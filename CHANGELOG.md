@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/jdx/fnox/compare/v0.2.1..v0.2.2) - 2025-10-20
+
+### 🐛 Bug Fixes
+
+- Clean up Azure CLI directory in test teardown by [@jdx](https://github.com/jdx) in [#5](https://github.com/jdx/fnox/pull/5)
+- Make vendored OpenSSL Linux-only to fix Windows builds by [@jdx](https://github.com/jdx) in [#6](https://github.com/jdx/fnox/pull/6)
+
 ## [0.2.1](https://github.com/jdx/fnox/compare/v0.2.0..v0.2.1) - 2025-10-20
 
 ### 🐛 Bug Fixes
