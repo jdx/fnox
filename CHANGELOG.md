@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.3](https://github.com/jdx/fnox/compare/v0.2.2..v0.2.3) - 2025-10-20
+
+### 🐛 Bug Fixes
+
+- Remove duplicate openssl-sys from main dependencies by [@jdx](https://github.com/jdx) in [8b4c8c7](https://github.com/jdx/fnox/commit/8b4c8c787a0c301c6d4a4910001c7515a5c4a6a4)
+
 ## [0.2.2](https://github.com/jdx/fnox/compare/v0.2.1..v0.2.2) - 2025-10-20
 
 ### 🐛 Bug Fixes
