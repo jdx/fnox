@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.1](https://github.com/jdx/fnox/compare/v0.2.0..v0.2.1) - 2025-10-20
+
+### 🐛 Bug Fixes
+
+- Enable vendored OpenSSL for cross-compilation by [@jdx](https://github.com/jdx) in [#3](https://github.com/jdx/fnox/pull/3)
+
 ## [0.2.0](https://github.com/jdx/fnox/compare/v0.1.0..v0.2.0) - 2025-10-20
 
 ### 🚀 Features
@@ -16,6 +22,10 @@
 ### 🔍 Other Changes
 
 - Fix Bitwarden provider to use --session flag and close stdin by [@jdx](https://github.com/jdx) in [9dcfe86](https://github.com/jdx/fnox/commit/9dcfe86c4791c6f7cc4dcc9e5439c70a6b587c78)
+
+### New Contributors
+
+- @mise-en-dev made their first contribution in [#2](https://github.com/jdx/fnox/pull/2)
 
 ## [0.1.0] - 2025-10-20
 
