@@ -1,6 +1,6 @@
 [package]
 name = "fnox"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 authors = ["@jdx"]
 description = "A flexible secret management tool supporting multiple providers and encryption methods"
@@ -60,6 +60,8 @@ gcp_auth = { version = "0.12" }
 keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
 # Required for rustls crypto provider (used by GCP SDKs)
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std"] }
+# Required for cross-compilation - vendored OpenSSL builds from source
+openssl-sys = { version = "0.9", features = ["vendored"] }
 
 # Linux-specific dependencies for cross-compilation
 [target.'cfg(target_os = "linux")'.dependencies]

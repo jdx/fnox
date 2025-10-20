@@ -57,6 +57,11 @@ teardown() {
             --name "$TEST_SECRET_NAME" >/dev/null 2>&1 || true
     fi
 
+    # Clean up Azure CLI cache/config directory created during tests
+    if [ -d "$TEST_TEMP_DIR/.azure" ]; then
+        rm -rf "$TEST_TEMP_DIR/.azure" || true
+    fi
+
     _common_teardown
 }
 
