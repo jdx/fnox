@@ -50,12 +50,19 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: rust-${{ matrix.target }}
+      - if: matrix.os == 'macos-latest'
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
+          p12-password: ${{ secrets.CERTIFICATES_P12_PASS }}
       - uses: taiki-e/upload-rust-binary-action@v1
         with:
           bin: fnox
           target: ${{ matrix.target }}
           build-tool: ${{ matrix.build-tool }}
           token: ${{ secrets.FNOX_GH_TOKEN }}
+          codesign: "Developer ID Application: Jeffrey Dickey (4993Y37DX6)"
+          codesign_prefix: dev.jdx.
           dry-run: true # Always dry-run to just build without uploading
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
