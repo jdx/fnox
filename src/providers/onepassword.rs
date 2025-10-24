@@ -1,8 +1,15 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
+use regex::Regex;
 use std::process::Command;
 use std::{path::Path, sync::LazyLock};
+
+/// Precompiled regex to remove leading error prefixes from stderr output of `op`.
+/// [ERROR] YYYY/MM/DD HH:MM:SS message
+static ERROR_PREFIX_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\[ERROR\]\s\d{4}/\d{2}/\d{2}\s\d{2}:\d{2}:\d{2}\s").unwrap()
+});
 
 pub struct OnePasswordProvider {
     vault: String,
@@ -25,8 +32,6 @@ impl OnePasswordProvider {
                 token.len()
             );
             cmd.env("OP_SERVICE_ACCOUNT_TOKEN", token);
-        } else {
-            tracing::warn!("OP_SERVICE_ACCOUNT_TOKEN not found in environment");
         }
         cmd.args(args);
 
@@ -47,10 +52,12 @@ impl OnePasswordProvider {
         })?;
 
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
+            let cow = String::from_utf8_lossy(&output.stderr);
+            let replaced = ERROR_PREFIX_RE.replace_all(&cow, "");
+
             return Err(FnoxError::Provider(format!(
                 "1Password CLI command failed: {}",
-                stderr.trim()
+                replaced.trim(),
             )));
         }
 
@@ -93,6 +100,17 @@ impl crate::providers::Provider for OnePasswordProvider {
 
         // Use 'op read' to fetch the secret
         self.execute_op_command(&["read", &reference])
+    }
+
+    async fn test_connection(&self) -> Result<()> {
+        tracing::debug!("Testing connection to 1Password");
+
+        // Try to get the current user as a basic connectivity test
+        let output = self.execute_op_command(&["whoami"])?;
+
+        tracing::debug!("1Password whoami output: {}", output);
+
+        Ok(())
     }
 }
 
