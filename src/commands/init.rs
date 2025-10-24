@@ -229,10 +229,11 @@ impl InitCommand {
                 println!("   Requires: 1Password CLI (op) and a service account token");
                 println!("   Set token: export OP_SERVICE_ACCOUNT_TOKEN=<token>\n");
 
-                let vault = Input::new("Vault name:")
-                    .placeholder("my-vault")
+                let vault = Input::new("Vault name (optional):")
+                    .placeholder("")
                     .run()
-                    .map_err(|e| FnoxError::Config(format!("Wizard cancelled: {}", e)))?;
+                    .ok()
+                    .filter(|s| !s.is_empty());
 
                 let account = Input::new("Account (optional, e.g., my.1password.com):")
                     .placeholder("")

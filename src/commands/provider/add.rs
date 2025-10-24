@@ -34,7 +34,7 @@ impl AddCommand {
         // Create a template provider config based on type
         let provider_config = match self.provider_type {
             ProviderType::OnePassword => crate::config::ProviderConfig::OnePassword {
-                vault: "default".to_string(),
+                vault: Some("default".to_string()),
                 account: None,
             },
             ProviderType::Aws => crate::config::ProviderConfig::AwsSecretsManager {

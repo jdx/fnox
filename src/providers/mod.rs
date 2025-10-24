@@ -35,7 +35,8 @@ pub enum ProviderConfig {
     #[serde(rename = "1password")]
     #[strum(serialize = "1password")]
     OnePassword {
-        vault: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        vault: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         account: Option<String>,
     },
