@@ -37,7 +37,7 @@ type = "1password"
 
 ### With Vault Parameter
 
-If you want to specify a vault to allow for short hand syntax, add it to the provider configuration:
+If you want to specify a vault to allow for shorthand syntax, add it to the provider configuration:
 
 ```toml
 [providers.onepass]
