@@ -93,10 +93,7 @@ impl Settings {
 
     /// Expand tilde (~) in path strings to the user's home directory
     fn expand_path(path: &str) -> std::path::PathBuf {
-        match shellexpand::tilde(path) {
-            std::borrow::Cow::Borrowed(s) => s.into(),
-            std::borrow::Cow::Owned(s) => s.into(),
-        }
+        shellexpand::tilde(path).into_owned().into()
     }
 
     /// Collect settings from environment variables
