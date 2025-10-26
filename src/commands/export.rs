@@ -1,5 +1,5 @@
 use crate::commands::Cli;
-use crate::config::Config;
+use crate::config::{Config, IfMissing};
 use crate::error::Result;
 use crate::secret_resolver::resolve_secret;
 use clap::{Args, ValueEnum};
@@ -59,16 +59,37 @@ impl ExportCommand {
 
         for (key, secret_config) in profile_secrets {
             // Use centralized secret resolver for consistent priority order
-            let value = resolve_secret(
+            match resolve_secret(
                 &config,
                 &profile,
                 key,
                 secret_config,
                 cli.age_key_file.as_deref(),
             )
-            .await?;
-            if let Some(value) = value {
-                secrets.insert(key.clone(), value);
+            .await
+            {
+                Ok(Some(value)) => {
+                    secrets.insert(key.clone(), value);
+                }
+                Ok(None) => {
+                    // Secret not found but if_missing allows it
+                }
+                Err(e) => {
+                    // Provider error - respect if_missing to decide whether to fail or continue
+                    match secret_config.if_missing {
+                        Some(IfMissing::Error) => {
+                            tracing::error!("Error resolving secret '{}': {}", key, e);
+                            return Err(e);
+                        }
+                        Some(IfMissing::Warn) | None => {
+                            // Default (None) is Warn
+                            tracing::warn!("Error resolving secret '{}': {}", key, e);
+                        }
+                        Some(IfMissing::Ignore) => {
+                            // Silently skip
+                        }
+                    }
+                }
             }
         }
 
