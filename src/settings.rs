@@ -91,6 +91,11 @@ impl Settings {
         Ok(Self::merge_settings(&defaults, &env_map, &cli_map))
     }
 
+    /// Expand tilde (~) in path strings to the user's home directory
+    fn expand_path(path: &str) -> std::path::PathBuf {
+        shellexpand::tilde(path).into_owned().into()
+    }
+
     /// Collect settings from environment variables
     fn collect_env_map() -> Result<SourceMap> {
         let mut map = SourceMap::new();
@@ -106,10 +111,13 @@ impl Settings {
                             map.insert(setting_name, SettingValue::OptionString(Some(val)));
                         }
                         "path" => {
-                            map.insert(setting_name, SettingValue::Path(val.into()));
+                            map.insert(setting_name, SettingValue::Path(Self::expand_path(&val)));
                         }
                         "option<path>" => {
-                            map.insert(setting_name, SettingValue::OptionPath(Some(val.into())));
+                            map.insert(
+                                setting_name,
+                                SettingValue::OptionPath(Some(Self::expand_path(&val))),
+                            );
                         }
                         "bool" => {
                             // Parse bool from env var (accept "true", "1", "yes", "on")
@@ -257,5 +265,17 @@ mod tests {
         );
         // Default profile should remain
         assert_eq!(merged.profile, "default");
+    }
+
+    #[test]
+    fn test_expand_path_with_tilde() {
+        // Test tilde expansion
+        let expanded = Settings::expand_path("~/test/path");
+        let home = dirs::home_dir().unwrap();
+        assert_eq!(expanded, home.join("test/path"));
+
+        // Test without tilde (should remain unchanged)
+        let expanded = Settings::expand_path("/absolute/path");
+        assert_eq!(expanded, std::path::PathBuf::from("/absolute/path"));
     }
 }

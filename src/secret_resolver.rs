@@ -81,11 +81,12 @@ async fn try_resolve_from_provider(
 
 fn handle_missing_secret(key: &str, secret_config: &SecretConfig) -> Result<Option<String>> {
     match secret_config.if_missing {
-        Some(IfMissing::Error) | None => Err(FnoxError::Config(format!(
+        Some(IfMissing::Error) => Err(FnoxError::Config(format!(
             "Secret '{}' not found and no default provided",
             key
         ))),
-        Some(IfMissing::Warn) => {
+        Some(IfMissing::Warn) | None => {
+            // Default to warn when if_missing is not specified
             eprintln!(
                 "Warning: Secret '{}' not found and no default provided",
                 key
