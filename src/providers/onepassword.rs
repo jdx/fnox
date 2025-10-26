@@ -11,12 +11,12 @@ static ERROR_PREFIX_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?m)^\[ERROR\] \d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} ").unwrap());
 
 pub struct OnePasswordProvider {
-    vault: String,
+    vault: Option<String>,
     account: Option<String>,
 }
 
 impl OnePasswordProvider {
-    pub fn new(vault: String, account: Option<String>) -> Self {
+    pub fn new(vault: Option<String>, account: Option<String>) -> Self {
         Self { vault, account }
     }
 
@@ -70,22 +70,32 @@ impl OnePasswordProvider {
 #[async_trait]
 impl crate::providers::Provider for OnePasswordProvider {
     async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
-        tracing::debug!(
-            "Getting secret '{}' from 1Password vault '{}'",
-            value,
-            self.vault
-        );
+        tracing::debug!("Getting secret '{}' from 1Password", value);
 
         // Check if value is already a full op:// reference
         let reference = if value.starts_with("op://") {
             value.to_string()
+        } else if self.vault.is_none() {
+            return Err(FnoxError::Provider(format!(
+                "Unknown secret vault for: '{}'. Expected value starting with 'op://' or a vault specified in the provider configuration.",
+                value
+            )));
         } else {
             // Parse value as "item/field" or just "item"
             // Default field is "password" if not specified
             let parts: Vec<&str> = value.split('/').collect();
             match parts.len() {
-                1 => format!("op://{}/{}/password", self.vault, parts[0]),
-                2 => format!("op://{}/{}/{}", self.vault, parts[0], parts[1]),
+                1 => format!(
+                    "op://{}/{}/password",
+                    self.vault.as_ref().unwrap(),
+                    parts[0]
+                ),
+                2 => format!(
+                    "op://{}/{}/{}",
+                    self.vault.as_ref().unwrap(),
+                    parts[0],
+                    parts[1]
+                ),
                 _ => {
                     return Err(FnoxError::Provider(format!(
                         "Invalid secret reference format: '{}'. Expected 'item' or 'item/field'",

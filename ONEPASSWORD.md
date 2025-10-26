@@ -33,6 +33,15 @@ Add the 1Password provider to your `fnox.toml`:
 ```toml
 [providers.onepass]
 type = "1password"
+```
+
+### With Vault Parameter
+
+If you want to specify a vault to allow for shorthand syntax, add it to the provider configuration:
+
+```toml
+[providers.onepass]
+type = "1password"
 vault = "your-vault-name"
 ```
 
@@ -109,14 +118,14 @@ value = "api-credentials/api_key"  # Fetch specific field
 
 The `value` field supports three formats:
 
-1. **Item name only** - fetches the password field
+1. **Item name only** (requires `vault` in provider config) - fetches the password field
 
    ```toml
    value = "my-item"
    # Resolves to: op://vault/my-item/password
    ```
 
-2. **Item and field** - fetches a specific field
+2. **Item and field** (requires `vault` in provider config) - fetches a specific field
 
    ```toml
    value = "my-item/username"
@@ -229,6 +238,10 @@ Ensure your value follows one of these formats:
 - `"item-name"`
 - `"item-name/field-name"`
 - `"op://vault/item/field"`
+
+### "Unknown secret vault"
+
+Ensure you have the `vault` parameter set in your provider configuration, or use the full `op://` reference format.
 
 ## Testing
 
