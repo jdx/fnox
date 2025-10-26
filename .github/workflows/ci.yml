@@ -32,8 +32,10 @@ jobs:
       - name: Build
         run: cargo build
       - name: Setup age key for fnox
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         run: mkdir -p ~/.config/fnox && echo "${{ secrets.AGE_SECRET }}" > ~/.config/fnox/age.txt
       - name: Redact secrets in CI output
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         run: |
           fnox ci-redact
           # shellcheck disable=SC2016
@@ -91,8 +93,10 @@ jobs:
       - name: Build
         run: cargo build
       - name: Setup age key for fnox
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         run: mkdir -p ~/.config/fnox && echo "${{ secrets.AGE_SECRET }}" > ~/.config/fnox/age.txt
       - name: Redact secrets in CI output
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         run: |
           fnox ci-redact
           # shellcheck disable=SC2016
