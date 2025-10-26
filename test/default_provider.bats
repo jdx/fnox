@@ -220,6 +220,7 @@ EOF
 
 @test "profile with no providers (and no global providers) returns error" {
     # Create config with profile that has no providers
+    # Set if_missing = "error" to require the secret
     cat > fnox.toml << 'EOF'
 root = true
 
@@ -228,7 +229,7 @@ root = true
 [profiles.test]
 
 [profiles.test.secrets]
-MY_SECRET = { description = "test secret" }
+MY_SECRET = { description = "test secret", if_missing = "error" }
 EOF
 
     # Should fail because profile has no providers and secret has no value

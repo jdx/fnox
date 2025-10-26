@@ -167,6 +167,31 @@ mise run test:bats -- test/bitwarden.bats
 - Each profile can have its own providers and encryption
 - Environment variable: `FNOX_PROFILE`
 
+### Secret Configuration
+
+Secrets support an `if_missing` field to control behavior when a secret cannot be resolved:
+
+```toml
+[secrets.MY_SECRET]
+provider = "age"
+value = "..."
+if_missing = "warn"  # Options: "error", "warn", "ignore"
+```
+
+**Default behavior**: When `if_missing` is not specified, fnox defaults to `"warn"`. This means:
+
+- Missing secrets will print a warning message
+- Commands will continue execution (useful for CI environments where some secrets may not be available)
+- The secret will not be set in the environment
+
+**Available options**:
+
+- `"error"` - Fail the command if the secret cannot be resolved (use for required secrets)
+- `"warn"` - Print a warning and continue (default, useful for optional secrets)
+- `"ignore"` - Silently skip the secret if it cannot be resolved
+
+**Example use case**: In forked PRs, CI environments don't have access to secrets. Using `if_missing = "warn"` (or omitting it for the default) allows tests to run without failing on missing secrets.
+
 ### CLI Flags
 
 - `-p, --profile` for profile selection

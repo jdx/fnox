@@ -55,12 +55,23 @@ impl ExecCommand {
                     cmd.env(key, value);
                 }
                 Ok(None) => {
-                    // Secret not found, ignore
+                    // Secret not found but if_missing allows it (already handled by resolve_secret)
                 }
                 Err(e) => {
-                    eprintln!("Error resolving secret '{}': {}", key, e);
-                    if matches!(secret_config.if_missing, Some(IfMissing::Error) | None) {
-                        return Err(e);
+                    // Provider error (auth, network, missing secret, etc.)
+                    // Respect if_missing to decide whether to fail or continue
+                    match secret_config.if_missing {
+                        Some(IfMissing::Error) => {
+                            tracing::error!("Error resolving secret '{}': {}", key, e);
+                            return Err(e);
+                        }
+                        Some(IfMissing::Warn) | None => {
+                            // Default (None) is Warn
+                            tracing::warn!("Error resolving secret '{}': {}", key, e);
+                        }
+                        Some(IfMissing::Ignore) => {
+                            // Silently skip
+                        }
                     }
                 }
             }
