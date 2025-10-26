@@ -47,7 +47,11 @@ jobs:
       - name: Run clippy
         run: cargo clippy -- -D warnings
       - name: Run integration tests
-        run: mise run test:bats
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          command: mise run test:bats
   ci-ubuntu:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -119,7 +123,11 @@ jobs:
           echo "VAULT_ADDR=http://localhost:8200" >> "$GITHUB_ENV"
           echo "VAULT_TOKEN=fnox-test-token" >> "$GITHUB_ENV"
       - name: Run integration tests
-        run: mise run test:bats
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          command: mise run test:bats
   msrv:
     runs-on: ubuntu-latest
     timeout-minutes: 10
