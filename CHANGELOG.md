@@ -1,6 +1,31 @@
 # Changelog
 
-## [0.2.3](https://github.com/jdx/fnox/compare/v0.2.2..v0.2.3) - 2025-10-20
+## [1.0.1](https://github.com/jdx/fnox/compare/v1.0.0..v1.0.1) - 2025-10-26
+
+### 🐛 Bug Fixes
+
+- default to warn instead of error for missing secrets by [@jdx](https://github.com/jdx) in [#20](https://github.com/jdx/fnox/pull/20)
+- expand tilde (~) in FNOX_AGE_KEY_FILE path by [@pepicrft](https://github.com/pepicrft) in [#17](https://github.com/jdx/fnox/pull/17)
+- make the onepassword vault name optional by [@btkostner](https://github.com/btkostner) in [#15](https://github.com/jdx/fnox/pull/15)
+- do not require OP_SERVICE_ACCOUNT_TOKEN for 1password by [@btkostner](https://github.com/btkostner) in [#16](https://github.com/jdx/fnox/pull/16)
+
+### 🛡️ Security
+
+- skip age setup and redact tests for fork PRs by [@jdx](https://github.com/jdx) in [#18](https://github.com/jdx/fnox/pull/18)
+
+### 🔍 Other Changes
+
+- **(ci)** add retry action for integration tests by [@jdx](https://github.com/jdx) in [#19](https://github.com/jdx/fnox/pull/19)
+- **(release)** add macOS code signing to release workflow by [@jdx](https://github.com/jdx) in [#11](https://github.com/jdx/fnox/pull/11)
+- wip by [@jdx](https://github.com/jdx) in [b164101](https://github.com/jdx/fnox/commit/b164101cdceac3e4c204fa5c400a48f976334a0d)
+- Update README.md by [@jdx](https://github.com/jdx) in [10ac17e](https://github.com/jdx/fnox/commit/10ac17ec17a777ad9076755231229153577535b7)
+
+### New Contributors
+
+- @btkostner made their first contribution in [#16](https://github.com/jdx/fnox/pull/16)
+- @pepicrft made their first contribution in [#17](https://github.com/jdx/fnox/pull/17)
+
+## [1.0.0](https://github.com/jdx/fnox/compare/v0.2.2..v1.0.0) - 2025-10-20
 
 ### 🐛 Bug Fixes
 
