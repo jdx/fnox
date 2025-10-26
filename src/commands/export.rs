@@ -1,8 +1,7 @@
 use crate::commands::Cli;
-use crate::config::{Config, SecretConfig};
-use crate::env;
-use crate::error::{FnoxError, Result};
-use crate::providers::get_provider;
+use crate::config::Config;
+use crate::error::Result;
+use crate::secret_resolver::resolve_secret;
 use clap::{Args, ValueEnum};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -55,14 +54,19 @@ impl ExportCommand {
         tracing::debug!("Exporting secrets from profile '{}'", profile);
 
         let profile_secrets = config.get_secrets(&profile)?;
-        let providers = config.get_providers(&profile);
 
         let mut secrets = IndexMap::new();
 
         for (key, secret_config) in profile_secrets {
-            let value = self
-                .resolve_secret_value(key, secret_config, &providers)
-                .await?;
+            // Use centralized secret resolver for consistent priority order
+            let value = resolve_secret(
+                &config,
+                &profile,
+                key,
+                secret_config,
+                cli.age_key_file.as_deref(),
+            )
+            .await?;
             if let Some(value) = value {
                 secrets.insert(key.clone(), value);
             }
@@ -96,69 +100,6 @@ impl ExportCommand {
         }
 
         Ok(())
-    }
-
-    async fn resolve_secret_value(
-        &self,
-        key: &str,
-        secret_config: &SecretConfig,
-        providers: &IndexMap<String, crate::config::ProviderConfig>,
-    ) -> Result<Option<String>> {
-        // Check provider first
-        if let Some(ref provider_name) = secret_config.provider {
-            let provider_config = providers.get(provider_name).ok_or_else(|| {
-                miette::miette!(
-                    "Provider '{}' not found for secret '{}'",
-                    provider_name,
-                    key
-                )
-            })?;
-
-            if let Some(provider_value) = &secret_config.value {
-                let provider = get_provider(provider_config)?;
-                let value = provider.get_secret(provider_value, None).await?;
-                return Ok(Some(value));
-            } else {
-                tracing::warn!(
-                    "Provider '{}' specified for secret '{}' but no value provided",
-                    provider_name,
-                    key
-                );
-                return Ok(None);
-            }
-        }
-
-        // Check direct value
-        if let Some(value) = &secret_config.value {
-            return Ok(Some(value.clone()));
-        }
-
-        // Check current environment variable
-        if let Ok(env_value) = env::var(key) {
-            return Ok(Some(env_value));
-        }
-
-        // Use default value
-        if let Some(default) = &secret_config.default {
-            return Ok(Some(default.clone()));
-        }
-
-        // Handle missing secrets
-        match secret_config.if_missing {
-            Some(crate::config::IfMissing::Error) => Err(FnoxError::Config(format!(
-                "Secret '{}' not found and no default provided",
-                key
-            ))),
-            Some(crate::config::IfMissing::Warn) | None => {
-                // Default to warn when if_missing is not specified
-                eprintln!(
-                    "Warning: Secret '{}' not found and no default provided",
-                    key
-                );
-                Ok(None)
-            }
-            Some(crate::config::IfMissing::Ignore) => Ok(None),
-        }
     }
 
     fn export_as_env(&self, data: &ExportData) -> Result<String> {
