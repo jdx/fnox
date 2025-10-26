@@ -114,7 +114,10 @@ impl Settings {
                             map.insert(setting_name, SettingValue::Path(Self::expand_path(&val)));
                         }
                         "option<path>" => {
-                            map.insert(setting_name, SettingValue::OptionPath(Some(Self::expand_path(&val))));
+                            map.insert(
+                                setting_name,
+                                SettingValue::OptionPath(Some(Self::expand_path(&val))),
+                            );
                         }
                         "bool" => {
                             // Parse bool from env var (accept "true", "1", "yes", "on")
