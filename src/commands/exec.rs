@@ -62,12 +62,12 @@ impl ExecCommand {
                     // Respect if_missing to decide whether to fail or continue
                     match secret_config.if_missing {
                         Some(IfMissing::Error) => {
-                            eprintln!("Error resolving secret '{}': {}", key, e);
+                            tracing::error!("Error resolving secret '{}': {}", key, e);
                             return Err(e);
                         }
                         Some(IfMissing::Warn) | None => {
                             // Default (None) is Warn
-                            eprintln!("Warning: Error resolving secret '{}': {}", key, e);
+                            tracing::warn!("Error resolving secret '{}': {}", key, e);
                         }
                         Some(IfMissing::Ignore) => {
                             // Silently skip
