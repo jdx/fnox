@@ -145,11 +145,12 @@ impl ExportCommand {
 
         // Handle missing secrets
         match secret_config.if_missing {
-            Some(crate::config::IfMissing::Error) | None => Err(FnoxError::Config(format!(
+            Some(crate::config::IfMissing::Error) => Err(FnoxError::Config(format!(
                 "Secret '{}' not found and no default provided",
                 key
             ))),
-            Some(crate::config::IfMissing::Warn) => {
+            Some(crate::config::IfMissing::Warn) | None => {
+                // Default to warn when if_missing is not specified
                 eprintln!(
                     "Warning: Secret '{}' not found and no default provided",
                     key

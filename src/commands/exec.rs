@@ -55,11 +55,12 @@ impl ExecCommand {
                     cmd.env(key, value);
                 }
                 Ok(None) => {
-                    // Secret not found, ignore
+                    // Secret not found, already handled by resolve_secret
                 }
                 Err(e) => {
                     eprintln!("Error resolving secret '{}': {}", key, e);
-                    if matches!(secret_config.if_missing, Some(IfMissing::Error) | None) {
+                    // Only fail if explicitly marked as required
+                    if matches!(secret_config.if_missing, Some(IfMissing::Error)) {
                         return Err(e);
                     }
                 }
