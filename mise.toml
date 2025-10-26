@@ -30,6 +30,12 @@ description = "Run bats tests only"
 depends = ["build"]
 run = "fnox exec -- bats --jobs 4 --no-parallelize-within-files {{arg(name='test', var=true, default='test')}}"
 
+[tasks."test:bats:fork"]
+description = "Run bats tests simulating forked PR (no age key access)"
+depends = ["build"]
+env = { FNOX_AGE_KEY = "/tmp/nonexistent-age-key.txt" }
+run = "fnox exec -- bats --jobs 4 --no-parallelize-within-files {{arg(name='test', var=true, default='test')}}"
+
 [tasks.cargo-test]
 description = "Run cargo tests only"
 run = "cargo test"

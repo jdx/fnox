@@ -122,6 +122,7 @@ EOF
 
 @test "error when secret not found and no fallback" {
     # Create config with no provider, no default, no env var
+    # Set if_missing = "error" to require the secret
     cat > fnox.toml << 'EOF'
 root = true
 
@@ -129,6 +130,7 @@ root = true
 type = "plain"
 
 [secrets.MY_SECRET]
+if_missing = "error"
 EOF
 
     # Don't set env var - should error
