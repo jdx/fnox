@@ -79,8 +79,17 @@ impl crate::providers::Provider for OnePasswordProvider {
             // Default field is "password" if not specified
             let parts: Vec<&str> = value.split('/').collect();
             match parts.len() {
-                1 => format!("op://{}/{}/password", self.vault.as_ref().unwrap(), parts[0]),
-                2 => format!("op://{}/{}/{}", self.vault.as_ref().unwrap(), parts[0], parts[1]),
+                1 => format!(
+                    "op://{}/{}/password",
+                    self.vault.as_ref().unwrap(),
+                    parts[0]
+                ),
+                2 => format!(
+                    "op://{}/{}/{}",
+                    self.vault.as_ref().unwrap(),
+                    parts[0],
+                    parts[1]
+                ),
                 _ => {
                     return Err(FnoxError::Provider(format!(
                         "Invalid secret reference format: '{}'. Expected 'item' or 'item/field'",
