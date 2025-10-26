@@ -7,9 +7,8 @@ use std::{path::Path, sync::LazyLock};
 
 /// Precompiled regex to remove leading error prefixes from stderr output of `op`.
 /// [ERROR] YYYY/MM/DD HH:MM:SS message
-static ERROR_PREFIX_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?m)^\[ERROR\] \d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} ").unwrap()
-});
+static ERROR_PREFIX_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)^\[ERROR\] \d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} ").unwrap());
 
 pub struct OnePasswordProvider {
     vault: String,
