@@ -58,6 +58,19 @@ impl ImportCommand {
         let input = self.read_input()?;
         let mut secrets = self.parse_input(&input)?;
 
+        // When importing from stdin, --force is required because stdin is consumed
+        // by read_input() and won't be available for the confirmation prompt
+        if self.input.is_none() && !self.force {
+            return Err(miette::miette!(
+                "When importing from stdin, the --force flag is required\n\n\
+                This is because stdin is consumed during import and cannot be used \
+                for the confirmation prompt.\n\n\
+                Use: fnox import --force < input.env\n\
+                Or:  cat input.env | fnox import --force"
+            )
+            .into());
+        }
+
         // Apply filter if specified
         if let Some(ref filter) = self.filter {
             let regex = Regex::new(filter)

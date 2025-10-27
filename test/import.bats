@@ -183,6 +183,33 @@ EOF
     assert_output "secret-key"
 }
 
+@test "fnox import from stdin requires --force flag" {
+    assert_fnox_success init
+
+    # FIXED: stdin imports now require --force to avoid double-stdin consumption bug
+    # Without --force, importing from stdin would consume stdin twice:
+    #   1. First to read import data (read_input)
+    #   2. Then to read confirmation (stdin.read_line)
+    # This would cause the import to fail because stdin is at EOF after reading data
+
+    # Try to import from stdin without --force - should fail with helpful error
+    run bash -c "echo -e 'TEST_VAR=test123' | $FNOX_BIN import"
+    assert_failure
+    assert_output --partial "the --force flag"
+    assert_output --partial "stdin is consumed"
+
+    # Verify secret was NOT imported
+    assert_fnox_failure get TEST_VAR
+
+    # Now try with --force - should succeed
+    run bash -c "echo -e 'TEST_VAR=test123' | $FNOX_BIN import --force"
+    assert_success
+
+    # Verify secret WAS imported
+    assert_fnox_success get TEST_VAR
+    assert_output "test123"
+}
+
 @test "fnox import supports json format" {
     assert_fnox_success init
 
