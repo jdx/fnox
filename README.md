@@ -252,6 +252,37 @@ recipients = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQs..."]
 export FNOX_AGE_KEY_FILE=~/.ssh/id_ed25519
 ```
 
+**Supported SSH Key Types:**
+
+- **`ssh-ed25519`** - Ed25519 keys (recommended, most secure)
+- **`ssh-rsa`** - RSA keys (2048-bit minimum, 4096-bit recommended)
+
+**Key Formats:**
+
+- **Public keys:** Use the full SSH public key format (`ssh-ed25519 AAAA...` or `ssh-rsa AAAA...`)
+- **Private keys:** Standard OpenSSH private key format (`-----BEGIN OPENSSH PRIVATE KEY-----`)
+
+**Password-protected SSH Keys:**
+
+Currently, fnox does not support password-protected SSH keys. If your SSH key has a passphrase:
+
+1. Create a copy without passphrase: `ssh-keygen -p -f ~/.ssh/id_ed25519`
+2. Or generate a dedicated age key for fnox
+
+**Examples:**
+
+```bash
+# Using Ed25519 key (recommended)
+[providers.age]
+type = "age"
+recipients = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQs..."]
+
+# Using RSA key
+[providers.age]
+type = "age"
+recipients = ["ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."]
+```
+
 Works with `ssh-ed25519` and `ssh-rsa` keys. For teams, add multiple recipients:
 
 ```bash

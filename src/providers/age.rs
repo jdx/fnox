@@ -119,14 +119,33 @@ impl crate::providers::Provider for AgeEncryptionProvider {
             }
         })?;
 
-        let identities = age::IdentityFile::from_buffer(identity_content.as_bytes())
-            .map_err(|e| FnoxError::AgeIdentityParseFailed {
-                details: e.to_string(),
-            })?
-            .into_identities()
-            .map_err(|e| FnoxError::AgeIdentityParseFailed {
-                details: e.to_string(),
-            })?;
+        // Try parsing as SSH identity first, then fall back to age identity file
+        let identities = {
+            let mut cursor = std::io::Cursor::new(identity_content.as_bytes());
+
+            // First try to parse as SSH identity
+            match age::ssh::Identity::from_buffer(
+                &mut cursor,
+                Some(key_file_path.to_string_lossy().to_string()),
+            ) {
+                Ok(ssh_identity) => {
+                    // SSH identity parsed successfully
+                    vec![Box::new(ssh_identity) as Box<dyn age::Identity>]
+                }
+                Err(_) => {
+                    // Not an SSH identity, try age identity file
+                    cursor.set_position(0);
+                    age::IdentityFile::from_buffer(cursor)
+                        .map_err(|e| FnoxError::AgeIdentityParseFailed {
+                            details: e.to_string(),
+                        })?
+                        .into_identities()
+                        .map_err(|e| FnoxError::AgeIdentityParseFailed {
+                            details: e.to_string(),
+                        })?
+                }
+            }
+        };
 
         let decryptor = age::Decryptor::new(encrypted_bytes.as_slice()).map_err(|e| {
             FnoxError::AgeDecryptionFailed {
