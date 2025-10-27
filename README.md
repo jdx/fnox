@@ -1563,6 +1563,101 @@ default = "info"
 if_missing = "warn"  # "error", "warn", or "ignore"
 ```
 
+### Handling Missing Secrets
+
+Control what happens when a secret can't be resolved using the `if_missing` setting. This is especially useful for CI environments or when some secrets are optional.
+
+#### Available Modes
+
+- `error` - Fail the command if a secret cannot be resolved (strictest)
+- `warn` - Print a warning and continue (default)
+- `ignore` - Silently skip missing secrets
+
+#### Priority Chain
+
+You can set `if_missing` at multiple levels. fnox uses the first match:
+
+1. **CLI flag** (highest priority): `--if-missing error`
+2. **Environment variable**: `FNOX_IF_MISSING=warn`
+3. **Secret-level config**: `[secrets.MY_SECRET]` with `if_missing = "error"`
+4. **Top-level config**: Global default for all secrets
+5. **Default**: `warn` (lowest priority)
+
+#### Examples
+
+**Per-secret configuration:**
+
+```toml
+# Critical secrets must exist (fail if missing)
+[secrets.DATABASE_URL]
+provider = "aws"
+value = "database-url"
+if_missing = "error"
+
+# Optional secrets (continue if missing)
+[secrets.ANALYTICS_KEY]
+provider = "aws"
+value = "analytics-key"
+if_missing = "ignore"
+```
+
+**Top-level default for all secrets:**
+
+```toml
+# Make all secrets strict by default
+if_missing = "error"
+
+[secrets.DATABASE_URL]
+provider = "age"
+value = "encrypted..."
+
+[secrets.API_KEY]
+provider = "age"
+value = "encrypted..."
+# ↑ Both inherit if_missing = "error"
+```
+
+**Runtime override with CLI:**
+
+```bash
+# Override config to be lenient (useful in CI with missing secrets)
+fnox exec --if-missing ignore -- npm test
+
+# Override to be strict (ensure all secrets are present)
+fnox exec --if-missing error -- ./deploy.sh
+```
+
+**Runtime override with environment variable:**
+
+```bash
+# Set globally for a session
+export FNOX_IF_MISSING=warn
+fnox exec -- npm start
+
+# Or inline
+FNOX_IF_MISSING=error fnox exec -- ./critical-task.sh
+```
+
+**CI/CD example:**
+
+```yaml
+# .github/workflows/test.yml
+name: Test
+on: [push]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run tests (some secrets may be missing in forks)
+        env:
+          FNOX_IF_MISSING: ignore # Don't fail on missing secrets in CI
+        run: |
+          fnox exec -- npm test
+```
+
 ### Import/Export
 
 Migrate from `.env` files:
@@ -1619,4 +1714,5 @@ fnox export --format toml > secrets.toml
 - `FNOX_CONFIG_DIR` - Config directory (default: `~/.config/fnox`)
 - `FNOX_AGE_KEY` - Age encryption key (alternative to file)
 - `FNOX_AGE_KEY_FILE` - Path to age key file
+- `FNOX_IF_MISSING` - Default behavior for missing secrets (`error`, `warn`, `ignore`)
 - `FNOX_SHELL_OUTPUT` - Shell integration output (`none`, `normal`, `debug`)
