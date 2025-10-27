@@ -258,3 +258,72 @@ TOML
     assert_output --partial "command succeeded"
     assert_output --partial "WARN"
 }
+
+@test "fnox exec with FNOX_IF_MISSING_DEFAULT=error fails on missing secret" {
+    cat > fnox.toml << 'TOML'
+root = true
+
+[providers.age]
+type = "age"
+recipients = ["age1cdk0klj88zzhg0ncfhe4ul9ja5k58w2st3fpkhmy0f46vlsuh5wq0s0gr9"]
+
+[secrets.MY_SECRET]
+provider = "age"
+value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBaaTFhczNBYnN3S1c0NjZwZnlDN2NUMTVaSTFXd2k1OWhnWUJvckVxYmh3CjNRSmhxSWJiYXU3eHoyNlcyOVVLRWNnUlFJeFBjL2N0YlA5K2hUaU04VDQKLS0tIGN6UVYzMHZJUUhKNmlkQjFOaXRXYUpjbzBOaHRMZkFFVVRPa3FaQUs2dHcKf3AcueEBLdl8lzRwKXik+OvDVg48g44QoPZu0j0NLV4lPLDqoq0="
+TOML
+
+    # Set invalid age key to trigger error
+    export FNOX_AGE_KEY="/tmp/nonexistent-age-key.txt"
+    export FNOX_IF_MISSING_DEFAULT="error"
+
+    run "$FNOX_BIN" exec -- echo "should not run"
+    assert_failure
+}
+
+@test "fnox exec top-level config overrides FNOX_IF_MISSING_DEFAULT" {
+    cat > fnox.toml << 'TOML'
+root = true
+if_missing = "ignore"
+
+[providers.age]
+type = "age"
+recipients = ["age1cdk0klj88zzhg0ncfhe4ul9ja5k58w2st3fpkhmy0f46vlsuh5wq0s0gr9"]
+
+[secrets.MY_SECRET]
+provider = "age"
+value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBaaTFhczNBYnN3S1c0NjZwZnlDN2NUMTVaSTFXd2k1OWhnWUJvckVxYmh3CjNRSmhxSWJiYXU3eHoyNlcyOVVLRWNnUlFJeFBjL2N0YlA5K2hUaU04VDQKLS0tIGN6UVYzMHZJUUhKNmlkQjFOaXRXYUpjbzBOaHRMZkFFVVRPa3FaQUs2dHcKf3AcueEBLdl8lzRwKXik+OvDVg48g44QoPZu0j0NLV4lPLDqoq0="
+TOML
+
+    # Set invalid age key to trigger error
+    export FNOX_AGE_KEY="/tmp/nonexistent-age-key.txt"
+    export FNOX_IF_MISSING_DEFAULT="error"
+
+    # Should succeed because config if_missing=ignore overrides FNOX_IF_MISSING_DEFAULT=error
+    run "$FNOX_BIN" exec -- echo "command succeeded"
+    assert_success
+    assert_output --partial "command succeeded"
+}
+
+@test "fnox exec FNOX_IF_MISSING overrides FNOX_IF_MISSING_DEFAULT" {
+    cat > fnox.toml << 'TOML'
+root = true
+
+[providers.age]
+type = "age"
+recipients = ["age1cdk0klj88zzhg0ncfhe4ul9ja5k58w2st3fpkhmy0f46vlsuh5wq0s0gr9"]
+
+[secrets.MY_SECRET]
+provider = "age"
+value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBaaTFhczNBYnN3S1c0NjZwZnlDN2NUMTVaSTFXd2k1OWhnWUJvckVxYmh3CjNRSmhxSWJiYXU3eHoyNlcyOVVLRWNnUlFJeFBjL2N0YlA5K2hUaU04VDQKLS0tIGN6UVYzMHZJUUhKNmlkQjFOaXRXYUpjbzBOaHRMZkFFVVRPa3FaQUs2dHcKf3AcueEBLdl8lzRwKXik+OvDVg48g44QoPZu0j0NLV4lPLDqoq0="
+TOML
+
+    # Set invalid age key to trigger error
+    export FNOX_AGE_KEY="/tmp/nonexistent-age-key.txt"
+    export FNOX_IF_MISSING_DEFAULT="error"
+    export FNOX_IF_MISSING="ignore"
+
+    # Should succeed because FNOX_IF_MISSING=ignore overrides FNOX_IF_MISSING_DEFAULT=error
+    run "$FNOX_BIN" exec -- echo "command succeeded"
+    assert_success
+    assert_output --partial "command succeeded"
+}

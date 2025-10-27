@@ -88,19 +88,42 @@ default = "None"
 sources.cli = ["--if-missing"]
 sources.env = ["FNOX_IF_MISSING"]
 docs = """
-Default behavior when a secret cannot be resolved.
+Runtime override for if_missing behavior when a secret cannot be resolved.
 
 Available modes:
 - "error" - Fail the command if a secret cannot be resolved
-- "warn" - Print a warning and continue (default when not specified)
+- "warn" - Print a warning and continue
 - "ignore" - Silently skip missing secrets
 
-This can be set at multiple levels with the following priority chain.
+This overrides all config file settings. Use FNOX_IF_MISSING_DEFAULT to set the base default.
 
-Priority (highest to lowest): CLI flag > Environment > Secret level > Top-level config > Default (warn)
+Priority (highest to lowest): CLI flag > Environment > Secret level > Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)
 """
 examples = [
   "fnox exec --if-missing error -- ./my-app",
   "FNOX_IF_MISSING=ignore fnox exec -- ./my-app",
+]
+since = "1.1.0"
+
+[if_missing_default]
+type = "option<string>"
+default = "None"
+sources.env = ["FNOX_IF_MISSING_DEFAULT"]
+docs = """
+Base default behavior when a secret cannot be resolved and not specified in config.
+
+Available modes:
+- "error" - Fail the command if a secret cannot be resolved
+- "warn" - Print a warning and continue (default)
+- "ignore" - Silently skip missing secrets
+
+This sets the fallback behavior when nothing is configured in fnox.toml.
+Config file settings (top-level or secret-level) override this.
+
+Priority (highest to lowest): CLI flag > FNOX_IF_MISSING > Secret level > Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)
+"""
+examples = [
+  "export FNOX_IF_MISSING_DEFAULT=error  # Strict by default",
+  "export FNOX_IF_MISSING_DEFAULT=ignore  # Lenient by default",
 ]
 since = "1.1.0"

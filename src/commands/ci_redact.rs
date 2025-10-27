@@ -84,22 +84,41 @@ impl CiRedactCommand {
                 }
                 Err(e) => {
                     // Provider error - respect if_missing to decide whether to fail or continue
-                    // Priority: CLI flag > Env var > Secret-level > Top-level config > Default
+                    // Priority: CLI flag > Env var > Secret-level > Top-level config > FNOX_IF_MISSING_DEFAULT > Default
                     let if_missing = Settings::try_get()
                         .ok()
                         .and_then(|s| {
                             // If Some(value), CLI or env var was explicitly set (highest priority)
-                            s.if_missing.as_ref().and_then(|value| {
+                            s.if_missing.as_ref().map(|value| {
                                 match value.to_lowercase().as_str() {
-                                    "error" => Some(IfMissing::Error),
-                                    "warn" => Some(IfMissing::Warn),
-                                    "ignore" => Some(IfMissing::Ignore),
-                                    _ => Some(IfMissing::Warn),
+                                    "error" => IfMissing::Error,
+                                    "warn" => IfMissing::Warn,
+                                    "ignore" => IfMissing::Ignore,
+                                    _ => IfMissing::Warn,
                                 }
                             })
                         })
                         .or(secret_config.if_missing)
                         .or(config.if_missing)
+                        .or_else(|| {
+                            // Check FNOX_IF_MISSING_DEFAULT (via Settings) as fallback
+                            Settings::try_get().ok().and_then(|s| {
+                                s.if_missing_default
+                                    .as_ref()
+                                    .map(|value| match value.to_lowercase().as_str() {
+                                        "error" => IfMissing::Error,
+                                        "warn" => IfMissing::Warn,
+                                        "ignore" => IfMissing::Ignore,
+                                        _ => {
+                                            eprintln!(
+                                                "Warning: Invalid FNOX_IF_MISSING_DEFAULT value '{}', using 'warn'",
+                                                value
+                                            );
+                                            IfMissing::Warn
+                                        }
+                                    })
+                            })
+                        })
                         .unwrap_or(IfMissing::Warn);
 
                     match if_missing {

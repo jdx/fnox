@@ -1581,7 +1581,8 @@ You can set `if_missing` at multiple levels. fnox uses the first match:
 2. **Environment variable**: `FNOX_IF_MISSING=warn`
 3. **Secret-level config**: `[secrets.MY_SECRET]` with `if_missing = "error"`
 4. **Top-level config**: Global default for all secrets
-5. **Default**: `warn` (lowest priority)
+5. **Base default environment variable**: `FNOX_IF_MISSING_DEFAULT=error`
+6. **Default**: `warn` (lowest priority)
 
 #### Examples
 
@@ -1636,6 +1637,18 @@ fnox exec -- npm start
 
 # Or inline
 FNOX_IF_MISSING=error fnox exec -- ./critical-task.sh
+```
+
+**Set a base default behavior (when nothing is configured):**
+
+```bash
+# Change the default behavior when if_missing is not specified in config
+# Useful for setting strict or lenient defaults across all projects
+export FNOX_IF_MISSING_DEFAULT=error  # Strict: fail on missing secrets by default
+
+# This affects only secrets without explicit if_missing configuration
+# Config file settings (top-level or secret-level) will override this
+fnox exec -- ./my-app
 ```
 
 **CI/CD example:**
@@ -1714,5 +1727,6 @@ fnox export --format toml > secrets.toml
 - `FNOX_CONFIG_DIR` - Config directory (default: `~/.config/fnox`)
 - `FNOX_AGE_KEY` - Age encryption key (alternative to file)
 - `FNOX_AGE_KEY_FILE` - Path to age key file
-- `FNOX_IF_MISSING` - Default behavior for missing secrets (`error`, `warn`, `ignore`)
+- `FNOX_IF_MISSING` - Runtime override for missing secrets behavior (`error`, `warn`, `ignore`)
+- `FNOX_IF_MISSING_DEFAULT` - Base default for missing secrets when not configured (`error`, `warn`, `ignore`)
 - `FNOX_SHELL_OUTPUT` - Shell integration output (`none`, `normal`, `debug`)

@@ -223,6 +223,7 @@ mod tests {
             profile: "default".to_string(),
             shell_integration_output: "normal".to_string(),
             if_missing: None,
+            if_missing_default: None,
         };
 
         let mut env = SourceMap::new();
@@ -253,6 +254,7 @@ mod tests {
             profile: "default".to_string(),
             shell_integration_output: "normal".to_string(),
             if_missing: None,
+            if_missing_default: None,
         };
 
         let mut env = SourceMap::new();
