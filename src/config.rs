@@ -360,20 +360,27 @@ impl Config {
     }
 
     /// Get effective secrets (default or profile)
-    pub fn get_secrets(&self, profile: &str) -> Result<&IndexMap<String, SecretConfig>> {
+    /// For non-default profiles, this merges top-level secrets with profile-specific secrets,
+    /// with profile secrets taking precedence
+    pub fn get_secrets(&self, profile: &str) -> Result<IndexMap<String, SecretConfig>> {
         if profile == "default" {
-            Ok(&self.secrets)
+            Ok(self.secrets.clone())
         } else {
-            self.profiles
-                .get(profile)
-                .map(|p| &p.secrets)
-                .ok_or_else(|| {
-                    let available_profiles: Vec<String> = self.profiles.keys().cloned().collect();
-                    FnoxError::ProfileNotFound {
-                        profile: profile.to_string(),
-                        available_profiles,
-                    }
+            // Start with top-level secrets as base
+            let mut secrets = self.secrets.clone();
+
+            // Get profile-specific secrets and merge/override
+            if let Some(profile_config) = self.profiles.get(profile) {
+                // Profile-specific secrets override top-level ones
+                secrets.extend(profile_config.secrets.clone());
+                Ok(secrets)
+            } else {
+                let available_profiles: Vec<String> = self.profiles.keys().cloned().collect();
+                Err(FnoxError::ProfileNotFound {
+                    profile: profile.to_string(),
+                    available_profiles,
                 })
+            }
         }
     }
 

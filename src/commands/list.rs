@@ -113,13 +113,13 @@ impl ListCommand {
         }
 
         if self.values && self.sources {
-            self.display_with_values_and_sources(&keys, profile_secrets)?;
+            self.display_with_values_and_sources(&keys, &profile_secrets)?;
         } else if self.values {
-            self.display_with_values(&keys, profile_secrets)?;
+            self.display_with_values(&keys, &profile_secrets)?;
         } else if self.sources {
-            self.display_with_sources(&keys, profile_secrets)?;
+            self.display_with_sources(&keys, &profile_secrets)?;
         } else {
-            self.display_basic(&keys, profile_secrets)?;
+            self.display_basic(&keys, &profile_secrets)?;
         }
 
         Ok(())

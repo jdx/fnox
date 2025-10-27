@@ -57,7 +57,7 @@ impl ExportCommand {
 
         let mut secrets = IndexMap::new();
 
-        for (key, secret_config) in profile_secrets {
+        for (key, secret_config) in &profile_secrets {
             // Use centralized secret resolver for consistent priority order
             match resolve_secret(
                 &config,

@@ -41,7 +41,7 @@ impl ExecCommand {
         }
 
         // Resolve and add each secret as an environment variable
-        for (key, secret_config) in profile_secrets {
+        for (key, secret_config) in &profile_secrets {
             match resolve_secret(
                 &config,
                 &profile,

@@ -72,7 +72,7 @@ impl CiRedactCommand {
         }
 
         // Resolve and redact each secret
-        for (key, secret_config) in profile_secrets {
+        for (key, secret_config) in &profile_secrets {
             match resolve_secret(
                 &config,
                 &profile,
