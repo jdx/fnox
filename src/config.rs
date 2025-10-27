@@ -335,13 +335,6 @@ impl Config {
             .unwrap_or_else(|| "default".to_string())
     }
 
-    /// List all available profiles (including "default")
-    pub fn list_profiles(&self) -> Vec<String> {
-        let mut profiles = vec!["default".to_string()];
-        profiles.extend(self.profiles.keys().cloned());
-        profiles
-    }
-
     /// Get secrets for the default profile (mutable)
     pub fn get_default_secrets_mut(&mut self) -> &mut IndexMap<String, SecretConfig> {
         &mut self.secrets
