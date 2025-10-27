@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.1.0](https://github.com/jdx/fnox/compare/v1.0.1..v1.1.0) - 2025-10-27
+
+### 🚀 Features
+
+- add top-level secret inheritance for profiles by [@jdx](https://github.com/jdx) in [#21](https://github.com/jdx/fnox/pull/21)
+- add global if_missing configuration with priority chain by [@jdx](https://github.com/jdx) in [#22](https://github.com/jdx/fnox/pull/22)
+
+### 🐛 Bug Fixes
+
+- SSH key support in age provider by [@jdx](https://github.com/jdx) in [#26](https://github.com/jdx/fnox/pull/26)
+
 ## [1.0.1](https://github.com/jdx/fnox/compare/v1.0.0..v1.0.1) - 2025-10-26
 
 ### 🐛 Bug Fixes
