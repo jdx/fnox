@@ -3,7 +3,7 @@ use crate::config::Config;
 use crate::error::Result;
 use clap::{Args, ValueEnum};
 use regex::Regex;
-use std::io;
+use std::io::{self, Read};
 use std::{collections::HashMap, path::PathBuf};
 use strum::{Display, EnumString, VariantNames};
 
@@ -55,7 +55,7 @@ impl ImportCommand {
             profile
         );
 
-        let input = self.read_input(&cli.config)?;
+        let input = self.read_input()?;
         let mut secrets = self.parse_input(&input)?;
 
         // Apply filter if specified
@@ -109,17 +109,17 @@ impl ImportCommand {
         // Load config and add secrets
         {
             let profile_secrets = config.get_secrets_mut(&profile);
+            let imported_count = secrets.len();
 
             for (key, value) in secrets {
                 let secret_config = profile_secrets.entry(key.clone()).or_default();
-                secret_config.value = Some(value.clone());
-                secret_config.default = Some(value.clone()); // Set as default for direct access
+                // Import as plain default values (not encrypted)
+                secret_config.default = Some(value);
             }
 
             println!(
                 "✓ Imported {} secrets into profile '{}'",
-                profile_secrets.len(),
-                profile
+                imported_count, profile
             );
         }
 
@@ -128,15 +128,25 @@ impl ImportCommand {
         Ok(())
     }
 
-    fn read_input(&self, config_path: &std::path::Path) -> Result<String> {
-        let input = std::fs::read_to_string(config_path).map_err(|e| {
-            miette::miette!(
-                "Failed to read config file '{}': {}",
-                config_path.display(),
-                e
-            )
-        })?;
-        Ok(input)
+    fn read_input(&self) -> Result<String> {
+        if let Some(ref input_path) = self.input {
+            // Read from specified file
+            let input = std::fs::read_to_string(input_path).map_err(|e| {
+                miette::miette!(
+                    "Failed to read input file '{}': {}",
+                    input_path.display(),
+                    e
+                )
+            })?;
+            Ok(input)
+        } else {
+            // Read from stdin
+            let mut input = String::new();
+            io::stdin()
+                .read_to_string(&mut input)
+                .map_err(|e| miette::miette!("Failed to read from stdin: {}", e))?;
+            Ok(input)
+        }
     }
 
     fn parse_input(&self, input: &str) -> Result<HashMap<String, String>> {

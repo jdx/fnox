@@ -1690,8 +1690,19 @@ jobs:
 Migrate from `.env` files:
 
 ```bash
-# Import from .env
-fnox import --format env --source .env
+# Import from .env file
+fnox import -i .env
+
+# Import with specific format (default is env)
+fnox import -i secrets.json json
+fnox import -i secrets.yaml yaml
+fnox import -i secrets.toml toml
+
+# Import from stdin
+cat .env | fnox import
+
+# Import with filters and prefixes
+fnox import -i .env --filter "^DATABASE_" --prefix "MYAPP_"
 
 # Export to various formats
 fnox export --format json > secrets.json
