@@ -15,11 +15,6 @@ setup() {
     # Generate a test SSH key (Ed25519)
     ssh-keygen -t ed25519 -f test_ssh_key -N "" -C "test@example.com" >/dev/null 2>&1
 
-    # Generate corresponding age key for encryption
-    age-keygen -o age_key.txt >/dev/null 2>&1
-    local age_pubkey
-    age_pubkey=$(grep "public key:" age_key.txt | cut -d' ' -f4)
-
     # Get SSH public key in format age expects
     local ssh_pubkey
     ssh_pubkey=$(cat test_ssh_key.pub)
@@ -28,7 +23,7 @@ setup() {
     printf "[providers.age]\ntype = \"age\"\nrecipients = [\"%s\"]\n" "$ssh_pubkey" > fnox.toml
 
     # Test encrypting to SSH public key and decrypting with SSH private key
-    run "$FNOX_BIN" set SSH_TEST "ssh-test-value" --provider age --age-key-file age_key.txt
+    run "$FNOX_BIN" set SSH_TEST "ssh-test-value" --provider age --age-key-file test_ssh_key
     assert_success
     assert_output --partial "Set secret SSH_TEST"
 
@@ -36,8 +31,8 @@ setup() {
     run "$FNOX_BIN" get SSH_TEST --age-key-file test_ssh_key
     assert_success
     assert_output "ssh-test-value"
+}
 
-    # Cleanup
-    cd "$OLDPWD"
-    rm -rf "$tmpdir"
+@test "age provider supports password-protected SSH keys" {
+    skip "Password-protected SSH keys require interactive prompts which bats cannot handle"
 }
