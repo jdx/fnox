@@ -1467,6 +1467,44 @@ fnox get API_URL --profile staging         # staging
 fnox get API_URL --profile production      # production
 ```
 
+#### Profile Secret Inheritance
+
+Profiles automatically inherit secrets defined at the top level, reducing configuration verbosity:
+
+```toml
+# Define secrets once at top level - all profiles inherit these
+[secrets.LOG_LEVEL]
+default = "info"
+
+[secrets.API_TIMEOUT]
+default = "30"
+
+[secrets.DATABASE_URL]
+provider = "age"
+value = "encrypted-dev-db-url..."
+
+# Staging profile inherits all top-level secrets
+[profiles.staging]
+# Automatically gets LOG_LEVEL, API_TIMEOUT, DATABASE_URL
+
+# Production overrides specific secrets, inherits the rest
+[profiles.production.secrets.DATABASE_URL]
+provider = "aws"
+value = "prod-db-url"  # Overrides top-level DATABASE_URL
+
+[profiles.production.secrets.LOG_LEVEL]
+default = "warn"  # Overrides top-level LOG_LEVEL
+# Still inherits API_TIMEOUT from top level
+```
+
+**How it works:**
+
+- Top-level `[secrets.*]` are inherited by all profiles
+- Profile-specific secrets override inherited values
+- Reduces duplication for secrets shared across environments
+
+This is especially useful when managing many secrets where only a few differ between environments.
+
 ### Hierarchical Configuration
 
 fnox searches parent directories for `fnox.toml` files and merges them:
