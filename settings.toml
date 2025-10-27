@@ -81,3 +81,26 @@ examples = [
   "FNOX_SHELL_OUTPUT=debug fnox activate zsh",
 ]
 since = "0.1.0"
+
+[if_missing]
+type = "string"
+default = "\"warn\""
+sources.cli = ["--if-missing"]
+sources.env = ["FNOX_IF_MISSING"]
+docs = """
+Default behavior when a secret cannot be resolved.
+
+Available modes:
+- "error" - Fail the command if a secret cannot be resolved
+- "warn" - Print a warning and continue (default when not specified)
+- "ignore" - Silently skip missing secrets
+
+This can be set at multiple levels with the following priority chain.
+
+Priority (highest to lowest): CLI flag > Environment > Secret level > Top-level config > Default (warn)
+"""
+examples = [
+  "fnox exec --if-missing error -- ./my-app",
+  "FNOX_IF_MISSING=ignore fnox exec -- ./my-app",
+]
+since = "1.1.0"

@@ -49,6 +49,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub age_key_file: Option<PathBuf>,
 
+    /// What to do if a secret is missing (error, warn, ignore)
+    #[arg(long, global = true)]
+    pub if_missing: Option<String>,
+
     /// Disable colored output
     #[arg(long, global = true)]
     pub no_color: bool,

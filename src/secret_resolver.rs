@@ -2,6 +2,7 @@ use crate::config::{Config, IfMissing, SecretConfig};
 use crate::env;
 use crate::error::{FnoxError, Result};
 use crate::providers::get_provider;
+use crate::settings::Settings;
 
 /// Resolves a secret value using the correct priority order:
 /// 1. Provider (if specified)
@@ -35,8 +36,8 @@ pub async fn resolve_secret(
         return Ok(Some(env_value));
     }
 
-    // No value found - handle based on if_missing
-    handle_missing_secret(key, secret_config)
+    // No value found - handle based on if_missing with priority chain
+    handle_missing_secret(key, secret_config, config)
 }
 
 async fn try_resolve_from_provider(
@@ -79,20 +80,54 @@ async fn try_resolve_from_provider(
     Ok(Some(value))
 }
 
-fn handle_missing_secret(key: &str, secret_config: &SecretConfig) -> Result<Option<String>> {
-    match secret_config.if_missing {
-        Some(IfMissing::Error) => Err(FnoxError::Config(format!(
+fn handle_missing_secret(
+    key: &str,
+    secret_config: &SecretConfig,
+    config: &Config,
+) -> Result<Option<String>> {
+    // Priority chain for if_missing:
+    // 1. CLI flag (via Settings)
+    // 2. Environment variable (via Settings)
+    // 3. Secret-level if_missing
+    // 4. Top-level config if_missing
+    // 5. Default (warn)
+    let if_missing = Settings::try_get()
+        .ok()
+        .and_then(|s| {
+            if s.if_missing != "warn" {
+                // User explicitly set it via CLI or env var
+                match s.if_missing.to_lowercase().as_str() {
+                    "error" => Some(IfMissing::Error),
+                    "warn" => Some(IfMissing::Warn),
+                    "ignore" => Some(IfMissing::Ignore),
+                    _ => {
+                        eprintln!(
+                            "Warning: Invalid if_missing value '{}', using 'warn'",
+                            s.if_missing
+                        );
+                        Some(IfMissing::Warn)
+                    }
+                }
+            } else {
+                None // Use config or default
+            }
+        })
+        .or(secret_config.if_missing)
+        .or(config.if_missing)
+        .unwrap_or(IfMissing::Warn);
+
+    match if_missing {
+        IfMissing::Error => Err(FnoxError::Config(format!(
             "Secret '{}' not found and no default provided",
             key
         ))),
-        Some(IfMissing::Warn) | None => {
-            // Default to warn when if_missing is not specified
+        IfMissing::Warn => {
             eprintln!(
                 "Warning: Secret '{}' not found and no default provided",
                 key
             );
             Ok(None)
         }
-        Some(IfMissing::Ignore) => Ok(None),
+        IfMissing::Ignore => Ok(None),
     }
 }

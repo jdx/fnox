@@ -43,6 +43,7 @@ static INITIALIZED: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
 pub struct CliSnapshot {
     pub age_key_file: Option<std::path::PathBuf>,
     pub profile: Option<String>,
+    pub if_missing: Option<String>,
 }
 
 static CLI_SNAPSHOT: LazyLock<Mutex<Option<CliSnapshot>>> = LazyLock::new(|| Mutex::new(None));
@@ -149,6 +150,10 @@ impl Settings {
             if let Some(profile) = snapshot.profile {
                 map.insert("profile", SettingValue::String(profile));
             }
+
+            if let Some(if_missing) = snapshot.if_missing {
+                map.insert("if_missing", SettingValue::OptionString(Some(if_missing)));
+            }
         }
 
         map
@@ -217,6 +222,7 @@ mod tests {
             age_key_file: None,
             profile: "default".to_string(),
             shell_integration_output: "normal".to_string(),
+            if_missing: "warn".to_string(),
         };
 
         let mut env = SourceMap::new();
@@ -246,6 +252,7 @@ mod tests {
             age_key_file: None,
             profile: "default".to_string(),
             shell_integration_output: "normal".to_string(),
+            if_missing: "warn".to_string(),
         };
 
         let mut env = SourceMap::new();

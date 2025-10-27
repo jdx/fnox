@@ -30,6 +30,7 @@ async fn main() -> miette::Result<()> {
     settings::Settings::set_cli_snapshot(settings::CliSnapshot {
         age_key_file: cli.age_key_file.clone(),
         profile: cli.profile.clone(),
+        if_missing: cli.if_missing.clone(),
     });
 
     // Handle --no-color flag

@@ -42,6 +42,10 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub age_key_file: Option<PathBuf>,
 
+    /// Default if_missing behavior for all secrets in this config
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub if_missing: Option<IfMissing>,
+
     /// Track which config file each provider came from (not serialized)
     #[serde(skip)]
     pub provider_sources: HashMap<String, PathBuf>,
@@ -249,6 +253,11 @@ impl Config {
             merged.age_key_file = overlay.age_key_file;
         }
 
+        // Merge if_missing (overlay takes precedence)
+        if overlay.if_missing.is_some() {
+            merged.if_missing = overlay.if_missing;
+        }
+
         // Merge providers (overlay takes precedence)
         for (name, provider) in overlay.providers {
             merged.providers.insert(name, provider);
@@ -322,6 +331,7 @@ impl Config {
             secrets: IndexMap::new(),
             profiles: IndexMap::new(),
             age_key_file: None,
+            if_missing: None,
             provider_sources: HashMap::new(),
             secret_sources: HashMap::new(),
         }

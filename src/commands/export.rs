@@ -2,6 +2,7 @@ use crate::commands::Cli;
 use crate::config::{Config, IfMissing};
 use crate::error::Result;
 use crate::secret_resolver::resolve_secret;
+use crate::settings::Settings;
 use clap::{Args, ValueEnum};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -76,16 +77,35 @@ impl ExportCommand {
                 }
                 Err(e) => {
                     // Provider error - respect if_missing to decide whether to fail or continue
-                    match secret_config.if_missing {
-                        Some(IfMissing::Error) => {
+                    // Priority: CLI flag > Env var > Secret-level > Top-level config > Default
+                    let if_missing = Settings::try_get()
+                        .ok()
+                        .and_then(|s| {
+                            if s.if_missing != "warn" {
+                                // User explicitly set it via CLI or env var
+                                match s.if_missing.to_lowercase().as_str() {
+                                    "error" => Some(IfMissing::Error),
+                                    "warn" => Some(IfMissing::Warn),
+                                    "ignore" => Some(IfMissing::Ignore),
+                                    _ => Some(IfMissing::Warn),
+                                }
+                            } else {
+                                None // Use config or default
+                            }
+                        })
+                        .or(secret_config.if_missing)
+                        .or(config.if_missing)
+                        .unwrap_or(IfMissing::Warn);
+
+                    match if_missing {
+                        IfMissing::Error => {
                             tracing::error!("Error resolving secret '{}': {}", key, e);
                             return Err(e);
                         }
-                        Some(IfMissing::Warn) | None => {
-                            // Default (None) is Warn
+                        IfMissing::Warn => {
                             tracing::warn!("Error resolving secret '{}': {}", key, e);
                         }
-                        Some(IfMissing::Ignore) => {
+                        IfMissing::Ignore => {
                             // Silently skip
                         }
                     }
