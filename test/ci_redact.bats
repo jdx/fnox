@@ -117,11 +117,11 @@ EOF
     assert_output --partial "::add-mask::default-value"
     refute_output --partial "staging-value"
 
-    # Test staging profile
+    # Test staging profile - inherits top-level secrets
     run "$FNOX_BIN" -p staging ci-redact
     assert_success
     assert_output --partial "::add-mask::staging-value"
-    refute_output --partial "default-value"
+    assert_output --partial "::add-mask::default-value"  # Inherited from top level
 }
 
 @test "ci-redact handles missing secrets with if_missing=ignore" {
