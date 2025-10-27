@@ -1,9 +1,6 @@
 use crate::error::{FnoxError, Result};
-use crate::secret_resolver::{resolve_if_missing_behavior, resolve_secret};
-use crate::{
-    commands::Cli,
-    config::{Config, IfMissing},
-};
+use crate::secret_resolver::{handle_provider_error, resolve_if_missing_behavior, resolve_secret};
+use crate::{commands::Cli, config::Config};
 use clap::Args;
 
 #[derive(Debug, Args)]
@@ -85,17 +82,8 @@ impl CiRedactCommand {
                     // Provider error - respect if_missing to decide whether to fail or continue
                     let if_missing = resolve_if_missing_behavior(secret_config, &config);
 
-                    match if_missing {
-                        IfMissing::Error => {
-                            eprintln!("Error resolving secret '{}': {}", key, e);
-                            return Err(e);
-                        }
-                        IfMissing::Warn => {
-                            eprintln!("Warning: Error resolving secret '{}': {}", key, e);
-                        }
-                        IfMissing::Ignore => {
-                            // Silently skip
-                        }
+                    if let Some(error) = handle_provider_error(key, e, if_missing, false) {
+                        return Err(error);
                     }
                 }
             }

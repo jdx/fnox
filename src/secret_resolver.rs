@@ -55,6 +55,38 @@ pub fn resolve_if_missing_behavior(secret_config: &SecretConfig, config: &Config
         .unwrap_or(IfMissing::Warn)
 }
 
+/// Handles provider errors according to if_missing behavior.
+/// Returns Some(err) if the error should be propagated, None if it should be ignored.
+pub fn handle_provider_error(
+    key: &str,
+    error: FnoxError,
+    if_missing: IfMissing,
+    use_tracing: bool,
+) -> Option<FnoxError> {
+    match if_missing {
+        IfMissing::Error => {
+            if use_tracing {
+                tracing::error!("Error resolving secret '{}': {}", key, error);
+            } else {
+                eprintln!("Error resolving secret '{}': {}", key, error);
+            }
+            Some(error)
+        }
+        IfMissing::Warn => {
+            if use_tracing {
+                tracing::warn!("Error resolving secret '{}': {}", key, error);
+            } else {
+                eprintln!("Warning: Error resolving secret '{}': {}", key, error);
+            }
+            None
+        }
+        IfMissing::Ignore => {
+            // Silently skip
+            None
+        }
+    }
+}
+
 /// Resolves a secret value using the correct priority order:
 /// 1. Provider (if specified)
 /// 2. Default value (if specified)
