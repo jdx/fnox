@@ -94,23 +94,21 @@ fn handle_missing_secret(
     let if_missing = Settings::try_get()
         .ok()
         .and_then(|s| {
-            if s.if_missing != "warn" {
-                // User explicitly set it via CLI or env var
-                match s.if_missing.to_lowercase().as_str() {
+            // If Some(value), CLI or env var was explicitly set (highest priority)
+            s.if_missing
+                .as_ref()
+                .and_then(|value| match value.to_lowercase().as_str() {
                     "error" => Some(IfMissing::Error),
                     "warn" => Some(IfMissing::Warn),
                     "ignore" => Some(IfMissing::Ignore),
                     _ => {
                         eprintln!(
                             "Warning: Invalid if_missing value '{}', using 'warn'",
-                            s.if_missing
+                            value
                         );
                         Some(IfMissing::Warn)
                     }
-                }
-            } else {
-                None // Use config or default
-            }
+                })
         })
         .or(secret_config.if_missing)
         .or(config.if_missing)

@@ -222,7 +222,7 @@ mod tests {
             age_key_file: None,
             profile: "default".to_string(),
             shell_integration_output: "normal".to_string(),
-            if_missing: "warn".to_string(),
+            if_missing: None,
         };
 
         let mut env = SourceMap::new();
@@ -252,7 +252,7 @@ mod tests {
             age_key_file: None,
             profile: "default".to_string(),
             shell_integration_output: "normal".to_string(),
-            if_missing: "warn".to_string(),
+            if_missing: None,
         };
 
         let mut env = SourceMap::new();

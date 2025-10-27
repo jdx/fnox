@@ -83,8 +83,8 @@ examples = [
 since = "0.1.0"
 
 [if_missing]
-type = "string"
-default = "\"warn\""
+type = "option<string>"
+default = "None"
 sources.cli = ["--if-missing"]
 sources.env = ["FNOX_IF_MISSING"]
 docs = """
