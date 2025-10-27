@@ -4,6 +4,57 @@ use crate::error::{FnoxError, Result};
 use crate::providers::get_provider;
 use crate::settings::Settings;
 
+/// Resolves the if_missing behavior using the complete priority chain:
+/// 1. CLI flag (--if-missing) via Settings
+/// 2. Environment variable (FNOX_IF_MISSING) via Settings  
+/// 3. Secret-level if_missing
+/// 4. Top-level config if_missing
+/// 5. Base default environment variable (FNOX_IF_MISSING_DEFAULT) via Settings
+/// 6. Hard-coded default (warn)
+pub fn resolve_if_missing_behavior(secret_config: &SecretConfig, config: &Config) -> IfMissing {
+    Settings::try_get()
+        .ok()
+        .and_then(|s| {
+            // CLI flag or FNOX_IF_MISSING env var (highest priority)
+            s.if_missing
+                .as_ref()
+                .map(|value| match value.to_lowercase().as_str() {
+                    "error" => IfMissing::Error,
+                    "warn" => IfMissing::Warn,
+                    "ignore" => IfMissing::Ignore,
+                    _ => {
+                        eprintln!(
+                            "Warning: Invalid if_missing value '{}', using 'warn'",
+                            value
+                        );
+                        IfMissing::Warn
+                    }
+                })
+        })
+        .or(secret_config.if_missing)
+        .or(config.if_missing)
+        .or_else(|| {
+            // FNOX_IF_MISSING_DEFAULT fallback before hard-coded default
+            Settings::try_get().ok().and_then(|s| {
+                s.if_missing_default
+                    .as_ref()
+                    .map(|value| match value.to_lowercase().as_str() {
+                        "error" => IfMissing::Error,
+                        "warn" => IfMissing::Warn,
+                        "ignore" => IfMissing::Ignore,
+                        _ => {
+                            eprintln!(
+                                "Warning: Invalid FNOX_IF_MISSING_DEFAULT value '{}', using 'warn'",
+                                value
+                            );
+                            IfMissing::Warn
+                        }
+                    })
+            })
+        })
+        .unwrap_or(IfMissing::Warn)
+}
+
 /// Resolves a secret value using the correct priority order:
 /// 1. Provider (if specified)
 /// 2. Default value (if specified)
@@ -85,54 +136,7 @@ fn handle_missing_secret(
     secret_config: &SecretConfig,
     config: &Config,
 ) -> Result<Option<String>> {
-    // Priority chain for if_missing:
-    // 1. CLI flag (--if-missing)
-    // 2. Environment variable (FNOX_IF_MISSING)
-    // 3. Secret-level if_missing
-    // 4. Top-level config if_missing
-    // 5. FNOX_IF_MISSING_DEFAULT env var
-    // 6. Default (warn)
-    let if_missing = Settings::try_get()
-        .ok()
-        .and_then(|s| {
-            // If Some(value), CLI or env var was explicitly set (highest priority)
-            s.if_missing
-                .as_ref()
-                .map(|value| match value.to_lowercase().as_str() {
-                    "error" => IfMissing::Error,
-                    "warn" => IfMissing::Warn,
-                    "ignore" => IfMissing::Ignore,
-                    _ => {
-                        eprintln!(
-                            "Warning: Invalid if_missing value '{}', using 'warn'",
-                            value
-                        );
-                        IfMissing::Warn
-                    }
-                })
-        })
-        .or(secret_config.if_missing)
-        .or(config.if_missing)
-        .or_else(|| {
-            // Check FNOX_IF_MISSING_DEFAULT (via Settings) as fallback before hard-coded default
-            Settings::try_get().ok().and_then(|s| {
-                s.if_missing_default
-                    .as_ref()
-                    .map(|value| match value.to_lowercase().as_str() {
-                        "error" => IfMissing::Error,
-                        "warn" => IfMissing::Warn,
-                        "ignore" => IfMissing::Ignore,
-                        _ => {
-                            eprintln!(
-                                "Warning: Invalid FNOX_IF_MISSING_DEFAULT value '{}', using 'warn'",
-                                value
-                            );
-                            IfMissing::Warn
-                        }
-                    })
-            })
-        })
-        .unwrap_or(IfMissing::Warn);
+    let if_missing = resolve_if_missing_behavior(secret_config, config);
 
     match if_missing {
         IfMissing::Error => Err(FnoxError::Config(format!(

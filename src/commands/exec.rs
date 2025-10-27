@@ -1,6 +1,5 @@
 use crate::error::{FnoxError, Result};
-use crate::secret_resolver::resolve_secret;
-use crate::settings::Settings;
+use crate::secret_resolver::{resolve_if_missing_behavior, resolve_secret};
 use crate::{
     commands::Cli,
     config::{Config, IfMissing},
@@ -53,36 +52,7 @@ impl ExecCommand {
                 Err(e) => {
                     // Provider error (auth, network, missing secret, etc.)
                     // Respect if_missing to decide whether to fail or continue
-                    // Priority: CLI > Env > Secret > Config > FNOX_IF_MISSING_DEFAULT > Default
-                    let if_missing = Settings::try_get()
-                        .ok()
-                        .and_then(|s| {
-                            // If Some(value), CLI or env var was explicitly set (highest priority)
-                            s.if_missing
-                                .as_ref()
-                                .map(|value| match value.to_lowercase().as_str() {
-                                    "error" => IfMissing::Error,
-                                    "warn" => IfMissing::Warn,
-                                    "ignore" => IfMissing::Ignore,
-                                    _ => IfMissing::Warn,
-                                })
-                        })
-                        .or(secret_config.if_missing)
-                        .or(config.if_missing)
-                        .or_else(|| {
-                            // Check FNOX_IF_MISSING_DEFAULT (via Settings) as fallback
-                            Settings::try_get().ok().and_then(|s| {
-                                s.if_missing_default.as_ref().map(|value| {
-                                    match value.to_lowercase().as_str() {
-                                        "error" => IfMissing::Error,
-                                        "warn" => IfMissing::Warn,
-                                        "ignore" => IfMissing::Ignore,
-                                        _ => IfMissing::Warn,
-                                    }
-                                })
-                            })
-                        })
-                        .unwrap_or(IfMissing::Warn);
+                    let if_missing = resolve_if_missing_behavior(secret_config, &config);
 
                     match if_missing {
                         IfMissing::Error => {
