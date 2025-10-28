@@ -149,22 +149,20 @@ fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
     loop {
         // Check fnox.toml
         let config_path = current.join("fnox.toml");
-        if let Ok(metadata) = std::fs::metadata(&config_path) {
-            if let Ok(modified) = metadata.modified() {
-                if let Ok(duration) = modified.duration_since(SystemTime::UNIX_EPOCH) {
-                    configs.push((config_path, duration.as_millis()));
-                }
-            }
+        if let Ok(metadata) = std::fs::metadata(&config_path)
+            && let Ok(modified) = metadata.modified()
+            && let Ok(duration) = modified.duration_since(SystemTime::UNIX_EPOCH)
+        {
+            configs.push((config_path, duration.as_millis()));
         }
 
         // Check fnox.local.toml
         let local_config_path = current.join("fnox.local.toml");
-        if let Ok(metadata) = std::fs::metadata(&local_config_path) {
-            if let Ok(modified) = metadata.modified() {
-                if let Ok(duration) = modified.duration_since(SystemTime::UNIX_EPOCH) {
-                    configs.push((local_config_path, duration.as_millis()));
-                }
-            }
+        if let Ok(metadata) = std::fs::metadata(&local_config_path)
+            && let Ok(modified) = metadata.modified()
+            && let Ok(duration) = modified.duration_since(SystemTime::UNIX_EPOCH)
+        {
+            configs.push((local_config_path, duration.as_millis()));
         }
 
         // Move to parent directory
