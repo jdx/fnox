@@ -37,10 +37,13 @@ cargo set-version --package fnox "${version#v}"
 git config user.name mise-en-dev
 git config user.email 123107610+mise-en-dev@users.noreply.github.com
 cargo update
+mise run render ::: lint-fix
 
 git add \
   Cargo.* \
-  CHANGELOG.md
+  CHANGELOG.md \
+  docs \
+  fnox.usage.kdl
 
 git checkout -B release
 git commit -m "chore: release $version"
