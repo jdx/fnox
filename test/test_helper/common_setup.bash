@@ -73,6 +73,10 @@ _common_setup() {
 	export HOME="$TEST_TEMP_DIR"
 	export FNOX_CONFIG_FILE="$TEST_TEMP_DIR/fnox.toml"
 
+	# Clear hook-env session state to ensure clean test environment
+	unset __FNOX_SESSION
+	unset __FNOX_DIFF
+
 	# Ensure no existing config
 	rm -f "$FNOX_CONFIG_FILE"
 }
