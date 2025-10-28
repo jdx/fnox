@@ -15,12 +15,22 @@ setup_age_provider() {
         skip "age-keygen not installed"
     fi
 
-    assert_fnox_success init
+    # Generate age key
     local keygen_output
     keygen_output=$(age-keygen -o key.txt 2>&1)
     local public_key
     public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
-    assert_fnox_success provider add age age --recipients "$public_key"
+
+    # Create config with age provider
+    cat > fnox.toml << EOF
+root = true
+
+[providers.age]
+type = "age"
+recipients = ["$public_key"]
+
+[secrets]
+EOF
 }
 
 @test "fnox import requires --provider flag" {
@@ -223,16 +233,22 @@ EOF
     #   2. Then to read confirmation (stdin.read_line)
     # This would cause the import to fail because stdin is at EOF after reading data
 
-    # Try to import from stdin without --force but without --provider - should fail asking for provider
+    # First test: import without --provider should fail with missing provider error
     run bash -c "echo -e 'TEST_VAR=test123' | $FNOX_BIN import"
+    assert_failure
+    assert_output --partial "required arguments were not provided"
+    assert_output --partial "--provider"
+
+    # Second test: import with --provider but without --force should fail with stdin consumption error
+    run bash -c "echo -e 'TEST_VAR=test456' | $FNOX_BIN import --provider age"
     assert_failure
     assert_output --partial "the --force flag"
     assert_output --partial "stdin is consumed"
 
-    # Verify secret was NOT imported
+    # Verify secrets were NOT imported
     assert_fnox_failure get TEST_VAR
 
-    # Now try with --force and --provider - should succeed
+    # Now try with both --provider and --force - should succeed
     run bash -c "echo -e 'TEST_VAR=test123' | $FNOX_BIN import --provider age --force"
     assert_success
 
