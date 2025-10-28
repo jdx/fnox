@@ -133,12 +133,13 @@ fn has_config_been_modified() -> bool {
     // Compare with the stored hash from the previous session
     if PREV_SESSION.config_files_hash.is_empty() {
         // Old session without config_files_hash - use conservative fallback
-        // Detect if config presence changed (added or deleted)
+        // Without the hash, we can't reliably detect changes, so we must be conservative:
+        // - Reload if there was a previous config (might have changed or been deleted)
+        // - Reload if there's a current config (might be new or changed)
+        // - Only skip if neither previous nor current config exists
         let had_config = PREV_SESSION.config_path.is_some();
         let has_config = !current_configs.is_empty();
-
-        // Reload if config situation changed (added or deleted)
-        return (had_config || has_config) && had_config != has_config;
+        return had_config || has_config;
     }
 
     // Compare the current hash with the stored hash
