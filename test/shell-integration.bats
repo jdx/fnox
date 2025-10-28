@@ -331,13 +331,13 @@ teardown() {
 		value = "dev-value"
 	EOF
 
-	# Test with dev profile
+	# Test with dev profile - should inherit top-level secrets
 	export FNOX_PROFILE="dev"
 	run "$FNOX_BIN" hook-env -s bash
 
 	assert_success
 	assert_output --partial 'export DEV_SECRET="dev-value"'
-	refute_output --partial 'DEFAULT_SECRET'
+	assert_output --partial 'export DEFAULT_SECRET="default-value"'
 }
 
 # ============================================================================

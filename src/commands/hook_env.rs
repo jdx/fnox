@@ -150,22 +150,16 @@ async fn load_secrets_from_config(
     // Get the active profile
     let profile_name = &settings.profile;
 
-    // Get secrets for the active profile
-    // NOTE: hook-env does NOT inherit top-level secrets - only profile-specific secrets are loaded
-    // This is different from exec/export which DO inherit top-level secrets
-    let secrets = if profile_name == "default" {
-        &config.secrets
-    } else if let Some(profile) = config.profiles.get(profile_name) {
-        &profile.secrets
-    } else {
-        // Profile not found, use default
-        &config.secrets
-    };
+    // Get secrets for the profile using the Config method (inherits top-level secrets)
+    let secrets = config
+        .get_secrets(profile_name)
+        .map_err(|e| anyhow::anyhow!("Failed to get secrets: {}", e))?;
 
     let age_key_file = settings.age_key_file.as_deref();
 
     // Use batch resolution for better performance
-    let resolved = match resolve_secrets_batch(&config, profile_name, secrets, age_key_file).await {
+    let resolved = match resolve_secrets_batch(&config, profile_name, &secrets, age_key_file).await
+    {
         Ok(r) => r,
         Err(e) => {
             // Log error but don't fail the shell hook
