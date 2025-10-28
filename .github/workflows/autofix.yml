@@ -1,0 +1,43 @@
+name: autofix
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  autofix:
+    if: github.actor != 'renovate[bot]' && github.actor != 'mend[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: autofix
+      - name: Install Rust components
+        run: rustup component add rustfmt clippy
+      - name: Build project
+        run: cargo build
+      - name: Add target to PATH
+        run: echo "$PWD/target/debug" >> "$GITHUB_PATH"
+      - uses: jdx/mise-action@v3
+      - name: Install mise tools
+        run: mise install
+      - name: Render documentation
+        run: mise run render
+      - name: Fix linting issues
+        run: mise run lint-fix
+      - uses: autofix-ci/action@v1.3.2

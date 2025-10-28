@@ -156,7 +156,7 @@ impl Config {
     }
 
     /// Load configuration with recursive directory search and merging
-    pub fn load_with_recursion<P: AsRef<Path>>(_start_path: P) -> Result<Self> {
+    fn load_with_recursion<P: AsRef<Path>>(_start_path: P) -> Result<Self> {
         // Start from current working directory and search upwards
         let current_dir = env::current_dir()
             .map_err(|e| FnoxError::Config(format!("Failed to get current directory: {}", e)))?;
