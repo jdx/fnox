@@ -16,6 +16,7 @@ actionlint = "latest"
 1password = "latest"
 bitwarden = "latest"
 vault = "latest"
+usage = "latest"
 
 [tasks.test]
 description = "Run both cargo and bats tests"

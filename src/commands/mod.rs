@@ -38,7 +38,7 @@ pub struct Cli {
     pub config: PathBuf,
 
     /// Profile to use (default: default, or FNOX_PROFILE env var)
-    #[arg(short, long, global = true)]
+    #[arg(short = 'P', long, global = true)]
     pub profile: Option<String>,
 
     /// Enable verbose logging

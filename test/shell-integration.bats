@@ -506,3 +506,31 @@ line3"""
 	session=$(echo "$output" | grep '__FNOX_SESSION=' | sed 's/^export __FNOX_SESSION="//' | sed 's/"$//')
 	[ -n "$session" ]
 }
+
+# ============================================================================
+# fnox.local.toml support tests
+# ============================================================================
+
+@test "fnox hook-env loads secrets from fnox.local.toml without fnox.toml" {
+	# Create an isolated directory with only fnox.local.toml (no fnox.toml)
+	mkdir -p "$TEST_TEMP_DIR/local-only"
+	cd "$TEST_TEMP_DIR/local-only"
+
+	cat >fnox.local.toml <<-EOF
+		root = true
+
+		[providers.plain]
+		type = "plain"
+
+		[secrets.LOCAL_ONLY_SECRET]
+		provider = "plain"
+		value = "local-only-value"
+	EOF
+
+	# hook-env should load secrets even with only fnox.local.toml
+	run "$FNOX_BIN" hook-env -s bash
+
+	assert_success
+	assert_output --partial 'export LOCAL_ONLY_SECRET="local-only-value"'
+	assert_output --partial '__FNOX_SESSION='
+}

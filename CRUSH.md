@@ -197,8 +197,8 @@ if_missing = "warn"  # Options: "error", "warn", "ignore"
 
 ### CLI Flags
 
-- `-p, --profile` for profile selection
-- `-P, --provider` for provider specification
+- `-P, --profile` for profile selection
+- `-p, --provider` for provider specification
 - `-d, --description` for secret descriptions
 - `-k, --key-name` for provider key names
 

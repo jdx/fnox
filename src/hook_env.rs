@@ -106,33 +106,30 @@ fn has_directory_changed() -> bool {
     PREV_SESSION.dir != current_dir
 }
 
-/// Check if fnox.toml has been modified since last run
+/// Check if fnox.toml or fnox.local.toml has been modified since last run
 fn has_config_been_modified() -> bool {
-    let current_dir = match std::env::current_dir() {
-        Ok(dir) => dir,
-        Err(_) => return false,
-    };
-
-    let config_path = current_dir.join("fnox.toml");
+    // Use find_config to check for either fnox.toml or fnox.local.toml
+    let config_path = find_config();
 
     // Check if config exists now but didn't before
-    if config_path.exists() && PREV_SESSION.config_path.is_none() {
+    if config_path.is_some() && PREV_SESSION.config_path.is_none() {
         return true;
     }
 
     // Check if config existed before but doesn't now
-    if !config_path.exists() && PREV_SESSION.config_path.is_some() {
+    if config_path.is_none() && PREV_SESSION.config_path.is_some() {
         return true;
     }
 
     // Check if config path changed
-    if PREV_SESSION.config_path.as_deref() != Some(&config_path) {
+    if config_path != PREV_SESSION.config_path {
         return true;
     }
 
     // Check if modification time changed
-    if let Some(prev_mtime) = PREV_SESSION.config_mtime
-        && let Ok(metadata) = std::fs::metadata(&config_path)
+    if let Some(ref current_path) = config_path
+        && let Some(prev_mtime) = PREV_SESSION.config_mtime
+        && let Ok(metadata) = std::fs::metadata(current_path)
         && let Ok(modified) = metadata.modified()
         && let Ok(duration) = modified.duration_since(SystemTime::UNIX_EPOCH)
     {
@@ -168,7 +165,7 @@ fn hash_fnox_env_vars() -> String {
     format!("{:x}", hasher.finish())
 }
 
-/// Find fnox.toml in current or parent directories
+/// Find fnox.toml or fnox.local.toml in current or parent directories
 pub fn find_config() -> Option<PathBuf> {
     let mut current = std::env::current_dir().ok()?;
 
@@ -176,6 +173,11 @@ pub fn find_config() -> Option<PathBuf> {
         let config_path = current.join("fnox.toml");
         if config_path.exists() {
             return Some(config_path);
+        }
+
+        let local_config_path = current.join("fnox.local.toml");
+        if local_config_path.exists() {
+            return Some(local_config_path);
         }
 
         if !current.pop() {

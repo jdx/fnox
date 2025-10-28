@@ -54,7 +54,6 @@ export default defineConfig({
           { text: "Shell Integration", link: "/guide/shell-integration" },
           { text: "Profiles", link: "/guide/profiles" },
           { text: "Hierarchical Config", link: "/guide/hierarchical-config" },
-          { text: "Local Overrides", link: "/guide/local-overrides" },
           {
             text: "Handling Missing Secrets",
             link: "/guide/missing-secrets",

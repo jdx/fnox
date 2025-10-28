@@ -4,23 +4,29 @@ fnox searches parent directories for `fnox.toml` files and merges them. This is 
 
 ## How It Works
 
-fnox walks up the directory tree from your current location and merges all `fnox.toml` files it finds:
+fnox walks up the directory tree from your current location and merges all `fnox.toml` and `fnox.local.toml` files it finds:
 
 ```
 project/
 ├── fnox.toml              # Root config
+├── fnox.local.toml        # Root local overrides (optional)
 └── services/
     ├── api/
-    │   └── fnox.toml      # API config
+    │   ├── fnox.toml      # API config
+    │   └── fnox.local.toml # API local overrides (optional)
     └── worker/
-        └── fnox.toml      # Worker config
+        ├── fnox.toml      # Worker config
+        └── fnox.local.toml # Worker local overrides (optional)
 ```
 
-When you run fnox from `project/services/api/`:
+When you run fnox from `project/services/api/`, the merge order is (lowest to highest priority):
 
 1. Loads `project/fnox.toml` (parent)
-2. Loads `project/services/api/fnox.toml` (current)
-3. Merges them (child overrides parent)
+2. Loads `project/fnox.local.toml` (parent local, if exists)
+3. Loads `project/services/api/fnox.toml` (current)
+4. Loads `project/services/api/fnox.local.toml` (current local, if exists)
+
+Each level merges both the main config and local overrides, with child configs taking precedence over parent configs, and local configs taking precedence over main configs at the same level.
 
 ## Example Setup
 
@@ -102,81 +108,14 @@ fnox list
 # WORKER_CONCURRENCY=4          (from worker)
 ```
 
-## Monorepo Pattern
-
-A typical monorepo setup:
-
-```
-monorepo/
-├── fnox.toml                  # Global: age provider, shared secrets
-├── apps/
-│   ├── web/
-│   │   └── fnox.toml          # Web app secrets
-│   └── mobile/
-│       └── fnox.toml          # Mobile app secrets
-└── services/
-    ├── api/
-    │   └── fnox.toml          # API service secrets
-    └── workers/
-        ├── fnox.toml          # Shared worker config
-        ├── email/
-        │   └── fnox.toml      # Email worker secrets
-        └── analytics/
-            └── fnox.toml      # Analytics worker secrets
-```
-
-### Root Config
-
-```toml
-# monorepo/fnox.toml
-
-[providers.age]
-type = "age"
-recipients = [
-  "age1alice...",
-  "age1bob...",
-  "age1charlie..."
-]
-
-# Shared across all services
-[secrets.SENTRY_DSN]
-provider = "age"
-value = "encrypted-sentry..."
-
-[secrets.LOG_LEVEL]
-default = "info"
-```
-
-Each subdirectory inherits the age provider and shared secrets, then adds its own.
-
-## Local Config with Hierarchy
-
-Both `fnox.toml` and `fnox.local.toml` are merged at each level:
-
-```
-project/
-├── fnox.toml
-├── fnox.local.toml            # Local overrides for root
-└── services/
-    └── api/
-        ├── fnox.toml
-        └── fnox.local.toml    # Local overrides for api
-```
-
-Merge order (lowest to highest priority):
-
-1. `project/fnox.toml`
-2. `project/fnox.local.toml`
-3. `project/services/api/fnox.toml`
-4. `project/services/api/fnox.local.toml`
-
 ## Imports vs Hierarchy
 
 **Hierarchy** (automatic):
 
 - Walks up directory tree
-- Merges all `fnox.toml` files found
-- Child overrides parent
+- Merges all `fnox.toml` and `fnox.local.toml` files found
+- Child configs override parent configs
+- Local configs override main configs at the same level
 
 **Imports** (explicit):
 
@@ -187,15 +126,46 @@ imports = ["./shared/secrets.toml", "./envs/dev.toml"]
 
 Use hierarchy for location-based config (monorepos). Use imports for cross-cutting concerns (shared secret bundles).
 
+## Local Overrides
+
+Use `fnox.local.toml` for user-specific overrides without committing to version control:
+
+```bash
+# Add to .gitignore
+echo "fnox.local.toml" >> .gitignore
+
+# Create local overrides
+cat > fnox.local.toml << 'EOF'
+[secrets.DATABASE_URL]
+default = "postgresql://localhost/mylocal"
+
+[secrets.DEBUG_MODE]
+default = "true"
+EOF
+```
+
+**Common use cases:**
+
+- Override team secrets for local development
+- Personal API keys and tokens
+- Machine-specific configuration (laptop vs desktop)
+- Testing different providers locally
+
+**Tips:**
+
+- Always add `fnox.local.toml` to `.gitignore`
+- Provide a `fnox.local.toml.example` (committed) for team guidance
+- Use explicit paths to bypass local overrides: `fnox -c ./fnox.toml get SECRET`
+
 ## Tips
 
 - **Keep root config minimal:** Only shared providers and secrets
 - **Service-specific secrets in subdirectories:** Each service manages its own
-- **Use local overrides for development:** Personal config without affecting team
+- **Use `fnox.local.toml` for development:** Personal overrides without affecting team
 - **Profile inheritance works too:** Each level can define profile-specific overrides
+- **Use `root = true` to stop recursion:** Prevents searching parent directories
 
 ## Next Steps
 
-- [Local Overrides](/guide/local-overrides) - Per-developer customization
 - [Profiles](/guide/profiles) - Multi-environment management
 - [Real-World Example](/guide/real-world-example) - See it all together
