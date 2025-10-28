@@ -1533,6 +1533,69 @@ project/
 
 Child configs override parent values. Great for monorepos!
 
+### Local Configuration Overrides
+
+Use `fnox.local.toml` for user-specific or machine-specific overrides without committing them to version control:
+
+```
+project/
+├── fnox.toml              # Committed config (team secrets)
+├── fnox.local.toml        # Local overrides (gitignored)
+└── .gitignore             # Contains: fnox.local.toml
+```
+
+**How it works:**
+
+- `fnox.local.toml` is loaded automatically alongside `fnox.toml` in the same directory
+- Local config takes precedence over `fnox.toml` values
+- Perfect for personal development settings, machine-specific credentials, or testing
+- Works with profiles and config recursion
+
+**Example use case:**
+
+```toml
+# fnox.toml (committed to git)
+[providers.age]
+type = "age"
+recipients = ["age1team..."]
+
+[secrets.DATABASE_URL]
+provider = "age"
+value = "encrypted-team-db..."
+
+[secrets.API_KEY]
+provider = "age"
+value = "encrypted-shared-key..."
+```
+
+```toml
+# fnox.local.toml (gitignored, personal overrides)
+[secrets.DATABASE_URL]
+default = "postgresql://localhost/mylocal"  # Override with local DB
+
+[secrets.DEBUG_MODE]
+default = "true"  # Personal debugging flag
+```
+
+**Common use cases:**
+
+- **Personal development databases:** Override team DB URLs with local instances
+- **Developer-specific tokens:** Store personal API keys without sharing
+- **Testing configurations:** Try different provider settings without affecting the team
+- **Machine-specific secrets:** Different values per machine (laptop vs desktop)
+
+**Important:** To use explicit config paths (bypassing local overrides), use a path prefix:
+
+```bash
+# Uses both fnox.toml and fnox.local.toml
+fnox get DATABASE_URL
+
+# Only uses fnox.toml (skips fnox.local.toml)
+fnox -c ./fnox.toml get DATABASE_URL
+```
+
+Remember to add `fnox.local.toml` to your `.gitignore`!
+
 ### Configuration Imports
 
 Split configs across files:

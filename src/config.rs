@@ -181,11 +181,20 @@ impl Config {
     /// Returns (config, found_any) where found_any indicates if any config file was found
     fn load_recursive(dir: &Path, _from_parent: bool, found_any: bool) -> Result<(Self, bool)> {
         let config_path = dir.join("fnox.toml");
+        let local_config_path = dir.join("fnox.local.toml");
+
         let (mut config, mut found) = if config_path.exists() {
             (Self::load(&config_path)?, true)
         } else {
             (Self::new(), found_any)
         };
+
+        // Load fnox.local.toml if it exists and merge it (takes precedence over fnox.toml)
+        if local_config_path.exists() {
+            let local_config = Self::load(&local_config_path)?;
+            config = Self::merge_configs(config, local_config)?;
+            found = true;
+        }
 
         // If this config marks root, stop recursion
         if config.root {

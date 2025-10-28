@@ -166,6 +166,9 @@ mise run test:bats -- test/bitwarden.bats
 - Named profiles in `[profiles.name]` sections
 - Each profile can have its own providers and encryption
 - Environment variable: `FNOX_PROFILE`
+- Local overrides: `fnox.local.toml` (gitignored) is loaded alongside `fnox.toml` and takes precedence
+- Config recursion: searches parent directories for `fnox.toml` files
+- Local config works with config recursion: both files are merged in each directory before recursing upward
 
 ### Secret Configuration
 
