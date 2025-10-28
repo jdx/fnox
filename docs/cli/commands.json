@@ -269,7 +269,7 @@
       },
       "import": {
         "full_cmd": ["import"],
-        "usage": "import [FLAGS] [FORMAT]",
+        "usage": "import <FLAGS> [FORMAT]",
         "subcommands": {},
         "args": [
           {
@@ -309,6 +309,24 @@
             "arg": {
               "name": "INPUT",
               "usage": "<INPUT>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            }
+          },
+          {
+            "name": "provider",
+            "usage": "-p --provider <PROVIDER>",
+            "help": "Provider to use for encrypting/storing imported secrets (required)",
+            "help_first_line": "Provider to use for encrypting/storing imported secrets (required)",
+            "short": ["p"],
+            "long": ["provider"],
+            "required": true,
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "PROVIDER",
+              "usage": "<PROVIDER>",
               "required": true,
               "double_dash": "Optional",
               "hide": false
@@ -751,10 +769,10 @@
           },
           {
             "name": "provider",
-            "usage": "-P --provider <PROVIDER>",
+            "usage": "-p --provider <PROVIDER>",
             "help": "Provider to fetch from",
             "help_first_line": "Provider to fetch from",
-            "short": ["P"],
+            "short": ["p"],
             "long": ["provider"],
             "hide": false,
             "global": false,
@@ -862,10 +880,10 @@
       },
       {
         "name": "profile",
-        "usage": "-p --profile <PROFILE>",
+        "usage": "-P --profile <PROFILE>",
         "help": "Profile to use (default: default, or FNOX_PROFILE env var)",
         "help_first_line": "Profile to use (default: default, or FNOX_PROFILE env var)",
-        "short": ["p"],
+        "short": ["P"],
         "long": ["profile"],
         "hide": false,
         "global": true,
@@ -942,7 +960,7 @@
   "config": {
     "props": {}
   },
-  "version": "1.1.0",
+  "version": "1.2.1",
   "usage": "Usage: fnox [OPTIONS] <COMMAND>",
   "complete": {
     "key": {
