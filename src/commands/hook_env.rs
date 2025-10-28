@@ -138,12 +138,13 @@ impl HookEnvCommand {
 
 /// Load all secrets from a fnox.toml config file
 async fn load_secrets_from_config(
-    config_path: &std::path::Path,
+    _config_path: &std::path::Path,
 ) -> Result<HashMap<String, String>> {
     use crate::secret_resolver::resolve_secrets_batch;
 
-    let config =
-        Config::load(config_path).map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    // Use load_with_recursion to ensure provider inheritance from parent configs
+    let config = Config::load_with_recursion("fnox.toml")
+        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
     let settings =
         Settings::try_get().map_err(|e| anyhow::anyhow!("Failed to get settings: {}", e))?;
 
