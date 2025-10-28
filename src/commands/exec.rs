@@ -36,7 +36,7 @@ impl ExecCommand {
             &profile_secrets,
             cli.age_key_file.as_deref(),
         )
-        .await;
+        .await?;
 
         // Add resolved secrets as environment variables
         for (key, value) in resolved_secrets {

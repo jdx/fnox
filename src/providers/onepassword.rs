@@ -223,12 +223,43 @@ impl crate::providers::Provider for OnePasswordProvider {
         // Execute op inject with stdin
         match self.execute_op_inject(&input) {
             Ok(output) => {
-                // Parse output line by line
-                // Expected format: KEY1=secret_value\nKEY2=secret_value2\n...
+                // Parse output handling multi-line secrets
+                // Format: KEY1=value1\nKEY2=value2_line1\nvalue2_line2\nKEY3=value3
+                // We need to identify where each key starts and collect all lines until the next key
+                let mut current_key: Option<String> = None;
+                let mut current_value = String::new();
+
                 for line in output.lines() {
-                    if let Some((key, value)) = line.split_once('=') {
-                        results.insert(key.to_string(), Ok(value.to_string()));
+                    // Check if this line starts a new key (contains '=' and the prefix matches a key we're looking for)
+                    if let Some(eq_pos) = line.find('=') {
+                        let potential_key = &line[..eq_pos];
+
+                        // Check if this is one of our expected keys
+                        if key_order.iter().any(|k| k == potential_key) {
+                            // Save the previous key-value pair if we have one
+                            if let Some(key) = current_key.take() {
+                                results.insert(key, Ok(current_value.clone()));
+                            }
+
+                            // Start collecting the new key
+                            current_key = Some(potential_key.to_string());
+                            current_value = line[eq_pos + 1..].to_string();
+                            continue;
+                        }
                     }
+
+                    // This line is a continuation of the current value
+                    if current_key.is_some() {
+                        if !current_value.is_empty() {
+                            current_value.push('\n');
+                        }
+                        current_value.push_str(line);
+                    }
+                }
+
+                // Don't forget the last key-value pair
+                if let Some(key) = current_key {
+                    results.insert(key, Ok(current_value));
                 }
 
                 // Check if any secrets are missing from output

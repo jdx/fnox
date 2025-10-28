@@ -122,18 +122,29 @@ pub trait Provider: Send + Sync {
     /// Returns a HashMap of successfully resolved secrets. Failures are logged but don't
     /// stop other secrets from being resolved.
     ///
-    /// Default implementation falls back to calling get_secret for each item.
+    /// Default implementation fetches secrets in parallel using tokio tasks.
+    /// Providers can override this for true batch operations (e.g., single API call).
     async fn get_secrets_batch(
         &self,
         secrets: &[(String, String)],
         key_file: Option<&Path>,
     ) -> HashMap<String, Result<String>> {
-        let mut results = HashMap::new();
-        for (key, value) in secrets {
-            let result = self.get_secret(value, key_file).await;
-            results.insert(key.clone(), result);
-        }
-        results
+        use futures::stream::{self, StreamExt};
+
+        // Clone the secrets to avoid lifetime issues with async closures
+        let secrets_vec: Vec<_> = secrets.to_vec();
+
+        // Fetch all secrets in parallel (up to 10 concurrent)
+        let results: Vec<_> = stream::iter(secrets_vec)
+            .map(|(key, value)| async move {
+                let result = self.get_secret(&value, key_file).await;
+                (key, result)
+            })
+            .buffer_unordered(10)
+            .collect()
+            .await;
+
+        results.into_iter().collect()
     }
 
     /// Encrypt a value with this provider (for encryption providers)

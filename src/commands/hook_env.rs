@@ -158,7 +158,15 @@ async fn load_secrets_from_config(
     let age_key_file = settings.age_key_file.as_deref();
 
     // Use batch resolution for better performance
-    let resolved = resolve_secrets_batch(&config, profile_name, &secrets, age_key_file).await;
+    let resolved = match resolve_secrets_batch(&config, profile_name, &secrets, age_key_file).await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            // Log error but don't fail the shell hook
+            tracing::warn!("failed to resolve secrets: {}", e);
+            return Ok(HashMap::new());
+        }
+    };
 
     // Convert to HashMap, filtering out None values
     let mut loaded_secrets = HashMap::new();

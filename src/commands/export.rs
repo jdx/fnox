@@ -62,7 +62,7 @@ impl ExportCommand {
             &profile_secrets,
             cli.age_key_file.as_deref(),
         )
-        .await;
+        .await?;
 
         // Build secrets map, preserving insertion order
         let mut secrets = IndexMap::new();
