@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.2.0](https://github.com/jdx/fnox/compare/v1.1.0..v1.2.0) - 2025-10-28
+
+### 🚀 Features
+
+- add support for fnox.local.toml local config overrides by [@jdx](https://github.com/jdx) in [#30](https://github.com/jdx/fnox/pull/30)
+- add batch secret resolution to improve performance by [@jdx](https://github.com/jdx) in [#31](https://github.com/jdx/fnox/pull/31)
+
+### 🐛 Bug Fixes
+
+- import command now reads from input file instead of config file by [@jdx](https://github.com/jdx) in [#28](https://github.com/jdx/fnox/pull/28)
+
+### 📚 Documentation
+
+- Add VitePress documentation and GitHub Pages deployment by [@jdx](https://github.com/jdx) in [#32](https://github.com/jdx/fnox/pull/32)
+
+### 🔍 Other Changes
+
+- Update URLs to use custom domain fnox.jdx.dev and remove DOCS_DEPLOYMENT.md by [@jdx](https://github.com/jdx) in [79a2c78](https://github.com/jdx/fnox/commit/79a2c7875e8b74283b71093be74d1e41171e5143)
+- Remove DOCS_DEPLOYMENT.md by [@jdx](https://github.com/jdx) in [dd9cb7b](https://github.com/jdx/fnox/commit/dd9cb7b90c6ffff43074aaba5908cc444bb8f412)
+- Remove ONEPASSWORD.md (content migrated to docs) by [@jdx](https://github.com/jdx) in [622baa3](https://github.com/jdx/fnox/commit/622baa3052abdebce3955d181848770bf9ef1ed6)
+- Add fnox vault logo by [@jdx](https://github.com/jdx) in [95a100f](https://github.com/jdx/fnox/commit/95a100fd22b6c9019a5d8e0d907680a235ec52bd)
+- Add auto-generated CLI reference documentation by [@jdx](https://github.com/jdx) in [582af5b](https://github.com/jdx/fnox/commit/582af5ba07f232f727041934af344bf953d72bab)
+- Show CLI Reference in sidebar on all pages by [@jdx](https://github.com/jdx) in [a19d6d1](https://github.com/jdx/fnox/commit/a19d6d127ae7d462424390147e9d46643dff16a6)
+- Remove 'When to Use' sections from provider docs by [@jdx](https://github.com/jdx) in [9fc9a75](https://github.com/jdx/fnox/commit/9fc9a756b9e85f5277deb46f0e11df61095eb663)
+- Add custom dark theme with Fort Knox styling by [@jdx](https://github.com/jdx) in [9c83a2e](https://github.com/jdx/fnox/commit/9c83a2eb4a4e1e17bd793e6c1a6e56aecc25fac8)
+- Fix dead links to /reference/commands by [@jdx](https://github.com/jdx) in [86762d8](https://github.com/jdx/fnox/commit/86762d8076f084f0fe704519dc4e2974d518dc02)
+
 ## [1.1.0](https://github.com/jdx/fnox/compare/v1.0.1..v1.1.0) - 2025-10-27
 
 ### 🚀 Features
