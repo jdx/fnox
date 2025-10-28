@@ -213,6 +213,5 @@ jobs:
 
 ## Next Steps
 
-- [Hierarchical Config](/guide/hierarchical-config) - Organize configs across directories
-- [Local Overrides](/guide/local-overrides) - Per-developer customization
+- [Hierarchical Config](/guide/hierarchical-config) - Organize configs across directories (includes local overrides)
 - [Real-World Example](/guide/real-world-example) - Complete multi-environment setup
