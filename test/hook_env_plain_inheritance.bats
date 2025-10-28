@@ -195,3 +195,72 @@ EOF
     assert_success
     assert_line --index -1 "child-override-value"
 }
+
+@test "hook-env loads fnox.local.toml and merges with fnox.toml" {
+    # Create directory with both fnox.toml and fnox.local.toml
+    mkdir -p test_dir
+
+    # Create main config
+    cat > test_dir/fnox.toml <<EOF
+[providers.plain]
+type = "plain"
+
+[secrets.MAIN_SECRET]
+provider = "plain"
+value = "main-value"
+EOF
+
+    # Create local config that overrides and adds secrets
+    cat > test_dir/fnox.local.toml <<EOF
+[secrets.MAIN_SECRET]
+provider = "plain"
+value = "local-override"
+
+[secrets.LOCAL_SECRET]
+provider = "plain"
+value = "local-only"
+EOF
+
+    cd test_dir
+
+    # Both secrets should be loaded, with local override taking precedence
+    run bash -c "eval \"\$('$FNOX_BIN' hook-env -s bash 2>/dev/null)\" && echo \$MAIN_SECRET \$LOCAL_SECRET"
+    assert_success
+    assert_line --index -1 "local-override local-only"
+}
+
+@test "hook-env inherits provider from parent with local config override" {
+    # Create directory structure
+    mkdir -p parent/child
+
+    # Create parent config with provider
+    cat > parent/fnox.toml <<EOF
+[providers.plain]
+type = "plain"
+
+[secrets.PARENT_SECRET]
+provider = "plain"
+value = "parent-value"
+EOF
+
+    # Create child main config
+    cat > parent/child/fnox.toml <<EOF
+[secrets.CHILD_SECRET]
+provider = "plain"
+value = "child-value"
+EOF
+
+    # Create child local config (inherits provider from parent)
+    cat > parent/child/fnox.local.toml <<EOF
+[secrets.LOCAL_SECRET]
+provider = "plain"
+value = "local-value"
+EOF
+
+    cd parent/child
+
+    # All three secrets should be loaded
+    run bash -c "eval \"\$('$FNOX_BIN' hook-env -s bash 2>/dev/null)\" && echo \$PARENT_SECRET \$CHILD_SECRET \$LOCAL_SECRET"
+    assert_success
+    assert_line --index -1 "parent-value child-value local-value"
+}

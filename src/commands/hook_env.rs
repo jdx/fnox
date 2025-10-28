@@ -82,8 +82,8 @@ impl HookEnvCommand {
         let mut output = String::new();
 
         // Load secrets if config exists
-        let loaded_secrets = if let Some(ref path) = config_path {
-            match load_secrets_from_config(path).await {
+        let loaded_secrets = if config_path.is_some() {
+            match load_secrets_from_config().await {
                 Ok(secrets) => secrets,
                 Err(e) => {
                     // Log error but don't fail the shell hook
@@ -137,13 +137,12 @@ impl HookEnvCommand {
 }
 
 /// Load all secrets from a fnox.toml config file
-async fn load_secrets_from_config(
-    _config_path: &std::path::Path,
-) -> Result<HashMap<String, String>> {
+async fn load_secrets_from_config() -> Result<HashMap<String, String>> {
     use crate::secret_resolver::resolve_secrets_batch;
 
-    // Use load_with_recursion to ensure provider inheritance from parent configs
-    let config = Config::load_with_recursion("fnox.toml")
+    // Use load_smart to ensure provider inheritance from parent configs
+    // This handles both fnox.toml and fnox.local.toml with proper recursion
+    let config = Config::load_smart("fnox.toml")
         .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
     let settings =
         Settings::try_get().map_err(|e| anyhow::anyhow!("Failed to get settings: {}", e))?;
