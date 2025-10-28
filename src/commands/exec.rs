@@ -1,5 +1,5 @@
 use crate::error::{FnoxError, Result};
-use crate::secret_resolver::{handle_provider_error, resolve_if_missing_behavior, resolve_secret};
+use crate::secret_resolver::resolve_secrets_batch;
 use crate::{commands::Cli, config::Config};
 use clap::{Args, ValueHint};
 use std::process::Command;
@@ -29,31 +29,19 @@ impl ExecCommand {
             cmd.args(&self.command[1..]);
         }
 
-        // Resolve and add each secret as an environment variable
-        for (key, secret_config) in &profile_secrets {
-            match resolve_secret(
-                &config,
-                &profile,
-                key,
-                secret_config,
-                cli.age_key_file.as_deref(),
-            )
-            .await
-            {
-                Ok(Some(value)) => {
-                    cmd.env(key, value);
-                }
-                Ok(None) => {
-                    // Secret not found but if_missing allows it (already handled by resolve_secret)
-                }
-                Err(e) => {
-                    // Provider error - respect if_missing to decide whether to fail or continue
-                    let if_missing = resolve_if_missing_behavior(secret_config, &config);
+        // Resolve secrets using batch resolution for better performance
+        let resolved_secrets = resolve_secrets_batch(
+            &config,
+            &profile,
+            &profile_secrets,
+            cli.age_key_file.as_deref(),
+        )
+        .await;
 
-                    if let Some(error) = handle_provider_error(key, e, if_missing, true) {
-                        return Err(error);
-                    }
-                }
+        // Add resolved secrets as environment variables
+        for (key, value) in resolved_secrets {
+            if let Some(value) = value {
+                cmd.env(key, value);
             }
         }
 

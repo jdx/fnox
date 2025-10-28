@@ -1,6 +1,7 @@
 use crate::error::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::Path;
 use strum::AsRefStr;
 
@@ -111,6 +112,29 @@ pub enum ProviderConfig {
 pub trait Provider: Send + Sync {
     /// Get a secret value from the provider (decrypt if needed)
     async fn get_secret(&self, value: &str, key_file: Option<&Path>) -> Result<String>;
+
+    /// Get multiple secrets in a batch (more efficient for some providers)
+    ///
+    /// Takes a slice of (key, value) tuples where:
+    /// - key: the environment variable name (e.g., "MY_SECRET")
+    /// - value: the provider-specific reference (e.g., "op://vault/item/field")
+    ///
+    /// Returns a HashMap of successfully resolved secrets. Failures are logged but don't
+    /// stop other secrets from being resolved.
+    ///
+    /// Default implementation falls back to calling get_secret for each item.
+    async fn get_secrets_batch(
+        &self,
+        secrets: &[(String, String)],
+        key_file: Option<&Path>,
+    ) -> HashMap<String, Result<String>> {
+        let mut results = HashMap::new();
+        for (key, value) in secrets {
+            let result = self.get_secret(value, key_file).await;
+            results.insert(key.clone(), result);
+        }
+        results
+    }
 
     /// Encrypt a value with this provider (for encryption providers)
     async fn encrypt(&self, _value: &str, _key_file: Option<&Path>) -> Result<String> {

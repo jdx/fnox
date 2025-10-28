@@ -1,12 +1,10 @@
-use crate::config::{Config, SecretConfig};
+use crate::config::Config;
 use crate::env_diff::{EnvDiff, EnvDiffOperation};
 use crate::hook_env::{self, HookEnvSession, PREV_SESSION};
-use crate::providers;
 use crate::settings::Settings;
 use crate::shell;
 use anyhow::Result;
 use clap::Parser;
-use indexmap::IndexMap;
 use std::collections::HashMap;
 
 /// Output mode for shell integration
@@ -142,6 +140,8 @@ impl HookEnvCommand {
 async fn load_secrets_from_config(
     config_path: &std::path::Path,
 ) -> Result<HashMap<String, String>> {
+    use crate::secret_resolver::resolve_secrets_batch;
+
     let config =
         Config::load(config_path).map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
     let settings =
@@ -150,39 +150,21 @@ async fn load_secrets_from_config(
     // Get the active profile
     let profile_name = &settings.profile;
 
-    // Get secrets and providers for the active profile
-    let (secrets, providers_map, default_provider) = if profile_name == "default" {
-        (
-            &config.secrets,
-            &config.providers,
-            config.default_provider.as_deref(),
-        )
-    } else if let Some(profile) = config.profiles.get(profile_name) {
-        (
-            &profile.secrets,
-            &profile.providers,
-            profile.default_provider.as_deref(),
-        )
-    } else {
-        // Profile not found, use default
-        (
-            &config.secrets,
-            &config.providers,
-            config.default_provider.as_deref(),
-        )
-    };
+    // Get secrets for the profile using the Config method
+    let secrets = config
+        .get_secrets(profile_name)
+        .map_err(|e| anyhow::anyhow!("Failed to get secrets: {}", e))?;
 
-    let mut loaded_secrets = HashMap::new();
     let age_key_file = settings.age_key_file.as_deref();
 
-    for (key, secret_config) in secrets {
-        match resolve_secret(secret_config, providers_map, default_provider, age_key_file).await {
-            Ok(value) => {
-                loaded_secrets.insert(key.clone(), value);
-            }
-            Err(e) => {
-                tracing::warn!("failed to get secret '{}': {}", key, e);
-            }
+    // Use batch resolution for better performance
+    let resolved = resolve_secrets_batch(&config, profile_name, &secrets, age_key_file).await;
+
+    // Convert to HashMap, filtering out None values
+    let mut loaded_secrets = HashMap::new();
+    for (key, value) in resolved {
+        if let Some(value) = value {
+            loaded_secrets.insert(key, value);
         }
     }
 
@@ -318,40 +300,4 @@ fn display_changes(env_diff: &EnvDiff, mode: OutputMode) {
             }
         }
     }
-}
-
-/// Resolve a single secret using its configuration
-async fn resolve_secret(
-    secret_config: &SecretConfig,
-    providers_map: &IndexMap<String, crate::config::ProviderConfig>,
-    default_provider: Option<&str>,
-    age_key_file: Option<&std::path::Path>,
-) -> Result<String> {
-    // Get the value from secret config
-    let value = secret_config
-        .value
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Secret value not specified"))?;
-
-    // Get the provider name (from secret config or default)
-    let provider_name = secret_config
-        .provider
-        .as_deref()
-        .or(default_provider)
-        .unwrap_or("plain");
-
-    // Get provider config
-    let provider_config = providers_map
-        .get(provider_name)
-        .ok_or_else(|| anyhow::anyhow!("Provider '{}' not found", provider_name))?;
-
-    // Create provider instance
-    let provider = providers::get_provider(provider_config)
-        .map_err(|e| anyhow::anyhow!("Failed to create provider: {}", e))?;
-
-    // Get secret from provider
-    provider
-        .get_secret(value, age_key_file)
-        .await
-        .map_err(|e| anyhow::anyhow!("Provider error: {}", e))
 }

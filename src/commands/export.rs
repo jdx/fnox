@@ -1,7 +1,7 @@
 use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::Result;
-use crate::secret_resolver::{handle_provider_error, resolve_if_missing_behavior, resolve_secret};
+use crate::secret_resolver::resolve_secrets_batch;
 use clap::{Args, ValueEnum};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -55,33 +55,20 @@ impl ExportCommand {
 
         let profile_secrets = config.get_secrets(&profile)?;
 
+        // Resolve secrets using batch resolution for better performance
+        let resolved_secrets = resolve_secrets_batch(
+            &config,
+            &profile,
+            &profile_secrets,
+            cli.age_key_file.as_deref(),
+        )
+        .await;
+
+        // Build secrets map, preserving insertion order
         let mut secrets = IndexMap::new();
-
-        for (key, secret_config) in &profile_secrets {
-            // Use centralized secret resolver for consistent priority order
-            match resolve_secret(
-                &config,
-                &profile,
-                key,
-                secret_config,
-                cli.age_key_file.as_deref(),
-            )
-            .await
-            {
-                Ok(Some(value)) => {
-                    secrets.insert(key.clone(), value);
-                }
-                Ok(None) => {
-                    // Secret not found but if_missing allows it
-                }
-                Err(e) => {
-                    // Provider error - respect if_missing to decide whether to fail or continue
-                    let if_missing = resolve_if_missing_behavior(secret_config, &config);
-
-                    if let Some(error) = handle_provider_error(key, e, if_missing, true) {
-                        return Err(error);
-                    }
-                }
+        for (key, value) in resolved_secrets {
+            if let Some(value) = value {
+                secrets.insert(key, value);
             }
         }
 
