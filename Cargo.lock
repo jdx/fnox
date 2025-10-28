@@ -1701,7 +1701,7 @@ dependencies = [
 
 [[package]]
 name = "fnox"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "age",
  "anyhow",
@@ -1927,15 +1927,14 @@ dependencies = [
 
 [[package]]
 name = "gcp_auth"
-version = "0.12.3"
+version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbf67f30198e045a039264c01fb44659ce82402d7771c50938beb41a5ac87733"
+checksum = "59619ec98ca106a826e2bc35b4523b5ce872b1baae9b1dda6ed10a517bdfb69e"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
  "bytes",
  "chrono",
- "home",
  "http 1.3.1",
  "http-body-util",
  "hyper 1.7.0",
@@ -1945,7 +1944,7 @@ dependencies = [
  "rustls-pemfile 2.2.0",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.17",
  "tokio",
  "tracing",
  "tracing-futures",

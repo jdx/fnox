@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.1](https://github.com/jdx/fnox/compare/v1.2.0..v1.2.1) - 2025-10-28
+
+### 🛡️ Security
+
+- **(import)** require --provider flag to prevent plaintext storage by [@jdx](https://github.com/jdx) in [#35](https://github.com/jdx/fnox/pull/35)
+
 ## [1.2.0](https://github.com/jdx/fnox/compare/v1.1.0..v1.2.0) - 2025-10-28
 
 ### 🚀 Features
