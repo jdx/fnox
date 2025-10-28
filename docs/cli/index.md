@@ -14,7 +14,7 @@
 
 Path to the configuration file (default: fnox.toml, searches parent directories)
 
-### `-p --profile <PROFILE>`
+### `-P --profile <PROFILE>`
 
 Profile to use (default: default, or FNOX_PROFILE env var)
 

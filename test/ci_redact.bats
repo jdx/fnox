@@ -118,7 +118,7 @@ EOF
     refute_output --partial "staging-value"
 
     # Test staging profile - inherits top-level secrets
-    run "$FNOX_BIN" -p staging ci-redact
+    run "$FNOX_BIN" -P staging ci-redact
     assert_success
     assert_output --partial "::add-mask::staging-value"
     assert_output --partial "::add-mask::default-value"  # Inherited from top level

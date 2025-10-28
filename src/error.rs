@@ -80,7 +80,7 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::profile::not_found),
         help(
-            "Available profiles: {available_profiles}\n\nTo create this profile, add to your fnox.toml:\n  [profiles.{profile}]\n  # Add provider and secret configuration here\n\nOr use 'fnox set <KEY> <VALUE> -p {profile}' to create it automatically",
+            "Available profiles: {available_profiles}\n\nTo create this profile, add to your fnox.toml:\n  [profiles.{profile}]\n  # Add provider and secret configuration here\n\nOr use 'fnox set <KEY> <VALUE> -P {profile}' to create it automatically",
             available_profiles = if available_profiles.is_empty() {
                 "none (only 'default' is available)".to_string()
             } else {
@@ -112,7 +112,7 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::secret::not_found),
         help(
-            "{init_help}Available actions:\n  • View defined secrets: fnox list -p {profile} --sources\n  • Add this secret: fnox set {key} <value> -p {profile}{suggest}",
+            "{init_help}Available actions:\n  • View defined secrets: fnox list -P {profile} --sources\n  • Add this secret: fnox set {key} <value> -P {profile}{suggest}",
             init_help = if config_path.is_none() {
                 "No configuration file found. Create one with:\n  • fnox init\n\n"
             } else {
@@ -138,7 +138,7 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::secret::already_exists),
         help(
-            "To update this secret:\n  • Overwrite: fnox set {key} <value> --force -p {profile}{edit}",
+            "To update this secret:\n  • Overwrite: fnox set {key} <value> --force -P {profile}{edit}",
             edit = config_path.as_ref()
                 .map(|p| format!("\n  • Edit directly: {}", p.display()))
                 .unwrap_or_default()
