@@ -283,6 +283,33 @@ teardown() {
 	assert_output --partial 'export PARENT_SECRET="parent-updated"'
 }
 
+@test "fnox hook-env reloads when config is deleted" {
+	cd "$TEST_TEMP_DIR"
+	cat >fnox.toml <<-EOF
+		[providers.plain]
+		type = "plain"
+
+		[secrets.TEMPORARY_SECRET]
+		provider = "plain"
+		value = "temp-value"
+	EOF
+
+	# First run - should load secret
+	output1=$("$FNOX_BIN" hook-env -s bash)
+	session=$(echo "$output1" | grep '__FNOX_SESSION=' | sed 's/^export __FNOX_SESSION="//' | sed 's/"$//')
+	echo "$output1" | grep -q 'export TEMPORARY_SECRET="temp-value"'
+
+	# Delete config file
+	rm fnox.toml
+
+	# Second run with session - should detect deletion and unset the secret
+	export __FNOX_SESSION="$session"
+	run "$FNOX_BIN" hook-env -s bash
+
+	assert_success
+	assert_output --partial 'unset TEMPORARY_SECRET'
+}
+
 @test "fnox hook-env reloads when directory changes" {
 	# Create first directory with config
 	dir1="$TEST_TEMP_DIR/dir1"
