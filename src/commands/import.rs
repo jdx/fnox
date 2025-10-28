@@ -44,6 +44,10 @@ pub struct ImportCommand {
     /// Prefix to add to imported secret names
     #[arg(long)]
     prefix: Option<String>,
+
+    /// Provider to use for encrypting/storing imported secrets (required)
+    #[arg(short = 'P', long)]
+    provider: String,
 }
 
 impl ImportCommand {
@@ -119,20 +123,89 @@ impl ImportCommand {
             }
         }
 
-        // Load config and add secrets
+        // Verify provider exists
+        let providers = config.get_providers(&profile);
+        let provider_config = providers.get(&self.provider).ok_or_else(|| {
+            miette::miette!(
+                "Provider '{}' not found in profile '{}'. Available providers: {}",
+                self.provider,
+                profile,
+                providers
+                    .keys()
+                    .map(|k| k.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })?;
+
+        // Get provider and check its capabilities
+        let provider = crate::providers::get_provider(provider_config)?;
+        let capabilities = provider.capabilities();
+
+        if capabilities.is_empty() {
+            return Err(miette::miette!(
+                "Provider '{}' has no capabilities defined",
+                self.provider
+            )
+            .into());
+        }
+
+        let is_encryption_provider =
+            capabilities.contains(&crate::providers::ProviderCapability::Encryption);
+        let is_remote_storage_provider =
+            capabilities.contains(&crate::providers::ProviderCapability::RemoteStorage);
+
+        // Process and encrypt/store each secret
         {
             let profile_secrets = config.get_secrets_mut(&profile);
-            let imported_count = secrets.len();
+            let total_secrets = secrets.len();
 
             for (key, value) in secrets {
                 let secret_config = profile_secrets.entry(key.clone()).or_default();
-                // Import as plain default values (not encrypted)
-                secret_config.default = Some(value);
+
+                // Set the provider
+                secret_config.provider = Some(self.provider.clone());
+
+                // Handle encryption or remote storage based on provider capabilities
+                if is_encryption_provider {
+                    // Encrypt the value
+                    match provider
+                        .encrypt(
+                            &value,
+                            cli.age_key_file.as_ref().map(PathBuf::from).as_deref(),
+                        )
+                        .await
+                    {
+                        Ok(encrypted) => {
+                            secret_config.value = Some(encrypted);
+                        }
+                        Err(e) => {
+                            return Err(miette::miette!(
+                                "Failed to encrypt secret '{}' with provider '{}': {}",
+                                key,
+                                self.provider,
+                                e
+                            )
+                            .into());
+                        }
+                    }
+                } else if is_remote_storage_provider {
+                    return Err(miette::miette!(
+                        "Remote storage providers are not yet supported for import. Use an encryption provider like 'age' instead."
+                    )
+                    .into());
+                } else {
+                    return Err(miette::miette!(
+                        "Provider '{}' does not support encryption or remote storage",
+                        self.provider
+                    )
+                    .into());
+                }
             }
 
             println!(
-                "✓ Imported {} secrets into profile '{}'",
-                imported_count, profile
+                "✓ Imported {} secrets into profile '{}' using provider '{}'",
+                total_secrets, profile, self.provider
             );
         }
 
