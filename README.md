@@ -66,31 +66,31 @@ Your `fnox.toml` config file either contains encrypted secrets or references to 
 
 ## Documentation
 
-**📚 [Complete Documentation](https://jdx.github.io/fnox/)**
+**📚 [Complete Documentation](https://fnox.jdx.dev/)**
 
 ### Quick Links
 
-- [Installation](https://jdx.github.io/fnox/guide/installation)
-- [Quick Start Guide](https://jdx.github.io/fnox/guide/quick-start)
-- [How It Works](https://jdx.github.io/fnox/guide/how-it-works)
-- [Shell Integration](https://jdx.github.io/fnox/guide/shell-integration)
-- [Providers Overview](https://jdx.github.io/fnox/providers/overview)
-- [Real-World Example](https://jdx.github.io/fnox/guide/real-world-example)
+- [Installation](https://fnox.jdx.dev/guide/installation)
+- [Quick Start Guide](https://fnox.jdx.dev/guide/quick-start)
+- [How It Works](https://fnox.jdx.dev/guide/how-it-works)
+- [Shell Integration](https://fnox.jdx.dev/guide/shell-integration)
+- [Providers Overview](https://fnox.jdx.dev/providers/overview)
+- [Real-World Example](https://fnox.jdx.dev/guide/real-world-example)
 
 ### Provider Guides
 
-- [Age Encryption](https://jdx.github.io/fnox/providers/age) - Simple, free, works with SSH keys
-- [AWS Secrets Manager](https://jdx.github.io/fnox/providers/aws-sm) - Centralized AWS secret management
-- [1Password](https://jdx.github.io/fnox/providers/1password) - Integrate with 1Password CLI
-- [Bitwarden](https://jdx.github.io/fnox/providers/bitwarden) - Open source password manager
+- [Age Encryption](https://fnox.jdx.dev/providers/age) - Simple, free, works with SSH keys
+- [AWS Secrets Manager](https://fnox.jdx.dev/providers/aws-sm) - Centralized AWS secret management
+- [1Password](https://fnox.jdx.dev/providers/1password) - Integrate with 1Password CLI
+- [Bitwarden](https://fnox.jdx.dev/providers/bitwarden) - Open source password manager
 
-[**View all providers →**](https://jdx.github.io/fnox/providers/overview)
+[**View all providers →**](https://fnox.jdx.dev/providers/overview)
 
 ### Reference
 
-- [Commands Reference](https://jdx.github.io/fnox/reference/commands)
-- [Environment Variables](https://jdx.github.io/fnox/reference/environment)
-- [Configuration File](https://jdx.github.io/fnox/reference/configuration)
+- [Commands Reference](https://fnox.jdx.dev/reference/commands)
+- [Environment Variables](https://fnox.jdx.dev/reference/environment)
+- [Configuration File](https://fnox.jdx.dev/reference/configuration)
 
 ## Example
 
@@ -188,7 +188,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Links
 
-- [Documentation](https://jdx.github.io/fnox/)
+- [Documentation](https://fnox.jdx.dev/)
 - [GitHub Repository](https://github.com/jdx/fnox)
 - [Issue Tracker](https://github.com/jdx/fnox/issues)
 - [mise](https://mise.jdx.dev) - Recommended installation method

@@ -30,7 +30,7 @@ To enable GitHub Pages for this repository:
 2. Under **Source**, select **GitHub Actions**
 3. The workflow will automatically deploy on the next push to `main`
 
-The documentation will be available at: https://jdx.github.io/fnox/
+The documentation will be available at: https://fnox.jdx.dev/
 
 ## Structure
 

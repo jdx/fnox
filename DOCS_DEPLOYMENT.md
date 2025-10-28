@@ -38,7 +38,7 @@ Once you push this workflow to the `main` branch, it will automatically:
 
 - Build the documentation
 - Deploy to GitHub Pages
-- Make it available at: **https://jdx.github.io/fnox/**
+- Make it available at: **https://fnox.jdx.dev/**
 
 ## Testing Locally
 
@@ -79,9 +79,10 @@ After setup, you can monitor deployments:
 
 ## Configuration
 
-The documentation is configured for GitHub Pages:
+The documentation is configured for GitHub Pages with custom domain:
 
-- **Base URL**: `/fnox/` (configured in `docs/.vitepress/config.mjs`)
+- **Custom Domain**: `fnox.jdx.dev`
+- **Base URL**: `/` (configured in `docs/.vitepress/config.mjs`)
 - **Output Directory**: `docs/.vitepress/dist`
 - **Node Version**: 20 (LTS)
 

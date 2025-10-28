@@ -3,7 +3,7 @@ import { defineConfig } from "vitepress";
 export default defineConfig({
   title: "fnox",
   description: "Fort Knox for your secrets",
-  base: "/fnox/",
+  base: "/",
 
   themeConfig: {
     logo: "/logo.svg",
