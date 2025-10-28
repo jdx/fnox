@@ -53,7 +53,8 @@ EOF
     assert_output "child-plain-value"
 
     # Test 3: fnox hook-env should load both secrets without error
-    run bash -c "eval \"\$('$FNOX_BIN' hook-env -s bash 2>/dev/null)\" && echo \$CHILD_SECRET"
+    # TEMP: removed 2>/dev/null to see debug output in CI
+    run bash -c "eval \"\$('$FNOX_BIN' hook-env -s bash)\" && echo \$CHILD_SECRET"
     assert_success
     assert_line --index -1 "child-plain-value"
 

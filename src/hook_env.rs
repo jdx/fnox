@@ -90,24 +90,31 @@ fn decode_session(encoded: &str) -> Result<HookEnvSession> {
 /// Check if we should exit early (optimization)
 /// Returns true if nothing changed and we can skip work
 pub fn should_exit_early() -> bool {
+    eprintln!("DEBUG: should_exit_early: checking directory");
     // Check if directory changed
     if has_directory_changed() {
+        eprintln!("DEBUG: should_exit_early: directory changed");
         tracing::debug!("directory changed, must run hook-env");
         return false;
     }
 
+    eprintln!("DEBUG: should_exit_early: checking config");
     // Check if fnox.toml was modified
     if has_config_been_modified() {
+        eprintln!("DEBUG: should_exit_early: config modified");
         tracing::debug!("fnox.toml modified, must run hook-env");
         return false;
     }
 
+    eprintln!("DEBUG: should_exit_early: checking env vars");
     // Check if FNOX_* env vars changed
     if has_fnox_env_vars_changed() {
+        eprintln!("DEBUG: should_exit_early: env vars changed");
         tracing::debug!("FNOX_* env vars changed, must run hook-env");
         return false;
     }
 
+    eprintln!("DEBUG: should_exit_early: no changes, exiting early");
     tracing::debug!("no changes detected, exiting early");
     true
 }
@@ -148,16 +155,29 @@ fn has_config_been_modified() -> bool {
 
 /// Collect all config files (fnox.toml and fnox.local.toml) from dir up to root
 fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
+    eprintln!("DEBUG: collect_config_files: start_dir={:?}", start_dir);
     let mut configs = Vec::new();
     let mut current = start_dir.to_path_buf();
+    let mut iterations = 0;
 
     loop {
+        iterations += 1;
+        if iterations > 100 {
+            eprintln!("DEBUG: collect_config_files: too many iterations, breaking");
+            break;
+        }
+        eprintln!("DEBUG: collect_config_files: checking {:?}", current);
+
         // Check fnox.toml
         let config_path = current.join("fnox.toml");
         if let Ok(metadata) = std::fs::metadata(&config_path)
             && let Ok(modified) = metadata.modified()
             && let Ok(duration) = modified.duration_since(SystemTime::UNIX_EPOCH)
         {
+            eprintln!(
+                "DEBUG: collect_config_files: found fnox.toml at {:?}",
+                config_path
+            );
             configs.push((config_path, duration.as_millis()));
         }
 
@@ -167,15 +187,24 @@ fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
             && let Ok(modified) = metadata.modified()
             && let Ok(duration) = modified.duration_since(SystemTime::UNIX_EPOCH)
         {
+            eprintln!(
+                "DEBUG: collect_config_files: found fnox.local.toml at {:?}",
+                local_config_path
+            );
             configs.push((local_config_path, duration.as_millis()));
         }
 
         // Move to parent directory
         if !current.pop() {
+            eprintln!("DEBUG: collect_config_files: reached root");
             break;
         }
     }
 
+    eprintln!(
+        "DEBUG: collect_config_files: found {} configs",
+        configs.len()
+    );
     configs
 }
 
