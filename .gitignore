@@ -31,3 +31,6 @@ test/tmp/
 *.key
 *.pem
 age.txt
+
+# Local configuration overrides (user-specific, should not be committed)
+fnox.local.toml

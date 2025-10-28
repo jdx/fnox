@@ -19,7 +19,7 @@ vault = "latest"
 
 [tasks.test]
 description = "Run both cargo and bats tests"
-depends = ["test:*"]
+depends = ["test:cargo", "test:bats"]
 
 [tasks."test:cargo"]
 description = "Run cargo tests only"
