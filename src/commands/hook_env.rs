@@ -43,25 +43,19 @@ pub struct HookEnvCommand {
 
 impl HookEnvCommand {
     pub async fn run(&self) -> Result<()> {
-        eprintln!("DEBUG: hook-env starting");
-
         // Get settings for output mode
-        eprintln!("DEBUG: loading settings");
         let settings =
             Settings::try_get().map_err(|e| anyhow::anyhow!("Failed to get settings: {}", e))?;
         let output_mode = OutputMode::from_string(&settings.shell_integration_output);
 
-        eprintln!("DEBUG: detecting shell");
         // Detect shell
         let shell_name = match &self.shell {
             Some(s) => s.clone(),
             None => shell::detect_shell().unwrap_or_else(|| "bash".to_string()),
         };
 
-        eprintln!("DEBUG: getting shell handler");
         let shell = shell::get_shell(Some(&shell_name))?;
 
-        eprintln!("DEBUG: current_dir = {:?}", std::env::current_dir().ok());
         if output_mode.should_show_debug() {
             eprintln!(
                 "fnox: hook-env running in {:?}",
@@ -69,10 +63,8 @@ impl HookEnvCommand {
             );
         }
 
-        eprintln!("DEBUG: checking should_exit_early");
         // Check if we can exit early (optimization)
         if hook_env::should_exit_early() {
-            eprintln!("DEBUG: exiting early");
             if output_mode.should_show_debug() {
                 eprintln!("fnox: early exit - no changes detected");
             }
@@ -80,15 +72,12 @@ impl HookEnvCommand {
             return Ok(());
         }
 
-        eprintln!("DEBUG: not exiting early, proceeding");
         if output_mode.should_show_debug() {
             eprintln!("fnox: changes detected, loading secrets");
         }
 
-        eprintln!("DEBUG: finding config");
         // Find fnox.toml in current or parent directories
         let config_path = hook_env::find_config();
-        eprintln!("DEBUG: config_path = {:?}", config_path);
 
         let mut output = String::new();
 
