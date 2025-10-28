@@ -23,7 +23,7 @@ pub struct SetCommand {
     pub key_name: Option<String>,
 
     /// Provider to fetch from
-    #[arg(short = 'P', long)]
+    #[arg(short = 'p', long)]
     pub provider: Option<String>,
 
     /// Default value to use if secret is not found

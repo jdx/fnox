@@ -38,7 +38,7 @@ pub struct ImportCommand {
     input: Option<PathBuf>,
 
     /// Provider to use for encrypting/storing imported secrets (required)
-    #[arg(short = 'P', long)]
+    #[arg(short = 'p', long)]
     provider: String,
 
     /// Only import matching secrets (regex pattern)
