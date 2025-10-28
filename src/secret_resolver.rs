@@ -4,7 +4,7 @@ use crate::error::{FnoxError, Result};
 use crate::providers::get_provider;
 use crate::settings::Settings;
 use indexmap::IndexMap;
-use std::collections::HashMap;
+use std::collections::HashMap; // Used only for internal grouping by provider
 
 /// Resolves the if_missing behavior using the complete priority chain:
 /// 1. CLI flag (--if-missing) via Settings
@@ -199,7 +199,7 @@ pub async fn resolve_secrets_batch(
     profile: &str,
     secrets: &IndexMap<String, SecretConfig>,
     age_key_file: Option<&std::path::Path>,
-) -> Result<HashMap<String, Option<String>>> {
+) -> Result<IndexMap<String, Option<String>>> {
     use futures::stream::{self, StreamExt};
 
     // Group secrets by provider
@@ -247,10 +247,10 @@ pub async fn resolve_secrets_batch(
         .collect()
         .await;
 
-    // Combine results from all providers, failing fast on errors
-    let mut results = HashMap::new();
+    // Combine results from all providers into a temporary HashMap, failing fast on errors
+    let mut temp_results = HashMap::new();
     for provider_result in provider_results {
-        results.extend(provider_result?);
+        temp_results.extend(provider_result?);
     }
 
     // Resolve secrets that couldn't be batched using individual resolution in parallel
@@ -275,10 +275,18 @@ pub async fn resolve_secrets_batch(
         .collect()
         .await;
 
-    // Check for any errors and fail fast if needed
+    // Add no-provider results to temporary HashMap, failing fast on errors
     for result in no_provider_results {
         let (key, value) = result?;
-        results.insert(key, value);
+        temp_results.insert(key, value);
+    }
+
+    // Build final results in the original order from the input secrets IndexMap
+    let mut results = IndexMap::new();
+    for (key, _secret_config) in secrets {
+        if let Some(value) = temp_results.remove(key) {
+            results.insert(key.clone(), value);
+        }
     }
 
     Ok(results)
