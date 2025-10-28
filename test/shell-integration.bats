@@ -234,6 +234,55 @@ teardown() {
 	assert_output --partial 'export MODIFIED_SECRET="updated-value"'
 }
 
+@test "fnox hook-env reloads when parent config is modified" {
+	# Create parent directory with config
+	parent_dir="$TEST_TEMP_DIR/parent"
+	mkdir -p "$parent_dir"
+	cd "$parent_dir"
+	cat >fnox.toml <<-EOF
+		[providers.plain]
+		type = "plain"
+
+		[secrets.PARENT_SECRET]
+		provider = "plain"
+		value = "parent-original"
+	EOF
+
+	# Create child directory with its own config
+	child_dir="$parent_dir/child"
+	mkdir -p "$child_dir"
+	cd "$child_dir"
+	cat >fnox.toml <<-EOF
+		[secrets.CHILD_SECRET]
+		provider = "plain"
+		value = "child-value"
+	EOF
+
+	# First run - should load both parent and child secrets
+	output1=$("$FNOX_BIN" hook-env -s bash)
+	session=$(echo "$output1" | grep '__FNOX_SESSION=' | sed 's/^export __FNOX_SESSION="//' | sed 's/"$//')
+	echo "$output1" | grep -q 'export PARENT_SECRET="parent-original"'
+	echo "$output1" | grep -q 'export CHILD_SECRET="child-value"'
+
+	# Modify parent config file
+	sleep 1 # Ensure mtime changes
+	cat >"$parent_dir/fnox.toml" <<-EOF
+		[providers.plain]
+		type = "plain"
+
+		[secrets.PARENT_SECRET]
+		provider = "plain"
+		value = "parent-updated"
+	EOF
+
+	# Second run with session - should detect parent modification and reload
+	export __FNOX_SESSION="$session"
+	run "$FNOX_BIN" hook-env -s bash
+
+	assert_success
+	assert_output --partial 'export PARENT_SECRET="parent-updated"'
+}
+
 @test "fnox hook-env reloads when directory changes" {
 	# Create first directory with config
 	dir1="$TEST_TEMP_DIR/dir1"

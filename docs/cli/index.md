@@ -4,7 +4,7 @@
 
 **Usage**: `fnox [FLAGS] <SUBCOMMAND>`
 
-**Version**: 1.1.0
+**Version**: 1.2.1
 
 - **Usage**: `fnox [FLAGS] <SUBCOMMAND>`
 
@@ -45,7 +45,7 @@ Disable colored output
 - [`fnox exec [COMMAND]…`](/cli/exec.md)
 - [`fnox export [-f --format <FORMAT>] [-o --output <OUTPUT>]`](/cli/export.md)
 - [`fnox get <KEY>`](/cli/get.md)
-- [`fnox import [FLAGS] [FORMAT]`](/cli/import.md)
+- [`fnox import <FLAGS> [FORMAT]`](/cli/import.md)
 - [`fnox init [--force] [--skip-wizard]`](/cli/init.md)
 - [`fnox list [FLAGS]`](/cli/list.md)
 - [`fnox profiles`](/cli/profiles.md)

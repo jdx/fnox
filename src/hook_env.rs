@@ -1,7 +1,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::time::SystemTime;
 
@@ -18,6 +18,9 @@ pub struct HookEnvSession {
     pub loaded_secrets: HashMap<String, String>,
     /// Hash of FNOX_* environment variables for change detection
     pub env_var_hash: String,
+    /// Hash of all config files in the hierarchy for change detection
+    #[serde(default)]
+    pub config_files_hash: String,
 }
 
 /// Global previous session state, loaded from __FNOX_SESSION env var
@@ -49,12 +52,21 @@ impl HookEnvSession {
 
         let env_var_hash = hash_fnox_env_vars();
 
+        // Calculate hash of all config files in the hierarchy
+        let config_files_hash = if let Some(ref d) = dir {
+            let configs = collect_config_files(d);
+            hash_config_files(&configs)
+        } else {
+            String::new()
+        };
+
         Ok(Self {
             dir,
             config_path,
             config_mtime,
             loaded_secrets,
             env_var_hash,
+            config_files_hash,
         })
     }
 
@@ -106,40 +118,75 @@ fn has_directory_changed() -> bool {
     PREV_SESSION.dir != current_dir
 }
 
-/// Check if fnox.toml or fnox.local.toml has been modified since last run
+/// Check if any config files in the hierarchy have been modified since last run
+/// This checks all fnox.toml and fnox.local.toml files from current directory up to root
 fn has_config_been_modified() -> bool {
-    // Use find_config to check for either fnox.toml or fnox.local.toml
-    let config_path = find_config();
+    let current_dir = match std::env::current_dir() {
+        Ok(dir) => dir,
+        Err(_) => return true, // If we can't get current dir, force reload
+    };
 
-    // Check if config exists now but didn't before
-    if config_path.is_some() && PREV_SESSION.config_path.is_none() {
-        return true;
+    // Build a hash of all current config files and their mtimes
+    let current_configs = collect_config_files(&current_dir);
+    let current_hash = hash_config_files(&current_configs);
+
+    // Compare with the stored hash from the previous session
+    if PREV_SESSION.config_files_hash.is_empty() {
+        // Old session without config_files_hash, or no previous session
+        // Check if we have configs now
+        return !current_configs.is_empty() && PREV_SESSION.config_path.is_some();
     }
 
-    // Check if config existed before but doesn't now
-    if config_path.is_none() && PREV_SESSION.config_path.is_some() {
-        return true;
-    }
+    // Compare the current hash with the stored hash
+    current_hash != PREV_SESSION.config_files_hash
+}
 
-    // Check if config path changed
-    if config_path != PREV_SESSION.config_path {
-        return true;
-    }
+/// Collect all config files (fnox.toml and fnox.local.toml) from dir up to root
+fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
+    let mut configs = Vec::new();
+    let mut current = start_dir.to_path_buf();
 
-    // Check if modification time changed
-    if let Some(ref current_path) = config_path
-        && let Some(prev_mtime) = PREV_SESSION.config_mtime
-        && let Ok(metadata) = std::fs::metadata(current_path)
-        && let Ok(modified) = metadata.modified()
-        && let Ok(duration) = modified.duration_since(SystemTime::UNIX_EPOCH)
-    {
-        let current_mtime = duration.as_millis();
-        if current_mtime != prev_mtime {
-            return true;
+    loop {
+        // Check fnox.toml
+        let config_path = current.join("fnox.toml");
+        if let Ok(metadata) = std::fs::metadata(&config_path) {
+            if let Ok(modified) = metadata.modified() {
+                if let Ok(duration) = modified.duration_since(SystemTime::UNIX_EPOCH) {
+                    configs.push((config_path, duration.as_millis()));
+                }
+            }
+        }
+
+        // Check fnox.local.toml
+        let local_config_path = current.join("fnox.local.toml");
+        if let Ok(metadata) = std::fs::metadata(&local_config_path) {
+            if let Ok(modified) = metadata.modified() {
+                if let Ok(duration) = modified.duration_since(SystemTime::UNIX_EPOCH) {
+                    configs.push((local_config_path, duration.as_millis()));
+                }
+            }
+        }
+
+        // Move to parent directory
+        if !current.pop() {
+            break;
         }
     }
 
-    false
+    configs
+}
+
+/// Create a hash of config files and their modification times
+fn hash_config_files(configs: &[(PathBuf, u128)]) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+    for (path, mtime) in configs {
+        path.hash(&mut hasher);
+        mtime.hash(&mut hasher);
+    }
+    format!("{:x}", hasher.finish())
 }
 
 /// Check if FNOX_* environment variables have changed

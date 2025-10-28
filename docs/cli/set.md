@@ -27,7 +27,7 @@ Description of the secret
 
 Key name in the provider (if different from env var name)
 
-### `-P --provider <PROVIDER>`
+### `-p --provider <PROVIDER>`
 
 Provider to fetch from
 
