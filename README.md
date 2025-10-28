@@ -88,7 +88,7 @@ Your `fnox.toml` config file either contains encrypted secrets or references to 
 
 ### Reference
 
-- [Commands Reference](https://fnox.jdx.dev/reference/commands)
+- [CLI Reference](https://fnox.jdx.dev/cli/)
 - [Environment Variables](https://fnox.jdx.dev/reference/environment)
 - [Configuration File](https://fnox.jdx.dev/reference/configuration)
 
