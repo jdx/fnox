@@ -5,6 +5,32 @@ use aws_sdk_secretsmanager::Client;
 use std::collections::HashMap;
 use std::path::Path;
 
+/// Extract the secret name from an AWS Secrets Manager ARN.
+/// ARN format: arn:aws:secretsmanager:region:account:secret:name-SUFFIX
+/// The SUFFIX is a 6-character random string added by AWS.
+///
+/// If the input is not an ARN (doesn't start with "arn:"), returns it as-is.
+fn extract_name_from_arn(arn_or_name: &str) -> String {
+    // If it's not an ARN, return as-is
+    if !arn_or_name.starts_with("arn:") {
+        return arn_or_name.to_string();
+    }
+
+    // Split ARN by colons and get the last part (name-SUFFIX)
+    if let Some(name_with_suffix) = arn_or_name.rsplit(':').next() {
+        // AWS adds a 7-character suffix (hyphen + 6 random chars) to secret names in ARNs
+        // We need to remove this to get the original name
+        if name_with_suffix.len() > 7 {
+            // Remove the last 7 characters (-XXXXXX)
+            return name_with_suffix[..name_with_suffix.len() - 7].to_string();
+        }
+        return name_with_suffix.to_string();
+    }
+
+    // Fallback: return the original string
+    arn_or_name.to_string()
+}
+
 pub struct AwsSecretsManagerProvider {
     region: String,
     prefix: Option<String>,
@@ -153,10 +179,16 @@ impl crate::providers::Provider for AwsSecretsManagerProvider {
         };
 
         for chunk in secrets.chunks(BATCH_SIZE) {
-            // Build list of secret IDs to fetch
+            // Build mapping from secret ID to original key
+            // This allows exact matching without false positives
+            let mut secret_id_to_key: HashMap<String, String> = HashMap::new();
             let secret_ids: Vec<String> = chunk
                 .iter()
-                .map(|(_, value)| self.get_secret_name(value))
+                .map(|(key, value)| {
+                    let secret_id = self.get_secret_name(value);
+                    secret_id_to_key.insert(secret_id.clone(), key.clone());
+                    secret_id
+                })
                 .collect();
 
             tracing::debug!(
@@ -174,64 +206,73 @@ impl crate::providers::Provider for AwsSecretsManagerProvider {
                 Ok(response) => {
                     // Process successfully retrieved secrets
                     for secret in response.secret_values() {
-                        // Find which key this secret corresponds to
-                        if let Some(arn_or_name) = secret.arn().or(secret.name()) {
-                            // Match back to original key
-                            for (key, value) in chunk {
-                                let expected_name = self.get_secret_name(value);
-                                if arn_or_name.ends_with(&expected_name)
-                                    || arn_or_name == expected_name
-                                {
-                                    if let Some(secret_string) = secret.secret_string() {
-                                        results.insert(key.clone(), Ok(secret_string.to_string()));
-                                    } else {
-                                        results.insert(
-                                            key.clone(),
-                                            Err(FnoxError::Provider(format!(
-                                                "Secret '{}' has no string value (binary secrets not supported)",
-                                                expected_name
-                                            ))),
-                                        );
-                                    }
-                                    break;
-                                }
+                        // Use name field for matching (not ARN, which has random suffix)
+                        let secret_name = if let Some(name) = secret.name() {
+                            name.to_string()
+                        } else if let Some(arn) = secret.arn() {
+                            // Fallback: extract name from ARN if name field is missing
+                            // ARN format: arn:aws:secretsmanager:region:account:secret:name-SUFFIX
+                            // We need to match against the name we requested (without suffix)
+                            extract_name_from_arn(arn)
+                        } else {
+                            tracing::warn!("Secret in batch response has no name or ARN");
+                            continue;
+                        };
+
+                        // Find the matching key using exact name match
+                        if let Some(key) = secret_id_to_key.get(&secret_name) {
+                            if let Some(secret_string) = secret.secret_string() {
+                                results.insert(key.clone(), Ok(secret_string.to_string()));
+                            } else {
+                                results.insert(
+                                    key.clone(),
+                                    Err(FnoxError::Provider(format!(
+                                        "Secret '{}' has no string value (binary secrets not supported)",
+                                        secret_name
+                                    ))),
+                                );
                             }
+                        } else {
+                            tracing::warn!(
+                                "Received secret '{}' that was not requested in batch",
+                                secret_name
+                            );
                         }
                     }
 
                     // Handle errors for secrets that weren't retrieved
                     for error in response.errors() {
                         if let Some(error_secret_id) = error.secret_id() {
-                            // Match back to original key
-                            for (key, value) in chunk {
-                                let expected_name = self.get_secret_name(value);
-                                if error_secret_id.ends_with(&expected_name)
-                                    || error_secret_id == expected_name
-                                {
-                                    let error_msg =
-                                        error.message().unwrap_or("Unknown error").to_string();
-                                    results.insert(
-                                        key.clone(),
-                                        Err(FnoxError::Provider(format!(
-                                            "Failed to get secret '{}': {}",
-                                            expected_name, error_msg
-                                        ))),
-                                    );
-                                    break;
-                                }
+                            // Try exact match first, then check if it's an ARN
+                            let lookup_name = if secret_id_to_key.contains_key(error_secret_id) {
+                                error_secret_id.to_string()
+                            } else {
+                                // Might be an ARN in the error response
+                                extract_name_from_arn(error_secret_id)
+                            };
+
+                            if let Some(key) = secret_id_to_key.get(&lookup_name) {
+                                let error_msg =
+                                    error.message().unwrap_or("Unknown error").to_string();
+                                results.insert(
+                                    key.clone(),
+                                    Err(FnoxError::Provider(format!(
+                                        "Failed to get secret '{}': {}",
+                                        lookup_name, error_msg
+                                    ))),
+                                );
                             }
                         }
                     }
 
                     // Check for any secrets that weren't in response (neither success nor error)
-                    for (key, value) in chunk {
+                    for (secret_id, key) in &secret_id_to_key {
                         if !results.contains_key(key) {
-                            let secret_name = self.get_secret_name(value);
                             results.insert(
                                 key.clone(),
                                 Err(FnoxError::Provider(format!(
                                     "Secret '{}' not found in batch response",
-                                    secret_name
+                                    secret_id
                                 ))),
                             );
                         }
@@ -240,7 +281,7 @@ impl crate::providers::Provider for AwsSecretsManagerProvider {
                 Err(e) => {
                     // Batch call failed entirely, return errors for all secrets in this chunk
                     let error_msg = format!("AWS Secrets Manager batch call failed: {}", e);
-                    for (key, _) in chunk {
+                    for key in secret_id_to_key.values() {
                         results.insert(key.clone(), Err(FnoxError::Provider(error_msg.clone())));
                     }
                 }
