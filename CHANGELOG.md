@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.2.2](https://github.com/jdx/fnox/compare/v1.2.1..v1.2.2) - 2025-10-29
+
+### 🐛 Bug Fixes
+
+- resolve secrets from providers when using --values flag in list command by [@jdx](https://github.com/jdx) in [#47](https://github.com/jdx/fnox/pull/47)
+- hook-env now inherits providers from parent configs by [@jdx](https://github.com/jdx) in [#37](https://github.com/jdx/fnox/pull/37)
+
+### 🚜 Refactor
+
+- change profile flag from -p to -P by [@jdx](https://github.com/jdx) in [#42](https://github.com/jdx/fnox/pull/42)
+
+### 📚 Documentation
+
+- clean up local overrides docs by [@jdx](https://github.com/jdx) in [#46](https://github.com/jdx/fnox/pull/46)
+
+### 🔍 Other Changes
+
+- Update commands reference link to CLI reference by [@thomascjohnson](https://github.com/thomascjohnson) in [#44](https://github.com/jdx/fnox/pull/44)
+- add autofix.ci workflow for automatic linting fixes by [@jdx](https://github.com/jdx) in [#45](https://github.com/jdx/fnox/pull/45)
+
+### New Contributors
+
+- @thomascjohnson made their first contribution in [#44](https://github.com/jdx/fnox/pull/44)
+
 ## [1.2.1](https://github.com/jdx/fnox/compare/v1.2.0..v1.2.1) - 2025-10-28
 
 ### 🛡️ Security
