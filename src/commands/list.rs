@@ -1,7 +1,9 @@
 use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::Result;
+use crate::secret_resolver::resolve_secrets_batch;
 use clap::Args;
+use indexmap::IndexMap;
 use tabled::settings::{
     Color, Format, Modify, Style, Width,
     object::{Columns, Rows},
@@ -112,10 +114,29 @@ impl ListCommand {
             return Ok(());
         }
 
+        // Resolve secrets if values are requested
+        let resolved_values = if self.values {
+            Some(
+                resolve_secrets_batch(
+                    &config,
+                    &profile,
+                    &profile_secrets,
+                    cli.age_key_file.as_deref(),
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
+
         if self.values && self.sources {
-            self.display_with_values_and_sources(&keys, &profile_secrets)?;
+            self.display_with_values_and_sources(
+                &keys,
+                &profile_secrets,
+                resolved_values.as_ref().unwrap(),
+            )?;
         } else if self.values {
-            self.display_with_values(&keys, &profile_secrets)?;
+            self.display_with_values(&keys, &profile_secrets, resolved_values.as_ref().unwrap())?;
         } else if self.sources {
             self.display_with_sources(&keys, &profile_secrets)?;
         } else {
@@ -210,6 +231,7 @@ impl ListCommand {
         &self,
         keys: &[&String],
         profile_secrets: &indexmap::IndexMap<String, crate::config::SecretConfig>,
+        resolved_values: &IndexMap<String, Option<String>>,
     ) -> Result<()> {
         let mut rows = Vec::new();
         for key in keys {
@@ -221,7 +243,13 @@ impl ListCommand {
                 .as_deref()
                 .unwrap_or("")
                 .to_string();
-            let value_str = secret_config.default.as_ref().cloned().unwrap_or_default();
+
+            // Use the resolved value if available, otherwise show placeholder
+            let value_str = resolved_values
+                .get(*key)
+                .and_then(|v| v.as_ref())
+                .cloned()
+                .unwrap_or_else(|| "<not available>".to_string());
 
             rows.push(SecretRowWithValues {
                 key: (*key).clone(),
@@ -239,6 +267,7 @@ impl ListCommand {
         &self,
         keys: &[&String],
         profile_secrets: &indexmap::IndexMap<String, crate::config::SecretConfig>,
+        resolved_values: &IndexMap<String, Option<String>>,
     ) -> Result<()> {
         let mut rows = Vec::new();
         for key in keys {
@@ -255,7 +284,13 @@ impl ListCommand {
                 .as_ref()
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|| "unknown".to_string());
-            let value_str = secret_config.default.as_ref().cloned().unwrap_or_default();
+
+            // Use the resolved value if available, otherwise show placeholder
+            let value_str = resolved_values
+                .get(*key)
+                .and_then(|v| v.as_ref())
+                .cloned()
+                .unwrap_or_else(|| "<not available>".to_string());
 
             rows.push(SecretRowWithValuesAndSources {
                 key: (*key).clone(),
