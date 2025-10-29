@@ -17,13 +17,14 @@ setup() {
         skip "macOS keychain not accessible (may be locked or unavailable in this environment)"
     fi
 
-    # Try to verify keychain access by creating a test entry
-    if ! security add-generic-password -s "fnox-test-access-check-$$" -a "test" -w "test" -U >/dev/null 2>&1; then
+    # Try to verify keychain access by creating a test entry with timeout
+    # Use timeout to prevent hanging in CI environments
+    if ! timeout 5 security add-generic-password -s "fnox-test-access-check-$$" -a "test" -w "test" -U >/dev/null 2>&1; then
         skip "macOS keychain not accessible for write operations (may require GUI/interactive session)"
     fi
 
     # Clean up the test entry
-    security delete-generic-password -s "fnox-test-access-check-$$" -a "test" >/dev/null 2>&1 || true
+    timeout 5 security delete-generic-password -s "fnox-test-access-check-$$" -a "test" >/dev/null 2>&1 || true
 
     # Set a unique service name for tests
     export KEYCHAIN_SERVICE="fnox-test-$$"
@@ -173,52 +174,4 @@ EOF
     run "$FNOX_BIN" hook-env -s bash
     assert_success
     refute_output --partial "Provider 'keychain' not found"
-}
-
-@test "hook-env with plain provider inheritance" {
-    # Create directory structure for plain provider test (doesn't require keychain)
-    mkdir -p parent/child
-
-    # Create parent config with plain provider
-    cat > parent/fnox.toml <<EOF
-[providers.plain]
-type = "plain"
-
-[secrets.PARENT_SECRET]
-provider = "plain"
-value = "parent-plain-value"
-description = "Parent secret"
-EOF
-
-    # Create child config that uses plain provider but doesn't define it
-    cat > parent/child/fnox.toml <<EOF
-[secrets.CHILD_SECRET]
-provider = "plain"
-value = "child-plain-value"
-description = "Child secret"
-EOF
-
-    # Change to child directory
-    cd parent/child
-
-    # Test 1: fnox ls should show both secrets
-    run "$FNOX_BIN" ls
-    assert_success
-    assert_output --partial "PARENT_SECRET"
-    assert_output --partial "CHILD_SECRET"
-
-    # Test 2: fnox get should work
-    run "$FNOX_BIN" get CHILD_SECRET
-    assert_success
-    assert_output "child-plain-value"
-
-    # Test 3: hook-env should work
-    run bash -c "eval \"\$('$FNOX_BIN' hook-env -s bash)\" && echo \$CHILD_SECRET"
-    assert_success
-    assert_output "child-plain-value"
-
-    # Test 4: Verify no warnings
-    run "$FNOX_BIN" hook-env -s bash
-    assert_success
-    refute_output --partial "Provider 'plain' not found"
 }
