@@ -285,3 +285,184 @@ EOF
     refute_output --partial "Source File"
     assert_output --partial "no_source"
 }
+
+@test "fnox list --values resolves secrets from age provider" {
+    # Generate age key pair
+    AGE_KEY=$(age-keygen 2>&1 | grep "^AGE-SECRET-KEY" || true)
+    AGE_PUB=$(echo "$AGE_KEY" | age-keygen -y 2>/dev/null || true)
+
+    # Create a config with age provider
+    cat > "${FNOX_CONFIG_FILE:-fnox.toml}" << EOF
+root = true
+
+[providers.age]
+type = "age"
+recipients = ["$AGE_PUB"]
+EOF
+
+    # Store the age key for decryption
+    mkdir -p "$HOME/.config/fnox"
+    echo "$AGE_KEY" > "$HOME/.config/fnox/age.txt"
+
+    # Set a secret using age provider
+    run "$FNOX_BIN" set MY_SECRET "decrypted-value-123" --provider age
+    assert_success
+
+    # List with --values should show the decrypted value
+    run "$FNOX_BIN" list --values
+    assert_success
+    assert_output --partial "MY_SECRET"
+    assert_output --partial "decrypted-value-123"
+    assert_output --partial "Value"
+}
+
+@test "fnox list --values shows decrypted values in Value column" {
+    # Generate age key pair
+    AGE_KEY=$(age-keygen 2>&1 | grep "^AGE-SECRET-KEY" || true)
+    AGE_PUB=$(echo "$AGE_KEY" | age-keygen -y 2>/dev/null || true)
+
+    # Create a config with age provider
+    cat > "${FNOX_CONFIG_FILE:-fnox.toml}" << EOF
+root = true
+
+[providers.age]
+type = "age"
+recipients = ["$AGE_PUB"]
+EOF
+
+    # Store the age key for decryption
+    mkdir -p "$HOME/.config/fnox"
+    echo "$AGE_KEY" > "$HOME/.config/fnox/age.txt"
+
+    # Set a secret using age provider
+    run "$FNOX_BIN" set TEST_SECRET "my-secret-plaintext" --provider age
+    assert_success
+
+    # List with --values should show plaintext in Value column
+    # (Provider Key column will still show the encrypted value, which is expected)
+    run "$FNOX_BIN" list --values
+    assert_success
+    assert_output --partial "Value"
+    assert_output --partial "my-secret-plaintext"
+}
+
+@test "fnox list --values resolves multiple secrets from age provider" {
+    # Generate age key pair
+    AGE_KEY=$(age-keygen 2>&1 | grep "^AGE-SECRET-KEY" || true)
+    AGE_PUB=$(echo "$AGE_KEY" | age-keygen -y 2>/dev/null || true)
+
+    # Create a config with age provider
+    cat > "${FNOX_CONFIG_FILE:-fnox.toml}" << EOF
+root = true
+
+[providers.age]
+type = "age"
+recipients = ["$AGE_PUB"]
+EOF
+
+    # Store the age key for decryption
+    mkdir -p "$HOME/.config/fnox"
+    echo "$AGE_KEY" > "$HOME/.config/fnox/age.txt"
+
+    # Set multiple secrets
+    run "$FNOX_BIN" set SECRET_ONE "value-one" --provider age
+    assert_success
+    run "$FNOX_BIN" set SECRET_TWO "value-two" --provider age
+    assert_success
+    run "$FNOX_BIN" set SECRET_THREE "value-three" --provider age
+    assert_success
+
+    # List with --values should show all decrypted values
+    run "$FNOX_BIN" list --values
+    assert_success
+    assert_output --partial "SECRET_ONE"
+    assert_output --partial "value-one"
+    assert_output --partial "SECRET_TWO"
+    assert_output --partial "value-two"
+    assert_output --partial "SECRET_THREE"
+    assert_output --partial "value-three"
+}
+
+@test "fnox list --values --sources shows both decrypted values and source files" {
+    # Generate age key pair
+    AGE_KEY=$(age-keygen 2>&1 | grep "^AGE-SECRET-KEY" || true)
+    AGE_PUB=$(echo "$AGE_KEY" | age-keygen -y 2>/dev/null || true)
+
+    # Create a config with age provider
+    cat > "${FNOX_CONFIG_FILE:-fnox.toml}" << EOF
+root = true
+
+[providers.age]
+type = "age"
+recipients = ["$AGE_PUB"]
+EOF
+
+    # Store the age key for decryption
+    mkdir -p "$HOME/.config/fnox"
+    echo "$AGE_KEY" > "$HOME/.config/fnox/age.txt"
+
+    # Set a secret using age provider
+    run "$FNOX_BIN" set COMBINED_SECRET "combined-value" --provider age
+    assert_success
+
+    # List with both flags
+    run "$FNOX_BIN" list --values --sources
+    assert_success
+    assert_output --partial "COMBINED_SECRET"
+    assert_output --partial "combined-value"
+    assert_output --partial "Source File"
+    assert_output --partial "Value"
+    assert_output --partial "fnox.toml"
+}
+
+@test "fnox list --values with default values still works" {
+    create_test_config
+
+    cat >> "${FNOX_CONFIG_FILE:-fnox.toml}" << EOF
+
+[secrets.default_secret]
+default = "default_value_123"
+description = "Secret with default"
+EOF
+
+    # List with --values should show default value
+    run "$FNOX_BIN" list --values
+    assert_success
+    assert_output --partial "default_secret"
+    assert_output --partial "default_value_123"
+}
+
+@test "fnox list --values shows mix of provider and default secrets" {
+    # Generate age key pair
+    AGE_KEY=$(age-keygen 2>&1 | grep "^AGE-SECRET-KEY" || true)
+    AGE_PUB=$(echo "$AGE_KEY" | age-keygen -y 2>/dev/null || true)
+
+    # Create a config with age provider
+    cat > "${FNOX_CONFIG_FILE:-fnox.toml}" << EOF
+root = true
+
+[providers.age]
+type = "age"
+recipients = ["$AGE_PUB"]
+
+[secrets.default_secret]
+default = "default-value"
+
+EOF
+
+    # Store the age key for decryption
+    mkdir -p "$HOME/.config/fnox"
+    echo "$AGE_KEY" > "$HOME/.config/fnox/age.txt"
+
+    # Add a provider-based secret
+    run "$FNOX_BIN" set PROVIDER_SECRET "provider-value" --provider age
+    assert_success
+
+    # List should show both types with their resolved values
+    run "$FNOX_BIN" list --values
+    assert_success
+    assert_output --partial "default_secret"
+    assert_output --partial "default-value"
+    assert_output --partial "PROVIDER_SECRET"
+    assert_output --partial "provider-value"
+}
