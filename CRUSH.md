@@ -175,10 +175,8 @@ mise run test:bats -- test/bitwarden.bats
 Secrets support an `if_missing` field to control behavior when a secret cannot be resolved:
 
 ```toml
-[secrets.MY_SECRET]
-provider = "age"
-value = "..."
-if_missing = "warn"  # Options: "error", "warn", "ignore"
+[secrets]
+MY_SECRET = { provider = "age", value = "...", if_missing = "warn" }  # Options: "error", "warn", "ignore"
 ```
 
 **Default behavior**: When `if_missing` is not specified, fnox defaults to `"warn"`. This means:
@@ -226,18 +224,18 @@ The 1Password provider integrates with the 1Password CLI (`op`) to retrieve secr
 **Configuration:**
 
 ```toml
-[providers.onepass]
-type = "1password"
-vault = "my-vault"
-account = "my.1password.com"  # Optional
+[providers]
+onepass = { type = "1password", vault = "my-vault", account = "my.1password.com" }  # account is optional
 
-[secrets.MY_SECRET]
-provider = "onepass"
-value = "item-name"           # Retrieves password field
-# OR
-value = "item-name/username"  # Retrieves specific field
-# OR
-value = "op://vault/item/field"  # Full op:// reference
+[secrets]
+# Retrieves password field
+MY_SECRET = { provider = "onepass", value = "item-name" }
+
+# OR retrieves specific field
+MY_SECRET = { provider = "onepass", value = "item-name/username" }
+
+# OR full op:// reference
+MY_SECRET = { provider = "onepass", value = "op://vault/item/field" }
 ```
 
 **Requirements:**
@@ -276,16 +274,15 @@ The Bitwarden provider integrates with the Bitwarden CLI (`bw`) to retrieve secr
 **Configuration:**
 
 ```toml
-[providers.bitwarden]
-type = "bitwarden"
-collection = "my-collection-id"     # Optional
-organization_id = "my-org-id"       # Optional
+[providers]
+bitwarden = { type = "bitwarden", collection = "my-collection-id", organization_id = "my-org-id" }  # collection and organization_id are optional
 
-[secrets.MY_SECRET]
-provider = "bitwarden"
-value = "item-name"                 # Retrieves password field
-# OR
-value = "item-name/username"        # Retrieves specific field
+[secrets]
+# Retrieves password field
+MY_SECRET = { provider = "bitwarden", value = "item-name" }
+
+# OR retrieves specific field
+MY_SECRET = { provider = "bitwarden", value = "item-name/username" }
 ```
 
 **Requirements:**
@@ -345,14 +342,11 @@ The AWS KMS provider uses AWS Key Management Service to encrypt and decrypt secr
 **Configuration:**
 
 ```toml
-[providers.kms]
-type = "aws-kms"
-key_id = "arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012"
-region = "us-east-1"
+[providers]
+kms = { type = "aws-kms", key_id = "arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012", region = "us-east-1" }
 
-[secrets.MY_SECRET]
-provider = "kms"
-value = "base64-encoded-ciphertext"  # Encrypted value stored in config
+[secrets]
+MY_SECRET = { provider = "kms", value = "base64-encoded-ciphertext" }  # Encrypted value stored in config
 ```
 
 **Requirements:**
@@ -409,14 +403,11 @@ The AWS Secrets Manager provider retrieves secrets stored remotely in AWS Secret
 **Configuration:**
 
 ```toml
-[providers.sm]
-type = "aws-sm"
-region = "us-east-1"
-prefix = "fnox/"  # Optional prefix prepended to secret names
+[providers]
+sm = { type = "aws-sm", region = "us-east-1", prefix = "fnox/" }  # prefix is optional
 
-[secrets.MY_SECRET]
-provider = "sm"
-value = "my-secret-name"  # Name of secret in AWS Secrets Manager
+[secrets]
+MY_SECRET = { provider = "sm", value = "my-secret-name" }  # Name of secret in AWS Secrets Manager
 ```
 
 **Requirements:**
@@ -470,9 +461,8 @@ fnox provider add sm --type aws-sm \
 
 # Add secret reference (fnox just stores the reference, not the value)
 cat >> fnox.toml << EOF
-[secrets.MY_SECRET]
-provider = "sm"
-value = "my-secret-name"
+[secrets]
+MY_SECRET = { provider = "sm", value = "my-secret-name" }
 EOF
 
 # Retrieve secret from AWS Secrets Manager
@@ -506,14 +496,11 @@ The Keychain provider stores secrets in the operating system's native secure sto
 **Configuration:**
 
 ```toml
-[providers.keychain]
-type = "keychain"
-service = "fnox"
-prefix = "myapp/"  # Optional
+[providers]
+keychain = { type = "keychain", service = "fnox", prefix = "myapp/" }  # prefix is optional
 
-[secrets.MY_SECRET]
-provider = "keychain"
-value = "my-secret-name"  # Key name in keychain, not the actual value
+[secrets]
+MY_SECRET = { provider = "keychain", value = "my-secret-name" }  # Key name in keychain, not the actual value
 ```
 
 **Requirements:**
@@ -528,10 +515,8 @@ value = "my-secret-name"  # Key name in keychain, not the actual value
 ```bash
 # Set up provider in fnox.toml
 cat >> fnox.toml << EOF
-[providers.keychain]
-type = "keychain"
-service = "fnox"
-prefix = "myapp/"
+[providers]
+keychain = { type = "keychain", service = "fnox", prefix = "myapp/" }
 EOF
 
 # Store a secret in OS keychain (encrypts and stores in keychain)

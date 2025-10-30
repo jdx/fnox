@@ -97,28 +97,19 @@ Your `fnox.toml` config file either contains encrypted secrets or references to 
 ```toml
 # fnox.toml
 
-# Provider configuration
-[providers.age]
-type = "age"
-recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
+[providers]
+age = { type = "age", recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"] }
 
+[secrets]
 # Development secrets (encrypted in git)
-[secrets.DATABASE_URL]
-provider = "age"
-value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..."  # ← encrypted, safe to commit
+DATABASE_URL = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..." }  # ← encrypted, safe to commit
+API_KEY = { default = "dev-key-12345" }  # ← plain default for local dev
 
-[secrets.API_KEY]
-default = "dev-key-12345"  # ← plain default for local dev
+[profiles.production.providers]
+aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp/" }
 
-# Production profile (AWS Secrets Manager)
-[profiles.production.providers.aws]
-type = "aws-sm"
-region = "us-east-1"
-prefix = "myapp/"
-
-[profiles.production.secrets.DATABASE_URL]
-provider = "aws"
-value = "database-url"  # ← reference to AWS secret
+[profiles.production.secrets]
+DATABASE_URL = { provider = "aws", value = "database-url" }  # ← reference to AWS secret
 ```
 
 ```bash
