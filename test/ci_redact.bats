@@ -208,3 +208,60 @@ EOF
     assert_success
     assert_output --partial "Redact secrets in CI/CD output"
 }
+
+@test "ci-redact warns about multiline secrets" {
+    # Create a multiline secret (like a JSON file or private key)
+    cat > "$FNOX_CONFIG_FILE" << 'EOF'
+root = true
+
+[secrets]
+MULTILINE_SECRET = { default = """line1
+line2
+line3""" }
+SINGLE_LINE = { default = "single" }
+EOF
+
+    export CI=true
+    export GITHUB_ACTIONS=true
+
+    run "$FNOX_BIN" ci-redact
+    assert_success
+
+    # Should warn about the multiline secret
+    assert_output --partial "Secret 'MULTILINE_SECRET' contains newlines and cannot be fully redacted"
+
+    # Should still mask the single-line secret
+    assert_output --partial "::add-mask::single"
+
+    # Only 1 mask command for single-line secret
+    mask_count=$(echo "$output" | grep -c "::add-mask::" || true)
+    [ "$mask_count" -eq 1 ]
+}
+
+@test "ci-redact warns about JSON secrets" {
+    # Simulate a GCP service account key or similar JSON secret
+    cat > "$FNOX_CONFIG_FILE" << 'EOF'
+root = true
+
+[secrets]
+GCP_KEY = { default = """{
+  "type": "service_account",
+  "project_id": "my-project",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nABCD1234\n-----END PRIVATE KEY-----"
+}""" }
+SAFE_SECRET = { default = "safe-value" }
+EOF
+
+    export CI=true
+    export GITHUB_ACTIONS=true
+
+    run "$FNOX_BIN" ci-redact
+    assert_success
+
+    # Should warn about the multiline JSON secret
+    assert_output --partial "Secret 'GCP_KEY' contains newlines and cannot be fully redacted"
+    assert_output --partial "Consider using a secret manager"
+
+    # Should still mask single-line secrets
+    assert_output --partial "::add-mask::safe-value"
+}
