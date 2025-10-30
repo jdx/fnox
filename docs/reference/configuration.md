@@ -121,8 +121,12 @@ gcp = { type = "gcp-sm", project = "my-project-id", prefix = "myapp/" }  # prefi
 #### GCP Cloud KMS
 
 ```toml
-[providers]
-gcpkms = { type = "gcp-kms", project = "my-project-id", location = "us-central1", keyring = "fnox-keyring", key = "fnox-key" }
+[providers.gcpkms]
+type = "gcp-kms"
+project = "my-project-id"
+location = "us-central1"
+keyring = "fnox-keyring"
+key = "fnox-key"
 ```
 
 #### 1Password

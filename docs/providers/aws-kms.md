@@ -25,8 +25,10 @@ aws kms create-key --description "fnox secrets encryption"
 
 # 2. Configure provider
 cat >> fnox.toml << 'EOF'
-[providers]
-kms = { type = "aws-kms", key_id = "arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012", region = "us-east-1" }
+[providers.kms]
+type = "aws-kms"
+key_id = "arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012"
+region = "us-east-1"
 EOF
 
 # 3. Encrypt a secret
@@ -81,8 +83,10 @@ Same as [AWS Secrets Manager](/providers/aws-sm#configure-aws-credentials).
 ### 3. Configure fnox Provider
 
 ```toml
-[providers]
-kms = { type = "aws-kms", key_id = "arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012", region = "us-east-1" }
+[providers.kms]
+type = "aws-kms"
+key_id = "arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012"
+region = "us-east-1"
 ```
 
 The `key_id` can be:
