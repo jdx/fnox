@@ -20,9 +20,21 @@ impl CiRedactCommand {
         }
 
         // Determine the masking format based on CI vendor
-        let mask_fn: Box<dyn Fn(&str)> = match ci_info.vendor {
+        let mask_fn: Box<dyn Fn(&str, &str)> = match ci_info.vendor {
             Some(ci_info::types::Vendor::GitHubActions) => {
-                Box::new(|value: &str| println!("::add-mask::{}", value))
+                Box::new(|key: &str, value: &str| {
+                    // GitHub Actions doesn't properly handle multiline secrets
+                    // Warn the user instead of attempting to mask
+                    if value.contains('\n') {
+                        tracing::warn!(
+                            "Secret '{}' contains newlines and cannot be fully redacted in CI logs. \
+                            Consider using a secret manager or storing multiline secrets outside fnox config.",
+                            key
+                        );
+                    } else {
+                        println!("::add-mask::{}", value);
+                    }
+                })
             }
             Some(ci_info::types::Vendor::GitLabCI) => {
                 // GitLab CI doesn't have a built-in mask command
@@ -73,7 +85,7 @@ impl CiRedactCommand {
             {
                 Ok(Some(value)) => {
                     // Output CI-specific mask command
-                    mask_fn(&value);
+                    mask_fn(key, &value);
                 }
                 Ok(None) => {
                     // Secret not found, ignore based on if_missing setting
