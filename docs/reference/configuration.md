@@ -76,11 +76,12 @@ type = "PROVIDER_TYPE"
 #### Age Encryption
 
 ```toml
-[providers]
-age = { type = "age", recipients = [
+[providers.age]
+type = "age"
+recipients = [
   "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQs..."
-] }
+]
 ```
 
 #### AWS Secrets Manager

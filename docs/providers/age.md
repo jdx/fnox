@@ -148,11 +148,12 @@ Age natively supports SSH keys—no conversion needed!
 ### Using SSH Keys
 
 ```toml
-[providers]
-age = { type = "age", recipients = [
+[providers.age]
+type = "age"
+recipients = [
   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQs8YqSC... alice@example.com",
   "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC5... bob@example.com"
-] }
+]
 ```
 
 Set decryption key:
@@ -193,12 +194,13 @@ cat ~/.ssh/id_ed25519.pub
 ### 2. Add All Recipients
 
 ```toml
-[providers]
-age = { type = "age", recipients = [
-  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQs... # alice",
-  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBws... # bob",
-  "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2el... # ci-bot"
-] }
+[providers.age]
+type = "age"
+recipients = [
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQs...",  # alice
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBws...",  # bob
+  "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2el..."   # ci-bot
+]
 ```
 
 ### 3. Encrypt Secrets
@@ -248,12 +250,13 @@ fnox get DATABASE_URL  # Works for all recipients!
 2. **Admin adds to recipients**:
 
    ```toml
-   [providers]
-   age = { type = "age", recipients = [
-     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQs... # alice",
-     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBws... # bob",
-     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIXyz... # charlie (NEW)"
-   ] }
+   [providers.age]
+   type = "age"
+   recipients = [
+     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQs...",  # alice
+     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBws...",  # bob
+     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIXyz..."   # charlie (NEW)
+   ]
    ```
 
 3. **Re-encrypt all secrets** (necessary for new recipient):
