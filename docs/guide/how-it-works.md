@@ -11,13 +11,11 @@ Secrets can be stored in two ways:
 The encrypted ciphertext lives directly in the config file:
 
 ```toml
-[providers.age]
-type = "age"
-recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
+[providers]
+age = { type = "age", recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"] }
 
-[secrets.DATABASE_URL]
-provider = "age"
-value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC4uLg=="  # ← encrypted, safe to commit
+[secrets]
+DATABASE_URL = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC4uLg==" }  # ← encrypted, safe to commit
 ```
 
 **Providers:** age, aws-kms, azure-kms, gcp-kms
@@ -38,14 +36,11 @@ value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC4uLg=="  # ← encrypted, saf
 The config contains only a reference to a secret stored remotely:
 
 ```toml
-[providers.aws]
-type = "aws-sm"
-region = "us-east-1"
-prefix = "myapp/"
+[providers]
+aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp/" }
 
-[secrets.DATABASE_URL]
-provider = "aws"
-value = "database-url"  # ← Just a reference, actual secret in AWS
+[secrets]
+DATABASE_URL = { provider = "aws", value = "database-url" }  # ← Just a reference, actual secret in AWS
 ```
 
 **Providers:** aws-sm, azure-sm, gcp-sm, vault, 1password, bitwarden, keychain
@@ -78,27 +73,14 @@ First match wins!
 
 ```toml
 # Provider definitions
-[providers.age]
-type = "age"
-recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
+[providers]
+age = { type = "age", recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"] }
+aws = { type = "aws-sm", region = "us-east-1" }
 
-[providers.aws]
-type = "aws-sm"
-region = "us-east-1"
-
-# Encrypted secret (in git)
-[secrets.JWT_SECRET]
-provider = "age"
-value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC4uLg=="
-
-# Remote secret (in AWS)
-[secrets.DATABASE_URL]
-provider = "aws"
-value = "prod-database-url"
-
-# Default value (fallback)
-[secrets.NODE_ENV]
-default = "development"
+[secrets]
+JWT_SECRET = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC4uLg==" }  # Encrypted secret (in git)
+DATABASE_URL = { provider = "aws", value = "prod-database-url" }  # Remote secret (in AWS)
+NODE_ENV = { default = "development" }  # Default value (fallback)
 ```
 
 ## Execution Flow

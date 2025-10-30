@@ -16,9 +16,8 @@ sudo apt-get install libsecret-1-0 libsecret-1-dev  # Ubuntu/Debian
 
 # 2. Configure provider
 cat >> fnox.toml << 'EOF'
-[providers.keychain]
-type = "keychain"
-service = "fnox"
+[providers]
+keychain = { type = "keychain", service = "fnox" }
 EOF
 
 # 3. Store a secret in OS keychain
@@ -53,10 +52,8 @@ macOS and Windows have built-in support—no installation needed.
 ## Configuration
 
 ```toml
-[providers.keychain]
-type = "keychain"
-service = "fnox"        # Namespace for fnox secrets
-prefix = "myapp/"       # Optional prefix for secret names
+[providers]
+keychain = { type = "keychain", service = "fnox", prefix = "myapp/" }  # Prefix is optional
 ```
 
 ### Service Name
@@ -64,11 +61,11 @@ prefix = "myapp/"       # Optional prefix for secret names
 The `service` acts as a namespace to isolate fnox secrets from other applications:
 
 ```toml
-[providers.keychain]
-service = "fnox"         # All fnox secrets under "fnox" service
+[providers]
+keychain = { service = "fnox" }  # All fnox secrets under "fnox" service
 
 # Or use project-specific service
-service = "myapp"        # All secrets under "myapp" service
+keychain = { service = "myapp" }  # All secrets under "myapp" service
 ```
 
 ### Prefix
@@ -76,9 +73,8 @@ service = "myapp"        # All secrets under "myapp" service
 Optional prefix prepended to secret names:
 
 ```toml
-[providers.keychain]
-service = "fnox"
-prefix = "myapp/"        # "database-url" becomes "myapp/database-url"
+[providers]
+keychain = { service = "fnox", prefix = "myapp/" }  # "database-url" becomes "myapp/database-url"
 ```
 
 ## How It Works
@@ -100,9 +96,8 @@ fnox set DATABASE_URL "postgresql://localhost/mydb" --provider keychain
 Your `fnox.toml`:
 
 ```toml
-[secrets.DATABASE_URL]
-provider = "keychain"
-value = "database-url"  # ← Keychain entry name, not the actual secret
+[secrets]
+DATABASE_URL = { provider = "keychain", value = "database-url" }  # ← Keychain entry name, not the actual secret
 ```
 
 The actual secret is stored in the OS keychain, encrypted.
@@ -124,23 +119,13 @@ fnox exec -- npm run dev
 A common pattern is to store provider tokens in the keychain:
 
 ```toml
-[providers.keychain]
-type = "keychain"
-service = "fnox"
+[providers]
+keychain = { type = "keychain", service = "fnox" }
+age = { type = "age", recipients = ["age1..."] }
 
-[providers.age]
-type = "age"
-recipients = ["age1..."]
-
-# Store 1Password token in keychain
-[secrets.OP_SERVICE_ACCOUNT_TOKEN]
-provider = "keychain"
-value = "op-token"
-
-# Other secrets encrypted with age
-[secrets.DATABASE_URL]
-provider = "age"
-value = "encrypted..."
+[secrets]
+OP_SERVICE_ACCOUNT_TOKEN = { provider = "keychain", value = "op-token" }  # Store 1Password token in keychain
+DATABASE_URL = { provider = "age", value = "encrypted..." }  # Other secrets encrypted with age
 ```
 
 Then bootstrap:
@@ -156,46 +141,34 @@ fnox exec -- ./start.sh
 ### Personal Project
 
 ```toml
-[providers.keychain]
-type = "keychain"
-service = "myapp"
+[providers]
+keychain = { type = "keychain", service = "myapp" }
 
-[secrets.DATABASE_URL]
-provider = "keychain"
-value = "database-url"
-
-[secrets.API_KEY]
-provider = "keychain"
-value = "api-key"
+[secrets]
+DATABASE_URL = { provider = "keychain", value = "database-url" }
+API_KEY = { provider = "keychain", value = "api-key" }
 ```
 
 ### Bootstrap Tokens
 
 ```toml
-[providers.keychain]
-type = "keychain"
-service = "fnox-tokens"
+[providers]
+keychain = { type = "keychain", service = "fnox-tokens" }
 
-[secrets.GITHUB_TOKEN]
-provider = "keychain"
-value = "github"
-
-[secrets.NPM_TOKEN]
-provider = "keychain"
-value = "npm"
+[secrets]
+GITHUB_TOKEN = { provider = "keychain", value = "github" }
+NPM_TOKEN = { provider = "keychain", value = "npm" }
 ```
 
 ### Machine-Specific Secrets
 
 ```toml
 # fnox.local.toml (gitignored)
-[providers.keychain]
-type = "keychain"
-service = "fnox-local"
+[providers]
+keychain = { type = "keychain", service = "fnox-local" }
 
-[secrets.LAPTOP_DB_URL]
-provider = "keychain"
-value = "laptop-db"
+[secrets]
+LAPTOP_DB_URL = { provider = "keychain", value = "laptop-db" }
 ```
 
 ## Platform Details

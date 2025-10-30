@@ -7,10 +7,8 @@ AWS Secrets Manager provides centralized secret management with IAM access contr
 ```bash
 # 1. Configure provider in fnox.toml
 cat >> fnox.toml << 'EOF'
-[providers.aws]
-type = "aws-sm"
-region = "us-east-1"
-prefix = "myapp/"
+[providers]
+aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp/" }
 EOF
 
 # 2. Create secret in AWS
@@ -20,9 +18,8 @@ aws secretsmanager create-secret \
 
 # 3. Reference in fnox.toml
 cat >> fnox.toml << 'EOF'
-[secrets.DATABASE_URL]
-provider = "aws"
-value = "database-url"  # With prefix, fetches "myapp/database-url"
+[secrets]
+DATABASE_URL = { provider = "aws", value = "database-url" }  # With prefix, fetches "myapp/database-url"
 EOF
 
 # 4. Fetch secret
@@ -130,10 +127,8 @@ If running on EC2, ECS, Lambda, or other AWS services:
 ### Configure fnox Provider
 
 ```toml
-[providers.aws]
-type = "aws-sm"
-region = "us-east-1"
-prefix = "myapp/"  # Optional: prepended to all secret names
+[providers]
+aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp/" }  # prefix is optional
 ```
 
 ## Creating Secrets
@@ -173,16 +168,10 @@ aws secretsmanager create-secret \
 Add references to `fnox.toml`:
 
 ```toml
-[secrets.DATABASE_URL]
-provider = "aws"
-value = "database-url"  # → Fetches "myapp/database-url"
-
-[secrets.API_KEY]
-provider = "aws"
-value = "api-key"  # → Fetches "myapp/api-key"
-
-# Without prefix in provider, use full name:
-# value = "myapp/api-key"
+[secrets]
+DATABASE_URL = { provider = "aws", value = "database-url" }  # → Fetches "myapp/database-url"
+API_KEY = { provider = "aws", value = "api-key" }  # → Fetches "myapp/api-key"
+# Without prefix in provider, use full name like: value = "myapp/api-key"
 ```
 
 ## Usage
@@ -212,60 +201,47 @@ fnox exec --profile production -- ./deploy.sh
 The `prefix` is prepended to the `value`:
 
 ```toml
-[providers.aws]
-prefix = "myapp/"
+[providers]
+aws = { prefix = "myapp/" }
 
-[secrets.DATABASE_URL]
-provider = "aws"
-value = "database-url"  # → Fetches "myapp/database-url"
-
-[secrets.API_KEY]
-provider = "aws"
-value = "api-key"  # → Fetches "myapp/api-key"
+[secrets]
+DATABASE_URL = { provider = "aws", value = "database-url" }  # → Fetches "myapp/database-url"
+API_KEY = { provider = "aws", value = "api-key" }  # → Fetches "myapp/api-key"
 ```
 
 Without prefix:
 
 ```toml
-[providers.aws]
-# No prefix
+[providers]
+aws = { }  # No prefix
 
-[secrets.DATABASE_URL]
-provider = "aws"
-value = "myapp/database-url"  # → Fetches "myapp/database-url"
+[secrets]
+DATABASE_URL = { provider = "aws", value = "myapp/database-url" }  # → Fetches "myapp/database-url"
 ```
 
 ## Multi-Environment Example
 
 ```toml
 # Development: age encryption
-[providers.age]
-type = "age"
-recipients = ["age1..."]
+[providers]
+age = { type = "age", recipients = ["age1..."] }
 
-[secrets.DATABASE_URL]
-provider = "age"
-value = "encrypted-dev-db..."
+[secrets]
+DATABASE_URL = { provider = "age", value = "encrypted-dev-db..." }
 
 # Staging: AWS Secrets Manager (us-east-1)
-[profiles.staging.providers.aws]
-type = "aws-sm"
-region = "us-east-1"
-prefix = "myapp-staging/"
+[profiles.staging.providers]
+aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp-staging/" }
 
-[profiles.staging.secrets.DATABASE_URL]
-provider = "aws"
-value = "database-url"  # → myapp-staging/database-url
+[profiles.staging.secrets]
+DATABASE_URL = { provider = "aws", value = "database-url" }  # → myapp-staging/database-url
 
 # Production: AWS Secrets Manager (us-west-2)
-[profiles.production.providers.aws]
-type = "aws-sm"
-region = "us-west-2"
-prefix = "myapp-prod/"
+[profiles.production.providers]
+aws = { type = "aws-sm", region = "us-west-2", prefix = "myapp-prod/" }
 
-[profiles.production.secrets.DATABASE_URL]
-provider = "aws"
-value = "database-url"  # → myapp-prod/database-url
+[profiles.production.secrets]
+DATABASE_URL = { provider = "aws", value = "database-url" }  # → myapp-prod/database-url
 ```
 
 ```bash

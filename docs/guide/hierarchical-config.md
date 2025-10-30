@@ -35,21 +35,13 @@ Each level merges both the main config and local overrides, with child configs t
 ```toml
 # project/fnox.toml
 
-# Shared age provider
-[providers.age]
-type = "age"
-recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
+[providers]
+age = { type = "age", recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"] }
 
-# Shared secrets
-[secrets.LOG_LEVEL]
-default = "info"
-
-[secrets.ENVIRONMENT]
-default = "development"
-
-[secrets.JWT_SECRET]
-provider = "age"
-value = "encrypted-shared-jwt..."
+[secrets]
+LOG_LEVEL = { default = "info" }
+ENVIRONMENT = { default = "development" }
+JWT_SECRET = { provider = "age", value = "encrypted-shared-jwt..." }
 ```
 
 ### API Service Config
@@ -57,17 +49,10 @@ value = "encrypted-shared-jwt..."
 ```toml
 # project/services/api/fnox.toml
 
-# API-specific secrets
-[secrets.API_PORT]
-default = "3000"
-
-[secrets.DATABASE_URL]
-provider = "age"
-value = "encrypted-api-db..."
-
-# Override shared secret for API
-[secrets.LOG_LEVEL]
-default = "debug"  # More verbose for API during dev
+[secrets]
+API_PORT = { default = "3000" }
+DATABASE_URL = { provider = "age", value = "encrypted-api-db..." }
+LOG_LEVEL = { default = "debug" }  # Override shared secret - more verbose for API during dev
 ```
 
 ### Worker Service Config
@@ -75,13 +60,9 @@ default = "debug"  # More verbose for API during dev
 ```toml
 # project/services/worker/fnox.toml
 
-# Worker-specific secrets
-[secrets.QUEUE_URL]
-provider = "age"
-value = "encrypted-queue-url..."
-
-[secrets.WORKER_CONCURRENCY]
-default = "4"
+[secrets]
+QUEUE_URL = { provider = "age", value = "encrypted-queue-url..." }
+WORKER_CONCURRENCY = { default = "4" }
 ```
 
 ## Resulting Secrets

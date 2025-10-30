@@ -24,23 +24,15 @@ You can set `if_missing` at multiple levels. fnox uses the first match:
 Set different behaviors for different secrets:
 
 ```toml
+[secrets]
 # Critical secrets must exist
-[secrets.DATABASE_URL]
-provider = "aws"
-value = "database-url"
-if_missing = "error"  # Fail if missing
+DATABASE_URL = { provider = "aws", value = "database-url", if_missing = "error" }  # Fail if missing
 
 # Optional secrets
-[secrets.ANALYTICS_KEY]
-provider = "aws"
-value = "analytics-key"
-if_missing = "ignore"  # Continue silently if missing
+ANALYTICS_KEY = { provider = "aws", value = "analytics-key", if_missing = "ignore" }  # Continue silently if missing
 
 # Warn about missing secrets (default)
-[secrets.CACHE_URL]
-provider = "aws"
-value = "cache-url"
-if_missing = "warn"  # Print warning if missing
+CACHE_URL = { provider = "aws", value = "cache-url", if_missing = "warn" }  # Print warning if missing
 ```
 
 ## Top-Level Default
@@ -51,20 +43,10 @@ Set a default for all secrets:
 # Make all secrets strict by default
 if_missing = "error"
 
-[secrets.DATABASE_URL]
-provider = "age"
-value = "encrypted..."
-# ↑ Inherits if_missing = "error"
-
-[secrets.API_KEY]
-provider = "age"
-value = "encrypted..."
-# ↑ Inherits if_missing = "error"
-
-# Override for specific secret
-[secrets.OPTIONAL_FEATURE_FLAG]
-default = "false"
-if_missing = "ignore"  # This one can be missing
+[secrets]
+DATABASE_URL = { provider = "age", value = "encrypted..." }  # Inherits if_missing = "error"
+API_KEY = { provider = "age", value = "encrypted..." }  # Inherits if_missing = "error"
+OPTIONAL_FEATURE_FLAG = { default = "false", if_missing = "ignore" }  # Override - this one can be missing
 ```
 
 ## Runtime Override with CLI
@@ -185,35 +167,24 @@ jobs:
 ### Optional Analytics/Monitoring
 
 ```toml
+[secrets]
 # Won't break the app if missing
-[secrets.SENTRY_DSN]
-provider = "aws"
-value = "sentry-dsn"
-if_missing = "ignore"
-
-[secrets.DATADOG_API_KEY]
-provider = "aws"
-value = "datadog-key"
-if_missing = "ignore"
+SENTRY_DSN = { provider = "aws", value = "sentry-dsn", if_missing = "ignore" }
+DATADOG_API_KEY = { provider = "aws", value = "datadog-key", if_missing = "ignore" }
 ```
 
 ### Required Database
 
 ```toml
-# Must exist or fail
-[secrets.DATABASE_URL]
-provider = "aws"
-value = "database-url"
-if_missing = "error"
+[secrets]
+DATABASE_URL = { provider = "aws", value = "database-url", if_missing = "error" }  # Must exist or fail
 ```
 
 ### Development Defaults
 
 ```toml
-# Warn if missing, but provide a default
-[secrets.REDIS_URL]
-default = "redis://localhost:6379"
-if_missing = "warn"
+[secrets]
+REDIS_URL = { default = "redis://localhost:6379", if_missing = "warn" }  # Warn if missing, but provide a default
 ```
 
 ## Behavior Summary

@@ -19,8 +19,8 @@ fnox set BW_SESSION "$(bw unlock --raw)" --provider age
 
 # 5. Configure Bitwarden provider
 cat >> fnox.toml << 'EOF'
-[providers.bitwarden]
-type = "bitwarden"
+[providers]
+bitwarden = { type = "bitwarden" }
 EOF
 
 # 6. Add secrets to Bitwarden
@@ -30,9 +30,8 @@ bw create item --name "Database" \
 
 # 7. Reference in fnox
 cat >> fnox.toml << 'EOF'
-[secrets.DATABASE_PASSWORD]
-provider = "bitwarden"
-value = "Database"
+[secrets]
+DATABASE_PASSWORD = { provider = "bitwarden", value = "Database" }
 EOF
 
 # 8. Use it
@@ -98,10 +97,8 @@ export BW_SESSION=$(fnox get BW_SESSION)
 ### 4. Configure Bitwarden Provider
 
 ```toml
-[providers.bitwarden]
-type = "bitwarden"
-collection = "my-collection-id"     # Optional
-organization_id = "my-org-id"       # Optional
+[providers]
+bitwarden = { type = "bitwarden", collection = "my-collection-id", organization_id = "my-org-id" }  # both optional
 ```
 
 ## Adding Secrets to Bitwarden
@@ -145,17 +142,10 @@ bw list items
 Add references to `fnox.toml`:
 
 ```toml
-[secrets.DATABASE_PASSWORD]
-provider = "bitwarden"
-value = "Database"  # Item name (fetches 'password' field)
-
-[secrets.DB_USERNAME]
-provider = "bitwarden"
-value = "Database/username"  # Specific field
-
-[secrets.API_KEY]
-provider = "bitwarden"
-value = "API Key"
+[secrets]
+DATABASE_PASSWORD = { provider = "bitwarden", value = "Database" }  # Item name (fetches 'password' field)
+DB_USERNAME = { provider = "bitwarden", value = "Database/username" }  # Specific field
+API_KEY = { provider = "bitwarden", value = "API Key" }
 ```
 
 ## Reference Formats
@@ -163,25 +153,17 @@ value = "API Key"
 ### 1. Item Name (Gets Password Field)
 
 ```toml
-[secrets.MY_SECRET]
-provider = "bitwarden"
-value = "My Item"  # → Gets the 'password' field
+[secrets]
+MY_SECRET = { provider = "bitwarden", value = "My Item" }  # → Gets the 'password' field
 ```
 
 ### 2. Item Name + Field
 
 ```toml
-[secrets.USERNAME]
-provider = "bitwarden"
-value = "Database/username"
-
-[secrets.PASSWORD]
-provider = "bitwarden"
-value = "Database/password"
-
-[secrets.TOTP]
-provider = "bitwarden"
-value = "Database/totp"
+[secrets]
+USERNAME = { provider = "bitwarden", value = "Database/username" }
+PASSWORD = { provider = "bitwarden", value = "Database/password" }
+TOTP = { provider = "bitwarden", value = "Database/totp" }
 ```
 
 Supported fields: `username`, `password`, `notes`, `uri`, `totp`
@@ -208,30 +190,20 @@ fnox exec -- npm start
 
 ```toml
 # Bootstrap session token (encrypted in git)
-[providers.age]
-type = "age"
-recipients = ["age1..."]
+[providers]
+age = { type = "age", recipients = ["age1..."] }
+bitwarden = { type = "bitwarden" }
 
-[secrets.BW_SESSION]
-provider = "age"
-value = "encrypted-session..."
-
-# Development: Bitwarden
-[providers.bitwarden]
-type = "bitwarden"
-
-[secrets.DATABASE_URL]
-provider = "bitwarden"
-value = "Dev Database"
+[secrets]
+BW_SESSION = { provider = "age", value = "encrypted-session..." }
+DATABASE_URL = { provider = "bitwarden", value = "Dev Database" }
 
 # Production: Different Bitwarden organization
-[profiles.production.providers.bitwarden]
-type = "bitwarden"
-organization_id = "prod-org-id"
+[profiles.production.providers]
+bitwarden = { type = "bitwarden", organization_id = "prod-org-id" }
 
-[profiles.production.secrets.DATABASE_URL]
-provider = "bitwarden"
-value = "Prod Database"
+[profiles.production.secrets]
+DATABASE_URL = { provider = "bitwarden", value = "Prod Database" }
 ```
 
 ## Self-Hosted Vaultwarden
@@ -318,10 +290,8 @@ export BW_SESSION=$(bw unlock --raw)
 Filter secrets by collection or organization:
 
 ```toml
-[providers.bitwarden]
-type = "bitwarden"
-collection = "abc123-collection-id"
-organization_id = "org-id"
+[providers]
+bitwarden = { type = "bitwarden", collection = "abc123-collection-id", organization_id = "org-id" }
 ```
 
 Get collection ID:

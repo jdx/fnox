@@ -67,16 +67,12 @@ You configure providers (encryption methods or cloud services), then assign each
 
 ```toml
 # fnox.toml
-[providers.age]
-type = "age"
-recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
+[providers]
+age = { type = "age", recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"] }
 
-[secrets.DATABASE_URL]
-provider = "age"
-value = "YWdlLWVuY3J5cHRpb24uLi4="  # ← encrypted ciphertext, safe to commit
-
-[secrets.API_KEY]
-default = "dev-key-12345"  # ← plain default value for local dev
+[secrets]
+DATABASE_URL = { provider = "age", value = "YWdlLWVuY3J5cHRpb24uLi4=" }  # ← encrypted ciphertext, safe to commit
+API_KEY = { default = "dev-key-12345" }  # ← plain default value for local dev
 ```
 
 ## Supported Providers

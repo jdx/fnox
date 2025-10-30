@@ -16,9 +16,8 @@ fnox set OP_SERVICE_ACCOUNT_TOKEN "ops_YOUR_TOKEN" --provider age
 
 # 4. Configure 1Password provider
 cat >> fnox.toml << 'EOF'
-[providers.onepass]
-type = "1password"
-vault = "Development"
+[providers]
+onepass = { type = "1password", vault = "Development" }
 EOF
 
 # 5. Add secrets to 1Password (via app or CLI)
@@ -29,9 +28,8 @@ op item create --category=login \
 
 # 6. Reference in fnox
 cat >> fnox.toml << 'EOF'
-[secrets.DATABASE_PASSWORD]
-provider = "onepass"
-value = "Database"
+[secrets]
+DATABASE_PASSWORD = { provider = "onepass", value = "Database" }
 EOF
 
 # 7. Use it
@@ -79,9 +77,8 @@ Use age encryption to store the token:
 ```bash
 # First, set up age provider (if not already done)
 cat >> fnox.toml << 'EOF'
-[providers.age]
-type = "age"
-recipients = ["age1..."]
+[providers]
+age = { type = "age", recipients = ["age1..."] }
 EOF
 
 # Store the 1Password token encrypted in fnox
@@ -97,10 +94,8 @@ export OP_SERVICE_ACCOUNT_TOKEN=$(fnox get OP_SERVICE_ACCOUNT_TOKEN)
 ### 3. Configure 1Password Provider
 
 ```toml
-[providers.onepass]
-type = "1password"
-vault = "Development"  # Your vault name
-account = "my.1password.com"  # Optional
+[providers]
+onepass = { type = "1password", vault = "Development", account = "my.1password.com" }  # account is optional
 ```
 
 ## Adding Secrets to 1Password
@@ -146,17 +141,10 @@ op item create --category=login \
 Add references to `fnox.toml`:
 
 ```toml
-[secrets.DATABASE_PASSWORD]
-provider = "onepass"
-value = "Database"  # Item name (fetches 'password' field)
-
-[secrets.DB_USERNAME]
-provider = "onepass"
-value = "Database/username"  # Specific field
-
-[secrets.API_KEY]
-provider = "onepass"
-value = "op://Development/API Keys/credential"  # Full op:// URI
+[secrets]
+DATABASE_PASSWORD = { provider = "onepass", value = "Database" }  # Item name (fetches 'password' field)
+DB_USERNAME = { provider = "onepass", value = "Database/username" }  # Specific field
+API_KEY = { provider = "onepass", value = "op://Development/API Keys/credential" }  # Full op:// URI
 ```
 
 ## Reference Formats
@@ -166,21 +154,16 @@ fnox supports multiple ways to reference 1Password items:
 ### 1. Item Name (Gets Password Field)
 
 ```toml
-[secrets.MY_SECRET]
-provider = "onepass"
-value = "My Item"  # → Gets the 'password' field
+[secrets]
+MY_SECRET = { provider = "onepass", value = "My Item" }  # → Gets the 'password' field
 ```
 
 ### 2. Item Name + Field
 
 ```toml
-[secrets.USERNAME]
-provider = "onepass"
-value = "Database/username"  # → Gets 'username' field
-
-[secrets.PASSWORD]
-provider = "onepass"
-value = "Database/password"  # → Gets 'password' field
+[secrets]
+USERNAME = { provider = "onepass", value = "Database/username" }  # → Gets 'username' field
+PASSWORD = { provider = "onepass", value = "Database/password" }  # → Gets 'password' field
 ```
 
 Common fields: `username`, `password`, `url`, `notes`
@@ -188,9 +171,8 @@ Common fields: `username`, `password`, `url`, `notes`
 ### 3. Full op:// URI
 
 ```toml
-[secrets.API_KEY]
-provider = "onepass"
-value = "op://Development/API Keys/credential"
+[secrets]
+API_KEY = { provider = "onepass", value = "op://Development/API Keys/credential" }
 ```
 
 Format: `op://VAULT/ITEM/FIELD`
@@ -213,31 +195,20 @@ fnox exec -- npm start
 
 ```toml
 # Bootstrap token (encrypted in git)
-[providers.age]
-type = "age"
-recipients = ["age1..."]
+[providers]
+age = { type = "age", recipients = ["age1..."] }
+onepass = { type = "1password", vault = "Development" }
 
-[secrets.OP_SERVICE_ACCOUNT_TOKEN]
-provider = "age"
-value = "encrypted-token..."
-
-# Development: 1Password
-[providers.onepass]
-type = "1password"
-vault = "Development"
-
-[secrets.DATABASE_URL]
-provider = "onepass"
-value = "Dev Database"
+[secrets]
+OP_SERVICE_ACCOUNT_TOKEN = { provider = "age", value = "encrypted-token..." }
+DATABASE_URL = { provider = "onepass", value = "Dev Database" }
 
 # Production: Different 1Password vault
-[profiles.production.providers.onepass]
-type = "1password"
-vault = "Production"
+[profiles.production.providers]
+onepass = { type = "1password", vault = "Production" }
 
-[profiles.production.secrets.DATABASE_URL]
-provider = "onepass"
-value = "Prod Database"
+[profiles.production.secrets]
+DATABASE_URL = { provider = "onepass", value = "Prod Database" }
 ```
 
 ## CI/CD Example
@@ -280,9 +251,8 @@ jobs:
 3. **Admin creates items** in 1Password vault
 4. **Admin adds references** to fnox.toml:
    ```toml
-   [secrets.DATABASE_URL]
-   provider = "onepass"
-   value = "Database"
+   [secrets]
+   DATABASE_URL = { provider = "onepass", value = "Database" }
    ```
 5. **Team members pull and use**:
    ```bash

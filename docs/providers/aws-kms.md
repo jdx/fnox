@@ -25,10 +25,8 @@ aws kms create-key --description "fnox secrets encryption"
 
 # 2. Configure provider
 cat >> fnox.toml << 'EOF'
-[providers.kms]
-type = "aws-kms"
-key_id = "arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012"
-region = "us-east-1"
+[providers]
+kms = { type = "aws-kms", key_id = "arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012", region = "us-east-1" }
 EOF
 
 # 3. Encrypt a secret
@@ -83,10 +81,8 @@ Same as [AWS Secrets Manager](/providers/aws-sm#configure-aws-credentials).
 ### 3. Configure fnox Provider
 
 ```toml
-[providers.kms]
-type = "aws-kms"
-key_id = "arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012"
-region = "us-east-1"
+[providers]
+kms = { type = "aws-kms", key_id = "arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012", region = "us-east-1" }
 ```
 
 The `key_id` can be:
@@ -106,9 +102,8 @@ fnox set DATABASE_URL "postgresql://prod.example.com/db" --provider kms
 Result in `fnox.toml`:
 
 ```toml
-[secrets.DATABASE_URL]
-provider = "kms"
-value = "AQICAHhw...base64...ciphertext..."  # ← Encrypted, safe to commit!
+[secrets]
+DATABASE_URL = { provider = "kms", value = "AQICAHhw...base64...ciphertext..." }  # ← Encrypted, safe to commit!
 ```
 
 ### Decrypt and Get
@@ -131,23 +126,18 @@ fnox get DATABASE_URL
 
 ```toml
 # Development: age encryption (free)
-[providers.age]
-type = "age"
-recipients = ["age1..."]
+[providers]
+age = { type = "age", recipients = ["age1..."] }
 
-[secrets.DATABASE_URL]
-provider = "age"
-value = "encrypted-dev..."
+[secrets]
+DATABASE_URL = { provider = "age", value = "encrypted-dev..." }
 
 # Production: AWS KMS
-[profiles.production.providers.kms]
-type = "aws-kms"
-key_id = "arn:aws:kms:us-east-1:123456789012:key/..."
-region = "us-east-1"
+[profiles.production.providers]
+kms = { type = "aws-kms", key_id = "arn:aws:kms:us-east-1:123456789012:key/...", region = "us-east-1" }
 
-[profiles.production.secrets.DATABASE_URL]
-provider = "kms"
-value = "AQICAHhw..."  # ← KMS encrypted ciphertext
+[profiles.production.secrets]
+DATABASE_URL = { provider = "kms", value = "AQICAHhw..." }  # ← KMS encrypted ciphertext
 ```
 
 ## Key Rotation

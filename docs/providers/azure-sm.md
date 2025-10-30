@@ -10,10 +10,8 @@ az keyvault create --name "myapp-vault" --resource-group "myapp-rg"
 
 # 2. Configure provider
 cat >> fnox.toml << 'EOF'
-[providers.azure]
-type = "azure-sm"
-vault_url = "https://myapp-vault.vault.azure.net/"
-prefix = "myapp/"
+[providers]
+azure = { type = "azure-sm", vault_url = "https://myapp-vault.vault.azure.net/", prefix = "myapp/" }
 EOF
 
 # 3. Create secret
@@ -21,9 +19,8 @@ az keyvault secret set --vault-name "myapp-vault" --name "myapp-database-url" --
 
 # 4. Reference in fnox
 cat >> fnox.toml << 'EOF'
-[secrets.DATABASE_URL]
-provider = "azure"
-value = "database-url"
+[secrets]
+DATABASE_URL = { provider = "azure", value = "database-url" }
 EOF
 
 # 5. Get secret
@@ -61,10 +58,8 @@ az role assignment create \
 ## Configuration
 
 ```toml
-[providers.azure]
-type = "azure-sm"
-vault_url = "https://myapp-vault.vault.azure.net/"
-prefix = "myapp/"  # Optional
+[providers]
+azure = { type = "azure-sm", vault_url = "https://myapp-vault.vault.azure.net/", prefix = "myapp/" }  # prefix is optional
 ```
 
 ## Pros

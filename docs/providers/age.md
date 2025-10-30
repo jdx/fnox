@@ -14,9 +14,8 @@ grep "public key:" ~/.config/fnox/age.txt
 
 # 3. Configure fnox
 cat >> fnox.toml << 'EOF'
-[providers.age]
-type = "age"
-recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
+[providers]
+age = { type = "age", recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"] }
 EOF
 
 # 4. Set private key
@@ -77,17 +76,15 @@ Age has first-class SSH key support! Use your existing SSH keys:
 Add age provider to `fnox.toml`:
 
 ```toml
-[providers.age]
-type = "age"
-recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
+[providers]
+age = { type = "age", recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"] }
 ```
 
 Or with SSH key:
 
 ```toml
-[providers.age]
-type = "age"
-recipients = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQs8..."]
+[providers]
+age = { type = "age", recipients = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQs8..."] }
 ```
 
 ### Set Decryption Key
@@ -123,9 +120,8 @@ fnox set DATABASE_URL "postgresql://localhost/mydb" --provider age
 The resulting `fnox.toml`:
 
 ```toml
-[secrets.DATABASE_URL]
-provider = "age"
-value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..."  # ← Encrypted, safe to commit!
+[secrets]
+DATABASE_URL = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..." }  # ← Encrypted, safe to commit!
 ```
 
 ### Decrypt and Get a Secret
@@ -152,12 +148,11 @@ Age natively supports SSH keys—no conversion needed!
 ### Using SSH Keys
 
 ```toml
-[providers.age]
-type = "age"
-recipients = [
+[providers]
+age = { type = "age", recipients = [
   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQs8YqSC... alice@example.com",
   "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC5... bob@example.com"
-]
+] }
 ```
 
 Set decryption key:
@@ -198,13 +193,12 @@ cat ~/.ssh/id_ed25519.pub
 ### 2. Add All Recipients
 
 ```toml
-[providers.age]
-type = "age"
-recipients = [
+[providers]
+age = { type = "age", recipients = [
   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQs... # alice",
   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBws... # bob",
   "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2el... # ci-bot"
-]
+] }
 ```
 
 ### 3. Encrypt Secrets
@@ -254,13 +248,12 @@ fnox get DATABASE_URL  # Works for all recipients!
 2. **Admin adds to recipients**:
 
    ```toml
-   [providers.age]
-   type = "age"
-   recipients = [
+   [providers]
+   age = { type = "age", recipients = [
      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQs... # alice",
      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBws... # bob",
      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIXyz... # charlie (NEW)"
-   ]
+   ] }
    ```
 
 3. **Re-encrypt all secrets** (necessary for new recipient):

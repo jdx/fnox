@@ -10,10 +10,8 @@ az keyvault key create --vault-name "myapp-vault" --name "encryption-key" --prot
 
 # 2. Configure provider
 cat >> fnox.toml << 'EOF'
-[providers.azurekms]
-type = "azure-kms"
-vault_url = "https://myapp-vault.vault.azure.net/"
-key_name = "encryption-key"
+[providers]
+azurekms = { type = "azure-kms", vault_url = "https://myapp-vault.vault.azure.net/", key_name = "encryption-key" }
 EOF
 
 # 3. Encrypt a secret
@@ -37,10 +35,8 @@ az role assignment create \
 ## Configuration
 
 ```toml
-[providers.azurekms]
-type = "azure-kms"
-vault_url = "https://myapp-vault.vault.azure.net/"
-key_name = "encryption-key"
+[providers]
+azurekms = { type = "azure-kms", vault_url = "https://myapp-vault.vault.azure.net/", key_name = "encryption-key" }
 ```
 
 ## How It Works

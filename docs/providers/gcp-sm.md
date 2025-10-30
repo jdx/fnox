@@ -10,10 +10,8 @@ gcloud services enable secretmanager.googleapis.com
 
 # 2. Configure provider
 cat >> fnox.toml << 'EOF'
-[providers.gcp]
-type = "gcp-sm"
-project = "my-project-id"
-prefix = "myapp/"
+[providers]
+gcp = { type = "gcp-sm", project = "my-project-id", prefix = "myapp/" }
 EOF
 
 # 3. Create secret
@@ -21,9 +19,8 @@ echo -n "postgresql://..." | gcloud secrets create myapp-database-url --data-fil
 
 # 4. Reference in fnox
 cat >> fnox.toml << 'EOF'
-[secrets.DATABASE_URL]
-provider = "gcp"
-value = "database-url"
+[secrets]
+DATABASE_URL = { provider = "gcp", value = "database-url" }
 EOF
 
 # 5. Get secret
@@ -58,10 +55,8 @@ gcloud projects add-iam-policy-binding PROJECT-ID \
 ## Configuration
 
 ```toml
-[providers.gcp]
-type = "gcp-sm"
-project = "my-project-id"
-prefix = "myapp/"  # Optional
+[providers]
+gcp = { type = "gcp-sm", project = "my-project-id", prefix = "myapp/" }  # prefix is optional
 ```
 
 ## Pros

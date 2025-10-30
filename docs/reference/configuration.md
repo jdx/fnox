@@ -19,17 +19,12 @@ if_missing = "warn"  # Global default for missing secrets
 imports = ["./shared/secrets.toml"]  # Import other configs
 
 # Provider definitions
-[providers.PROVIDER_NAME]
-type = "PROVIDER_TYPE"
-# ... provider-specific config ...
+[providers]
+PROVIDER_NAME = { type = "PROVIDER_TYPE" }  # ... provider-specific config ...
 
 # Secret definitions
-[secrets.SECRET_NAME]
-provider = "PROVIDER_NAME"
-value = "..."
-default = "..."
-if_missing = "error"
-description = "..."
+[secrets]
+SECRET_NAME = { provider = "PROVIDER_NAME", value = "...", default = "...", if_missing = "error", description = "..." }
 
 # Profile definitions
 [profiles.PROFILE_NAME]
@@ -81,116 +76,88 @@ type = "PROVIDER_TYPE"
 #### Age Encryption
 
 ```toml
-[providers.age]
-type = "age"
-recipients = [
+[providers]
+age = { type = "age", recipients = [
   "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQs..."
-]
+] }
 ```
 
 #### AWS Secrets Manager
 
 ```toml
-[providers.aws]
-type = "aws-sm"
-region = "us-east-1"
-prefix = "myapp/"  # Optional
+[providers]
+aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp/" }  # prefix is optional
 ```
 
 #### AWS KMS
 
 ```toml
-[providers.kms]
-type = "aws-kms"
-key_id = "arn:aws:kms:us-east-1:123456789012:key/..."
-region = "us-east-1"
+[providers]
+kms = { type = "aws-kms", key_id = "arn:aws:kms:us-east-1:123456789012:key/...", region = "us-east-1" }
 ```
 
 #### Azure Key Vault Secrets
 
 ```toml
-[providers.azure]
-type = "azure-sm"
-vault_url = "https://myapp-vault.vault.azure.net/"
-prefix = "myapp/"  # Optional
+[providers]
+azure = { type = "azure-sm", vault_url = "https://myapp-vault.vault.azure.net/", prefix = "myapp/" }  # prefix is optional
 ```
 
 #### Azure Key Vault Keys
 
 ```toml
-[providers.azurekms]
-type = "azure-kms"
-vault_url = "https://myapp-vault.vault.azure.net/"
-key_name = "encryption-key"
+[providers]
+azurekms = { type = "azure-kms", vault_url = "https://myapp-vault.vault.azure.net/", key_name = "encryption-key" }
 ```
 
 #### GCP Secret Manager
 
 ```toml
-[providers.gcp]
-type = "gcp-sm"
-project = "my-project-id"
-prefix = "myapp/"  # Optional
+[providers]
+gcp = { type = "gcp-sm", project = "my-project-id", prefix = "myapp/" }  # prefix is optional
 ```
 
 #### GCP Cloud KMS
 
 ```toml
-[providers.gcpkms]
-type = "gcp-kms"
-project = "my-project-id"
-location = "us-central1"
-keyring = "fnox-keyring"
-key = "fnox-key"
+[providers]
+gcpkms = { type = "gcp-kms", project = "my-project-id", location = "us-central1", keyring = "fnox-keyring", key = "fnox-key" }
 ```
 
 #### 1Password
 
 ```toml
-[providers.onepass]
-type = "1password"
-vault = "Development"
-account = "my.1password.com"  # Optional
+[providers]
+onepass = { type = "1password", vault = "Development", account = "my.1password.com" }  # account is optional
 ```
 
 #### Bitwarden
 
 ```toml
-[providers.bitwarden]
-type = "bitwarden"
-collection = "collection-id"     # Optional
-organization_id = "org-id"       # Optional
+[providers]
+bitwarden = { type = "bitwarden", collection = "collection-id", organization_id = "org-id" }  # both optional
 ```
 
 #### HashiCorp Vault
 
 ```toml
-[providers.vault]
-type = "vault"
-address = "https://vault.example.com:8200"
-path = "secret/myapp"
-token = "hvs.CAESIJ..."  # Optional, can use VAULT_TOKEN env var
+[providers]
+vault = { type = "vault", address = "https://vault.example.com:8200", path = "secret/myapp", token = "hvs.CAESIJ..." }  # token optional, can use VAULT_TOKEN env var
 ```
 
 #### OS Keychain
 
 ```toml
-[providers.keychain]
-type = "keychain"
-service = "fnox"
-prefix = "myapp/"  # Optional
+[providers]
+keychain = { type = "keychain", service = "fnox", prefix = "myapp/" }  # prefix is optional
 ```
 
 ## Secret Configuration
 
 ```toml
-[secrets.SECRET_NAME]
-provider = "PROVIDER_NAME"    # Required (unless using default)
-value = "..."                 # Provider-specific value
-default = "..."               # Fallback value
-if_missing = "error"          # Behavior when missing
-description = "..."           # Human-readable description
+[secrets]
+SECRET_NAME = { provider = "PROVIDER_NAME", value = "...", default = "...", if_missing = "error", description = "..." }
 ```
 
 ### Fields
@@ -200,9 +167,8 @@ description = "..."           # Human-readable description
 Provider to use for this secret.
 
 ```toml
-[secrets.DATABASE_URL]
-provider = "age"
-value = "encrypted..."
+[secrets]
+DATABASE_URL = { provider = "age", value = "encrypted..." }
 ```
 
 **Required:** Unless using only `default` (plain text).
@@ -215,15 +181,12 @@ Provider-specific value:
 - **Remote providers** (aws-sm, 1password, etc.): Secret name/reference
 
 ```toml
+[secrets]
 # Encrypted ciphertext (age)
-[secrets.DATABASE_URL]
-provider = "age"
-value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..."
+DATABASE_URL = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..." }
 
 # Remote reference (AWS)
-[secrets.DATABASE_URL]
-provider = "aws"
-value = "database-url"  # Secret name in AWS Secrets Manager
+DATABASE_URL = { provider = "aws", value = "database-url" }  # Secret name in AWS Secrets Manager
 ```
 
 #### `default`
@@ -231,10 +194,8 @@ value = "database-url"  # Secret name in AWS Secrets Manager
 Fallback value if secret cannot be resolved.
 
 ```toml
-[secrets.DATABASE_URL]
-provider = "age"
-value = "encrypted..."
-default = "postgresql://localhost/dev"  # Fallback for local dev
+[secrets]
+DATABASE_URL = { provider = "age", value = "encrypted...", default = "postgresql://localhost/dev" }  # Fallback for local dev
 ```
 
 **Use for:**
@@ -248,15 +209,9 @@ default = "postgresql://localhost/dev"  # Fallback for local dev
 Behavior when secret cannot be resolved.
 
 ```toml
-[secrets.DATABASE_URL]
-provider = "aws"
-value = "database-url"
-if_missing = "error"  # Fail if missing (critical secret)
-
-[secrets.ANALYTICS_KEY]
-provider = "aws"
-value = "analytics-key"
-if_missing = "ignore"  # Silently skip if missing (optional)
+[secrets]
+DATABASE_URL = { provider = "aws", value = "database-url", if_missing = "error" }  # Fail if missing (critical secret)
+ANALYTICS_KEY = { provider = "aws", value = "analytics-key", if_missing = "ignore" }  # Silently skip if missing (optional)
 ```
 
 **Values:** `"error"`, `"warn"`, `"ignore"`
@@ -268,10 +223,8 @@ if_missing = "ignore"  # Silently skip if missing (optional)
 Human-readable description.
 
 ```toml
-[secrets.DATABASE_URL]
-provider = "age"
-value = "encrypted..."
-description = "Production database connection string"
+[secrets]
+DATABASE_URL = { provider = "age", value = "encrypted...", description = "Production database connection string" }
 ```
 
 ## Profile Configuration
@@ -280,20 +233,17 @@ Profiles allow environment-specific configuration:
 
 ```toml
 # Default profile (no prefix)
-[secrets.DATABASE_URL]
-provider = "age"
-value = "encrypted-dev..."
+[secrets]
+DATABASE_URL = { provider = "age", value = "encrypted-dev..." }
 
 # Production profile
 [profiles.production]
 
-[profiles.production.providers.aws]
-type = "aws-sm"
-region = "us-east-1"
+[profiles.production.providers]
+aws = { type = "aws-sm", region = "us-east-1" }
 
-[profiles.production.secrets.DATABASE_URL]
-provider = "aws"
-value = "database-url"
+[profiles.production.secrets]
+DATABASE_URL = { provider = "aws", value = "database-url" }
 ```
 
 ### Profile Structure
@@ -302,14 +252,11 @@ value = "database-url"
 [profiles.PROFILE_NAME]
 if_missing = "error"  # Profile-specific default
 
-[profiles.PROFILE_NAME.providers.PROVIDER_NAME]
-type = "PROVIDER_TYPE"
-# ... provider config ...
+[profiles.PROFILE_NAME.providers]
+PROVIDER_NAME = { type = "PROVIDER_TYPE" }  # ... provider config ...
 
-[profiles.PROFILE_NAME.secrets.SECRET_NAME]
-provider = "PROVIDER_NAME"
-value = "..."
-# ... secret config ...
+[profiles.PROFILE_NAME.secrets]
+SECRET_NAME = { provider = "PROVIDER_NAME", value = "..." }  # ... secret config ...
 ```
 
 ### Profile Inheritance
@@ -318,17 +265,13 @@ Profiles inherit top-level secrets and providers:
 
 ```toml
 # Top-level (inherited by all profiles)
-[secrets.LOG_LEVEL]
-default = "info"
-
-[secrets.DATABASE_URL]
-provider = "age"
-value = "encrypted-dev..."
+[secrets]
+LOG_LEVEL = { default = "info" }
+DATABASE_URL = { provider = "age", value = "encrypted-dev..." }
 
 # Production profile
-[profiles.production.secrets.DATABASE_URL]
-provider = "aws"
-value = "prod-db"  # Overrides top-level DATABASE_URL
+[profiles.production.secrets]
+DATABASE_URL = { provider = "aws", value = "prod-db" }  # Overrides top-level DATABASE_URL
 # Inherits LOG_LEVEL="info" from top-level
 ```
 
@@ -340,48 +283,26 @@ if_missing = "warn"
 imports = ["./shared/common.toml"]
 
 # Providers
-[providers.age]
-type = "age"
-recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
-
-[providers.aws]
-type = "aws-sm"
-region = "us-east-1"
-prefix = "myapp/"
+[providers]
+age = { type = "age", recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"] }
+aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp/" }
 
 # Default profile secrets
-[secrets.DATABASE_URL]
-provider = "age"
-value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..."
-default = "postgresql://localhost/dev"
-description = "Database connection string"
-
-[secrets.JWT_SECRET]
-provider = "age"
-value = "encrypted..."
-if_missing = "error"
-
-[secrets.LOG_LEVEL]
-default = "info"
+[secrets]
+DATABASE_URL = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC...", default = "postgresql://localhost/dev", description = "Database connection string" }
+JWT_SECRET = { provider = "age", value = "encrypted...", if_missing = "error" }
+LOG_LEVEL = { default = "info" }
 
 # Production profile
 [profiles.production]
 if_missing = "error"
 
-[profiles.production.providers.aws]
-type = "aws-sm"
-region = "us-east-1"
-prefix = "myapp-prod/"
+[profiles.production.providers]
+aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp-prod/" }
 
-[profiles.production.secrets.DATABASE_URL]
-provider = "aws"
-value = "database-url"
-description = "Production database"
-
-[profiles.production.secrets.JWT_SECRET]
-provider = "aws"
-value = "jwt-secret"
-
+[profiles.production.secrets]
+DATABASE_URL = { provider = "aws", value = "database-url", description = "Production database" }
+JWT_SECRET = { provider = "aws", value = "jwt-secret" }
 # Inherits LOG_LEVEL from top-level
 ```
 
@@ -392,12 +313,9 @@ Create `fnox.local.toml` alongside `fnox.toml` for local overrides:
 ```toml
 # fnox.local.toml (gitignored)
 
-# Override secrets for local development
-[secrets.DATABASE_URL]
-default = "postgresql://localhost/mylocal"
-
-[secrets.DEBUG_MODE]
-default = "true"
+[secrets]
+DATABASE_URL = { default = "postgresql://localhost/mylocal" }  # Override for local development
+DEBUG_MODE = { default = "true" }
 ```
 
 **Important:** Add to `.gitignore`:

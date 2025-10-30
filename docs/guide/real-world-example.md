@@ -42,13 +42,12 @@ Add to `fnox.toml`:
 
 ```toml
 # Shared age provider for dev and staging
-[providers.age]
-type = "age"
-recipients = [
+[providers]
+age = { type = "age", recipients = [
   "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",  # alice
   "age1pr3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqabc123",  # bob
-  "age1zr3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqdxf456",  # ci
-]
+  "age1zr3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqdxf456"   # ci
+] }
 ```
 
 Set decryption key:
@@ -71,25 +70,14 @@ fnox set SENDGRID_KEY "SG.test123" --provider age
 Your `fnox.toml` now contains encrypted secrets:
 
 ```toml
-[providers.age]
-type = "age"
-recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
+[providers]
+age = { type = "age", recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"] }
 
-[secrets.DATABASE_URL]
-provider = "age"
-value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..."
-
-[secrets.JWT_SECRET]
-provider = "age"
-value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..."
-
-[secrets.STRIPE_KEY]
-provider = "age"
-value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..."
-
-[secrets.SENDGRID_KEY]
-provider = "age"
-value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..."
+[secrets]
+DATABASE_URL = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..." }
+JWT_SECRET = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..." }
+STRIPE_KEY = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..." }
+SENDGRID_KEY = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..." }
 ```
 
 **Commit this!** It's encrypted and safe.
@@ -125,30 +113,19 @@ fnox set SENDGRID_KEY "SG.staging456" \
 Your `fnox.toml` now has a staging profile:
 
 ```toml
-[providers.age]
-type = "age"
-recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
+[providers]
+age = { type = "age", recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"] }
 
 # Development (default profile)
-[secrets.DATABASE_URL]
-provider = "age"
-value = "..."
-
-[secrets.JWT_SECRET]
-provider = "age"
-value = "..."
-
+[secrets]
+DATABASE_URL = { provider = "age", value = "..." }
+JWT_SECRET = { provider = "age", value = "..." }
 # ... other dev secrets ...
 
 # Staging profile
-[profiles.staging.secrets.DATABASE_URL]
-provider = "age"
-value = "..."
-
-[profiles.staging.secrets.JWT_SECRET]
-provider = "age"
-value = "..."
-
+[profiles.staging.secrets]
+DATABASE_URL = { provider = "age", value = "..." }
+JWT_SECRET = { provider = "age", value = "..." }
 # ... other staging secrets ...
 ```
 
@@ -159,30 +136,14 @@ Add production configuration (secrets stored in AWS):
 ```toml
 # Add to fnox.toml
 
-[profiles.production.providers.aws]
-type = "aws-sm"
-region = "us-east-1"
-prefix = "myapi/"
+[profiles.production.providers]
+aws = { type = "aws-sm", region = "us-east-1", prefix = "myapi/" }
 
-[profiles.production.secrets.DATABASE_URL]
-provider = "aws"
-value = "database-url"
-if_missing = "error"  # Critical secret
-
-[profiles.production.secrets.JWT_SECRET]
-provider = "aws"
-value = "jwt-secret"
-if_missing = "error"
-
-[profiles.production.secrets.STRIPE_KEY]
-provider = "aws"
-value = "stripe-key"
-if_missing = "error"
-
-[profiles.production.secrets.SENDGRID_KEY]
-provider = "aws"
-value = "sendgrid-key"
-if_missing = "error"
+[profiles.production.secrets]
+DATABASE_URL = { provider = "aws", value = "database-url", if_missing = "error" }  # Critical secret
+JWT_SECRET = { provider = "aws", value = "jwt-secret", if_missing = "error" }
+STRIPE_KEY = { provider = "aws", value = "stripe-key", if_missing = "error" }
+SENDGRID_KEY = { provider = "aws", value = "sendgrid-key", if_missing = "error" }
 ```
 
 Create secrets in AWS:
@@ -228,11 +189,9 @@ Each developer can create personal overrides:
 ```toml
 # fnox.local.toml (not committed)
 
-[secrets.DATABASE_URL]
-default = "postgresql://localhost/alice_db"  # Personal DB
-
-[secrets.DEBUG_MODE]
-default = "true"  # Enable debugging
+[secrets]
+DATABASE_URL = { default = "postgresql://localhost/alice_db" }  # Personal DB
+DEBUG_MODE = { default = "true" }  # Enable debugging
 ```
 
 ## Step 7: Use It

@@ -12,12 +12,8 @@ gcloud kms keys create "fnox-key" --keyring="fnox-keyring" --location="us-centra
 
 # 2. Configure provider
 cat >> fnox.toml << 'EOF'
-[providers.gcpkms]
-type = "gcp-kms"
-project = "my-project-id"
-location = "us-central1"
-keyring = "fnox-keyring"
-key = "fnox-key"
+[providers]
+gcpkms = { type = "gcp-kms", project = "my-project-id", location = "us-central1", keyring = "fnox-keyring", key = "fnox-key" }
 EOF
 
 # 3. Encrypt a secret
@@ -42,12 +38,8 @@ gcloud kms keys add-iam-policy-binding "fnox-key" \
 ## Configuration
 
 ```toml
-[providers.gcpkms]
-type = "gcp-kms"
-project = "my-project-id"
-location = "us-central1"
-keyring = "fnox-keyring"
-key = "fnox-key"
+[providers]
+gcpkms = { type = "gcp-kms", project = "my-project-id", location = "us-central1", keyring = "fnox-keyring", key = "fnox-key" }
 ```
 
 ## How It Works

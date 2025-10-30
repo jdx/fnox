@@ -23,11 +23,8 @@ sudo apt update && sudo apt install vault
 ## Configuration
 
 ```toml
-[providers.vault]
-type = "vault"
-address = "https://vault.example.com:8200"
-path = "secret/myapp"  # KV v2 mount path
-# token = "hvs.CAESIJ..."  # Optional, can use VAULT_TOKEN env var
+[providers]
+vault = { type = "vault", address = "https://vault.example.com:8200", path = "secret/myapp" }  # token optional, can use VAULT_TOKEN env var
 ```
 
 ## Setup
@@ -73,13 +70,9 @@ vault kv put secret/myapp/api-key value="sk_live_abc123"
 ### 4. Reference in fnox
 
 ```toml
-[secrets.DATABASE_URL]
-provider = "vault"
-value = "database/url"  # → secret/myapp/database/url
-
-[secrets.API_KEY]
-provider = "vault"
-value = "api-key/value"  # → secret/myapp/api-key/value
+[secrets]
+DATABASE_URL = { provider = "vault", value = "database/url" }  # → secret/myapp/database/url
+API_KEY = { provider = "vault", value = "api-key/value" }  # → secret/myapp/api-key/value
 ```
 
 ## Usage

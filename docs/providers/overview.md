@@ -164,24 +164,17 @@ You can use multiple providers in the same project:
 
 ```toml
 # Age for development
-[providers.age]
-type = "age"
-recipients = ["age1..."]
-
-# AWS for production
-[providers.aws]
-type = "aws-sm"
-region = "us-east-1"
+[providers]
+age = { type = "age", recipients = ["age1..."] }
+aws = { type = "aws-sm", region = "us-east-1" }
 
 # Development secrets (encrypted in git)
-[secrets.DATABASE_URL]
-provider = "age"
-value = "encrypted..."
+[secrets]
+DATABASE_URL = { provider = "age", value = "encrypted..." }
 
 # Production secrets (in AWS)
-[profiles.production.secrets.DATABASE_URL]
-provider = "aws"
-value = "database-url"
+[profiles.production.secrets]
+DATABASE_URL = { provider = "aws", value = "database-url" }
 ```
 
 ## Feature Comparison
