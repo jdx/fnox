@@ -42,12 +42,13 @@ Add to `fnox.toml`:
 
 ```toml
 # Shared age provider for dev and staging
-[providers]
-age = { type = "age", recipients = [
+[providers.age]
+type = "age"
+recipients = [
   "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",  # alice
   "age1pr3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqabc123",  # bob
   "age1zr3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqdxf456"   # ci
-] }
+]
 ```
 
 Set decryption key:
