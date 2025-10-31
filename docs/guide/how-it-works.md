@@ -20,17 +20,6 @@ DATABASE_URL = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNj
 
 **Providers:** age, aws-kms, azure-kms, gcp-kms
 
-**Pros:**
-
-- Secrets live in git (version control, code review)
-- Works offline
-- Fast (no network calls)
-
-**Cons:**
-
-- Key rotation requires re-encrypting all secrets
-- No centralized access control
-
 ### 2. Remote References
 
 The config contains only a reference to a secret stored remotely:
@@ -44,19 +33,6 @@ DATABASE_URL = { provider = "aws", value = "database-url" }  # ← Just a refere
 ```
 
 **Providers:** aws-sm, azure-sm, gcp-sm, vault, 1password, bitwarden, keychain
-
-**Pros:**
-
-- Centralized secret management
-- Audit logs
-- Access control
-- Easy rotation
-
-**Cons:**
-
-- Requires network access
-- Costs money (for cloud providers)
-- Slower (network latency)
 
 ## Secret Resolution Order
 
@@ -92,13 +68,6 @@ When you run `fnox exec -- <command>`:
 3. Decrypts encrypted secrets or fetches remote secrets
 4. Exports all secrets as environment variables
 5. Executes your command with those env vars
-
-## Security Model
-
-- **Encrypted secrets:** Private key required for decryption (via `FNOX_AGE_KEY` or `FNOX_AGE_KEY_FILE`)
-- **Remote secrets:** Authentication via provider (AWS credentials, 1Password token, etc.)
-- **Never logged:** Secrets are never written to logs or stdout (except `fnox get` output)
-- **CI-safe:** Use `if_missing = "warn"` to handle missing secrets in CI environments
 
 ## Next Steps
 

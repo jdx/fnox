@@ -345,15 +345,6 @@ jobs:
 - ❌ Manual key management
 - ❌ Adding new team members requires re-encryption
 
-## Best Practices
-
-1. **Use SSH keys when possible** - Leverage keys you already have
-2. **Add all team members as recipients** - Everyone can decrypt
-3. **Include a CI bot key** - For GitHub Actions/CI pipelines
-4. **Keep private keys secure** - Never commit `FNOX_AGE_KEY` or private keys
-5. **Rotate keys periodically** - Generate new keys and re-encrypt secrets
-6. **Use different keys for different environments** - Separate dev, staging, prod
-
 ## Troubleshooting
 
 ### "no identity matched any of the recipients"

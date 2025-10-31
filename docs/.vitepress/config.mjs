@@ -69,38 +69,44 @@ export default defineConfig({
       },
       {
         text: "Providers",
-        items: [{ text: "Overview", link: "/providers/overview" }],
-      },
-      {
-        text: "Encryption (in git)",
         items: [
-          { text: "Age Encryption", link: "/providers/age" },
-          { text: "AWS KMS", link: "/providers/aws-kms" },
-          { text: "Azure Key Vault Keys", link: "/providers/azure-kms" },
-          { text: "Google Cloud KMS", link: "/providers/gcp-kms" },
-        ],
-      },
-      {
-        text: "Cloud Secret Storage",
-        items: [
-          { text: "AWS Secrets Manager", link: "/providers/aws-sm" },
-          { text: "Azure Key Vault Secrets", link: "/providers/azure-sm" },
-          { text: "GCP Secret Manager", link: "/providers/gcp-sm" },
-          { text: "HashiCorp Vault", link: "/providers/vault" },
-        ],
-      },
-      {
-        text: "Password Managers",
-        items: [
-          { text: "1Password", link: "/providers/1password" },
-          { text: "Bitwarden", link: "/providers/bitwarden" },
-        ],
-      },
-      {
-        text: "Local Storage",
-        items: [
-          { text: "OS Keychain", link: "/providers/keychain" },
-          { text: "Plain Text", link: "/providers/plain" },
+          { text: "Overview", link: "/providers/overview" },
+          {
+            text: "Encryption (in git)",
+            collapsed: true,
+            items: [
+              { text: "Age Encryption", link: "/providers/age" },
+              { text: "AWS KMS", link: "/providers/aws-kms" },
+              { text: "Azure Key Vault Keys", link: "/providers/azure-kms" },
+              { text: "Google Cloud KMS", link: "/providers/gcp-kms" },
+            ],
+          },
+          {
+            text: "Cloud Secret Storage",
+            collapsed: true,
+            items: [
+              { text: "AWS Secrets Manager", link: "/providers/aws-sm" },
+              { text: "Azure Key Vault Secrets", link: "/providers/azure-sm" },
+              { text: "GCP Secret Manager", link: "/providers/gcp-sm" },
+              { text: "HashiCorp Vault", link: "/providers/vault" },
+            ],
+          },
+          {
+            text: "Password Managers",
+            collapsed: true,
+            items: [
+              { text: "1Password", link: "/providers/1password" },
+              { text: "Bitwarden", link: "/providers/bitwarden" },
+            ],
+          },
+          {
+            text: "Local Storage",
+            collapsed: true,
+            items: [
+              { text: "OS Keychain", link: "/providers/keychain" },
+              { text: "Plain Text", link: "/providers/plain" },
+            ],
+          },
         ],
       },
       {

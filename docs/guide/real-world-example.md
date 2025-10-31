@@ -348,16 +348,6 @@ cd my-api
 npm run dev  # Just works!
 ```
 
-## What We Achieved
-
-✅ **Dev secrets** encrypted in git → Team can clone and run immediately
-✅ **Staging secrets** encrypted in git → Safe deployment
-✅ **Prod secrets** in AWS → Never in git, centrally managed
-✅ **Shell integration** → Secrets auto-load on `cd`
-✅ **Local overrides** → Each developer can customize
-✅ **CI/CD ready** → Tests run with dev secrets, deploys use appropriate profiles
-✅ **Team-friendly** → Simple onboarding, no manual secret sharing
-
 ## File Structure
 
 ```

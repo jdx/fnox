@@ -195,13 +195,6 @@ REDIS_URL = { default = "redis://localhost:6379", if_missing = "warn" }  # Warn 
 | `warn`   | Print warning, continue | Optional but recommended secrets          |
 | `ignore` | Silent skip             | Truly optional features (analytics, etc.) |
 
-## Tips
-
-- **Start strict, relax as needed:** Use `if_missing = "error"` by default, then explicitly mark optional secrets as `"warn"` or `"ignore"`
-- **CI environments:** Use `FNOX_IF_MISSING=ignore` for tests in forked PRs
-- **Production:** Use `--if-missing error` or `FNOX_IF_MISSING=error` to ensure all secrets are available
-- **Development:** Use `"warn"` (default) to know when secrets are missing but not block local dev
-
 ## Next Steps
 
 - [Profiles](/guide/profiles) - Different secrets per environment

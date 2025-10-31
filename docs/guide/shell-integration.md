@@ -111,45 +111,6 @@ fnox deactivate
 eval "$(fnox activate bash)"
 ```
 
-## Tips
-
-- **One-time use:** Use `fnox exec` instead of shell integration for scripts
-- **CI/CD:** Don't use shell integration in CI—use `fnox exec` explicitly
-- **Multiple projects:** Shell integration works across all your projects automatically
-- **Performance:** fnox caches config parsing but always fetches fresh secrets (no secret caching)
-
-## Troubleshooting
-
-### Secrets not loading
-
-1. Check that `fnox.toml` exists in current or parent directories
-2. Verify your provider credentials are set (e.g., `FNOX_AGE_KEY`)
-3. Enable debug output: `export FNOX_SHELL_OUTPUT=debug`
-
-### Conflicts with other tools
-
-If you use other tools that modify `cd` (like direnv, mise, etc.), they may conflict. Order matters:
-
-```bash
-# Load fnox AFTER other tools
-eval "$(mise activate bash)"
-eval "$(direnv hook bash)"
-eval "$(fnox activate bash)"  # fnox last
-```
-
-### Slow directory changes
-
-If `cd` is slow, it's likely due to:
-
-- Remote provider calls (AWS/1Password/etc. network latency)
-- Many secrets to resolve
-
-Solutions:
-
-- Use encrypted secrets (age) for development (no network calls)
-- Use profiles to reduce secret count
-- Use `fnox exec` instead of shell integration for large setups
-
 ## Next Steps
 
 - [Profiles](/guide/profiles) - Manage multiple environments

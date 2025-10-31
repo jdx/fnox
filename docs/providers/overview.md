@@ -15,19 +15,6 @@ Store encrypted secrets in your `fnox.toml` file. The encrypted ciphertext is sa
 | [Azure KMS](/providers/azure-kms) | Azure Key Vault encryption               | Azure-based projects                      |
 | [GCP KMS](/providers/gcp-kms)     | Google Cloud KMS                         | GCP-based projects                        |
 
-**Pros:**
-
-- Secrets live in git (version control, code review)
-- Works offline
-- No monthly per-secret charges
-- Fast (no network calls to decrypt)
-
-**Cons:**
-
-- Key rotation requires re-encrypting secrets
-- No centralized access control
-- No audit logs
-
 ### ☁️ Cloud Secret Storage (remote, centralized)
 
 Store secrets remotely in cloud providers. Your `fnox.toml` contains only references to secret names.
@@ -39,21 +26,6 @@ Store secrets remotely in cloud providers. Your `fnox.toml` contains only refere
 | [GCP Secret Manager](/providers/gcp-sm)        | Google Cloud secrets     | Production GCP workloads       |
 | [HashiCorp Vault](/providers/vault)            | Self-hosted or HCP Vault | Multi-cloud, advanced features |
 
-**Pros:**
-
-- Centralized secret management
-- IAM/RBAC access control
-- Audit logs
-- Automatic rotation (some providers)
-- Secrets never in git
-
-**Cons:**
-
-- Requires network access
-- Costs money
-- Slower (network latency)
-- Vendor lock-in
-
 ### 🔑 Password Managers
 
 Integrate with password managers you already use.
@@ -63,19 +35,6 @@ Integrate with password managers you already use.
 | [1Password](/providers/1password) | 1Password CLI integration | Teams already using 1Password        |
 | [Bitwarden](/providers/bitwarden) | Bitwarden/Vaultwarden     | Open source preference, self-hosting |
 
-**Pros:**
-
-- Leverage existing password manager
-- Great UI and mobile apps
-- Team management features
-- Audit logs
-
-**Cons:**
-
-- Requires subscription (1Password)
-- Session token management
-- Requires network access
-
 ### 💻 Local Storage
 
 Store secrets locally on your machine.
@@ -84,79 +43,6 @@ Store secrets locally on your machine.
 | ---------------------------------- | ------------------------------------- | ------------------------------------ |
 | [OS Keychain](/providers/keychain) | macOS/Windows/Linux credential stores | Local development, personal projects |
 | [Plain](/providers/plain)          | Plaintext (default values only)       | Non-sensitive defaults               |
-
-**Pros:**
-
-- OS-managed encryption (keychain)
-- No external dependencies
-- Free
-- Simple
-
-**Cons:**
-
-- Per-machine (not for teams)
-- Requires GUI session (keychain)
-- Not suitable for production
-
-## Choosing a Provider
-
-### For Open Source Projects
-
-Use **[age](/providers/age)**:
-
-- Encrypted secrets in git
-- Works with SSH keys
-- Simple setup
-- Free forever
-
-### For Development Teams
-
-Use **[age](/providers/age)** for development + cloud provider for production:
-
-- Dev/staging: age encrypted in git (team can clone and run)
-- Production: AWS/Azure/GCP Secrets Manager (centralized)
-
-### For AWS Infrastructure
-
-- **Development:** [age](/providers/age) (encrypted in git)
-- **Production:** [AWS Secrets Manager](/providers/aws-sm) (centralized)
-- **Alternative:** [AWS KMS](/providers/aws-kms) (encrypted in git, AWS keys)
-
-### For Azure Infrastructure
-
-- **Development:** [age](/providers/age)
-- **Production:** [Azure Key Vault Secrets](/providers/azure-sm)
-- **Alternative:** [Azure KMS](/providers/azure-kms) (encrypted in git)
-
-### For Google Cloud Infrastructure
-
-- **Development:** [age](/providers/age)
-- **Production:** [GCP Secret Manager](/providers/gcp-sm)
-- **Alternative:** [GCP KMS](/providers/gcp-kms) (encrypted in git)
-
-### For Multi-Cloud
-
-Use **[HashiCorp Vault](/providers/vault)**:
-
-- Works across all clouds
-- Advanced features (dynamic secrets, leasing)
-- Self-hosted or managed (HCP Vault)
-
-### For Existing 1Password Users
-
-Use **[1Password](/providers/1password)**:
-
-- Leverage existing infrastructure
-- Great for small teams
-- Nice UI and mobile apps
-
-### For Personal Projects
-
-Use **[age](/providers/age)** or **[OS Keychain](/providers/keychain)**:
-
-- Simple setup
-- Free
-- No cloud dependencies
 
 ## Mixing Providers
 
