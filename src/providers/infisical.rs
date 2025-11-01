@@ -83,7 +83,11 @@ impl InfisicalProvider {
             let base_url = api_url.trim_end_matches("/api").trim_end_matches('/');
             cmd.arg("--domain");
             cmd.arg(base_url);
-            tracing::debug!("Using custom Infisical domain: {} (from: {})", base_url, api_url);
+            tracing::debug!(
+                "Using custom Infisical domain: {} (from: {})",
+                base_url,
+                api_url
+            );
         }
 
         cmd.stdin(std::process::Stdio::null());
