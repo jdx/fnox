@@ -82,7 +82,11 @@ setup_linux_keychain() {
         mkdir -p "$XDG_RUNTIME_DIR"
         chmod 700 "$XDG_RUNTIME_DIR"
 
-        # DON'T pre-set GNOME_KEYRING_CONTROL - let the daemon create it and tell us where
+        # Pre-create the keyring subdirectory (daemon expects this to exist)
+        mkdir -p "$XDG_RUNTIME_DIR/keyring"
+        chmod 700 "$XDG_RUNTIME_DIR/keyring"
+
+        # DON'T pre-set GNOME_KEYRING_CONTROL - let the daemon set it
 
         # Start gnome-keyring-daemon - it outputs shell commands on stdout, diagnostics on stderr
         # We need to capture them separately
