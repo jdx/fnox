@@ -169,7 +169,10 @@ EOF
 }
 
 @test "fnox get fails with invalid secret name" {
-    create_infisical_config
+    # Use explicit project_id - either from env or a dummy value for CI
+    # This ensures the CLI tries to access a project and fails appropriately
+    local test_project_id="${INFISICAL_PROJECT_ID:-00000000-0000-0000-0000-000000000000}"
+    create_infisical_config "$test_project_id"
 
     cat >> "${FNOX_CONFIG_FILE}" << EOF
 
