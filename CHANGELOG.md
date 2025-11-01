@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.1](https://github.com/jdx/fnox/compare/v1.3.0..v1.3.1) - 2025-11-01
+
+### 🐛 Bug Fixes
+
+- **(ci)** make final job fail if any dependencies fail by [@jdx](https://github.com/jdx) in [#74](https://github.com/jdx/fnox/pull/74)
+
+### 🔍 Other Changes
+
+- shellcheck/shfmt by [@jdx](https://github.com/jdx) in [#77](https://github.com/jdx/fnox/pull/77)
+
 ## [1.3.0](https://github.com/jdx/fnox/compare/v1.2.3..v1.3.0) - 2025-11-01
 
 ### 🚀 Features
