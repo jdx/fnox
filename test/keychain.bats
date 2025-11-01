@@ -85,13 +85,24 @@ setup_linux_keychain() {
 
         # Start gnome-keyring-daemon - it outputs shell commands to set environment variables
         local daemon_output
-        daemon_output=$(gnome-keyring-daemon --start --components=secrets 2>/dev/null)
+        local daemon_stderr
+        daemon_output=$(gnome-keyring-daemon --start --components=secrets 2>&1)
+        local daemon_exit_code=$?
+
+        # Check exit code
+        if [ $daemon_exit_code -ne 0 ]; then
+            echo "# Error: gnome-keyring-daemon failed with exit code $daemon_exit_code" >&3
+            echo "# Output: $daemon_output" >&3
+            echo "# XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-<not set>}" >&3
+            echo "# DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-<not set>}" >&3
+            return 1
+        fi
 
         # Check if we got any output
         if [ -z "$daemon_output" ]; then
             echo "# Error: gnome-keyring-daemon produced no output" >&3
-            echo "# XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >&3
-            echo "# DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >&3
+            echo "# XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-<not set>}" >&3
+            echo "# DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-<not set>}" >&3
             return 1
         fi
 
