@@ -75,7 +75,7 @@ PROMPT_COMMAND="${PROMPT_COMMAND//_fnox_hook/}"
 
         // Unset fnox-related variables
         out.push_str("unset -f fnox _fnox_hook\n");
-        out.push_str("unset FNOX_SHELL __FNOX_SESSION __FNOX_DIFF\n");
+        out.push_str("unset FNOX_SHELL __FNOX_SESSION\n");
 
         out
     }

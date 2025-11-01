@@ -1,5 +1,4 @@
 use crate::config::Config;
-use crate::env_diff::{EnvDiff, EnvDiffOperation};
 use crate::hook_env::{self, HookEnvSession, PREV_SESSION};
 use crate::settings::Settings;
 use crate::shell;
@@ -95,27 +94,23 @@ impl HookEnvCommand {
             HashMap::new()
         };
 
-        // Calculate diff from previous session
+        // Calculate changes from previous session
         let old_secrets = PREV_SESSION.loaded_secrets.clone();
-        let env_diff = EnvDiff::new(old_secrets, loaded_secrets.clone());
+        let (added, removed) = calculate_changes(&old_secrets, &loaded_secrets);
 
         // Display summary of changes if enabled
-        if output_mode.should_show_summary() && env_diff.has_changes() {
-            display_changes(&env_diff, output_mode);
+        if output_mode.should_show_summary() && (!added.is_empty() || !removed.is_empty()) {
+            display_changes(&added, &removed, output_mode);
         }
 
         // Generate shell code for environment changes
-        if env_diff.has_changes() {
-            for operation in env_diff.operations() {
-                match operation {
-                    EnvDiffOperation::Set(key, value) => {
-                        output.push_str(&shell.set_env(&key, &value));
-                    }
-                    EnvDiffOperation::Remove(key) => {
-                        output.push_str(&shell.unset_env(&key));
-                    }
-                }
-            }
+        // Set new/updated secrets
+        for (key, value) in &added {
+            output.push_str(&shell.set_env(key, value));
+        }
+        // Remove secrets no longer in config
+        for key in &removed {
+            output.push_str(&shell.unset_env(key));
         }
 
         // Create new session
@@ -126,14 +121,41 @@ impl HookEnvCommand {
         let session_encoded = session.encode()?;
         output.push_str(&shell.set_env("__FNOX_SESSION", &session_encoded));
 
-        // Export diff state for potential rollback
-        let diff_encoded = env_diff.encode()?;
-        output.push_str(&shell.set_env("__FNOX_DIFF", &diff_encoded));
-
         print!("{}", output);
 
         Ok(())
     }
+}
+
+/// Calculate which secrets were added/changed or removed
+fn calculate_changes(
+    old: &HashMap<String, String>,
+    new: &HashMap<String, String>,
+) -> (Vec<(String, String)>, Vec<String>) {
+    let mut added = Vec::new();
+    let mut removed = Vec::new();
+
+    // Find additions and changes
+    for (key, new_value) in new {
+        match old.get(key) {
+            Some(old_value) if old_value == new_value => {
+                // No change, skip
+            }
+            _ => {
+                // New or changed value
+                added.push((key.clone(), new_value.clone()));
+            }
+        }
+    }
+
+    // Find removals
+    for key in old.keys() {
+        if !new.contains_key(key) {
+            removed.push(key.clone());
+        }
+    }
+
+    (added, removed)
 }
 
 /// Load all secrets from a fnox.toml config file
@@ -180,27 +202,15 @@ async fn load_secrets_from_config() -> Result<HashMap<String, String>> {
 }
 
 /// Display a summary of environment changes
-fn display_changes(env_diff: &EnvDiff, mode: OutputMode) {
+fn display_changes(added: &[(String, String)], removed: &[String], mode: OutputMode) {
     use console::{Style, Term};
 
     let term = Term::stderr();
     let cyan = Style::new().cyan().for_stderr();
     let dim = Style::new().dim().for_stderr();
 
-    let operations = env_diff.operations();
-    let mut added_keys = Vec::new();
-    let mut removed_keys = Vec::new();
-
-    for op in operations {
-        match op {
-            EnvDiffOperation::Set(key, _value) => {
-                added_keys.push(key.clone());
-            }
-            EnvDiffOperation::Remove(key) => {
-                removed_keys.push(key.clone());
-            }
-        }
-    }
+    let added_keys: Vec<String> = added.iter().map(|(k, _)| k.clone()).collect();
+    let removed_keys: Vec<String> = removed.to_vec();
 
     if mode.should_show_debug() {
         // Debug mode: show each secret on its own line
