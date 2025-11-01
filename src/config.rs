@@ -347,11 +347,43 @@ impl Config {
 
         // Convert top-level [secrets]
         if let Some(secrets_item) = doc.get_mut("secrets")
-            && let Some(secrets_table) = secrets_item.as_table_mut() {
-                let keys: Vec<String> = secrets_table.iter().map(|(k, _)| k.to_string()).collect();
-                for key in keys {
-                    if let Some(item) = secrets_table.get_mut(&key)
-                        && let Some(table) = item.as_table() {
+            && let Some(secrets_table) = secrets_item.as_table_mut()
+        {
+            let keys: Vec<String> = secrets_table.iter().map(|(k, _)| k.to_string()).collect();
+            for key in keys {
+                if let Some(item) = secrets_table.get_mut(&key)
+                    && let Some(table) = item.as_table()
+                {
+                    let mut inline = InlineTable::new();
+                    for (k, v) in table.iter() {
+                        if let Some(value) = v.as_value() {
+                            inline.insert(k, value.clone());
+                        }
+                    }
+                    inline.fmt();
+                    *item = Item::Value(toml_edit::Value::InlineTable(inline));
+                }
+            }
+        }
+
+        // Convert [profiles.*.secrets]
+        if let Some(profiles_item) = doc.get_mut("profiles")
+            && let Some(profiles_table) = profiles_item.as_table_mut()
+        {
+            let profile_names: Vec<String> =
+                profiles_table.iter().map(|(k, _)| k.to_string()).collect();
+            for profile_name in profile_names {
+                if let Some(profile_item) = profiles_table.get_mut(&profile_name)
+                    && let Some(profile_table) = profile_item.as_table_mut()
+                    && let Some(secrets_item) = profile_table.get_mut("secrets")
+                    && let Some(secrets_table) = secrets_item.as_table_mut()
+                {
+                    let keys: Vec<String> =
+                        secrets_table.iter().map(|(k, _)| k.to_string()).collect();
+                    for key in keys {
+                        if let Some(item) = secrets_table.get_mut(&key)
+                            && let Some(table) = item.as_table()
+                        {
                             let mut inline = InlineTable::new();
                             for (k, v) in table.iter() {
                                 if let Some(value) = v.as_value() {
@@ -361,39 +393,10 @@ impl Config {
                             inline.fmt();
                             *item = Item::Value(toml_edit::Value::InlineTable(inline));
                         }
+                    }
                 }
             }
-
-        // Convert [profiles.*.secrets]
-        if let Some(profiles_item) = doc.get_mut("profiles")
-            && let Some(profiles_table) = profiles_item.as_table_mut() {
-                let profile_names: Vec<String> =
-                    profiles_table.iter().map(|(k, _)| k.to_string()).collect();
-                for profile_name in profile_names {
-                    if let Some(profile_item) = profiles_table.get_mut(&profile_name)
-                        && let Some(profile_table) = profile_item.as_table_mut()
-                            && let Some(secrets_item) = profile_table.get_mut("secrets")
-                                && let Some(secrets_table) = secrets_item.as_table_mut() {
-                                    let keys: Vec<String> =
-                                        secrets_table.iter().map(|(k, _)| k.to_string()).collect();
-                                    for key in keys {
-                                        if let Some(item) = secrets_table.get_mut(&key)
-                                            && let Some(table) = item.as_table() {
-                                                let mut inline = InlineTable::new();
-                                                for (k, v) in table.iter() {
-                                                    if let Some(value) = v.as_value() {
-                                                        inline.insert(k, value.clone());
-                                                    }
-                                                }
-                                                inline.fmt();
-                                                *item = Item::Value(toml_edit::Value::InlineTable(
-                                                    inline,
-                                                ));
-                                            }
-                                    }
-                                }
-                }
-            }
+        }
 
         Ok(())
     }
