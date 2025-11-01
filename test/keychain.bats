@@ -78,8 +78,9 @@ setup_linux_keychain() {
 
         # Start a test gnome-keyring daemon
         # Don't set GNOME_KEYRING_CONTROL beforehand - let the daemon create its own control directory
-        # The daemon will output shell commands that set the correct environment variables
-        eval "$(gnome-keyring-daemon --start --components=secrets 2>&1)"
+        # The daemon will output shell commands on stdout that set the correct environment variables
+        # Stderr contains diagnostic messages which we should ignore
+        eval "$(gnome-keyring-daemon --start --components=secrets 2>/dev/null)"
         export USING_TEST_KEYRING=1
 
         # Verify the daemon started and set the control path
