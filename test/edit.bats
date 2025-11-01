@@ -11,7 +11,8 @@ setup() {
   # Generate age key for testing
   AGE_KEY_FILE="$TEST_DIR/age-key.txt"
   age-keygen -o "$AGE_KEY_FILE" 2>/dev/null
-  export FNOX_AGE_KEY="$AGE_KEY_FILE"
+  # Export the actual key content, not the file path
+  export FNOX_AGE_KEY="$(grep 'AGE-SECRET-KEY' "$AGE_KEY_FILE")"
 
   # Create a minimal fnox config with age provider (no fnox init to avoid default secrets)
   cat > fnox.toml << EOF
@@ -46,9 +47,10 @@ with open(sys.argv[1], 'r') as f:
 
 # Replace TEST_SECRET value with new plaintext
 # The temporary file should have plaintext values
+# Note: inline table format is "KEY= { ... }" with no space before =
 content = re.sub(
-    r'TEST_SECRET = \{ provider = "age", value = "[^"]*" \}',
-    r'TEST_SECRET = { provider = "age", value = "newsecret789" }',
+    r'TEST_SECRET= \{ provider = "age", value = "[^"]*" \}',
+    r'TEST_SECRET= { provider = "age", value = "newsecret789" }',
     content
 )
 
@@ -120,10 +122,11 @@ EDITOR_SCRIPT
 
 @test "edit command decrypts secrets in temporary file" {
   # Create a script that captures the decrypted content
-  cat > "$TEST_DIR/test-editor.sh" << 'EDITOR_SCRIPT'
+  # Use double quotes to allow $TEST_DIR to be expanded
+  cat > "$TEST_DIR/test-editor.sh" << EDITOR_SCRIPT
 #!/bin/bash
 # Capture the decrypted content
-cp "$1" "$TEST_DIR/decrypted-content.txt"
+cp "\$1" "$TEST_DIR/decrypted-content.txt"
 exit 0
 EDITOR_SCRIPT
   chmod +x "$TEST_DIR/test-editor.sh"
@@ -169,10 +172,11 @@ EDITOR_SCRIPT
   echo "value3" | fnox set SECRET3 --provider age
 
   # Create a script that modifies multiple secrets
+  # Note: inline table format is "KEY= { ... }" with no space before =
   cat > "$TEST_DIR/test-editor.sh" << 'EDITOR_SCRIPT'
 #!/bin/bash
-sed -i.bak 's/SECRET1 = { provider = "age", value = "[^"]*" }/SECRET1 = { provider = "age", value = "modified1" }/' "$1"
-sed -i.bak 's/SECRET2 = { provider = "age", value = "[^"]*" }/SECRET2 = { provider = "age", value = "modified2" }/' "$1"
+sed -i.bak 's/SECRET1= { provider = "age", value = "[^"]*" }/SECRET1= { provider = "age", value = "modified1" }/' "$1"
+sed -i.bak 's/SECRET2= { provider = "age", value = "[^"]*" }/SECRET2= { provider = "age", value = "modified2" }/' "$1"
 EDITOR_SCRIPT
   chmod +x "$TEST_DIR/test-editor.sh"
 
