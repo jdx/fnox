@@ -88,36 +88,44 @@ impl crate::providers::Provider for AgeEncryptionProvider {
                 }
             };
 
-        // Determine which key file to use
-        let key_file_path = if let Some(key_file) = key_file {
-            // Use provided key file
-            key_file.to_path_buf()
+        // First check if FNOX_AGE_KEY environment variable is set
+        let (identity_content, key_file_path_opt) = if let Some(ref age_key) = *env::FNOX_AGE_KEY {
+            // Use the key directly from the environment variable
+            (age_key.clone(), None)
         } else {
-            // Get settings which merges CLI flags, env vars, and defaults
-            let settings = crate::settings::Settings::get();
-
-            if let Some(ref age_key_file) = settings.age_key_file {
-                // Use age key file from settings (CLI flag or env var)
-                age_key_file.clone()
+            // Determine which key file to use
+            let key_file_path = if let Some(key_file) = key_file {
+                // Use provided key file
+                key_file.to_path_buf()
             } else {
-                // Try default path
-                let default_key_path = env::FNOX_CONFIG_DIR.join("age.txt");
-                if !default_key_path.exists() {
-                    return Err(FnoxError::AgeIdentityNotFound {
-                        path: default_key_path,
-                    });
-                }
-                default_key_path
-            }
-        };
+                // Get settings which merges CLI flags, env vars, and defaults
+                let settings = crate::settings::Settings::get();
 
-        // Load identity file content
-        let identity_content = std::fs::read_to_string(&key_file_path).map_err(|e| {
-            FnoxError::AgeIdentityReadFailed {
-                path: key_file_path.clone(),
-                source: e,
-            }
-        })?;
+                if let Some(ref age_key_file) = settings.age_key_file {
+                    // Use age key file from settings (CLI flag or env var)
+                    age_key_file.clone()
+                } else {
+                    // Try default path
+                    let default_key_path = env::FNOX_CONFIG_DIR.join("age.txt");
+                    if !default_key_path.exists() {
+                        return Err(FnoxError::AgeIdentityNotFound {
+                            path: default_key_path,
+                        });
+                    }
+                    default_key_path
+                }
+            };
+
+            // Load identity file content
+            let content = std::fs::read_to_string(&key_file_path).map_err(|e| {
+                FnoxError::AgeIdentityReadFailed {
+                    path: key_file_path.clone(),
+                    source: e,
+                }
+            })?;
+
+            (content, Some(key_file_path))
+        };
 
         // Try parsing as SSH identity first, then fall back to age identity file
         let identities = {
@@ -126,7 +134,9 @@ impl crate::providers::Provider for AgeEncryptionProvider {
             // First try to parse as SSH identity
             match age::ssh::Identity::from_buffer(
                 &mut cursor,
-                Some(key_file_path.to_string_lossy().to_string()),
+                key_file_path_opt
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().to_string()),
             ) {
                 Ok(ssh_identity) => {
                     // SSH identity parsed successfully

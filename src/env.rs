@@ -16,6 +16,9 @@ pub static FNOX_CONFIG_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
 // Profile configuration
 pub static FNOX_PROFILE: LazyLock<Option<String>> = LazyLock::new(|| var("FNOX_PROFILE").ok());
 
+// Age encryption key configuration
+pub static FNOX_AGE_KEY: LazyLock<Option<String>> = LazyLock::new(|| var("FNOX_AGE_KEY").ok());
+
 // Helper functions for parsing environment variables
 fn var_path(name: &str) -> Option<PathBuf> {
     var(name).map(PathBuf::from).ok()

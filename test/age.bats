@@ -20,7 +20,7 @@ teardown() {
     keygen_output=$(age-keygen -o key.txt 2>&1)
     local public_key
     public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
-    local private_key=$(echo "$keygen_output" | grep "^AGE-SECRET-KEY")
+    local private_key=$(grep "^AGE-SECRET-KEY" key.txt)
 
     # Create config with single provider
     cat > fnox.toml << EOF
