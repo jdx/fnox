@@ -960,7 +960,7 @@
   "config": {
     "props": {}
   },
-  "version": "1.2.2",
+  "version": "1.2.3",
   "usage": "Usage: fnox [OPTIONS] <COMMAND>",
   "complete": {
     "key": {

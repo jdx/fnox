@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.2.3](https://github.com/jdx/fnox/compare/v1.2.2..v1.2.3) - 2025-11-01
+
+### 🐛 Bug Fixes
+
+- support FNOX_AGE_KEY by [@Cantido](https://github.com/Cantido) in [#60](https://github.com/jdx/fnox/pull/60)
+- use inline tables by default in TOML output and preserve existing format by [@jdx](https://github.com/jdx) in [#62](https://github.com/jdx/fnox/pull/62)
+- enhance edit command to decrypt secrets before editing by [@jdx](https://github.com/jdx) in [#63](https://github.com/jdx/fnox/pull/63)
+
+### 📚 Documentation
+
+- use single-line TOML syntax with section headers by [@jdx](https://github.com/jdx) in [#51](https://github.com/jdx/fnox/pull/51)
+- clean up documentation and organize providers sidebar by [@jdx](https://github.com/jdx) in [cd019c0](https://github.com/jdx/fnox/commit/cd019c00a77370790444d85d4bc80d25f63ceacc)
+
+### 🛡️ Security
+
+- warn about multiline secrets in ci-redact by [@jdx](https://github.com/jdx) in [#53](https://github.com/jdx/fnox/pull/53)
+
+### 🔍 Other Changes
+
+- add semantic PR title validation by [@jdx](https://github.com/jdx) in [#61](https://github.com/jdx/fnox/pull/61)
+
+### New Contributors
+
+- @Cantido made their first contribution in [#60](https://github.com/jdx/fnox/pull/60)
+
 ## [1.2.2](https://github.com/jdx/fnox/compare/v1.2.1..v1.2.2) - 2025-10-29
 
 ### 🐛 Bug Fixes
