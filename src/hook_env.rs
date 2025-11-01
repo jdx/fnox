@@ -163,8 +163,8 @@ fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
         }
 
         // Check fnox.$FNOX_PROFILE.toml
-        if let Some(profile_name) = (*env::FNOX_PROFILE).as_ref() {
-            if profile_name != "default" {
+        if let Some(profile_name) = (*env::FNOX_PROFILE).as_ref()
+            && profile_name != "default" {
                 let profile_config_path = current.join(format!("fnox.{}.toml", profile_name));
                 if let Ok(metadata) = std::fs::metadata(&profile_config_path)
                     && let Ok(modified) = metadata.modified()
@@ -173,7 +173,6 @@ fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
                     configs.push((profile_config_path, duration.as_millis()));
                 }
             }
-        }
 
         // Check fnox.local.toml
         let local_config_path = current.join("fnox.local.toml");
@@ -241,14 +240,13 @@ pub fn find_config() -> Option<PathBuf> {
         }
 
         // Check for profile-specific config
-        if let Some(profile_name) = (*env::FNOX_PROFILE).as_ref() {
-            if profile_name != "default" {
+        if let Some(profile_name) = (*env::FNOX_PROFILE).as_ref()
+            && profile_name != "default" {
                 let profile_config_path = current.join(format!("fnox.{}.toml", profile_name));
                 if profile_config_path.exists() {
                     return Some(profile_config_path);
                 }
             }
-        }
 
         let local_config_path = current.join("fnox.local.toml");
         if local_config_path.exists() {
