@@ -72,6 +72,16 @@ jobs:
           # Install gnome-keyring for keychain tests
           sudo apt-get update
           sudo apt-get install -y gnome-keyring libsecret-tools dbus-x11
+          # Start D-Bus session for gnome-keyring
+          eval "$(dbus-launch --sh-syntax)"
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
+          echo "DBUS_SESSION_BUS_PID=$DBUS_SESSION_BUS_PID" >> "$GITHUB_ENV"
+          # Start gnome-keyring-daemon
+          eval "$(gnome-keyring-daemon --start --components=secrets)"
+          echo "GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL" >> "$GITHUB_ENV"
+          echo "GNOME_KEYRING_PID=$GNOME_KEYRING_PID" >> "$GITHUB_ENV"
+          # Unlock keyring with test password
+          echo 'test' | gnome-keyring-daemon --unlock
           # Start Vaultwarden
           docker run -d --name vaultwarden \
             -p 8080:80 \

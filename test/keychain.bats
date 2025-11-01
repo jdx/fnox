@@ -61,84 +61,18 @@ setup_linux_keychain() {
         echo "# Warning: secret-tool not found (install libsecret-tools for manual testing)" >&3
     fi
 
-    # In CI environments, set up a test secret service backend
+    # In CI environments, check if gnome-keyring-daemon is already running
     if [ "${CI:-}" = "true" ] || [ -n "${GITHUB_ACTIONS:-}" ] || [ -n "${GITLAB_CI:-}" ] || [ -n "${CIRCLECI:-}" ]; then
-        # Check if gnome-keyring-daemon is available
-        if ! command -v gnome-keyring-daemon >/dev/null 2>&1; then
-            echo "# Error: gnome-keyring-daemon not found in CI (install gnome-keyring)" >&3
+        # Check if daemon is already running (started by CI workflow)
+        if [ -n "${GNOME_KEYRING_CONTROL:-}" ]; then
+            echo "# Using pre-started gnome-keyring-daemon from CI" >&3
+            echo "# GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL" >&3
+            export USING_TEST_KEYRING=1
+        else
+            echo "# Error: gnome-keyring-daemon not started in CI" >&3
+            echo "# GNOME_KEYRING_CONTROL should be set by CI workflow" >&3
             return 1
         fi
-
-        # Start dbus session if not already running
-        if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
-            eval "$(dbus-launch --sh-syntax)"
-            export DBUS_SESSION_BUS_PID
-            export DBUS_SESSION_BUS_ADDRESS
-        fi
-
-        # Set up XDG_RUNTIME_DIR for the daemon to use
-        # Use BATS_TEST_NUMBER to ensure uniqueness in parallel execution
-        if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
-            export XDG_RUNTIME_DIR="$BATS_TEST_TMPDIR/runtime-$$-${BATS_TEST_NUMBER}"
-            mkdir -p "$XDG_RUNTIME_DIR"
-            chmod 700 "$XDG_RUNTIME_DIR"
-        fi
-
-        # Start gnome-keyring-daemon - it outputs shell commands on stdout, diagnostics on stderr
-        # Don't pre-set GNOME_KEYRING_CONTROL - let the daemon create its own control directory
-        # We need to capture them separately
-        local daemon_stdout
-        local daemon_stderr
-        local daemon_exit_code
-
-        # Use a temporary file to capture stderr separately
-        local stderr_file="$BATS_TEST_TMPDIR/keyring-stderr-$$"
-        daemon_stdout=$(gnome-keyring-daemon --start --components=secrets 2>"$stderr_file")
-        daemon_exit_code=$?
-        daemon_stderr=$(cat "$stderr_file")
-        rm -f "$stderr_file"
-
-        # Log stderr for debugging (these are just diagnostic messages, not errors)
-        if [ -n "$daemon_stderr" ]; then
-            echo "# gnome-keyring-daemon stderr:" >&3
-            echo "$daemon_stderr" | while IFS= read -r line; do echo "#   $line" >&3; done
-        fi
-
-        # Check exit code
-        if [ $daemon_exit_code -ne 0 ]; then
-            echo "# Error: gnome-keyring-daemon failed with exit code $daemon_exit_code" >&3
-            echo "# Stdout: $daemon_stdout" >&3
-            echo "# Stderr: $daemon_stderr" >&3
-            return 1
-        fi
-
-        # Check if we got any stdout (the environment variable exports)
-        if [ -z "$daemon_stdout" ]; then
-            echo "# Error: gnome-keyring-daemon produced no stdout" >&3
-            echo "# Stderr: $daemon_stderr" >&3
-            echo "# XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-<not set>}" >&3
-            echo "# DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-<not set>}" >&3
-            return 1
-        fi
-
-        # Eval only the stdout (environment variable exports)
-        eval "$daemon_stdout"
-        export USING_TEST_KEYRING=1
-
-        # Verify the daemon started and set the control path
-        if [ -z "${GNOME_KEYRING_CONTROL:-}" ]; then
-            echo "# Error: gnome-keyring-daemon did not set GNOME_KEYRING_CONTROL" >&3
-            echo "# Daemon stdout: $daemon_stdout" >&3
-            echo "# Daemon stderr: $daemon_stderr" >&3
-            return 1
-        fi
-
-        # Unlock the keyring with a test password
-        # The daemon is now running, so we unlock it separately
-        echo 'test' | gnome-keyring-daemon --unlock >/dev/null 2>&1 || true
-
-        # Give it a moment to start
-        sleep 1
     fi
 
     # For non-CI Linux, verify that a secret service is available via D-Bus
@@ -162,23 +96,8 @@ teardown() {
         done
     fi
 
-    # Clean up test keyring if we created one in CI (Linux)
-    if [ -n "$USING_TEST_KEYRING" ]; then
-        # Kill the gnome-keyring-daemon
-        if [ -n "${GNOME_KEYRING_PID:-}" ]; then
-            kill "$GNOME_KEYRING_PID" 2>&1 || true
-        fi
-
-        # Clean up the control directory
-        if [ -n "$GNOME_KEYRING_CONTROL" ] && [ -d "$GNOME_KEYRING_CONTROL" ]; then
-            rm -rf "$GNOME_KEYRING_CONTROL" 2>&1 || true
-        fi
-
-        # Kill dbus session if we started it
-        if [ -n "${DBUS_SESSION_BUS_PID:-}" ]; then
-            kill "$DBUS_SESSION_BUS_PID" 2>&1 || true
-        fi
-    fi
+    # Note: Don't kill gnome-keyring-daemon or dbus in CI
+    # They are started by the CI workflow and shared across all tests
 
     _common_teardown
 }
