@@ -50,6 +50,9 @@ pub enum ProviderType {
     /// Age encryption
     #[value(name = "age")]
     Age,
+    /// Infisical
+    #[value(name = "infisical")]
+    Infisical,
 }
 
 #[derive(Debug, Args)]

@@ -13,6 +13,7 @@ pub mod azure_sm;
 pub mod bitwarden;
 pub mod gcp_kms;
 pub mod gcp_sm;
+pub mod infisical;
 pub mod keychain;
 pub mod onepassword;
 pub mod plain;
@@ -102,6 +103,16 @@ pub enum ProviderConfig {
         service: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         prefix: Option<String>,
+    },
+    #[serde(rename = "infisical")]
+    #[strum(serialize = "infisical")]
+    Infisical {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        project_id: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        environment: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        path: Option<String>,
     },
     #[serde(rename = "plain")]
     #[strum(serialize = "plain")]
@@ -234,6 +245,15 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
         ProviderConfig::Keychain { service, prefix } => Ok(Box::new(
             keychain::KeychainProvider::new(service.clone(), prefix.clone()),
         )),
+        ProviderConfig::Infisical {
+            project_id,
+            environment,
+            path,
+        } => Ok(Box::new(infisical::InfisicalProvider::new(
+            project_id.clone(),
+            environment.clone(),
+            path.clone(),
+        ))),
         ProviderConfig::Plain => Ok(Box::new(plain::PlainProvider::new())),
     }
 }

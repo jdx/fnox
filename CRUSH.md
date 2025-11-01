@@ -558,3 +558,55 @@ fnox exec -- ./my-app
 - Connection testing via keychain read/write/delete test
 - May require GUI/interactive session on some platforms
 - Tests automatically skip in CI/headless environments where keychain isn't accessible
+
+### Infisical Provider
+
+The Infisical provider integrates with Infisical to retrieve secrets from Infisical projects and environments.
+
+**Configuration:**
+
+```toml
+[providers]
+infisical = { type = "infisical", project_id = "your-project-id", environment = "dev", path = "/" }  # all fields are optional
+
+[secrets]
+# Retrieves secret from Infisical
+MY_SECRET = { provider = "infisical", value = "SECRET_NAME" }
+```
+
+**Requirements:**
+
+- Infisical CLI installed: `brew install infisical/get-cli/infisical` or see [Infisical docs](https://infisical.com/docs/cli/overview)
+- Infisical token set in environment: `export INFISICAL_TOKEN=$(fnox get INFISICAL_TOKEN)`
+- Or store token encrypted in fnox config using age provider
+
+**Reference Format:**
+
+- `SECRET_NAME` - Gets the secret with this name from the configured project/environment/path
+
+**Usage:**
+
+```bash
+# Export the token first
+export INFISICAL_TOKEN=$(fnox get INFISICAL_TOKEN)
+
+# Then retrieve secrets
+fnox get MY_SECRET
+
+# Use in shell commands
+fnox exec -- ./my-app
+```
+
+**How it works:**
+
+1. **Storage**: Secrets are stored remotely in Infisical
+2. **Config**: fnox.toml only contains the secret name/reference (not the actual value)
+3. **Retrieval**: When you run `fnox get`, it calls `infisical secrets get` to fetch the current value
+4. **Scoping**: Project ID, environment, and path can be configured in the provider to scope secret lookups
+
+**Implementation Notes:**
+
+- Uses `infisical` CLI command to fetch secrets
+- Supports project-level, environment-level, and path-level scoping
+- Token can be stored encrypted with age provider for bootstrapping
+- Connection testing via `infisical user` command
