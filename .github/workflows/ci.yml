@@ -77,37 +77,22 @@ jobs:
           echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
           echo "DBUS_SESSION_BUS_PID=$DBUS_SESSION_BUS_PID" >> "$GITHUB_ENV"
           echo "Started D-Bus session: $DBUS_SESSION_BUS_ADDRESS"
-          # Set up XDG_RUNTIME_DIR for gnome-keyring-daemon
-          XDG_RUNTIME_DIR=$(mktemp -d)
-          chmod 700 "$XDG_RUNTIME_DIR"
-          export XDG_RUNTIME_DIR
-          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
-          echo "Set XDG_RUNTIME_DIR: $XDG_RUNTIME_DIR"
-          # Start gnome-keyring-daemon and capture stdout/stderr separately
-          KEYRING_STDERR_FILE=$(mktemp)
-          KEYRING_STDOUT=$(gnome-keyring-daemon --start --components=secrets 2>"$KEYRING_STDERR_FILE")
-          KEYRING_STDERR=$(cat "$KEYRING_STDERR_FILE")
-          rm -f "$KEYRING_STDERR_FILE"
-          # Display stderr (diagnostic messages) for debugging
-          if [ -n "$KEYRING_STDERR" ]; then
-            echo "gnome-keyring-daemon stderr: $KEYRING_STDERR"
-          fi
-          # Display stdout (environment variable exports)
-          echo "gnome-keyring-daemon stdout: $KEYRING_STDOUT"
-          # Eval only the stdout to set environment variables
-          eval "$KEYRING_STDOUT"
-          # Verify the daemon started and set GNOME_KEYRING_CONTROL
-          if [ -z "$GNOME_KEYRING_CONTROL" ]; then
-            echo "ERROR: gnome-keyring-daemon did not set GNOME_KEYRING_CONTROL"
-            echo "Daemon stdout was: $KEYRING_STDOUT"
-            echo "Daemon stderr was: $KEYRING_STDERR"
+          # Start and unlock gnome-keyring-daemon (simpler approach)
+          gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'test'
+          # The daemon sets SSH_AUTH_SOCK but we need to find GNOME_KEYRING_CONTROL
+          # It creates the control socket in XDG_RUNTIME_DIR/keyring or $HOME/.cache/keyring
+          if [ -n "$XDG_RUNTIME_DIR" ] && [ -d "$XDG_RUNTIME_DIR/keyring" ]; then
+            export GNOME_KEYRING_CONTROL="$XDG_RUNTIME_DIR/keyring"
+          elif [ -d "$HOME/.cache/keyring" ]; then
+            export GNOME_KEYRING_CONTROL="$HOME/.cache/keyring"
+          elif [ -d "$HOME/.local/share/keyring" ]; then
+            export GNOME_KEYRING_CONTROL="$HOME/.local/share/keyring"
+          else
+            echo "ERROR: Could not find gnome-keyring control directory"
             exit 1
           fi
           echo "GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL" >> "$GITHUB_ENV"
-          echo "GNOME_KEYRING_PID=$GNOME_KEYRING_PID" >> "$GITHUB_ENV"
           echo "Started gnome-keyring-daemon: GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL"
-          # Unlock keyring with test password
-          echo 'test' | gnome-keyring-daemon --unlock
           # Start Vaultwarden
           docker run -d --name vaultwarden \
             -p 8080:80 \
