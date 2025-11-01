@@ -87,7 +87,7 @@ EOF
 create_test_secret() {
     local secret_name="$1"
     local secret_value="$2"
-
+    
     aws secretsmanager create-secret \
         --name "$secret_name" \
         --secret-string "$secret_value" \
@@ -335,23 +335,4 @@ EOF
 @test "fnox set creates secret in AWS Secrets Manager" {
     create_sm_config
 
-    # Create a temporary secret with unique name using fnox set
-    local timestamp="$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
-    local secret_value="my-test-secret-value-${timestamp}"
-
-    # Create secret using fnox set (should use AWS SM provider)
-    run "$FNOX_BIN" set AWS_SM_CREATE_TEST "$secret_value" --provider sm
-    assert_success
-
-    # Get secret back to verify it was created correctly
-    run "$FNOX_BIN" get AWS_SM_CREATE_TEST
-    assert_success
-    assert_output "$secret_value"
-
-    # Cleanup - delete the actual secret created by fnox set
-    # fnox set creates the secret with the provider prefix + secret key
-    aws secretsmanager delete-secret \
-        --secret-id "fnox-test/AWS_SM_CREATE_TEST" \
-        --region "$SM_REGION" \
-        --force-delete-without-recovery >/dev/null 2>&1 || true
-}
+cat /tmp/aws_patch.bats

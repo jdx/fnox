@@ -244,6 +244,9 @@ EOF
     # Create a temporary secret with unique name using fnox set
     local secret_name="fnox-test-create-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
     local secret_value="my-test-secret-value-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
+    
+    # Set the secret name for teardown cleanup
+    export TEST_SECRET_NAME="fnox-test-create-GCP_SM_CREATE_TEST"
 
     # Add secret to config so fnox set will use GCP SM provider
     cat >> "${FNOX_CONFIG_FILE}" << EOF
@@ -264,5 +267,5 @@ EOF
 
     # Cleanup - delete actual secret created by fnox set
     # fnox set creates a secret with the provider prefix + secret key
-    gcloud secrets delete "fnox-test-create-GCP_SM_CREATE_TEST" --project="$GCP_PROJECT" --quiet >/dev/null 2>&1 || true
+    gcloud secrets delete "$TEST_SECRET_NAME" --project="$GCP_PROJECT" --quiet >/dev/null 2>&1 || true
 }

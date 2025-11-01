@@ -328,6 +328,9 @@ EOF
     # Create a temporary secret with unique name using fnox set
     local timestamp="$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
     local secret_value="my-test-secret-value-${timestamp}"
+    
+    # Set the secret name for teardown cleanup
+    export TEST_SECRET_NAME="fnox-test-AZURE_SM_CREATE_TEST"
 
     # Create secret using fnox set (should use Azure SM provider)
     run "$FNOX_BIN" set AZURE_SM_CREATE_TEST "$secret_value" --provider azure-sm
@@ -342,6 +345,6 @@ EOF
     # fnox set creates a secret with the provider prefix + secret key
     az keyvault secret delete \
         --vault-name fnox-testing-kv \
-        --name "fnox-test-AZURE_SM_CREATE_TEST" \
+        --name "$TEST_SECRET_NAME" \
         >/dev/null 2>&1 || true
 }
