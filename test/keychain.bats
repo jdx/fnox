@@ -76,12 +76,11 @@ setup_linux_keychain() {
             export DBUS_SESSION_BUS_ADDRESS
         fi
 
-        # Set up XDG_RUNTIME_DIR if not set - gnome-keyring-daemon needs this
-        if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
-            export XDG_RUNTIME_DIR="$BATS_TEST_TMPDIR/runtime"
-            mkdir -p "$XDG_RUNTIME_DIR"
-            chmod 700 "$XDG_RUNTIME_DIR"
-        fi
+        # Override XDG_RUNTIME_DIR to use our test directory
+        # The default /run/user/1001 exists but gnome-keyring-daemon can't create subdirectories there
+        export XDG_RUNTIME_DIR="$BATS_TEST_TMPDIR/runtime-$$"
+        mkdir -p "$XDG_RUNTIME_DIR"
+        chmod 700 "$XDG_RUNTIME_DIR"
 
         # Start gnome-keyring-daemon - it outputs shell commands on stdout, diagnostics on stderr
         # We need to capture them separately
