@@ -526,7 +526,8 @@
                     "azure-kms",
                     "azure-sm",
                     "gcp-kms",
-                    "age"
+                    "age",
+                    "infisical"
                   ]
                 }
               }

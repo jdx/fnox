@@ -28,3 +28,4 @@ Provider type
 - `azure-sm`
 - `gcp-kms`
 - `age`
+- `infisical`
