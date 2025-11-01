@@ -328,19 +328,23 @@ provider = "infisical"
 value = "DATABASE_URL"
 EOF
 
-    # Temporarily unset credentials
+    # Temporarily unset all credentials
+    local original_token="$INFISICAL_TOKEN"
     local original_client_id="$INFISICAL_CLIENT_ID"
     local original_client_secret="$INFISICAL_CLIENT_SECRET"
+    unset INFISICAL_TOKEN
     unset INFISICAL_CLIENT_ID
     unset INFISICAL_CLIENT_SECRET
+    unset FNOX_INFISICAL_TOKEN
     unset FNOX_INFISICAL_CLIENT_ID
     unset FNOX_INFISICAL_CLIENT_SECRET
 
     run "$FNOX_BIN" get TEST_SECRET
     assert_failure
-    assert_output --partial "client"
+    assert_output --partial "Infisical authentication not found"
 
     # Restore credentials
+    export INFISICAL_TOKEN="$original_token"
     export INFISICAL_CLIENT_ID="$original_client_id"
     export INFISICAL_CLIENT_SECRET="$original_client_secret"
 }
