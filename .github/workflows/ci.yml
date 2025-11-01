@@ -71,7 +71,7 @@ jobs:
         run: |
           # Install gnome-keyring for keychain tests
           sudo apt-get update
-          sudo apt-get install -y gnome-keyring dbus-x11
+          sudo apt-get install -y gnome-keyring libsecret-tools dbus-x11
           # Start Vaultwarden
           docker run -d --name vaultwarden \
             -p 8080:80 \
