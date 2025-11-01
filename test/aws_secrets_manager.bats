@@ -331,8 +331,3 @@ EOF
     assert_output --partial "DESCRIBED_SECRET"
     assert_output --partial "A secret with a description"
 }
-
-@test "fnox set creates secret in AWS Secrets Manager" {
-    create_sm_config
-
-cat /tmp/aws_patch.bats

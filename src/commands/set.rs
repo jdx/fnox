@@ -162,6 +162,18 @@ impl SetCommand {
                                 // Store just the key name (without prefix) in config
                                 (None, Some(self.key.clone()))
                             }
+                            ProviderConfig::AzureSecretsManager { vault_url, prefix } => {
+                                let azure_sm_provider =
+                                    crate::providers::azure_sm::AzureSecretsManagerProvider::new(
+                                        vault_url.clone(),
+                                        prefix.clone(),
+                                    );
+                                let secret_name = azure_sm_provider.get_secret_name(&self.key);
+                                azure_sm_provider.put_secret(&secret_name, value).await?;
+
+                                // Store just the key name (without prefix) in config
+                                (None, Some(self.key.clone()))
+                            }
                             _ => {
                                 // Other remote storage providers not yet implemented
                                 tracing::warn!(

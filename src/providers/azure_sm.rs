@@ -56,7 +56,6 @@ impl AzureSecretsManagerProvider {
     }
 
     /// Create or update a secret in Azure Key Vault
-    #[allow(dead_code)]
     pub async fn put_secret(&self, secret_name: &str, secret_value: &str) -> Result<()> {
         let client = self.create_client().await?;
 

@@ -7,6 +7,11 @@ setup() {
     load 'test_helper/common_setup'
     _common_setup
 
+    # Check if keychain tests are disabled via env var
+    if [ -n "$SKIP_KEYCHAIN_TESTS" ]; then
+        skip "Keychain tests disabled via SKIP_KEYCHAIN_TESTS env var"
+    fi
+
     # Check if we're on macOS for keychain tests
     if [[ "$(uname)" != "Darwin" ]]; then
         skip "Keychain provider tests require macOS"

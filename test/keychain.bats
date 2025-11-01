@@ -15,11 +15,15 @@ setup() {
     load 'test_helper/common_setup'
     _common_setup
 
+    # Check if keychain tests are disabled via env var
+    if [ -n "$SKIP_KEYCHAIN_TESTS" ]; then
+        skip "Keychain tests disabled via SKIP_KEYCHAIN_TESTS env var"
+    fi
+
     # Check if we're on macOS (keychain is macOS-specific in these tests)
     if [[ "$(uname)" != "Darwin" ]]; then
         skip "OS keychain tests require macOS"
     fi
-    skip "Keychain tests are disabled for now"
 
     # Check if keychain is accessible by attempting to list keychains
     if ! security list-keychains >/dev/null 2>&1; then
