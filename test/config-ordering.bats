@@ -43,10 +43,6 @@ teardown() {
 	run fnox set FIFTH_SECRET "value5" --provider age
 	assert_success
 
-	# Debug: show the actual config
-	echo "=== DEBUG: Full config ===" >&3
-	cat fnox.toml >&3
-
 	# Read the config file and extract secrets from the [secrets] section
 	# With inline table format, secrets look like: SECRET_NAME= { provider = "age", value = "..." }
 	# Use awk to extract secrets between [secrets] and next section (or EOF)
@@ -56,14 +52,8 @@ teardown() {
 		in_secrets && /^(FIRST|SECOND|THIRD|FOURTH|FIFTH)_SECRET\s*=/ { print }
 	' fnox.toml)
 
-	echo "=== DEBUG: Secrets section ===" >&3
-	echo "$secrets_section" >&3
-
 	# Extract just the keys in the order they appear (handle both "KEY=" and "KEY =")
 	keys=$(echo "$secrets_section" | sed 's/^\([A-Z_]*\)\s*=.*/\1/' | tr '\n' ' ')
-
-	echo "=== DEBUG: Extracted keys ===" >&3
-	echo "$keys" >&3
 
 	# Verify the order
 	expected_order="FIRST_SECRET SECOND_SECRET THIRD_SECRET FOURTH_SECRET FIFTH_SECRET "
