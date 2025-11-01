@@ -76,26 +76,20 @@ setup_linux_keychain() {
             export DBUS_SESSION_BUS_ADDRESS
         fi
 
-        # GitHub Actions runners don't have IPC_LOCK permission, so we need to unlock the keyring
-        # Start gnome-keyring-daemon and unlock it with a test password
-        local daemon_output
-        daemon_output=$(echo 'test' | gnome-keyring-daemon --unlock --start --components=secrets 2>&1)
-        local daemon_exit_code=$?
-
-        echo "# DEBUG: daemon exit code: $daemon_exit_code" >&3
-        echo "# DEBUG: daemon output:" >&3
-        echo "$daemon_output" | while IFS= read -r line; do echo "# DEBUG:   $line" >&3; done
-
-        # Eval the output to set environment variables
-        eval "$daemon_output"
+        # Don't pre-set GNOME_KEYRING_CONTROL - let the daemon create its own directory
+        # Start gnome-keyring-daemon - it outputs shell commands to set environment variables
+        eval "$(gnome-keyring-daemon --start --components=secrets)"
         export USING_TEST_KEYRING=1
 
         # Verify the daemon started and set the control path
         if [ -z "${GNOME_KEYRING_CONTROL:-}" ]; then
             echo "# Error: gnome-keyring-daemon did not set GNOME_KEYRING_CONTROL" >&3
-            echo "# GNOME_KEYRING_PID=${GNOME_KEYRING_PID:-<not set>}" >&3
             return 1
         fi
+
+        # Unlock the keyring with a test password
+        # The daemon is now running, so we unlock it separately
+        echo 'test' | gnome-keyring-daemon --unlock >/dev/null 2>&1 || true
 
         # Give it a moment to start
         sleep 1
