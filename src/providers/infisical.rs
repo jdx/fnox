@@ -6,9 +6,9 @@ use std::process::Command;
 use std::sync::{LazyLock, Mutex};
 
 pub struct InfisicalProvider {
-    project_id: String,
-    environment: String,
-    path: String,
+    project_id: Option<String>,
+    environment: Option<String>,
+    path: Option<String>,
 }
 
 impl InfisicalProvider {
@@ -18,9 +18,9 @@ impl InfisicalProvider {
         path: Option<String>,
     ) -> Self {
         Self {
-            project_id: project_id.unwrap_or_default(),
-            environment: environment.unwrap_or_else(|| "dev".to_string()),
-            path: path.unwrap_or_else(|| "/".to_string()),
+            project_id,
+            environment,
+            path,
         }
     }
 
@@ -169,38 +169,32 @@ impl crate::providers::Provider for InfisicalProvider {
 
         // Add project ID if specified
         let project_arg;
-        if !self.project_id.is_empty() {
-            project_arg = format!("--projectId={}", self.project_id);
+        if let Some(ref project_id) = self.project_id {
+            project_arg = format!("--projectId={}", project_id);
             args.push(&project_arg);
         }
 
-        // Add environment (global flag)
-        let env_arg = format!("--env={}", self.environment);
-        args.push(&env_arg);
+        // Add environment if specified (otherwise CLI uses its default: "dev")
+        let env_arg;
+        if let Some(ref environment) = self.environment {
+            env_arg = format!("--env={}", environment);
+            args.push(&env_arg);
+        }
 
-        // Add path if not default
+        // Add path if specified (otherwise CLI uses its default: "/")
         let path_arg;
-        if self.path != "/" {
-            path_arg = format!("--path={}", self.path);
+        if let Some(ref path) = self.path {
+            path_arg = format!("--path={}", path);
             args.push(&path_arg);
         }
 
-        if self.project_id.is_empty() {
-            tracing::debug!(
-                "Fetching secret '{}' with environment '{}', path '{}'",
-                value,
-                self.environment,
-                self.path
-            );
-        } else {
-            tracing::debug!(
-                "Fetching secret '{}' from project '{}', environment '{}', path '{}'",
-                value,
-                self.project_id,
-                self.environment,
-                self.path
-            );
-        }
+        tracing::debug!(
+            "Fetching secret '{}' with project_id={:?}, environment={:?}, path={:?}",
+            value,
+            self.project_id,
+            self.environment,
+            self.path
+        );
 
         self.execute_infisical_command(&args)
     }

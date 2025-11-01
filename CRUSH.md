@@ -614,7 +614,7 @@ The Infisical provider integrates with Infisical using the official Rust SDK to 
 
 ```toml
 [providers]
-infisical = { type = "infisical", project_id = "your-project-id", environment = "dev", path = "/" }  # all fields optional, project_id defaults to auth credentials' default project, environment defaults to "dev", path defaults to "/"
+infisical = { type = "infisical", project_id = "your-project-id", environment = "dev", path = "/" }  # all fields optional; if omitted, Infisical CLI uses its own defaults (project from auth, environment="dev", path="/")
 
 [secrets]
 # Retrieves secret from Infisical
