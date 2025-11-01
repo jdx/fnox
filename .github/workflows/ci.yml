@@ -76,10 +76,21 @@ jobs:
           eval "$(dbus-launch --sh-syntax)"
           echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
           echo "DBUS_SESSION_BUS_PID=$DBUS_SESSION_BUS_PID" >> "$GITHUB_ENV"
-          # Start gnome-keyring-daemon
-          eval "$(gnome-keyring-daemon --start --components=secrets)"
+          echo "Started D-Bus session: $DBUS_SESSION_BUS_ADDRESS"
+          # Start gnome-keyring-daemon and capture output
+          KEYRING_OUTPUT=$(gnome-keyring-daemon --start --components=secrets 2>&1)
+          echo "gnome-keyring-daemon output: $KEYRING_OUTPUT"
+          # Eval the output to set environment variables
+          eval "$KEYRING_OUTPUT"
+          # Verify the daemon started and set GNOME_KEYRING_CONTROL
+          if [ -z "$GNOME_KEYRING_CONTROL" ]; then
+            echo "ERROR: gnome-keyring-daemon did not set GNOME_KEYRING_CONTROL"
+            echo "Daemon output was: $KEYRING_OUTPUT"
+            exit 1
+          fi
           echo "GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL" >> "$GITHUB_ENV"
           echo "GNOME_KEYRING_PID=$GNOME_KEYRING_PID" >> "$GITHUB_ENV"
+          echo "Started gnome-keyring-daemon: GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL"
           # Unlock keyring with test password
           echo 'test' | gnome-keyring-daemon --unlock
           # Start Vaultwarden
