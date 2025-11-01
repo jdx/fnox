@@ -209,22 +209,15 @@ impl crate::providers::Provider for InfisicalProvider {
 
         let json_output = self.execute_infisical_command(&args)?;
 
-        // DEBUG: Log what we got from CLI
-        eprintln!("DEBUG: Infisical CLI returned: '{}'", json_output);
-        eprintln!("DEBUG: Length: {}", json_output.len());
-
         // Parse JSON response - format is an array with one object
         // [{"secretKey": "NAME", "secretValue": "value"}]
         let json_array =
             serde_json::from_str::<Vec<serde_json::Value>>(&json_output).map_err(|e| {
-                eprintln!("DEBUG: JSON parse failed: {}", e);
                 FnoxError::Provider(format!(
                     "Failed to parse Infisical response for '{}': {}",
                     value, e
                 ))
             })?;
-
-        eprintln!("DEBUG: Parsed array length: {}", json_array.len());
 
         // Extract the secret value from the first (and only) object
         if json_array.is_empty() {

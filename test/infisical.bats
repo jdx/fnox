@@ -174,11 +174,23 @@ EOF
     local test_project_id="${INFISICAL_PROJECT_ID:-00000000-0000-0000-0000-000000000000}"
     create_infisical_config "$test_project_id"
 
+    # Use a highly unique secret name to avoid collisions
+    local unique_secret="FNOX_TEST_NONEXISTENT_$(date +%s)_$(( RANDOM % 100000 ))_SHOULD_NOT_EXIST"
+
+    # If we have INFISICAL_TOKEN, ensure the secret doesn't exist
+    if [ -n "${INFISICAL_TOKEN:-}" ]; then
+        infisical secrets delete "$unique_secret" \
+            --projectId="$test_project_id" \
+            --env=dev \
+            --token="$INFISICAL_TOKEN" \
+            --silent 2>/dev/null || true
+    fi
+
     cat >> "${FNOX_CONFIG_FILE}" << EOF
 
 [secrets.INVALID_SECRET]
 provider = "infisical"
-value = "NONEXISTENT_SECRET_$(date +%s)"
+value = "$unique_secret"
 if_missing = "error"
 EOF
 
@@ -187,18 +199,9 @@ EOF
     # Locally: fails with "secret not found" if we have project access
     # Either way, it should fail appropriately
     run "$FNOX_BIN" get INVALID_SECRET
-
-    # Debug output
-    echo "=== TEST 44 DEBUG ===" >&3
-    echo "Exit status: $status" >&3
-    echo "Output: '$output'" >&3
-    echo "Config:" >&3
-    cat "${FNOX_CONFIG_FILE}" >&3
-    echo "====================" >&3
-
     assert_failure
     # Accept multiple error messages:
-    # - "Secret '...' not found or inaccessible" (empty CLI response)
+    # - "Secret '...' not found or inaccessible" (empty CLI response/array)
     # - "Failed to get secret from Infisical" (CLI error)
     # - "Infisical CLI command failed" (CLI failure)
     assert_output --regexp "(not found or inaccessible|Failed to get secret from Infisical|Infisical CLI command failed)"
