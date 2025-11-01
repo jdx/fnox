@@ -395,6 +395,7 @@ EOF
 [secrets.MISSING_SECRET]
 provider = "keychain"
 value = "not-in-keychain"
+if_missing = "error"
 EOF
 
     # Check should detect the missing secret

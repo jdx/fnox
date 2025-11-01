@@ -2,7 +2,6 @@ use crate::config::Config;
 use crate::error::Result;
 use crate::secret_resolver;
 use clap::Args;
-use tracing::{error, info, warn};
 
 use crate::commands::Cli;
 
@@ -20,7 +19,7 @@ impl CheckCommand {
         let profile = Config::get_profile(cli.profile.as_deref());
 
         // Load config
-        info!("Checking configuration for profile: {}", profile);
+        println!("Checking configuration for profile: {}", profile);
 
         let mut issues = Vec::new();
         let mut warnings = Vec::new();
@@ -30,7 +29,7 @@ impl CheckCommand {
             if secrets.is_empty() {
                 warnings.push("No secrets defined in profile".to_string());
             } else {
-                info!("Found {} secret(s) in profile", secrets.len());
+                println!("Found {} secret(s) in profile", secrets.len());
 
                 for (name, secret_config) in secrets {
                     // Check if secret has a value source
@@ -144,28 +143,28 @@ impl CheckCommand {
         if providers.is_empty() {
             warnings.push("No providers configured".to_string());
         } else {
-            info!("Found {} provider(s) in profile", providers.len());
+            println!("Found {} provider(s) in profile", providers.len());
         }
 
         // Report results
         if !issues.is_empty() {
-            error!("Found {} error(s):", issues.len());
+            eprintln!("Found {} error(s):", issues.len());
             for issue in &issues {
-                error!("  {}", issue);
+                eprintln!("  {}", issue);
             }
         }
 
         if !warnings.is_empty() {
-            warn!("Found {} warning(s):", warnings.len());
+            eprintln!("Found {} warning(s):", warnings.len());
             for warning in &warnings {
-                warn!("  {}", warning);
+                eprintln!("  {}", warning);
             }
         }
 
         if issues.is_empty() && warnings.is_empty() {
-            info!("✓ Configuration is healthy");
+            println!("✓ Configuration is healthy");
         } else if issues.is_empty() {
-            info!("✓ Configuration is OK (with warnings)");
+            println!("✓ Configuration is OK (with warnings)");
         }
 
         if !issues.is_empty() {
