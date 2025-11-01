@@ -174,8 +174,9 @@ impl crate::providers::Provider for InfisicalProvider {
     async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
         tracing::debug!("Getting secret '{}' from Infisical", value);
 
-        // Build the command: infisical secrets get <name>
-        let mut args = vec!["secrets", "get", value, "--plain"];
+        // Build the command: infisical secrets get <name> --output json
+        // Using JSON format allows us to distinguish between "not found" and "empty value"
+        let mut args = vec!["secrets", "get", value, "--output", "json"];
 
         // Add project ID if specified
         let project_arg;
@@ -206,18 +207,37 @@ impl crate::providers::Provider for InfisicalProvider {
             self.path
         );
 
-        let result = self.execute_infisical_command(&args)?;
+        let json_output = self.execute_infisical_command(&args)?;
 
-        // The Infisical CLI sometimes returns exit 0 with empty output when a secret
-        // is not found or when there's a permission error. Treat empty responses as errors.
-        if result.is_empty() {
+        // Parse JSON response - format is an array with one object
+        // [{"secretKey": "NAME", "secretValue": "value"}]
+        let json_array =
+            serde_json::from_str::<Vec<serde_json::Value>>(&json_output).map_err(|e| {
+                FnoxError::Provider(format!(
+                    "Failed to parse Infisical response for '{}': {}",
+                    value, e
+                ))
+            })?;
+
+        // Extract the secret value from the first (and only) object
+        if json_array.is_empty() {
             return Err(FnoxError::Provider(format!(
                 "Secret '{}' not found or inaccessible in Infisical",
                 value
             )));
         }
 
-        Ok(result)
+        let secret_value = json_array[0]
+            .get("secretValue")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                FnoxError::Provider(format!(
+                    "Invalid response format for secret '{}' - missing secretValue field",
+                    value
+                ))
+            })?;
+
+        Ok(secret_value.to_string())
     }
 
     async fn get_secrets_batch(
