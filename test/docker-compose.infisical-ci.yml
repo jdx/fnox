@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: fnox-infisical-postgres
+    environment:
+      - POSTGRES_USER=infisical
+      - POSTGRES_PASSWORD=infisical
+      - POSTGRES_DB=infisical
+    volumes:
+      - infisical-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U infisical"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: fnox-infisical-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - infisical-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  infisical:
+    image: infisical/infisical:latest
+    container_name: fnox-infisical
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+      - ENCRYPTION_KEY=4edd2a7f4e8577428fe88c534e39bdaa
+      - AUTH_SECRET=2a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d
+      - DB_CONNECTION_URI=postgres://infisical:infisical@postgres:5432/infisical
+      - REDIS_URL=redis://redis:6379
+      - SITE_URL=http://localhost:8081
+      - TELEMETRY_ENABLED=false
+      - SMTP_HOST=
+      - SMTP_FROM_NAME=Infisical
+      - INVITE_ONLY_SIGNUP=false
+    ports:
+      - "8081:8080"
+    restart: unless-stopped
+
+volumes:
+  infisical-postgres-data:
+  infisical-redis-data:

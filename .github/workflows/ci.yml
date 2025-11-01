@@ -84,6 +84,8 @@ jobs:
             -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 \
             -e VAULT_ADDR=http://127.0.0.1:8200 \
             hashicorp/vault:latest
+          # Start Infisical (self-hosted with PostgreSQL and Redis)
+          docker compose -f test/docker-compose.infisical-ci.yml up -d
           # Wait for services to be ready
           sleep 5
           echo "VAULT_ADDR=http://localhost:8200" >> "$GITHUB_ENV"
@@ -94,13 +96,11 @@ jobs:
           source ./test/setup-bitwarden-ci.sh
           echo "BW_SESSION=$BW_SESSION" >> "$GITHUB_ENV"
       - name: Setup Infisical for tests
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
-          # INFISICAL_TOKEN should be set as a GitHub Secret
-          # Tests will skip if not available
-          if [ -n "${{ secrets.INFISICAL_TOKEN }}" ]; then
-            echo "INFISICAL_TOKEN=${{ secrets.INFISICAL_TOKEN }}" >> "$GITHUB_ENV"
-          fi
+          source ./test/setup-infisical-ci.sh
+          echo "INFISICAL_TOKEN=$INFISICAL_TOKEN" >> "$GITHUB_ENV"
+          echo "INFISICAL_API_URL=http://localhost:8081/api" >> "$GITHUB_ENV"
       - name: Setup services (macOS)
         if: ${{ matrix.os == 'macos-latest' }}
         run: |
