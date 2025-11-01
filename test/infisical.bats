@@ -176,6 +176,7 @@ EOF
 [secrets.INVALID_SECRET]
 provider = "infisical"
 value = "NONEXISTENT_SECRET_$(date +%s)"
+if_missing = "error"
 EOF
 
     # Try to get non-existent secret
