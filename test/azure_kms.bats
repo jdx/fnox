@@ -197,9 +197,10 @@ EOF
     run "$FNOX_BIN" set AZURE_KMS_UNIQUE_2 "same-value" --provider azure-kms
     assert_success
 
-    # Get the encrypted values from config
-    cipher1=$(grep -A2 "\[secrets.AZURE_KMS_UNIQUE_1\]" "${FNOX_CONFIG_FILE}" | grep "^value =" | cut -d'"' -f2)
-    cipher2=$(grep -A2 "\[secrets.AZURE_KMS_UNIQUE_2\]" "${FNOX_CONFIG_FILE}" | grep "^value =" | cut -d'"' -f2)
+    # Get the encrypted values from config (inline table format)
+    # Secrets are now stored as: AZURE_KMS_UNIQUE_1 = { provider = "azure-kms", value = "..." }
+    cipher1=$(grep "^AZURE_KMS_UNIQUE_1\s*=" "${FNOX_CONFIG_FILE}" | sed 's/.*value = "\([^"]*\)".*/\1/')
+    cipher2=$(grep "^AZURE_KMS_UNIQUE_2\s*=" "${FNOX_CONFIG_FILE}" | sed 's/.*value = "\([^"]*\)".*/\1/')
 
     # Verify ciphertexts were extracted
     [ -n "$cipher1" ]
