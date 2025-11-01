@@ -5,8 +5,9 @@
 # These tests verify the OS keychain provider integration with fnox.
 #
 # Prerequisites:
-#   1. macOS with Keychain Access (tests automatically skip on other platforms)
-#   2. Run tests: mise run test:bats -- test/keychain.bats
+#   - macOS: Keychain Access (built-in)
+#   - Linux: Secret Service (gnome-keyring or KWallet)
+#   - Run tests: mise run test:bats -- test/keychain.bats
 #
 # Note: Tests use a dedicated "fnox-test" service name to avoid conflicts.
 #
@@ -20,36 +21,129 @@ setup() {
         skip "Keychain tests disabled via SKIP_KEYCHAIN_TESTS env var"
     fi
 
-    # Check if we're on macOS (keychain is macOS-specific in these tests)
-    if [[ "$(uname)" != "Darwin" ]]; then
-        skip "OS keychain tests require macOS"
-    fi
+    # Detect platform
+    local platform
+    platform="$(uname)"
+    export PLATFORM="$platform"
 
-    # Check if keychain is accessible by attempting to list keychains
-    if ! security list-keychains >/dev/null 2>&1; then
-        skip "macOS keychain not accessible (may be locked or unavailable in this environment)"
+    # Platform-specific setup
+    if [[ "$platform" == "Darwin" ]]; then
+        setup_macos_keychain
+    elif [[ "$platform" == "Linux" ]]; then
+        setup_linux_keychain
+    else
+        skip "OS keychain tests only support macOS and Linux (detected: $platform)"
     fi
-
-    # Try to verify keychain access by creating a test entry
-    # If this fails, the keychain isn't accessible in this environment
-    if ! security add-generic-password -s "fnox-test-access-check-$$" -a "test" -w "test" -U >/dev/null 2>&1; then
-        skip "macOS keychain not accessible for write operations (may require GUI/interactive session)"
-    fi
-
-    # Clean up the test entry
-    security delete-generic-password -s "fnox-test-access-check-$$" -a "test" >/dev/null 2>&1 || true
 
     # Set a unique service name for tests
     export KEYCHAIN_SERVICE="fnox-test-$$"
 }
 
+setup_macos_keychain() {
+    # In CI environments, create an unlocked test keychain to avoid prompts
+    if [ "${CI:-}" = "true" ] || [ -n "${GITHUB_ACTIONS:-}" ] || [ -n "${GITLAB_CI:-}" ] || [ -n "${CIRCLECI:-}" ]; then
+        # Create a temporary keychain for testing
+        export TEST_KEYCHAIN="$BATS_TEST_TMPDIR/fnox-test-$$.keychain-db"
+        export TEST_KEYCHAIN_PASSWORD="test-password"
+
+        # Create the test keychain with no password timeout
+        security create-keychain -p "$TEST_KEYCHAIN_PASSWORD" "$TEST_KEYCHAIN" 2>&1
+
+        # Unlock the keychain (no timeout)
+        security unlock-keychain -p "$TEST_KEYCHAIN_PASSWORD" "$TEST_KEYCHAIN" 2>&1
+
+        # Disable keychain lock timeout
+        security set-keychain-settings "$TEST_KEYCHAIN" 2>&1 || true
+
+        # Add to search list
+        local existing_keychains
+        existing_keychains=$(security list-keychains -d user | sed 's/"//g')
+        # shellcheck disable=SC2086
+        security list-keychains -d user -s "$TEST_KEYCHAIN" $existing_keychains 2>&1 || true
+
+        # Make it the default keychain for this session
+        security default-keychain -s "$TEST_KEYCHAIN" 2>&1 || true
+
+        export USING_TEST_KEYCHAIN=1
+    fi
+
+    # Verify keychain is accessible by attempting to list keychains
+    security list-keychains >/dev/null 2>&1
+
+    # Verify keychain access by creating a test entry
+    security add-generic-password -s "fnox-test-access-check-$$" -a "test" -w "test" -U 2>&1
+
+    # Clean up the test entry
+    security delete-generic-password -s "fnox-test-access-check-$$" -a "test" 2>&1 || true
+}
+
+setup_linux_keychain() {
+    # Check if secret-tool is available (for manual testing verification)
+    if ! command -v secret-tool >/dev/null 2>&1; then
+        echo "# Warning: secret-tool not found (install libsecret-tools for manual testing)" >&3
+    fi
+
+    # In CI environments, set up a test secret service backend
+    if [ "${CI:-}" = "true" ] || [ -n "${GITHUB_ACTIONS:-}" ] || [ -n "${GITLAB_CI:-}" ] || [ -n "${CIRCLECI:-}" ]; then
+        # Check if gnome-keyring-daemon is available
+        gnome-keyring-daemon >/dev/null 2>&1
+
+        # Start a test gnome-keyring daemon
+        export GNOME_KEYRING_CONTROL="$BATS_TEST_TMPDIR/keyring-$$"
+        mkdir -p "$GNOME_KEYRING_CONTROL"
+
+        # Start the daemon with an unlocked keyring
+        eval "$(gnome-keyring-daemon --start --components=secrets --control-dir="$GNOME_KEYRING_CONTROL" 2>&1)"
+        export USING_TEST_KEYRING=1
+
+        # Give it a moment to start
+        sleep 1
+    fi
+
+    # For non-CI Linux, verify that a secret service is available via D-Bus
+    if [ -z "${USING_TEST_KEYRING:-}" ]; then
+        # Connect to the secret service (fail if not available)
+        dbus-send --print-reply --dest=org.freedesktop.secrets /org/freedesktop/secrets org.freedesktop.DBus.Peer.Ping >/dev/null 2>&1
+    fi
+}
+
 teardown() {
-    # Clean up any test secrets from keychain
+    # Clean up any test secrets from keychain (platform-specific)
     if [ -n "$TEST_SECRET_KEYS" ]; then
         for key in $TEST_SECRET_KEYS; do
-            # Use security command to delete test secrets
-            security delete-generic-password -s "$KEYCHAIN_SERVICE" -a "$key" >/dev/null 2>&1 || true
+            if [[ "$PLATFORM" == "Darwin" ]]; then
+                # macOS: Use security command to delete test secrets
+                security delete-generic-password -s "$KEYCHAIN_SERVICE" -a "$key" >/dev/null 2>&1 || true
+            elif [[ "$PLATFORM" == "Linux" ]] && command -v secret-tool >/dev/null 2>&1; then
+                # Linux: Use secret-tool to delete test secrets
+                secret-tool clear service "$KEYCHAIN_SERVICE" account "$key" >/dev/null 2>&1 || true
+            fi
         done
+    fi
+
+    # Clean up test keychain if we created one in CI (macOS)
+    if [ -n "$USING_TEST_KEYCHAIN" ] && [ -n "$TEST_KEYCHAIN" ]; then
+        # Remove from keychain search list
+        local remaining_keychains
+        remaining_keychains=$(security list-keychains -d user | grep -v "$TEST_KEYCHAIN" | sed 's/"//g')
+        # shellcheck disable=SC2086
+        security list-keychains -d user -s $remaining_keychains 2>&1 || true
+
+        # Delete the test keychain
+        security delete-keychain "$TEST_KEYCHAIN" 2>&1 || true
+    fi
+
+    # Clean up test keyring if we created one in CI (Linux)
+    if [ -n "$USING_TEST_KEYRING" ]; then
+        # Kill the gnome-keyring-daemon
+        if [ -n "${GNOME_KEYRING_PID:-}" ]; then
+            kill "$GNOME_KEYRING_PID" 2>&1 || true
+        fi
+
+        # Clean up the control directory
+        if [ -n "$GNOME_KEYRING_CONTROL" ] && [ -d "$GNOME_KEYRING_CONTROL" ]; then
+            rm -rf "$GNOME_KEYRING_CONTROL" 2>&1 || true
+        fi
     fi
 
     _common_teardown
@@ -236,7 +330,7 @@ line3"
     track_secret "EXEC_TEST"
 
     # Use it in exec
-    run "$FNOX_BIN" exec -- bash -c 'echo $EXEC_TEST'
+    run "$FNOX_BIN" exec -- bash -c "echo \$EXEC_TEST"
     assert_success
     assert_output "exec-value"
 }
@@ -331,7 +425,8 @@ EOF
     create_keychain_config "$KEYCHAIN_SERVICE"
 
     # Create a long value (4KB)
-    local long_value=$(python3 -c "print('a' * 4096)")
+    local long_value
+    long_value=$(python3 -c "print('a' * 4096)")
 
     # Set long value
     run "$FNOX_BIN" set LONG_SECRET "$long_value" --provider keychain
