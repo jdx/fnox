@@ -1,5 +1,5 @@
 use crate::commands::Cli;
-use crate::config::{Config, SecretConfig};
+use crate::config::{Config, ProviderConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
 use crate::providers::{ProviderCapability, get_provider};
 use crate::secret_resolver;
@@ -20,6 +20,8 @@ pub struct EditCommand {}
 /// Represents a secret with its metadata for tracking during editing
 #[derive(Debug, Clone)]
 struct SecretEntry {
+    /// The profile this secret belongs to ("default" for top-level secrets)
+    profile: String,
     /// The secret key (environment variable name)
     key: String,
     /// The original secret config from the config file
@@ -185,6 +187,7 @@ impl EditCommand {
             };
 
             all_secrets.push(SecretEntry {
+                profile: profile.to_string(),
                 key: key.clone(),
                 original_config: secret_config.clone(),
                 plaintext_value: None,
@@ -223,15 +226,18 @@ impl EditCommand {
         // Clone the document and replace encrypted values with plaintext
         let mut decrypted_doc = doc.clone();
 
-        // Create a map of secrets by key for quick lookup
-        let secrets_map: HashMap<_, _> = all_secrets.iter().map(|s| (s.key.clone(), s)).collect();
+        // Create a map of secrets by (profile, key) for quick lookup to avoid collisions
+        let secrets_map: HashMap<_, _> = all_secrets
+            .iter()
+            .map(|s| ((s.profile.clone(), s.key.clone()), s))
+            .collect();
 
         // Replace values in [secrets] section
         if let Some(secrets_table) = decrypted_doc
             .get_mut("secrets")
             .and_then(|item| item.as_table_mut())
         {
-            self.replace_secrets_in_table(secrets_table, &secrets_map)?;
+            self.replace_secrets_in_table(secrets_table, "default", &secrets_map)?;
         }
 
         // Replace values in [profiles.*] sections
@@ -239,13 +245,14 @@ impl EditCommand {
             .get_mut("profiles")
             .and_then(|item| item.as_table_mut())
         {
-            for (_profile_name, profile_item) in profiles_table.iter_mut() {
+            for (profile_name, profile_item) in profiles_table.iter_mut() {
+                let profile_name_str = profile_name.to_string();
                 if let Some(profile_table) = profile_item.as_table_mut()
                     && let Some(secrets_table) = profile_table
                         .get_mut("secrets")
                         .and_then(|item| item.as_table_mut())
                 {
-                    self.replace_secrets_in_table(secrets_table, &secrets_map)?;
+                    self.replace_secrets_in_table(secrets_table, &profile_name_str, &secrets_map)?;
                 }
             }
         }
@@ -275,11 +282,13 @@ impl EditCommand {
     fn replace_secrets_in_table(
         &self,
         secrets_table: &mut Table,
-        secrets_map: &HashMap<String, &SecretEntry>,
+        profile: &str,
+        secrets_map: &HashMap<(String, String), &SecretEntry>,
     ) -> Result<()> {
         for (key, value) in secrets_table.iter_mut() {
             let key_string = key.to_string();
-            if let Some(secret_entry) = secrets_map.get(&key_string) {
+            let lookup_key = (profile.to_string(), key_string);
+            if let Some(secret_entry) = secrets_map.get(&lookup_key) {
                 // Get the inline table for this secret
                 if let Some(inline_table) = value.as_inline_table_mut() {
                     // Replace the 'value' field with plaintext
@@ -305,8 +314,11 @@ impl EditCommand {
         profile: &str,
         age_key_file: Option<&Path>,
     ) -> Result<()> {
-        // Create a map of secrets by key
-        let secrets_map: HashMap<_, _> = all_secrets.iter().map(|s| (s.key.clone(), s)).collect();
+        // Create a map of secrets by (profile, key) to avoid collisions
+        let secrets_map: HashMap<_, _> = all_secrets
+            .iter()
+            .map(|s| ((s.profile.clone(), s.key.clone()), s))
+            .collect();
 
         // Process [secrets] section
         if let Some(modified_secrets) = modified_doc.get("secrets").and_then(|item| item.as_table())
@@ -318,6 +330,7 @@ impl EditCommand {
                 config,
                 original_secrets,
                 modified_secrets,
+                "default",
                 &secrets_map,
                 profile,
                 age_key_file,
@@ -334,6 +347,7 @@ impl EditCommand {
                 .and_then(|item| item.as_table_mut())
         {
             for (profile_name, modified_profile_item) in modified_profiles.iter() {
+                let profile_name_str = profile_name.to_string();
                 if let Some(modified_profile_table) = modified_profile_item.as_table()
                     && let Some(modified_secrets) = modified_profile_table
                         .get("secrets")
@@ -348,6 +362,7 @@ impl EditCommand {
                         config,
                         original_secrets,
                         modified_secrets,
+                        &profile_name_str,
                         &secrets_map,
                         profile,
                         age_key_file,
@@ -361,20 +376,23 @@ impl EditCommand {
     }
 
     /// Process changes in a specific secrets table
+    #[allow(clippy::too_many_arguments)]
     async fn process_secrets_table_changes(
         &self,
         config: &Config,
         original_secrets: &mut Table,
         modified_secrets: &Table,
-        secrets_map: &HashMap<String, &SecretEntry>,
+        secret_profile: &str,
+        secrets_map: &HashMap<(String, String), &SecretEntry>,
         profile: &str,
         age_key_file: Option<&Path>,
     ) -> Result<()> {
         for (key, modified_value) in modified_secrets.iter() {
             let key_str = key.to_string();
 
-            // Get the secret entry metadata
-            let Some(secret_entry) = secrets_map.get(&key_str) else {
+            // Get the secret entry metadata using (profile, key) composite key
+            let lookup_key = (secret_profile.to_string(), key_str.clone());
+            let Some(secret_entry) = secrets_map.get(&lookup_key) else {
                 // New secret added - not supported in edit mode
                 return Err(FnoxError::Config(format!(
                     "New secret '{}' detected. Use 'fnox set' to add new secrets.",
@@ -435,9 +453,50 @@ impl EditCommand {
                         // Encryption provider - encrypt the value
                         provider.encrypt(modified_plaintext, age_key_file).await?
                     } else if capabilities.contains(&ProviderCapability::RemoteStorage) {
-                        // Remote storage provider - would need to call set method
-                        // For now, just keep the plaintext as the "reference"
-                        modified_plaintext.to_string()
+                        // Remote storage provider - push to remote and store only the key name
+                        tracing::debug!(
+                            "Updating secret '{}' in remote provider '{}'",
+                            key_str,
+                            provider_name
+                        );
+
+                        match provider_config {
+                            ProviderConfig::AwsSecretsManager { region, prefix } => {
+                                let sm_provider =
+                                    crate::providers::aws_sm::AwsSecretsManagerProvider::new(
+                                        region.clone(),
+                                        prefix.clone(),
+                                    );
+                                let secret_name = sm_provider.get_secret_name(&key_str);
+                                sm_provider
+                                    .put_secret(&secret_name, modified_plaintext)
+                                    .await?;
+
+                                // Store just the key name (without prefix) in config
+                                key_str.clone()
+                            }
+                            ProviderConfig::Keychain { service, prefix } => {
+                                let keychain_provider =
+                                    crate::providers::keychain::KeychainProvider::new(
+                                        service.clone(),
+                                        prefix.clone(),
+                                    );
+                                keychain_provider
+                                    .put_secret(&key_str, modified_plaintext)
+                                    .await?;
+
+                                // Store just the key name (without prefix) in config
+                                key_str.clone()
+                            }
+                            _ => {
+                                // Other remote storage providers not yet implemented
+                                return Err(FnoxError::Config(format!(
+                                    "Remote storage update not yet implemented for provider '{}'. \
+                                    Please use 'fnox set' to update this secret.",
+                                    provider_name
+                                )));
+                            }
+                        }
                     } else {
                         // RemoteRead or unknown - shouldn't get here due to read-only check
                         modified_plaintext.to_string()
