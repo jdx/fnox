@@ -199,11 +199,8 @@ jobs:
     steps:
       - name: Check job results
         if: |
-          needs.ci-bats.result == 'failure' ||
-          needs.ci-other.result == 'failure' ||
-          needs.msrv.result == 'failure' ||
-          needs.ci-bats.result == 'cancelled' ||
-          needs.ci-other.result == 'cancelled' ||
-          needs.msrv.result == 'cancelled'
+          needs.ci-bats.result != 'success' ||
+          needs.ci-other.result != 'success' ||
+          needs.msrv.result != 'success'
         run: exit 1
       - run: echo "All CI jobs completed successfully"
