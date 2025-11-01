@@ -42,9 +42,9 @@ impl InfisicalProvider {
                 "INFISICAL_TOKEN not found in environment. Set INFISICAL_TOKEN or FNOX_INFISICAL_TOKEN"
             );
             return Err(FnoxError::Provider(
-                "Infisical token not found. Please set INFISICAL_TOKEN environment variable:\n  \
-                 export INFISICAL_TOKEN=$(fnox get INFISICAL_TOKEN)\n\
-                 Or set FNOX_INFISICAL_TOKEN in your configuration."
+                "Infisical token not found. Please set the INFISICAL_TOKEN or FNOX_INFISICAL_TOKEN environment variable:\n  \
+                 export INFISICAL_TOKEN=$(fnox get INFISICAL_TOKEN)\n  \
+                 # or\n  export FNOX_INFISICAL_TOKEN=your_token_here"
                     .to_string(),
             ));
         }
@@ -83,37 +83,36 @@ impl crate::providers::Provider for InfisicalProvider {
 
         // Build the infisical secrets get command
         // infisical secrets get <secret-name> [flags]
-        let mut args = vec!["secrets", "get", value, "--plain"];
-
-        // Collect additional arguments as Strings to extend their lifetime
-        let mut additional_args = Vec::new();
+        let mut args = vec![
+            "secrets".to_string(),
+            "get".to_string(),
+            value.to_string(),
+            "--plain".to_string(),
+        ];
 
         // Add project ID if specified
         if let Some(project_id) = &self.project_id {
-            additional_args.push("--projectId".to_string());
-            additional_args.push(project_id.clone());
+            args.push("--projectId".to_string());
+            args.push(project_id.clone());
         }
 
         // Add environment if specified
         if let Some(environment) = &self.environment {
-            additional_args.push("--env".to_string());
-            additional_args.push(environment.clone());
+            args.push("--env".to_string());
+            args.push(environment.clone());
         }
 
         // Add path if specified
         if let Some(path) = &self.path {
-            additional_args.push("--path".to_string());
-            additional_args.push(path.clone());
+            args.push("--path".to_string());
+            args.push(path.clone());
         }
 
-        // Convert additional_args to &str references
-        for arg in &additional_args {
-            args.push(arg.as_str());
-        }
+        let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
 
-        tracing::debug!("Reading Infisical secret '{}' with args: {:?}", value, args);
+        tracing::debug!("Reading Infisical secret '{}' with args: {:?}", value, args_ref);
 
-        self.execute_infisical_command(&args)
+        self.execute_infisical_command(&args_ref)
     }
 
     async fn test_connection(&self) -> Result<()> {
