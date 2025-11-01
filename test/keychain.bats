@@ -77,13 +77,16 @@ setup_linux_keychain() {
         fi
 
         # Start a test gnome-keyring daemon
-        export GNOME_KEYRING_CONTROL="$BATS_TEST_TMPDIR/keyring-$$"
-        mkdir -p "$GNOME_KEYRING_CONTROL"
-
-        # Start the daemon with an unlocked keyring
-        # Note: --control-dir is not a valid option; the daemon uses the GNOME_KEYRING_CONTROL env var
-        eval "$(gnome-keyring-daemon --start --components=secrets)"
+        # Don't set GNOME_KEYRING_CONTROL beforehand - let the daemon create its own control directory
+        # The daemon will output shell commands that set the correct environment variables
+        eval "$(gnome-keyring-daemon --start --components=secrets 2>&1)"
         export USING_TEST_KEYRING=1
+
+        # Verify the daemon started and set the control path
+        if [ -z "${GNOME_KEYRING_CONTROL:-}" ]; then
+            echo "# Error: gnome-keyring-daemon did not set GNOME_KEYRING_CONTROL" >&3
+            return 1
+        fi
 
         # Give it a moment to start
         sleep 1
