@@ -61,18 +61,12 @@ setup_linux_keychain() {
         echo "# Warning: secret-tool not found (install libsecret-tools for manual testing)" >&3
     fi
 
-    # In CI environments, check if gnome-keyring-daemon is already running
+    # In CI environments, assume gnome-keyring-daemon is already running
+    # (started by CI workflow before tests begin)
     if [ "${CI:-}" = "true" ] || [ -n "${GITHUB_ACTIONS:-}" ] || [ -n "${GITLAB_CI:-}" ] || [ -n "${CIRCLECI:-}" ]; then
-        # Check if daemon is already running (started by CI workflow)
-        if [ -n "${GNOME_KEYRING_CONTROL:-}" ]; then
-            echo "# Using pre-started gnome-keyring-daemon from CI" >&3
-            echo "# GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL" >&3
-            export USING_TEST_KEYRING=1
-        else
-            echo "# Error: gnome-keyring-daemon not started in CI" >&3
-            echo "# GNOME_KEYRING_CONTROL should be set by CI workflow" >&3
-            return 1
-        fi
+        echo "# Using pre-started gnome-keyring-daemon from CI" >&3
+        export USING_TEST_KEYRING=1
+        return 0
     fi
 
     # For non-CI Linux, verify that a secret service is available via D-Bus

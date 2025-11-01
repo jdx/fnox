@@ -71,28 +71,10 @@ jobs:
         run: |
           # Install gnome-keyring for keychain tests
           sudo apt-get update
-          sudo apt-get install -y gnome-keyring libsecret-tools dbus-x11
-          # Start D-Bus session for gnome-keyring
-          eval "$(dbus-launch --sh-syntax)"
-          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
-          echo "DBUS_SESSION_BUS_PID=$DBUS_SESSION_BUS_PID" >> "$GITHUB_ENV"
-          echo "Started D-Bus session: $DBUS_SESSION_BUS_ADDRESS"
-          # Start and unlock gnome-keyring-daemon (simpler approach)
-          gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'test'
-          # The daemon sets SSH_AUTH_SOCK but we need to find GNOME_KEYRING_CONTROL
-          # It creates the control socket in XDG_RUNTIME_DIR/keyring or $HOME/.cache/keyring
-          if [ -n "$XDG_RUNTIME_DIR" ] && [ -d "$XDG_RUNTIME_DIR/keyring" ]; then
-            export GNOME_KEYRING_CONTROL="$XDG_RUNTIME_DIR/keyring"
-          elif [ -d "$HOME/.cache/keyring" ]; then
-            export GNOME_KEYRING_CONTROL="$HOME/.cache/keyring"
-          elif [ -d "$HOME/.local/share/keyring" ]; then
-            export GNOME_KEYRING_CONTROL="$HOME/.local/share/keyring"
-          else
-            echo "ERROR: Could not find gnome-keyring control directory"
-            exit 1
-          fi
-          echo "GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL" >> "$GITHUB_ENV"
-          echo "Started gnome-keyring-daemon: GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL"
+          sudo apt-get install -y gnome-keyring libsecret-tools
+          # Start gnome-keyring daemon for keychain tests
+          # The daemon will automatically set up D-Bus and create control sockets
+          gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'foobar'
           # Start Vaultwarden
           docker run -d --name vaultwarden \
             -p 8080:80 \
