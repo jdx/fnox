@@ -181,9 +181,10 @@ EOF
     run "$FNOX_BIN" set GCP_KMS_UNIQUE_2 "same-value" --provider gcp_kms
     assert_success
 
-    # Get the encrypted values from config
-    cipher1=$(grep -A2 "\[secrets.GCP_KMS_UNIQUE_1\]" "${FNOX_CONFIG_FILE}" | grep "^value =" | cut -d'"' -f2)
-    cipher2=$(grep -A2 "\[secrets.GCP_KMS_UNIQUE_2\]" "${FNOX_CONFIG_FILE}" | grep "^value =" | cut -d'"' -f2)
+    # Get the encrypted values from config (inline table format)
+    # Secrets are now stored as: GCP_KMS_UNIQUE_1 = { provider = "gcp_kms", value = "..." }
+    cipher1=$(grep "^GCP_KMS_UNIQUE_1\s*=" "${FNOX_CONFIG_FILE}" | sed 's/.*value = "\([^"]*\)".*/\1/')
+    cipher2=$(grep "^GCP_KMS_UNIQUE_2\s*=" "${FNOX_CONFIG_FILE}" | sed 's/.*value = "\([^"]*\)".*/\1/')
 
     # Verify ciphertexts were extracted
     [ -n "$cipher1" ]

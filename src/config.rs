@@ -317,6 +317,7 @@ impl Config {
 
     /// Save configuration to a file
     /// Uses toml_edit to preserve insertion order from IndexMap
+    /// and format secrets as inline tables
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         // Clone and clean up empty profiles before saving
         let mut clean_config = self.clone();
@@ -324,9 +325,79 @@ impl Config {
             .profiles
             .retain(|_, profile| !profile.is_empty());
 
-        let content = toml_edit::ser::to_string_pretty(&clean_config)?;
-        fs::write(path.as_ref(), content)
+        // First serialize with to_string_pretty to get proper structure
+        let pretty_string = toml_edit::ser::to_string_pretty(&clean_config)?;
+
+        // Parse it back as a document so we can modify it
+        let mut doc = pretty_string
+            .parse::<toml_edit::DocumentMut>()
+            .map_err(|e| FnoxError::Config(format!("Failed to parse TOML: {}", e)))?;
+
+        // Convert secrets to inline tables
+        Self::convert_secrets_to_inline(&mut doc)?;
+
+        fs::write(path.as_ref(), doc.to_string())
             .map_err(|e| FnoxError::Config(format!("Failed to write config file: {}", e)))?;
+        Ok(())
+    }
+
+    /// Convert all tables in [secrets] and [profiles.*.secrets] to inline tables
+    fn convert_secrets_to_inline(doc: &mut toml_edit::DocumentMut) -> Result<()> {
+        use toml_edit::{InlineTable, Item};
+
+        // Convert top-level [secrets]
+        if let Some(secrets_item) = doc.get_mut("secrets")
+            && let Some(secrets_table) = secrets_item.as_table_mut()
+        {
+            let keys: Vec<String> = secrets_table.iter().map(|(k, _)| k.to_string()).collect();
+            for key in keys {
+                if let Some(item) = secrets_table.get_mut(&key)
+                    && let Some(table) = item.as_table()
+                {
+                    let mut inline = InlineTable::new();
+                    for (k, v) in table.iter() {
+                        if let Some(value) = v.as_value() {
+                            inline.insert(k, value.clone());
+                        }
+                    }
+                    inline.fmt();
+                    *item = Item::Value(toml_edit::Value::InlineTable(inline));
+                }
+            }
+        }
+
+        // Convert [profiles.*.secrets]
+        if let Some(profiles_item) = doc.get_mut("profiles")
+            && let Some(profiles_table) = profiles_item.as_table_mut()
+        {
+            let profile_names: Vec<String> =
+                profiles_table.iter().map(|(k, _)| k.to_string()).collect();
+            for profile_name in profile_names {
+                if let Some(profile_item) = profiles_table.get_mut(&profile_name)
+                    && let Some(profile_table) = profile_item.as_table_mut()
+                    && let Some(secrets_item) = profile_table.get_mut("secrets")
+                    && let Some(secrets_table) = secrets_item.as_table_mut()
+                {
+                    let keys: Vec<String> =
+                        secrets_table.iter().map(|(k, _)| k.to_string()).collect();
+                    for key in keys {
+                        if let Some(item) = secrets_table.get_mut(&key)
+                            && let Some(table) = item.as_table()
+                        {
+                            let mut inline = InlineTable::new();
+                            for (k, v) in table.iter() {
+                                if let Some(value) = v.as_value() {
+                                    inline.insert(k, value.clone());
+                                }
+                            }
+                            inline.fmt();
+                            *item = Item::Value(toml_edit::Value::InlineTable(inline));
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 
