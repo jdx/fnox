@@ -387,8 +387,6 @@ EOF
 }
 
 @test "fnox check detects missing keychain secrets" {
-    skip "BUG: fnox check should verify secrets exist in providers, not just config format"
-
     create_keychain_config "$KEYCHAIN_SERVICE"
 
     # Add reference without actually storing in keychain
