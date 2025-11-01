@@ -76,14 +76,33 @@ setup_linux_keychain() {
             export DBUS_SESSION_BUS_ADDRESS
         fi
 
-        # Don't pre-set GNOME_KEYRING_CONTROL - let the daemon create its own directory
+        # Set up XDG_RUNTIME_DIR if not set - gnome-keyring-daemon needs this
+        if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
+            export XDG_RUNTIME_DIR="$BATS_TEST_TMPDIR/runtime"
+            mkdir -p "$XDG_RUNTIME_DIR"
+            chmod 700 "$XDG_RUNTIME_DIR"
+        fi
+
         # Start gnome-keyring-daemon - it outputs shell commands to set environment variables
-        eval "$(gnome-keyring-daemon --start --components=secrets)"
+        local daemon_output
+        daemon_output=$(gnome-keyring-daemon --start --components=secrets 2>/dev/null)
+
+        # Check if we got any output
+        if [ -z "$daemon_output" ]; then
+            echo "# Error: gnome-keyring-daemon produced no output" >&3
+            echo "# XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >&3
+            echo "# DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >&3
+            return 1
+        fi
+
+        # Eval the output to set environment variables
+        eval "$daemon_output"
         export USING_TEST_KEYRING=1
 
         # Verify the daemon started and set the control path
         if [ -z "${GNOME_KEYRING_CONTROL:-}" ]; then
             echo "# Error: gnome-keyring-daemon did not set GNOME_KEYRING_CONTROL" >&3
+            echo "# Daemon output: $daemon_output" >&3
             return 1
         fi
 
