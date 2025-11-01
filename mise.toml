@@ -28,7 +28,6 @@ run = "cargo test"
 
 [tasks."test:bats"]
 description = "Run bats tests only"
-depends = ["build"]
 run = '''
 if [ -n "$TRANCHE" ] && [ -n "$TRANCHE_COUNT" ]; then
   tests=$(ls -1 test/*.bats | sort | awk -v t=$TRANCHE -v n=$TRANCHE_COUNT 'NR % n == t')
@@ -40,7 +39,6 @@ fi
 
 [tasks."test:bats:fork"]
 description = "Run bats tests simulating forked PR (no age key access)"
-depends = ["build"]
 env = { FNOX_AGE_KEY = "/tmp/nonexistent-age-key.txt" }
 run = "fnox exec -- bats --jobs 16 {{arg(name='test', var=true, default='test')}}"
 
