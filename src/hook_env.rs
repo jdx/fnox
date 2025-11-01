@@ -1,4 +1,5 @@
 use anyhow::Result;
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -6,17 +7,29 @@ use std::sync::LazyLock;
 use std::time::SystemTime;
 
 /// Session state that persists between hook-env invocations
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct HookEnvSession {
     /// Current working directory when session was created
+    #[serde(default)]
     pub dir: Option<PathBuf>,
     /// Path to fnox.toml file that was loaded (if any)
+    #[serde(default)]
     pub config_path: Option<PathBuf>,
     /// Last modification time of fnox.toml (milliseconds since epoch)
+    #[serde(default)]
     pub config_mtime: Option<u128>,
-    /// Secrets that were loaded
-    pub loaded_secrets: HashMap<String, String>,
+    /// BLAKE3 hashes of secret values (for change detection)
+    /// Keys of this map are the secret names (used for deactivation)
+    /// Hashed with the session's hash_key to prevent offline dictionary attacks
+    /// Uses IndexMap to preserve insertion order
+    #[serde(default)]
+    pub secret_hashes: IndexMap<String, String>,
+    /// Random key used for BLAKE3 keyed hashing (unique per session)
+    /// This prevents correlation of hashes across different sessions
+    #[serde(default)]
+    pub hash_key: [u8; 32],
     /// Hash of FNOX_* environment variables for change detection
+    #[serde(default)]
     pub env_var_hash: String,
     /// Hash of all config files in the hierarchy for change detection
     #[serde(default)]
@@ -60,11 +73,34 @@ impl HookEnvSession {
             String::new()
         };
 
+        // Generate a random key for this session's hashes
+        use blake3::Hasher;
+        let hash_key = *Hasher::new()
+            .update(b"fnox-session-")
+            .update(
+                &std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos()
+                    .to_le_bytes(),
+            )
+            .update(&std::process::id().to_le_bytes())
+            .finalize()
+            .as_bytes();
+
+        // Compute hashes (not storing plaintext values)
+        // Use IndexMap to preserve insertion order
+        let secret_hashes: IndexMap<String, String> = loaded_secrets
+            .iter()
+            .map(|(k, v)| (k.clone(), hash_secret_with_key(&hash_key, k, v)))
+            .collect();
+
         Ok(Self {
             dir,
             config_path,
             config_mtime,
-            loaded_secrets,
+            secret_hashes,
+            hash_key,
             env_var_hash,
             config_files_hash,
         })
@@ -85,6 +121,22 @@ fn decode_session(encoded: &str) -> Result<HookEnvSession> {
         .map_err(|e| anyhow::anyhow!("failed to decompress session: {:?}", e))?;
     let session = rmp_serde::from_slice(&bytes)?;
     Ok(session)
+}
+
+/// Compute a BLAKE3 keyed hash of a secret value using a session-specific key
+/// We use the secret key name as part of the hash to ensure different secrets
+/// with the same value have different hashes (domain separation)
+fn hash_secret_with_key(hash_key: &[u8; 32], key: &str, value: &str) -> String {
+    let mut hasher = blake3::Hasher::new_keyed(hash_key);
+    hasher.update(key.as_bytes());
+    hasher.update(b"\x00"); // separator
+    hasher.update(value.as_bytes());
+    hasher.finalize().to_hex().to_string()
+}
+
+/// Public API for computing hashes with a given session's key
+pub fn hash_secret_value_with_session(session: &HookEnvSession, key: &str, value: &str) -> String {
+    hash_secret_with_key(&session.hash_key, key, value)
 }
 
 /// Check if we should exit early (optimization)

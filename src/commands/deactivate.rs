@@ -48,7 +48,7 @@ fn clear_old_env(shell: &dyn shell::Shell) -> String {
 
     // Unset all loaded secrets from the previous session
     let mut output = String::new();
-    for key in prev_session.loaded_secrets.keys() {
+    for key in prev_session.secret_hashes.keys() {
         output.push_str(&shell.unset_env(key));
     }
 

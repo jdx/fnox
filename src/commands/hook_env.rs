@@ -94,9 +94,8 @@ impl HookEnvCommand {
             HashMap::new()
         };
 
-        // Calculate changes from previous session
-        let old_secrets = PREV_SESSION.loaded_secrets.clone();
-        let (added, removed) = calculate_changes(&old_secrets, &loaded_secrets);
+        // Calculate changes from previous session using hashes
+        let (added, removed) = calculate_changes(&PREV_SESSION.secret_hashes, &loaded_secrets);
 
         // Display summary of changes if enabled
         if output_mode.should_show_summary() && (!added.is_empty() || !removed.is_empty()) {
@@ -127,30 +126,34 @@ impl HookEnvCommand {
     }
 }
 
-/// Calculate which secrets were added/changed or removed
+/// Calculate which secrets were added/changed or removed by comparing hashes
 fn calculate_changes(
-    old: &HashMap<String, String>,
-    new: &HashMap<String, String>,
+    old_hashes: &indexmap::IndexMap<String, String>,
+    new_secrets: &HashMap<String, String>,
 ) -> (Vec<(String, String)>, Vec<String>) {
+    use crate::hook_env::{PREV_SESSION, hash_secret_value_with_session};
+
     let mut added = Vec::new();
     let mut removed = Vec::new();
 
-    // Find additions and changes
-    for (key, new_value) in new {
-        match old.get(key) {
-            Some(old_value) if old_value == new_value => {
-                // No change, skip
+    // Find additions and changes by comparing hashes
+    for (key, new_value) in new_secrets {
+        // Use the previous session's hash_key for comparison
+        let new_hash = hash_secret_value_with_session(&PREV_SESSION, key, new_value);
+        match old_hashes.get(key) {
+            Some(old_hash) if old_hash == &new_hash => {
+                // Hash matches, no change
             }
             _ => {
-                // New or changed value
+                // New or changed value (hash differs or key is new)
                 added.push((key.clone(), new_value.clone()));
             }
         }
     }
 
-    // Find removals
-    for key in old.keys() {
-        if !new.contains_key(key) {
+    // Find removals - keys that were in old session but not in new
+    for key in old_hashes.keys() {
+        if !new_secrets.contains_key(key) {
             removed.push(key.clone());
         }
     }
