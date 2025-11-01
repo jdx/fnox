@@ -1,6 +1,7 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
+use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 use std::sync::{LazyLock, Mutex};
@@ -206,6 +207,107 @@ impl crate::providers::Provider for InfisicalProvider {
         );
 
         self.execute_infisical_command(&args)
+    }
+
+    async fn get_secrets_batch(
+        &self,
+        secrets: &[(String, String)],
+        _key_file: Option<&Path>,
+    ) -> HashMap<String, Result<String>> {
+        // If empty or single secret, fall back to individual get
+        if secrets.is_empty() {
+            return HashMap::new();
+        }
+        if secrets.len() == 1 {
+            let (key, value) = &secrets[0];
+            let result = self.get_secret(value, _key_file).await;
+            let mut map = HashMap::new();
+            map.insert(key.clone(), result);
+            return map;
+        }
+
+        tracing::debug!("Batch fetching {} secrets from Infisical", secrets.len());
+
+        // Build command with all secret names
+        let mut args = vec!["secrets", "get"];
+        let secret_names: Vec<&str> = secrets.iter().map(|(_, v)| v.as_str()).collect();
+        args.extend(&secret_names);
+        args.push("--output");
+        args.push("json");
+
+        // Add project ID if specified
+        let project_arg;
+        if let Some(ref project_id) = self.project_id {
+            project_arg = format!("--projectId={}", project_id);
+            args.push(&project_arg);
+        }
+
+        // Add environment if specified
+        let env_arg;
+        if let Some(ref environment) = self.environment {
+            env_arg = format!("--env={}", environment);
+            args.push(&env_arg);
+        }
+
+        // Add path if specified
+        let path_arg;
+        if let Some(ref path) = self.path {
+            path_arg = format!("--path={}", path);
+            args.push(&path_arg);
+        }
+
+        // Execute command
+        match self.execute_infisical_command(&args) {
+            Ok(json_output) => {
+                // Parse JSON response
+                match serde_json::from_str::<Vec<serde_json::Value>>(&json_output) {
+                    Ok(json_array) => {
+                        // Build a map of secret_name -> secret_value from JSON
+                        let mut value_map: HashMap<String, String> = HashMap::new();
+                        for item in json_array {
+                            if let (Some(name), Some(value)) = (
+                                item.get("secretKey").and_then(|v| v.as_str()),
+                                item.get("secretValue").and_then(|v| v.as_str()),
+                            ) {
+                                value_map.insert(name.to_string(), value.to_string());
+                            }
+                        }
+
+                        // Map results back to original keys
+                        secrets
+                            .iter()
+                            .map(|(key, secret_name)| {
+                                let result = value_map.get(secret_name).cloned().ok_or_else(|| {
+                                    FnoxError::Provider(format!(
+                                        "Secret '{}' not found in batch response",
+                                        secret_name
+                                    ))
+                                });
+                                (key.clone(), result)
+                            })
+                            .collect()
+                    }
+                    Err(e) => {
+                        // JSON parse error - return same error for all secrets
+                        let error_msg = format!("Failed to parse Infisical batch response: {}", e);
+                        secrets
+                            .iter()
+                            .map(|(key, _)| {
+                                (key.clone(), Err(FnoxError::Provider(error_msg.clone())))
+                            })
+                            .collect()
+                    }
+                }
+            }
+            Err(e) => {
+                // CLI error - return same error message for all secrets
+                let error_msg = e.to_string();
+                secrets
+                    .iter()
+                    .map(|(key, _)| (key.clone(), Err(FnoxError::Provider(error_msg.clone()))))
+                    .collect()
+            }
+        }
     }
 
     async fn test_connection(&self) -> Result<()> {
