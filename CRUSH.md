@@ -113,6 +113,53 @@ mise run test:bats -- test/bitwarden.bats
 - On macOS runners: Tests skip (Docker services not available)
 - Tests skip gracefully when BW_SESSION is not available (similar to 1Password tests)
 
+### Running Infisical Tests
+
+The Infisical integration tests require an Infisical account and service token:
+
+```bash
+# 1. Install Infisical CLI
+brew install infisical/get-cli/infisical
+
+# 2. Get a service token from Infisical
+#    - Go to your Infisical project settings
+#    - Navigate to "Service Tokens"
+#    - Create a new token with read/write permissions for dev environment
+#    - Copy the token (st.xxx.yyy.zzz format)
+
+# 3. Export the token
+export INFISICAL_TOKEN="st.xxx.yyy.zzz"
+
+# 4. Optionally store it encrypted for reuse
+fnox set INFISICAL_TOKEN "st.xxx.yyy.zzz" --provider age
+
+# 5. Run the Infisical tests
+mise run test:bats -- test/infisical.bats
+```
+
+**Note**:
+
+- Tests will automatically skip if `INFISICAL_TOKEN` is not available
+- The `list` test runs without authentication
+- Tests create and delete temporary secrets in your Infisical project
+- Secret names are prefixed with `FNOX_TEST_` and include timestamps for uniqueness
+
+**CI Behavior**:
+
+- GitHub Actions uses self-hosted Infisical (similar to Vaultwarden for Bitwarden):
+  - On Ubuntu runners:
+    1. Docker Compose starts Infisical with PostgreSQL and Redis
+    2. Setup script (`test/setup-infisical-ci.sh`) creates test account and project
+    3. Service token is automatically generated and exported
+    4. Tests run against local Infisical instance (no external dependencies)
+  - On macOS runners: Tests skip (Docker Compose services not available)
+- Self-hosted setup ensures:
+  - No external Infisical account needed for CI
+  - Tests are isolated and reproducible
+  - Faster test execution (local instance)
+  - No risk of API rate limits or token exposure
+- Tests clean up created secrets, but orphaned secrets may remain if tests fail
+
 ## Code Style Guidelines
 
 ### Imports & Dependencies
@@ -558,3 +605,68 @@ fnox exec -- ./my-app
 - Connection testing via keychain read/write/delete test
 - May require GUI/interactive session on some platforms
 - Tests automatically skip in CI/headless environments where keychain isn't accessible
+
+### Infisical Provider
+
+The Infisical provider integrates with Infisical using the official Rust SDK to retrieve secrets from Infisical projects and environments.
+
+**Configuration:**
+
+```toml
+[providers]
+infisical = { type = "infisical", project_id = "your-project-id", environment = "dev", path = "/" }  # project_id required, environment defaults to "dev", path defaults to "/"
+
+[secrets]
+# Retrieves secret from Infisical
+MY_SECRET = { provider = "infisical", value = "SECRET_NAME" }
+```
+
+**Requirements:**
+
+- Machine identity with Universal Auth configured in Infisical
+- Client ID set in environment: `export INFISICAL_CLIENT_ID="your-client-id"`
+- Client secret set in environment: `export INFISICAL_CLIENT_SECRET="your-client-secret"`
+- Or store credentials encrypted in fnox config using age provider
+- Project ID must be configured in the provider
+
+**Creating Universal Auth Credentials:**
+
+1. In Infisical, go to Project Settings → Machine Identities
+2. Create a new Machine Identity
+3. Attach "Universal Auth" authentication method
+4. Note the Client ID and create a Client Secret
+5. Add the identity to your project with appropriate permissions
+
+**Reference Format:**
+
+- `SECRET_NAME` - Gets the secret with this name from the configured project/environment/path
+
+**Usage:**
+
+```bash
+# Export the credentials first
+export INFISICAL_CLIENT_ID=$(fnox get INFISICAL_CLIENT_ID)
+export INFISICAL_CLIENT_SECRET=$(fnox get INFISICAL_CLIENT_SECRET)
+
+# Then retrieve secrets
+fnox get MY_SECRET
+
+# Use in shell commands
+fnox exec -- ./my-app
+```
+
+**How it works:**
+
+1. **Storage**: Secrets are stored remotely in Infisical
+2. **Config**: fnox.toml only contains the secret name/reference (not the actual value)
+3. **Authentication**: Uses Universal Auth (Client ID + Client Secret) to authenticate
+4. **Retrieval**: When you run `fnox get`, the SDK authenticates and fetches the current value
+5. **Scoping**: Project ID (required), environment, and path can be configured in the provider to scope secret lookups
+
+**Implementation Notes:**
+
+- Uses official Infisical Rust SDK (v0.0.3)
+- Supports project-level, environment-level, and path-level scoping
+- Credentials can be stored encrypted with age provider for bootstrapping
+- Connection testing via SDK authentication
+- For self-hosted Infisical instances, set `INFISICAL_API_URL` environment variable

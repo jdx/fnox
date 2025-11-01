@@ -73,6 +73,11 @@ impl AddCommand {
             ProviderType::Age => crate::config::ProviderConfig::AgeEncryption {
                 recipients: vec!["age1...".to_string()],
             },
+            ProviderType::Infisical => crate::config::ProviderConfig::Infisical {
+                project_id: Some("your-project-id".to_string()),
+                environment: Some("dev".to_string()),
+                path: Some("/".to_string()),
+            },
         };
 
         config

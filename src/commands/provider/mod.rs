@@ -22,15 +22,12 @@ pub enum ProviderType {
     #[value(name = "1password")]
     #[strum(serialize = "1password")]
     OnePassword,
+    /// Age encryption
+    #[value(name = "age")]
+    Age,
     /// AWS Secrets Manager
     #[value(name = "aws")]
     Aws,
-    /// HashiCorp Vault
-    #[value(name = "vault")]
-    Vault,
-    /// Google Cloud Secret Manager
-    #[value(name = "gcp")]
-    Gcp,
     /// AWS KMS
     #[value(name = "aws-kms")]
     #[strum(serialize = "aws-kms")]
@@ -43,13 +40,19 @@ pub enum ProviderType {
     #[value(name = "azure-sm")]
     #[strum(serialize = "azure-sm")]
     AzureSecretsManager,
+    /// Google Cloud Secret Manager
+    #[value(name = "gcp")]
+    Gcp,
     /// Google Cloud KMS
     #[value(name = "gcp-kms")]
     #[strum(serialize = "gcp-kms")]
     GcpKms,
-    /// Age encryption
-    #[value(name = "age")]
-    Age,
+    /// Infisical
+    #[value(name = "infisical")]
+    Infisical,
+    /// HashiCorp Vault
+    #[value(name = "vault")]
+    Vault,
 }
 
 #[derive(Debug, Args)]

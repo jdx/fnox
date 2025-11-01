@@ -26,14 +26,15 @@ Store secrets remotely in cloud providers. Your `fnox.toml` contains only refere
 | [GCP Secret Manager](/providers/gcp-sm)        | Google Cloud secrets     | Production GCP workloads       |
 | [HashiCorp Vault](/providers/vault)            | Self-hosted or HCP Vault | Multi-cloud, advanced features |
 
-### 🔑 Password Managers
+### 🔑 Password Managers & Secret Services
 
-Integrate with password managers you already use.
+Integrate with password managers and secret services you already use.
 
-| Provider                          | Description               | Best For                             |
-| --------------------------------- | ------------------------- | ------------------------------------ |
-| [1Password](/providers/1password) | 1Password CLI integration | Teams already using 1Password        |
-| [Bitwarden](/providers/bitwarden) | Bitwarden/Vaultwarden     | Open source preference, self-hosting |
+| Provider                          | Description               | Best For                              |
+| --------------------------------- | ------------------------- | ------------------------------------- |
+| [1Password](/providers/1password) | 1Password CLI integration | Teams already using 1Password         |
+| [Bitwarden](/providers/bitwarden) | Bitwarden/Vaultwarden     | Open source preference, self-hosting  |
+| [Infisical](/providers/infisical) | Infisical secrets         | Modern secret management, open source |
 
 ### 💻 Local Storage
 

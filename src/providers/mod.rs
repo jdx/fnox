@@ -13,6 +13,7 @@ pub mod azure_sm;
 pub mod bitwarden;
 pub mod gcp_kms;
 pub mod gcp_sm;
+pub mod infisical;
 pub mod keychain;
 pub mod onepassword;
 pub mod plain;
@@ -41,14 +42,12 @@ pub enum ProviderConfig {
         #[serde(skip_serializing_if = "Option::is_none")]
         account: Option<String>,
     },
-    #[serde(rename = "bitwarden")]
-    #[strum(serialize = "bitwarden")]
-    Bitwarden {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        collection: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        organization_id: Option<String>,
-    },
+    #[serde(rename = "age")]
+    #[strum(serialize = "age")]
+    AgeEncryption { recipients: Vec<String> },
+    #[serde(rename = "aws-kms")]
+    #[strum(serialize = "aws-kms")]
+    AwsKms { key_id: String, region: String },
     #[serde(rename = "aws-sm")]
     #[strum(serialize = "aws-sm")]
     AwsSecretsManager {
@@ -56,28 +55,6 @@ pub enum ProviderConfig {
         #[serde(skip_serializing_if = "Option::is_none")]
         prefix: Option<String>,
     },
-    #[serde(rename = "vault")]
-    #[strum(serialize = "vault")]
-    HashiCorpVault {
-        address: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        path: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        token: Option<String>,
-    },
-    #[serde(rename = "gcp-sm")]
-    #[strum(serialize = "gcp-sm")]
-    GoogleSecretManager {
-        project: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        prefix: Option<String>,
-    },
-    #[serde(rename = "age")]
-    #[strum(serialize = "age")]
-    AgeEncryption { recipients: Vec<String> },
-    #[serde(rename = "aws-kms")]
-    #[strum(serialize = "aws-kms")]
-    AwsKms { key_id: String, region: String },
     #[serde(rename = "azure-kms")]
     #[strum(serialize = "azure-kms")]
     AzureKms { vault_url: String, key_name: String },
@@ -88,6 +65,14 @@ pub enum ProviderConfig {
         #[serde(skip_serializing_if = "Option::is_none")]
         prefix: Option<String>,
     },
+    #[serde(rename = "bitwarden")]
+    #[strum(serialize = "bitwarden")]
+    Bitwarden {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        collection: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        organization_id: Option<String>,
+    },
     #[serde(rename = "gcp-kms")]
     #[strum(serialize = "gcp-kms")]
     GcpKms {
@@ -95,6 +80,23 @@ pub enum ProviderConfig {
         location: String,
         keyring: String,
         key: String,
+    },
+    #[serde(rename = "gcp-sm")]
+    #[strum(serialize = "gcp-sm")]
+    GoogleSecretManager {
+        project: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        prefix: Option<String>,
+    },
+    #[serde(rename = "infisical")]
+    #[strum(serialize = "infisical")]
+    Infisical {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        project_id: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        environment: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        path: Option<String>,
     },
     #[serde(rename = "keychain")]
     #[strum(serialize = "keychain")]
@@ -106,6 +108,15 @@ pub enum ProviderConfig {
     #[serde(rename = "plain")]
     #[strum(serialize = "plain")]
     Plain,
+    #[serde(rename = "vault")]
+    #[strum(serialize = "vault")]
+    HashiCorpVault {
+        address: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        path: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        token: Option<String>,
+    },
 }
 
 #[async_trait]
@@ -181,28 +192,6 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
         ProviderConfig::OnePassword { vault, account } => Ok(Box::new(
             onepassword::OnePasswordProvider::new(vault.clone(), account.clone()),
         )),
-        ProviderConfig::Bitwarden {
-            collection,
-            organization_id,
-        } => Ok(Box::new(bitwarden::BitwardenProvider::new(
-            collection.clone(),
-            organization_id.clone(),
-        ))),
-        ProviderConfig::AwsSecretsManager { region, prefix } => Ok(Box::new(
-            aws_sm::AwsSecretsManagerProvider::new(region.clone(), prefix.clone()),
-        )),
-        ProviderConfig::HashiCorpVault {
-            address,
-            path,
-            token,
-        } => Ok(Box::new(vault::HashiCorpVaultProvider::new(
-            address.clone(),
-            path.clone(),
-            token.clone(),
-        ))),
-        ProviderConfig::GoogleSecretManager { project, prefix } => Ok(Box::new(
-            gcp_sm::GoogleSecretManagerProvider::new(project.clone(), prefix.clone()),
-        )),
         ProviderConfig::AgeEncryption { recipients } => Ok(Box::new(
             age::AgeEncryptionProvider::new(recipients.clone()),
         )),
@@ -210,6 +199,9 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
             key_id.clone(),
             region.clone(),
         ))),
+        ProviderConfig::AwsSecretsManager { region, prefix } => Ok(Box::new(
+            aws_sm::AwsSecretsManagerProvider::new(region.clone(), prefix.clone()),
+        )),
         ProviderConfig::AzureKms {
             vault_url,
             key_name,
@@ -220,6 +212,13 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
         ProviderConfig::AzureSecretsManager { vault_url, prefix } => Ok(Box::new(
             azure_sm::AzureSecretsManagerProvider::new(vault_url.clone(), prefix.clone()),
         )),
+        ProviderConfig::Bitwarden {
+            collection,
+            organization_id,
+        } => Ok(Box::new(bitwarden::BitwardenProvider::new(
+            collection.clone(),
+            organization_id.clone(),
+        ))),
         ProviderConfig::GcpKms {
             project,
             location,
@@ -231,9 +230,30 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
             keyring.clone(),
             key.clone(),
         ))),
+        ProviderConfig::GoogleSecretManager { project, prefix } => Ok(Box::new(
+            gcp_sm::GoogleSecretManagerProvider::new(project.clone(), prefix.clone()),
+        )),
+        ProviderConfig::Infisical {
+            project_id,
+            environment,
+            path,
+        } => Ok(Box::new(infisical::InfisicalProvider::new(
+            project_id.clone(),
+            environment.clone(),
+            path.clone(),
+        ))),
         ProviderConfig::Keychain { service, prefix } => Ok(Box::new(
             keychain::KeychainProvider::new(service.clone(), prefix.clone()),
         )),
         ProviderConfig::Plain => Ok(Box::new(plain::PlainProvider::new())),
+        ProviderConfig::HashiCorpVault {
+            address,
+            path,
+            token,
+        } => Ok(Box::new(vault::HashiCorpVaultProvider::new(
+            address.clone(),
+            path.clone(),
+            token.clone(),
+        ))),
     }
 }

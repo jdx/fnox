@@ -87,6 +87,8 @@ jobs:
             -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 \
             -e VAULT_ADDR=http://127.0.0.1:8200 \
             hashicorp/vault:latest
+          # Start Infisical (self-hosted with PostgreSQL and Redis)
+          docker compose -f test/docker-compose.infisical-ci.yml up -d
           # Wait for services to be ready
           sleep 5
           echo "VAULT_ADDR=http://localhost:8200" >> "$GITHUB_ENV"
@@ -96,13 +98,31 @@ jobs:
         run: |
           source ./test/setup-bitwarden-ci.sh
           echo "BW_SESSION=$BW_SESSION" >> "$GITHUB_ENV"
+      - name: Install Infisical CLI
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | sudo -E bash
+          sudo apt-get update && sudo apt-get install -y infisical
+      - name: Setup Infisical for tests
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          source ./test/setup-infisical-ci.sh
+          {
+            echo "INFISICAL_TOKEN=$INFISICAL_TOKEN"
+            echo "INFISICAL_CLIENT_ID=$INFISICAL_CLIENT_ID"
+            echo "INFISICAL_CLIENT_SECRET=$INFISICAL_CLIENT_SECRET"
+            echo "INFISICAL_PROJECT_ID=$INFISICAL_PROJECT_ID"
+            echo "INFISICAL_API_URL=http://localhost:8081/api"
+          } >> "$GITHUB_ENV"
       - name: Setup services (macOS)
         if: ${{ matrix.os == 'macos-latest' }}
         run: |
           # Start Vault in dev mode in background
           vault server -dev -dev-root-token-id=fnox-test-token -dev-listen-address=127.0.0.1:8200 &
-          echo "VAULT_ADDR=http://127.0.0.1:8200" >> "$GITHUB_ENV"
-          echo "VAULT_TOKEN=fnox-test-token" >> "$GITHUB_ENV"
+          {
+            echo "VAULT_ADDR=http://127.0.0.1:8200"
+            echo "VAULT_TOKEN=fnox-test-token"
+          } >> "$GITHUB_ENV"
           # Wait for Vault to be ready
           sleep 2
       - name: Run bats tests - tranche ${{ matrix.tranche }}

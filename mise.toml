@@ -16,6 +16,7 @@ actionlint = "latest"
 1password = "latest"
 bitwarden = "latest"
 vault = "latest"
+infisical = "latest"
 usage = "latest"
 
 [tasks.test]

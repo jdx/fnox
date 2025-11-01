@@ -99,7 +99,7 @@ cmd provider help="Manage providers (defaults to list)" {
         alias a set
         arg <PROVIDER> help="Provider name"
         arg <PROVIDER_TYPE> help="Provider type" {
-            choices "1password" aws vault gcp aws-kms azure-kms azure-sm gcp-kms age
+            choices "1password" age aws aws-kms azure-kms azure-sm gcp gcp-kms infisical vault
         }
     }
     cmd list help="List available providers" {
