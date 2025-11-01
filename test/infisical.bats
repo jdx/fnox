@@ -187,6 +187,15 @@ EOF
     # Locally: fails with "secret not found" if we have project access
     # Either way, it should fail appropriately
     run "$FNOX_BIN" get INVALID_SECRET
+
+    # Debug output
+    echo "=== TEST 44 DEBUG ===" >&3
+    echo "Exit status: $status" >&3
+    echo "Output: '$output'" >&3
+    echo "Config:" >&3
+    cat "${FNOX_CONFIG_FILE}" >&3
+    echo "====================" >&3
+
     assert_failure
     # Accept multiple error messages:
     # - "Secret '...' not found or inaccessible" (empty CLI response)
