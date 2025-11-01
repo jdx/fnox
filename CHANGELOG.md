@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.3.0](https://github.com/jdx/fnox/compare/v1.2.3..v1.3.0) - 2025-11-01
+
+### 🚀 Features
+
+- add support for fnox.$FNOX_PROFILE.toml config files by [@jdx](https://github.com/jdx) in [#64](https://github.com/jdx/fnox/pull/64)
+- add Infisical provider with CLI integration and self-hosted CI by [@jdx](https://github.com/jdx) in [#67](https://github.com/jdx/fnox/pull/67)
+
+### 🐛 Bug Fixes
+
+- **(tests)** skip keychain tests in CI when gnome-keyring-daemon unavailable by [@jdx](https://github.com/jdx) in [#72](https://github.com/jdx/fnox/pull/72)
+- **(tests)** let gnome-keyring-daemon create its own control directory by [@jdx](https://github.com/jdx) in [#73](https://github.com/jdx/fnox/pull/73)
+- add unique namespacing to parallel provider tests by [@jdx](https://github.com/jdx) in [#68](https://github.com/jdx/fnox/pull/68)
+
+### 🚜 Refactor
+
+- remove unused env_diff module and \_\_FNOX_DIFF by [@jdx](https://github.com/jdx) in [#70](https://github.com/jdx/fnox/pull/70)
+
+### ⚡ Performance
+
+- parallelize CI tests across GHA workers using tranches by [@jdx](https://github.com/jdx) in [#65](https://github.com/jdx/fnox/pull/65)
+
+### 🛡️ Security
+
+- **(security)** store only hashes in \_\_FNOX_SESSION instead of plaintext secrets by [@jdx](https://github.com/jdx) in [#71](https://github.com/jdx/fnox/pull/71)
+
 ## [1.2.3](https://github.com/jdx/fnox/compare/v1.2.2..v1.2.3) - 2025-11-01
 
 ### 🐛 Bug Fixes
