@@ -42,10 +42,21 @@
       },
       "check": {
         "full_cmd": ["check"],
-        "usage": "check",
+        "usage": "check [-a --all]",
         "subcommands": {},
         "args": [],
-        "flags": [],
+        "flags": [
+          {
+            "name": "all",
+            "usage": "-a --all",
+            "help": "Check all secrets including those with if_missing=warn or if_missing=ignore",
+            "help_first_line": "Check all secrets including those with if_missing=warn or if_missing=ignore",
+            "short": ["a"],
+            "long": ["all"],
+            "hide": false,
+            "global": false
+          }
+        ],
         "mounts": [],
         "hide": false,
         "help": "Check if all required secrets are defined and configured",
