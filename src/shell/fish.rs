@@ -66,7 +66,6 @@ end
         // Unset fnox-related variables (one at a time for compatibility)
         out.push_str("set -e FNOX_SHELL 2>/dev/null\n");
         out.push_str("set -e __FNOX_SESSION 2>/dev/null\n");
-        out.push_str("set -e __FNOX_DIFF 2>/dev/null\n");
 
         // Erase the fnox function last (we're currently inside it)
         out.push_str("functions -e fnox 2>/dev/null\n");

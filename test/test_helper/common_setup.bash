@@ -75,7 +75,6 @@ _common_setup() {
 
 	# Clear hook-env session state to ensure clean test environment
 	unset __FNOX_SESSION
-	unset __FNOX_DIFF
 
 	# Ensure no existing config
 	rm -f "$FNOX_CONFIG_FILE"

@@ -19,6 +19,7 @@ arc-swap = "1"
 async-trait = "0.1"
 atty = "0.2"
 base64 = "0.22"
+blake3 = "1"
 chrono = "0.4"
 ci_info = "0.14"
 clap = { version = "4", features = ["derive", "env"] }

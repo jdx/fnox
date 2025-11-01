@@ -100,7 +100,6 @@ teardown() {
 	assert_success
 	assert_output --partial 'export TEST_SECRET="test-value-123"'
 	assert_output --partial 'export __FNOX_SESSION='
-	assert_output --partial 'export __FNOX_DIFF='
 }
 
 @test "fnox hook-env loads multiple secrets" {
@@ -146,7 +145,6 @@ teardown() {
 	assert_success
 	assert_output --partial 'set -gx FISH_SECRET "fish-value"'
 	assert_output --partial 'set -gx __FNOX_SESSION'
-	assert_output --partial 'set -gx __FNOX_DIFF'
 }
 
 @test "fnox hook-env finds config in parent directory" {
