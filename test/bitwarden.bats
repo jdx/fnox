@@ -56,8 +56,8 @@ EOF
 # Helper function to create a test item in Bitwarden
 # Returns the item ID
 create_test_bw_item() {
-    local item_name="fnox-test-$(date +%s)"
-    local password="test-secret-value-$(date +%s)"
+    local item_name="fnox-test-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
+    local password="test-secret-value-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
     local username="testuser"
 
     # Create item with bw CLI

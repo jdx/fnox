@@ -85,8 +85,8 @@ EOF
 # Returns the item name on success, empty string on failure
 create_test_op_item() {
     local vault="${1:-fnox}"
-    local item_name="fnox-test-$(date +%s)"
-    local password="test-secret-value-$(date +%s)"
+    local item_name="fnox-test-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
+    local password="test-secret-value-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
 
     # Create item with op CLI and capture output
     if op item create \
@@ -138,7 +138,7 @@ EOF
     create_onepassword_config "fnox"
 
     # Create a test item with custom field
-    item_name="fnox-test-field-$(date +%s)"
+    item_name="fnox-test-field-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
     if ! op item create \
         --category=password \
         --title="$item_name" \

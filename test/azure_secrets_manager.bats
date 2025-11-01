@@ -115,7 +115,7 @@ create_test_secret() {
     create_azure_sm_config
 
     # Create a test secret
-    local timestamp="$(date +%s)"
+    local timestamp="$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
     local secret_name="fnox-test-secret-${timestamp}"
     local secret_value="my-test-secret-value"
     create_test_secret "$secret_name" "$secret_value"
@@ -138,7 +138,7 @@ EOF
     create_azure_sm_config "https://fnox-testing-kv.vault.azure.net/" "fnox-test-"
 
     # Create a test secret with full path
-    local timestamp="$(date +%s)"
+    local timestamp="$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
     local secret_name="fnox-test-prefixed-${timestamp}"
     local secret_value="value-with-prefix"
     create_test_secret "$secret_name" "$secret_value"
@@ -161,7 +161,7 @@ EOF
     create_azure_sm_config "https://fnox-testing-kv.vault.azure.net/" ""
 
     # Create a test secret without prefix
-    local timestamp="$(date +%s)"
+    local timestamp="$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
     local secret_name="fnox-full-name-${timestamp}"
     local secret_value="value-no-prefix"
     create_test_secret "$secret_name" "$secret_value"
@@ -200,7 +200,7 @@ EOF
     create_azure_sm_config
 
     # Create a JSON secret
-    local timestamp="$(date +%s)"
+    local timestamp="$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
     local secret_name="fnox-test-json-secret-${timestamp}"
     local secret_value='{"api_key":"test123","endpoint":"https://api.example.com"}'
     create_test_secret "$secret_name" "$secret_value"
@@ -222,7 +222,7 @@ EOF
     create_azure_sm_config
 
     # Create a multiline secret
-    local timestamp="$(date +%s)"
+    local timestamp="$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
     local secret_name="fnox-test-multiline-${timestamp}"
     local secret_value="line1
 line2
@@ -269,7 +269,7 @@ EOF
     create_azure_sm_config
 
     # Create a secret with special characters
-    local timestamp="$(date +%s)"
+    local timestamp="$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
     local secret_name="fnox-test-special-${timestamp}"
     local secret_value='p@ssw0rd!#$%^&*()_+-={}[]|\:";'\''<>?,./~`'
     create_test_secret "$secret_name" "$secret_value"
@@ -320,4 +320,28 @@ EOF
     assert_success
     assert_output --partial "DESCRIBED_SECRET"
     assert_output --partial "A secret with a description"
+}
+
+@test "fnox set creates secret in Azure Key Vault" {
+    create_azure_sm_config
+
+    # Create a temporary secret with unique name using fnox set
+    local timestamp="$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
+    local secret_value="my-test-secret-value-${timestamp}"
+
+    # Create secret using fnox set (should use Azure SM provider)
+    run "$FNOX_BIN" set AZURE_SM_CREATE_TEST "$secret_value" --provider azure-sm
+    assert_success
+
+    # Get secret back to verify it was created correctly
+    run "$FNOX_BIN" get AZURE_SM_CREATE_TEST
+    assert_success
+    assert_output "$secret_value"
+
+    # Cleanup - delete actual secret created by fnox set
+    # fnox set creates a secret with the provider prefix + secret key
+    az keyvault secret delete \
+        --vault-name fnox-testing-kv \
+        --name "fnox-test-AZURE_SM_CREATE_TEST" \
+        >/dev/null 2>&1 || true
 }

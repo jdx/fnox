@@ -61,8 +61,8 @@ EOF
 # Helper function to create a test secret in Vault
 # Returns the secret name
 create_test_vault_secret() {
-    local secret_name="fnox-test-$(date +%s)"
-    local secret_value="test-secret-value-$(date +%s)"
+    local secret_name="fnox-test-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
+    local secret_value="test-secret-value-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
     local username="testuser"
 
     # Create secret with vault CLI

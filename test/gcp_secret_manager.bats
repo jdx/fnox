@@ -237,3 +237,32 @@ EOF
     assert_success
     assert_output "test-secret-value-1"
 }
+
+@test "fnox set creates secret in GCP Secret Manager" {
+    create_gcp_sm_config
+
+    # Create a temporary secret with unique name using fnox set
+    local secret_name="fnox-test-create-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
+    local secret_value="my-test-secret-value-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
+
+    # Add secret to config so fnox set will use GCP SM provider
+    cat >> "${FNOX_CONFIG_FILE}" << EOF
+
+[secrets.GCP_SM_CREATE_TEST]
+provider = "gcp_sm"
+value = "$secret_name"
+EOF
+
+    # Create the secret using fnox set (should use GCP SM provider)
+    run "$FNOX_BIN" set GCP_SM_CREATE_TEST "$secret_value" --provider gcp_sm
+    assert_success
+
+    # Get the secret back to verify it was created correctly
+    run "$FNOX_BIN" get GCP_SM_CREATE_TEST
+    assert_success
+    assert_output "$secret_value"
+
+    # Cleanup - delete actual secret created by fnox set
+    # fnox set creates a secret with the provider prefix + secret key
+    gcloud secrets delete "fnox-test-create-GCP_SM_CREATE_TEST" --project="$GCP_PROJECT" --quiet >/dev/null 2>&1 || true
+}
