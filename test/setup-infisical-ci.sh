@@ -78,9 +78,10 @@ BOOTSTRAP_OUTPUT=$(infisical bootstrap \
 	--organization "$INFISICAL_ORG_NAME" \
 	--output json \
 	2>/tmp/infisical-bootstrap-stderr.log)
+BOOTSTRAP_EXIT_CODE=$?
 
 # Check if bootstrap was successful
-if [ $? -ne 0 ] || [ -z "$BOOTSTRAP_OUTPUT" ]; then
+if [ $BOOTSTRAP_EXIT_CODE -ne 0 ] || [ -z "$BOOTSTRAP_OUTPUT" ]; then
 	echo "Error: Failed to bootstrap Infisical"
 	echo "Bootstrap stderr:"
 	cat /tmp/infisical-bootstrap-stderr.log
