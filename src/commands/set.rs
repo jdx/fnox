@@ -41,10 +41,11 @@ impl SetCommand {
         tracing::debug!("Setting secret '{}' in profile '{}'", self.key, profile);
 
         // Check if we're only setting metadata (no actual secret value)
+        // Note: provider is not considered "metadata only" because we need it for encryption
+        // key_name is metadata-only because it just sets the reference without encrypting
         let has_metadata = self.description.is_some()
             || self.if_missing.is_some()
             || self.default.is_some()
-            || self.provider.is_some()
             || self.key_name.is_some();
 
         // Get the secret value if provided
@@ -64,7 +65,6 @@ impl SetCommand {
             Some(buffer.trim().to_string())
         } else {
             // Interactive terminal - prompt for value
-            tracing::debug!("Prompting for secret value interactively");
             let value = demand::Input::new("Enter secret value")
                 .prompt("Secret value: ")
                 .password(true)
