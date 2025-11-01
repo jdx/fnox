@@ -11,8 +11,12 @@ local linters = new Mapping<String, Step> {
     ["cargo-clippy"] = (Builtins.cargo_clippy) {
         profiles = List("slow")
     }
-    ["shfmt"] = Builtins.shfmt
-    ["shellcheck"] = Builtins.shellcheck
+    ["shfmt"] = (Builtins.shfmt) {
+        glob = List("**/*.bats", "**/*.sh", "**/*.bash")
+    }
+    ["shellcheck"] = (Builtins.shellcheck) {
+        glob = List("**/*.bats", "**/*.sh", "**/*.bash")
+    }
 
     // define a custom linter
     ["pkl"] {

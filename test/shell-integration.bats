@@ -484,7 +484,7 @@ teardown() {
 		[secrets.AGE_SECRET]
 		provider = "age"
 		value = """
-$encrypted"""
+		$encrypted"""
 	EOF
 
 	# Run hook-env
@@ -526,8 +526,8 @@ $encrypted"""
 		[secrets.MULTILINE]
 		provider = "plain"
 		value = """line1
-line2
-line3"""
+		line2
+		line3"""
 	EOF
 
 	run "$FNOX_BIN" hook-env -s bash

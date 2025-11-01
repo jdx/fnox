@@ -1,0 +1,4 @@
+# Suppress info-level messages for bats tests
+# SC2030/SC2031: Variable modifications in subshells (expected in bats)
+# SC2016: Expressions in single quotes (intentional for subshell expansion)
+disable=SC2030,SC2031,SC2016
