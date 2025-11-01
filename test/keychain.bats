@@ -78,12 +78,14 @@ setup_linux_keychain() {
 
         # Override XDG_RUNTIME_DIR to use our test directory
         # The default /run/user/1001 exists but gnome-keyring-daemon can't create subdirectories there
-        export XDG_RUNTIME_DIR="$BATS_TEST_TMPDIR/runtime-$$"
+        # Use BATS_TEST_NUMBER for uniqueness in parallel test execution
+        export XDG_RUNTIME_DIR="$BATS_TEST_TMPDIR/runtime"
         mkdir -p "$XDG_RUNTIME_DIR"
         chmod 700 "$XDG_RUNTIME_DIR"
 
         # Pre-create the keyring control directory - the daemon expects this to exist
-        export GNOME_KEYRING_CONTROL="$XDG_RUNTIME_DIR/keyring"
+        # Use a unique name per test to avoid conflicts in parallel execution
+        export GNOME_KEYRING_CONTROL="$XDG_RUNTIME_DIR/keyring-$$-${BATS_TEST_NUMBER}"
         mkdir -p "$GNOME_KEYRING_CONTROL"
         chmod 700 "$GNOME_KEYRING_CONTROL"
 
