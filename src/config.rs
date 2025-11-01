@@ -203,11 +203,12 @@ impl Config {
 
         // Load fnox.$FNOX_PROFILE.toml if it exists and merge it (takes precedence over fnox.toml)
         if let Some(profile_path) = profile_config_path
-            && profile_path.exists() {
-                let profile_config = Self::load(&profile_path)?;
-                config = Self::merge_configs(config, profile_config)?;
-                found = true;
-            }
+            && profile_path.exists()
+        {
+            let profile_config = Self::load(&profile_path)?;
+            config = Self::merge_configs(config, profile_config)?;
+            found = true;
+        }
 
         // Load fnox.local.toml if it exists and merge it (takes precedence over fnox.$FNOX_PROFILE.toml)
         if local_config_path.exists() {
