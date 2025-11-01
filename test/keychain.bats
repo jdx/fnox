@@ -81,7 +81,8 @@ setup_linux_keychain() {
         mkdir -p "$GNOME_KEYRING_CONTROL"
 
         # Start the daemon with an unlocked keyring
-        eval "$(gnome-keyring-daemon --start --components=secrets --control-dir="$GNOME_KEYRING_CONTROL")"
+        # Note: --control-dir is not a valid option; the daemon uses the GNOME_KEYRING_CONTROL env var
+        eval "$(gnome-keyring-daemon --start --components=secrets)"
         export USING_TEST_KEYRING=1
 
         # Give it a moment to start
