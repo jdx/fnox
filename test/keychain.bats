@@ -76,19 +76,16 @@ setup_linux_keychain() {
             export DBUS_SESSION_BUS_ADDRESS
         fi
 
-        # Set XDG_RUNTIME_DIR for the daemon
-        # Use a unique directory per test to avoid conflicts in parallel execution
-        export XDG_RUNTIME_DIR="$BATS_TEST_TMPDIR/runtime-$$-${BATS_TEST_NUMBER}"
-        mkdir -p "$XDG_RUNTIME_DIR"
-        chmod 700 "$XDG_RUNTIME_DIR"
-
-        # Pre-create the keyring subdirectory (daemon expects this to exist)
-        mkdir -p "$XDG_RUNTIME_DIR/keyring"
-        chmod 700 "$XDG_RUNTIME_DIR/keyring"
-
-        # DON'T pre-set GNOME_KEYRING_CONTROL - let the daemon set it
+        # Set up XDG_RUNTIME_DIR for the daemon to use
+        # Use BATS_TEST_NUMBER to ensure uniqueness in parallel execution
+        if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
+            export XDG_RUNTIME_DIR="$BATS_TEST_TMPDIR/runtime-$$-${BATS_TEST_NUMBER}"
+            mkdir -p "$XDG_RUNTIME_DIR"
+            chmod 700 "$XDG_RUNTIME_DIR"
+        fi
 
         # Start gnome-keyring-daemon - it outputs shell commands on stdout, diagnostics on stderr
+        # Don't pre-set GNOME_KEYRING_CONTROL - let the daemon create its own control directory
         # We need to capture them separately
         local daemon_stdout
         local daemon_stderr
