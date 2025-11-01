@@ -46,11 +46,6 @@ setup() {
             if [ -z "$INFISICAL_TOKEN" ]; then
                 skip "INFISICAL_TOKEN not available. Required for CLI test helpers."
             fi
-
-            # Verify we can authenticate with Infisical CLI
-            if ! infisical user >/dev/null 2>&1; then
-                skip "Cannot authenticate with Infisical CLI. Token may be invalid or expired."
-            fi
         fi
     fi
 }
