@@ -119,11 +119,9 @@ infisical = { type = "infisical", project_id = "your-project-id", environment = 
 
 **Configuration Options:**
 
-- `project_id` (optional) - Infisical project ID to scope secret lookups
-- `environment` (optional) - Environment slug (e.g., "dev", "staging", "prod")
-- `path` (optional) - Secret path within the project (default: "/")
-
-All fields are optional. If not specified, the CLI will use defaults or prompt.
+- `project_id` (optional) - Infisical project ID to scope secret lookups. If not specified, the CLI will use the default project associated with your authentication credentials.
+- `environment` (optional) - Environment slug (e.g., "dev", "staging", "prod"). Defaults to "dev".
+- `path` (optional) - Secret path within the project. Defaults to "/".
 
 ## Adding Secrets to Infisical
 

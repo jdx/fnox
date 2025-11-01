@@ -164,19 +164,15 @@ impl crate::providers::Provider for InfisicalProvider {
     async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
         tracing::debug!("Getting secret '{}' from Infisical", value);
 
-        // Validate that project_id is set
-        if self.project_id.is_empty() {
-            return Err(FnoxError::Provider(
-                "Infisical project_id is required but not configured. Please add 'project_id' to your provider configuration.".to_string()
-            ));
-        }
-
         // Build the command: infisical secrets get <name>
         let mut args = vec!["secrets", "get", value, "--plain"];
 
-        // Add project ID
-        let project_arg = format!("--projectId={}", self.project_id);
-        args.push(&project_arg);
+        // Add project ID if specified
+        let project_arg;
+        if !self.project_id.is_empty() {
+            project_arg = format!("--projectId={}", self.project_id);
+            args.push(&project_arg);
+        }
 
         // Add environment (global flag)
         let env_arg = format!("--env={}", self.environment);
@@ -189,13 +185,22 @@ impl crate::providers::Provider for InfisicalProvider {
             args.push(&path_arg);
         }
 
-        tracing::debug!(
-            "Fetching secret '{}' from project '{}', environment '{}', path '{}'",
-            value,
-            self.project_id,
-            self.environment,
-            self.path
-        );
+        if self.project_id.is_empty() {
+            tracing::debug!(
+                "Fetching secret '{}' with environment '{}', path '{}'",
+                value,
+                self.environment,
+                self.path
+            );
+        } else {
+            tracing::debug!(
+                "Fetching secret '{}' from project '{}', environment '{}', path '{}'",
+                value,
+                self.project_id,
+                self.environment,
+                self.path
+            );
+        }
 
         self.execute_infisical_command(&args)
     }

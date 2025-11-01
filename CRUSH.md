@@ -614,7 +614,7 @@ The Infisical provider integrates with Infisical using the official Rust SDK to 
 
 ```toml
 [providers]
-infisical = { type = "infisical", project_id = "your-project-id", environment = "dev", path = "/" }  # project_id required, environment defaults to "dev", path defaults to "/"
+infisical = { type = "infisical", project_id = "your-project-id", environment = "dev", path = "/" }  # all fields optional, project_id defaults to auth credentials' default project, environment defaults to "dev", path defaults to "/"
 
 [secrets]
 # Retrieves secret from Infisical
@@ -660,13 +660,14 @@ fnox exec -- ./my-app
 1. **Storage**: Secrets are stored remotely in Infisical
 2. **Config**: fnox.toml only contains the secret name/reference (not the actual value)
 3. **Authentication**: Uses Universal Auth (Client ID + Client Secret) to authenticate
-4. **Retrieval**: When you run `fnox get`, the SDK authenticates and fetches the current value
-5. **Scoping**: Project ID (required), environment, and path can be configured in the provider to scope secret lookups
+4. **Retrieval**: When you run `fnox get`, the CLI authenticates and fetches the current value
+5. **Scoping**: Project ID (optional), environment, and path can be configured in the provider to scope secret lookups
 
 **Implementation Notes:**
 
-- Uses official Infisical Rust SDK (v0.0.3)
+- Uses official Infisical CLI (consistent with 1Password/Bitwarden providers)
 - Supports project-level, environment-level, and path-level scoping
 - Credentials can be stored encrypted with age provider for bootstrapping
-- Connection testing via SDK authentication
+- Connection testing via CLI authentication
 - For self-hosted Infisical instances, set `INFISICAL_API_URL` environment variable
+- Token caching avoids repeated authentication
