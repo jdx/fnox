@@ -113,6 +113,44 @@ mise run test:bats -- test/bitwarden.bats
 - On macOS runners: Tests skip (Docker services not available)
 - Tests skip gracefully when BW_SESSION is not available (similar to 1Password tests)
 
+### Running Infisical Tests
+
+The Infisical integration tests require an Infisical account and service token:
+
+```bash
+# 1. Install Infisical CLI
+brew install infisical/get-cli/infisical
+
+# 2. Get a service token from Infisical
+#    - Go to your Infisical project settings
+#    - Navigate to "Service Tokens"
+#    - Create a new token with read/write permissions for dev environment
+#    - Copy the token (st.xxx.yyy.zzz format)
+
+# 3. Export the token
+export INFISICAL_TOKEN="st.xxx.yyy.zzz"
+
+# 4. Optionally store it encrypted for reuse
+fnox set INFISICAL_TOKEN "st.xxx.yyy.zzz" --provider age
+
+# 5. Run the Infisical tests
+mise run test:bats -- test/infisical.bats
+```
+
+**Note**:
+
+- Tests will automatically skip if `INFISICAL_TOKEN` is not available
+- The `list` test runs without authentication
+- Tests create and delete temporary secrets in your Infisical project
+- Secret names are prefixed with `FNOX_TEST_` and include timestamps for uniqueness
+
+**CI Behavior**:
+
+- Tests skip if `INFISICAL_TOKEN` is not available in the environment
+- For CI, store the service token as a GitHub Secret and pass via environment
+- Recommended: Use a dedicated test project in Infisical to isolate test secrets
+- Tests clean up created secrets, but orphaned secrets may remain if tests fail
+
 ## Code Style Guidelines
 
 ### Imports & Dependencies

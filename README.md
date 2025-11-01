@@ -34,7 +34,7 @@ eval "$(fnox activate bash)"  # or zsh, fish
 fnox lets you store secrets in two ways:
 
 1. **Encrypted in git** - Using age, AWS KMS, Azure KMS, or GCP KMS
-2. **Remote in cloud** - Using AWS Secrets Manager, Azure Key Vault, GCP Secret Manager, 1Password, Bitwarden, or HashiCorp Vault
+2. **Remote in cloud** - Using AWS Secrets Manager, Azure Key Vault, GCP Secret Manager, 1Password, Bitwarden, Infisical, or HashiCorp Vault
 
 Your `fnox.toml` config file either contains encrypted secrets or references to remote secrets. Use `fnox exec` to run commands with secrets loaded, or enable shell integration to auto-load secrets when you `cd` into a directory.
 
@@ -54,10 +54,11 @@ Your `fnox.toml` config file either contains encrypted secrets or references to 
 - **gcp-sm** - Google Cloud Secret Manager
 - **vault** - HashiCorp Vault
 
-### 🔑 Password Managers
+### 🔑 Password Managers & Secret Services
 
 - **1password** - 1Password CLI
 - **bitwarden** - Bitwarden/Vaultwarden
+- **infisical** - Infisical secrets management
 
 ### 💻 Local Storage
 

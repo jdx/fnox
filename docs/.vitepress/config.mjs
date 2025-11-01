@@ -92,11 +92,12 @@ export default defineConfig({
             ],
           },
           {
-            text: "Password Managers",
+            text: "Password Managers & Secret Services",
             collapsed: true,
             items: [
               { text: "1Password", link: "/providers/1password" },
               { text: "Bitwarden", link: "/providers/bitwarden" },
+              { text: "Infisical", link: "/providers/infisical" },
             ],
           },
           {
