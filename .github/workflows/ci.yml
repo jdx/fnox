@@ -195,5 +195,15 @@ jobs:
       - msrv
     runs-on: ubuntu-latest
     timeout-minutes: 1
+    if: always()
     steps:
+      - name: Check job results
+        if: |
+          needs.ci-bats.result == 'failure' ||
+          needs.ci-other.result == 'failure' ||
+          needs.msrv.result == 'failure' ||
+          needs.ci-bats.result == 'cancelled' ||
+          needs.ci-other.result == 'cancelled' ||
+          needs.msrv.result == 'cancelled'
+        run: exit 1
       - run: echo "All CI jobs completed successfully"
