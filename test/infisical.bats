@@ -195,16 +195,14 @@ if_missing = "error"
 EOF
 
     # Try to get non-existent secret
-    # In CI: may fail with "project not found" if machine identity lacks project access
-    # Locally: fails with "secret not found" if we have project access
-    # Either way, it should fail appropriately
+    # Should fail because the secret doesn't exist and if_missing = "error"
     run "$FNOX_BIN" get INVALID_SECRET
     assert_failure
     # Accept multiple error messages:
-    # - "Secret '...' not found or inaccessible" (empty CLI response/array)
-    # - "Failed to get secret from Infisical" (CLI error)
-    # - "Infisical CLI command failed" (CLI failure)
-    assert_output --regexp "(not found or inaccessible|Failed to get secret from Infisical|Infisical CLI command failed)"
+    # - "Secret '...' not found in Infisical" (*not found* placeholder)
+    # - "Secret '...' not found or inaccessible" (empty array)
+    # - "Infisical CLI command failed" (CLI error)
+    assert_output --regexp "(not found in Infisical|not found or inaccessible|Infisical CLI command failed)"
 }
 
 @test "fnox list shows Infisical secrets" {

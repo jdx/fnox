@@ -237,6 +237,15 @@ impl crate::providers::Provider for InfisicalProvider {
                 ))
             })?;
 
+        // The Infisical CLI returns "*not found*" as a placeholder when a secret doesn't exist
+        // Treat this as an error rather than returning the literal placeholder string
+        if secret_value == "*not found*" {
+            return Err(FnoxError::Provider(format!(
+                "Secret '{}' not found in Infisical",
+                value
+            )));
+        }
+
         Ok(secret_value.to_string())
     }
 
@@ -294,13 +303,17 @@ impl crate::providers::Provider for InfisicalProvider {
                 match serde_json::from_str::<Vec<serde_json::Value>>(&json_output) {
                     Ok(json_array) => {
                         // Build a map of secret_name -> secret_value from JSON
+                        // Skip entries with "*not found*" placeholder (CLI returns this for missing secrets)
                         let mut value_map: HashMap<String, String> = HashMap::new();
                         for item in json_array {
                             if let (Some(name), Some(value)) = (
                                 item.get("secretKey").and_then(|v| v.as_str()),
                                 item.get("secretValue").and_then(|v| v.as_str()),
                             ) {
-                                value_map.insert(name.to_string(), value.to_string());
+                                // Skip placeholder values - treat them as not found
+                                if value != "*not found*" {
+                                    value_map.insert(name.to_string(), value.to_string());
+                                }
                             }
                         }
 
