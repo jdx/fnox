@@ -77,6 +77,12 @@ jobs:
           echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
           echo "DBUS_SESSION_BUS_PID=$DBUS_SESSION_BUS_PID" >> "$GITHUB_ENV"
           echo "Started D-Bus session: $DBUS_SESSION_BUS_ADDRESS"
+          # Set up XDG_RUNTIME_DIR for gnome-keyring-daemon
+          XDG_RUNTIME_DIR=$(mktemp -d)
+          chmod 700 "$XDG_RUNTIME_DIR"
+          export XDG_RUNTIME_DIR
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
+          echo "Set XDG_RUNTIME_DIR: $XDG_RUNTIME_DIR"
           # Start gnome-keyring-daemon and capture stdout/stderr separately
           KEYRING_STDERR_FILE=$(mktemp)
           KEYRING_STDOUT=$(gnome-keyring-daemon --start --components=secrets 2>"$KEYRING_STDERR_FILE")
