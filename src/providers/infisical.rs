@@ -51,13 +51,15 @@ impl InfisicalProvider {
                 )
             })?;
 
-        // Check if we have a cached token
-        let cached_token = CACHED_LOGIN_TOKEN.lock().unwrap();
+        // Acquire lock for the entire check-and-login operation to prevent race condition
+        // where multiple threads might all see no cached token and perform expensive login operations
+        let mut cached_token = CACHED_LOGIN_TOKEN.lock().unwrap();
+
+        // Check if another thread cached a token while we were waiting for the lock
         if let Some(token) = cached_token.as_ref() {
             tracing::debug!("Using cached login token");
             return Ok(token.clone());
         }
-        drop(cached_token);
 
         tracing::debug!("Logging in with Universal Auth credentials");
 
@@ -75,11 +77,13 @@ impl InfisicalProvider {
             "--silent",
         ]);
 
-        // Add custom API URL if specified
+        // Add custom domain if specified, stripping /api suffix if present
+        // The CLI's --domain flag expects base URL (some commands append /api automatically)
         if let Some(api_url) = &*INFISICAL_API_URL {
+            let base_url = api_url.trim_end_matches("/api").trim_end_matches('/');
             cmd.arg("--domain");
-            cmd.arg(api_url);
-            tracing::debug!("Using custom Infisical API URL: {}", api_url);
+            cmd.arg(base_url);
+            tracing::debug!("Using custom Infisical domain: {} (from: {})", base_url, api_url);
         }
 
         cmd.stdin(std::process::Stdio::null());
@@ -104,8 +108,7 @@ impl InfisicalProvider {
             .trim()
             .to_string();
 
-        // Cache the token for subsequent calls
-        let mut cached_token = CACHED_LOGIN_TOKEN.lock().unwrap();
+        // Cache the token (lock still held, preventing race condition)
         *cached_token = Some(token.clone());
 
         tracing::debug!("Successfully logged in and cached token");
@@ -126,10 +129,12 @@ impl InfisicalProvider {
         cmd.arg("--token");
         cmd.arg(&token);
 
-        // Add custom API URL if specified
+        // Add custom domain if specified, stripping /api suffix if present
+        // The CLI's --domain flag expects base URL (some commands append /api automatically)
         if let Some(api_url) = &*INFISICAL_API_URL {
+            let base_url = api_url.trim_end_matches("/api").trim_end_matches('/');
             cmd.arg("--domain");
-            cmd.arg(api_url);
+            cmd.arg(base_url);
         }
 
         // Add silent flag to reduce noise
