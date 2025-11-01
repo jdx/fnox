@@ -31,21 +31,26 @@ setup() {
     fi
 
     # Some tests don't need credentials (like 'fnox list')
-    # Only skip if this test actually needs authentication
+    # Some tests only need CLIENT_ID/SECRET (like 'fails with invalid')
+    # Only skip if this test actually needs full authentication
     if [[ "$BATS_TEST_DESCRIPTION" != *"list"* ]]; then
-        # Check if INFISICAL_CLIENT_ID and INFISICAL_CLIENT_SECRET are available (for fnox provider)
+        # All non-list tests need CLIENT_ID and CLIENT_SECRET for fnox provider
         if [ -z "$INFISICAL_CLIENT_ID" ] || [ -z "$INFISICAL_CLIENT_SECRET" ]; then
             skip "INFISICAL_CLIENT_ID and INFISICAL_CLIENT_SECRET not available. Set up Universal Auth credentials."
         fi
 
-        # Check if INFISICAL_TOKEN is available (for CLI test helpers)
-        if [ -z "$INFISICAL_TOKEN" ]; then
-            skip "INFISICAL_TOKEN not available. Required for CLI test helpers."
-        fi
+        # Tests that create/modify secrets need INFISICAL_TOKEN for CLI test helpers
+        # Error handling tests (like 'fails with invalid') don't need these
+        if [[ "$BATS_TEST_DESCRIPTION" != *"fails with invalid"* ]] && [[ "$BATS_TEST_DESCRIPTION" != *"fails gracefully"* ]]; then
+            # Check if INFISICAL_TOKEN is available (for CLI test helpers)
+            if [ -z "$INFISICAL_TOKEN" ]; then
+                skip "INFISICAL_TOKEN not available. Required for CLI test helpers."
+            fi
 
-        # Verify we can authenticate with Infisical CLI
-        if ! infisical user >/dev/null 2>&1; then
-            skip "Cannot authenticate with Infisical CLI. Token may be invalid or expired."
+            # Verify we can authenticate with Infisical CLI
+            if ! infisical user >/dev/null 2>&1; then
+                skip "Cannot authenticate with Infisical CLI. Token may be invalid or expired."
+            fi
         fi
     fi
 }
@@ -180,9 +185,13 @@ if_missing = "error"
 EOF
 
     # Try to get non-existent secret
+    # In CI: may fail with "project not found" if machine identity lacks project access
+    # Locally: fails with "secret not found" if we have project access
+    # Either way, it should fail appropriately
     run "$FNOX_BIN" get INVALID_SECRET
     assert_failure
-    assert_output --partial "Failed to get secret from Infisical"
+    # Accept either error message (project access denied OR secret not found)
+    assert_output --regexp "(Failed to get secret from Infisical|Infisical CLI command failed)"
 }
 
 @test "fnox list shows Infisical secrets" {
