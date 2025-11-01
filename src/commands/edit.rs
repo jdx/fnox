@@ -110,13 +110,13 @@ impl EditCommand {
                 source: e,
             })?;
 
-        if !status.success() {
-            if let Some(code) = status.code() {
-                return Err(FnoxError::EditorExitFailed {
-                    editor: editor.clone(),
-                    status: code,
-                });
-            }
+        if !status.success()
+            && let Some(code) = status.code()
+        {
+            return Err(FnoxError::EditorExitFailed {
+                editor: editor.clone(),
+                status: code,
+            });
         }
 
         // Step 6: Read and parse modified temp file
@@ -240,13 +240,12 @@ impl EditCommand {
             .and_then(|item| item.as_table_mut())
         {
             for (_profile_name, profile_item) in profiles_table.iter_mut() {
-                if let Some(profile_table) = profile_item.as_table_mut() {
-                    if let Some(secrets_table) = profile_table
+                if let Some(profile_table) = profile_item.as_table_mut()
+                    && let Some(secrets_table) = profile_table
                         .get_mut("secrets")
                         .and_then(|item| item.as_table_mut())
-                    {
-                        self.replace_secrets_in_table(secrets_table, &secrets_map)?;
-                    }
+                {
+                    self.replace_secrets_in_table(secrets_table, &secrets_map)?;
                 }
             }
         }
@@ -258,7 +257,7 @@ impl EditCommand {
              # Secrets marked as READ-ONLY cannot be modified (from 1Password, Bitwarden, etc.)\n\
              # After you save and close this file, fnox will re-encrypt changed secrets.\n\
              # DO NOT share this file as it contains plaintext secrets!\n\n{}",
-            decrypted_doc.to_string()
+            decrypted_doc
         );
 
         temp_file
@@ -311,62 +310,49 @@ impl EditCommand {
 
         // Process [secrets] section
         if let Some(modified_secrets) = modified_doc.get("secrets").and_then(|item| item.as_table())
-        {
-            if let Some(original_secrets) = original_doc
+            && let Some(original_secrets) = original_doc
                 .get_mut("secrets")
                 .and_then(|item| item.as_table_mut())
-            {
-                self.process_secrets_table_changes(
-                    config,
-                    original_secrets,
-                    modified_secrets,
-                    &secrets_map,
-                    profile,
-                    age_key_file,
-                )
-                .await?;
-            }
+        {
+            self.process_secrets_table_changes(
+                config,
+                original_secrets,
+                modified_secrets,
+                &secrets_map,
+                profile,
+                age_key_file,
+            )
+            .await?;
         }
 
         // Process [profiles.*] sections
         if let Some(modified_profiles) = modified_doc
             .get("profiles")
             .and_then(|item| item.as_table())
-        {
-            if let Some(original_profiles) = original_doc
+            && let Some(original_profiles) = original_doc
                 .get_mut("profiles")
                 .and_then(|item| item.as_table_mut())
-            {
-                for (profile_name, modified_profile_item) in modified_profiles.iter() {
-                    if let Some(modified_profile_table) = modified_profile_item.as_table() {
-                        if let Some(modified_secrets) = modified_profile_table
-                            .get("secrets")
-                            .and_then(|item| item.as_table())
-                        {
-                            if let Some(original_profile_item) =
-                                original_profiles.get_mut(profile_name)
-                            {
-                                if let Some(original_profile_table) =
-                                    original_profile_item.as_table_mut()
-                                {
-                                    if let Some(original_secrets) = original_profile_table
-                                        .get_mut("secrets")
-                                        .and_then(|item| item.as_table_mut())
-                                    {
-                                        self.process_secrets_table_changes(
-                                            config,
-                                            original_secrets,
-                                            modified_secrets,
-                                            &secrets_map,
-                                            profile,
-                                            age_key_file,
-                                        )
-                                        .await?;
-                                    }
-                                }
-                            }
-                        }
-                    }
+        {
+            for (profile_name, modified_profile_item) in modified_profiles.iter() {
+                if let Some(modified_profile_table) = modified_profile_item.as_table()
+                    && let Some(modified_secrets) = modified_profile_table
+                        .get("secrets")
+                        .and_then(|item| item.as_table())
+                    && let Some(original_profile_item) = original_profiles.get_mut(profile_name)
+                    && let Some(original_profile_table) = original_profile_item.as_table_mut()
+                    && let Some(original_secrets) = original_profile_table
+                        .get_mut("secrets")
+                        .and_then(|item| item.as_table_mut())
+                {
+                    self.process_secrets_table_changes(
+                        config,
+                        original_secrets,
+                        modified_secrets,
+                        &secrets_map,
+                        profile,
+                        age_key_file,
+                    )
+                    .await?;
                 }
             }
         }
@@ -466,11 +452,10 @@ impl EditCommand {
             };
 
             // Update the original document with the new encrypted value
-            if let Some(original_value) = original_secrets.get_mut(&key_str) {
-                if let Some(original_inline_table) = original_value.as_inline_table_mut() {
-                    original_inline_table
-                        .insert("value", Value::from(new_encrypted_value.as_str()));
-                }
+            if let Some(original_value) = original_secrets.get_mut(&key_str)
+                && let Some(original_inline_table) = original_value.as_inline_table_mut()
+            {
+                original_inline_table.insert("value", Value::from(new_encrypted_value.as_str()));
             }
         }
 
