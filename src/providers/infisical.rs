@@ -206,7 +206,18 @@ impl crate::providers::Provider for InfisicalProvider {
             self.path
         );
 
-        self.execute_infisical_command(&args)
+        let result = self.execute_infisical_command(&args)?;
+
+        // The Infisical CLI sometimes returns exit 0 with empty output when a secret
+        // is not found or when there's a permission error. Treat empty responses as errors.
+        if result.is_empty() {
+            return Err(FnoxError::Provider(format!(
+                "Secret '{}' not found or inaccessible in Infisical",
+                value
+            )));
+        }
+
+        Ok(result)
     }
 
     async fn get_secrets_batch(

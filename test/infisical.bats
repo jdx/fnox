@@ -187,14 +187,12 @@ EOF
     # Locally: fails with "secret not found" if we have project access
     # Either way, it should fail appropriately
     run "$FNOX_BIN" get INVALID_SECRET
-
-    # Debug: Print what we got
-    echo "Exit status: $status" >&3
-    echo "Output: $output" >&3
-
     assert_failure
-    # Accept either error message (project access denied OR secret not found)
-    assert_output --regexp "(Failed to get secret from Infisical|Infisical CLI command failed)"
+    # Accept multiple error messages:
+    # - "Secret '...' not found or inaccessible" (empty CLI response)
+    # - "Failed to get secret from Infisical" (CLI error)
+    # - "Infisical CLI command failed" (CLI failure)
+    assert_output --regexp "(not found or inaccessible|Failed to get secret from Infisical|Infisical CLI command failed)"
 }
 
 @test "fnox list shows Infisical secrets" {
