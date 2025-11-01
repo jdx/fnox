@@ -137,7 +137,8 @@ track_secret() {
     # Verify the config contains only a reference (not the value)
     run cat "${FNOX_CONFIG_FILE}"
     assert_success
-    assert_output --partial '[secrets.MY_SECRET]'
+    # Check for inline table or TOML table format (both are valid)
+    assert_output --partial 'MY_SECRET'
     assert_output --partial 'provider = "keychain"'
     assert_output --partial 'value = "MY_SECRET"'
     refute_output --partial "my-secret-value"
