@@ -47,15 +47,20 @@ teardown() {
 	echo "=== DEBUG: Full config ===" >&3
 	cat fnox.toml >&3
 
-	# Read the config file and extract the [secrets] section
-	# The secrets should appear in the same order they were added
-	secrets_section=$(awk '/^\[secrets\.(FIRST|SECOND|THIRD|FOURTH|FIFTH)_SECRET\]/ {print}' fnox.toml)
+	# Read the config file and extract secrets from the [secrets] section
+	# With inline table format, secrets look like: SECRET_NAME= { provider = "age", value = "..." }
+	# Use awk to extract secrets between [secrets] and next section (or EOF)
+	secrets_section=$(awk '
+		/^\[secrets\]$/ { in_secrets=1; next }
+		/^\[/ && in_secrets { in_secrets=0 }
+		in_secrets && /^(FIRST|SECOND|THIRD|FOURTH|FIFTH)_SECRET\s*=/ { print }
+	' fnox.toml)
 
 	echo "=== DEBUG: Secrets section ===" >&3
 	echo "$secrets_section" >&3
 
-	# Extract just the keys in the order they appear
-	keys=$(echo "$secrets_section" | sed 's/\[secrets\.\(.*\)\]/\1/' | tr '\n' ' ')
+	# Extract just the keys in the order they appear (handle both "KEY=" and "KEY =")
+	keys=$(echo "$secrets_section" | sed 's/^\([A-Z_]*\)\s*=.*/\1/' | tr '\n' ' ')
 
 	echo "=== DEBUG: Extracted keys ===" >&3
 	echo "$keys" >&3
@@ -76,9 +81,13 @@ teardown() {
 	run fnox set BETA "b_modified" --provider age
 	assert_success
 
-	# Extract keys from config
-	secrets_section=$(awk '/^\[secrets\.(ALPHA|BETA|GAMMA|DELTA)\]/ {print}' fnox.toml)
-	keys=$(echo "$secrets_section" | sed 's/\[secrets\.\(.*\)\]/\1/' | tr '\n' ' ')
+	# Extract keys from config using inline table format
+	secrets_section=$(awk '
+		/^\[secrets\]$/ { in_secrets=1; next }
+		/^\[/ && in_secrets { in_secrets=0 }
+		in_secrets && /^(ALPHA|BETA|GAMMA|DELTA)\s*=/ { print }
+	' fnox.toml)
+	keys=$(echo "$secrets_section" | sed 's/^\([A-Z_]*\)\s*=.*/\1/' | tr '\n' ' ')
 
 	# Order should be preserved (BETA stays in second position)
 	expected_order="ALPHA BETA GAMMA DELTA "
