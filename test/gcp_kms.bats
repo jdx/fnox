@@ -18,8 +18,21 @@ setup() {
     load 'test_helper/common_setup'
     _common_setup
 
+    # Determine if we're in CI with secrets access (not a forked PR)
+    local in_ci_with_secrets=false
+    if [ "${CI:-}" = "true" ] || [ -n "${GITHUB_ACTIONS:-}" ]; then
+        # Check if age key is available (indicates secrets are decrypted)
+        if [ -f ~/.config/fnox/age.txt ] || [ -n "${FNOX_AGE_KEY:-}" ]; then
+            in_ci_with_secrets=true
+        fi
+    fi
+
     # Check if GCP credentials are available
     if [ -z "$GCP_SERVICE_ACCOUNT_KEY" ] && [ -z "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
+        if [ "$in_ci_with_secrets" = "true" ]; then
+            echo "# ERROR: In CI with secrets access, but GCP_SERVICE_ACCOUNT_KEY is not available!" >&3
+            return 1
+        fi
         skip "GCP credentials not available. Ensure GCP_SERVICE_ACCOUNT_KEY or GOOGLE_APPLICATION_CREDENTIALS are configured."
     fi
 
@@ -35,13 +48,22 @@ setup() {
     export GCP_KEYRING="fnox-test"
     export GCP_KEY="fnox-test-key"
 
-    # Check if gcloud CLI is installed (optional, for verification)
+    # Check if gcloud CLI is installed
     if ! command -v gcloud >/dev/null 2>&1; then
+        if [ "$in_ci_with_secrets" = "true" ]; then
+            echo "# ERROR: In CI with secrets access, but gcloud CLI is not installed!" >&3
+            return 1
+        fi
         skip "gcloud CLI not installed. Install with: brew install google-cloud-sdk"
     fi
 
     # Verify we can access the KMS key
     if ! gcloud kms keys list --location="$GCP_LOCATION" --keyring="$GCP_KEYRING" --project="$GCP_PROJECT" >/dev/null 2>&1; then
+        if [ "$in_ci_with_secrets" = "true" ]; then
+            echo "# ERROR: In CI with secrets access, but cannot access GCP KMS key!" >&3
+            echo "# This indicates a real problem with GCP access that should be fixed." >&3
+            return 1
+        fi
         skip "Cannot access GCP KMS key. Key may not exist or permissions may be insufficient."
     fi
 }
