@@ -93,6 +93,14 @@ jobs:
         run: |
           source ./test/setup-bitwarden-ci.sh
           echo "BW_SESSION=$BW_SESSION" >> "$GITHUB_ENV"
+      - name: Setup Infisical for tests
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          # INFISICAL_TOKEN should be set as a GitHub Secret
+          # Tests will skip if not available
+          if [ -n "${{ secrets.INFISICAL_TOKEN }}" ]; then
+            echo "INFISICAL_TOKEN=${{ secrets.INFISICAL_TOKEN }}" >> "$GITHUB_ENV"
+          fi
       - name: Setup services (macOS)
         if: ${{ matrix.os == 'macos-latest' }}
         run: |

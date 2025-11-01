@@ -147,9 +147,14 @@ mise run test:bats -- test/infisical.bats
 **CI Behavior**:
 
 - Tests skip if `INFISICAL_TOKEN` is not available in the environment
-- For CI, store the service token as a GitHub Secret and pass via environment
+- GitHub Actions setup:
+  1. Create a service token in Infisical with read/write permissions for dev environment
+  2. Add the token to GitHub repository secrets as `INFISICAL_TOKEN`
+  3. The CI workflow automatically exports it as an environment variable
+  4. Tests will run on both Ubuntu and macOS runners when token is available
 - Recommended: Use a dedicated test project in Infisical to isolate test secrets
 - Tests clean up created secrets, but orphaned secrets may remain if tests fail
+- Tests run only for non-forked PRs (to prevent token exposure)
 
 ## Code Style Guidelines
 
