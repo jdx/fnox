@@ -16,76 +16,15 @@ env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
-  ci-macos:
-    runs-on: macos-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - uses: jdx/mise-action@v3
-      - uses: Swatinem/rust-cache@v2
-      - name: Install parallel on macOS
-        run: brew install parallel
-      - name: Install Rust components
-        run: rustup component add rustfmt clippy
-      - name: Build
-        run: cargo build
-      - name: Setup age key for fnox
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        run: mkdir -p ~/.config/fnox && echo "${{ secrets.AGE_SECRET }}" > ~/.config/fnox/age.txt
-      - name: Redact secrets in CI output
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        run: |
-          fnox ci-redact
-          # shellcheck disable=SC2016
-          fnox run -- sh -c 'echo MY_UNIMPORTANT_SECRET: $MY_UNIMPORTANT_SECRET'
-      - name: Run tests
-        run: cargo test
-      - name: Check formatting
-        run: mise run lint
-      - name: Run clippy
-        run: cargo clippy -- -D warnings
-      - name: Run integration tests
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 10
-          max_attempts: 3
-          command: mise run test:bats
-  ci-ubuntu:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    services:
-      # Vaultwarden for Bitwarden provider tests
-      vaultwarden:
-        image: vaultwarden/server:latest
-        ports:
-          - 8080:80
-        env:
-          DOMAIN: http://localhost:8080
-          SIGNUPS_ALLOWED: "true"
-          DISABLE_ADMIN_TOKEN: "true"
-          I_REALLY_WANT_VOLATILE_STORAGE: "true"
-        options: >-
-          --health-cmd "curl -f http://localhost || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      # HashiCorp Vault for Vault provider tests
-      vault:
-        image: hashicorp/vault:latest
-        ports:
-          - 8200:8200
-        env:
-          VAULT_DEV_ROOT_TOKEN_ID: fnox-test-token
-          VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
-          VAULT_ADDR: http://127.0.0.1:8200
-        options: >-
-          --cap-add=IPC_LOCK
-          --health-cmd "vault status"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -96,38 +35,122 @@ jobs:
         run: rustup component add rustfmt clippy
       - name: Build
         run: cargo build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fnox-${{ matrix.os }}
+          path: target/debug/fnox
+
+  ci-bats:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - ubuntu-latest
+        tranche: [0, 1, 2]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - run: brew install parallel vault
+        if: ${{ matrix.os == 'macos-latest' }}
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: jdx/mise-action@v3
+      - uses: actions/download-artifact@v4
+        with:
+          name: fnox-${{ matrix.os }}
+          path: target/debug
+      - run: chmod +x target/debug/fnox
       - name: Setup age key for fnox
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         run: mkdir -p ~/.config/fnox && echo "${{ secrets.AGE_SECRET }}" > ~/.config/fnox/age.txt
-      - name: Redact secrets in CI output
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+      - name: Setup services (Ubuntu)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
-          fnox ci-redact
-          # shellcheck disable=SC2016
-          fnox run -- sh -c 'echo MY_UNIMPORTANT_SECRET: $MY_UNIMPORTANT_SECRET'
-      - name: Run tests
-        run: cargo test
-      - name: Check formatting
-        run: mise run lint
-      - name: Run clippy
-        run: cargo clippy -- -D warnings
-      - name: Setup Bitwarden for tests
-        run: |
-          # Configure bw CLI for vaultwarden and create test account
-          source ./test/setup-bitwarden-ci.sh
-          # Export BW_SESSION to GITHUB_ENV so it's available in next steps
-          echo "BW_SESSION=$BW_SESSION" >> "$GITHUB_ENV"
-      - name: Setup Vault for tests
-        run: |
-          # Export Vault environment variables for tests
+          # Start Vaultwarden
+          docker run -d --name vaultwarden \
+            -p 8080:80 \
+            -e DOMAIN=http://localhost:8080 \
+            -e SIGNUPS_ALLOWED=true \
+            -e DISABLE_ADMIN_TOKEN=true \
+            -e I_REALLY_WANT_VOLATILE_STORAGE=true \
+            vaultwarden/server:latest
+          # Start Vault
+          docker run -d --name vault --cap-add=IPC_LOCK \
+            -p 8200:8200 \
+            -e VAULT_DEV_ROOT_TOKEN_ID=fnox-test-token \
+            -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 \
+            -e VAULT_ADDR=http://127.0.0.1:8200 \
+            hashicorp/vault:latest
+          # Wait for services to be ready
+          sleep 5
           echo "VAULT_ADDR=http://localhost:8200" >> "$GITHUB_ENV"
           echo "VAULT_TOKEN=fnox-test-token" >> "$GITHUB_ENV"
-      - name: Run integration tests
+      - name: Setup Bitwarden for tests
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          source ./test/setup-bitwarden-ci.sh
+          echo "BW_SESSION=$BW_SESSION" >> "$GITHUB_ENV"
+      - name: Setup services (macOS)
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: |
+          # Start Vault in dev mode in background
+          vault server -dev -dev-root-token-id=fnox-test-token -dev-listen-address=127.0.0.1:8200 &
+          echo "VAULT_ADDR=http://127.0.0.1:8200" >> "$GITHUB_ENV"
+          echo "VAULT_TOKEN=fnox-test-token" >> "$GITHUB_ENV"
+          # Wait for Vault to be ready
+          sleep 2
+      - name: Run bats tests - tranche ${{ matrix.tranche }}
         uses: nick-fields/retry@v3
+        env:
+          TRANCHE: ${{ matrix.tranche }}
+          TRANCHE_COUNT: 3
         with:
           timeout_minutes: 10
           max_attempts: 3
           command: mise run test:bats
+
+  ci-other:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: jdx/mise-action@v3
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Rust components
+        run: rustup component add rustfmt clippy
+      - uses: actions/download-artifact@v4
+        with:
+          name: fnox-${{ matrix.os }}
+          path: target/debug
+      - run: chmod +x target/debug/fnox
+      - name: Setup age key for fnox
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        run: mkdir -p ~/.config/fnox && echo "${{ secrets.AGE_SECRET }}" > ~/.config/fnox/age.txt
+      - name: Redact secrets in CI output
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          fnox ci-redact
+          # shellcheck disable=SC2016
+          fnox run -- sh -c 'echo MY_UNIMPORTANT_SECRET: $MY_UNIMPORTANT_SECRET'
+      - name: Run tests
+        run: cargo test
+      - name: Check formatting
+        run: mise run lint
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
+
   msrv:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -138,3 +161,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: jdx/mise-action@v3
       - run: cargo msrv verify
+
+  final:
+    needs:
+      - ci-bats
+      - ci-other
+      - msrv
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - run: echo "All CI jobs completed successfully"
