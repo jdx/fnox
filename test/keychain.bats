@@ -76,11 +76,9 @@ setup_linux_keychain() {
             export DBUS_SESSION_BUS_ADDRESS
         fi
 
-        # Start a test gnome-keyring daemon
-        # Don't set GNOME_KEYRING_CONTROL beforehand - let the daemon create its own control directory
-        # The daemon will output shell commands on stdout that set the correct environment variables
-        # Stderr contains diagnostic messages which we should ignore
-        eval "$(gnome-keyring-daemon --start --components=secrets 2>/dev/null)"
+        # GitHub Actions runners don't have IPC_LOCK permission, so we need to unlock the keyring
+        # Start gnome-keyring-daemon and unlock it with a test password
+        eval "$(echo 'test' | gnome-keyring-daemon --unlock --start --components=secrets 2>/dev/null)"
         export USING_TEST_KEYRING=1
 
         # Verify the daemon started and set the control path
