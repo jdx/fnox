@@ -146,8 +146,9 @@ fn has_config_been_modified() -> bool {
     current_hash != PREV_SESSION.config_files_hash
 }
 
-/// Collect all config files (fnox.toml and fnox.local.toml) from dir up to root
+/// Collect all config files (fnox.toml, fnox.$FNOX_PROFILE.toml, and fnox.local.toml) from dir up to root
 fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
+    use crate::env;
     let mut configs = Vec::new();
     let mut current = start_dir.to_path_buf();
 
@@ -159,6 +160,19 @@ fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
             && let Ok(duration) = modified.duration_since(SystemTime::UNIX_EPOCH)
         {
             configs.push((config_path, duration.as_millis()));
+        }
+
+        // Check fnox.$FNOX_PROFILE.toml
+        if let Some(profile_name) = (*env::FNOX_PROFILE).as_ref()
+            && profile_name != "default"
+        {
+            let profile_config_path = current.join(format!("fnox.{}.toml", profile_name));
+            if let Ok(metadata) = std::fs::metadata(&profile_config_path)
+                && let Ok(modified) = metadata.modified()
+                && let Ok(duration) = modified.duration_since(SystemTime::UNIX_EPOCH)
+            {
+                configs.push((profile_config_path, duration.as_millis()));
+            }
         }
 
         // Check fnox.local.toml
@@ -215,14 +229,25 @@ fn hash_fnox_env_vars() -> String {
     format!("{:x}", hasher.finish())
 }
 
-/// Find fnox.toml or fnox.local.toml in current or parent directories
+/// Find fnox.toml, fnox.$FNOX_PROFILE.toml, or fnox.local.toml in current or parent directories
 pub fn find_config() -> Option<PathBuf> {
+    use crate::env;
     let mut current = std::env::current_dir().ok()?;
 
     loop {
         let config_path = current.join("fnox.toml");
         if config_path.exists() {
             return Some(config_path);
+        }
+
+        // Check for profile-specific config
+        if let Some(profile_name) = (*env::FNOX_PROFILE).as_ref()
+            && profile_name != "default"
+        {
+            let profile_config_path = current.join(format!("fnox.{}.toml", profile_name));
+            if profile_config_path.exists() {
+                return Some(profile_config_path);
+            }
         }
 
         let local_config_path = current.join("fnox.local.toml");

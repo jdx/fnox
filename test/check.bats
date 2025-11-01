@@ -47,9 +47,12 @@ EOF
     assert_fnox_success check --profile test
 }
 
-@test "fnox check fails with unknown profile" {
+@test "fnox check works with unknown profile (profile-specific config file support)" {
     create_test_config
-    assert_fnox_failure check --profile unknown
+    # With fnox.$FNOX_PROFILE.toml support, unknown profiles are allowed
+    # They just use top-level secrets (same as default profile)
+    assert_fnox_success check --profile unknown
+    # Should show it's checking the profile
     assert_output --partial "unknown"
 }
 

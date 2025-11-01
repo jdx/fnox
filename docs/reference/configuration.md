@@ -329,6 +329,40 @@ DEBUG_MODE = { default = "true" }
 fnox.local.toml
 ```
 
+## Profile-Specific Config Files
+
+You can create environment-specific config files that load based on the `FNOX_PROFILE` environment variable:
+
+```bash
+# Directory structure
+project/
+├── fnox.toml              # Base config
+├── fnox.production.toml   # Production overrides
+├── fnox.staging.toml      # Staging overrides
+├── fnox.development.toml  # Development overrides
+└── fnox.local.toml        # Local overrides (gitignored)
+```
+
+Example usage:
+
+```bash
+# Use default config (fnox.toml only)
+fnox exec -- npm start
+
+# Use production config (fnox.toml + fnox.production.toml)
+FNOX_PROFILE=production fnox exec -- ./deploy.sh
+
+# Use staging config (fnox.toml + fnox.staging.toml)
+FNOX_PROFILE=staging fnox exec -- ./deploy.sh
+```
+
+**Key differences:**
+
+- `fnox.$FNOX_PROFILE.toml` files are **committed to git** (environment-specific, but shared with team)
+- `fnox.local.toml` is **gitignored** (machine-specific, personal overrides)
+- Profile-specific files work with the default profile's secrets, not `[profiles.xxx]` sections
+- `fnox.default.toml` is **not loaded** (use `fnox.toml` instead)
+
 ## Hierarchical Configuration
 
 fnox searches parent directories for `fnox.toml` files:
@@ -344,9 +378,11 @@ project/
 Merge order (lowest to highest priority):
 
 1. Root `fnox.toml`
-2. Root `fnox.local.toml`
-3. Child `fnox.toml`
-4. Child `fnox.local.toml`
+2. Root `fnox.$FNOX_PROFILE.toml` (if `FNOX_PROFILE` is set and not "default")
+3. Root `fnox.local.toml`
+4. Child `fnox.toml`
+5. Child `fnox.$FNOX_PROFILE.toml` (if `FNOX_PROFILE` is set and not "default")
+6. Child `fnox.local.toml`
 
 ## Next Steps
 

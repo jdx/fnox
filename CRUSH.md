@@ -167,8 +167,17 @@ mise run test:bats -- test/bitwarden.bats
 - Each profile can have its own providers and encryption
 - Environment variable: `FNOX_PROFILE`
 - Local overrides: `fnox.local.toml` (gitignored) is loaded alongside `fnox.toml` and takes precedence
+- Profile-specific config files: `fnox.$FNOX_PROFILE.toml` (e.g., `fnox.production.toml`, `fnox.staging.toml`)
 - Config recursion: searches parent directories for `fnox.toml` files
 - Local config works with config recursion: both files are merged in each directory before recursing upward
+
+**Config file loading order (later files override earlier ones):**
+
+1. `fnox.toml` (base config)
+2. `fnox.$FNOX_PROFILE.toml` (profile-specific config, if `FNOX_PROFILE` is set and not "default")
+3. `fnox.local.toml` (local overrides)
+
+Note: Profile-specific config files (`fnox.$FNOX_PROFILE.toml`) work with the default profile's secrets, not `[profiles.xxx]` sections. They're useful for environment-specific overrides that you want to commit to version control, while `fnox.local.toml` is for machine-specific overrides that should be gitignored.
 
 ### Secret Configuration
 

@@ -183,13 +183,34 @@ impl Config {
         let config_path = dir.join("fnox.toml");
         let local_config_path = dir.join("fnox.local.toml");
 
+        // Get current profile to load profile-specific config if applicable
+        let profile = (*env::FNOX_PROFILE).clone();
+        let profile_config_path = if let Some(profile_name) = &profile {
+            if profile_name != "default" {
+                Some(dir.join(format!("fnox.{}.toml", profile_name)))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         let (mut config, mut found) = if config_path.exists() {
             (Self::load(&config_path)?, true)
         } else {
             (Self::new(), found_any)
         };
 
-        // Load fnox.local.toml if it exists and merge it (takes precedence over fnox.toml)
+        // Load fnox.$FNOX_PROFILE.toml if it exists and merge it (takes precedence over fnox.toml)
+        if let Some(profile_path) = profile_config_path
+            && profile_path.exists()
+        {
+            let profile_config = Self::load(&profile_path)?;
+            config = Self::merge_configs(config, profile_config)?;
+            found = true;
+        }
+
+        // Load fnox.local.toml if it exists and merge it (takes precedence over fnox.$FNOX_PROFILE.toml)
         if local_config_path.exists() {
             let local_config = Self::load(&local_config_path)?;
             config = Self::merge_configs(config, local_config)?;
@@ -444,7 +465,10 @@ impl Config {
 
     /// Get effective secrets (default or profile)
     /// For non-default profiles, this merges top-level secrets with profile-specific secrets,
-    /// with profile secrets taking precedence
+    /// with profile secrets taking precedence.
+    ///
+    /// Note: If a profile doesn't exist in [profiles], it's treated as "default".
+    /// This allows fnox.$FNOX_PROFILE.toml files to work without requiring a [profiles] section.
     pub fn get_secrets(&self, profile: &str) -> Result<IndexMap<String, SecretConfig>> {
         if profile == "default" {
             Ok(self.secrets.clone())
@@ -452,18 +476,14 @@ impl Config {
             // Start with top-level secrets as base
             let mut secrets = self.secrets.clone();
 
-            // Get profile-specific secrets and merge/override
+            // Get profile-specific secrets and merge/override (if profile exists)
             if let Some(profile_config) = self.profiles.get(profile) {
                 // Profile-specific secrets override top-level ones
                 secrets.extend(profile_config.secrets.clone());
-                Ok(secrets)
-            } else {
-                let available_profiles: Vec<String> = self.profiles.keys().cloned().collect();
-                Err(FnoxError::ProfileNotFound {
-                    profile: profile.to_string(),
-                    available_profiles,
-                })
             }
+            // If profile doesn't exist in [profiles], that's OK - just use top-level secrets
+            // This allows fnox.$FNOX_PROFILE.toml to work without requiring [profiles.xxx]
+            Ok(secrets)
         }
     }
 

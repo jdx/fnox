@@ -76,30 +76,6 @@ pub enum FnoxError {
     // ========================================================================
     // Profile Errors
     // ========================================================================
-    #[error("Profile '{profile}' not found")]
-    #[diagnostic(
-        code(fnox::profile::not_found),
-        help(
-            "Available profiles: {available_profiles}\n\nTo create this profile, add to your fnox.toml:\n  [profiles.{profile}]\n  # Add provider and secret configuration here\n\nOr use 'fnox set <KEY> <VALUE> -P {profile}' to create it automatically",
-            available_profiles = if available_profiles.is_empty() {
-                "none (only 'default' is available)".to_string()
-            } else {
-                available_profiles.join(", ")
-            }
-        )
-    )]
-    ProfileNotFound {
-        profile: String,
-        available_profiles: Vec<String>,
-    },
-
-    #[allow(dead_code)]
-    #[error("No profile specified")]
-    #[diagnostic(
-        code(fnox::profile::not_specified),
-        help("Specify a profile with --profile or set FNOX_PROFILE environment variable")
-    )]
-    ProfileNotSpecified,
 
     // ========================================================================
     // Secret Errors
