@@ -83,31 +83,44 @@ setup_linux_keychain() {
             chmod 700 "$XDG_RUNTIME_DIR"
         fi
 
-        # Start gnome-keyring-daemon - it outputs shell commands to set environment variables
-        local daemon_output
+        # Start gnome-keyring-daemon - it outputs shell commands on stdout, diagnostics on stderr
+        # We need to capture them separately
+        local daemon_stdout
         local daemon_stderr
-        daemon_output=$(gnome-keyring-daemon --start --components=secrets 2>&1)
-        local daemon_exit_code=$?
+        local daemon_exit_code
+
+        # Use a temporary file to capture stderr separately
+        local stderr_file="$BATS_TEST_TMPDIR/keyring-stderr-$$"
+        daemon_stdout=$(gnome-keyring-daemon --start --components=secrets 2>"$stderr_file")
+        daemon_exit_code=$?
+        daemon_stderr=$(cat "$stderr_file")
+        rm -f "$stderr_file"
+
+        # Log stderr for debugging (these are just diagnostic messages, not errors)
+        if [ -n "$daemon_stderr" ]; then
+            echo "# gnome-keyring-daemon stderr:" >&3
+            echo "$daemon_stderr" | while IFS= read -r line; do echo "#   $line" >&3; done
+        fi
 
         # Check exit code
         if [ $daemon_exit_code -ne 0 ]; then
             echo "# Error: gnome-keyring-daemon failed with exit code $daemon_exit_code" >&3
-            echo "# Output: $daemon_output" >&3
+            echo "# Stdout: $daemon_stdout" >&3
+            echo "# Stderr: $daemon_stderr" >&3
+            return 1
+        fi
+
+        # Check if we got any stdout (the environment variable exports)
+        if [ -z "$daemon_stdout" ]; then
+            echo "# Error: gnome-keyring-daemon produced no stdout" >&3
+            echo "# Stderr: $daemon_stderr" >&3
             echo "# XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-<not set>}" >&3
             echo "# DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-<not set>}" >&3
             return 1
         fi
 
-        # Check if we got any output
-        if [ -z "$daemon_output" ]; then
-            echo "# Error: gnome-keyring-daemon produced no output" >&3
-            echo "# XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-<not set>}" >&3
-            echo "# DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-<not set>}" >&3
-            return 1
-        fi
-
-        # Eval the output to set environment variables
-        eval "$daemon_output"
+        # Eval only the stdout (environment variable exports)
+        eval "$daemon_stdout"
         export USING_TEST_KEYRING=1
 
         # Verify the daemon started and set the control path
