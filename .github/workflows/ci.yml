@@ -77,15 +77,24 @@ jobs:
           echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
           echo "DBUS_SESSION_BUS_PID=$DBUS_SESSION_BUS_PID" >> "$GITHUB_ENV"
           echo "Started D-Bus session: $DBUS_SESSION_BUS_ADDRESS"
-          # Start gnome-keyring-daemon and capture output
-          KEYRING_OUTPUT=$(gnome-keyring-daemon --start --components=secrets 2>&1)
-          echo "gnome-keyring-daemon output: $KEYRING_OUTPUT"
-          # Eval the output to set environment variables
-          eval "$KEYRING_OUTPUT"
+          # Start gnome-keyring-daemon and capture stdout/stderr separately
+          KEYRING_STDERR_FILE=$(mktemp)
+          KEYRING_STDOUT=$(gnome-keyring-daemon --start --components=secrets 2>"$KEYRING_STDERR_FILE")
+          KEYRING_STDERR=$(cat "$KEYRING_STDERR_FILE")
+          rm -f "$KEYRING_STDERR_FILE"
+          # Display stderr (diagnostic messages) for debugging
+          if [ -n "$KEYRING_STDERR" ]; then
+            echo "gnome-keyring-daemon stderr: $KEYRING_STDERR"
+          fi
+          # Display stdout (environment variable exports)
+          echo "gnome-keyring-daemon stdout: $KEYRING_STDOUT"
+          # Eval only the stdout to set environment variables
+          eval "$KEYRING_STDOUT"
           # Verify the daemon started and set GNOME_KEYRING_CONTROL
           if [ -z "$GNOME_KEYRING_CONTROL" ]; then
             echo "ERROR: gnome-keyring-daemon did not set GNOME_KEYRING_CONTROL"
-            echo "Daemon output was: $KEYRING_OUTPUT"
+            echo "Daemon stdout was: $KEYRING_STDOUT"
+            echo "Daemon stderr was: $KEYRING_STDERR"
             exit 1
           fi
           echo "GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL" >> "$GITHUB_ENV"
