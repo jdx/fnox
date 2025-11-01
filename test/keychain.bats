@@ -126,7 +126,8 @@ setup_linux_keychain() {
         # Verify the daemon started and set the control path
         if [ -z "${GNOME_KEYRING_CONTROL:-}" ]; then
             echo "# Error: gnome-keyring-daemon did not set GNOME_KEYRING_CONTROL" >&3
-            echo "# Daemon output: $daemon_output" >&3
+            echo "# Daemon stdout: $daemon_stdout" >&3
+            echo "# Daemon stderr: $daemon_stderr" >&3
             return 1
         fi
 
