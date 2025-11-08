@@ -102,7 +102,7 @@ fnox list
 
 ```toml
 # Explicit file imports
-imports = ["./shared/secrets.toml", "./envs/dev.toml"]
+import = ["./shared/secrets.toml", "./envs/dev.toml"]
 ```
 
 Use hierarchy for location-based config (monorepos). Use imports for cross-cutting concerns (shared secret bundles).

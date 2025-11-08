@@ -16,7 +16,7 @@ fnox looks for configuration files in this order:
 ```toml
 # Top-level settings
 if_missing = "warn"  # Global default for missing secrets
-imports = ["./shared/secrets.toml"]  # Import other configs
+import = ["./shared/secrets.toml"]  # Import other configs
 
 # Provider definitions
 [providers]
@@ -54,7 +54,7 @@ if_missing = "error"  # or "warn", "ignore"
 List of config files to import.
 
 ```toml
-imports = ["./shared/base.toml", "./envs/dev.toml"]
+import = ["./shared/base.toml", "./envs/dev.toml"]
 ```
 
 **Usage:**
@@ -285,7 +285,7 @@ DATABASE_URL = { provider = "aws", value = "prod-db" }  # Overrides top-level DA
 ```toml
 # Global settings
 if_missing = "warn"
-imports = ["./shared/common.toml"]
+import = ["./shared/common.toml"]
 
 # Providers
 [providers]
