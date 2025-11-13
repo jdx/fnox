@@ -27,6 +27,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: autofix
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config
       - uses: jdx/mise-action@v3
       - run: "mise run render ::: lint-fix"
       - uses: autofix-ci/action@v1.3.2
