@@ -1,5 +1,5 @@
 use crate::commands::Cli;
-use crate::config::{Config, ProviderConfig, SecretConfig};
+use crate::config::{Config, SecretConfig};
 use crate::error::{FnoxError, Result};
 use crate::providers::{ProviderCapability, get_provider};
 use crate::secret_resolver;
@@ -451,51 +451,11 @@ impl EditCommand {
                 };
 
                 let provider = get_provider(provider_config)?;
-                let capabilities = provider.capabilities();
 
-                // Encrypt or store the value based on provider capabilities
-                let encrypted_value = if capabilities.contains(&ProviderCapability::Encryption) {
-                    provider.encrypt(plaintext, age_key_file).await?
-                } else if capabilities.contains(&ProviderCapability::RemoteStorage) {
-                    // For remote storage providers, push to remote and store the key name
-                    tracing::debug!(
-                        "Storing new secret '{}' in remote provider '{}'",
-                        key_str,
-                        provider_name
-                    );
-
-                    match provider_config {
-                        ProviderConfig::AwsSecretsManager { region, prefix } => {
-                            let sm_provider =
-                                crate::providers::aws_sm::AwsSecretsManagerProvider::new(
-                                    region.clone(),
-                                    prefix.clone(),
-                                );
-                            let secret_name = sm_provider.get_secret_name(&key_str);
-                            sm_provider.put_secret(&secret_name, plaintext).await?;
-                            key_str.clone()
-                        }
-                        ProviderConfig::Keychain { service, prefix } => {
-                            let keychain_provider =
-                                crate::providers::keychain::KeychainProvider::new(
-                                    service.clone(),
-                                    prefix.clone(),
-                                );
-                            keychain_provider.put_secret(&key_str, plaintext).await?;
-                            key_str.clone()
-                        }
-                        _ => {
-                            return Err(FnoxError::Config(format!(
-                                "Remote storage not yet implemented for provider '{}'. \
-                                Please use 'fnox set' to add this secret.",
-                                provider_name
-                            )));
-                        }
-                    }
-                } else {
-                    // No encryption or storage capability, store as plaintext
-                    plaintext.to_string()
-                };
+                // Use the unified put_secret method that handles both encryption and remote storage
+                let encrypted_value = provider
+                    .put_secret(&key_str, plaintext, age_key_file)
+                    .await?;
 
                 // Add to original document with encrypted value
                 let mut new_value = modified_value.clone();
@@ -548,65 +508,15 @@ impl EditCommand {
 
             tracing::debug!("Secret '{}' changed, re-encrypting", key_str);
 
-            // Re-encrypt the new value
+            // Re-encrypt the new value using the unified put_secret method
             let new_encrypted_value = if let Some(ref provider_name) = secret_entry.provider_name {
                 let providers = config.get_providers(profile);
                 if let Some(provider_config) = providers.get(provider_name) {
                     let provider = get_provider(provider_config)?;
-                    let capabilities = provider.capabilities();
-
-                    if capabilities.contains(&ProviderCapability::Encryption) {
-                        // Encryption provider - encrypt the value
-                        provider.encrypt(modified_plaintext, age_key_file).await?
-                    } else if capabilities.contains(&ProviderCapability::RemoteStorage) {
-                        // Remote storage provider - push to remote and store only the key name
-                        tracing::debug!(
-                            "Updating secret '{}' in remote provider '{}'",
-                            key_str,
-                            provider_name
-                        );
-
-                        match provider_config {
-                            ProviderConfig::AwsSecretsManager { region, prefix } => {
-                                let sm_provider =
-                                    crate::providers::aws_sm::AwsSecretsManagerProvider::new(
-                                        region.clone(),
-                                        prefix.clone(),
-                                    );
-                                let secret_name = sm_provider.get_secret_name(&key_str);
-                                sm_provider
-                                    .put_secret(&secret_name, modified_plaintext)
-                                    .await?;
-
-                                // Store just the key name (without prefix) in config
-                                key_str.clone()
-                            }
-                            ProviderConfig::Keychain { service, prefix } => {
-                                let keychain_provider =
-                                    crate::providers::keychain::KeychainProvider::new(
-                                        service.clone(),
-                                        prefix.clone(),
-                                    );
-                                keychain_provider
-                                    .put_secret(&key_str, modified_plaintext)
-                                    .await?;
-
-                                // Store just the key name (without prefix) in config
-                                key_str.clone()
-                            }
-                            _ => {
-                                // Other remote storage providers not yet implemented
-                                return Err(FnoxError::Config(format!(
-                                    "Remote storage update not yet implemented for provider '{}'. \
-                                    Please use 'fnox set' to update this secret.",
-                                    provider_name
-                                )));
-                            }
-                        }
-                    } else {
-                        // RemoteRead or unknown - shouldn't get here due to read-only check
-                        modified_plaintext.to_string()
-                    }
+                    // Use the unified put_secret method that handles both encryption and remote storage
+                    provider
+                        .put_secret(&key_str, modified_plaintext, age_key_file)
+                        .await?
                 } else {
                     // Provider not found, store plaintext
                     modified_plaintext.to_string()

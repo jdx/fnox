@@ -110,6 +110,12 @@ impl crate::providers::Provider for KeychainProvider {
 
         Ok(())
     }
+
+    async fn put_secret(&self, key: &str, value: &str, _key_file: Option<&Path>) -> Result<String> {
+        self.put_secret(key, value).await?;
+        // Return the key name to store in config
+        Ok(key.to_string())
+    }
 }
 
 #[cfg(test)]

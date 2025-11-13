@@ -166,6 +166,33 @@ pub trait Provider: Send + Sync {
         ))
     }
 
+    /// Store a secret and return the value to save in config
+    ///
+    /// This is a unified method for both encryption and remote storage:
+    /// - Encryption providers (age, aws-kms): encrypt the value and return ciphertext
+    /// - Remote storage providers (aws-sm, keychain): store remotely and return the key name
+    /// - Read-only providers: return an error
+    ///
+    /// Returns the value that should be stored in the config file.
+    async fn put_secret(&self, _key: &str, value: &str, key_file: Option<&Path>) -> Result<String> {
+        let capabilities = self.capabilities();
+
+        if capabilities.contains(&ProviderCapability::Encryption) {
+            // Encryption provider - encrypt and return ciphertext
+            self.encrypt(value, key_file).await
+        } else if capabilities.contains(&ProviderCapability::RemoteStorage) {
+            // Remote storage provider - should override this method
+            Err(crate::error::FnoxError::Provider(
+                "Remote storage provider must implement put_secret".to_string(),
+            ))
+        } else {
+            // Read-only provider
+            Err(crate::error::FnoxError::Provider(
+                "This provider does not support storing secrets".to_string(),
+            ))
+        }
+    }
+
     /// Get the capabilities of this provider
     fn capabilities(&self) -> Vec<ProviderCapability> {
         // Default: read-only remote provider (like 1Password, Bitwarden)
