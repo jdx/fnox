@@ -77,9 +77,14 @@ jobs:
           # Install gnome-keyring for keychain tests
           sudo apt-get update
           sudo apt-get install -y gnome-keyring libsecret-tools
+          # Start D-Bus session daemon
+          mkdir -p ~/.dbus-session
+          dbus-daemon --session --fork --print-address=1 > ~/.dbus-session/bus-address
+          DBUS_SESSION_BUS_ADDRESS=$(cat ~/.dbus-session/bus-address)
+          export DBUS_SESSION_BUS_ADDRESS
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
           # Start gnome-keyring daemon for keychain tests
-          # The daemon will automatically set up D-Bus and create control sockets
-          gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'foobar'
+          echo "foobar" | gnome-keyring-daemon --unlock --components=secrets --daemonize
           # Start Vaultwarden
           docker run -d --name vaultwarden \
             -p 8080:80 \
@@ -163,7 +168,18 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
           sudo apt-get update
-          sudo apt-get install -y libdbus-1-dev pkg-config
+          sudo apt-get install -y libdbus-1-dev pkg-config gnome-keyring libsecret-tools
+      - name: Setup gnome-keyring (Ubuntu)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          # Start D-Bus session daemon
+          mkdir -p ~/.dbus-session
+          dbus-daemon --session --fork --print-address=1 > ~/.dbus-session/bus-address
+          DBUS_SESSION_BUS_ADDRESS=$(cat ~/.dbus-session/bus-address)
+          export DBUS_SESSION_BUS_ADDRESS
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
+          # Start gnome-keyring daemon for keychain tests
+          echo "foobar" | gnome-keyring-daemon --unlock --components=secrets --daemonize
       - name: Install Rust components
         run: rustup component add rustfmt clippy
       - uses: actions/download-artifact@v4
