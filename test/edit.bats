@@ -202,3 +202,165 @@ EDITOR_SCRIPT
 	assert_success
 	assert_output "value3"
 }
+
+@test "edit command: create, edit, and remove encrypted secrets" {
+	# Setup: Start with one existing secret
+	echo "original-value" | fnox set EXISTING_SECRET --provider age
+
+	# Create an editor script that:
+	# 1. Creates a new secret (NEW_SECRET)
+	# 2. Edits the existing secret (EXISTING_SECRET)
+	# 3. Removes TEST_SECRET (from setup)
+	cat >"$TEST_DIR/test-editor.py" <<'EDITOR_SCRIPT'
+#!/usr/bin/env python3
+import sys
+import re
+
+with open(sys.argv[1], 'r') as f:
+    content = f.read()
+
+# 1. Edit existing secret - change EXISTING_SECRET value
+content = re.sub(
+    r'EXISTING_SECRET= \{ provider = "age", value = "[^"]*" \}',
+    r'EXISTING_SECRET= { provider = "age", value = "edited-value" }',
+    content
+)
+
+# 2. Add a new secret - append to the [secrets] section
+# Find the end of the secrets section and add new secret
+if '[secrets]' in content:
+    # Add new secret after [secrets] section
+    content = re.sub(
+        r'(\[secrets\]\n)',
+        r'\1NEW_SECRET= { provider = "age", value = "new-secret-value" }\n',
+        content
+    )
+
+# 3. Remove TEST_SECRET - delete the line
+content = re.sub(
+    r'TEST_SECRET= \{[^}]*\}\n',
+    '',
+    content
+)
+
+with open(sys.argv[1], 'w') as f:
+    f.write(content)
+EDITOR_SCRIPT
+	chmod +x "$TEST_DIR/test-editor.py"
+
+	export EDITOR="$TEST_DIR/test-editor.py"
+
+	# Run edit command
+	run fnox edit
+	assert_success
+
+	# Verify: NEW_SECRET was created and encrypted
+	run fnox get NEW_SECRET
+	assert_success
+	assert_output "new-secret-value"
+
+	# Verify: EXISTING_SECRET was edited and re-encrypted
+	run fnox get EXISTING_SECRET
+	assert_success
+	assert_output "edited-value"
+
+	# Verify: TEST_SECRET was removed (should fail)
+	run fnox get TEST_SECRET
+	assert_failure
+}
+
+@test "edit command: create, edit, and remove keychain secrets" {
+	# Skip if keychain is not available (CI environments)
+	if ! command -v security &>/dev/null && ! command -v secret-tool &>/dev/null; then
+		skip "Keychain/secret-tool not available"
+	fi
+
+	# Add keychain provider to config
+	cat >>fnox.toml <<EOF
+
+[providers.keychain]
+type = "keychain"
+service = "fnox-test"
+prefix = "test-$$/"
+EOF
+
+	# Setup: Create initial keychain secrets
+	echo "kc-original" | fnox set KC_EXISTING --provider keychain
+	echo "kc-to-delete" | fnox set KC_DELETE --provider keychain
+
+	# Verify setup
+	run fnox get KC_EXISTING
+	if [ "$status" -ne 0 ]; then
+		skip "Keychain not accessible in this environment"
+	fi
+
+	# Create an editor script that:
+	# 1. Creates a new keychain secret
+	# 2. Edits existing keychain secret
+	# 3. Removes a keychain secret
+	cat >"$TEST_DIR/test-editor.py" <<'EDITOR_SCRIPT'
+#!/usr/bin/env python3
+import sys
+import re
+
+with open(sys.argv[1], 'r') as f:
+    content = f.read()
+
+# 1. Edit existing keychain secret
+content = re.sub(
+    r'KC_EXISTING= \{ provider = "keychain", value = "[^"]*" \}',
+    r'KC_EXISTING= { provider = "keychain", value = "kc-edited" }',
+    content
+)
+
+# 2. Add new keychain secret
+if '[secrets]' in content:
+    content = re.sub(
+        r'(\[secrets\]\n)',
+        r'\1KC_NEW= { provider = "keychain", value = "kc-new-value" }\n',
+        content
+    )
+
+# 3. Remove KC_DELETE secret
+content = re.sub(
+    r'KC_DELETE= \{[^}]*\}\n',
+    '',
+    content
+)
+
+with open(sys.argv[1], 'w') as f:
+    f.write(content)
+EDITOR_SCRIPT
+	chmod +x "$TEST_DIR/test-editor.py"
+
+	export EDITOR="$TEST_DIR/test-editor.py"
+
+	# Run edit command
+	run fnox edit
+	assert_success
+
+	# Verify: KC_NEW was created in keychain
+	run fnox get KC_NEW
+	assert_success
+	assert_output "kc-new-value"
+
+	# Verify: KC_EXISTING was edited in keychain
+	run fnox get KC_EXISTING
+	assert_success
+	assert_output "kc-edited"
+
+	# Verify: KC_DELETE was removed (should fail)
+	run fnox get KC_DELETE
+	assert_failure
+
+	# Cleanup: manually remove keychain entries
+	if command -v security &>/dev/null; then
+		# macOS keychain
+		security delete-generic-password -s "fnox-test" -a "test-$$/KC_NEW" 2>/dev/null || true
+		security delete-generic-password -s "fnox-test" -a "test-$$/KC_EXISTING" 2>/dev/null || true
+	elif command -v secret-tool &>/dev/null; then
+		# Linux secret-service
+		secret-tool clear service "fnox-test" account "test-$$/KC_NEW" 2>/dev/null || true
+		secret-tool clear service "fnox-test" account "test-$$/KC_EXISTING" 2>/dev/null || true
+	fi
+}
