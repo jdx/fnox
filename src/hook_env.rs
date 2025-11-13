@@ -200,7 +200,6 @@ fn has_config_been_modified() -> bool {
 
 /// Collect all config files (fnox.toml, fnox.$FNOX_PROFILE.toml, and fnox.local.toml) from dir up to root
 fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
-    use crate::env;
     let mut configs = Vec::new();
     let mut current = start_dir.to_path_buf();
 
@@ -215,9 +214,9 @@ fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
         }
 
         // Check fnox.$FNOX_PROFILE.toml
-        if let Some(profile_name) = (*env::FNOX_PROFILE).as_ref()
-            && profile_name != "default"
-        {
+        // Use Settings system which respects: CLI flag > Env var > Default
+        let profile_name = crate::settings::Settings::get().profile.clone();
+        if profile_name != "default" {
             let profile_config_path = current.join(format!("fnox.{}.toml", profile_name));
             if let Ok(metadata) = std::fs::metadata(&profile_config_path)
                 && let Ok(modified) = metadata.modified()
@@ -283,7 +282,6 @@ fn hash_fnox_env_vars() -> String {
 
 /// Find fnox.toml, fnox.$FNOX_PROFILE.toml, or fnox.local.toml in current or parent directories
 pub fn find_config() -> Option<PathBuf> {
-    use crate::env;
     let mut current = std::env::current_dir().ok()?;
 
     loop {
@@ -293,9 +291,9 @@ pub fn find_config() -> Option<PathBuf> {
         }
 
         // Check for profile-specific config
-        if let Some(profile_name) = (*env::FNOX_PROFILE).as_ref()
-            && profile_name != "default"
-        {
+        // Use Settings system which respects: CLI flag > Env var > Default
+        let profile_name = crate::settings::Settings::get().profile.clone();
+        if profile_name != "default" {
             let profile_config_path = current.join(format!("fnox.{}.toml", profile_name));
             if profile_config_path.exists() {
                 return Some(profile_config_path);

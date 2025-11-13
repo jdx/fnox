@@ -184,7 +184,15 @@ impl Config {
         let local_config_path = dir.join("fnox.local.toml");
 
         // Get current profile to load profile-specific config if applicable
-        let profile = (*env::FNOX_PROFILE).clone();
+        // Use Settings system which respects: CLI flag > Env var > Default
+        let profile = {
+            let settings_profile = crate::settings::Settings::get().profile.clone();
+            if settings_profile != "default" {
+                Some(settings_profile)
+            } else {
+                None
+            }
+        };
         let profile_config_path = if let Some(profile_name) = &profile {
             if profile_name != "default" {
                 Some(dir.join(format!("fnox.{}.toml", profile_name)))
