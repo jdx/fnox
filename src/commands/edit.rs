@@ -75,14 +75,18 @@ impl EditCommand {
             }
         }
 
-        // Step 3: Decrypt/fetch all secrets (fail immediately on error per user preference)
+        // Step 3: Decrypt/fetch all secrets (force error mode in edit)
         tracing::debug!("Decrypting {} secrets", all_secrets.len());
         for secret_entry in &mut all_secrets {
+            // In edit mode, override if_missing to "error" to get the actual error
+            let mut edit_secret_config = secret_entry.original_config.clone();
+            edit_secret_config.if_missing = Some(crate::config::IfMissing::Error);
+
             secret_entry.plaintext_value = secret_resolver::resolve_secret(
                 &config,
                 &profile,
                 &secret_entry.key,
-                &secret_entry.original_config,
+                &edit_secret_config,
                 cli.age_key_file.as_ref().map(PathBuf::from).as_deref(),
             )
             .await?;
@@ -204,7 +208,9 @@ impl EditCommand {
         doc: &DocumentMut,
         all_secrets: &[SecretEntry],
     ) -> Result<NamedTempFile> {
-        let mut temp_file = NamedTempFile::new()
+        let mut temp_file = tempfile::Builder::new()
+            .suffix(".toml")
+            .tempfile()
             .map_err(|e| FnoxError::Config(format!("Failed to create temporary file: {}", e)))?;
 
         // Set restrictive permissions (Unix only)
@@ -287,18 +293,22 @@ impl EditCommand {
     ) -> Result<()> {
         for (key, value) in secrets_table.iter_mut() {
             let key_string = key.to_string();
-            let lookup_key = (profile.to_string(), key_string);
+            let lookup_key = (profile.to_string(), key_string.clone());
             if let Some(secret_entry) = secrets_map.get(&lookup_key) {
-                // Get the inline table for this secret
+                // Try inline table first (KEY = { provider = "...", value = "..." })
                 if let Some(inline_table) = value.as_inline_table_mut() {
-                    // Replace the 'value' field with plaintext
                     if let Some(plaintext) = &secret_entry.plaintext_value {
                         inline_table.insert("value", Value::from(plaintext.as_str()));
                     }
-
-                    // Note: We can't easily add inline comments to inline tables in toml_edit
-                    // The read-only status will be enforced when processing changes
+                } else if let Some(table) = value.as_table_mut() {
+                    // Handle regular table format ([secrets.KEY])
+                    if let Some(plaintext) = &secret_entry.plaintext_value {
+                        table.insert("value", toml_edit::value(plaintext.as_str()));
+                    }
                 }
+
+                // Note: We can't easily add inline comments to tables in toml_edit
+                // The read-only status will be enforced when processing changes
             }
         }
         Ok(())
@@ -392,24 +402,131 @@ impl EditCommand {
 
             // Get the secret entry metadata using (profile, key) composite key
             let lookup_key = (secret_profile.to_string(), key_str.clone());
-            let Some(secret_entry) = secrets_map.get(&lookup_key) else {
-                // New secret added - not supported in edit mode
-                return Err(FnoxError::Config(format!(
-                    "New secret '{}' detected. Use 'fnox set' to add new secrets.",
-                    key_str
-                )));
+
+            // Handle new secrets
+            if secrets_map.get(&lookup_key).is_none() {
+                // New secret added - encrypt and add to config
+                tracing::debug!("New secret '{}' detected, adding to config", key_str);
+
+                // Extract plaintext value and provider from modified value
+                let (plaintext, provider_name) =
+                    if let Some(inline_table) = modified_value.as_inline_table() {
+                        let plaintext = inline_table.get("value").and_then(|v| v.as_str());
+                        let provider = inline_table.get("provider").and_then(|v| v.as_str());
+                        (plaintext, provider)
+                    } else if let Some(table) = modified_value.as_table() {
+                        let plaintext = table.get("value").and_then(|v| v.as_str());
+                        let provider = table.get("provider").and_then(|v| v.as_str());
+                        (plaintext, provider)
+                    } else {
+                        continue;
+                    };
+
+                let Some(plaintext) = plaintext else {
+                    continue;
+                };
+
+                // Determine provider to use (explicit or default)
+                let provider_name = if let Some(prov) = provider_name {
+                    prov.to_string()
+                } else if let Some(default_prov) = config.get_default_provider(profile)? {
+                    default_prov
+                } else {
+                    // No provider specified and no default - store as plaintext
+                    tracing::warn!(
+                        "No provider specified for new secret '{}', storing as plaintext",
+                        key_str
+                    );
+                    original_secrets.insert(&key_str, modified_value.clone());
+                    continue;
+                };
+
+                // Get provider config and encrypt
+                let providers = config.get_providers(profile);
+                let Some(provider_config) = providers.get(&provider_name) else {
+                    return Err(FnoxError::Config(format!(
+                        "Provider '{}' not found for new secret '{}'",
+                        provider_name, key_str
+                    )));
+                };
+
+                let provider = get_provider(provider_config)?;
+                let capabilities = provider.capabilities();
+
+                // Encrypt or store the value based on provider capabilities
+                let encrypted_value = if capabilities.contains(&ProviderCapability::Encryption) {
+                    provider.encrypt(plaintext, age_key_file).await?
+                } else if capabilities.contains(&ProviderCapability::RemoteStorage) {
+                    // For remote storage providers, push to remote and store the key name
+                    tracing::debug!(
+                        "Storing new secret '{}' in remote provider '{}'",
+                        key_str,
+                        provider_name
+                    );
+
+                    match provider_config {
+                        ProviderConfig::AwsSecretsManager { region, prefix } => {
+                            let sm_provider =
+                                crate::providers::aws_sm::AwsSecretsManagerProvider::new(
+                                    region.clone(),
+                                    prefix.clone(),
+                                );
+                            let secret_name = sm_provider.get_secret_name(&key_str);
+                            sm_provider.put_secret(&secret_name, plaintext).await?;
+                            key_str.clone()
+                        }
+                        ProviderConfig::Keychain { service, prefix } => {
+                            let keychain_provider =
+                                crate::providers::keychain::KeychainProvider::new(
+                                    service.clone(),
+                                    prefix.clone(),
+                                );
+                            keychain_provider.put_secret(&key_str, plaintext).await?;
+                            key_str.clone()
+                        }
+                        _ => {
+                            return Err(FnoxError::Config(format!(
+                                "Remote storage not yet implemented for provider '{}'. \
+                                Please use 'fnox set' to add this secret.",
+                                provider_name
+                            )));
+                        }
+                    }
+                } else {
+                    // No encryption or storage capability, store as plaintext
+                    plaintext.to_string()
+                };
+
+                // Add to original document with encrypted value
+                let mut new_value = modified_value.clone();
+                if let Some(inline_table) = new_value.as_inline_table_mut() {
+                    inline_table.insert("value", Value::from(encrypted_value.as_str()));
+                } else if let Some(table) = new_value.as_table_mut() {
+                    table.insert("value", toml_edit::value(encrypted_value.as_str()));
+                }
+                original_secrets.insert(&key_str, new_value);
+                continue;
+            }
+
+            let secret_entry = secrets_map.get(&lookup_key).unwrap();
+
+            // Get modified plaintext value (support both inline table and table formats)
+            let modified_plaintext = if let Some(inline_table) = modified_value.as_inline_table() {
+                inline_table.get("value").and_then(|v| v.as_str())
+            } else if let Some(table) = modified_value.as_table() {
+                table.get("value").and_then(|v| v.as_str())
+            } else {
+                None
+            };
+
+            let Some(modified_plaintext) = modified_plaintext else {
+                continue;
             };
 
             // Check if this is a read-only secret
             if secret_entry.is_read_only {
-                // Get modified plaintext value
-                let modified_plaintext = modified_value
-                    .as_inline_table()
-                    .and_then(|t| t.get("value"))
-                    .and_then(|v| v.as_str());
-
                 // Check if it changed
-                if modified_plaintext != secret_entry.plaintext_value.as_deref() {
+                if Some(modified_plaintext) != secret_entry.plaintext_value.as_deref() {
                     return Err(FnoxError::Config(format!(
                         "Cannot modify read-only secret '{}' from provider '{}'",
                         key_str,
@@ -422,17 +539,6 @@ impl EditCommand {
                 // No change, skip this secret
                 continue;
             }
-
-            // Get the modified plaintext value
-            let Some(modified_inline_table) = modified_value.as_inline_table() else {
-                continue;
-            };
-
-            let Some(modified_plaintext) =
-                modified_inline_table.get("value").and_then(|v| v.as_str())
-            else {
-                continue;
-            };
 
             // Check if the value changed
             if Some(modified_plaintext) == secret_entry.plaintext_value.as_deref() {
@@ -511,10 +617,13 @@ impl EditCommand {
             };
 
             // Update the original document with the new encrypted value
-            if let Some(original_value) = original_secrets.get_mut(&key_str)
-                && let Some(original_inline_table) = original_value.as_inline_table_mut()
-            {
-                original_inline_table.insert("value", Value::from(new_encrypted_value.as_str()));
+            if let Some(original_value) = original_secrets.get_mut(&key_str) {
+                if let Some(original_inline_table) = original_value.as_inline_table_mut() {
+                    original_inline_table
+                        .insert("value", Value::from(new_encrypted_value.as_str()));
+                } else if let Some(original_table) = original_value.as_table_mut() {
+                    original_table.insert("value", toml_edit::value(new_encrypted_value.as_str()));
+                }
             }
         }
 
