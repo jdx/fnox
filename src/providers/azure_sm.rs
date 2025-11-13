@@ -103,4 +103,11 @@ impl crate::providers::Provider for AzureSecretsManagerProvider {
 
         Ok(())
     }
+
+    async fn put_secret(&self, key: &str, value: &str, _key_file: Option<&Path>) -> Result<String> {
+        let secret_name = self.get_secret_name(key);
+        self.put_secret(&secret_name, value).await?;
+        // Return the key name (without prefix) to store in config
+        Ok(key.to_string())
+    }
 }

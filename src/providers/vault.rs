@@ -78,6 +78,10 @@ impl HashiCorpVaultProvider {
 
 #[async_trait]
 impl crate::providers::Provider for HashiCorpVaultProvider {
+    fn capabilities(&self) -> Vec<crate::providers::ProviderCapability> {
+        vec![crate::providers::ProviderCapability::RemoteStorage]
+    }
+
     async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
         tracing::debug!("Getting secret '{}' from HashiCorp Vault", value);
 
@@ -120,6 +124,23 @@ impl crate::providers::Provider for HashiCorpVaultProvider {
         self.execute_vault_command(&args)?;
 
         Ok(())
+    }
+
+    async fn put_secret(&self, key: &str, value: &str, _key_file: Option<&Path>) -> Result<String> {
+        let secret_path = self.get_secret_path(key);
+
+        tracing::debug!("Writing secret '{}' to HashiCorp Vault", secret_path);
+
+        // Use vault kv put command: vault kv put <path> value=<value>
+        let value_arg = format!("value={}", value);
+        let args = vec!["kv", "put", &secret_path, &value_arg];
+
+        self.execute_vault_command(&args)?;
+
+        tracing::debug!("Successfully wrote secret '{}' to Vault", secret_path);
+
+        // Return the key name to store in config
+        Ok(key.to_string())
     }
 }
 

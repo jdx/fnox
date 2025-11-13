@@ -33,6 +33,26 @@ impl GoogleSecretManagerProvider {
             FnoxError::Provider(format!("Failed to create GCP Secret Manager client: {}", e))
         })
     }
+
+    /// Get the secret ID (without version path)
+    fn get_secret_id(&self, key: &str) -> String {
+        if let Some(prefix) = &self.prefix {
+            format!("{}{}", prefix, key)
+        } else {
+            key.to_string()
+        }
+    }
+
+    /// Create or update a secret in GCP Secret Manager
+    /// Note: This is a placeholder - full implementation requires determining
+    /// the correct API for setting payload data in google-cloud-secretmanager-v1 crate
+    async fn put_secret_value(&self, _secret_id: &str, _secret_value: &str) -> Result<()> {
+        Err(FnoxError::Provider(
+            "GCP Secret Manager put_secret not yet implemented. \
+            Contributions welcome to implement payload data setting."
+                .to_string(),
+        ))
+    }
 }
 
 #[async_trait]
@@ -84,5 +104,12 @@ impl crate::providers::Provider for GoogleSecretManagerProvider {
             })?;
 
         Ok(())
+    }
+
+    async fn put_secret(&self, key: &str, value: &str, _key_file: Option<&Path>) -> Result<String> {
+        let secret_id = self.get_secret_id(key);
+        self.put_secret_value(&secret_id, value).await?;
+        // Return the key name (without prefix) to store in config
+        Ok(key.to_string())
     }
 }
