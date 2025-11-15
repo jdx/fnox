@@ -19,6 +19,9 @@ setup() {
 	load 'test_helper/common_setup'
 	_common_setup
 
+	# Allow self-signed certificates for localhost testing (required for vaultwarden HTTPS)
+	export NODE_TLS_REJECT_UNAUTHORIZED=0
+
 	# Check if bw CLI is installed
 	if ! command -v bw >/dev/null 2>&1; then
 		skip "Bitwarden CLI (bw) not installed. Install with: npm install -g @bitwarden/cli"

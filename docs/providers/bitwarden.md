@@ -315,8 +315,8 @@ For local development without a Bitwarden account:
 source ./test/setup-bitwarden-test.sh
 
 # Follow on-screen instructions:
-# 1. Create account at http://localhost:8080
-# 2. Login: bw login
+# 1. Create account at https://localhost:8080 (accept self-signed certificate)
+# 2. Login: export NODE_TLS_REJECT_UNAUTHORIZED=0 && bw login
 # 3. Unlock: export BW_SESSION=$(bw unlock --raw)
 
 # Run tests

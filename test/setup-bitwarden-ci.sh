@@ -15,9 +15,11 @@
 set -e
 
 # Configuration
-BW_SERVER="${BW_SERVER:-http://localhost:8080}"
+BW_SERVER="${BW_SERVER:-https://localhost:8080}"
 BW_EMAIL="${BW_EMAIL:-test@fnox.ci}"
 BW_PASSWORD="${BW_PASSWORD:-TestCIPassword123!}"
+# Allow self-signed certificates for localhost testing
+export NODE_TLS_REJECT_UNAUTHORIZED=0
 
 # Find the script directory (handles both sourced and executed)
 if [ -n "${BASH_SOURCE[0]}" ]; then
@@ -78,7 +80,7 @@ docker restart "$CONTAINER_NAME"
 # Wait for vaultwarden to be ready after restart
 echo "Waiting for vaultwarden to be ready..."
 for i in {1..60}; do
-	if curl -sf "$BW_SERVER" >/dev/null 2>&1; then
+	if curl -skf "$BW_SERVER" >/dev/null 2>&1; then
 		echo "✓ Vaultwarden is ready with seeded database"
 		break
 	fi
@@ -93,6 +95,7 @@ done
 echo "Configuring bw CLI..."
 # Logout first if already logged in to allow server config change
 bw logout >/dev/null 2>&1 || true
+# Note: NODE_TLS_REJECT_UNAUTHORIZED=0 is set above to allow self-signed certificates
 bw config server "$BW_SERVER"
 
 # Login with pre-created test account
