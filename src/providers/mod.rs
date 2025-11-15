@@ -72,6 +72,8 @@ pub enum ProviderConfig {
         collection: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         organization_id: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        profile: Option<String>,
     },
     #[serde(rename = "gcp-kms")]
     #[strum(serialize = "gcp-kms")]
@@ -242,9 +244,11 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
         ProviderConfig::Bitwarden {
             collection,
             organization_id,
+            profile,
         } => Ok(Box::new(bitwarden::BitwardenProvider::new(
             collection.clone(),
             organization_id.clone(),
+            profile.clone(),
         ))),
         ProviderConfig::GcpKms {
             project,

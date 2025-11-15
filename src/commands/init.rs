@@ -265,6 +265,12 @@ impl InitCommand {
                     .ok()
                     .filter(|s| !s.is_empty());
 
+                let profile = Input::new("Bitwarden CLI profile (optional):")
+                    .placeholder("")
+                    .run()
+                    .ok()
+                    .filter(|s| !s.is_empty());
+
                 let name = Input::new("Provider name:")
                     .placeholder("bitwarden")
                     .run()
@@ -275,6 +281,7 @@ impl InitCommand {
                     ProviderConfig::Bitwarden {
                         collection,
                         organization_id,
+                        profile,
                     },
                 ))
             }

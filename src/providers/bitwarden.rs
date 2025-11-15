@@ -7,13 +7,15 @@ use std::{path::Path, sync::LazyLock};
 pub struct BitwardenProvider {
     collection: Option<String>,
     organization_id: Option<String>,
+    profile: Option<String>,
 }
 
 impl BitwardenProvider {
-    pub fn new(collection: Option<String>, organization_id: Option<String>) -> Self {
+    pub fn new(collection: Option<String>, organization_id: Option<String>, profile: Option<String>) -> Self {
         Self {
             collection,
             organization_id,
+            profile,
         }
     }
 
@@ -22,6 +24,20 @@ impl BitwardenProvider {
         tracing::debug!("Executing bw command with args: {:?}", args);
 
         let mut cmd = Command::new("bw");
+        if let Some(profile) = &self.profile {
+            match std::env::var("BITWARDENCLI_APPDATA_DIR") {
+                Ok(existing_value) => {
+                    tracing::warn!(
+                        "BITWARDENCLI_APPDATA_DIR is already set to '{}', not overriding with profile '{}'",
+                        existing_value,
+                        profile
+                    );
+                }
+                Err(_) => {
+                    cmd.env("BITWARDENCLI_APPDATA_DIR", format!("{}/Bitwarden CLI {}", dirs::config_dir().unwrap().display(), profile));
+                }
+            }
+        }
 
         // Check if session token is available
         let token = if let Some(token) = &*BW_SESSION_TOKEN {
