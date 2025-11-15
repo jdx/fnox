@@ -282,6 +282,7 @@ impl InitCommand {
                         collection,
                         organization_id,
                         profile,
+                        backend: None,
                     },
                 ))
             }
