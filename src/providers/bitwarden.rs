@@ -44,22 +44,14 @@ impl BitwardenProvider {
         }
     }
 
-    fn build_command(
-        &self,
-        kind: Option<&str>,
-        item_name: &str,
-    ) -> Result<Command> {
+    fn build_command(&self, kind: Option<&str>, item_name: &str) -> Result<Command> {
         match &self.backend {
             BitwardenBackend::Bw => self.build_bw_command(kind, item_name),
             BitwardenBackend::Rbw => self.build_rbw_command(kind, item_name),
         }
     }
 
-    fn build_bw_command(
-        &self,
-        kind: Option<&str>,
-        item_name: &str,
-    ) -> Result<Command> {
+    fn build_bw_command(&self, kind: Option<&str>, item_name: &str) -> Result<Command> {
         // Build the bw get command
         // bw get <type> <name> [--output json]
         // where type can be: item, username, password, uri, totp, notes, exposed, attachment
@@ -88,7 +80,6 @@ impl BitwardenProvider {
             cmd.arg(field_type);
             cmd.arg(item_name);
         }
-
 
         if let Some(ref coll) = self.collection {
             cmd.args(["--collectionid", coll]);
@@ -147,11 +138,7 @@ impl BitwardenProvider {
         Ok(cmd)
     }
 
-    fn build_rbw_command(
-        &self,
-        kind: Option<&str>,
-        item_name: &str,
-    ) -> Result<Command> {
+    fn build_rbw_command(&self, kind: Option<&str>, item_name: &str) -> Result<Command> {
         let mut cmd = Command::new("rbw");
 
         match kind {
@@ -184,7 +171,7 @@ impl BitwardenProvider {
 
         Ok(cmd)
     }
-    
+
     fn execute_command(&self, cmd: &mut Command) -> Result<String> {
         // Close stdin to prevent bw from prompting for passwords interactively
         // This is especially important in CI environments where there's no TTY
