@@ -206,6 +206,39 @@ bitwarden = { type = "bitwarden", organization_id = "prod-org-id" }
 DATABASE_URL = { provider = "bitwarden", value = "Prod Database" }
 ```
 
+## Multi-profile Example
+
+`bw` supports multiple accounts, as per the [official documentation](https://bitwarden.com/help/cli/#log-in-to-multiple-accounts).
+fnox can access secrets in a specific profile supplying an optional "profile" attribute to the prov
+
+```toml
+default_provider = "bitwarden"
+
+[providers.bitwarden]
+type = "bitwarden"
+profile = "Business"
+
+[providers.bitwarden-perso]
+type = "bitwarden"
+profile = "Personal"
+```
+
+## `rbw` support
+
+[`rbw`](https://github.com/doy/rbw) is a stateful alternative to `bw`.
+
+fnox supports rbw via an experimental backend.
+
+```toml
+default_provider = "bitwarden"
+
+[providers.bitwarden]
+type = "bitwarden"
+backend = "rbw"
+```
+
+NB: you must have set up the `rbw` CLI independently from fnox using `rbw login`.
+
 ## Self-Hosted Vaultwarden
 
 Vaultwarden is a lightweight, open-source Bitwarden-compatible server:
@@ -293,6 +326,8 @@ Filter secrets by collection or organization:
 [providers]
 bitwarden = { type = "bitwarden", collection = "abc123-collection-id", organization_id = "org-id" }
 ```
+
+NB: This feature is supported only by the `bw` backend.
 
 Get collection ID:
 
