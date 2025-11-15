@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.4.0](https://github.com/jdx/fnox/compare/v1.3.0..v1.4.0) - 2025-11-15
+
+### 🚀 Features
+
+- **(bitwarden)** specify profile by [@nilleb](https://github.com/nilleb) in [#90](https://github.com/jdx/fnox/pull/90)
+
+### 🐛 Bug Fixes
+
+- **(ci)** make final job fail if any dependencies fail by [@jdx](https://github.com/jdx) in [#74](https://github.com/jdx/fnox/pull/74)
+- **(ci)** install dbus dependencies for autofix and release-plz workflows by [@jdx](https://github.com/jdx) in [#89](https://github.com/jdx/fnox/pull/89)
+- **(docs)** imports -> import by [@lttb](https://github.com/lttb) in [#84](https://github.com/jdx/fnox/pull/84)
+- **(edit)** add .toml extension, decrypt secrets properly, and support adding new secrets by [@jdx](https://github.com/jdx) in [#88](https://github.com/jdx/fnox/pull/88)
+- **(keychain)** use Secret Service backend for Linux by [@jdx](https://github.com/jdx) in [#86](https://github.com/jdx/fnox/pull/86)
+- respect --profile/-P CLI flag when loading config files by [@jdx](https://github.com/jdx) in [#87](https://github.com/jdx/fnox/pull/87)
+
+### 🔍 Other Changes
+
+- shellcheck/shfmt by [@jdx](https://github.com/jdx) in [#77](https://github.com/jdx/fnox/pull/77)
+
+### New Contributors
+
+- @nilleb made their first contribution in [#90](https://github.com/jdx/fnox/pull/90)
+- @lttb made their first contribution in [#84](https://github.com/jdx/fnox/pull/84)
+
 ## [1.3.0](https://github.com/jdx/fnox/compare/v1.2.3..v1.3.0) - 2025-11-01
 
 ### 🚀 Features
