@@ -76,7 +76,10 @@ pub enum ProviderConfig {
         organization_id: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         profile: Option<String>,
-        #[serde(default = "default_bitwarden_backend", skip_serializing_if = "is_default_backend")]
+        #[serde(
+            default = "default_bitwarden_backend",
+            skip_serializing_if = "is_default_backend"
+        )]
         backend: Option<BitwardenBackend>,
     },
     #[serde(rename = "gcp-kms")]
@@ -300,5 +303,7 @@ fn default_bitwarden_backend() -> Option<BitwardenBackend> {
 }
 
 fn is_default_backend(backend: &Option<BitwardenBackend>) -> bool {
-    backend.as_ref().map_or(true, |b| *b == BitwardenBackend::Bw)
+    backend
+        .as_ref()
+        .map_or(true, |b| *b == BitwardenBackend::Bw)
 }
