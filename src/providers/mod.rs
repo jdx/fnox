@@ -257,7 +257,7 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
             collection.clone(),
             organization_id.clone(),
             profile.clone(),
-            backend.clone(),
+            *backend,
         ))),
         ProviderConfig::GcpKms {
             project,
@@ -303,7 +303,5 @@ fn default_bitwarden_backend() -> Option<BitwardenBackend> {
 }
 
 fn is_default_backend(backend: &Option<BitwardenBackend>) -> bool {
-    backend
-        .as_ref()
-        .map_or(true, |b| *b == BitwardenBackend::Bw)
+    backend.as_ref().is_none_or(|b| *b == BitwardenBackend::Bw)
 }
