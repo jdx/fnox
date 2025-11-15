@@ -11,7 +11,11 @@ pub struct BitwardenProvider {
 }
 
 impl BitwardenProvider {
-    pub fn new(collection: Option<String>, organization_id: Option<String>, profile: Option<String>) -> Self {
+    pub fn new(
+        collection: Option<String>,
+        organization_id: Option<String>,
+        profile: Option<String>,
+    ) -> Self {
         Self {
             collection,
             organization_id,
@@ -34,7 +38,14 @@ impl BitwardenProvider {
                     );
                 }
                 Err(_) => {
-                    cmd.env("BITWARDENCLI_APPDATA_DIR", format!("{}/Bitwarden CLI {}", dirs::config_dir().unwrap().display(), profile));
+                    cmd.env(
+                        "BITWARDENCLI_APPDATA_DIR",
+                        format!(
+                            "{}/Bitwarden CLI {}",
+                            dirs::config_dir().unwrap().display(),
+                            profile
+                        ),
+                    );
                 }
             }
         }
