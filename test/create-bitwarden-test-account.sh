@@ -5,7 +5,7 @@
 
 set -e
 
-BW_SERVER="http://localhost:8080"
+BW_SERVER="https://localhost:8080"
 BW_EMAIL="${BW_TEST_EMAIL:-test@fnox.local}"
 BW_PASSWORD="${BW_TEST_PASSWORD:-TestPassword123!}"
 
@@ -13,7 +13,7 @@ echo "Creating Bitwarden test account..."
 echo "Email: $BW_EMAIL"
 
 # The bw CLI doesn't have a register command, so users need to:
-# 1. Go to http://localhost:8080
+# 1. Go to https://localhost:8080 (accept self-signed certificate)
 # 2. Click "Create Account"
 # 3. Enter email: test@fnox.local
 # 4. Enter password: TestPassword123!
