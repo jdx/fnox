@@ -86,6 +86,8 @@ for i in {1..60}; do
 	fi
 	if [ "$i" -eq 60 ]; then
 		echo "Error: Vaultwarden failed to start after 60 seconds"
+		docker logs "$CONTAINER_NAME"
+		docker ps -a
 		exit 1
 	fi
 	sleep 1
