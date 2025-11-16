@@ -85,13 +85,23 @@ jobs:
           echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
           # Start gnome-keyring daemon for keychain tests
           echo "foobar" | gnome-keyring-daemon --unlock --components=secrets --daemonize
-          # Start Vaultwarden
+          # Start Vaultwarden with HTTPS (self-signed certificate)
+          # Generate self-signed certificate
+          mkdir -p /tmp/vaultwarden-certs
+          openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout /tmp/vaultwarden-certs/key.pem \
+            -out /tmp/vaultwarden-certs/cert.pem \
+            -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" 2>/dev/null || true
+          # Start Vaultwarden with HTTPS enabled
           docker run -d --name vaultwarden \
             -p 8080:80 \
-            -e DOMAIN=http://localhost:8080 \
+            -e DOMAIN=https://localhost:8080 \
             -e SIGNUPS_ALLOWED=true \
             -e DISABLE_ADMIN_TOKEN=true \
             -e I_REALLY_WANT_VOLATILE_STORAGE=true \
+            -e ROCKET_TLS='{certs="/data/certs/cert.pem",key="/data/certs/key.pem"}' \
+            -v /tmp/vaultwarden-certs:/data/certs:ro \
             vaultwarden/server:latest
           # Start Vault
           docker run -d --name vault --cap-add=IPC_LOCK \

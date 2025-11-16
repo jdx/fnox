@@ -9,7 +9,7 @@ This directory contains tools for testing fnox's Bitwarden integration using a l
 source ./test/setup-bitwarden-test.sh
 
 # 2. If this is your first time, follow the on-screen instructions to:
-#    - Open http://localhost:8080 in your browser
+#    - Open https://localhost:8080 in your browser (accept self-signed certificate)
 #    - Create an account
 #    - Login with: bw login
 #    - Unlock: export BW_SESSION=$(bw unlock --raw)
@@ -42,11 +42,12 @@ If you prefer to set things up manually:
 # Start vaultwarden
 docker compose -f test/docker-compose.bitwarden.yml up -d
 
-# Configure bw CLI to use local server
-bw config server http://localhost:8080
+# Configure bw CLI to use local server (HTTPS required)
+# Note: NODE_TLS_REJECT_UNAUTHORIZED=0 is set by the setup script to allow self-signed certificates
+bw config server https://localhost:8080
 
-# Create account via web UI
-open http://localhost:8080
+# Create account via web UI (accept self-signed certificate warning)
+open https://localhost:8080
 
 # Login with bw CLI
 bw login
@@ -127,8 +128,8 @@ If you need to update the test database (e.g., after vaultwarden version changes
 # 1. Start fresh vaultwarden
 docker compose -f test/docker-compose.bitwarden.yml up -d
 
-# 2. Create account via web UI
-open http://localhost:8080
+# 2. Create account via web UI (accept self-signed certificate warning)
+open https://localhost:8080
 # Register with: test@fnox.ci / TestCIPassword123!
 
 # 3. Extract database with WAL checkpoint
@@ -193,8 +194,8 @@ docker compose -f test/docker-compose.bitwarden.yml down -v
 Make sure you've:
 
 1. Started vaultwarden: `docker compose -f test/docker-compose.bitwarden.yml up -d`
-2. Configured bw CLI: `bw config server http://localhost:8080`
-3. Created an account at http://localhost:8080
+2. Configured bw CLI: `export NODE_TLS_REJECT_UNAUTHORIZED=0 && bw config server https://localhost:8080`
+3. Created an account at https://localhost:8080 (accept self-signed certificate)
 4. Logged in: `bw login`
 5. Unlocked: `export BW_SESSION=$(bw unlock --raw)`
 

@@ -19,6 +19,8 @@ pub mod onepassword;
 pub mod plain;
 pub mod vault;
 
+pub use bitwarden::BitwardenBackend;
+
 /// Provider capabilities - what a provider can do
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderCapability {
@@ -74,6 +76,11 @@ pub enum ProviderConfig {
         organization_id: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         profile: Option<String>,
+        #[serde(
+            default = "default_bitwarden_backend",
+            skip_serializing_if = "is_default_backend"
+        )]
+        backend: Option<BitwardenBackend>,
     },
     #[serde(rename = "gcp-kms")]
     #[strum(serialize = "gcp-kms")]
@@ -245,10 +252,12 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
             collection,
             organization_id,
             profile,
+            backend,
         } => Ok(Box::new(bitwarden::BitwardenProvider::new(
             collection.clone(),
             organization_id.clone(),
             profile.clone(),
+            *backend,
         ))),
         ProviderConfig::GcpKms {
             project,
@@ -287,4 +296,12 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
             token.clone(),
         ))),
     }
+}
+
+fn default_bitwarden_backend() -> Option<BitwardenBackend> {
+    Some(BitwardenBackend::Bw)
+}
+
+fn is_default_backend(backend: &Option<BitwardenBackend>) -> bool {
+    backend.as_ref().is_none_or(|b| *b == BitwardenBackend::Bw)
 }

@@ -3,13 +3,16 @@ services:
     image: vaultwarden/server:latest
     container_name: fnox-vaultwarden-ci
     environment:
-      - DOMAIN=http://localhost:8080
+      - DOMAIN=https://localhost:8080
       - SIGNUPS_ALLOWED=false # Disable signups in CI (account already exists)
       - DISABLE_ADMIN_TOKEN=true
+      # Enable HTTPS with self-signed certificate
+      - ROCKET_TLS={certs="/data/certs/cert.pem",key="/data/certs/key.pem"}
     ports:
       - "8080:80"
     volumes:
       - vaultwarden-ci-data:/data
+      - ./fixtures/bitwarden-certs/certs:/data/certs:ro
     restart: unless-stopped
 
 volumes:

@@ -23,10 +23,12 @@ NC='\033[0m' # No Color
 echo -e "${GREEN}Setting up Bitwarden test environment...${NC}"
 
 # Configuration
-BW_SERVER="http://localhost:8080"
+BW_SERVER="https://localhost:8080"
 export BW_EMAIL="test@fnox.local"
 export BW_PASSWORD="TestPassword123!"
 COMPOSE_FILE="test/docker-compose.bitwarden.yml"
+# Allow self-signed certificates for localhost testing
+export NODE_TLS_REJECT_UNAUTHORIZED=0
 
 # Check if Docker is running
 if ! docker info >/dev/null 2>&1; then
@@ -41,7 +43,7 @@ docker compose -f "$COMPOSE_FILE" up -d
 # Wait for server to be ready
 echo -e "${YELLOW}Waiting for vaultwarden to be ready...${NC}"
 for i in {1..30}; do
-	if curl -s "$BW_SERVER" >/dev/null 2>&1; then
+	if curl -sk "$BW_SERVER" >/dev/null 2>&1; then
 		echo -e "${GREEN}Vaultwarden is ready!${NC}"
 		break
 	fi
@@ -54,6 +56,7 @@ done
 
 # Configure bw CLI to use local server
 echo -e "${YELLOW}Configuring bw CLI for local server...${NC}"
+# Note: NODE_TLS_REJECT_UNAUTHORIZED=0 is set above to allow self-signed certificates
 bw config server "$BW_SERVER"
 
 # Check if already logged in
@@ -62,6 +65,7 @@ if bw login --check 2>/dev/null; then
 
 	# Unlock vault and get session
 	echo -e "${YELLOW}Unlocking vault...${NC}"
+	# NODE_TLS_REJECT_UNAUTHORIZED=0 is already set to allow self-signed certificates
 	BW_SESSION=$(bw unlock "$BW_PASSWORD" --raw 2>/dev/null)
 	export BW_SESSION
 

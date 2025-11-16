@@ -19,6 +19,9 @@ setup() {
 	load 'test_helper/common_setup'
 	_common_setup
 
+	# Allow self-signed certificates for localhost testing (required for vaultwarden HTTPS)
+	export NODE_TLS_REJECT_UNAUTHORIZED=0
+
 	# Check if bw CLI is installed
 	if ! command -v bw >/dev/null 2>&1; then
 		skip "Bitwarden CLI (bw) not installed. Install with: npm install -g @bitwarden/cli"
@@ -182,7 +185,7 @@ EOF
 	# Try to get non-existent secret
 	run "$FNOX_BIN" get INVALID_ITEM
 	assert_failure
-	assert_output --partial "Bitwarden CLI command failed"
+	assert_output --partial "Bitwarden backend 'bw' command failed"
 }
 
 @test "fnox get handles invalid secret reference format" {
