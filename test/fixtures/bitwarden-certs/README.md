@@ -31,4 +31,3 @@ The Bitwarden CLI now requires HTTPS for all server connections. This is a secur
 3. `NODE_TLS_REJECT_UNAUTHORIZED=0` environment variable to allow self-signed certificates
 
 **Note:** The `NODE_TLS_REJECT_UNAUTHORIZED=0` setting is only for local testing. Never use this in production!
-
