@@ -95,7 +95,7 @@ jobs:
             -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" 2>/dev/null || true
           # Start Vaultwarden with HTTPS enabled
           docker run -d --name vaultwarden \
-            -p 8080:443 \
+            -p 8080:80 \
             -e DOMAIN=https://localhost:8080 \
             -e SIGNUPS_ALLOWED=true \
             -e DISABLE_ADMIN_TOKEN=true \
