@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.5.0](https://github.com/jdx/fnox/compare/v1.4.0..v1.5.0) - 2025-11-18
+
+### 🚀 Features
+
+- **(bitwarden)** rbw support (experimental) by [@nilleb](https://github.com/nilleb) in [#91](https://github.com/jdx/fnox/pull/91)
+
+### 🐛 Bug Fixes
+
+- **(ci)** bitwarden setup by [@nilleb](https://github.com/nilleb) in [#92](https://github.com/jdx/fnox/pull/92)
+- **(ci)** install dbus dependencies for release workflow by [@jdx](https://github.com/jdx) in [#96](https://github.com/jdx/fnox/pull/96)
+
 ## [1.4.0](https://github.com/jdx/fnox/compare/v1.3.0..v1.4.0) - 2025-11-15
 
 ### 🚀 Features
