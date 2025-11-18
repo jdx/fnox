@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.1](https://github.com/jdx/fnox/compare/v1.5.0..v1.5.1) - 2025-11-18
+
+### 🐛 Bug Fixes
+
+- **(ci)** configure dbus dependencies for cross-compilation by [@jdx](https://github.com/jdx) in [#97](https://github.com/jdx/fnox/pull/97)
+
 ## [1.5.0](https://github.com/jdx/fnox/compare/v1.4.0..v1.5.0) - 2025-11-18
 
 ### 🚀 Features
