@@ -47,6 +47,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.FNOX_GH_TOKEN }}
+      - name: Install system dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: rust-${{ matrix.target }}
