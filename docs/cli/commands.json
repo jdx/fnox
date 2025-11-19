@@ -972,7 +972,7 @@
   "config": {
     "props": {}
   },
-  "version": "1.5.1",
+  "version": "1.5.2",
   "usage": "Usage: fnox [OPTIONS] <COMMAND>",
   "complete": {
     "key": {
