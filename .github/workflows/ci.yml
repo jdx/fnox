@@ -31,11 +31,6 @@ jobs:
           submodules: recursive
       - uses: jdx/mise-action@v3
       - uses: Swatinem/rust-cache@v2
-      - name: Install system dependencies (Ubuntu)
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libdbus-1-dev pkg-config
       - name: Install Rust components
         run: rustup component add rustfmt clippy
       - name: Build
@@ -174,11 +169,11 @@ jobs:
           submodules: recursive
       - uses: jdx/mise-action@v3
       - uses: Swatinem/rust-cache@v2
-      - name: Install system dependencies (Ubuntu)
+      - name: Install gnome-keyring for tests (Ubuntu)
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
           sudo apt-get update
-          sudo apt-get install -y libdbus-1-dev pkg-config gnome-keyring libsecret-tools
+          sudo apt-get install -y gnome-keyring libsecret-tools
       - name: Setup gnome-keyring (Ubuntu)
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
@@ -221,10 +216,6 @@ jobs:
         with:
           submodules: recursive
       - uses: Swatinem/rust-cache@v2
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libdbus-1-dev pkg-config
       - uses: jdx/mise-action@v3
       - run: cargo msrv verify
 

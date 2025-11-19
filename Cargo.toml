@@ -69,6 +69,8 @@ rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Vendored OpenSSL builds from source to support cross-compilation
 openssl-sys = { version = "0.9", features = ["vendored"] }
+# Vendored dbus builds from source to support cross-compilation
+dbus = { version = "0.9", features = ["vendored"] }
 
 [dev-dependencies]
 tempfile = "3"

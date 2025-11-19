@@ -1857,6 +1857,7 @@ dependencies = [
  "clap",
  "console",
  "data-encoding",
+ "dbus",
  "demand",
  "dirs",
  "futures",
@@ -3237,6 +3238,7 @@ version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5cbe856efeb50e4681f010e9aaa2bf0a644e10139e54cde10fc83a307c23bd9f"
 dependencies = [
+ "cc",
  "pkg-config",
 ]
 
