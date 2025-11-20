@@ -27,7 +27,7 @@ impl PasswordStoreProvider {
     /// Build the full secret path with optional prefix
     fn build_secret_path(&self, key: &str) -> String {
         match &self.prefix {
-            Some(prefix) => format!("{}{}", prefix, key),
+            Some(prefix) => format!("{prefix}{key}"),
             None => key.to_string(),
         }
     }
@@ -52,7 +52,7 @@ impl PasswordStoreProvider {
 
     /// Execute pass CLI command
     fn execute_pass_command(&self, args: &[&str]) -> Result<String> {
-        tracing::debug!("Executing pass command with args: {:?}", args);
+        tracing::debug!("Executing pass command with args: {args:?}");
 
         let mut cmd = Command::new("pass");
         self.configure_command_env(&mut cmd);
@@ -64,8 +64,7 @@ impl PasswordStoreProvider {
 
         let output = cmd.output().map_err(|e| {
             FnoxError::Provider(format!(
-                "Failed to execute 'pass' command: {}. Make sure password-store is installed.",
-                e
+                "Failed to execute 'pass' command: {e}. Make sure password-store is installed."
             ))
         })?;
 
@@ -78,7 +77,7 @@ impl PasswordStoreProvider {
         }
 
         let stdout = String::from_utf8(output.stdout)
-            .map_err(|e| FnoxError::Provider(format!("Invalid UTF-8 in command output: {}", e)))?;
+            .map_err(|e| FnoxError::Provider(format!("Invalid UTF-8 in command output: {e}")))?;
 
         Ok(stdout.trim().to_string())
     }
@@ -87,7 +86,7 @@ impl PasswordStoreProvider {
     pub async fn put_secret(&self, key: &str, value: &str) -> Result<()> {
         let secret_path = self.build_secret_path(key);
 
-        tracing::debug!("Storing secret '{}' in password-store", secret_path);
+        tracing::debug!("Storing secret '{secret_path}' in password-store");
 
         // Use `pass insert` with multiline support
         // pass insert -m will read from stdin until EOF
@@ -103,7 +102,7 @@ impl PasswordStoreProvider {
             .stderr(std::process::Stdio::piped());
 
         let mut child = cmd.spawn().map_err(|e| {
-            FnoxError::Provider(format!("Failed to spawn 'pass insert' command: {}", e))
+            FnoxError::Provider(format!("Failed to spawn 'pass insert' command: {e}"))
         })?;
 
         // Write value to stdin
@@ -111,13 +110,13 @@ impl PasswordStoreProvider {
             use std::io::Write;
 
             stdin.write_all(value.as_bytes()).map_err(|e| {
-                FnoxError::Provider(format!("Failed to write to 'pass insert' stdin: {}", e))
+                FnoxError::Provider(format!("Failed to write to 'pass insert' stdin: {e}"))
             })?;
             drop(stdin); // Explicitly close stdin to signal EOF
         }
 
         let output = child.wait_with_output().map_err(|e| {
-            FnoxError::Provider(format!("Failed to wait for 'pass insert' command: {}", e))
+            FnoxError::Provider(format!("Failed to wait for 'pass insert' command: {e}"))
         })?;
 
         if !output.status.success() {
@@ -128,10 +127,7 @@ impl PasswordStoreProvider {
             )));
         }
 
-        tracing::debug!(
-            "Successfully stored secret '{}' in password-store",
-            secret_path
-        );
+        tracing::debug!("Successfully stored secret '{secret_path}' in password-store");
         Ok(())
     }
 }
@@ -145,7 +141,7 @@ impl crate::providers::Provider for PasswordStoreProvider {
     async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
         let secret_path = self.build_secret_path(value);
 
-        tracing::debug!("Getting secret '{}' from password-store", secret_path);
+        tracing::debug!("Getting secret '{secret_path}' from password-store");
 
         // Use `pass show` to retrieve the secret
         self.execute_pass_command(&["show", &secret_path])
