@@ -32,12 +32,8 @@ impl PasswordStoreProvider {
         }
     }
 
-    /// Execute pass CLI command
-    fn execute_pass_command(&self, args: &[&str]) -> Result<String> {
-        tracing::debug!("Executing pass command with args: {:?}", args);
-
-        let mut cmd = Command::new("pass");
-
+    /// Configure environment variables for pass command
+    fn configure_command_env(&self, cmd: &mut Command) {
         // Set custom PASSWORD_STORE_DIR if configured
         let store_dir = self.store_dir.as_deref().or(PASSWORD_STORE_DIR.as_deref());
         if let Some(store_dir) = store_dir {
@@ -52,6 +48,14 @@ impl PasswordStoreProvider {
         if let Some(gpg_opts) = gpg_opts {
             cmd.env("PASSWORD_STORE_GPG_OPTS", gpg_opts);
         }
+    }
+
+    /// Execute pass CLI command
+    fn execute_pass_command(&self, args: &[&str]) -> Result<String> {
+        tracing::debug!("Executing pass command with args: {:?}", args);
+
+        let mut cmd = Command::new("pass");
+        self.configure_command_env(&mut cmd);
 
         cmd.args(args);
         cmd.stdin(std::process::Stdio::null());
@@ -88,21 +92,7 @@ impl PasswordStoreProvider {
         // Use `pass insert` with multiline support
         // pass insert -m will read from stdin until EOF
         let mut cmd = Command::new("pass");
-
-        // Set custom PASSWORD_STORE_DIR if configured
-        let store_dir = self.store_dir.as_deref().or(PASSWORD_STORE_DIR.as_deref());
-        if let Some(store_dir) = store_dir {
-            cmd.env("PASSWORD_STORE_DIR", store_dir);
-        }
-
-        // Set custom GPG options if configured
-        let gpg_opts = self
-            .gpg_opts
-            .as_deref()
-            .or(PASSWORD_STORE_GPG_OPTS.as_deref());
-        if let Some(gpg_opts) = gpg_opts {
-            cmd.env("PASSWORD_STORE_GPG_OPTS", gpg_opts);
-        }
+        self.configure_command_env(&mut cmd);
 
         cmd.arg("insert")
             .arg("-m") // Multiline
@@ -123,6 +113,7 @@ impl PasswordStoreProvider {
             stdin.write_all(value.as_bytes()).map_err(|e| {
                 FnoxError::Provider(format!("Failed to write to 'pass insert' stdin: {}", e))
             })?;
+            drop(stdin); // Explicitly close stdin to signal EOF
         }
 
         let output = child.wait_with_output().map_err(|e| {

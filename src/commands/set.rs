@@ -178,7 +178,7 @@ impl SetCommand {
                                 pass_provider.put_secret(key_name, value).await?;
 
                                 // Store just the key name (without prefix) in config
-                                (None, Some(self.key.clone()))
+                                (None, Some(key_name.to_string()))
                             }
                             ProviderConfig::AzureSecretsManager { vault_url, prefix } => {
                                 let azure_sm_provider =
