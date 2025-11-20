@@ -162,6 +162,24 @@ impl SetCommand {
                                 // Store just the key name (without prefix) in config
                                 (None, Some(self.key.clone()))
                             }
+                            ProviderConfig::PasswordStore {
+                                prefix,
+                                store_dir,
+                                gpg_opts,
+                            } => {
+                                let pass_provider =
+                                    crate::providers::password_store::PasswordStoreProvider::new(
+                                        prefix.clone(),
+                                        store_dir.clone(),
+                                        gpg_opts.clone(),
+                                    );
+
+                                let key_name = self.key_name.as_deref().unwrap_or(&self.key);
+                                pass_provider.put_secret(key_name, value).await?;
+
+                                // Store just the key name (without prefix) in config
+                                (None, Some(self.key.clone()))
+                            }
                             ProviderConfig::AzureSecretsManager { vault_url, prefix } => {
                                 let azure_sm_provider =
                                     crate::providers::azure_sm::AzureSecretsManagerProvider::new(

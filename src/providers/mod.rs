@@ -16,6 +16,7 @@ pub mod gcp_sm;
 pub mod infisical;
 pub mod keychain;
 pub mod onepassword;
+pub mod password_store;
 pub mod plain;
 pub mod vault;
 
@@ -113,6 +114,16 @@ pub enum ProviderConfig {
         service: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         prefix: Option<String>,
+    },
+    #[serde(rename = "password-store")]
+    #[strum(serialize = "password-store")]
+    PasswordStore {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        prefix: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        store_dir: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        gpg_opts: Option<String>,
     },
     #[serde(rename = "plain")]
     #[strum(serialize = "plain")]
@@ -285,6 +296,15 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
         ProviderConfig::Keychain { service, prefix } => Ok(Box::new(
             keychain::KeychainProvider::new(service.clone(), prefix.clone()),
         )),
+        ProviderConfig::PasswordStore {
+            prefix,
+            store_dir,
+            gpg_opts,
+        } => Ok(Box::new(password_store::PasswordStoreProvider::new(
+            prefix.clone(),
+            store_dir.clone(),
+            gpg_opts.clone(),
+        ))),
         ProviderConfig::Plain => Ok(Box::new(plain::PlainProvider::new())),
         ProviderConfig::HashiCorpVault {
             address,

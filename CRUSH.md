@@ -606,6 +606,92 @@ fnox exec -- ./my-app
 - May require GUI/interactive session on some platforms
 - Tests automatically skip in CI/headless environments where keychain isn't accessible
 
+### Password-Store Provider
+
+The password-store provider integrates with the standard Unix password manager (`pass`) to store and retrieve secrets from GPG-encrypted files.
+
+**Configuration:**
+
+```toml
+[providers]
+pass = { type = "password-store", prefix = "fnox/", store_dir = "/path/to/custom/store" }  # all fields optional
+
+[secrets]
+MY_SECRET = { provider = "pass", value = "my-secret-name" }  # Path to secret in password-store
+```
+
+**Requirements:**
+
+- `pass` CLI installed (password-store): `brew install pass` or `apt install pass`
+- GPG key configured for encryption
+- Initialized password store: `pass init <gpg-key-id>`
+
+**Reference Format:**
+
+- `secret-name` - Gets the secret at the path (e.g., `~/.password-store/secret-name.gpg`)
+- `path/to/secret` - Gets the secret at a nested path (e.g., `~/.password-store/path/to/secret.gpg`)
+- Prefix is automatically prepended if configured
+
+**Usage:**
+
+```bash
+# Initialize password-store (one time setup)
+pass init <your-gpg-key-id>
+
+# Set up provider in fnox.toml
+cat >> fnox.toml << EOF
+[providers]
+pass = { type = "password-store", prefix = "fnox/" }
+EOF
+
+# Store a secret in password-store
+fnox set MY_SECRET "my-secret-value" --provider pass
+
+# Retrieve secret from password-store
+fnox get MY_SECRET
+
+# Use in shell commands
+fnox exec -- ./my-app
+
+# Store with nested path
+fnox set DB_PASSWORD "db-pass" --provider pass --key-name "database/production"
+```
+
+**How it works:**
+
+1. **Storage**: Secrets are stored as GPG-encrypted files in `~/.password-store/` (or custom `PASSWORD_STORE_DIR`)
+2. **Config**: fnox.toml only contains the secret path/reference (not the actual value)
+3. **Encryption**: When you run `fnox set`, it calls `pass insert` to GPG-encrypt and store the secret
+4. **Retrieval**: When you run `fnox get`, it calls `pass show` to decrypt and retrieve the secret
+5. **Prefix**: If configured, the prefix is prepended to the secret path (e.g., `value = "api-key"` becomes `fnox/api-key`)
+6. **Hierarchy**: Supports nested paths for organizing secrets (e.g., `work/github/token`)
+
+**Implementation Notes:**
+
+- Uses `pass` CLI for all operations (consistent with 1Password/Bitwarden approach)
+- Cross-platform: Works on macOS, Linux, and Windows (with WSL or Cygwin)
+- Supports both read and write operations (RemoteStorage capability)
+- Respects `PASSWORD_STORE_DIR` environment variable for custom locations
+- Respects `PASSWORD_STORE_GPG_OPTS` for custom GPG options
+- Multiline secrets are fully supported
+- Connection testing via `pass ls`
+- Git integration: password-store can automatically commit changes to a git repo
+
+**Environment Variables:**
+
+- `FNOX_PASSWORD_STORE_DIR` or `PASSWORD_STORE_DIR` - Custom password store directory
+- `FNOX_PASSWORD_STORE_GPG_OPTS` or `PASSWORD_STORE_GPG_OPTS` - Custom GPG options
+- Pass inherits all standard GPG environment variables
+
+**Advantages:**
+
+- Local-first: No cloud service required
+- Open standard: Uses GPG encryption (widely trusted)
+- Git-friendly: Encrypted files can be safely committed to version control
+- Portable: Easy to sync across machines using git
+- Transparent: Files are just GPG-encrypted text files
+- Ecosystem: Many third-party tools and integrations exist
+
 ### Infisical Provider
 
 The Infisical provider integrates with Infisical using the official Rust SDK to retrieve secrets from Infisical projects and environments.
