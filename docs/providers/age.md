@@ -261,11 +261,21 @@ fnox get DATABASE_URL  # Works for all recipients!
 
 3. **Re-encrypt all secrets** (necessary for new recipient):
 
+   Individual examples:
+
    ```bash
    # Re-encrypt each secret with new recipient list
    fnox set DATABASE_URL "$(fnox get DATABASE_URL)" --provider age
    fnox set API_KEY "$(fnox get API_KEY)" --provider age
    # ... repeat for all secrets
+   ```
+
+   Looping example:
+
+   ```bash
+   fnox list | awk '/provider \(age\)/ {print $1}' | while read env_key; do
+     fnox set "$env_key" "$(fnox get "$env_key")" --provider age
+   done
    ```
 
 4. **Commit and push**:
@@ -277,6 +287,7 @@ fnox get DATABASE_URL  # Works for all recipients!
    ```
 
 5. **New member pulls and decrypts**:
+
    ```bash
    git pull
    export FNOX_AGE_KEY_FILE=~/.ssh/id_ed25519
