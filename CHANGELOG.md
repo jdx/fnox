@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.6.0](https://github.com/jdx/fnox/compare/v1.5.2..v1.6.0) - 2025-11-21
+
+### 🚀 Features
+
+- add password-store provider with GPG-encrypted local storage by [@KokaKiwi](https://github.com/KokaKiwi) in [#102](https://github.com/jdx/fnox/pull/102)
+
+### 🐛 Bug Fixes
+
+- prevent config hierarchy duplication in fnox set command by [@jdx](https://github.com/jdx) in [#107](https://github.com/jdx/fnox/pull/107)
+- preserve newly created profile sections in edit command by [@jdx](https://github.com/jdx) in [#108](https://github.com/jdx/fnox/pull/108)
+
+### 📚 Documentation
+
+- add looping example for age provider by [@Lailanater](https://github.com/Lailanater) in [#106](https://github.com/jdx/fnox/pull/106)
+
+### New Contributors
+
+- @Lailanater made their first contribution in [#106](https://github.com/jdx/fnox/pull/106)
+- @KokaKiwi made their first contribution in [#102](https://github.com/jdx/fnox/pull/102)
+
 ## [1.5.2](https://github.com/jdx/fnox/compare/v1.5.1..v1.5.2) - 2025-11-19
 
 ### 🐛 Bug Fixes
