@@ -364,3 +364,84 @@ EDITOR_SCRIPT
 		secret-tool clear service "fnox-test" account "test-$$/KC_EXISTING" 2>/dev/null || true
 	fi
 }
+
+@test "edit command: move secret to new profile section (issue #105)" {
+	# Setup: Start with a secret in the default [secrets] section
+	echo "my-secret-value" | fnox set MY_SECRET --provider age
+
+	# Verify initial state
+	run fnox get MY_SECRET
+	assert_success
+	assert_output "my-secret-value"
+
+	# Show initial config
+	echo "Initial config:" >&3
+	cat fnox.toml >&3
+
+	# Create an editor script that:
+	# 1. Creates a new [profiles.production] section
+	# 2. Moves MY_SECRET from [secrets] to [profiles.production.secrets]
+	cat >"$TEST_DIR/test-editor.py" <<'EDITOR_SCRIPT'
+#!/usr/bin/env python3
+import sys
+import re
+
+with open(sys.argv[1], 'r') as f:
+    content = f.read()
+
+# Extract the MY_SECRET line from [secrets]
+secret_match = re.search(r'MY_SECRET= \{ provider = "age", value = "([^"]*)" \}', content)
+if secret_match:
+    secret_value = secret_match.group(1)
+
+    # Remove MY_SECRET from [secrets] section
+    content = re.sub(
+        r'MY_SECRET= \{[^}]*\}\n',
+        '',
+        content
+    )
+
+    # Add new [profiles.production] section with the secret
+    # Add it after the [secrets] section
+    profile_section = f'''
+[profiles.production]
+
+[profiles.production.secrets]
+MY_SECRET= {{ provider = "age", value = "{secret_value}" }}
+'''
+    content = content.rstrip() + profile_section + '\n'
+
+with open(sys.argv[1], 'w') as f:
+    f.write(content)
+EDITOR_SCRIPT
+	chmod +x "$TEST_DIR/test-editor.py"
+
+	export EDITOR="$TEST_DIR/test-editor.py"
+
+	# Run edit command
+	run fnox edit
+	echo "Edit output: $output" >&3
+	assert_success
+
+	# Show config after edit
+	echo "Config after edit:" >&3
+	cat fnox.toml >&3
+
+	# Verify: MY_SECRET should no longer be in default profile
+	run fnox get MY_SECRET
+	echo "Getting MY_SECRET from default profile: status=$status output=$output" >&3
+	assert_failure
+
+	# Verify: MY_SECRET should now be in production profile
+	run fnox get MY_SECRET --profile production
+	echo "Getting MY_SECRET from production profile: status=$status output=$output" >&3
+	assert_success
+	assert_output "my-secret-value"
+
+	# Verify the config file actually contains the production profile
+	run grep -q '\[profiles.production\]' fnox.toml
+	assert_success "Config should contain [profiles.production] section"
+
+	run grep -q '\[profiles.production.secrets\]' fnox.toml
+	assert_success "Config should contain [profiles.production.secrets] section"
+}

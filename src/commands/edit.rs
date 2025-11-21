@@ -352,32 +352,63 @@ impl EditCommand {
         if let Some(modified_profiles) = modified_doc
             .get("profiles")
             .and_then(|item| item.as_table())
-            && let Some(original_profiles) = original_doc
+        {
+            // Ensure original_profiles exists
+            if original_doc.get("profiles").is_none() {
+                original_doc.insert("profiles", toml_edit::Item::Table(toml_edit::Table::new()));
+            }
+
+            let original_profiles = original_doc
                 .get_mut("profiles")
                 .and_then(|item| item.as_table_mut())
-        {
+                .expect("profiles should be a table");
+
             for (profile_name, modified_profile_item) in modified_profiles.iter() {
                 let profile_name_str = profile_name.to_string();
-                if let Some(modified_profile_table) = modified_profile_item.as_table()
-                    && let Some(modified_secrets) = modified_profile_table
+
+                if let Some(modified_profile_table) = modified_profile_item.as_table() {
+                    // If the profile doesn't exist in original, create it
+                    if original_profiles.get(profile_name).is_none() {
+                        tracing::debug!("Creating new profile section: {}", profile_name_str);
+                        // Copy the entire profile structure from modified
+                        original_profiles.insert(profile_name, modified_profile_item.clone());
+                    }
+
+                    // Process secrets if they exist
+                    if let Some(modified_secrets) = modified_profile_table
                         .get("secrets")
                         .and_then(|item| item.as_table())
-                    && let Some(original_profile_item) = original_profiles.get_mut(profile_name)
-                    && let Some(original_profile_table) = original_profile_item.as_table_mut()
-                    && let Some(original_secrets) = original_profile_table
-                        .get_mut("secrets")
-                        .and_then(|item| item.as_table_mut())
-                {
-                    self.process_secrets_table_changes(
-                        config,
-                        original_secrets,
-                        modified_secrets,
-                        &profile_name_str,
-                        &secrets_map,
-                        profile,
-                        age_key_file,
-                    )
-                    .await?;
+                    {
+                        // Now process the secrets
+                        if let Some(original_profile_item) = original_profiles.get_mut(profile_name)
+                            && let Some(original_profile_table) =
+                                original_profile_item.as_table_mut()
+                        {
+                            // Ensure secrets table exists in the profile
+                            if original_profile_table.get("secrets").is_none() {
+                                original_profile_table.insert(
+                                    "secrets",
+                                    toml_edit::Item::Table(toml_edit::Table::new()),
+                                );
+                            }
+
+                            if let Some(original_secrets) = original_profile_table
+                                .get_mut("secrets")
+                                .and_then(|item| item.as_table_mut())
+                            {
+                                self.process_secrets_table_changes(
+                                    config,
+                                    original_secrets,
+                                    modified_secrets,
+                                    &profile_name_str,
+                                    &secrets_map,
+                                    profile,
+                                    age_key_file,
+                                )
+                                .await?;
+                            }
+                        }
+                    }
                 }
             }
         }
