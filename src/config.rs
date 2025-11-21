@@ -430,6 +430,75 @@ impl Config {
         Ok(())
     }
 
+    /// Save a single secret update back to its source file
+    /// If the secret is new (no source), save to the specified target file
+    /// If the secret exists, update its source file
+    pub fn save_secret_to_source(
+        &self,
+        secret_name: &str,
+        secret_config: &SecretConfig,
+        profile: &str,
+        default_target: &Path,
+    ) -> Result<()> {
+        // Determine which file to update
+        let target_file = if let Some(source) = &secret_config.source_path {
+            // Existing secret - update its source file
+            source.clone()
+        } else {
+            // New secret - save to default target (current directory's fnox.toml)
+            default_target.to_path_buf()
+        };
+
+        // Load the target file (or create new config if it doesn't exist)
+        let mut target_config = if target_file.exists() {
+            Self::load_single(&target_file)?
+        } else {
+            Self::new()
+        };
+
+        // Update the secret in the appropriate location
+        if profile == "default" {
+            target_config
+                .secrets
+                .insert(secret_name.to_string(), secret_config.clone());
+        } else {
+            target_config
+                .profiles
+                .entry(profile.to_string())
+                .or_default()
+                .secrets
+                .insert(secret_name.to_string(), secret_config.clone());
+        }
+
+        // Save back to the target file
+        target_config.save(&target_file)?;
+        Ok(())
+    }
+
+    /// Load a single config file without recursion or merging
+    fn load_single(path: &Path) -> Result<Self> {
+        let content = fs::read_to_string(path)
+            .map_err(|e| FnoxError::Config(format!("Failed to read config file: {}", e)))?;
+
+        let mut config: Self = toml_edit::de::from_str(&content)
+            .map_err(|e| FnoxError::Config(format!("Failed to parse config file: {}", e)))?;
+
+        // Store the source path for all secrets in this file
+        let source_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+
+        for secret in config.secrets.values_mut() {
+            secret.source_path = Some(source_path.clone());
+        }
+
+        for profile in config.profiles.values_mut() {
+            for secret in profile.secrets.values_mut() {
+                secret.source_path = Some(source_path.clone());
+            }
+        }
+
+        Ok(config)
+    }
+
     /// Create a new default configuration
     pub fn new() -> Self {
         Self {

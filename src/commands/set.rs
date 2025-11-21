@@ -267,8 +267,15 @@ impl SetCommand {
             }
         }
 
+        let secret_config = profile_secrets.get(&self.key).unwrap().clone();
         let _ = profile_secrets; // Release the mutable borrow
-        config.save(&cli.config)?;
+
+        // Save the secret to its source file (or to the current directory's config)
+        let current_dir = std::env::current_dir()
+            .map_err(|e| FnoxError::Config(format!("Failed to get current directory: {}", e)))?;
+        let default_target = current_dir.join(&cli.config);
+        config.save_secret_to_source(&self.key, &secret_config, &profile, &default_target)?;
+
         let check = console::style("✓").green();
         let styled_key = console::style(&self.key).cyan();
         let styled_profile = console::style(&profile).magenta();
