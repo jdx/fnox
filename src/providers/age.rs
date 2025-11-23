@@ -5,7 +5,6 @@ use std::io::Read;
 use std::path::Path;
 
 pub struct AgeEncryptionProvider {
-    #[allow(dead_code)]
     recipients: Vec<String>,
 }
 
@@ -23,54 +22,70 @@ impl crate::providers::Provider for AgeEncryptionProvider {
 
     async fn encrypt(&self, plaintext: &str, _key_file: Option<&Path>) -> Result<String> {
         use std::io::Write;
-        use std::process::Command;
 
         if self.recipients.is_empty() {
             return Err(FnoxError::AgeNotConfigured);
         }
 
-        // Use age CLI to encrypt
-        let mut cmd = Command::new("age");
+        // Parse recipients - try both SSH and native age formats
+        let mut parsed_recipients: Vec<Box<dyn age::Recipient + Send + Sync>> = Vec::new();
 
-        // Add all recipients
         for recipient in &self.recipients {
-            cmd.arg("-r").arg(recipient);
+            // Try parsing as SSH recipient first
+            if let Ok(ssh_recipient) = recipient.parse::<age::ssh::Recipient>() {
+                parsed_recipients.push(Box::new(ssh_recipient));
+                continue;
+            }
+
+            // Fall back to native age recipient
+            match recipient.parse::<age::x25519::Recipient>() {
+                Ok(age_recipient) => {
+                    parsed_recipients.push(Box::new(age_recipient));
+                }
+                Err(e) => {
+                    return Err(FnoxError::AgeEncryptionFailed {
+                        details: format!("Failed to parse recipient '{}': {}", recipient, e),
+                    });
+                }
+            }
         }
 
-        let mut child = cmd
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .map_err(|e| {
-                FnoxError::Config(format!(
-                    "Failed to spawn age command: {}. Make sure age is installed.",
-                    e
-                ))
+        if parsed_recipients.is_empty() {
+            return Err(FnoxError::AgeNotConfigured);
+        }
+
+        // Create encryptor with parsed recipients
+        let encryptor = age::Encryptor::with_recipients(
+            parsed_recipients
+                .iter()
+                .map(|r| r.as_ref() as &dyn age::Recipient),
+        )
+        .expect("we provided at least one recipient");
+
+        // Encrypt the plaintext
+        let mut encrypted = vec![];
+        let mut writer =
+            encryptor
+                .wrap_output(&mut encrypted)
+                .map_err(|e| FnoxError::AgeEncryptionFailed {
+                    details: format!("Failed to create encrypted writer: {}", e),
+                })?;
+
+        writer
+            .write_all(plaintext.as_bytes())
+            .map_err(|e| FnoxError::AgeEncryptionFailed {
+                details: format!("Failed to write plaintext: {}", e),
             })?;
 
-        // Write the plaintext to stdin
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(plaintext.as_bytes())
-                .map_err(|e| FnoxError::Config(format!("Failed to write to age stdin: {}", e)))?;
-        }
-
-        // Wait for the command to finish and get output
-        let output = child
-            .wait_with_output()
-            .map_err(|e| FnoxError::Config(format!("Failed to wait for age command: {}", e)))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(FnoxError::AgeEncryptionFailed {
-                details: stderr.to_string(),
-            });
-        }
+        writer
+            .finish()
+            .map_err(|e| FnoxError::AgeEncryptionFailed {
+                details: format!("Failed to finalize encryption: {}", e),
+            })?;
 
         // Base64 encode the encrypted output
         use base64::Engine;
-        let encrypted_base64 = base64::engine::general_purpose::STANDARD.encode(&output.stdout);
+        let encrypted_base64 = base64::engine::general_purpose::STANDARD.encode(&encrypted);
 
         Ok(encrypted_base64)
     }
