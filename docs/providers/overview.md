@@ -40,11 +40,11 @@ Integrate with password managers and secret services you already use.
 
 Store secrets locally on your machine.
 
-| Provider                                       | Description                           | Best For                                 |
-| ---------------------------------------------- | ------------------------------------- | ---------------------------------------- |
-| [OS Keychain](/providers/keychain)             | macOS/Windows/Linux credential stores | Local development, personal projects     |
-| [password-store](/providers/password-store)    | GPG-encrypted local password store    | CLI users, git-based sync, Unix systems  |
-| [Plain](/providers/plain)                      | Plaintext (default values only)       | Non-sensitive defaults                   |
+| Provider                                    | Description                           | Best For                                |
+| ------------------------------------------- | ------------------------------------- | --------------------------------------- |
+| [OS Keychain](/providers/keychain)          | macOS/Windows/Linux credential stores | Local development, personal projects    |
+| [password-store](/providers/password-store) | GPG-encrypted local password store    | CLI users, git-based sync, Unix systems |
+| [Plain](/providers/plain)                   | Plaintext (default values only)       | Non-sensitive defaults                  |
 
 ## Mixing Providers
 
