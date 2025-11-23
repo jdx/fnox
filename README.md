@@ -63,6 +63,7 @@ Your `fnox.toml` config file either contains encrypted secrets or references to 
 ### 💻 Local Storage
 
 - **keychain** - OS Keychain (macOS/Windows/Linux)
+- **password-store** - GPG-encrypted password store (Unix pass)
 - **plain** - Plain text (for defaults only!)
 
 ## Documentation
