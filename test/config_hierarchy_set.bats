@@ -191,3 +191,197 @@ EOF
 	assert_output --partial 'updated-parent-value'
 	refute_output --partial "CHILD_SECRET"
 }
+
+@test "fnox set with multi-level hierarchy should not duplicate configs" {
+	# Create multi-level directory structure
+	mkdir -p grandparent/parent/child
+
+	# Create grandparent config
+	cat >grandparent/fnox.toml <<EOF
+[providers.age_provider]
+type = "age"
+recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
+
+[secrets]
+GRANDPARENT_SECRET = { provider = "age_provider", value = "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p:encrypted:grandparent" }
+EOF
+
+	# Create parent config
+	cat >grandparent/parent/fnox.toml <<EOF
+[secrets]
+PARENT_SECRET = { default = "parent-value" }
+EOF
+
+	# Change to child directory (2 levels deep)
+	cd grandparent/parent/child
+
+	# Set a new secret in child directory
+	run "$FNOX_BIN" set CHILD_SECRET "child-value" --provider age_provider
+	assert_success
+
+	# Check that child fnox.toml was created
+	assert [ -f fnox.toml ]
+
+	# Check that child config does NOT contain grandparent or parent secrets
+	run cat fnox.toml
+	assert_success
+	refute_output --partial "GRANDPARENT_SECRET"
+	refute_output --partial "PARENT_SECRET"
+	assert_output --partial "CHILD_SECRET"
+
+	# Verify parent config is unchanged
+	run cat ../fnox.toml
+	assert_success
+	assert_output --partial "PARENT_SECRET"
+	refute_output --partial "GRANDPARENT_SECRET"
+	refute_output --partial "CHILD_SECRET"
+
+	# Verify grandparent config is unchanged
+	run cat ../../fnox.toml
+	assert_success
+	assert_output --partial "GRANDPARENT_SECRET"
+	refute_output --partial "PARENT_SECRET"
+	refute_output --partial "CHILD_SECRET"
+}
+
+@test "fnox set with actual age encryption should work correctly in hierarchy" {
+	# Create directory structure
+	mkdir -p parent/child
+
+	# Generate age key for testing
+	local age_key_file="$TEST_TEMP_DIR/test-age-key.txt"
+	age-keygen -o "$age_key_file" 2>/dev/null
+
+	# Extract the public key
+	local public_key
+	public_key=$(grep "^# public key:" "$age_key_file" | cut -d ' ' -f 4)
+
+	# Create parent config with provider
+	cat >parent/fnox.toml <<EOF
+[providers.age_provider]
+type = "age"
+recipients = ["$public_key"]
+
+[secrets]
+PARENT_SECRET = { provider = "age_provider", value = "parent-encrypted-value" }
+EOF
+
+	# Encrypt the parent secret properly
+	cd parent
+	run "$FNOX_BIN" --age-key-file "$age_key_file" set PARENT_SECRET "parent-actual-value" --provider age_provider
+	assert_success
+
+	# Change to child directory
+	cd child
+
+	# Set a new encrypted secret in child directory
+	run "$FNOX_BIN" --age-key-file "$age_key_file" set CHILD_SECRET "child-actual-value" --provider age_provider
+	assert_success
+
+	# Verify child config does NOT contain parent secret
+	run cat fnox.toml
+	assert_success
+	assert_output --partial "CHILD_SECRET"
+	refute_output --partial "PARENT_SECRET"
+
+	# Verify we can decrypt the child secret (this tests that encryption is valid)
+	run "$FNOX_BIN" --age-key-file "$age_key_file" get CHILD_SECRET
+	assert_success
+	assert_output "child-actual-value"
+
+	# Verify we can still decrypt the parent secret (inheritance still works)
+	run "$FNOX_BIN" --age-key-file "$age_key_file" get PARENT_SECRET
+	assert_success
+	assert_output "parent-actual-value"
+
+	# Verify parent config was not modified
+	run cat ../fnox.toml
+	assert_success
+	assert_output --partial "PARENT_SECRET"
+	refute_output --partial "CHILD_SECRET"
+}
+
+@test "fnox set multiple times in child should not accumulate parent secrets" {
+	# Create directory structure
+	mkdir -p parent/child
+
+	# Create parent config with multiple secrets
+	cat >parent/fnox.toml <<EOF
+[providers.age_provider]
+type = "age"
+recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
+
+[secrets]
+PARENT_SECRET_1 = { provider = "age_provider", value = "encrypted:parent1" }
+PARENT_SECRET_2 = { provider = "age_provider", value = "encrypted:parent2" }
+PARENT_SECRET_3 = { provider = "age_provider", value = "encrypted:parent3" }
+EOF
+
+	# Change to child directory
+	cd parent/child
+
+	# Set multiple secrets one by one
+	run "$FNOX_BIN" set CHILD_SECRET_1 "value1" --provider age_provider
+	assert_success
+
+	run "$FNOX_BIN" set CHILD_SECRET_2 "value2" --provider age_provider
+	assert_success
+
+	run "$FNOX_BIN" set CHILD_SECRET_3 "value3" --provider age_provider
+	assert_success
+
+	# Verify child config only has child secrets, no parent secrets
+	run cat fnox.toml
+	assert_success
+	assert_output --partial "CHILD_SECRET_1"
+	assert_output --partial "CHILD_SECRET_2"
+	assert_output --partial "CHILD_SECRET_3"
+	refute_output --partial "PARENT_SECRET_1"
+	refute_output --partial "PARENT_SECRET_2"
+	refute_output --partial "PARENT_SECRET_3"
+
+	# Count the number of secret entries (should be exactly 3)
+	run bash -c "grep -c 'CHILD_SECRET' fnox.toml"
+	assert_success
+	assert_output "3"
+
+	# Verify no parent secrets leaked in
+	run bash -c "grep -c 'PARENT_SECRET' fnox.toml || true"
+	assert_success
+	assert_output "0"
+}
+
+@test "fnox set with profiles should not duplicate parent profile config" {
+	# Create directory structure
+	mkdir -p parent/child
+
+	# Create parent config with profile
+	cat >parent/fnox.toml <<EOF
+[providers.age_provider]
+type = "age"
+recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
+
+[profiles.production]
+[profiles.production.secrets]
+PARENT_PROD_SECRET = { provider = "age_provider", value = "encrypted:parent-prod" }
+EOF
+
+	# Change to child directory
+	cd parent/child
+
+	# Set a secret in production profile
+	run "$FNOX_BIN" --profile production set CHILD_PROD_SECRET "child-prod-value" --provider age_provider
+	assert_success
+
+	# Verify child config was created with only child secret
+	run cat fnox.toml
+	assert_success
+	assert_output --partial "CHILD_PROD_SECRET"
+	refute_output --partial "PARENT_PROD_SECRET"
+
+	# Verify parent config is unchanged
+	run cat ../fnox.toml
+	assert_success
+	assert_output --partial "PARENT_PROD_SECRET"
+	refute_output --partial "CHILD_PROD_SECRET"
+}
