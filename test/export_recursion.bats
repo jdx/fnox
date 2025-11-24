@@ -143,3 +143,62 @@ EOF
 	# Make sure secrets are not masked
 	refute_output --partial "··"
 }
+
+@test "fnox export with age provider and profile includes parent secrets" {
+	# Skip if age not installed
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	# Generate age key
+	local keygen_output
+	keygen_output=$(age-keygen -o key.txt 2>&1)
+	local public_key
+	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+	local private_key
+	private_key=$(grep "^AGE-SECRET-KEY" key.txt)
+
+	# Create directory structure
+	mkdir -p parent/child
+
+	# Create parent config with age provider and profile
+	cat >parent/fnox.toml <<EOF
+root = true
+
+[providers.age]
+type = "age"
+recipients = ["$public_key"]
+
+[profiles.prod.secrets]
+PARENT_SECRET = { description = "Parent secret", default = "parent-prod-secret-123" }
+EOF
+
+	# Encrypt parent secret
+	cd parent
+	export FNOX_AGE_KEY="$private_key"
+	run "$FNOX_BIN" set PARENT_SECRET "sb_secret_parent_encrypted_value_xyz" --provider age --profile prod
+	assert_success
+	cd ..
+
+	# Create child config with age secret
+	cat >parent/child/fnox.toml <<EOF
+[profiles.prod.secrets]
+CHILD_SECRET = { description = "Child secret", default = "child-prod-secret-456" }
+EOF
+
+	# Encrypt child secret
+	cd parent/child
+	run "$FNOX_BIN" set CHILD_SECRET "child_encrypted_token_abc" --provider age --profile prod
+	assert_success
+
+	# Export with profile
+	run "$FNOX_BIN" export --profile prod --age-key-file ../../key.txt
+	assert_success
+
+	# Check that both secrets are exported with actual values
+	assert_output --partial "PARENT_SECRET='sb_secret_parent_encrypted_value_xyz'"
+	assert_output --partial "CHILD_SECRET='child_encrypted_token_abc'"
+
+	# Make sure secrets are not masked
+	refute_output --partial "··"
+}
