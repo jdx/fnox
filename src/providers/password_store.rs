@@ -1,4 +1,5 @@
 use crate::error::{FnoxError, Result};
+use crate::providers::ProviderCapability;
 use async_trait::async_trait;
 use std::path::Path;
 use std::process::Command;
@@ -81,9 +82,24 @@ impl PasswordStoreProvider {
 
         Ok(stdout.trim().to_string())
     }
+}
 
-    /// Store a secret in password-store
-    pub async fn put_secret(&self, key: &str, value: &str) -> Result<()> {
+#[async_trait]
+impl crate::providers::Provider for PasswordStoreProvider {
+    fn capabilities(&self) -> Vec<ProviderCapability> {
+        vec![ProviderCapability::RemoteStorage]
+    }
+
+    async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
+        let secret_path = self.build_secret_path(value);
+
+        tracing::debug!("Getting secret '{secret_path}' from password-store");
+
+        // Use `pass show` to retrieve the secret
+        self.execute_pass_command(&["show", &secret_path])
+    }
+
+    async fn put_secret(&self, key: &str, value: &str, _key_file: Option<&Path>) -> Result<String> {
         let secret_path = self.build_secret_path(key);
 
         tracing::debug!("Storing secret '{secret_path}' in password-store");
@@ -128,23 +144,7 @@ impl PasswordStoreProvider {
         }
 
         tracing::debug!("Successfully stored secret '{secret_path}' in password-store");
-        Ok(())
-    }
-}
-
-#[async_trait]
-impl crate::providers::Provider for PasswordStoreProvider {
-    fn capabilities(&self) -> Vec<crate::providers::ProviderCapability> {
-        vec![crate::providers::ProviderCapability::RemoteStorage]
-    }
-
-    async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
-        let secret_path = self.build_secret_path(value);
-
-        tracing::debug!("Getting secret '{secret_path}' from password-store");
-
-        // Use `pass show` to retrieve the secret
-        self.execute_pass_command(&["show", &secret_path])
+        Ok(key.to_string())
     }
 
     async fn test_connection(&self) -> Result<()> {
