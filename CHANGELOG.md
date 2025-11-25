@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.6.1](https://github.com/jdx/fnox/compare/v1.6.0..v1.6.1) - 2025-11-25
+
+### 🚜 Refactor
+
+- **(age)** use age crate for encryption instead of CLI by [@KokaKiwi](https://github.com/KokaKiwi) in [#112](https://github.com/jdx/fnox/pull/112)
+- **(password-store)** implement Provider trait with put_secret returning key by [@KokaKiwi](https://github.com/KokaKiwi) in [#117](https://github.com/jdx/fnox/pull/117)
+
+### 📚 Documentation
+
+- add password-store provider documentation by [@KokaKiwi](https://github.com/KokaKiwi) in [#111](https://github.com/jdx/fnox/pull/111)
+
+### 📦️ Dependency Updates
+
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#113](https://github.com/jdx/fnox/pull/113)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#114](https://github.com/jdx/fnox/pull/114)
+
+### New Contributors
+
+- @renovate[bot] made their first contribution in [#114](https://github.com/jdx/fnox/pull/114)
+
 ## [1.6.0](https://github.com/jdx/fnox/compare/v1.5.2..v1.6.0) - 2025-11-21
 
 ### 🚀 Features
@@ -9,6 +29,7 @@
 ### 🐛 Bug Fixes
 
 - prevent config hierarchy duplication in fnox set command by [@jdx](https://github.com/jdx) in [#107](https://github.com/jdx/fnox/pull/107)
+- preserve newly created profile sections in edit command by [@jdx](https://github.com/jdx) in [#108](https://github.com/jdx/fnox/pull/108)
 
 ### 📚 Documentation
 

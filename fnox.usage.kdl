@@ -1,7 +1,7 @@
 min_usage_version "1.3"
 name fnox
 bin fnox
-version "1.6.0"
+version "1.6.1"
 about "A flexible secret management tool by @jdx"
 usage "Usage: fnox [OPTIONS] <COMMAND>"
 flag "-c --config" help="Path to the configuration file (default: fnox.toml, searches parent directories)" global=#true {
