@@ -83,22 +83,58 @@ impl KeePassProvider {
 
     /// Save the database back to disk
     fn save_database(&self, db: &Database) -> Result<()> {
-        let file = File::create(&self.database_path).map_err(|e| {
+        // Write to a temporary file first, then atomically rename to avoid data loss
+        // if the save fails partway through (File::create truncates immediately)
+        let parent_dir = self.database_path.parent().unwrap_or(Path::new("."));
+        let temp_path = parent_dir.join(format!(
+            ".{}.tmp",
+            self.database_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+        ));
+
+        let file = File::create(&temp_path).map_err(|e| {
             FnoxError::Provider(format!(
-                "Failed to create KeePass database file '{}': {}",
-                self.database_path.display(),
+                "Failed to create temporary KeePass database file '{}': {}",
+                temp_path.display(),
                 e
             ))
         })?;
         let mut writer = BufWriter::new(file);
         let key = self.build_key()?;
 
-        db.save(&mut writer, key)
-            .map_err(|e| FnoxError::Provider(format!("Failed to save KeePass database: {e}")))?;
+        // Save to temp file
+        if let Err(e) = db.save(&mut writer, key) {
+            // Clean up temp file on failure
+            let _ = std::fs::remove_file(&temp_path);
+            return Err(FnoxError::Provider(format!(
+                "Failed to save KeePass database: {e}"
+            )));
+        }
 
-        // Explicitly flush to catch any I/O errors (BufWriter silently ignores flush errors on drop)
-        writer.flush().map_err(|e| {
-            FnoxError::Provider(format!("Failed to flush KeePass database to disk: {e}"))
+        // Flush buffer to file
+        if let Err(e) = writer.flush() {
+            let _ = std::fs::remove_file(&temp_path);
+            return Err(FnoxError::Provider(format!(
+                "Failed to flush KeePass database to disk: {e}"
+            )));
+        }
+
+        // Sync to disk to ensure durability before rename
+        if let Err(e) = writer.get_ref().sync_all() {
+            let _ = std::fs::remove_file(&temp_path);
+            return Err(FnoxError::Provider(format!(
+                "Failed to sync KeePass database to disk: {e}"
+            )));
+        }
+
+        // Atomically rename temp file to target (preserves original on failure)
+        std::fs::rename(&temp_path, &self.database_path).map_err(|e| {
+            let _ = std::fs::remove_file(&temp_path);
+            FnoxError::Provider(format!(
+                "Failed to rename temporary KeePass database file: {e}"
+            ))
         })
     }
 
