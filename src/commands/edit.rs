@@ -157,7 +157,6 @@ impl EditCommand {
             &modified_config,
             &mut modified_doc,
             &all_secrets,
-            &profile,
             cli.age_key_file.as_ref().map(PathBuf::from).as_deref(),
         )
         .await?;
@@ -333,7 +332,6 @@ impl EditCommand {
         config: &Config,
         modified_doc: &mut DocumentMut,
         all_secrets: &[SecretEntry],
-        profile: &str,
         age_key_file: Option<&Path>,
     ) -> Result<()> {
         // Create a map of secrets by (profile, key) to avoid collisions
@@ -352,7 +350,6 @@ impl EditCommand {
                 secrets_table,
                 "default",
                 &secrets_map,
-                profile,
                 age_key_file,
             )
             .await?;
@@ -378,7 +375,6 @@ impl EditCommand {
                         secrets_table,
                         &profile_name,
                         &secrets_map,
-                        profile,
                         age_key_file,
                     )
                     .await?;
@@ -390,14 +386,12 @@ impl EditCommand {
     }
 
     /// Re-encrypt secrets in a specific secrets table
-    #[allow(clippy::too_many_arguments)]
     async fn reencrypt_secrets_table(
         &self,
         config: &Config,
         secrets_table: &mut Table,
         secret_profile: &str,
         secrets_map: &HashMap<(String, String), &SecretEntry>,
-        profile: &str,
         age_key_file: Option<&Path>,
     ) -> Result<()> {
         // Collect keys first to avoid borrow issues when mutating
@@ -452,9 +446,11 @@ impl EditCommand {
                 }
 
                 // Check if the value or provider changed
+                // Compare explicit provider fields (not resolved provider names)
+                // to avoid false positives when secrets use default provider
                 let value_changed = Some(plaintext) != secret_entry.plaintext_value.as_deref();
                 let provider_changed =
-                    explicit_provider.as_ref() != secret_entry.provider_name.as_ref();
+                    explicit_provider.as_ref() != secret_entry.original_config.provider.as_ref();
 
                 if !value_changed && !provider_changed {
                     // Nothing changed - restore original encrypted value to avoid version control churn
@@ -465,15 +461,15 @@ impl EditCommand {
                 }
 
                 // Value or provider changed - re-encrypt
-                // If explicit provider is set, use it; otherwise use default provider (like new secrets)
+                // If explicit provider is set, use it; otherwise use default provider for this secret's profile
                 tracing::debug!("Secret '{}' changed, re-encrypting", key_str);
                 let provider_to_use = if let Some(ref prov) = explicit_provider {
                     Some(prov.clone())
                 } else {
-                    config.get_default_provider(profile)?
+                    config.get_default_provider(secret_profile)?
                 };
                 let encrypted_value = if let Some(provider_name) = provider_to_use {
-                    let providers = config.get_providers(profile);
+                    let providers = config.get_providers(secret_profile);
                     if let Some(provider_config) = providers.get(&provider_name) {
                         let provider = get_provider(provider_config)?;
                         provider
@@ -491,10 +487,10 @@ impl EditCommand {
                 // New secret added by user
                 tracing::debug!("New secret '{}' detected, encrypting", key_str);
 
-                // Determine provider to use
+                // Determine provider to use (from this secret's profile)
                 let provider_name = if let Some(prov) = explicit_provider {
                     prov
-                } else if let Some(default_prov) = config.get_default_provider(profile)? {
+                } else if let Some(default_prov) = config.get_default_provider(secret_profile)? {
                     default_prov
                 } else {
                     // No provider - keep as plaintext
@@ -505,8 +501,8 @@ impl EditCommand {
                     continue;
                 };
 
-                // Encrypt with the provider
-                let providers = config.get_providers(profile);
+                // Encrypt with the provider from this secret's profile
+                let providers = config.get_providers(secret_profile);
                 let Some(provider_config) = providers.get(&provider_name) else {
                     return Err(FnoxError::Config(format!(
                         "Provider '{}' not found for new secret '{}'",
