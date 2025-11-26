@@ -246,11 +246,10 @@ impl KeePassProvider {
             if let Node::Entry(entry) = &mut group.children[idx] {
                 return Some(entry);
             }
-        } else if let Some(idx) = found_in_subgroup_idx {
-            if let Node::Group(subgroup) = &mut group.children[idx] {
+        } else if let Some(idx) = found_in_subgroup_idx
+            && let Node::Group(subgroup) = &mut group.children[idx] {
                 return Self::find_entry_by_title_mut(subgroup, title);
             }
-        }
         None
     }
 
