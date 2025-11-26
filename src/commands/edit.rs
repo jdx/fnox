@@ -146,8 +146,15 @@ impl EditCommand {
         // Step 7: Re-encrypt secrets in the modified document
         // This preserves all user edits (comments, formatting, non-secret config)
         tracing::debug!("Re-encrypting secrets in modified document");
+
+        // Parse a fresh config from the modified content to recognize new providers
+        // Strip the temp header first as it's not valid TOML
+        let modified_toml = Self::strip_temp_header(&modified_content);
+        let modified_config: Config = toml_edit::de::from_str(&modified_toml)
+            .map_err(|e| FnoxError::Config(format!("Invalid configuration after edit: {}", e)))?;
+
         self.reencrypt_secrets(
-            &config,
+            &modified_config,
             &mut modified_doc,
             &all_secrets,
             &profile,
@@ -457,14 +464,17 @@ impl EditCommand {
                     continue;
                 }
 
-                // Value or provider changed - re-encrypt with the provider from the modified document
+                // Value or provider changed - re-encrypt
+                // If explicit provider is set, use it; otherwise use default provider (like new secrets)
                 tracing::debug!("Secret '{}' changed, re-encrypting", key_str);
-                let provider_to_use = explicit_provider
-                    .as_ref()
-                    .or(secret_entry.provider_name.as_ref());
+                let provider_to_use = if let Some(ref prov) = explicit_provider {
+                    Some(prov.clone())
+                } else {
+                    config.get_default_provider(profile)?
+                };
                 let encrypted_value = if let Some(provider_name) = provider_to_use {
                     let providers = config.get_providers(profile);
-                    if let Some(provider_config) = providers.get(provider_name) {
+                    if let Some(provider_config) = providers.get(&provider_name) {
                         let provider = get_provider(provider_config)?;
                         provider
                             .put_secret(&key_str, plaintext, age_key_file)

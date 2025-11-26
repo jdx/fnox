@@ -33,6 +33,11 @@ impl crate::providers::Provider for PlainProvider {
         Ok(value.to_string())
     }
 
+    async fn encrypt(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
+        // Plain provider stores values as-is without encryption
+        Ok(value.to_string())
+    }
+
     async fn test_connection(&self) -> Result<()> {
         // Plain provider is always available
         Ok(())
