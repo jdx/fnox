@@ -409,3 +409,29 @@ EOF
 	assert_success
 	assert_output "updated-value"
 }
+
+@test "fnox set creates parent directories for new database" {
+	# Use a nested path that doesn't exist
+	local nested_db="$BATS_TEST_TMPDIR/nested/dirs/test.kdbx"
+
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF
+[providers.keepass]
+type = "keepass"
+database = "$nested_db"
+
+[secrets]
+EOF
+
+	# Set a secret - should create parent directories and database
+	run "$FNOX_BIN" set NESTED_DIR_SECRET "nested-value" --provider keepass
+	assert_success
+	assert_output --partial "Set secret NESTED_DIR_SECRET"
+
+	# Verify the database file was created in the nested directory
+	[ -f "$nested_db" ]
+
+	# Verify we can read the secret back
+	run "$FNOX_BIN" get NESTED_DIR_SECRET
+	assert_success
+	assert_output "nested-value"
+}

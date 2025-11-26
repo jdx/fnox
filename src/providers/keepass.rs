@@ -7,6 +7,7 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
+use tempfile::NamedTempFile;
 
 /// Provider that reads and writes secrets from KeePass database files (.kdbx)
 pub struct KeePassProvider {
@@ -86,56 +87,60 @@ impl KeePassProvider {
         // Write to a temporary file first, then atomically rename to avoid data loss
         // if the save fails partway through (File::create truncates immediately)
         let parent_dir = self.database_path.parent().unwrap_or(Path::new("."));
-        let temp_path = parent_dir.join(format!(
-            ".{}.tmp",
-            self.database_path
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-        ));
 
-        let file = File::create(&temp_path).map_err(|e| {
+        // Create parent directory if it doesn't exist (for new databases)
+        if !parent_dir.exists() {
+            std::fs::create_dir_all(parent_dir).map_err(|e| {
+                FnoxError::Provider(format!(
+                    "Failed to create directory '{}': {}",
+                    parent_dir.display(),
+                    e
+                ))
+            })?;
+        }
+
+        // Create temp file in same directory (required for atomic rename on same filesystem)
+        // NamedTempFile handles unique naming to avoid race conditions
+        let temp_file = NamedTempFile::new_in(parent_dir).map_err(|e| {
             FnoxError::Provider(format!(
-                "Failed to create temporary KeePass database file '{}': {}",
-                temp_path.display(),
+                "Failed to create temporary file in '{}': {}",
+                parent_dir.display(),
                 e
             ))
         })?;
-        let mut writer = BufWriter::new(file);
+
+        let mut writer = BufWriter::new(temp_file);
         let key = self.build_key()?;
 
         // Save to temp file
-        if let Err(e) = db.save(&mut writer, key) {
-            // Clean up temp file on failure
-            let _ = std::fs::remove_file(&temp_path);
-            return Err(FnoxError::Provider(format!(
-                "Failed to save KeePass database: {e}"
-            )));
-        }
+        db.save(&mut writer, key)
+            .map_err(|e| FnoxError::Provider(format!("Failed to save KeePass database: {e}")))?;
 
         // Flush buffer to file
-        if let Err(e) = writer.flush() {
-            let _ = std::fs::remove_file(&temp_path);
-            return Err(FnoxError::Provider(format!(
-                "Failed to flush KeePass database to disk: {e}"
-            )));
-        }
+        writer
+            .flush()
+            .map_err(|e| FnoxError::Provider(format!("Failed to flush KeePass database: {e}")))?;
 
         // Sync to disk to ensure durability before rename
-        if let Err(e) = writer.get_ref().sync_all() {
-            let _ = std::fs::remove_file(&temp_path);
-            return Err(FnoxError::Provider(format!(
-                "Failed to sync KeePass database to disk: {e}"
-            )));
-        }
+        writer.get_ref().as_file().sync_all().map_err(|e| {
+            FnoxError::Provider(format!("Failed to sync KeePass database to disk: {e}"))
+        })?;
 
         // Atomically rename temp file to target (preserves original on failure)
-        std::fs::rename(&temp_path, &self.database_path).map_err(|e| {
-            let _ = std::fs::remove_file(&temp_path);
+        // Note: into_inner() returns the NamedTempFile, which we then persist
+        let temp_file = writer
+            .into_inner()
+            .map_err(|e| FnoxError::Provider(format!("Failed to finalize temp file: {e}")))?;
+
+        temp_file.persist(&self.database_path).map_err(|e| {
             FnoxError::Provider(format!(
-                "Failed to rename temporary KeePass database file: {e}"
+                "Failed to persist KeePass database to '{}': {}",
+                self.database_path.display(),
+                e
             ))
-        })
+        })?;
+
+        Ok(())
     }
 
     /// Parse a reference value into (entry_path, field)
