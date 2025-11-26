@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use keepass::DatabaseKey;
 use keepass::db::{Database, Entry, Group, Node, Value};
 use std::fs::File;
-use std::io::{BufReader, BufWriter};
+use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
@@ -94,7 +94,12 @@ impl KeePassProvider {
         let key = self.build_key()?;
 
         db.save(&mut writer, key)
-            .map_err(|e| FnoxError::Provider(format!("Failed to save KeePass database: {e}")))
+            .map_err(|e| FnoxError::Provider(format!("Failed to save KeePass database: {e}")))?;
+
+        // Explicitly flush to catch any I/O errors (BufWriter silently ignores flush errors on drop)
+        writer.flush().map_err(|e| {
+            FnoxError::Provider(format!("Failed to flush KeePass database to disk: {e}"))
+        })
     }
 
     /// Parse a reference value into (entry_path, field)
