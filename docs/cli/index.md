@@ -22,10 +22,6 @@ Profile to use (default: default, or FNOX_PROFILE env var)
 
 Enable verbose logging
 
-### `--age-key-file <AGE_KEY_FILE>`
-
-Path to age key file for decryption
-
 ### `--if-missing <IF_MISSING>`
 
 What to do if a secret is missing (error, warn, ignore)

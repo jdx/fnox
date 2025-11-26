@@ -920,11 +920,11 @@
       {
         "name": "age-key-file",
         "usage": "--age-key-file <AGE_KEY_FILE>",
-        "help": "Path to age key file for decryption",
-        "help_first_line": "Path to age key file for decryption",
+        "help": "Path to age key file for decryption (deprecated: use provider config instead)",
+        "help_first_line": "Path to age key file for decryption (deprecated: use provider config instead)",
         "short": [],
         "long": ["age-key-file"],
-        "hide": false,
+        "hide": true,
         "global": true,
         "arg": {
           "name": "AGE_KEY_FILE",
