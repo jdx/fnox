@@ -280,6 +280,13 @@ impl KeePassProvider {
             ));
         }
 
+        // Use Protected for Password field (in-memory encryption and proper KDBX marking)
+        let field_value = if field == "Password" {
+            Value::Protected(value.as_bytes().into())
+        } else {
+            Value::Unprotected(value.to_string())
+        };
+
         if path.len() == 1 {
             // Create or update entry in this group or any subgroup (recursive search)
             let entry_name = path[0];
@@ -287,9 +294,7 @@ impl KeePassProvider {
             // Look for existing entry recursively
             if let Some(entry) = Self::find_entry_by_title_mut(group, entry_name) {
                 // Update existing entry
-                entry
-                    .fields
-                    .insert(field.to_string(), Value::Unprotected(value.to_string()));
+                entry.fields.insert(field.to_string(), field_value);
                 return Ok(entry_name.to_string());
             }
 
@@ -299,9 +304,7 @@ impl KeePassProvider {
                 "Title".to_string(),
                 Value::Unprotected(entry_name.to_string()),
             );
-            entry
-                .fields
-                .insert(field.to_string(), Value::Unprotected(value.to_string()));
+            entry.fields.insert(field.to_string(), field_value);
             group.children.push(Node::Entry(entry));
             Ok(entry_name.to_string())
         } else {
