@@ -3,7 +3,6 @@ use async_trait::async_trait;
 use aws_config::BehaviorVersion;
 use aws_sdk_secretsmanager::Client;
 use std::collections::HashMap;
-use std::path::Path;
 
 /// Extract the secret name from an AWS Secrets Manager ARN.
 /// ARN format: arn:aws:secretsmanager:region:account:secret:name-SUFFIX
@@ -139,7 +138,7 @@ impl crate::providers::Provider for AwsSecretsManagerProvider {
         vec![crate::providers::ProviderCapability::RemoteStorage]
     }
 
-    async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn get_secret(&self, value: &str) -> Result<String> {
         let secret_name = self.get_secret_name(value);
         tracing::debug!(
             "Getting secret '{}' from AWS Secrets Manager in region '{}'",
@@ -153,7 +152,6 @@ impl crate::providers::Provider for AwsSecretsManagerProvider {
     async fn get_secrets_batch(
         &self,
         secrets: &[(String, String)],
-        _key_file: Option<&Path>,
     ) -> HashMap<String, Result<String>> {
         tracing::debug!(
             "Getting {} secrets from AWS Secrets Manager using batch API",
@@ -310,7 +308,7 @@ impl crate::providers::Provider for AwsSecretsManagerProvider {
         Ok(())
     }
 
-    async fn put_secret(&self, key: &str, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn put_secret(&self, key: &str, value: &str) -> Result<String> {
         let secret_name = self.get_secret_name(key);
         self.put_secret(&secret_name, value).await?;
         // Return the key name (without prefix) to store in config

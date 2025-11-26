@@ -31,15 +31,7 @@ impl GetCommand {
                 })?;
 
         // Resolve the secret using centralized resolver
-        match resolve_secret(
-            &config,
-            &profile,
-            &self.key,
-            secret_config,
-            cli.age_key_file.as_deref(),
-        )
-        .await
-        {
+        match resolve_secret(&config, &profile, &self.key, secret_config).await {
             Ok(Some(value)) => {
                 println!("{}", value);
                 Ok(())

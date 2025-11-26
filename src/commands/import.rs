@@ -169,13 +169,7 @@ impl ImportCommand {
                 // Handle encryption or remote storage based on provider capabilities
                 if is_encryption_provider {
                     // Encrypt the value
-                    match provider
-                        .encrypt(
-                            &value,
-                            cli.age_key_file.as_ref().map(PathBuf::from).as_deref(),
-                        )
-                        .await
-                    {
+                    match provider.encrypt(&value).await {
                         Ok(encrypted) => {
                             secret_config.value = Some(encrypted);
                         }

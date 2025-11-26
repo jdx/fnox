@@ -2,15 +2,19 @@ use crate::env;
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
 use std::io::Read;
-use std::path::Path;
+use std::path::PathBuf;
 
 pub struct AgeEncryptionProvider {
     recipients: Vec<String>,
+    key_file: Option<PathBuf>,
 }
 
 impl AgeEncryptionProvider {
-    pub fn new(recipients: Vec<String>) -> Self {
-        Self { recipients }
+    pub fn new(recipients: Vec<String>, key_file: Option<String>) -> Self {
+        Self {
+            recipients,
+            key_file: key_file.map(|k| PathBuf::from(shellexpand::tilde(&k).to_string())),
+        }
     }
 }
 
@@ -20,7 +24,7 @@ impl crate::providers::Provider for AgeEncryptionProvider {
         vec![crate::providers::ProviderCapability::Encryption]
     }
 
-    async fn encrypt(&self, plaintext: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn encrypt(&self, plaintext: &str) -> Result<String> {
         use std::io::Write;
 
         if self.recipients.is_empty() {
@@ -90,7 +94,7 @@ impl crate::providers::Provider for AgeEncryptionProvider {
         Ok(encrypted_base64)
     }
 
-    async fn get_secret(&self, value: &str, key_file: Option<&Path>) -> Result<String> {
+    async fn get_secret(&self, value: &str) -> Result<String> {
         // value contains the encrypted blob (might be base64 encoded or raw)
 
         // Try to decode as base64 first, if that fails, treat as raw bytes
@@ -103,21 +107,25 @@ impl crate::providers::Provider for AgeEncryptionProvider {
                 }
             };
 
-        // First check if FNOX_AGE_KEY environment variable is set
+        // Priority for key file:
+        // 1. FNOX_AGE_KEY env var (inline key content)
+        // 2. self.key_file (from provider config)
+        // 3. Settings age_key_file (from CLI flag - deprecated)
+        // 4. Default path (~/.config/fnox/age.txt)
         let (identity_content, key_file_path_opt) = if let Some(ref age_key) = *env::FNOX_AGE_KEY {
             // Use the key directly from the environment variable
             (age_key.clone(), None)
         } else {
             // Determine which key file to use
-            let key_file_path = if let Some(key_file) = key_file {
-                // Use provided key file
-                key_file.to_path_buf()
+            let key_file_path = if let Some(ref config_key_file) = self.key_file {
+                // Use key file from provider config
+                config_key_file.clone()
             } else {
                 // Get settings which merges CLI flags, env vars, and defaults
                 let settings = crate::settings::Settings::get();
 
                 if let Some(ref age_key_file) = settings.age_key_file {
-                    // Use age key file from settings (CLI flag or env var)
+                    // Use age key file from settings (CLI flag or env var - deprecated)
                     age_key_file.clone()
                 } else {
                     // Try default path

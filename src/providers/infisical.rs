@@ -2,7 +2,6 @@ use crate::env;
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::path::Path;
 use std::process::Command;
 use std::sync::{LazyLock, Mutex};
 
@@ -171,7 +170,7 @@ impl InfisicalProvider {
 
 #[async_trait]
 impl crate::providers::Provider for InfisicalProvider {
-    async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn get_secret(&self, value: &str) -> Result<String> {
         tracing::debug!("Getting secret '{}' from Infisical", value);
 
         // Build the command: infisical secrets get <name> --output json
@@ -252,7 +251,6 @@ impl crate::providers::Provider for InfisicalProvider {
     async fn get_secrets_batch(
         &self,
         secrets: &[(String, String)],
-        _key_file: Option<&Path>,
     ) -> HashMap<String, Result<String>> {
         // If empty or single secret, fall back to individual get
         if secrets.is_empty() {
@@ -260,7 +258,7 @@ impl crate::providers::Provider for InfisicalProvider {
         }
         if secrets.len() == 1 {
             let (key, value) = &secrets[0];
-            let result = self.get_secret(value, _key_file).await;
+            let result = self.get_secret(value).await;
             let mut map = HashMap::new();
             map.insert(key.clone(), result);
             return map;

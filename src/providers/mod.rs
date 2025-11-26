@@ -2,7 +2,6 @@ use crate::error::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::Path;
 use strum::AsRefStr;
 
 pub mod age;
@@ -48,7 +47,11 @@ pub enum ProviderConfig {
     },
     #[serde(rename = "age")]
     #[strum(serialize = "age")]
-    AgeEncryption { recipients: Vec<String> },
+    AgeEncryption {
+        recipients: Vec<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        key_file: Option<String>,
+    },
     #[serde(rename = "aws-kms")]
     #[strum(serialize = "aws-kms")]
     AwsKms { key_id: String, region: String },
@@ -152,7 +155,7 @@ pub enum ProviderConfig {
 #[async_trait]
 pub trait Provider: Send + Sync {
     /// Get a secret value from the provider (decrypt if needed)
-    async fn get_secret(&self, value: &str, key_file: Option<&Path>) -> Result<String>;
+    async fn get_secret(&self, value: &str) -> Result<String>;
 
     /// Get multiple secrets in a batch (more efficient for some providers)
     ///
@@ -168,7 +171,6 @@ pub trait Provider: Send + Sync {
     async fn get_secrets_batch(
         &self,
         secrets: &[(String, String)],
-        key_file: Option<&Path>,
     ) -> HashMap<String, Result<String>> {
         use futures::stream::{self, StreamExt};
 
@@ -178,7 +180,7 @@ pub trait Provider: Send + Sync {
         // Fetch all secrets in parallel (up to 10 concurrent)
         let results: Vec<_> = stream::iter(secrets_vec)
             .map(|(key, value)| async move {
-                let result = self.get_secret(&value, key_file).await;
+                let result = self.get_secret(&value).await;
                 (key, result)
             })
             .buffer_unordered(10)
@@ -189,7 +191,7 @@ pub trait Provider: Send + Sync {
     }
 
     /// Encrypt a value with this provider (for encryption providers)
-    async fn encrypt(&self, _value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn encrypt(&self, _value: &str) -> Result<String> {
         // Default implementation for non-encryption providers
         Err(crate::error::FnoxError::Provider(
             "This provider does not support encryption".to_string(),
@@ -204,12 +206,12 @@ pub trait Provider: Send + Sync {
     /// - Read-only providers: return an error
     ///
     /// Returns the value that should be stored in the config file.
-    async fn put_secret(&self, _key: &str, value: &str, key_file: Option<&Path>) -> Result<String> {
+    async fn put_secret(&self, _key: &str, value: &str) -> Result<String> {
         let capabilities = self.capabilities();
 
         if capabilities.contains(&ProviderCapability::Encryption) {
             // Encryption provider - encrypt and return ciphertext
-            self.encrypt(value, key_file).await
+            self.encrypt(value).await
         } else if capabilities.contains(&ProviderCapability::RemoteStorage) {
             // Remote storage provider - should override this method
             Err(crate::error::FnoxError::Provider(
@@ -249,9 +251,13 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
         ProviderConfig::OnePassword { vault, account } => Ok(Box::new(
             onepassword::OnePasswordProvider::new(vault.clone(), account.clone()),
         )),
-        ProviderConfig::AgeEncryption { recipients } => Ok(Box::new(
-            age::AgeEncryptionProvider::new(recipients.clone()),
-        )),
+        ProviderConfig::AgeEncryption {
+            recipients,
+            key_file,
+        } => Ok(Box::new(age::AgeEncryptionProvider::new(
+            recipients.clone(),
+            key_file.clone(),
+        ))),
         ProviderConfig::AwsKms { key_id, region } => Ok(Box::new(aws_kms::AwsKmsProvider::new(
             key_id.clone(),
             region.clone(),

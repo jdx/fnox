@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::process::Command;
-use std::{path::Path, sync::LazyLock};
+use std::sync::LazyLock;
 
 pub struct BitwardenProvider {
     collection: Option<String>,
@@ -206,7 +206,7 @@ impl BitwardenProvider {
 
 #[async_trait]
 impl crate::providers::Provider for BitwardenProvider {
-    async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn get_secret(&self, value: &str) -> Result<String> {
         tracing::debug!("Getting secret '{}' from Bitwarden", value);
 
         // Parse value as "item/field" or just "item"
@@ -236,7 +236,7 @@ impl crate::providers::Provider for BitwardenProvider {
 }
 
 static BW_SESSION_TOKEN: LazyLock<Option<String>> = LazyLock::new(|| {
-    env::var("FNOX_BW_SESSION_TOKEN")
+    env::var("FNOX_BW_SESSION")
         .or_else(|_| env::var("BW_SESSION"))
         .ok()
 });

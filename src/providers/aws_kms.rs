@@ -3,7 +3,6 @@ use async_trait::async_trait;
 use aws_config::BehaviorVersion;
 use aws_sdk_kms::Client;
 use aws_sdk_kms::primitives::Blob;
-use std::path::Path;
 
 pub struct AwsKmsProvider {
     key_id: String,
@@ -61,12 +60,12 @@ impl crate::providers::Provider for AwsKmsProvider {
         vec![crate::providers::ProviderCapability::Encryption]
     }
 
-    async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn get_secret(&self, value: &str) -> Result<String> {
         // value contains the base64-encoded encrypted blob
         self.decrypt(value).await
     }
 
-    async fn encrypt(&self, plaintext: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn encrypt(&self, plaintext: &str) -> Result<String> {
         let client = self.create_client().await?;
 
         let result = client

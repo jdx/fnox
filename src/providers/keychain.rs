@@ -1,7 +1,6 @@
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
 use keyring::Entry;
-use std::path::Path;
 
 pub struct KeychainProvider {
     service: String,
@@ -66,7 +65,7 @@ impl crate::providers::Provider for KeychainProvider {
         vec![crate::providers::ProviderCapability::RemoteStorage]
     }
 
-    async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn get_secret(&self, value: &str) -> Result<String> {
         let entry = self.create_entry(value)?;
         let full_key = self.build_key_name(value);
 
@@ -111,7 +110,7 @@ impl crate::providers::Provider for KeychainProvider {
         Ok(())
     }
 
-    async fn put_secret(&self, key: &str, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn put_secret(&self, key: &str, value: &str) -> Result<String> {
         self.put_secret(key, value).await?;
         // Return the key name to store in config
         Ok(key.to_string())
@@ -132,7 +131,7 @@ mod tests {
         assert!(result.is_ok(), "Failed to set secret: {:?}", result.err());
 
         // Get it back
-        let result = provider.get_secret("test_key", None).await;
+        let result = provider.get_secret("test_key").await;
         assert!(result.is_ok(), "Failed to get secret: {:?}", result.err());
         assert_eq!(result.unwrap(), "test_value");
 

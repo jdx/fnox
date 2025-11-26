@@ -4,7 +4,6 @@ use azure_core::auth::TokenCredential;
 use azure_identity::{DefaultAzureCredential, TokenCredentialOptions};
 use azure_security_keyvault::KeyClient;
 use azure_security_keyvault::prelude::*;
-use std::path::Path;
 use std::sync::Arc;
 
 pub struct AzureKeyVaultProvider {
@@ -79,12 +78,12 @@ impl crate::providers::Provider for AzureKeyVaultProvider {
         vec![crate::providers::ProviderCapability::Encryption]
     }
 
-    async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn get_secret(&self, value: &str) -> Result<String> {
         // value contains the base64-encoded encrypted blob
         self.decrypt(value).await
     }
 
-    async fn encrypt(&self, plaintext: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn encrypt(&self, plaintext: &str) -> Result<String> {
         let client = self.create_client().await?;
 
         // Create encrypt parameters with RSA-OAEP-256 algorithm

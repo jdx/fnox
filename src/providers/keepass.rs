@@ -335,7 +335,7 @@ impl crate::providers::Provider for KeePassProvider {
         vec![ProviderCapability::RemoteStorage]
     }
 
-    async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn get_secret(&self, value: &str) -> Result<String> {
         let (entry_path, field) = Self::parse_reference(value);
 
         tracing::debug!(
@@ -363,7 +363,7 @@ impl crate::providers::Provider for KeePassProvider {
         })
     }
 
-    async fn put_secret(&self, key: &str, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn put_secret(&self, key: &str, value: &str) -> Result<String> {
         // Parse the key to determine entry path and field
         let (entry_path, field) = Self::parse_reference(key);
 

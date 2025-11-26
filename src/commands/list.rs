@@ -116,15 +116,7 @@ impl ListCommand {
 
         // Resolve secrets if values are requested
         let resolved_values = if self.values {
-            Some(
-                resolve_secrets_batch(
-                    &config,
-                    &profile,
-                    &profile_secrets,
-                    cli.age_key_file.as_deref(),
-                )
-                .await?,
-            )
+            Some(resolve_secrets_batch(&config, &profile, &profile_secrets).await?)
         } else {
             None
         };

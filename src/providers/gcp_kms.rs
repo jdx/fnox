@@ -2,7 +2,6 @@ use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
 use google_cloud_kms::client::{Client, ClientConfig};
 use google_cloud_kms::grpc::kms::v1::{DecryptRequest, EncryptRequest, GetCryptoKeyRequest};
-use std::path::Path;
 
 pub struct GcpKmsProvider {
     project: String,
@@ -76,12 +75,12 @@ impl crate::providers::Provider for GcpKmsProvider {
         vec![crate::providers::ProviderCapability::Encryption]
     }
 
-    async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn get_secret(&self, value: &str) -> Result<String> {
         // value contains the base64-encoded encrypted blob
         self.decrypt(value).await
     }
 
-    async fn encrypt(&self, plaintext: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn encrypt(&self, plaintext: &str) -> Result<String> {
         let client = self.create_client().await?;
 
         let request = EncryptRequest {

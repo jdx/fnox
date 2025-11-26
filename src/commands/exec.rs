@@ -30,13 +30,7 @@ impl ExecCommand {
         }
 
         // Resolve secrets using batch resolution for better performance
-        let resolved_secrets = resolve_secrets_batch(
-            &config,
-            &profile,
-            &profile_secrets,
-            cli.age_key_file.as_deref(),
-        )
-        .await?;
+        let resolved_secrets = resolve_secrets_batch(&config, &profile, &profile_secrets).await?;
 
         // Add resolved secrets as environment variables
         for (key, value) in resolved_secrets {

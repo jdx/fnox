@@ -5,7 +5,7 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::io::Write;
 use std::process::{Command, Stdio};
-use std::{path::Path, sync::LazyLock};
+use std::sync::LazyLock;
 
 /// Precompiled regex to remove leading error prefixes from stderr output of `op`.
 /// [ERROR] YYYY/MM/DD HH:MM:SS message
@@ -164,7 +164,7 @@ impl OnePasswordProvider {
 
 #[async_trait]
 impl crate::providers::Provider for OnePasswordProvider {
-    async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn get_secret(&self, value: &str) -> Result<String> {
         tracing::debug!("Getting secret '{}' from 1Password", value);
 
         let reference = self.value_to_reference(value)?;
@@ -177,7 +177,6 @@ impl crate::providers::Provider for OnePasswordProvider {
     async fn get_secrets_batch(
         &self,
         secrets: &[(String, String)],
-        _key_file: Option<&Path>,
     ) -> HashMap<String, Result<String>> {
         tracing::debug!(
             "Getting {} secrets from 1Password using batch mode",
@@ -187,7 +186,7 @@ impl crate::providers::Provider for OnePasswordProvider {
         // If only one secret, fall back to single get_secret
         if secrets.len() == 1 {
             let (key, value) = &secrets[0];
-            let result = self.get_secret(value, None).await;
+            let result = self.get_secret(value).await;
             let mut map = HashMap::new();
             map.insert(key.clone(), result);
             return map;
@@ -280,7 +279,7 @@ impl crate::providers::Provider for OnePasswordProvider {
                 tracing::warn!("op inject failed, falling back to individual calls: {}", e);
                 for (key, value) in secrets {
                     if !results.contains_key(key) {
-                        let result = self.get_secret(value, None).await;
+                        let result = self.get_secret(value).await;
                         results.insert(key.clone(), result);
                     }
                 }

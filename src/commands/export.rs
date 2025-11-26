@@ -56,13 +56,7 @@ impl ExportCommand {
         let profile_secrets = config.get_secrets(&profile)?;
 
         // Resolve secrets using batch resolution for better performance
-        let resolved_secrets = resolve_secrets_batch(
-            &config,
-            &profile,
-            &profile_secrets,
-            cli.age_key_file.as_deref(),
-        )
-        .await?;
+        let resolved_secrets = resolve_secrets_batch(&config, &profile, &profile_secrets).await?;
 
         // Build secrets map, preserving insertion order
         let mut secrets = IndexMap::new();

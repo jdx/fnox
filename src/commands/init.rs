@@ -200,6 +200,7 @@ impl InitCommand {
                     name,
                     ProviderConfig::AgeEncryption {
                         recipients: vec![recipient],
+                        key_file: None,
                     },
                 ))
             }

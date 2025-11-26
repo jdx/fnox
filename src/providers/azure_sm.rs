@@ -3,7 +3,6 @@ use async_trait::async_trait;
 use azure_core::auth::TokenCredential;
 use azure_identity::{DefaultAzureCredential, TokenCredentialOptions};
 use azure_security_keyvault::SecretClient;
-use std::path::Path;
 use std::sync::Arc;
 
 pub struct AzureSecretsManagerProvider {
@@ -78,7 +77,7 @@ impl crate::providers::Provider for AzureSecretsManagerProvider {
         vec![crate::providers::ProviderCapability::RemoteStorage]
     }
 
-    async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn get_secret(&self, value: &str) -> Result<String> {
         let secret_name = self.get_secret_name(value);
         tracing::debug!(
             "Getting secret '{}' from Azure Key Vault '{}'",
@@ -104,7 +103,7 @@ impl crate::providers::Provider for AzureSecretsManagerProvider {
         Ok(())
     }
 
-    async fn put_secret(&self, key: &str, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn put_secret(&self, key: &str, value: &str) -> Result<String> {
         let secret_name = self.get_secret_name(key);
         self.put_secret(&secret_name, value).await?;
         // Return the key name (without prefix) to store in config

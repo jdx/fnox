@@ -2,7 +2,7 @@ use crate::env;
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
 use std::process::Command;
-use std::{path::Path, sync::LazyLock};
+use std::sync::LazyLock;
 
 pub struct HashiCorpVaultProvider {
     address: String,
@@ -82,7 +82,7 @@ impl crate::providers::Provider for HashiCorpVaultProvider {
         vec![crate::providers::ProviderCapability::RemoteStorage]
     }
 
-    async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn get_secret(&self, value: &str) -> Result<String> {
         tracing::debug!("Getting secret '{}' from HashiCorp Vault", value);
 
         // Parse value as "secret-name/field" or just "secret-name"
@@ -126,7 +126,7 @@ impl crate::providers::Provider for HashiCorpVaultProvider {
         Ok(())
     }
 
-    async fn put_secret(&self, key: &str, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn put_secret(&self, key: &str, value: &str) -> Result<String> {
         let secret_path = self.get_secret_path(key);
 
         tracing::debug!("Writing secret '{}' to HashiCorp Vault", secret_path);

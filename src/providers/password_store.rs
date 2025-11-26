@@ -1,7 +1,6 @@
 use crate::error::{FnoxError, Result};
 use crate::providers::ProviderCapability;
 use async_trait::async_trait;
-use std::path::Path;
 use std::process::Command;
 use std::sync::LazyLock;
 
@@ -90,7 +89,7 @@ impl crate::providers::Provider for PasswordStoreProvider {
         vec![ProviderCapability::RemoteStorage]
     }
 
-    async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn get_secret(&self, value: &str) -> Result<String> {
         let secret_path = self.build_secret_path(value);
 
         tracing::debug!("Getting secret '{secret_path}' from password-store");
@@ -99,7 +98,7 @@ impl crate::providers::Provider for PasswordStoreProvider {
         self.execute_pass_command(&["show", &secret_path])
     }
 
-    async fn put_secret(&self, key: &str, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn put_secret(&self, key: &str, value: &str) -> Result<String> {
         let secret_path = self.build_secret_path(key);
 
         tracing::debug!("Storing secret '{secret_path}' in password-store");

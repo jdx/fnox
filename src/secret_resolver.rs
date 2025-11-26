@@ -100,12 +100,9 @@ pub async fn resolve_secret(
     profile: &str,
     key: &str,
     secret_config: &SecretConfig,
-    age_key_file: Option<&std::path::Path>,
 ) -> Result<Option<String>> {
     // Priority 1: Provider (if specified and has a value)
-    if let Some(value) =
-        try_resolve_from_provider(config, profile, secret_config, age_key_file).await?
-    {
+    if let Some(value) = try_resolve_from_provider(config, profile, secret_config).await? {
         return Ok(Some(value));
     }
 
@@ -129,7 +126,6 @@ async fn try_resolve_from_provider(
     config: &Config,
     profile: &str,
     secret_config: &SecretConfig,
-    age_key_file: Option<&std::path::Path>,
 ) -> Result<Option<String>> {
     // Only try provider if we have a value to pass to it
     let Some(provider_value) = &secret_config.value else {
@@ -161,7 +157,7 @@ async fn try_resolve_from_provider(
 
     // Resolve from provider
     let provider = get_provider(provider_config)?;
-    let value = provider.get_secret(provider_value, age_key_file).await?;
+    let value = provider.get_secret(provider_value).await?;
     Ok(Some(value))
 }
 
@@ -198,7 +194,6 @@ pub async fn resolve_secrets_batch(
     config: &Config,
     profile: &str,
     secrets: &IndexMap<String, SecretConfig>,
-    age_key_file: Option<&std::path::Path>,
 ) -> Result<IndexMap<String, Option<String>>> {
     use futures::stream::{self, StreamExt};
 
@@ -233,15 +228,7 @@ pub async fn resolve_secrets_batch(
     // Resolve secrets grouped by provider in parallel
     let provider_results: Vec<_> = stream::iter(by_provider)
         .map(|(provider_name, provider_secrets)| async move {
-            resolve_provider_batch(
-                config,
-                profile,
-                secrets,
-                &provider_name,
-                provider_secrets,
-                age_key_file,
-            )
-            .await
+            resolve_provider_batch(config, profile, secrets, &provider_name, provider_secrets).await
         })
         .buffer_unordered(10)
         .collect()
@@ -257,7 +244,7 @@ pub async fn resolve_secrets_batch(
     let no_provider_results: Vec<_> = stream::iter(no_provider)
         .map(|key| async move {
             let secret_config = &secrets[&key];
-            match resolve_secret(config, profile, &key, secret_config, age_key_file).await {
+            match resolve_secret(config, profile, &key, secret_config).await {
                 Ok(value) => Ok((key, value)),
                 Err(e) => {
                     let if_missing = resolve_if_missing_behavior(secret_config, config);
@@ -299,7 +286,6 @@ async fn resolve_provider_batch(
     secrets: &IndexMap<String, SecretConfig>,
     provider_name: &str,
     provider_secrets: Vec<(String, String)>,
-    age_key_file: Option<&std::path::Path>,
 ) -> Result<HashMap<String, Option<String>>> {
     let mut results = HashMap::new();
 
@@ -354,9 +340,7 @@ async fn resolve_provider_batch(
     };
 
     // Call batch method
-    let batch_results = provider
-        .get_secrets_batch(&provider_secrets, age_key_file)
-        .await;
+    let batch_results = provider.get_secrets_batch(&provider_secrets).await;
 
     // Process batch results
     for (key, result) in batch_results {

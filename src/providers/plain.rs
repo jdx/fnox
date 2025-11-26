@@ -1,6 +1,5 @@
 use crate::error::Result;
 use async_trait::async_trait;
-use std::path::Path;
 
 /// Plain provider that stores and returns values as-is without encryption.
 ///
@@ -28,12 +27,12 @@ impl crate::providers::Provider for PlainProvider {
         vec![crate::providers::ProviderCapability::Encryption]
     }
 
-    async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn get_secret(&self, value: &str) -> Result<String> {
         // Simply return the value as-is
         Ok(value.to_string())
     }
 
-    async fn encrypt(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn encrypt(&self, value: &str) -> Result<String> {
         // Plain provider stores values as-is without encryption
         Ok(value.to_string())
     }

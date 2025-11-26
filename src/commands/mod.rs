@@ -45,8 +45,8 @@ pub struct Cli {
     #[arg(short, long, global = true)]
     pub verbose: bool,
 
-    /// Path to age key file for decryption
-    #[arg(long, global = true)]
+    /// Path to age key file for decryption (deprecated: use provider config instead)
+    #[arg(long, global = true, hide = true)]
     pub age_key_file: Option<PathBuf>,
 
     /// What to do if a secret is missing (error, warn, ignore)

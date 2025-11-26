@@ -76,15 +76,7 @@ impl CiRedactCommand {
 
         // Resolve and redact each secret
         for (key, secret_config) in &profile_secrets {
-            match resolve_secret(
-                &config,
-                &profile,
-                key,
-                secret_config,
-                cli.age_key_file.as_deref(),
-            )
-            .await
-            {
+            match resolve_secret(&config, &profile, key, secret_config).await {
                 Ok(Some(value)) => {
                     // Output CI-specific mask command
                     mask_fn(key, &value);

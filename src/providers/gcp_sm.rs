@@ -1,7 +1,6 @@
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
 use google_cloud_secretmanager_v1::client::SecretManagerService;
-use std::path::Path;
 
 pub struct GoogleSecretManagerProvider {
     project: String,
@@ -61,7 +60,7 @@ impl crate::providers::Provider for GoogleSecretManagerProvider {
         vec![crate::providers::ProviderCapability::RemoteStorage]
     }
 
-    async fn get_secret(&self, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn get_secret(&self, value: &str) -> Result<String> {
         let client = self.create_client().await?;
         let secret_name = self.build_secret_name(value);
 
@@ -106,7 +105,7 @@ impl crate::providers::Provider for GoogleSecretManagerProvider {
         Ok(())
     }
 
-    async fn put_secret(&self, key: &str, value: &str, _key_file: Option<&Path>) -> Result<String> {
+    async fn put_secret(&self, key: &str, value: &str) -> Result<String> {
         let secret_id = self.get_secret_id(key);
         self.put_secret_value(&secret_id, value).await?;
         // Return the key name (without prefix) to store in config

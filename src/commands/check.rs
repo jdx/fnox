@@ -82,7 +82,6 @@ impl CheckCommand {
                                 &profile,
                                 &name,
                                 &secret_config,
-                                cli.age_key_file.as_deref(),
                             )
                             .await
                             {

@@ -3,7 +3,6 @@ use crate::config::{Config, IfMissing, ProviderConfig};
 use crate::error::{FnoxError, Result};
 use clap::Args;
 use std::io::{self, Read};
-use std::path::PathBuf;
 
 #[derive(Debug, Args)]
 #[command(visible_aliases = ["s"])]
@@ -112,13 +111,7 @@ impl SetCommand {
                         );
 
                         // Encrypt with the provider
-                        match provider
-                            .encrypt(
-                                value,
-                                cli.age_key_file.as_ref().map(PathBuf::from).as_deref(),
-                            )
-                            .await
-                        {
+                        match provider.encrypt(value).await {
                             Ok(encrypted) => (Some(encrypted), None),
                             Err(e) => {
                                 // Provider doesn't support encryption, store plaintext
@@ -177,7 +170,7 @@ impl SetCommand {
                                     );
 
                                 let key_name = self.key_name.as_deref().unwrap_or(&self.key);
-                                let key = pass_provider.put_secret(key_name, value, None).await?;
+                                let key = pass_provider.put_secret(key_name, value).await?;
 
                                 (None, Some(key))
                             }
@@ -208,8 +201,7 @@ impl SetCommand {
                                     );
 
                                 let key_name = self.key_name.as_deref().unwrap_or(&self.key);
-                                let key =
-                                    keepass_provider.put_secret(key_name, value, None).await?;
+                                let key = keepass_provider.put_secret(key_name, value).await?;
 
                                 (None, Some(key))
                             }

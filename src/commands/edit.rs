@@ -9,7 +9,6 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::io::Write as _;
-use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::NamedTempFile;
 use toml_edit::{DocumentMut, Table, Value};
@@ -61,14 +60,8 @@ impl EditCommand {
 
         // Collect secrets from top-level [secrets] section
         if !config.secrets.is_empty() {
-            self.collect_secrets(
-                &config,
-                "default",
-                &config.secrets,
-                &mut all_secrets,
-                cli.age_key_file.as_ref().map(PathBuf::from).as_deref(),
-            )
-            .await?;
+            self.collect_secrets(&config, "default", &config.secrets, &mut all_secrets)
+                .await?;
         }
 
         // Collect secrets from all [profiles.*] sections
@@ -79,7 +72,6 @@ impl EditCommand {
                     profile_name,
                     &profile_config.secrets,
                     &mut all_secrets,
-                    cli.age_key_file.as_ref().map(PathBuf::from).as_deref(),
                 )
                 .await?;
             }
@@ -97,7 +89,6 @@ impl EditCommand {
                 &profile,
                 &secret_entry.key,
                 &edit_secret_config,
-                cli.age_key_file.as_ref().map(PathBuf::from).as_deref(),
             )
             .await?;
         }
@@ -153,13 +144,8 @@ impl EditCommand {
         let modified_config: Config = toml_edit::de::from_str(&modified_toml)
             .map_err(|e| FnoxError::Config(format!("Invalid configuration after edit: {}", e)))?;
 
-        self.reencrypt_secrets(
-            &modified_config,
-            &mut modified_doc,
-            &all_secrets,
-            cli.age_key_file.as_ref().map(PathBuf::from).as_deref(),
-        )
-        .await?;
+        self.reencrypt_secrets(&modified_config, &mut modified_doc, &all_secrets)
+            .await?;
 
         // Step 8: Save the modified config (preserves all user edits)
         // Strip the temporary file header comments before saving
@@ -181,7 +167,6 @@ impl EditCommand {
         profile: &str,
         secrets: &IndexMap<String, SecretConfig>,
         all_secrets: &mut Vec<SecretEntry>,
-        _age_key_file: Option<&Path>,
     ) -> Result<()> {
         for (key, secret_config) in secrets {
             // Determine provider and check if read-only
@@ -332,7 +317,6 @@ impl EditCommand {
         config: &Config,
         modified_doc: &mut DocumentMut,
         all_secrets: &[SecretEntry],
-        age_key_file: Option<&Path>,
     ) -> Result<()> {
         // Create a map of secrets by (profile, key) to avoid collisions
         let secrets_map: HashMap<_, _> = all_secrets
@@ -345,14 +329,8 @@ impl EditCommand {
             .get_mut("secrets")
             .and_then(|item| item.as_table_mut())
         {
-            self.reencrypt_secrets_table(
-                config,
-                secrets_table,
-                "default",
-                &secrets_map,
-                age_key_file,
-            )
-            .await?;
+            self.reencrypt_secrets_table(config, secrets_table, "default", &secrets_map)
+                .await?;
         }
 
         // Process [profiles.*] sections
@@ -375,7 +353,6 @@ impl EditCommand {
                         secrets_table,
                         &profile_name,
                         &secrets_map,
-                        age_key_file,
                     )
                     .await?;
                 }
@@ -392,7 +369,6 @@ impl EditCommand {
         secrets_table: &mut Table,
         secret_profile: &str,
         secrets_map: &HashMap<(String, String), &SecretEntry>,
-        age_key_file: Option<&Path>,
     ) -> Result<()> {
         // Collect keys first to avoid borrow issues when mutating
         let keys: Vec<_> = secrets_table.iter().map(|(k, _)| k.to_string()).collect();
@@ -472,9 +448,7 @@ impl EditCommand {
                     let providers = config.get_providers(secret_profile);
                     if let Some(provider_config) = providers.get(&provider_name) {
                         let provider = get_provider(provider_config)?;
-                        provider
-                            .put_secret(&key_str, plaintext, age_key_file)
-                            .await?
+                        provider.put_secret(&key_str, plaintext).await?
                     } else {
                         plaintext.to_string()
                     }
@@ -511,9 +485,7 @@ impl EditCommand {
                 };
 
                 let provider = get_provider(provider_config)?;
-                let encrypted_value = provider
-                    .put_secret(&key_str, plaintext, age_key_file)
-                    .await?;
+                let encrypted_value = provider.put_secret(&key_str, plaintext).await?;
 
                 Self::set_secret_value(value, &encrypted_value);
             }
