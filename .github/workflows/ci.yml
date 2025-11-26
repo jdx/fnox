@@ -148,6 +148,7 @@ jobs:
         env:
           TRANCHE: ${{ matrix.tranche }}
           TRANCHE_COUNT: 3
+          KEEPASS_PASSWORD: fnox-test-password
         with:
           timeout_minutes: 10
           max_attempts: 3

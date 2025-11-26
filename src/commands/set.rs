@@ -193,6 +193,26 @@ impl SetCommand {
                                 // Store just the key name (without prefix) in config
                                 (None, Some(self.key.clone()))
                             }
+                            ProviderConfig::KeePass {
+                                database,
+                                keyfile,
+                                password,
+                            } => {
+                                use crate::providers::Provider;
+
+                                let keepass_provider =
+                                    crate::providers::keepass::KeePassProvider::new(
+                                        database.clone(),
+                                        keyfile.clone(),
+                                        password.clone(),
+                                    );
+
+                                let key_name = self.key_name.as_deref().unwrap_or(&self.key);
+                                let key =
+                                    keepass_provider.put_secret(key_name, value, None).await?;
+
+                                (None, Some(key))
+                            }
                             _ => {
                                 // Other remote storage providers not yet implemented
                                 tracing::warn!(

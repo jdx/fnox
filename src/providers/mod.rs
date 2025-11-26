@@ -14,6 +14,7 @@ pub mod bitwarden;
 pub mod gcp_kms;
 pub mod gcp_sm;
 pub mod infisical;
+pub mod keepass;
 pub mod keychain;
 pub mod onepassword;
 pub mod password_store;
@@ -107,6 +108,15 @@ pub enum ProviderConfig {
         environment: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         path: Option<String>,
+    },
+    #[serde(rename = "keepass")]
+    #[strum(serialize = "keepass")]
+    KeePass {
+        database: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        keyfile: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        password: Option<String>,
     },
     #[serde(rename = "keychain")]
     #[strum(serialize = "keychain")]
@@ -292,6 +302,15 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
             project_id.clone(),
             environment.clone(),
             path.clone(),
+        ))),
+        ProviderConfig::KeePass {
+            database,
+            keyfile,
+            password,
+        } => Ok(Box::new(keepass::KeePassProvider::new(
+            database.clone(),
+            keyfile.clone(),
+            password.clone(),
         ))),
         ProviderConfig::Keychain { service, prefix } => Ok(Box::new(
             keychain::KeychainProvider::new(service.clone(), prefix.clone()),
