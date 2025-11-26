@@ -411,14 +411,13 @@ impl crate::providers::Provider for KeePassProvider {
         self.get_password()?;
 
         // Verify keyfile exists if configured
-        if let Some(keyfile_path) = &self.keyfile_path {
-            if !keyfile_path.exists() {
+        if let Some(keyfile_path) = &self.keyfile_path
+            && !keyfile_path.exists() {
                 return Err(FnoxError::Provider(format!(
                     "KeePass keyfile '{}' does not exist",
                     keyfile_path.display()
                 )));
             }
-        }
 
         // If database exists, verify we can open it
         // If it doesn't exist, that's OK - put_secret will create it
