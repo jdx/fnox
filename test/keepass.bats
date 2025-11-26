@@ -382,3 +382,30 @@ EOF
 	assert_success
 	assert_output "fnox-env-value"
 }
+
+@test "fnox set fails when writing to title field" {
+	create_keepass_config
+
+	# Try to set a secret with title field - should fail
+	run "$FNOX_BIN" set TITLE_SECRET "some-title-value" --provider keepass --key-name "my-entry/title"
+	assert_failure
+	assert_output --partial "Cannot write to 'Title' field"
+}
+
+@test "fnox set updates entry in subgroup using just name" {
+	create_keepass_config
+
+	# Create an entry in a subgroup
+	run "$FNOX_BIN" set SUBGROUP_ENTRY "initial-value" --provider keepass --key-name "mygroup/nested-entry"
+	assert_success
+	track_entry_name "mygroup/nested-entry"
+
+	# Update using just the entry name (should find it recursively)
+	run "$FNOX_BIN" set SUBGROUP_ENTRY "updated-value" --provider keepass --key-name "nested-entry"
+	assert_success
+
+	# Verify the update worked (should get updated value)
+	run "$FNOX_BIN" get SUBGROUP_ENTRY
+	assert_success
+	assert_output "updated-value"
+}

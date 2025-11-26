@@ -218,6 +218,42 @@ impl KeePassProvider {
         None
     }
 
+    /// Search for an entry by title in a group and all its subgroups (mutable version)
+    fn find_entry_by_title_mut<'a>(group: &'a mut Group, title: &str) -> Option<&'a mut Entry> {
+        // First find the index of the entry or subgroup containing it
+        let mut found_entry_idx = None;
+        let mut found_in_subgroup_idx = None;
+
+        for (i, node) in group.children.iter().enumerate() {
+            match node {
+                Node::Entry(entry) if entry.get_title() == Some(title) => {
+                    found_entry_idx = Some(i);
+                    break;
+                }
+                Node::Group(subgroup) => {
+                    // Check if entry exists in this subgroup (read-only check)
+                    if Self::find_entry_by_title(subgroup, title).is_some() {
+                        found_in_subgroup_idx = Some(i);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Now access mutably based on what we found
+        if let Some(idx) = found_entry_idx {
+            if let Node::Entry(entry) = &mut group.children[idx] {
+                return Some(entry);
+            }
+        } else if let Some(idx) = found_in_subgroup_idx {
+            if let Node::Group(subgroup) = &mut group.children[idx] {
+                return Self::find_entry_by_title_mut(subgroup, title);
+            }
+        }
+        None
+    }
+
     /// Find or create entry by path for writing
     /// Returns the entry name (title) that was used
     fn find_or_create_entry(
@@ -232,24 +268,27 @@ impl KeePassProvider {
             ));
         }
 
+        // Reject writing to Title field as it's used for entry lookups
+        if field == "Title" {
+            return Err(FnoxError::Provider(
+                "Cannot write to 'Title' field as it is used for entry identification. Use a different field name.".to_string(),
+            ));
+        }
+
         if path.len() == 1 {
-            // Create or update entry in this group
+            // Create or update entry in this group or any subgroup (recursive search)
             let entry_name = path[0];
 
-            // Look for existing entry
-            for node in &mut group.children {
-                if let Node::Entry(entry) = node
-                    && entry.get_title() == Some(entry_name)
-                {
-                    // Update existing entry
-                    entry
-                        .fields
-                        .insert(field.to_string(), Value::Unprotected(value.to_string()));
-                    return Ok(entry_name.to_string());
-                }
+            // Look for existing entry recursively
+            if let Some(entry) = Self::find_entry_by_title_mut(group, entry_name) {
+                // Update existing entry
+                entry
+                    .fields
+                    .insert(field.to_string(), Value::Unprotected(value.to_string()));
+                return Ok(entry_name.to_string());
             }
 
-            // Create new entry
+            // Create new entry in current group
             let mut entry = Entry::new();
             entry.fields.insert(
                 "Title".to_string(),
