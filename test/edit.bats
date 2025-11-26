@@ -365,6 +365,64 @@ EDITOR_SCRIPT
 	fi
 }
 
+@test "edit command persists default_provider and provider changes (issue #118)" {
+	# Create an editor script that adds default_provider
+	cat >"$TEST_DIR/test-editor.py" <<'EDITOR_SCRIPT'
+#!/usr/bin/env python3
+import sys
+
+with open(sys.argv[1], 'r') as f:
+    content = f.read()
+
+# Add default_provider at the top (after the header comments)
+if 'default_provider' not in content:
+    # Find where [providers.age] starts and add default_provider before it
+    content = content.replace('[providers.age]', 'default_provider = "age"\n\n[providers.age]')
+
+with open(sys.argv[1], 'w') as f:
+    f.write(content)
+EDITOR_SCRIPT
+	chmod +x "$TEST_DIR/test-editor.py"
+
+	export EDITOR="$TEST_DIR/test-editor.py"
+
+	# Run edit command
+	run fnox edit
+	assert_success
+
+	# Verify default_provider was persisted in the config file
+	run grep 'default_provider = "age"' fnox.toml
+	assert_success
+}
+
+@test "edit command preserves comments added during edit" {
+	# Create an editor script that adds a comment
+	cat >"$TEST_DIR/test-editor.py" <<'EDITOR_SCRIPT'
+#!/usr/bin/env python3
+import sys
+
+with open(sys.argv[1], 'r') as f:
+    content = f.read()
+
+# Add a custom comment before the [providers.age] section
+content = content.replace('[providers.age]', '# My custom comment\n[providers.age]')
+
+with open(sys.argv[1], 'w') as f:
+    f.write(content)
+EDITOR_SCRIPT
+	chmod +x "$TEST_DIR/test-editor.py"
+
+	export EDITOR="$TEST_DIR/test-editor.py"
+
+	# Run edit command
+	run fnox edit
+	assert_success
+
+	# Verify the custom comment was preserved
+	run grep '# My custom comment' fnox.toml
+	assert_success
+}
+
 @test "edit command: move secret to new profile section (issue #105)" {
 	# Setup: Start with a secret in the default [secrets] section
 	echo "my-secret-value" | fnox set MY_SECRET --provider age

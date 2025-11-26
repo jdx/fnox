@@ -14,6 +14,16 @@ use std::process::Command;
 use tempfile::NamedTempFile;
 use toml_edit::{DocumentMut, Table, Value};
 
+/// Header added to temporary edit file for user reference
+const TEMP_FILE_HEADER: &str = "\
+# FNOX EDIT - Decrypted Secrets
+# This is a temporary file with decrypted secret values.
+# Secrets marked as READ-ONLY cannot be modified (from 1Password, Bitwarden, etc.)
+# After you save and close this file, fnox will re-encrypt changed secrets.
+# DO NOT share this file as it contains plaintext secrets!
+
+";
+
 #[derive(Debug, Args)]
 pub struct EditCommand {}
 
@@ -42,7 +52,7 @@ impl EditCommand {
         // Step 1: Load raw TOML with toml_edit to preserve formatting
         let toml_content = fs::read_to_string(&cli.config)
             .map_err(|e| FnoxError::Config(format!("Failed to read config file: {}", e)))?;
-        let mut doc = toml_content
+        let doc = toml_content
             .parse::<DocumentMut>()
             .map_err(|e| FnoxError::Config(format!("Failed to parse TOML: {}", e)))?;
 
@@ -129,24 +139,26 @@ impl EditCommand {
         tracing::debug!("Reading modified temporary file");
         let modified_content = fs::read_to_string(&temp_path)
             .map_err(|e| FnoxError::Config(format!("Failed to read temporary file: {}", e)))?;
-        let modified_doc = modified_content
+        let mut modified_doc = modified_content
             .parse::<DocumentMut>()
             .map_err(|e| FnoxError::Config(format!("Invalid TOML after edit: {}", e)))?;
 
-        // Step 7: Detect changes and re-encrypt/update
-        tracing::debug!("Processing changes and re-encrypting secrets");
-        self.process_changes(
+        // Step 7: Re-encrypt secrets in the modified document
+        // This preserves all user edits (comments, formatting, non-secret config)
+        tracing::debug!("Re-encrypting secrets in modified document");
+        self.reencrypt_secrets(
             &config,
-            &mut doc,
-            &modified_doc,
+            &mut modified_doc,
             &all_secrets,
             &profile,
             cli.age_key_file.as_ref().map(PathBuf::from).as_deref(),
         )
         .await?;
 
-        // Step 8: Save updated config
-        fs::write(&cli.config, doc.to_string())
+        // Step 8: Save the modified config (preserves all user edits)
+        // Strip the temporary file header comments before saving
+        let output = Self::strip_temp_header(&modified_doc.to_string());
+        fs::write(&cli.config, output)
             .map_err(|e| FnoxError::Config(format!("Failed to write config file: {}", e)))?;
 
         let check = console::style("✓").green();
@@ -264,14 +276,7 @@ impl EditCommand {
         }
 
         // Add header comment
-        let header = format!(
-            "# FNOX EDIT - Decrypted Secrets\n\
-             # This is a temporary file with decrypted secret values.\n\
-             # Secrets marked as READ-ONLY cannot be modified (from 1Password, Bitwarden, etc.)\n\
-             # After you save and close this file, fnox will re-encrypt changed secrets.\n\
-             # DO NOT share this file as it contains plaintext secrets!\n\n{}",
-            decrypted_doc
-        );
+        let header = format!("{}{}", TEMP_FILE_HEADER, decrypted_doc);
 
         temp_file
             .write_all(header.as_bytes())
@@ -314,12 +319,12 @@ impl EditCommand {
         Ok(())
     }
 
-    /// Process changes between original and modified TOML, re-encrypting as needed
-    async fn process_changes(
+    /// Re-encrypt secrets in the modified document
+    /// This preserves all user edits (comments, formatting, non-secret config)
+    async fn reencrypt_secrets(
         &self,
         config: &Config,
-        original_doc: &mut DocumentMut,
-        modified_doc: &DocumentMut,
+        modified_doc: &mut DocumentMut,
         all_secrets: &[SecretEntry],
         profile: &str,
         age_key_file: Option<&Path>,
@@ -331,15 +336,13 @@ impl EditCommand {
             .collect();
 
         // Process [secrets] section
-        if let Some(modified_secrets) = modified_doc.get("secrets").and_then(|item| item.as_table())
-            && let Some(original_secrets) = original_doc
-                .get_mut("secrets")
-                .and_then(|item| item.as_table_mut())
+        if let Some(secrets_table) = modified_doc
+            .get_mut("secrets")
+            .and_then(|item| item.as_table_mut())
         {
-            self.process_secrets_table_changes(
+            self.reencrypt_secrets_table(
                 config,
-                original_secrets,
-                modified_secrets,
+                secrets_table,
                 "default",
                 &secrets_map,
                 profile,
@@ -349,66 +352,29 @@ impl EditCommand {
         }
 
         // Process [profiles.*] sections
-        if let Some(modified_profiles) = modified_doc
-            .get("profiles")
-            .and_then(|item| item.as_table())
+        if let Some(profiles_table) = modified_doc
+            .get_mut("profiles")
+            .and_then(|item| item.as_table_mut())
         {
-            // Ensure original_profiles exists
-            if original_doc.get("profiles").is_none() {
-                original_doc.insert("profiles", toml_edit::Item::Table(toml_edit::Table::new()));
-            }
+            // Collect profile names first to avoid borrow issues
+            let profile_names: Vec<_> = profiles_table.iter().map(|(k, _)| k.to_string()).collect();
 
-            let original_profiles = original_doc
-                .get_mut("profiles")
-                .and_then(|item| item.as_table_mut())
-                .expect("profiles should be a table");
-
-            for (profile_name, modified_profile_item) in modified_profiles.iter() {
-                let profile_name_str = profile_name.to_string();
-
-                if let Some(modified_profile_table) = modified_profile_item.as_table() {
-                    // If the profile doesn't exist in original, create it
-                    if original_profiles.get(profile_name).is_none() {
-                        tracing::debug!("Creating new profile section: {}", profile_name_str);
-                        // Copy the entire profile structure from modified
-                        original_profiles.insert(profile_name, modified_profile_item.clone());
-                    }
-
-                    // Process secrets if they exist
-                    if let Some(modified_secrets) = modified_profile_table
-                        .get("secrets")
-                        .and_then(|item| item.as_table())
-                    {
-                        // Now process the secrets
-                        if let Some(original_profile_item) = original_profiles.get_mut(profile_name)
-                            && let Some(original_profile_table) =
-                                original_profile_item.as_table_mut()
-                        {
-                            // Ensure secrets table exists in the profile
-                            if original_profile_table.get("secrets").is_none() {
-                                original_profile_table.insert(
-                                    "secrets",
-                                    toml_edit::Item::Table(toml_edit::Table::new()),
-                                );
-                            }
-
-                            if let Some(original_secrets) = original_profile_table
-                                .get_mut("secrets")
-                                .and_then(|item| item.as_table_mut())
-                            {
-                                self.process_secrets_table_changes(
-                                    config,
-                                    original_secrets,
-                                    modified_secrets,
-                                    &profile_name_str,
-                                    &secrets_map,
-                                    profile,
-                                    age_key_file,
-                                )
-                                .await?;
-                            }
-                        }
-                    }
+            for profile_name in profile_names {
+                if let Some(profile_item) = profiles_table.get_mut(&profile_name)
+                    && let Some(profile_table) = profile_item.as_table_mut()
+                    && let Some(secrets_table) = profile_table
+                        .get_mut("secrets")
+                        .and_then(|item| item.as_table_mut())
+                {
+                    self.reencrypt_secrets_table(
+                        config,
+                        secrets_table,
+                        &profile_name,
+                        &secrets_map,
+                        profile,
+                        age_key_file,
+                    )
+                    .await?;
                 }
             }
         }
@@ -416,63 +382,120 @@ impl EditCommand {
         Ok(())
     }
 
-    /// Process changes in a specific secrets table
+    /// Re-encrypt secrets in a specific secrets table
     #[allow(clippy::too_many_arguments)]
-    async fn process_secrets_table_changes(
+    async fn reencrypt_secrets_table(
         &self,
         config: &Config,
-        original_secrets: &mut Table,
-        modified_secrets: &Table,
+        secrets_table: &mut Table,
         secret_profile: &str,
         secrets_map: &HashMap<(String, String), &SecretEntry>,
         profile: &str,
         age_key_file: Option<&Path>,
     ) -> Result<()> {
-        for (key, modified_value) in modified_secrets.iter() {
-            let key_str = key.to_string();
+        // Collect keys first to avoid borrow issues when mutating
+        let keys: Vec<_> = secrets_table.iter().map(|(k, _)| k.to_string()).collect();
 
-            // Get the secret entry metadata using (profile, key) composite key
+        for key_str in keys {
             let lookup_key = (secret_profile.to_string(), key_str.clone());
 
-            // Handle new secrets
-            if secrets_map.get(&lookup_key).is_none() {
-                // New secret added - encrypt and add to config
-                tracing::debug!("New secret '{}' detected, adding to config", key_str);
+            // Get the current value from the table
+            let Some(value) = secrets_table.get_mut(&key_str) else {
+                continue;
+            };
 
-                // Extract plaintext value and provider from modified value
-                let (plaintext, provider_name) =
-                    if let Some(inline_table) = modified_value.as_inline_table() {
-                        let plaintext = inline_table.get("value").and_then(|v| v.as_str());
-                        let provider = inline_table.get("provider").and_then(|v| v.as_str());
-                        (plaintext, provider)
-                    } else if let Some(table) = modified_value.as_table() {
-                        let plaintext = table.get("value").and_then(|v| v.as_str());
-                        let provider = table.get("provider").and_then(|v| v.as_str());
-                        (plaintext, provider)
-                    } else {
-                        continue;
-                    };
+            // Extract plaintext value and provider from the value
+            let (plaintext, explicit_provider) = if let Some(inline_table) = value.as_inline_table()
+            {
+                let plaintext = inline_table.get("value").and_then(|v| v.as_str());
+                let provider = inline_table.get("provider").and_then(|v| v.as_str());
+                (plaintext, provider.map(String::from))
+            } else if let Some(table) = value.as_table() {
+                let plaintext = table.get("value").and_then(|v| v.as_str());
+                let provider = table.get("provider").and_then(|v| v.as_str());
+                (plaintext, provider.map(String::from))
+            } else {
+                continue;
+            };
 
-                let Some(plaintext) = plaintext else {
+            let Some(plaintext) = plaintext else {
+                continue;
+            };
+
+            // Check if this is an existing secret or a new one
+            if let Some(secret_entry) = secrets_map.get(&lookup_key) {
+                // Existing secret - check if read-only
+                if secret_entry.is_read_only {
+                    // Verify it wasn't changed
+                    if Some(plaintext) != secret_entry.plaintext_value.as_deref() {
+                        return Err(FnoxError::Config(format!(
+                            "Cannot modify read-only secret '{}' from provider '{}'",
+                            key_str,
+                            secret_entry
+                                .provider_name
+                                .as_ref()
+                                .unwrap_or(&"unknown".to_string())
+                        )));
+                    }
+                    // Read-only and unchanged - restore original encrypted value
+                    if let Some(original_value) = &secret_entry.original_config.value {
+                        Self::set_secret_value(value, original_value);
+                    }
                     continue;
+                }
+
+                // Check if the value or provider changed
+                let value_changed = Some(plaintext) != secret_entry.plaintext_value.as_deref();
+                let provider_changed =
+                    explicit_provider.as_ref() != secret_entry.provider_name.as_ref();
+
+                if !value_changed && !provider_changed {
+                    // Nothing changed - restore original encrypted value to avoid version control churn
+                    if let Some(original_value) = &secret_entry.original_config.value {
+                        Self::set_secret_value(value, original_value);
+                    }
+                    continue;
+                }
+
+                // Value or provider changed - re-encrypt with the provider from the modified document
+                tracing::debug!("Secret '{}' changed, re-encrypting", key_str);
+                let provider_to_use = explicit_provider
+                    .as_ref()
+                    .or(secret_entry.provider_name.as_ref());
+                let encrypted_value = if let Some(provider_name) = provider_to_use {
+                    let providers = config.get_providers(profile);
+                    if let Some(provider_config) = providers.get(provider_name) {
+                        let provider = get_provider(provider_config)?;
+                        provider
+                            .put_secret(&key_str, plaintext, age_key_file)
+                            .await?
+                    } else {
+                        plaintext.to_string()
+                    }
+                } else {
+                    plaintext.to_string()
                 };
 
-                // Determine provider to use (explicit or default)
-                let provider_name = if let Some(prov) = provider_name {
-                    prov.to_string()
+                Self::set_secret_value(value, &encrypted_value);
+            } else {
+                // New secret added by user
+                tracing::debug!("New secret '{}' detected, encrypting", key_str);
+
+                // Determine provider to use
+                let provider_name = if let Some(prov) = explicit_provider {
+                    prov
                 } else if let Some(default_prov) = config.get_default_provider(profile)? {
                     default_prov
                 } else {
-                    // No provider specified and no default - store as plaintext
+                    // No provider - keep as plaintext
                     tracing::warn!(
                         "No provider specified for new secret '{}', storing as plaintext",
                         key_str
                     );
-                    original_secrets.insert(&key_str, modified_value.clone());
                     continue;
                 };
 
-                // Get provider config and encrypt
+                // Encrypt with the provider
                 let providers = config.get_providers(profile);
                 let Some(provider_config) = providers.get(&provider_name) else {
                     return Err(FnoxError::Config(format!(
@@ -482,110 +505,33 @@ impl EditCommand {
                 };
 
                 let provider = get_provider(provider_config)?;
-
-                // Use the unified put_secret method that handles both encryption and remote storage
                 let encrypted_value = provider
                     .put_secret(&key_str, plaintext, age_key_file)
                     .await?;
 
-                // Add to original document with encrypted value
-                let mut new_value = modified_value.clone();
-                if let Some(inline_table) = new_value.as_inline_table_mut() {
-                    inline_table.insert("value", Value::from(encrypted_value.as_str()));
-                } else if let Some(table) = new_value.as_table_mut() {
-                    table.insert("value", toml_edit::value(encrypted_value.as_str()));
-                }
-                original_secrets.insert(&key_str, new_value);
-                continue;
-            }
-
-            let secret_entry = secrets_map.get(&lookup_key).unwrap();
-
-            // Get modified plaintext value (support both inline table and table formats)
-            let modified_plaintext = if let Some(inline_table) = modified_value.as_inline_table() {
-                inline_table.get("value").and_then(|v| v.as_str())
-            } else if let Some(table) = modified_value.as_table() {
-                table.get("value").and_then(|v| v.as_str())
-            } else {
-                None
-            };
-
-            let Some(modified_plaintext) = modified_plaintext else {
-                continue;
-            };
-
-            // Check if this is a read-only secret
-            if secret_entry.is_read_only {
-                // Check if it changed
-                if Some(modified_plaintext) != secret_entry.plaintext_value.as_deref() {
-                    return Err(FnoxError::Config(format!(
-                        "Cannot modify read-only secret '{}' from provider '{}'",
-                        key_str,
-                        secret_entry
-                            .provider_name
-                            .as_ref()
-                            .unwrap_or(&"unknown".to_string())
-                    )));
-                }
-                // No change, skip this secret
-                continue;
-            }
-
-            // Check if the value changed
-            if Some(modified_plaintext) == secret_entry.plaintext_value.as_deref() {
-                // No change, skip
-                continue;
-            }
-
-            tracing::debug!("Secret '{}' changed, re-encrypting", key_str);
-
-            // Re-encrypt the new value using the unified put_secret method
-            let new_encrypted_value = if let Some(ref provider_name) = secret_entry.provider_name {
-                let providers = config.get_providers(profile);
-                if let Some(provider_config) = providers.get(provider_name) {
-                    let provider = get_provider(provider_config)?;
-                    // Use the unified put_secret method that handles both encryption and remote storage
-                    provider
-                        .put_secret(&key_str, modified_plaintext, age_key_file)
-                        .await?
-                } else {
-                    // Provider not found, store plaintext
-                    modified_plaintext.to_string()
-                }
-            } else {
-                // No provider, store plaintext
-                modified_plaintext.to_string()
-            };
-
-            // Update the original document with the new encrypted value
-            if let Some(original_value) = original_secrets.get_mut(&key_str) {
-                if let Some(original_inline_table) = original_value.as_inline_table_mut() {
-                    original_inline_table
-                        .insert("value", Value::from(new_encrypted_value.as_str()));
-                } else if let Some(original_table) = original_value.as_table_mut() {
-                    original_table.insert("value", toml_edit::value(new_encrypted_value.as_str()));
-                }
-            }
-        }
-
-        // Check for deleted secrets
-        let modified_keys: std::collections::HashSet<_> = modified_secrets
-            .iter()
-            .map(|(k, _)| k.to_string())
-            .collect();
-
-        let original_keys: Vec<_> = original_secrets
-            .iter()
-            .map(|(k, _)| k.to_string())
-            .collect();
-
-        for key in original_keys {
-            if !modified_keys.contains(key.as_str()) {
-                tracing::debug!("Secret '{}' deleted", key);
-                original_secrets.remove(&key);
+                Self::set_secret_value(value, &encrypted_value);
             }
         }
 
         Ok(())
+    }
+
+    /// Helper to set the value field in a secret (handles both inline table and table formats)
+    fn set_secret_value(item: &mut toml_edit::Item, value: &str) {
+        if let Some(inline_table) = item.as_inline_table_mut() {
+            inline_table.insert("value", Value::from(value));
+        } else if let Some(table) = item.as_table_mut() {
+            table.insert("value", toml_edit::value(value));
+        }
+    }
+
+    /// Strip the temporary file header that was added for user reference
+    fn strip_temp_header(content: &str) -> String {
+        // Only strip if the content starts with our exact header
+        // This avoids accidentally removing user comments that happen to match patterns
+        content
+            .strip_prefix(TEMP_FILE_HEADER)
+            .unwrap_or(content)
+            .to_string()
     }
 }
