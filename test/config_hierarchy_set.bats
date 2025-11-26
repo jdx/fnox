@@ -134,7 +134,7 @@ EOF
 	refute_output --partial "TEST_SECRET"
 }
 
-@test "fnox set should update secret in its original source file" {
+@test "fnox set creates local override for parent secrets" {
 	# Create directory structure
 	mkdir -p parent/child
 
@@ -157,21 +157,24 @@ EOF
 	# Change to child directory
 	cd parent/child
 
-	# Update the parent secret (should update parent file, not child)
-	run "$FNOX_BIN" set PARENT_SECRET "updated-parent-value"
+	# Setting a parent secret from child should create a LOCAL override
+	# NOT modify the parent config (this is the fix for #104 and #121)
+	run "$FNOX_BIN" set PARENT_SECRET "child-override-value"
 	assert_success
 
-	# Verify parent config was updated
+	# Verify parent config was NOT modified (should keep original value)
 	run cat ../fnox.toml
 	assert_success
 	assert_output --partial 'PARENT_SECRET'
-	assert_output --partial 'updated-parent-value'
+	assert_output --partial 'original-parent-value'
+	refute_output --partial "child-override-value"
 
-	# Verify child config was NOT modified
+	# Verify child config now has local override
 	run cat fnox.toml
 	assert_success
-	assert_output --partial 'CHILD_SECRET = { default = "original-child-value"'
-	refute_output --partial "PARENT_SECRET"
+	assert_output --partial 'CHILD_SECRET'
+	assert_output --partial 'PARENT_SECRET'
+	assert_output --partial 'child-override-value'
 
 	# Update the child secret (should update child file)
 	run "$FNOX_BIN" set CHILD_SECRET "updated-child-value"
@@ -182,12 +185,13 @@ EOF
 	assert_success
 	assert_output --partial 'CHILD_SECRET'
 	assert_output --partial 'updated-child-value'
-	refute_output --partial "PARENT_SECRET"
+	assert_output --partial 'PARENT_SECRET'
 
-	# Verify parent config was NOT modified (should still have old value)
+	# Verify parent config was still NOT modified
 	run cat ../fnox.toml
 	assert_success
 	assert_output --partial 'PARENT_SECRET'
-	assert_output --partial 'updated-parent-value'
+	assert_output --partial 'original-parent-value'
 	refute_output --partial "CHILD_SECRET"
+	refute_output --partial "updated-child-value"
 }

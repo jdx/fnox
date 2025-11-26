@@ -431,8 +431,9 @@ impl Config {
     }
 
     /// Save a single secret update back to its source file
-    /// If the secret is new (no source), save to the specified target file
-    /// If the secret exists, update its source file
+    /// Always saves to the default_target (local config file), creating a local
+    /// override if the secret exists in a parent config. This aligns with the
+    /// hierarchical config model where child configs override parent configs.
     pub fn save_secret_to_source(
         &self,
         secret_name: &str,
@@ -440,14 +441,11 @@ impl Config {
         profile: &str,
         default_target: &Path,
     ) -> Result<()> {
-        // Determine which file to update
-        let target_file = if let Some(source) = &secret_config.source_path {
-            // Existing secret - update its source file
-            source.clone()
-        } else {
-            // New secret - save to default target (current directory's fnox.toml)
-            default_target.to_path_buf()
-        };
+        // Always save to the local config file (default_target)
+        // If a secret exists in a parent config, this creates a local override
+        // rather than modifying the parent - matching user expectations for
+        // hierarchical configs (fixes #104, #121)
+        let target_file = default_target.to_path_buf();
 
         // Load the target file (or create new config if it doesn't exist)
         let mut target_config = if target_file.exists() {
