@@ -38,13 +38,13 @@ impl ResolutionContext {
     }
 
     /// Push a provider onto the resolution stack
-    fn push(&mut self, provider_name: &str) {
+    pub fn push(&mut self, provider_name: &str) {
         self.provider_stack.insert(provider_name.to_string());
         self.resolution_path.push(provider_name.to_string());
     }
 
     /// Pop a provider from the resolution stack
-    fn pop(&mut self, provider_name: &str) {
+    pub fn pop(&mut self, provider_name: &str) {
         self.provider_stack.remove(provider_name);
         self.resolution_path.pop();
     }
@@ -86,7 +86,7 @@ pub async fn resolve_provider_config(
 }
 
 /// Internal function that carries the resolution context for cycle detection.
-fn resolve_provider_config_with_context<'a>(
+pub fn resolve_provider_config_with_context<'a>(
     config: &'a Config,
     profile: &'a str,
     provider_name: &'a str,
@@ -106,185 +106,25 @@ fn resolve_provider_config_with_context<'a>(
         // Push onto resolution stack
         ctx.push(provider_name);
 
-        // Resolve based on provider type, capturing result to ensure cleanup on error
-        let result =
-            resolve_provider_fields(config, profile, provider_name, provider_config, ctx).await;
+        // Resolve using generated match (capturing result to ensure cleanup on error)
+        let result = super::generated::providers_resolver::resolve_provider_config_match(
+            config,
+            profile,
+            provider_name,
+            provider_config,
+            ctx,
+        )
+        .await;
 
         // Pop from resolution stack (always runs, even on error)
         ctx.pop(provider_name);
 
         result
-    }) // Close async move and Box::pin
-}
-
-/// Helper to resolve provider fields. Separated to allow cleanup in caller on error.
-async fn resolve_provider_fields(
-    config: &Config,
-    profile: &str,
-    provider_name: &str,
-    provider_config: &ProviderConfig,
-    ctx: &mut ResolutionContext,
-) -> Result<ResolvedProviderConfig> {
-    match provider_config {
-        ProviderConfig::Plain => Ok(ResolvedProviderConfig::Plain),
-
-        ProviderConfig::OnePassword { vault, account } => Ok(ResolvedProviderConfig::OnePassword {
-            vault: resolve_option(config, profile, provider_name, vault, ctx).await?,
-            account: resolve_option(config, profile, provider_name, account, ctx).await?,
-        }),
-
-        ProviderConfig::AgeEncryption {
-            recipients,
-            key_file,
-        } => {
-            // Vec<String> fields are not resolved (v1 scope decision)
-            Ok(ResolvedProviderConfig::AgeEncryption {
-                recipients: recipients.clone(),
-                key_file: resolve_option(config, profile, provider_name, key_file, ctx).await?,
-            })
-        }
-
-        ProviderConfig::AwsKms { key_id, region } => Ok(ResolvedProviderConfig::AwsKms {
-            key_id: resolve_required(config, profile, provider_name, "key_id", key_id, ctx).await?,
-            region: resolve_required(config, profile, provider_name, "region", region, ctx).await?,
-        }),
-
-        ProviderConfig::AwsSecretsManager { region, prefix } => {
-            Ok(ResolvedProviderConfig::AwsSecretsManager {
-                region: resolve_required(config, profile, provider_name, "region", region, ctx)
-                    .await?,
-                prefix: resolve_option(config, profile, provider_name, prefix, ctx).await?,
-            })
-        }
-
-        ProviderConfig::AwsParameterStore { region, prefix } => {
-            Ok(ResolvedProviderConfig::AwsParameterStore {
-                region: resolve_required(config, profile, provider_name, "region", region, ctx)
-                    .await?,
-                prefix: resolve_option(config, profile, provider_name, prefix, ctx).await?,
-            })
-        }
-
-        ProviderConfig::AzureKms {
-            vault_url,
-            key_name,
-        } => Ok(ResolvedProviderConfig::AzureKms {
-            vault_url: resolve_required(
-                config,
-                profile,
-                provider_name,
-                "vault_url",
-                vault_url,
-                ctx,
-            )
-            .await?,
-            key_name: resolve_required(config, profile, provider_name, "key_name", key_name, ctx)
-                .await?,
-        }),
-
-        ProviderConfig::AzureSecretsManager { vault_url, prefix } => {
-            Ok(ResolvedProviderConfig::AzureSecretsManager {
-                vault_url: resolve_required(
-                    config,
-                    profile,
-                    provider_name,
-                    "vault_url",
-                    vault_url,
-                    ctx,
-                )
-                .await?,
-                prefix: resolve_option(config, profile, provider_name, prefix, ctx).await?,
-            })
-        }
-
-        ProviderConfig::Bitwarden {
-            collection,
-            organization_id,
-            profile: bw_profile,
-            backend,
-        } => Ok(ResolvedProviderConfig::Bitwarden {
-            collection: resolve_option(config, profile, provider_name, collection, ctx).await?,
-            organization_id: resolve_option(config, profile, provider_name, organization_id, ctx)
-                .await?,
-            profile: resolve_option(config, profile, provider_name, bw_profile, ctx).await?,
-            backend: *backend,
-        }),
-
-        ProviderConfig::GcpKms {
-            project,
-            location,
-            keyring,
-            key,
-        } => Ok(ResolvedProviderConfig::GcpKms {
-            project: resolve_required(config, profile, provider_name, "project", project, ctx)
-                .await?,
-            location: resolve_required(config, profile, provider_name, "location", location, ctx)
-                .await?,
-            keyring: resolve_required(config, profile, provider_name, "keyring", keyring, ctx)
-                .await?,
-            key: resolve_required(config, profile, provider_name, "key", key, ctx).await?,
-        }),
-
-        ProviderConfig::GoogleSecretManager { project, prefix } => {
-            Ok(ResolvedProviderConfig::GoogleSecretManager {
-                project: resolve_required(config, profile, provider_name, "project", project, ctx)
-                    .await?,
-                prefix: resolve_option(config, profile, provider_name, prefix, ctx).await?,
-            })
-        }
-
-        ProviderConfig::Infisical {
-            project_id,
-            environment,
-            path,
-        } => Ok(ResolvedProviderConfig::Infisical {
-            project_id: resolve_option(config, profile, provider_name, project_id, ctx).await?,
-            environment: resolve_option(config, profile, provider_name, environment, ctx).await?,
-            path: resolve_option(config, profile, provider_name, path, ctx).await?,
-        }),
-
-        ProviderConfig::KeePass {
-            database,
-            keyfile,
-            password,
-        } => Ok(ResolvedProviderConfig::KeePass {
-            database: resolve_required(config, profile, provider_name, "database", database, ctx)
-                .await?,
-            keyfile: resolve_option(config, profile, provider_name, keyfile, ctx).await?,
-            password: resolve_option(config, profile, provider_name, password, ctx).await?,
-        }),
-
-        ProviderConfig::Keychain { service, prefix } => Ok(ResolvedProviderConfig::Keychain {
-            service: resolve_required(config, profile, provider_name, "service", service, ctx)
-                .await?,
-            prefix: resolve_option(config, profile, provider_name, prefix, ctx).await?,
-        }),
-
-        ProviderConfig::PasswordStore {
-            prefix,
-            store_dir,
-            gpg_opts,
-        } => Ok(ResolvedProviderConfig::PasswordStore {
-            prefix: resolve_option(config, profile, provider_name, prefix, ctx).await?,
-            store_dir: resolve_option(config, profile, provider_name, store_dir, ctx).await?,
-            gpg_opts: resolve_option(config, profile, provider_name, gpg_opts, ctx).await?,
-        }),
-
-        ProviderConfig::HashiCorpVault {
-            address,
-            path,
-            token,
-        } => Ok(ResolvedProviderConfig::HashiCorpVault {
-            address: resolve_required(config, profile, provider_name, "address", address, ctx)
-                .await?,
-            path: resolve_option(config, profile, provider_name, path, ctx).await?,
-            token: resolve_option(config, profile, provider_name, token, ctx).await?,
-        }),
-    }
+    })
 }
 
 /// Resolve a required `StringOrSecretRef` field to its actual string value.
-fn resolve_required<'a>(
+pub fn resolve_required<'a>(
     config: &'a Config,
     profile: &'a str,
     provider_name: &'a str,
@@ -303,7 +143,7 @@ fn resolve_required<'a>(
 }
 
 /// Resolve an optional `OptionStringOrSecretRef` field to its actual value.
-fn resolve_option<'a>(
+pub fn resolve_option<'a>(
     config: &'a Config,
     profile: &'a str,
     provider_name: &'a str,

@@ -141,6 +141,9 @@ mod generated {
     pub(super) mod providers_wizard {
         include!(concat!(env!("OUT_DIR"), "/generated/providers_wizard.rs"));
     }
+    pub(super) mod providers_resolver {
+        include!(concat!(env!("OUT_DIR"), "/generated/providers_resolver.rs"));
+    }
 }
 
 // Re-export generated types

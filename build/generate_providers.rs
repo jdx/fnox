@@ -454,13 +454,31 @@ fn generate_provider_methods(
     Ok(output.to_string())
 }
 
+/// Reserved names that conflict with function parameters in generated code
+const RESERVED_NAMES: &[&str] = &["config", "profile", "provider_name", "ctx"];
+
+/// Get local variable name for a field, prefixing with `field_` if it conflicts with reserved names
+fn local_var_name(name: &str) -> String {
+    if RESERVED_NAMES.contains(&name) {
+        format!("field_{}", name)
+    } else {
+        name.to_string()
+    }
+}
+
 fn generate_field_patterns(provider: &ProviderToml) -> Vec<TokenStream> {
     provider
         .fields
         .keys()
         .map(|name| {
             let field_name = Ident::new(name, Span::call_site());
-            quote! { #field_name }
+            let local_name = local_var_name(name);
+            if local_name != *name {
+                let local_ident = Ident::new(&local_name, Span::call_site());
+                quote! { #field_name: #local_ident }
+            } else {
+                quote! { #field_name }
+            }
         })
         .collect()
 }
@@ -469,13 +487,14 @@ fn generate_has_secret_refs_body(provider: &ProviderToml) -> TokenStream {
     let mut checks = Vec::new();
 
     for (name, field) in &provider.fields {
-        let field_name = Ident::new(name, Span::call_site());
+        let local_name = local_var_name(name);
+        let local_ident = Ident::new(&local_name, Span::call_site());
         match field.typ.as_str() {
             "required" => {
-                checks.push(quote! { #field_name.is_secret_ref() });
+                checks.push(quote! { #local_ident.is_secret_ref() });
             }
             "optional" => {
-                checks.push(quote! { #field_name.has_secret_ref() });
+                checks.push(quote! { #local_ident.has_secret_ref() });
             }
             _ => {}
         }
@@ -494,15 +513,17 @@ fn generate_try_to_resolved_body(provider: &ProviderToml) -> TokenStream {
 
     for (name, field) in &provider.fields {
         let field_name = Ident::new(name, Span::call_site());
+        let local_name = local_var_name(name);
+        let local_ident = Ident::new(&local_name, Span::call_site());
         match field.typ.as_str() {
             "required" => {
-                field_conversions.push(quote! { #field_name: req(#field_name)? });
+                field_conversions.push(quote! { #field_name: req(#local_ident)? });
             }
             "optional" => {
-                field_conversions.push(quote! { #field_name: opt(#field_name)? });
+                field_conversions.push(quote! { #field_name: opt(#local_ident)? });
             }
             "vec_string" => {
-                field_conversions.push(quote! { #field_name: #field_name.clone() });
+                field_conversions.push(quote! { #field_name: #local_ident.clone() });
             }
             "backend_enum" => {
                 field_conversions.push(quote! { backend: *backend });
@@ -650,10 +671,11 @@ fn generate_new_args(provider: &ProviderToml) -> Vec<TokenStream> {
         .fields
         .iter()
         .map(|(name, field)| {
-            let field_name = Ident::new(name, Span::call_site());
+            let local_name = local_var_name(name);
+            let local_ident = Ident::new(&local_name, Span::call_site());
             match field.typ.as_str() {
                 "backend_enum" => quote! { *backend },
-                _ => quote! { #field_name.clone() },
+                _ => quote! { #local_ident.clone() },
             }
         })
         .collect()
@@ -715,20 +737,22 @@ fn generate_resolver_fields(provider: &ProviderToml) -> Vec<TokenStream> {
         .iter()
         .map(|(name, field)| {
             let field_name = Ident::new(name, Span::call_site());
+            let local_name = local_var_name(name);
+            let local_ident = Ident::new(&local_name, Span::call_site());
             let name_str = name.as_str();
             match field.typ.as_str() {
                 "required" => {
                     quote! {
-                        #field_name: super::super::resolver::resolve_required(config, profile, provider_name, #name_str, #field_name, ctx).await?
+                        #field_name: super::super::resolver::resolve_required(config, profile, provider_name, #name_str, #local_ident, ctx).await?
                     }
                 }
                 "optional" => {
                     quote! {
-                        #field_name: super::super::resolver::resolve_option(config, profile, provider_name, #field_name, ctx).await?
+                        #field_name: super::super::resolver::resolve_option(config, profile, provider_name, #local_ident, ctx).await?
                     }
                 }
                 "vec_string" => {
-                    quote! { #field_name: #field_name.clone() }
+                    quote! { #field_name: #local_ident.clone() }
                 }
                 "backend_enum" => {
                     quote! { backend: *backend }
