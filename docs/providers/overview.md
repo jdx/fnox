@@ -43,6 +43,7 @@ Store secrets locally on your machine.
 | Provider                                    | Description                           | Best For                                |
 | ------------------------------------------- | ------------------------------------- | --------------------------------------- |
 | [OS Keychain](/providers/keychain)          | macOS/Windows/Linux credential stores | Local development, personal projects    |
+| [KeePass](/providers/keepass)               | KeePass database files (.kdbx)        | Offline use, KeePassXC users            |
 | [password-store](/providers/password-store) | GPG-encrypted local password store    | CLI users, git-based sync, Unix systems |
 | [Plain](/providers/plain)                   | Plaintext (default values only)       | Non-sensitive defaults                  |
 

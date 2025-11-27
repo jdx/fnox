@@ -105,6 +105,7 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: "OS Keychain", link: "/providers/keychain" },
+              { text: "KeePass", link: "/providers/keepass" },
               { text: "password-store", link: "/providers/password-store" },
               { text: "Plain Text", link: "/providers/plain" },
             ],
