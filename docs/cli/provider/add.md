@@ -23,6 +23,7 @@ Provider type
 - `age`
 - `aws`
 - `aws-kms`
+- `aws-ps`
 - `azure-kms`
 - `azure-sm`
 - `gcp`
