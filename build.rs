@@ -14,10 +14,8 @@ fn main() {
 
     // Tell Cargo to rerun this build script if any provider toml changes
     println!("cargo:rerun-if-changed=providers");
-    for entry in std::fs::read_dir("providers").unwrap() {
-        if let Ok(entry) = entry {
-            println!("cargo:rerun-if-changed={}", entry.path().display());
-        }
+    for entry in std::fs::read_dir("providers").unwrap().flatten() {
+        println!("cargo:rerun-if-changed={}", entry.path().display());
     }
 
     // Generate settings code
