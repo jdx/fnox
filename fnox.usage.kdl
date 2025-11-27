@@ -63,6 +63,7 @@ cmd hook-env hide=#true help="Internal command used by shell hooks to load secre
 cmd import help="Import secrets from various sources" {
     alias im
     flag "-f --force" help="Skip confirmation prompts"
+    flag "-g --global" help="Import to the global config file (~/.config/fnox/config.toml)"
     flag "-i --input" help="Source file or path to import from (default: stdin)" {
         arg <INPUT>
     }
@@ -81,6 +82,7 @@ cmd import help="Import secrets from various sources" {
 }
 cmd init help="Initialize a new fnox configuration file" {
     alias i
+    flag "-g --global" help="Initialize the global config file (~/.config/fnox/config.toml)"
     flag --force help="Overwrite existing configuration file"
     flag --skip-wizard help="Skip the interactive wizard and create a minimal config"
 }
@@ -98,6 +100,7 @@ cmd profiles help="List available profiles" {
 cmd provider help="Manage providers (defaults to list)" {
     cmd add help="Add a new provider" {
         alias a set
+        flag "-g --global" help="Add to the global config file (~/.config/fnox/config.toml)"
         arg <PROVIDER> help="Provider name"
         arg <PROVIDER_TYPE> help="Provider type" {
             choices "1password" age aws aws-kms aws-ps azure-kms azure-sm gcp gcp-kms infisical vault
@@ -109,6 +112,7 @@ cmd provider help="Manage providers (defaults to list)" {
     }
     cmd remove help="Remove a provider" {
         alias rm delete
+        flag "-g --global" help="Remove from the global config file (~/.config/fnox/config.toml)"
         arg <PROVIDER> help="Provider name"
     }
     cmd test help="Test a provider connection" {
@@ -118,6 +122,7 @@ cmd provider help="Manage providers (defaults to list)" {
 }
 cmd remove help="Remove a secret" {
     alias rm delete
+    flag "-g --global" help="Remove from the global config file (~/.config/fnox/config.toml)"
     arg <KEY> help="Secret key to remove"
 }
 cmd scan help="Scan repository for potential secrets" {
@@ -134,6 +139,7 @@ cmd set help="Set a secret value" {
     flag "-d --description" help="Description of the secret" {
         arg <DESCRIPTION>
     }
+    flag "-g --global" help="Save to the global config file (~/.config/fnox/config.toml)"
     flag "-k --key-name" help="Key name in the provider (if different from env var name)" {
         arg <KEY_NAME>
     }

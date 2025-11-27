@@ -309,6 +309,16 @@
             "global": false
           },
           {
+            "name": "global",
+            "usage": "-g --global",
+            "help": "Import to the global config file (~/.config/fnox/config.toml)",
+            "help_first_line": "Import to the global config file (~/.config/fnox/config.toml)",
+            "short": ["g"],
+            "long": ["global"],
+            "hide": false,
+            "global": false
+          },
+          {
             "name": "input",
             "usage": "-i --input <INPUT>",
             "help": "Source file or path to import from (default: stdin)",
@@ -388,10 +398,20 @@
       },
       "init": {
         "full_cmd": ["init"],
-        "usage": "init [--force] [--skip-wizard]",
+        "usage": "init [FLAGS]",
         "subcommands": {},
         "args": [],
         "flags": [
+          {
+            "name": "global",
+            "usage": "-g --global",
+            "help": "Initialize the global config file (~/.config/fnox/config.toml)",
+            "help_first_line": "Initialize the global config file (~/.config/fnox/config.toml)",
+            "short": ["g"],
+            "long": ["global"],
+            "hide": false,
+            "global": false
+          },
           {
             "name": "force",
             "usage": "--force",
@@ -507,7 +527,7 @@
         "subcommands": {
           "add": {
             "full_cmd": ["provider", "add"],
-            "usage": "provider add <PROVIDER> <PROVIDER_TYPE>",
+            "usage": "provider add [-g --global] <PROVIDER> <PROVIDER_TYPE>",
             "subcommands": {},
             "args": [
               {
@@ -544,7 +564,18 @@
                 }
               }
             ],
-            "flags": [],
+            "flags": [
+              {
+                "name": "global",
+                "usage": "-g --global",
+                "help": "Add to the global config file (~/.config/fnox/config.toml)",
+                "help_first_line": "Add to the global config file (~/.config/fnox/config.toml)",
+                "short": ["g"],
+                "long": ["global"],
+                "hide": false,
+                "global": false
+              }
+            ],
             "mounts": [],
             "hide": false,
             "help": "Add a new provider",
@@ -580,7 +611,7 @@
           },
           "remove": {
             "full_cmd": ["provider", "remove"],
-            "usage": "provider remove <PROVIDER>",
+            "usage": "provider remove [-g --global] <PROVIDER>",
             "subcommands": {},
             "args": [
               {
@@ -593,7 +624,18 @@
                 "hide": false
               }
             ],
-            "flags": [],
+            "flags": [
+              {
+                "name": "global",
+                "usage": "-g --global",
+                "help": "Remove from the global config file (~/.config/fnox/config.toml)",
+                "help_first_line": "Remove from the global config file (~/.config/fnox/config.toml)",
+                "short": ["g"],
+                "long": ["global"],
+                "hide": false,
+                "global": false
+              }
+            ],
             "mounts": [],
             "hide": false,
             "help": "Remove a provider",
@@ -639,7 +681,7 @@
       },
       "remove": {
         "full_cmd": ["remove"],
-        "usage": "remove <KEY>",
+        "usage": "remove [-g --global] <KEY>",
         "subcommands": {},
         "args": [
           {
@@ -652,7 +694,18 @@
             "hide": false
           }
         ],
-        "flags": [],
+        "flags": [
+          {
+            "name": "global",
+            "usage": "-g --global",
+            "help": "Remove from the global config file (~/.config/fnox/config.toml)",
+            "help_first_line": "Remove from the global config file (~/.config/fnox/config.toml)",
+            "short": ["g"],
+            "long": ["global"],
+            "hide": false,
+            "global": false
+          }
+        ],
         "mounts": [],
         "hide": false,
         "help": "Remove a secret",
@@ -762,6 +815,16 @@
               "double_dash": "Optional",
               "hide": false
             }
+          },
+          {
+            "name": "global",
+            "usage": "-g --global",
+            "help": "Save to the global config file (~/.config/fnox/config.toml)",
+            "help_first_line": "Save to the global config file (~/.config/fnox/config.toml)",
+            "short": ["g"],
+            "long": ["global"],
+            "hide": false,
+            "global": false
           },
           {
             "name": "key-name",

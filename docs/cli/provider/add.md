@@ -2,7 +2,7 @@
 
 # `fnox provider add`
 
-- **Usage**: `fnox provider add <PROVIDER> <PROVIDER_TYPE>`
+- **Usage**: `fnox provider add [-g --global] <PROVIDER> <PROVIDER_TYPE>`
 - **Aliases**: `a`, `set`
 
 Add a new provider
@@ -30,3 +30,9 @@ Provider type
 - `gcp-kms`
 - `infisical`
 - `vault`
+
+## Flags
+
+### `-g --global`
+
+Add to the global config file (~/.config/fnox/config.toml)

@@ -23,6 +23,10 @@ Secret value (reads from stdin if not provided)
 
 Description of the secret
 
+### `-g --global`
+
+Save to the global config file (~/.config/fnox/config.toml)
+
 ### `-k --key-name <KEY_NAME>`
 
 Key name in the provider (if different from env var name)

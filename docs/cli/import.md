@@ -28,6 +28,10 @@ Import source format
 
 Skip confirmation prompts
 
+### `-g --global`
+
+Import to the global config file (~/.config/fnox/config.toml)
+
 ### `-i --input <INPUT>`
 
 Source file or path to import from (default: stdin)
