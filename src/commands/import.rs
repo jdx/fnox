@@ -55,7 +55,7 @@ pub struct ImportCommand {
 }
 
 impl ImportCommand {
-    pub async fn run(&self, cli: &Cli, mut config: Config) -> Result<()> {
+    pub async fn run(&self, cli: &Cli, merged_config: Config) -> Result<()> {
         let profile = Config::get_profile(cli.profile.as_deref());
         tracing::debug!(
             "Importing secrets in {} format into profile '{}'",
@@ -127,8 +127,8 @@ impl ImportCommand {
             }
         }
 
-        // Verify provider exists
-        let providers = config.get_providers(&profile);
+        // Verify provider exists (use merged config to find providers from any source)
+        let providers = merged_config.get_providers(&profile);
         let provider_config = providers.get(&self.provider).ok_or_else(|| {
             miette::miette!(
                 "Provider '{}' not found in profile '{}'. Available providers: {}",
@@ -159,9 +159,34 @@ impl ImportCommand {
         let is_remote_storage_provider =
             capabilities.contains(&crate::providers::ProviderCapability::RemoteStorage);
 
-        // Process and encrypt/store each secret
+        // Determine the target config file path
+        let target_path = if self.global {
+            let global_path = Config::global_config_path();
+            // Create parent directory if it doesn't exist
+            if let Some(parent) = global_path.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    miette::miette!(
+                        "Failed to create config directory '{}': {}",
+                        parent.display(),
+                        e
+                    )
+                })?;
+            }
+            global_path
+        } else {
+            cli.config.clone()
+        };
+
+        // Load only the target config file (not merged) for modification
+        let mut target_config = if target_path.exists() {
+            Config::load(&target_path)?
+        } else {
+            Config::new()
+        };
+
+        // Process and encrypt/store each secret into the target config
         {
-            let profile_secrets = config.get_secrets_mut(&profile);
+            let profile_secrets = target_config.get_secrets_mut(&profile);
             let total_secrets = secrets.len();
 
             for (key, value) in secrets {
@@ -201,30 +226,15 @@ impl ImportCommand {
                 }
             }
 
+            let global_suffix = if self.global { " (global)" } else { "" };
             println!(
-                "✓ Imported {} secrets into profile '{}' using provider '{}'",
-                total_secrets, profile, self.provider
+                "✓ Imported {} secrets into profile '{}' using provider '{}'{}",
+                total_secrets, profile, self.provider, global_suffix
             );
         }
 
-        // Save to the appropriate config file
-        let target_path = if self.global {
-            let global_path = Config::global_config_path();
-            // Create parent directory if it doesn't exist
-            if let Some(parent) = global_path.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| {
-                    miette::miette!(
-                        "Failed to create config directory '{}': {}",
-                        parent.display(),
-                        e
-                    )
-                })?;
-            }
-            global_path
-        } else {
-            cli.config.clone()
-        };
-        config.save(&target_path)?;
+        // Save only the target config
+        target_config.save(&target_path)?;
 
         Ok(())
     }
