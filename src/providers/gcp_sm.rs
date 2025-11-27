@@ -1,7 +1,10 @@
+use crate::config::ConfigValue;
+use crate::config_resolver::{ResolutionContext, resolve, resolve_opt};
 use crate::error::{FnoxError, Result};
-use crate::providers::{WizardCategory, WizardField, WizardInfo};
+use crate::providers::{Provider, WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use google_cloud_secretmanager_v1::client::SecretManagerService;
+use serde::{Deserialize, Serialize};
 
 pub const WIZARD_INFO: WizardInfo = WizardInfo {
     provider_type: "gcp-sm",
@@ -28,6 +31,27 @@ Requires GCP credentials configured.",
         },
     ],
 };
+
+/// Configuration for the GCP Secret Manager provider.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GcpSmConfig {
+    pub project: ConfigValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<ConfigValue>,
+}
+
+impl GcpSmConfig {
+    /// Create a provider from this config, resolving any secret references.
+    pub async fn create_provider(
+        &self,
+        ctx: &mut ResolutionContext<'_>,
+    ) -> Result<Box<dyn Provider>> {
+        Ok(Box::new(GoogleSecretManagerProvider::new(
+            resolve(&self.project, ctx).await?,
+            resolve_opt(&self.prefix, ctx).await?,
+        )))
+    }
+}
 
 pub struct GoogleSecretManagerProvider {
     project: String,

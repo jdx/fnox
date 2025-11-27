@@ -1,6 +1,8 @@
+use crate::config_resolver::ResolutionContext;
 use crate::error::Result;
-use crate::providers::{WizardCategory, WizardInfo};
+use crate::providers::{Provider, WizardCategory, WizardInfo};
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 
 pub const WIZARD_INFO: WizardInfo = WizardInfo {
     provider_type: "plain",
@@ -13,6 +15,20 @@ Only use this for non-sensitive values or development.",
     default_name: "plain",
     fields: &[],
 };
+
+/// Configuration for the plain provider.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlainConfig {}
+
+impl PlainConfig {
+    /// Create a provider from this config, resolving any secret references.
+    pub async fn create_provider(
+        &self,
+        _ctx: &mut ResolutionContext<'_>,
+    ) -> Result<Box<dyn Provider>> {
+        Ok(Box::new(PlainProvider::new()))
+    }
+}
 
 /// Plain provider that stores and returns values as-is without encryption.
 ///

@@ -1,7 +1,8 @@
 use crate::commands::Cli;
 use crate::config::{Config, SecretConfig};
+use crate::config_resolver::ResolutionContext;
 use crate::error::{FnoxError, Result};
-use crate::providers::{ProviderCapability, get_provider};
+use crate::providers::ProviderCapability;
 use crate::secret_resolver;
 use clap::Args;
 use indexmap::IndexMap;
@@ -180,8 +181,8 @@ impl EditCommand {
             {
                 let providers = config.get_providers(profile);
                 if let Some(provider_config) = providers.get(prov_name) {
-                    let provider = get_provider(provider_config)?;
-                    let capabilities = provider.capabilities();
+                    // Use ProviderConfig::capabilities() to avoid resolving secret refs
+                    let capabilities = provider_config.capabilities();
                     let is_read_only = capabilities.contains(&ProviderCapability::RemoteRead)
                         && !capabilities.contains(&ProviderCapability::Encryption)
                         && !capabilities.contains(&ProviderCapability::RemoteStorage);
@@ -447,7 +448,8 @@ impl EditCommand {
                 let encrypted_value = if let Some(provider_name) = provider_to_use {
                     let providers = config.get_providers(secret_profile);
                     if let Some(provider_config) = providers.get(&provider_name) {
-                        let provider = get_provider(provider_config)?;
+                        let mut ctx = ResolutionContext::new(config, secret_profile);
+                        let provider = provider_config.create_provider(&mut ctx).await?;
                         provider.put_secret(&key_str, plaintext).await?
                     } else {
                         plaintext.to_string()
@@ -484,7 +486,8 @@ impl EditCommand {
                     )));
                 };
 
-                let provider = get_provider(provider_config)?;
+                let mut ctx = ResolutionContext::new(config, secret_profile);
+                let provider = provider_config.create_provider(&mut ctx).await?;
                 let encrypted_value = provider.put_secret(&key_str, plaintext).await?;
 
                 Self::set_secret_value(value, &encrypted_value);

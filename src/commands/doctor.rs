@@ -1,8 +1,8 @@
 use crate::commands::Cli;
 use crate::config::Config;
+use crate::config_resolver::ResolutionContext;
 use crate::env;
 use crate::error::Result;
-use crate::providers::get_provider;
 use clap::Args;
 
 #[derive(Debug, Args)]
@@ -94,7 +94,8 @@ impl DoctorCommand {
             println!();
             println!("🔍 Provider Health:");
             for (name, provider_config) in &providers {
-                match get_provider(provider_config) {
+                let mut ctx = ResolutionContext::new(&config, &profile);
+                match provider_config.create_provider(&mut ctx).await {
                     Ok(provider) => {
                         print!("  {}: Testing...", name);
                         match provider.test_connection().await {

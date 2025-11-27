@@ -1,9 +1,12 @@
+use crate::config::ConfigValue;
+use crate::config_resolver::{ResolutionContext, resolve};
 use crate::error::{FnoxError, Result};
-use crate::providers::{WizardCategory, WizardField, WizardInfo};
+use crate::providers::{Provider, WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
 use aws_sdk_kms::Client;
 use aws_sdk_kms::primitives::Blob;
+use serde::{Deserialize, Serialize};
 
 pub const WIZARD_INFO: WizardInfo = WizardInfo {
     provider_type: "aws-kms",
@@ -31,6 +34,26 @@ Requires AWS credentials configured.",
         },
     ],
 };
+
+/// Configuration for the AWS KMS provider.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AwsKmsConfig {
+    pub key_id: ConfigValue,
+    pub region: ConfigValue,
+}
+
+impl AwsKmsConfig {
+    /// Create a provider from this config, resolving any secret references.
+    pub async fn create_provider(
+        &self,
+        ctx: &mut ResolutionContext<'_>,
+    ) -> Result<Box<dyn Provider>> {
+        Ok(Box::new(AwsKmsProvider::new(
+            resolve(&self.key_id, ctx).await?,
+            resolve(&self.region, ctx).await?,
+        )))
+    }
+}
 
 pub struct AwsKmsProvider {
     key_id: String,

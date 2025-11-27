@@ -1,8 +1,11 @@
+use crate::config::ConfigValue;
+use crate::config_resolver::{ResolutionContext, resolve_opt};
 use crate::env;
 use crate::error::{FnoxError, Result};
-use crate::providers::{WizardCategory, WizardField, WizardInfo};
+use crate::providers::{Provider, WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -30,6 +33,28 @@ Set token: export OP_SERVICE_ACCOUNT_TOKEN=<token>",
         },
     ],
 };
+
+/// Configuration for the 1Password provider.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OnePasswordConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vault: Option<ConfigValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account: Option<ConfigValue>,
+}
+
+impl OnePasswordConfig {
+    /// Create a provider from this config, resolving any secret references.
+    pub async fn create_provider(
+        &self,
+        ctx: &mut ResolutionContext<'_>,
+    ) -> Result<Box<dyn Provider>> {
+        Ok(Box::new(OnePasswordProvider::new(
+            resolve_opt(&self.vault, ctx).await?,
+            resolve_opt(&self.account, ctx).await?,
+        )))
+    }
+}
 
 /// Precompiled regex to remove leading error prefixes from stderr output of `op`.
 /// [ERROR] YYYY/MM/DD HH:MM:SS message

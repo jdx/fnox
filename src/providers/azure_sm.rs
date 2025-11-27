@@ -1,9 +1,12 @@
+use crate::config::ConfigValue;
+use crate::config_resolver::{ResolutionContext, resolve, resolve_opt};
 use crate::error::{FnoxError, Result};
-use crate::providers::{WizardCategory, WizardField, WizardInfo};
+use crate::providers::{Provider, WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use azure_core::auth::TokenCredential;
 use azure_identity::{DefaultAzureCredential, TokenCredentialOptions};
 use azure_security_keyvault::SecretClient;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 pub const WIZARD_INFO: WizardInfo = WizardInfo {
@@ -31,6 +34,27 @@ Requires Azure credentials configured.",
         },
     ],
 };
+
+/// Configuration for the Azure Key Vault Secrets provider.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AzureSmConfig {
+    pub vault_url: ConfigValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<ConfigValue>,
+}
+
+impl AzureSmConfig {
+    /// Create a provider from this config, resolving any secret references.
+    pub async fn create_provider(
+        &self,
+        ctx: &mut ResolutionContext<'_>,
+    ) -> Result<Box<dyn Provider>> {
+        Ok(Box::new(AzureSecretsManagerProvider::new(
+            resolve(&self.vault_url, ctx).await?,
+            resolve_opt(&self.prefix, ctx).await?,
+        )))
+    }
+}
 
 pub struct AzureSecretsManagerProvider {
     vault_url: String,

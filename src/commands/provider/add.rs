@@ -1,6 +1,11 @@
 use crate::commands::Cli;
-use crate::config::Config;
+use crate::config::{Config, ConfigValue, ProviderConfig};
 use crate::error::{FnoxError, Result};
+use crate::providers::{
+    age::AgeConfig, aws_kms::AwsKmsConfig, aws_ps::AwsPsConfig, aws_sm::AwsSmConfig,
+    azure_kms::AzureKmsConfig, azure_sm::AzureSmConfig, gcp_kms::GcpKmsConfig, gcp_sm::GcpSmConfig,
+    infisical::InfisicalConfig, onepassword::OnePasswordConfig, vault::VaultConfig,
+};
 use clap::Args;
 
 use super::ProviderType;
@@ -65,56 +70,56 @@ impl AddCommand {
 
         // Create a template provider config based on type
         let provider_config = match self.provider_type {
-            ProviderType::OnePassword => crate::config::ProviderConfig::OnePassword {
-                vault: Some("default".to_string()),
+            ProviderType::OnePassword => ProviderConfig::OnePassword(OnePasswordConfig {
+                vault: Some(ConfigValue::Plain("default".to_string())),
                 account: None,
-            },
-            ProviderType::Aws => crate::config::ProviderConfig::AwsSecretsManager {
-                region: "us-east-1".to_string(),
+            }),
+            ProviderType::Aws => ProviderConfig::AwsSecretsManager(AwsSmConfig {
+                region: ConfigValue::Plain("us-east-1".to_string()),
                 prefix: None,
-            },
-            ProviderType::Vault => crate::config::ProviderConfig::HashiCorpVault {
-                address: "http://localhost:8200".to_string(),
-                path: Some("secret".to_string()),
+            }),
+            ProviderType::Vault => ProviderConfig::HashiCorpVault(VaultConfig {
+                address: ConfigValue::Plain("http://localhost:8200".to_string()),
+                path: Some(ConfigValue::Plain("secret".to_string())),
                 token: None,
-            },
-            ProviderType::Gcp => crate::config::ProviderConfig::GoogleSecretManager {
-                project: "my-project".to_string(),
+            }),
+            ProviderType::Gcp => ProviderConfig::GoogleSecretManager(GcpSmConfig {
+                project: ConfigValue::Plain("my-project".to_string()),
                 prefix: None,
-            },
-            ProviderType::AwsKms => crate::config::ProviderConfig::AwsKms {
-                region: "us-east-1".to_string(),
-                key_id: "alias/my-key".to_string(),
-            },
-            ProviderType::AwsParameterStore => crate::config::ProviderConfig::AwsParameterStore {
-                region: "us-east-1".to_string(),
-                prefix: Some("/myapp/prod/".to_string()),
-            },
-            ProviderType::AzureKms => crate::config::ProviderConfig::AzureKms {
-                vault_url: "https://my-vault.vault.azure.net/".to_string(),
-                key_name: "my-key".to_string(),
-            },
+            }),
+            ProviderType::AwsKms => ProviderConfig::AwsKms(AwsKmsConfig {
+                region: ConfigValue::Plain("us-east-1".to_string()),
+                key_id: ConfigValue::Plain("alias/my-key".to_string()),
+            }),
+            ProviderType::AwsParameterStore => ProviderConfig::AwsParameterStore(AwsPsConfig {
+                region: ConfigValue::Plain("us-east-1".to_string()),
+                prefix: Some(ConfigValue::Plain("/myapp/prod/".to_string())),
+            }),
+            ProviderType::AzureKms => ProviderConfig::AzureKms(AzureKmsConfig {
+                vault_url: ConfigValue::Plain("https://my-vault.vault.azure.net/".to_string()),
+                key_name: ConfigValue::Plain("my-key".to_string()),
+            }),
             ProviderType::AzureSecretsManager => {
-                crate::config::ProviderConfig::AzureSecretsManager {
-                    vault_url: "https://my-vault.vault.azure.net/".to_string(),
+                ProviderConfig::AzureSecretsManager(AzureSmConfig {
+                    vault_url: ConfigValue::Plain("https://my-vault.vault.azure.net/".to_string()),
                     prefix: None,
-                }
+                })
             }
-            ProviderType::GcpKms => crate::config::ProviderConfig::GcpKms {
-                project: "my-project".to_string(),
-                location: "global".to_string(),
-                keyring: "my-keyring".to_string(),
-                key: "my-key".to_string(),
-            },
-            ProviderType::Age => crate::config::ProviderConfig::AgeEncryption {
-                recipients: vec!["age1...".to_string()],
+            ProviderType::GcpKms => ProviderConfig::GcpKms(GcpKmsConfig {
+                project: ConfigValue::Plain("my-project".to_string()),
+                location: ConfigValue::Plain("global".to_string()),
+                keyring: ConfigValue::Plain("my-keyring".to_string()),
+                key: ConfigValue::Plain("my-key".to_string()),
+            }),
+            ProviderType::Age => ProviderConfig::AgeEncryption(AgeConfig {
+                recipients: vec![ConfigValue::Plain("age1...".to_string())],
                 key_file: None,
-            },
-            ProviderType::Infisical => crate::config::ProviderConfig::Infisical {
-                project_id: Some("your-project-id".to_string()),
-                environment: Some("dev".to_string()),
-                path: Some("/".to_string()),
-            },
+            }),
+            ProviderType::Infisical => ProviderConfig::Infisical(InfisicalConfig {
+                project_id: Some(ConfigValue::Plain("your-project-id".to_string())),
+                environment: Some(ConfigValue::Plain("dev".to_string())),
+                path: Some(ConfigValue::Plain("/".to_string())),
+            }),
         };
 
         config

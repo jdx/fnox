@@ -1,8 +1,11 @@
+use crate::config::ConfigValue;
+use crate::config_resolver::{ResolutionContext, resolve, resolve_opt};
 use crate::error::{FnoxError, Result};
-use crate::providers::{ProviderCapability, WizardCategory, WizardField, WizardInfo};
+use crate::providers::{Provider, ProviderCapability, WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use keepass::DatabaseKey;
 use keepass::db::{Database, Entry, Group, Node, Value};
+use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -34,27 +37,28 @@ Set password via FNOX_KEEPASS_PASSWORD or KEEPASS_PASSWORD env var.",
     ],
 };
 
-use crate::config::{Config, ConfigValue};
-
-/// Create a KeePassProvider with resolved config values.
-///
-/// This resolves any secret references in the password field before
-/// creating the provider.
-pub async fn new_resolved(
-    database: String,
-    keyfile: Option<String>,
-    password: &Option<ConfigValue>,
-    config: &Config,
-    profile: &str,
-) -> Result<KeePassProvider> {
-    use crate::config_resolver::resolve_config_value_optional;
-    let resolved_password = resolve_config_value_optional(password, config, profile).await?;
-    Ok(KeePassProvider::new(database, keyfile, resolved_password))
+/// Configuration for the KeePass provider.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeePassConfig {
+    pub database: ConfigValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keyfile: Option<ConfigValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password: Option<ConfigValue>,
 }
 
-/// Check if the given password config contains a secret reference.
-pub fn has_secret_ref(password: &Option<ConfigValue>) -> bool {
-    password.as_ref().is_some_and(|p| !p.is_plain())
+impl KeePassConfig {
+    /// Create a provider from this config, resolving any secret references.
+    pub async fn create_provider(
+        &self,
+        ctx: &mut ResolutionContext<'_>,
+    ) -> Result<Box<dyn Provider>> {
+        Ok(Box::new(KeePassProvider::new(
+            resolve(&self.database, ctx).await?,
+            resolve_opt(&self.keyfile, ctx).await?,
+            resolve_opt(&self.password, ctx).await?,
+        )))
+    }
 }
 
 /// Provider that reads and writes secrets from KeePass database files (.kdbx)

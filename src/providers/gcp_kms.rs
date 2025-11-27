@@ -1,8 +1,11 @@
+use crate::config::ConfigValue;
+use crate::config_resolver::{ResolutionContext, resolve};
 use crate::error::{FnoxError, Result};
-use crate::providers::{WizardCategory, WizardField, WizardInfo};
+use crate::providers::{Provider, WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use google_cloud_kms::client::{Client, ClientConfig};
 use google_cloud_kms::grpc::kms::v1::{DecryptRequest, EncryptRequest, GetCryptoKeyRequest};
+use serde::{Deserialize, Serialize};
 
 pub const WIZARD_INFO: WizardInfo = WizardInfo {
     provider_type: "gcp-kms",
@@ -44,6 +47,30 @@ Requires GCP credentials configured.",
         },
     ],
 };
+
+/// Configuration for the GCP KMS provider.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GcpKmsConfig {
+    pub project: ConfigValue,
+    pub location: ConfigValue,
+    pub keyring: ConfigValue,
+    pub key: ConfigValue,
+}
+
+impl GcpKmsConfig {
+    /// Create a provider from this config, resolving any secret references.
+    pub async fn create_provider(
+        &self,
+        ctx: &mut ResolutionContext<'_>,
+    ) -> Result<Box<dyn Provider>> {
+        Ok(Box::new(GcpKmsProvider::new(
+            resolve(&self.project, ctx).await?,
+            resolve(&self.location, ctx).await?,
+            resolve(&self.keyring, ctx).await?,
+            resolve(&self.key, ctx).await?,
+        )))
+    }
+}
 
 pub struct GcpKmsProvider {
     project: String,

@@ -1,7 +1,10 @@
+use crate::config::ConfigValue;
+use crate::config_resolver::{ResolutionContext, resolve_opt, resolve_vec};
 use crate::env;
 use crate::error::{FnoxError, Result};
-use crate::providers::{WizardCategory, WizardField, WizardInfo};
+use crate::providers::{Provider, WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::io::Read;
 use std::path::PathBuf;
 
@@ -22,6 +25,27 @@ Generate a key with: age-keygen -o ~/.config/fnox/age.txt",
         ..WizardField::DEFAULT
     }],
 };
+
+/// Configuration for the age encryption provider.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgeConfig {
+    pub recipients: Vec<ConfigValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_file: Option<ConfigValue>,
+}
+
+impl AgeConfig {
+    /// Create a provider from this config, resolving any secret references.
+    pub async fn create_provider(
+        &self,
+        ctx: &mut ResolutionContext<'_>,
+    ) -> Result<Box<dyn Provider>> {
+        Ok(Box::new(AgeEncryptionProvider::new(
+            resolve_vec(&self.recipients, ctx).await?,
+            resolve_opt(&self.key_file, ctx).await?,
+        )))
+    }
+}
 
 pub struct AgeEncryptionProvider {
     recipients: Vec<String>,

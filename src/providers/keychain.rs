@@ -1,7 +1,10 @@
+use crate::config::ConfigValue;
+use crate::config_resolver::{ResolutionContext, resolve, resolve_opt};
 use crate::error::{FnoxError, Result};
-use crate::providers::{WizardCategory, WizardField, WizardInfo};
+use crate::providers::{Provider, WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use keyring::Entry;
+use serde::{Deserialize, Serialize};
 
 pub const WIZARD_INFO: WizardInfo = WizardInfo {
     provider_type: "keychain",
@@ -30,6 +33,27 @@ Uses your operating system's secure keychain:
         },
     ],
 };
+
+/// Configuration for the OS Keychain provider.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeychainConfig {
+    pub service: ConfigValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<ConfigValue>,
+}
+
+impl KeychainConfig {
+    /// Create a provider from this config, resolving any secret references.
+    pub async fn create_provider(
+        &self,
+        ctx: &mut ResolutionContext<'_>,
+    ) -> Result<Box<dyn Provider>> {
+        Ok(Box::new(KeychainProvider::new(
+            resolve(&self.service, ctx).await?,
+            resolve_opt(&self.prefix, ctx).await?,
+        )))
+    }
+}
 
 pub struct KeychainProvider {
     service: String,

@@ -1,7 +1,10 @@
+use crate::config::ConfigValue;
+use crate::config_resolver::{ResolutionContext, resolve_opt};
 use crate::env;
 use crate::error::{FnoxError, Result};
-use crate::providers::{WizardCategory, WizardField, WizardInfo};
+use crate::providers::{Provider, WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::Command;
 use std::sync::{LazyLock, Mutex};
@@ -37,6 +40,31 @@ Set credentials:
         },
     ],
 };
+
+/// Configuration for the Infisical provider.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InfisicalConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<ConfigValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub environment: Option<ConfigValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<ConfigValue>,
+}
+
+impl InfisicalConfig {
+    /// Create a provider from this config, resolving any secret references.
+    pub async fn create_provider(
+        &self,
+        ctx: &mut ResolutionContext<'_>,
+    ) -> Result<Box<dyn Provider>> {
+        Ok(Box::new(InfisicalProvider::new(
+            resolve_opt(&self.project_id, ctx).await?,
+            resolve_opt(&self.environment, ctx).await?,
+            resolve_opt(&self.path, ctx).await?,
+        )))
+    }
+}
 
 pub struct InfisicalProvider {
     project_id: Option<String>,

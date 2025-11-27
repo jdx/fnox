@@ -1,7 +1,7 @@
 use crate::config::{Config, IfMissing, SecretConfig};
+use crate::config_resolver::ResolutionContext;
 use crate::env;
 use crate::error::{FnoxError, Result};
-use crate::providers::get_provider_resolved;
 use crate::settings::Settings;
 use indexmap::IndexMap;
 use std::collections::HashMap; // Used only for internal grouping by provider
@@ -155,8 +155,9 @@ async fn try_resolve_from_provider(
                 config_path: config.provider_sources.get(&provider_name).cloned(),
             })?;
 
-    // Resolve from provider (using get_provider_resolved to handle secret refs in provider config)
-    let provider = get_provider_resolved(provider_config, config, profile).await?;
+    // Resolve from provider (create_provider handles secret refs in provider config)
+    let mut ctx = ResolutionContext::new(config, profile);
+    let provider = provider_config.create_provider(&mut ctx).await?;
     let value = provider.get_secret(provider_value).await?;
     Ok(Some(value))
 }
@@ -319,8 +320,9 @@ async fn resolve_provider_batch(
         }
     };
 
-    // Get the provider instance (using get_provider_resolved to handle secret refs in provider config)
-    let provider = match get_provider_resolved(provider_config, config, profile).await {
+    // Get the provider instance (create_provider handles secret refs in provider config)
+    let mut ctx = ResolutionContext::new(config, profile);
+    let provider = match provider_config.create_provider(&mut ctx).await {
         Ok(p) => p,
         Err(e) => {
             // Failed to create provider, handle errors for all secrets

@@ -1,5 +1,6 @@
 use crate::commands::Cli;
 use crate::config::Config;
+use crate::config_resolver::ResolutionContext;
 use crate::error::Result;
 use clap::{Args, ValueEnum};
 use regex::Regex;
@@ -142,9 +143,8 @@ impl ImportCommand {
             )
         })?;
 
-        // Get provider and check its capabilities
-        let provider = crate::providers::get_provider(provider_config)?;
-        let capabilities = provider.capabilities();
+        // Check provider capabilities (without resolving secret refs)
+        let capabilities = provider_config.capabilities();
 
         if capabilities.is_empty() {
             return Err(miette::miette!(
@@ -158,6 +158,10 @@ impl ImportCommand {
             capabilities.contains(&crate::providers::ProviderCapability::Encryption);
         let is_remote_storage_provider =
             capabilities.contains(&crate::providers::ProviderCapability::RemoteStorage);
+
+        // Create the provider (resolving any secret refs)
+        let mut ctx = ResolutionContext::new(&merged_config, &profile);
+        let provider = provider_config.create_provider(&mut ctx).await?;
 
         // Determine the target config file path
         let target_path = if self.global {

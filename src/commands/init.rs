@@ -1,7 +1,8 @@
 use crate::commands::Cli;
 use crate::config::{Config, ProviderConfig, SecretConfig};
+use crate::config_resolver::ResolutionContext;
 use crate::error::{FnoxError, Result};
-use crate::providers::{WizardCategory, WizardInfo, get_provider};
+use crate::providers::{WizardCategory, WizardInfo};
 use clap::Args;
 use demand::{Confirm, DemandOption, Input, Select};
 use std::collections::HashMap;
@@ -306,7 +307,11 @@ impl InitCommand {
     async fn test_provider_connection(&self, provider_config: &ProviderConfig) {
         println!("\n🔍 Testing provider connection...");
 
-        match get_provider(provider_config) {
+        // Create a minimal config context for testing
+        // The wizard only uses plain values, so this will work
+        let test_config = Config::new();
+        let mut ctx = ResolutionContext::new(&test_config, "default");
+        match provider_config.create_provider(&mut ctx).await {
             Ok(provider) => match provider.test_connection().await {
                 Ok(()) => {
                     println!("✓ Provider connection successful!\n");

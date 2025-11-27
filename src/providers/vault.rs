@@ -1,7 +1,10 @@
+use crate::config::ConfigValue;
+use crate::config_resolver::{ResolutionContext, resolve, resolve_opt};
 use crate::env;
 use crate::error::{FnoxError, Result};
-use crate::providers::{WizardCategory, WizardField, WizardInfo};
+use crate::providers::{Provider, WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::process::Command;
 use std::sync::LazyLock;
 
@@ -38,27 +41,28 @@ Requires Vault address and token.",
     ],
 };
 
-use crate::config::{Config, ConfigValue};
-
-/// Create a HashiCorpVaultProvider with resolved config values.
-///
-/// This resolves any secret references in the token field before
-/// creating the provider.
-pub async fn new_resolved(
-    address: String,
-    path: Option<String>,
-    token: &Option<ConfigValue>,
-    config: &Config,
-    profile: &str,
-) -> Result<HashiCorpVaultProvider> {
-    use crate::config_resolver::resolve_config_value_optional;
-    let resolved_token = resolve_config_value_optional(token, config, profile).await?;
-    Ok(HashiCorpVaultProvider::new(address, path, resolved_token))
+/// Configuration for the HashiCorp Vault provider.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VaultConfig {
+    pub address: ConfigValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<ConfigValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token: Option<ConfigValue>,
 }
 
-/// Check if the given token config contains a secret reference.
-pub fn has_secret_ref(token: &Option<ConfigValue>) -> bool {
-    token.as_ref().is_some_and(|t| !t.is_plain())
+impl VaultConfig {
+    /// Create a provider from this config, resolving any secret references.
+    pub async fn create_provider(
+        &self,
+        ctx: &mut ResolutionContext<'_>,
+    ) -> Result<Box<dyn Provider>> {
+        Ok(Box::new(HashiCorpVaultProvider::new(
+            resolve(&self.address, ctx).await?,
+            resolve_opt(&self.path, ctx).await?,
+            resolve_opt(&self.token, ctx).await?,
+        )))
+    }
 }
 
 pub struct HashiCorpVaultProvider {

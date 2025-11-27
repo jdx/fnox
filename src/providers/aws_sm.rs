@@ -1,8 +1,11 @@
+use crate::config::ConfigValue;
+use crate::config_resolver::{ResolutionContext, resolve, resolve_opt};
 use crate::error::{FnoxError, Result};
-use crate::providers::{WizardCategory, WizardField, WizardInfo};
+use crate::providers::{Provider, WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
 use aws_sdk_secretsmanager::Client;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub const WIZARD_INFO: WizardInfo = WizardInfo {
@@ -30,6 +33,27 @@ Requires AWS credentials configured.",
         },
     ],
 };
+
+/// Configuration for the AWS Secrets Manager provider.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AwsSmConfig {
+    pub region: ConfigValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<ConfigValue>,
+}
+
+impl AwsSmConfig {
+    /// Create a provider from this config, resolving any secret references.
+    pub async fn create_provider(
+        &self,
+        ctx: &mut ResolutionContext<'_>,
+    ) -> Result<Box<dyn Provider>> {
+        Ok(Box::new(AwsSecretsManagerProvider::new(
+            resolve(&self.region, ctx).await?,
+            resolve_opt(&self.prefix, ctx).await?,
+        )))
+    }
+}
 
 /// Extract the secret name from an AWS Secrets Manager ARN.
 /// ARN format: arn:aws:secretsmanager:region:account:secret:name-SUFFIX

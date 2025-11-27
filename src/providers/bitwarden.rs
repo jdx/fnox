@@ -1,6 +1,8 @@
+use crate::config::ConfigValue;
+use crate::config_resolver::{ResolutionContext, resolve_opt};
 use crate::env;
 use crate::error::{FnoxError, Result};
-use crate::providers::{WizardCategory, WizardField, WizardInfo};
+use crate::providers::{Provider, WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -34,6 +36,34 @@ Login: bw login && export BW_SESSION=$(bw unlock --raw)",
         },
     ],
 };
+
+/// Configuration for the Bitwarden provider.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BitwardenConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub collection: Option<ConfigValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub organization_id: Option<ConfigValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<ConfigValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backend: Option<BitwardenBackend>,
+}
+
+impl BitwardenConfig {
+    /// Create a provider from this config, resolving any secret references.
+    pub async fn create_provider(
+        &self,
+        ctx: &mut ResolutionContext<'_>,
+    ) -> Result<Box<dyn Provider>> {
+        Ok(Box::new(BitwardenProvider::new(
+            resolve_opt(&self.collection, ctx).await?,
+            resolve_opt(&self.organization_id, ctx).await?,
+            resolve_opt(&self.profile, ctx).await?,
+            self.backend,
+        )))
+    }
+}
 
 pub struct BitwardenProvider {
     collection: Option<String>,

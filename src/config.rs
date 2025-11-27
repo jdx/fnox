@@ -52,7 +52,8 @@ pub struct SecretRef {
 }
 
 impl ConfigValue {
-    /// Check if this is a plain value
+    /// Check if this is a plain value (used in tests)
+    #[allow(dead_code)]
     pub fn is_plain(&self) -> bool {
         matches!(self, ConfigValue::Plain(_))
     }
@@ -926,9 +927,10 @@ mod tests {
 
         // Add a provider and secret to the prod profile
         let mut prod_profile = ProfileConfig::new();
-        prod_profile
-            .providers
-            .insert("plain".to_string(), ProviderConfig::Plain);
+        prod_profile.providers.insert(
+            "plain".to_string(),
+            ProviderConfig::Plain(crate::providers::plain::PlainConfig {}),
+        );
         let mut secret = SecretConfig::new();
         secret.value = Some("test-value".to_string());
         prod_profile
@@ -1034,9 +1036,12 @@ token = { secret = "VAULT_TOKEN" }
         let config: Config = toml_edit::de::from_str(toml).unwrap();
         let vault_config = config.providers.get("vault").unwrap();
         match vault_config {
-            ProviderConfig::HashiCorpVault { address, token, .. } => {
-                assert_eq!(address, "https://vault.example.com");
-                let token = token.as_ref().unwrap();
+            ProviderConfig::HashiCorpVault(c) => {
+                match &c.address {
+                    ConfigValue::Plain(s) => assert_eq!(s, "https://vault.example.com"),
+                    ConfigValue::SecretRef(_) => panic!("Expected Plain variant for address"),
+                }
+                let token = c.token.as_ref().unwrap();
                 match token {
                     ConfigValue::Plain(_) => panic!("Expected SecretRef variant"),
                     ConfigValue::SecretRef(r) => assert_eq!(r.secret, "VAULT_TOKEN"),
@@ -1058,9 +1063,12 @@ token = "hvs.my-token"
         let config: Config = toml_edit::de::from_str(toml).unwrap();
         let vault_config = config.providers.get("vault").unwrap();
         match vault_config {
-            ProviderConfig::HashiCorpVault { address, token, .. } => {
-                assert_eq!(address, "https://vault.example.com");
-                let token = token.as_ref().unwrap();
+            ProviderConfig::HashiCorpVault(c) => {
+                match &c.address {
+                    ConfigValue::Plain(s) => assert_eq!(s, "https://vault.example.com"),
+                    ConfigValue::SecretRef(_) => panic!("Expected Plain variant for address"),
+                }
+                let token = c.token.as_ref().unwrap();
                 match token {
                     ConfigValue::Plain(s) => assert_eq!(s, "hvs.my-token"),
                     ConfigValue::SecretRef(_) => panic!("Expected Plain variant"),

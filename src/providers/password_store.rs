@@ -1,6 +1,9 @@
+use crate::config::ConfigValue;
+use crate::config_resolver::{ResolutionContext, resolve_opt};
 use crate::error::{FnoxError, Result};
-use crate::providers::{ProviderCapability, WizardCategory, WizardField, WizardInfo};
+use crate::providers::{Provider, ProviderCapability, WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::process::Command;
 use std::sync::LazyLock;
 
@@ -28,6 +31,31 @@ Initialize with: pass init <gpg-key-id>",
         },
     ],
 };
+
+/// Configuration for the password-store provider.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PasswordStoreConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<ConfigValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub store_dir: Option<ConfigValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpg_opts: Option<ConfigValue>,
+}
+
+impl PasswordStoreConfig {
+    /// Create a provider from this config, resolving any secret references.
+    pub async fn create_provider(
+        &self,
+        ctx: &mut ResolutionContext<'_>,
+    ) -> Result<Box<dyn Provider>> {
+        Ok(Box::new(PasswordStoreProvider::new(
+            resolve_opt(&self.prefix, ctx).await?,
+            resolve_opt(&self.store_dir, ctx).await?,
+            resolve_opt(&self.gpg_opts, ctx).await?,
+        )))
+    }
+}
 
 /// Provider that integrates with password-store (pass) CLI tool
 pub struct PasswordStoreProvider {

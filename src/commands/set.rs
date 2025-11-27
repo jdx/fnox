@@ -1,5 +1,6 @@
 use crate::commands::Cli;
-use crate::config::{Config, IfMissing, ProviderConfig};
+use crate::config::{Config, IfMissing};
+use crate::config_resolver::ResolutionContext;
 use crate::error::{FnoxError, Result};
 use clap::Args;
 use std::io::{self, Read};
@@ -91,9 +92,8 @@ impl SetCommand {
                 // Get the provider config
                 let providers = config.get_providers(&profile);
                 if let Some(provider_config) = providers.get(provider_name) {
-                    // Get the provider and check its capabilities
-                    let provider = crate::providers::get_provider(provider_config)?;
-                    let capabilities = provider.capabilities();
+                    // Check capabilities using ProviderConfig method (avoids resolving secret refs)
+                    let capabilities = provider_config.capabilities();
 
                     // Ensure the provider has at least one capability
                     if capabilities.is_empty() {
@@ -107,6 +107,10 @@ impl SetCommand {
                         capabilities.contains(&crate::providers::ProviderCapability::Encryption);
                     let is_remote_storage_provider =
                         capabilities.contains(&crate::providers::ProviderCapability::RemoteStorage);
+
+                    // Create the provider using ResolutionContext
+                    let mut ctx = ResolutionContext::new(&config, &profile);
+                    let provider = provider_config.create_provider(&mut ctx).await?;
 
                     if is_encryption_provider {
                         tracing::debug!(
@@ -135,96 +139,11 @@ impl SetCommand {
                         );
 
                         // Push the secret to the remote provider
-                        match provider_config {
-                            ProviderConfig::AwsSecretsManager { region, prefix } => {
-                                let sm_provider =
-                                    crate::providers::aws_sm::AwsSecretsManagerProvider::new(
-                                        region.clone(),
-                                        prefix.clone(),
-                                    );
-                                let secret_name = sm_provider.get_secret_name(&self.key);
-                                sm_provider.put_secret(&secret_name, value).await?;
+                        let key_name = self.key_name.as_deref().unwrap_or(&self.key);
+                        let key = provider.put_secret(key_name, value).await?;
 
-                                // Store just the key name (without prefix) in config
-                                (None, Some(self.key.clone()))
-                            }
-                            ProviderConfig::Keychain { service, prefix } => {
-                                let keychain_provider =
-                                    crate::providers::keychain::KeychainProvider::new(
-                                        service.clone(),
-                                        prefix.clone(),
-                                    );
-                                keychain_provider.put_secret(&self.key, value).await?;
-
-                                // Store just the key name (without prefix) in config
-                                (None, Some(self.key.clone()))
-                            }
-                            ProviderConfig::PasswordStore {
-                                prefix,
-                                store_dir,
-                                gpg_opts,
-                            } => {
-                                use crate::providers::Provider;
-
-                                let pass_provider =
-                                    crate::providers::password_store::PasswordStoreProvider::new(
-                                        prefix.clone(),
-                                        store_dir.clone(),
-                                        gpg_opts.clone(),
-                                    );
-
-                                let key_name = self.key_name.as_deref().unwrap_or(&self.key);
-                                let key = pass_provider.put_secret(key_name, value).await?;
-
-                                (None, Some(key))
-                            }
-                            ProviderConfig::AzureSecretsManager { vault_url, prefix } => {
-                                let azure_sm_provider =
-                                    crate::providers::azure_sm::AzureSecretsManagerProvider::new(
-                                        vault_url.clone(),
-                                        prefix.clone(),
-                                    );
-                                let secret_name = azure_sm_provider.get_secret_name(&self.key);
-                                azure_sm_provider.put_secret(&secret_name, value).await?;
-
-                                // Store just the key name (without prefix) in config
-                                (None, Some(self.key.clone()))
-                            }
-                            ProviderConfig::KeePass {
-                                database,
-                                keyfile,
-                                password,
-                            } => {
-                                use crate::config_resolver::resolve_config_value_optional;
-                                use crate::providers::Provider;
-
-                                // Resolve password using the full resolution chain
-                                // (env var first, then config-defined secrets)
-                                let resolved_password =
-                                    resolve_config_value_optional(password, &config, &profile)
-                                        .await?;
-
-                                let keepass_provider =
-                                    crate::providers::keepass::KeePassProvider::new(
-                                        database.clone(),
-                                        keyfile.clone(),
-                                        resolved_password,
-                                    );
-
-                                let key_name = self.key_name.as_deref().unwrap_or(&self.key);
-                                let key = keepass_provider.put_secret(key_name, value).await?;
-
-                                (None, Some(key))
-                            }
-                            _ => {
-                                // Other remote storage providers not yet implemented
-                                tracing::warn!(
-                                    "Remote storage not yet implemented for provider '{}', storing plaintext",
-                                    provider_name
-                                );
-                                (Some(value.clone()), None)
-                            }
-                        }
+                        // Store just the key name in config
+                        (None, Some(key))
                     } else {
                         // Not an encryption or remote storage provider
                         (None, None)
