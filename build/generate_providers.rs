@@ -20,19 +20,9 @@ struct ProviderToml {
     default_name: String,
     setup_instructions: String,
     #[serde(default)]
-    special: SpecialFields,
-    #[serde(default)]
     fields: IndexMap<String, FieldDef>,
     #[serde(default)]
     wizard_fields: IndexMap<String, WizardFieldDef>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct SpecialFields {
-    #[serde(default)]
-    has_vec_field: bool,
-    #[serde(default)]
-    has_backend_field: bool,
 }
 
 #[derive(Debug, Deserialize)]

@@ -11,11 +11,6 @@ setup_instructions = """
 Age uses public/private key pairs for encryption.
 Generate a key with: age-keygen -o ~/.config/fnox/age.txt"""
 
-# Note: age has a special field 'recipients' that is Vec<String> not a string field
-# This requires custom handling in the code generator
-[special]
-has_vec_field = true
-
 [fields.recipients]
 type = "vec_string"
 wizard = false
