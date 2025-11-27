@@ -1036,7 +1036,7 @@
   "config": {
     "props": {}
   },
-  "version": "1.6.1",
+  "version": "1.7.0",
   "usage": "Usage: fnox [OPTIONS] <COMMAND>",
   "complete": {
     "key": {

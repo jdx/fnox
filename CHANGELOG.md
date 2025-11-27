@@ -1,6 +1,35 @@
 # Changelog
 
-## [1.6.1](https://github.com/jdx/fnox/compare/v1.6.0..v1.6.1) - 2025-11-25
+## [1.7.0](https://github.com/jdx/fnox/compare/v1.6.1..v1.7.0) - 2025-11-27
+
+### 🚀 Features
+
+- **(init)** improve wizard with traits and missing providers by [@jdx](https://github.com/jdx) in [#129](https://github.com/jdx/fnox/pull/129)
+- add KeePass provider support by [@jdx](https://github.com/jdx) in [#123](https://github.com/jdx/fnox/pull/123)
+- add AWS Parameter Store provider support by [@jdx](https://github.com/jdx) in [#126](https://github.com/jdx/fnox/pull/126)
+- support global config file for machine-wide secrets by [@jdx](https://github.com/jdx) in [#128](https://github.com/jdx/fnox/pull/128)
+
+### 🐛 Bug Fixes
+
+- **(set)** always write to local config, create override for parent secrets by [@jdx](https://github.com/jdx) in [#122](https://github.com/jdx/fnox/pull/122)
+
+### 🚜 Refactor
+
+- simplify Provider trait by removing key_file parameter by [@jdx](https://github.com/jdx) in [#124](https://github.com/jdx/fnox/pull/124)
+
+### 📚 Documentation
+
+- add KeePass provider documentation by [@jdx](https://github.com/jdx) in [#125](https://github.com/jdx/fnox/pull/125)
+
+### ⚡ Performance
+
+- **(tests)** reduce AWS Secrets Manager API calls by [@jdx](https://github.com/jdx) in [#127](https://github.com/jdx/fnox/pull/127)
+
+## [1.6.1](https://github.com/jdx/fnox/compare/v1.6.0..v1.6.1) - 2025-11-26
+
+### 🐛 Bug Fixes
+
+- **(edit)** preserve all user edits including non-secret config by [@jdx](https://github.com/jdx) in [#119](https://github.com/jdx/fnox/pull/119)
 
 ### 🚜 Refactor
 
