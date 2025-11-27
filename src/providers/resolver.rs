@@ -370,31 +370,32 @@ fn resolve_secret_ref<'a>(
         if let Some(secret_config) = secrets.get(secret_name) {
             // Secret found in config - resolve it
             if let Some(ref secret_provider_name) = secret_config.provider
-                && let Some(ref provider_value) = secret_config.value {
-                    // This secret uses a provider - need to resolve that provider first
-                    let providers = config.get_providers(profile);
-                    if let Some(secret_provider_config) = providers.get(secret_provider_name) {
-                        // Recursively resolve the provider's config
-                        let resolved_provider = resolve_provider_config_with_context(
-                            config,
-                            profile,
-                            secret_provider_name,
-                            secret_provider_config,
-                            ctx,
-                        )
-                        .await?;
+                && let Some(ref provider_value) = secret_config.value
+            {
+                // This secret uses a provider - need to resolve that provider first
+                let providers = config.get_providers(profile);
+                if let Some(secret_provider_config) = providers.get(secret_provider_name) {
+                    // Recursively resolve the provider's config
+                    let resolved_provider = resolve_provider_config_with_context(
+                        config,
+                        profile,
+                        secret_provider_name,
+                        secret_provider_config,
+                        ctx,
+                    )
+                    .await?;
 
-                        // Create the provider and get the secret
-                        let provider = super::get_provider_from_resolved(&resolved_provider)?;
-                        return provider.get_secret(provider_value).await;
-                    } else {
-                        return Err(FnoxError::ProviderNotConfigured {
-                            provider: secret_provider_name.clone(),
-                            profile: profile.to_string(),
-                            config_path: config.provider_sources.get(secret_provider_name).cloned(),
-                        });
-                    }
+                    // Create the provider and get the secret
+                    let provider = super::get_provider_from_resolved(&resolved_provider)?;
+                    return provider.get_secret(provider_value).await;
+                } else {
+                    return Err(FnoxError::ProviderNotConfigured {
+                        provider: secret_provider_name.clone(),
+                        profile: profile.to_string(),
+                        config_path: config.provider_sources.get(secret_provider_name).cloned(),
+                    });
                 }
+            }
 
             // Secret has a default value
             if let Some(ref default) = secret_config.default {
