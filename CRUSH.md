@@ -757,3 +757,106 @@ fnox exec -- ./my-app
 - Connection testing via CLI authentication
 - For self-hosted Infisical instances, set `INFISICAL_API_URL` environment variable
 - Token caching avoids repeated authentication
+
+### KeePass Provider
+
+The KeePass provider stores secrets in a local KeePass database file (`.kdbx`), supporting KDBX4 format with read/write operations.
+
+**Configuration:**
+
+```toml
+[providers]
+keepass = { type = "keepass", database = "~/secrets.kdbx" }
+# OR with keyfile
+keepass = { type = "keepass", database = "~/secrets.kdbx", keyfile = "~/keyfile.key" }
+
+[secrets]
+# Retrieves password field (default)
+MY_SECRET = { provider = "keepass", value = "entry-name" }
+
+# OR retrieves specific field
+MY_SECRET = { provider = "keepass", value = "entry-name/username" }
+
+# OR with group path
+MY_SECRET = { provider = "keepass", value = "group/subgroup/entry-name" }
+
+# OR group path with specific field
+MY_SECRET = { provider = "keepass", value = "group/entry-name/notes" }
+```
+
+**Requirements:**
+
+- KeePass database password set via environment variable:
+  - `FNOX_KEEPASS_PASSWORD` (preferred), or
+  - `KEEPASS_PASSWORD`
+- Or password configured in provider config (not recommended for security)
+- Optional keyfile for additional security
+
+**Reference Formats:**
+
+- `entry-name` - Gets the `password` field from the entry (searches all groups)
+- `entry-name/field` - Gets a specific field (e.g., `username`, `password`, `url`, `notes`)
+- `group/entry-name` - Gets password from entry in specific group
+- `group/subgroup/entry-name/field` - Full path with group hierarchy and field
+
+**Supported Fields:**
+
+- `password` (default) - Entry password
+- `username` - Entry username
+- `url` - Entry URL
+- `notes` - Entry notes
+- `title` - Entry title (read-only)
+
+**Usage:**
+
+```bash
+# Set the database password
+export FNOX_KEEPASS_PASSWORD="my-master-password"
+
+# Store a secret in KeePass database
+fnox set MY_SECRET "my-secret-value" --provider keepass
+
+# Store with specific entry/field path
+fnox set MY_SECRET "my-username" --provider keepass --key-name "myapp/username"
+
+# Retrieve secret from KeePass
+fnox get MY_SECRET
+
+# Use in shell commands
+fnox exec -- ./my-app
+```
+
+**How it works:**
+
+1. **Storage**: Secrets are stored in a local `.kdbx` database file
+2. **Config**: fnox.toml contains the entry name/path (not the actual secret value)
+3. **Auto-creation**: Database and group structure are created automatically if they don't exist
+4. **Atomic writes**: Uses temporary files with sync-to-disk before rename to prevent data loss
+5. **Protected fields**: Password fields are stored encrypted within KDBX format
+
+**Implementation Notes:**
+
+- Uses `keepass-rs` crate with KDBX4 save support
+- Supports both read and write operations (RemoteStorage capability)
+- Shell expansion supported for database path (`~` expands to home directory)
+- Single-part entry names search recursively across all groups
+- Title field is read-only (reserved for entry identification)
+- Connection testing via database open/read test
+
+### Running KeePass Tests
+
+The KeePass integration tests use a temporary database created during test execution:
+
+```bash
+# Set the test password
+export KEEPASS_PASSWORD="test-password"
+
+# Run the KeePass tests
+mise run test:bats -- test/keepass.bats
+```
+
+**Note**:
+
+- Tests will automatically skip if `KEEPASS_PASSWORD` is not available
+- Tests create and delete temporary databases during execution
+- No external services required - tests are fully self-contained
