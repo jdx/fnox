@@ -33,6 +33,10 @@ pub struct ImportCommand {
     #[arg(short, long)]
     force: bool,
 
+    /// Import to the global config file (~/.config/fnox/config.toml)
+    #[arg(short = 'g', long)]
+    global: bool,
+
     /// Source file or path to import from (default: stdin)
     #[arg(short = 'i', long)]
     input: Option<PathBuf>,
@@ -203,7 +207,24 @@ impl ImportCommand {
             );
         }
 
-        config.save(&cli.config)?;
+        // Save to the appropriate config file
+        let target_path = if self.global {
+            let global_path = Config::global_config_path();
+            // Create parent directory if it doesn't exist
+            if let Some(parent) = global_path.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    miette::miette!(
+                        "Failed to create config directory '{}': {}",
+                        parent.display(),
+                        e
+                    )
+                })?;
+            }
+            global_path
+        } else {
+            cli.config.clone()
+        };
+        config.save(&target_path)?;
 
         Ok(())
     }

@@ -14,15 +14,47 @@ pub struct AddCommand {
     /// Provider type
     #[arg(value_enum)]
     pub provider_type: ProviderType,
+
+    /// Add to the global config file (~/.config/fnox/config.toml)
+    #[arg(short = 'g', long)]
+    pub global: bool,
 }
 
 impl AddCommand {
-    pub async fn run(&self, cli: &Cli, mut config: Config) -> Result<()> {
+    pub async fn run(&self, cli: &Cli) -> Result<()> {
         tracing::debug!(
             "Adding provider '{}' of type '{}'",
             self.provider,
             self.provider_type
         );
+
+        // Determine the target config file
+        let target_path = if self.global {
+            let global_path = Config::global_config_path();
+            // Create parent directory if it doesn't exist
+            if let Some(parent) = global_path.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    FnoxError::Config(format!(
+                        "Failed to create config directory '{}': {}",
+                        parent.display(),
+                        e
+                    ))
+                })?;
+            }
+            global_path
+        } else {
+            let current_dir = std::env::current_dir().map_err(|e| {
+                FnoxError::Config(format!("Failed to get current directory: {}", e))
+            })?;
+            current_dir.join(&cli.config)
+        };
+
+        // Load the target config file (or create new if it doesn't exist)
+        let mut config = if target_path.exists() {
+            Config::load(&target_path)?
+        } else {
+            Config::new()
+        };
 
         if config.providers.contains_key(&self.provider) {
             return Err(FnoxError::Config(format!(
@@ -88,12 +120,13 @@ impl AddCommand {
         config
             .providers
             .insert(self.provider.clone(), provider_config);
-        config.save(&cli.config)?;
+        config.save(&target_path)?;
 
-        println!("✓ Added provider '{}'", self.provider);
+        let global_suffix = if self.global { " (global)" } else { "" };
+        println!("✓ Added provider '{}'{}", self.provider, global_suffix);
         println!(
             "\nNote: Please edit '{}' to configure the provider settings.",
-            cli.config.display()
+            target_path.display()
         );
 
         Ok(())

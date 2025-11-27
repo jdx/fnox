@@ -311,3 +311,172 @@ EOF
 	assert_success
 	assert_output --partial "project-value"
 }
+
+# Tests for --global flag on commands
+
+@test "fnox init --global creates global config" {
+	# Ensure global config doesn't exist
+	rm -f "$HOME/.config/fnox/config.toml"
+
+	# Run fnox init --global
+	run "$FNOX_BIN" init --global --skip-wizard
+	assert_success
+	assert_output --partial "Created new fnox configuration"
+	assert_output --partial ".config/fnox/config.toml"
+
+	# Verify the global config was created
+	[ -f "$HOME/.config/fnox/config.toml" ]
+}
+
+@test "fnox set --global stores secret in global config" {
+	# Create global config directory and a minimal config
+	mkdir -p "$HOME/.config/fnox"
+	cat >"$HOME/.config/fnox/config.toml" <<EOF
+[providers.plain]
+type = "plain"
+EOF
+
+	# Create a local project config
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.plain]
+type = "plain"
+EOF
+
+	# Set a secret to the global config
+	run "$FNOX_BIN" set GLOBAL_KEY "global-value" --provider plain --global
+	assert_success
+	assert_output --partial "(global)"
+
+	# Verify the secret is in the global config file
+	run cat "$HOME/.config/fnox/config.toml"
+	assert_output --partial "GLOBAL_KEY"
+
+	# Verify the secret is NOT in the local config
+	run cat fnox.toml
+	refute_output --partial "GLOBAL_KEY"
+
+	# Verify the secret can be retrieved
+	run "$FNOX_BIN" get GLOBAL_KEY
+	assert_success
+	assert_output --partial "global-value"
+}
+
+@test "fnox remove --global removes secret from global config" {
+	# Create global config with a secret
+	mkdir -p "$HOME/.config/fnox"
+	cat >"$HOME/.config/fnox/config.toml" <<EOF
+[providers.plain]
+type = "plain"
+
+[secrets]
+GLOBAL_SECRET = { provider = "plain", value = "to-be-removed" }
+EOF
+
+	# Create a local project config
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.plain]
+type = "plain"
+EOF
+
+	# Remove the secret from the global config
+	run "$FNOX_BIN" remove GLOBAL_SECRET --global
+	assert_success
+	assert_output --partial "(global)"
+
+	# Verify the secret is no longer in the global config
+	run cat "$HOME/.config/fnox/config.toml"
+	refute_output --partial "GLOBAL_SECRET"
+}
+
+@test "fnox provider add --global adds provider to global config" {
+	# Create global config directory
+	mkdir -p "$HOME/.config/fnox"
+
+	# Create a local project config
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.local]
+type = "plain"
+EOF
+
+	# Add a provider to the global config
+	run "$FNOX_BIN" provider add global-provider age --global
+	assert_success
+	assert_output --partial "(global)"
+
+	# Verify the provider is in the global config
+	run cat "$HOME/.config/fnox/config.toml"
+	assert_output --partial "global-provider"
+
+	# Verify the provider is NOT in the local config
+	run cat fnox.toml
+	refute_output --partial "global-provider"
+}
+
+@test "fnox provider remove --global removes provider from global config" {
+	# Create global config with a provider
+	mkdir -p "$HOME/.config/fnox"
+	cat >"$HOME/.config/fnox/config.toml" <<EOF
+[providers.to-remove]
+type = "plain"
+EOF
+
+	# Create a local project config
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.local]
+type = "plain"
+EOF
+
+	# Remove the provider from the global config
+	run "$FNOX_BIN" provider remove to-remove --global
+	assert_success
+	assert_output --partial "(global)"
+
+	# Verify the provider is no longer in the global config
+	run cat "$HOME/.config/fnox/config.toml"
+	refute_output --partial "to-remove"
+}
+
+@test "fnox import --global imports secrets to global config" {
+	# Create global config directory with a provider
+	mkdir -p "$HOME/.config/fnox"
+	cat >"$HOME/.config/fnox/config.toml" <<EOF
+[providers.plain]
+type = "plain"
+EOF
+
+	# Create a local project config
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.plain]
+type = "plain"
+EOF
+
+	# Create an env file to import
+	cat >secrets.env <<EOF
+IMPORTED_KEY1=value1
+IMPORTED_KEY2=value2
+EOF
+
+	# Import secrets to the global config
+	run "$FNOX_BIN" import -i secrets.env --provider plain --force --global
+	assert_success
+	assert_output --partial "Imported 2 secrets"
+
+	# Verify the secrets are in the global config
+	run cat "$HOME/.config/fnox/config.toml"
+	assert_output --partial "IMPORTED_KEY1"
+	assert_output --partial "IMPORTED_KEY2"
+
+	# Verify the secrets are NOT in the local config
+	run cat fnox.toml
+	refute_output --partial "IMPORTED_KEY1"
+}

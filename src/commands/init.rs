@@ -3,11 +3,14 @@ use crate::config::{Config, ProviderConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
 use clap::Args;
 use demand::{Confirm, DemandOption, Input, Select};
-use std::path::Path;
 
 #[derive(Debug, Args)]
 #[command(visible_alias = "i")]
 pub struct InitCommand {
+    /// Initialize the global config file (~/.config/fnox/config.toml)
+    #[arg(short = 'g', long)]
+    global: bool,
+
     /// Overwrite existing configuration file
     #[arg(long)]
     force: bool,
@@ -19,16 +22,36 @@ pub struct InitCommand {
 
 impl InitCommand {
     pub async fn run(&self, cli: &Cli) -> Result<()> {
+        // Determine the target config path
+        let config_path = if self.global {
+            Config::global_config_path()
+        } else {
+            cli.config.clone()
+        };
+
         tracing::debug!(
             "Initializing new fnox configuration at '{}'",
-            cli.config.display()
+            config_path.display()
         );
 
-        if Path::new(&cli.config).exists() && !self.force {
+        if config_path.exists() && !self.force {
             return Err(FnoxError::Config(format!(
                 "Configuration file '{}' already exists. Use --force to overwrite.",
-                cli.config.display()
+                config_path.display()
             )));
+        }
+
+        // Create parent directory if it doesn't exist (for global config)
+        if self.global {
+            if let Some(parent) = config_path.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    FnoxError::Config(format!(
+                        "Failed to create config directory '{}': {}",
+                        parent.display(),
+                        e
+                    ))
+                })?;
+            }
         }
 
         let config = if self.skip_wizard || !atty::is(atty::Stream::Stdin) {
@@ -39,14 +62,20 @@ impl InitCommand {
             self.run_wizard().await?
         };
 
-        config.save(&cli.config)?;
+        config.save(&config_path)?;
 
         println!(
             "\n✓ Created new fnox configuration at '{}'",
-            cli.config.display()
+            config_path.display()
         );
+        if self.global {
+            println!("\nThis global config will be used as the base for all projects.");
+        }
         println!("\nNext steps:");
-        println!("  • Add secrets: fnox set MY_SECRET <value>");
+        println!(
+            "  • Add secrets: fnox set MY_SECRET <value>{}",
+            if self.global { " --global" } else { "" }
+        );
         println!("  • List secrets: fnox list");
         println!("  • Use in commands: fnox exec -- <command>");
 

@@ -17,6 +17,10 @@ pub struct SetCommand {
     #[arg(short = 'd', long)]
     pub description: Option<String>,
 
+    /// Save to the global config file (~/.config/fnox/config.toml)
+    #[arg(short = 'g', long)]
+    pub global: bool,
+
     /// Key name in the provider (if different from env var name)
     #[arg(short = 'k', long)]
     pub key_name: Option<String>,
@@ -283,19 +287,38 @@ impl SetCommand {
         let secret_config = profile_secrets.get(&self.key).unwrap().clone();
         let _ = profile_secrets; // Release the mutable borrow
 
-        // Save the secret to its source file (or to the current directory's config)
-        let current_dir = std::env::current_dir()
-            .map_err(|e| FnoxError::Config(format!("Failed to get current directory: {}", e)))?;
-        let default_target = current_dir.join(&cli.config);
-        config.save_secret_to_source(&self.key, &secret_config, &profile, &default_target)?;
+        // Save the secret to the appropriate config file
+        let target_path = if self.global {
+            // Save to global config
+            let global_path = Config::global_config_path();
+            // Create parent directory if it doesn't exist
+            if let Some(parent) = global_path.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    FnoxError::Config(format!(
+                        "Failed to create config directory '{}': {}",
+                        parent.display(),
+                        e
+                    ))
+                })?;
+            }
+            global_path
+        } else {
+            // Save to current directory's config
+            let current_dir = std::env::current_dir().map_err(|e| {
+                FnoxError::Config(format!("Failed to get current directory: {}", e))
+            })?;
+            current_dir.join(&cli.config)
+        };
+        config.save_secret_to_source(&self.key, &secret_config, &profile, &target_path)?;
 
         let check = console::style("✓").green();
         let styled_key = console::style(&self.key).cyan();
         let styled_profile = console::style(&profile).magenta();
+        let global_suffix = if self.global { " (global)" } else { "" };
         if profile == "default" {
-            println!("{check} Set secret {styled_key}");
+            println!("{check} Set secret {styled_key}{global_suffix}");
         } else {
-            println!("{check} Set secret {styled_key} in profile {styled_profile}");
+            println!("{check} Set secret {styled_key} in profile {styled_profile}{global_suffix}");
         }
 
         Ok(())

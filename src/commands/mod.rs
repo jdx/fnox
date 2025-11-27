@@ -161,7 +161,7 @@ impl Commands {
             Commands::List(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Profiles(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Provider(cmd) => cmd.run(cli, self.load_config(cli)?).await,
-            Commands::Remove(cmd) => cmd.run(cli, self.load_config(cli)?).await,
+            Commands::Remove(cmd) => cmd.run(cli).await,
             Commands::Exec(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Set(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Scan(cmd) => cmd.run(cli, self.load_config(cli)?).await,

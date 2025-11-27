@@ -85,8 +85,8 @@ impl ProviderCommand {
         match &self.action {
             None => ListCommand { complete: false }.run(cli, config).await,
             Some(ProviderAction::List(cmd)) => cmd.run(cli, config).await,
-            Some(ProviderAction::Add(cmd)) => cmd.run(cli, config).await,
-            Some(ProviderAction::Remove(cmd)) => cmd.run(cli, config).await,
+            Some(ProviderAction::Add(cmd)) => cmd.run(cli).await,
+            Some(ProviderAction::Remove(cmd)) => cmd.run(cli).await,
             Some(ProviderAction::Test(cmd)) => cmd.run(cli, config).await,
         }
     }

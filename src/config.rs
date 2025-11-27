@@ -264,10 +264,15 @@ impl Config {
         Ok((config, found))
     }
 
+    /// Get the path to the global config file
+    pub fn global_config_path() -> PathBuf {
+        env::FNOX_CONFIG_DIR.join("config.toml")
+    }
+
     /// Load global configuration from FNOX_CONFIG_DIR/config.toml
     /// This is the lowest priority config, overridden by all project-level configs
     fn load_global() -> Result<(Self, bool)> {
-        let global_config_path = env::FNOX_CONFIG_DIR.join("config.toml");
+        let global_config_path = Self::global_config_path();
 
         if global_config_path.exists() {
             tracing::debug!(
