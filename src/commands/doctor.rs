@@ -2,7 +2,7 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::env;
 use crate::error::Result;
-use crate::providers::get_provider;
+use crate::providers::get_provider_resolved;
 use clap::Args;
 
 #[derive(Debug, Args)]
@@ -94,7 +94,7 @@ impl DoctorCommand {
             println!();
             println!("🔍 Provider Health:");
             for (name, provider_config) in &providers {
-                match get_provider(provider_config) {
+                match get_provider_resolved(&config, &profile, name, provider_config).await {
                     Ok(provider) => {
                         print!("  {}: Testing...", name);
                         match provider.test_connection().await {

@@ -1,7 +1,7 @@
 use crate::commands::Cli;
 use crate::config::{Config, SecretConfig};
 use crate::error::{FnoxError, Result};
-use crate::providers::{ProviderCapability, get_provider};
+use crate::providers::{ProviderCapability, get_provider_resolved};
 use crate::secret_resolver;
 use clap::Args;
 use indexmap::IndexMap;
@@ -180,7 +180,8 @@ impl EditCommand {
             {
                 let providers = config.get_providers(profile);
                 if let Some(provider_config) = providers.get(prov_name) {
-                    let provider = get_provider(provider_config)?;
+                    let provider =
+                        get_provider_resolved(config, profile, prov_name, provider_config).await?;
                     let capabilities = provider.capabilities();
                     let is_read_only = capabilities.contains(&ProviderCapability::RemoteRead)
                         && !capabilities.contains(&ProviderCapability::Encryption)
@@ -447,7 +448,13 @@ impl EditCommand {
                 let encrypted_value = if let Some(provider_name) = provider_to_use {
                     let providers = config.get_providers(secret_profile);
                     if let Some(provider_config) = providers.get(&provider_name) {
-                        let provider = get_provider(provider_config)?;
+                        let provider = get_provider_resolved(
+                            config,
+                            secret_profile,
+                            &provider_name,
+                            provider_config,
+                        )
+                        .await?;
                         provider.put_secret(&key_str, plaintext).await?
                     } else {
                         plaintext.to_string()
@@ -484,7 +491,9 @@ impl EditCommand {
                     )));
                 };
 
-                let provider = get_provider(provider_config)?;
+                let provider =
+                    get_provider_resolved(config, secret_profile, &provider_name, provider_config)
+                        .await?;
                 let encrypted_value = provider.put_secret(&key_str, plaintext).await?;
 
                 Self::set_secret_value(value, &encrypted_value);

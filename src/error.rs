@@ -211,6 +211,29 @@ pub enum FnoxError {
     #[diagnostic(code(fnox::provider::error))]
     Provider(String),
 
+    #[error("Circular dependency detected in provider configuration for '{provider}'")]
+    #[diagnostic(
+        code(fnox::provider::config_cycle),
+        help(
+            "Resolution path: {cycle}\n\
+            Break the cycle by using a literal value or environment variable for one provider."
+        )
+    )]
+    ProviderConfigCycle { provider: String, cycle: String },
+
+    #[error("Failed to resolve secret '{secret}' for provider '{provider}' configuration")]
+    #[diagnostic(
+        code(fnox::provider::config_resolution_failed),
+        help(
+            "Ensure the secret '{secret}' is defined in your config or as an environment variable"
+        )
+    )]
+    ProviderConfigResolutionFailed {
+        provider: String,
+        secret: String,
+        details: String,
+    },
+
     // ========================================================================
     // Encryption Errors
     // ========================================================================

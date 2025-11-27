@@ -143,7 +143,13 @@ impl ImportCommand {
         })?;
 
         // Get provider and check its capabilities
-        let provider = crate::providers::get_provider(provider_config)?;
+        let provider = crate::providers::get_provider_resolved(
+            &merged_config,
+            &profile,
+            &self.provider,
+            provider_config,
+        )
+        .await?;
         let capabilities = provider.capabilities();
 
         if capabilities.is_empty() {

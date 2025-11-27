@@ -19,9 +19,15 @@ pub mod keychain;
 pub mod onepassword;
 pub mod password_store;
 pub mod plain;
+pub mod resolved;
+pub mod resolver;
+pub mod secret_ref;
 pub mod vault;
 
 pub use bitwarden::BitwardenBackend;
+pub use resolved::ResolvedProviderConfig;
+pub use resolver::resolve_provider_config;
+pub use secret_ref::{OptionStringOrSecretRef, StringOrSecretRef};
 
 /// Provider capabilities - what a provider can do
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -122,54 +128,60 @@ pub enum ProviderConfig {
     #[serde(rename = "1password")]
     #[strum(serialize = "1password")]
     OnePassword {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        vault: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        account: Option<String>,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        vault: OptionStringOrSecretRef,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        account: OptionStringOrSecretRef,
     },
     #[serde(rename = "age")]
     #[strum(serialize = "age")]
     AgeEncryption {
         recipients: Vec<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        key_file: Option<String>,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        key_file: OptionStringOrSecretRef,
     },
     #[serde(rename = "aws-kms")]
     #[strum(serialize = "aws-kms")]
-    AwsKms { key_id: String, region: String },
+    AwsKms {
+        key_id: StringOrSecretRef,
+        region: StringOrSecretRef,
+    },
     #[serde(rename = "aws-sm")]
     #[strum(serialize = "aws-sm")]
     AwsSecretsManager {
-        region: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        prefix: Option<String>,
+        region: StringOrSecretRef,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        prefix: OptionStringOrSecretRef,
     },
     #[serde(rename = "aws-ps")]
     #[strum(serialize = "aws-ps")]
     AwsParameterStore {
-        region: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        prefix: Option<String>,
+        region: StringOrSecretRef,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        prefix: OptionStringOrSecretRef,
     },
     #[serde(rename = "azure-kms")]
     #[strum(serialize = "azure-kms")]
-    AzureKms { vault_url: String, key_name: String },
+    AzureKms {
+        vault_url: StringOrSecretRef,
+        key_name: StringOrSecretRef,
+    },
     #[serde(rename = "azure-sm")]
     #[strum(serialize = "azure-sm")]
     AzureSecretsManager {
-        vault_url: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        prefix: Option<String>,
+        vault_url: StringOrSecretRef,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        prefix: OptionStringOrSecretRef,
     },
     #[serde(rename = "bitwarden")]
     #[strum(serialize = "bitwarden")]
     Bitwarden {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        collection: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        organization_id: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        profile: Option<String>,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        collection: OptionStringOrSecretRef,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        organization_id: OptionStringOrSecretRef,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        profile: OptionStringOrSecretRef,
         #[serde(
             default = "default_bitwarden_backend",
             skip_serializing_if = "is_default_backend"
@@ -179,53 +191,53 @@ pub enum ProviderConfig {
     #[serde(rename = "gcp-kms")]
     #[strum(serialize = "gcp-kms")]
     GcpKms {
-        project: String,
-        location: String,
-        keyring: String,
-        key: String,
+        project: StringOrSecretRef,
+        location: StringOrSecretRef,
+        keyring: StringOrSecretRef,
+        key: StringOrSecretRef,
     },
     #[serde(rename = "gcp-sm")]
     #[strum(serialize = "gcp-sm")]
     GoogleSecretManager {
-        project: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        prefix: Option<String>,
+        project: StringOrSecretRef,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        prefix: OptionStringOrSecretRef,
     },
     #[serde(rename = "infisical")]
     #[strum(serialize = "infisical")]
     Infisical {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        project_id: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        environment: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        path: Option<String>,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        project_id: OptionStringOrSecretRef,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        environment: OptionStringOrSecretRef,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        path: OptionStringOrSecretRef,
     },
     #[serde(rename = "keepass")]
     #[strum(serialize = "keepass")]
     KeePass {
-        database: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        keyfile: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        password: Option<String>,
+        database: StringOrSecretRef,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        keyfile: OptionStringOrSecretRef,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        password: OptionStringOrSecretRef,
     },
     #[serde(rename = "keychain")]
     #[strum(serialize = "keychain")]
     Keychain {
-        service: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        prefix: Option<String>,
+        service: StringOrSecretRef,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        prefix: OptionStringOrSecretRef,
     },
     #[serde(rename = "password-store")]
     #[strum(serialize = "password-store")]
     PasswordStore {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        prefix: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        store_dir: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        gpg_opts: Option<String>,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        prefix: OptionStringOrSecretRef,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        store_dir: OptionStringOrSecretRef,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        gpg_opts: OptionStringOrSecretRef,
     },
     #[serde(rename = "plain")]
     #[strum(serialize = "plain")]
@@ -233,11 +245,11 @@ pub enum ProviderConfig {
     #[serde(rename = "vault")]
     #[strum(serialize = "vault")]
     HashiCorpVault {
-        address: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        path: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        token: Option<String>,
+        address: StringOrSecretRef,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        path: OptionStringOrSecretRef,
+        #[serde(default, skip_serializing_if = "OptionStringOrSecretRef::is_none")]
+        token: OptionStringOrSecretRef,
     },
 }
 
@@ -367,6 +379,226 @@ impl ProviderConfig {
             .collect()
     }
 
+    /// Check if this config has any secret references that need resolution.
+    ///
+    /// Returns true if any field contains a `{ secret = "..." }` reference.
+    pub fn has_secret_refs(&self) -> bool {
+        match self {
+            Self::Plain => false,
+            Self::OnePassword { vault, account } => {
+                vault.has_secret_ref() || account.has_secret_ref()
+            }
+            Self::AgeEncryption { key_file, .. } => key_file.has_secret_ref(),
+            Self::AwsKms { key_id, region } => key_id.is_secret_ref() || region.is_secret_ref(),
+            Self::AwsSecretsManager { region, prefix } => {
+                region.is_secret_ref() || prefix.has_secret_ref()
+            }
+            Self::AwsParameterStore { region, prefix } => {
+                region.is_secret_ref() || prefix.has_secret_ref()
+            }
+            Self::AzureKms {
+                vault_url,
+                key_name,
+            } => vault_url.is_secret_ref() || key_name.is_secret_ref(),
+            Self::AzureSecretsManager { vault_url, prefix } => {
+                vault_url.is_secret_ref() || prefix.has_secret_ref()
+            }
+            Self::Bitwarden {
+                collection,
+                organization_id,
+                profile,
+                ..
+            } => {
+                collection.has_secret_ref()
+                    || organization_id.has_secret_ref()
+                    || profile.has_secret_ref()
+            }
+            Self::GcpKms {
+                project,
+                location,
+                keyring,
+                key,
+            } => {
+                project.is_secret_ref()
+                    || location.is_secret_ref()
+                    || keyring.is_secret_ref()
+                    || key.is_secret_ref()
+            }
+            Self::GoogleSecretManager { project, prefix } => {
+                project.is_secret_ref() || prefix.has_secret_ref()
+            }
+            Self::Infisical {
+                project_id,
+                environment,
+                path,
+            } => {
+                project_id.has_secret_ref() || environment.has_secret_ref() || path.has_secret_ref()
+            }
+            Self::KeePass {
+                database,
+                keyfile,
+                password,
+            } => database.is_secret_ref() || keyfile.has_secret_ref() || password.has_secret_ref(),
+            Self::Keychain { service, prefix } => {
+                service.is_secret_ref() || prefix.has_secret_ref()
+            }
+            Self::PasswordStore {
+                prefix,
+                store_dir,
+                gpg_opts,
+            } => prefix.has_secret_ref() || store_dir.has_secret_ref() || gpg_opts.has_secret_ref(),
+            Self::HashiCorpVault {
+                address,
+                path,
+                token,
+            } => address.is_secret_ref() || path.has_secret_ref() || token.has_secret_ref(),
+        }
+    }
+
+    /// Convert to ResolvedProviderConfig if all values are literals.
+    ///
+    /// This is useful when you know all values are literals (e.g., from wizard input)
+    /// and don't need async resolution. Returns an error if any field is a secret reference.
+    pub fn try_to_resolved(&self) -> Result<ResolvedProviderConfig> {
+        use crate::error::FnoxError;
+
+        // Helper to extract literal from required field
+        let req = |v: &StringOrSecretRef| -> Result<String> {
+            v.as_literal().map(String::from).ok_or_else(|| {
+                FnoxError::Config(
+                    "Cannot resolve secret reference without config context".to_string(),
+                )
+            })
+        };
+
+        // Helper to extract literal from optional field
+        let opt = |v: &OptionStringOrSecretRef| -> Result<Option<String>> {
+            match v.as_ref() {
+                None => Ok(None),
+                Some(inner) => inner
+                    .as_literal()
+                    .map(|s| Some(s.to_string()))
+                    .ok_or_else(|| {
+                        FnoxError::Config(
+                            "Cannot resolve secret reference without config context".to_string(),
+                        )
+                    }),
+            }
+        };
+
+        match self {
+            Self::Plain => Ok(ResolvedProviderConfig::Plain),
+            Self::OnePassword { vault, account } => Ok(ResolvedProviderConfig::OnePassword {
+                vault: opt(vault)?,
+                account: opt(account)?,
+            }),
+            Self::AgeEncryption {
+                recipients,
+                key_file,
+            } => Ok(ResolvedProviderConfig::AgeEncryption {
+                recipients: recipients.clone(),
+                key_file: opt(key_file)?,
+            }),
+            Self::AwsKms { key_id, region } => Ok(ResolvedProviderConfig::AwsKms {
+                key_id: req(key_id)?,
+                region: req(region)?,
+            }),
+            Self::AwsSecretsManager { region, prefix } => {
+                Ok(ResolvedProviderConfig::AwsSecretsManager {
+                    region: req(region)?,
+                    prefix: opt(prefix)?,
+                })
+            }
+            Self::AwsParameterStore { region, prefix } => {
+                Ok(ResolvedProviderConfig::AwsParameterStore {
+                    region: req(region)?,
+                    prefix: opt(prefix)?,
+                })
+            }
+            Self::AzureKms {
+                vault_url,
+                key_name,
+            } => Ok(ResolvedProviderConfig::AzureKms {
+                vault_url: req(vault_url)?,
+                key_name: req(key_name)?,
+            }),
+            Self::AzureSecretsManager { vault_url, prefix } => {
+                Ok(ResolvedProviderConfig::AzureSecretsManager {
+                    vault_url: req(vault_url)?,
+                    prefix: opt(prefix)?,
+                })
+            }
+            Self::Bitwarden {
+                collection,
+                organization_id,
+                profile,
+                backend,
+            } => Ok(ResolvedProviderConfig::Bitwarden {
+                collection: opt(collection)?,
+                organization_id: opt(organization_id)?,
+                profile: opt(profile)?,
+                backend: *backend,
+            }),
+            Self::GcpKms {
+                project,
+                location,
+                keyring,
+                key,
+            } => Ok(ResolvedProviderConfig::GcpKms {
+                project: req(project)?,
+                location: req(location)?,
+                keyring: req(keyring)?,
+                key: req(key)?,
+            }),
+            Self::GoogleSecretManager { project, prefix } => {
+                Ok(ResolvedProviderConfig::GoogleSecretManager {
+                    project: req(project)?,
+                    prefix: opt(prefix)?,
+                })
+            }
+            Self::Infisical {
+                project_id,
+                environment,
+                path,
+            } => Ok(ResolvedProviderConfig::Infisical {
+                project_id: opt(project_id)?,
+                environment: opt(environment)?,
+                path: opt(path)?,
+            }),
+            Self::KeePass {
+                database,
+                keyfile,
+                password,
+            } => Ok(ResolvedProviderConfig::KeePass {
+                database: req(database)?,
+                keyfile: opt(keyfile)?,
+                password: opt(password)?,
+            }),
+            Self::Keychain { service, prefix } => Ok(ResolvedProviderConfig::Keychain {
+                service: req(service)?,
+                prefix: opt(prefix)?,
+            }),
+            Self::PasswordStore {
+                prefix,
+                store_dir,
+                gpg_opts,
+            } => Ok(ResolvedProviderConfig::PasswordStore {
+                prefix: opt(prefix)?,
+                store_dir: opt(store_dir)?,
+                gpg_opts: opt(gpg_opts)?,
+            }),
+            Self::HashiCorpVault {
+                address,
+                path,
+                token,
+            } => Ok(ResolvedProviderConfig::HashiCorpVault {
+                address: req(address)?,
+                path: opt(path)?,
+                token: opt(token)?,
+            }),
+        }
+    }
+
     /// Build a ProviderConfig from wizard field values
     pub fn from_wizard_fields(
         provider_type: &str,
@@ -374,34 +606,45 @@ impl ProviderConfig {
     ) -> Result<Self> {
         use crate::error::FnoxError;
 
-        // Helper to get a required field
-        let get_required = |name: &str| -> Result<String> {
+        // Helper to get a required field as StringOrSecretRef
+        let get_required = |name: &str| -> Result<StringOrSecretRef> {
             fields
                 .get(name)
                 .filter(|s| !s.is_empty())
-                .cloned()
+                .map(|s| StringOrSecretRef::Literal(s.clone()))
                 .ok_or_else(|| FnoxError::Config(format!("{} is required", name)))
         };
 
-        // Helper to get an optional field
-        let get_optional =
-            |name: &str| -> Option<String> { fields.get(name).filter(|s| !s.is_empty()).cloned() };
+        // Helper to get an optional field as OptionStringOrSecretRef
+        let get_optional = |name: &str| -> OptionStringOrSecretRef {
+            fields
+                .get(name)
+                .filter(|s| !s.is_empty())
+                .map(|s| OptionStringOrSecretRef::literal(s.clone()))
+                .unwrap_or_default()
+        };
 
         match provider_type {
             "plain" => Ok(ProviderConfig::Plain),
             "age" => Ok(ProviderConfig::AgeEncryption {
-                recipients: vec![get_required("recipient")?],
-                key_file: None,
+                recipients: vec![
+                    fields
+                        .get("recipient")
+                        .filter(|s| !s.is_empty())
+                        .cloned()
+                        .ok_or_else(|| FnoxError::Config("recipient is required".to_string()))?,
+                ],
+                key_file: OptionStringOrSecretRef::none(),
             }),
             "keepass" => Ok(ProviderConfig::KeePass {
                 database: get_required("database")?,
                 keyfile: get_optional("keyfile"),
-                password: None, // Always use env var
+                password: OptionStringOrSecretRef::none(), // Always use env var
             }),
             "password-store" => Ok(ProviderConfig::PasswordStore {
                 prefix: get_optional("prefix"),
                 store_dir: get_optional("store_dir"),
-                gpg_opts: None,
+                gpg_opts: OptionStringOrSecretRef::none(),
             }),
             "1password" => Ok(ProviderConfig::OnePassword {
                 vault: get_optional("vault"),
@@ -465,40 +708,43 @@ impl ProviderConfig {
     }
 }
 
-/// Create a provider from a provider configuration
-pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
+/// Create a provider from a resolved provider configuration.
+///
+/// This function requires a `ResolvedProviderConfig` where all secret references
+/// have been resolved to their actual values. Use `resolve_provider_config` to
+/// convert a `ProviderConfig` with potential secret references.
+pub fn get_provider_from_resolved(config: &ResolvedProviderConfig) -> Result<Box<dyn Provider>> {
     match config {
-        ProviderConfig::OnePassword { vault, account } => Ok(Box::new(
+        ResolvedProviderConfig::OnePassword { vault, account } => Ok(Box::new(
             onepassword::OnePasswordProvider::new(vault.clone(), account.clone()),
         )),
-        ProviderConfig::AgeEncryption {
+        ResolvedProviderConfig::AgeEncryption {
             recipients,
             key_file,
         } => Ok(Box::new(age::AgeEncryptionProvider::new(
             recipients.clone(),
             key_file.clone(),
         ))),
-        ProviderConfig::AwsKms { key_id, region } => Ok(Box::new(aws_kms::AwsKmsProvider::new(
-            key_id.clone(),
-            region.clone(),
-        ))),
-        ProviderConfig::AwsSecretsManager { region, prefix } => Ok(Box::new(
+        ResolvedProviderConfig::AwsKms { key_id, region } => Ok(Box::new(
+            aws_kms::AwsKmsProvider::new(key_id.clone(), region.clone()),
+        )),
+        ResolvedProviderConfig::AwsSecretsManager { region, prefix } => Ok(Box::new(
             aws_sm::AwsSecretsManagerProvider::new(region.clone(), prefix.clone()),
         )),
-        ProviderConfig::AwsParameterStore { region, prefix } => Ok(Box::new(
+        ResolvedProviderConfig::AwsParameterStore { region, prefix } => Ok(Box::new(
             aws_ps::AwsParameterStoreProvider::new(region.clone(), prefix.clone()),
         )),
-        ProviderConfig::AzureKms {
+        ResolvedProviderConfig::AzureKms {
             vault_url,
             key_name,
         } => Ok(Box::new(azure_kms::AzureKeyVaultProvider::new(
             vault_url.clone(),
             key_name.clone(),
         ))),
-        ProviderConfig::AzureSecretsManager { vault_url, prefix } => Ok(Box::new(
+        ResolvedProviderConfig::AzureSecretsManager { vault_url, prefix } => Ok(Box::new(
             azure_sm::AzureSecretsManagerProvider::new(vault_url.clone(), prefix.clone()),
         )),
-        ProviderConfig::Bitwarden {
+        ResolvedProviderConfig::Bitwarden {
             collection,
             organization_id,
             profile,
@@ -509,7 +755,7 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
             profile.clone(),
             *backend,
         ))),
-        ProviderConfig::GcpKms {
+        ResolvedProviderConfig::GcpKms {
             project,
             location,
             keyring,
@@ -520,10 +766,10 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
             keyring.clone(),
             key.clone(),
         ))),
-        ProviderConfig::GoogleSecretManager { project, prefix } => Ok(Box::new(
+        ResolvedProviderConfig::GoogleSecretManager { project, prefix } => Ok(Box::new(
             gcp_sm::GoogleSecretManagerProvider::new(project.clone(), prefix.clone()),
         )),
-        ProviderConfig::Infisical {
+        ResolvedProviderConfig::Infisical {
             project_id,
             environment,
             path,
@@ -532,7 +778,7 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
             environment.clone(),
             path.clone(),
         ))),
-        ProviderConfig::KeePass {
+        ResolvedProviderConfig::KeePass {
             database,
             keyfile,
             password,
@@ -541,10 +787,10 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
             keyfile.clone(),
             password.clone(),
         ))),
-        ProviderConfig::Keychain { service, prefix } => Ok(Box::new(
+        ResolvedProviderConfig::Keychain { service, prefix } => Ok(Box::new(
             keychain::KeychainProvider::new(service.clone(), prefix.clone()),
         )),
-        ProviderConfig::PasswordStore {
+        ResolvedProviderConfig::PasswordStore {
             prefix,
             store_dir,
             gpg_opts,
@@ -553,8 +799,8 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
             store_dir.clone(),
             gpg_opts.clone(),
         ))),
-        ProviderConfig::Plain => Ok(Box::new(plain::PlainProvider::new())),
-        ProviderConfig::HashiCorpVault {
+        ResolvedProviderConfig::Plain => Ok(Box::new(plain::PlainProvider::new())),
+        ResolvedProviderConfig::HashiCorpVault {
             address,
             path,
             token,
@@ -564,6 +810,23 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
             token.clone(),
         ))),
     }
+}
+
+/// Create a provider from an unresolved provider configuration.
+///
+/// This is a convenience wrapper that first resolves any secret references in the
+/// configuration (using the provided config and profile), then creates the provider.
+///
+/// For providers that don't have any secret references, this is equivalent to calling
+/// `get_provider_from_resolved` directly with a resolved config.
+pub async fn get_provider_resolved(
+    config: &crate::config::Config,
+    profile: &str,
+    provider_name: &str,
+    provider_config: &ProviderConfig,
+) -> Result<Box<dyn Provider>> {
+    let resolved = resolve_provider_config(config, profile, provider_name, provider_config).await?;
+    get_provider_from_resolved(&resolved)
 }
 
 fn default_bitwarden_backend() -> Option<BitwardenBackend> {

@@ -1,6 +1,7 @@
 use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
+use crate::providers::{OptionStringOrSecretRef, StringOrSecretRef};
 use clap::Args;
 
 use super::ProviderType;
@@ -66,54 +67,54 @@ impl AddCommand {
         // Create a template provider config based on type
         let provider_config = match self.provider_type {
             ProviderType::OnePassword => crate::config::ProviderConfig::OnePassword {
-                vault: Some("default".to_string()),
-                account: None,
+                vault: OptionStringOrSecretRef::literal("default"),
+                account: OptionStringOrSecretRef::none(),
             },
             ProviderType::Aws => crate::config::ProviderConfig::AwsSecretsManager {
-                region: "us-east-1".to_string(),
-                prefix: None,
+                region: StringOrSecretRef::from("us-east-1"),
+                prefix: OptionStringOrSecretRef::none(),
             },
             ProviderType::Vault => crate::config::ProviderConfig::HashiCorpVault {
-                address: "http://localhost:8200".to_string(),
-                path: Some("secret".to_string()),
-                token: None,
+                address: StringOrSecretRef::from("http://localhost:8200"),
+                path: OptionStringOrSecretRef::literal("secret"),
+                token: OptionStringOrSecretRef::none(),
             },
             ProviderType::Gcp => crate::config::ProviderConfig::GoogleSecretManager {
-                project: "my-project".to_string(),
-                prefix: None,
+                project: StringOrSecretRef::from("my-project"),
+                prefix: OptionStringOrSecretRef::none(),
             },
             ProviderType::AwsKms => crate::config::ProviderConfig::AwsKms {
-                region: "us-east-1".to_string(),
-                key_id: "alias/my-key".to_string(),
+                region: StringOrSecretRef::from("us-east-1"),
+                key_id: StringOrSecretRef::from("alias/my-key"),
             },
             ProviderType::AwsParameterStore => crate::config::ProviderConfig::AwsParameterStore {
-                region: "us-east-1".to_string(),
-                prefix: Some("/myapp/prod/".to_string()),
+                region: StringOrSecretRef::from("us-east-1"),
+                prefix: OptionStringOrSecretRef::literal("/myapp/prod/"),
             },
             ProviderType::AzureKms => crate::config::ProviderConfig::AzureKms {
-                vault_url: "https://my-vault.vault.azure.net/".to_string(),
-                key_name: "my-key".to_string(),
+                vault_url: StringOrSecretRef::from("https://my-vault.vault.azure.net/"),
+                key_name: StringOrSecretRef::from("my-key"),
             },
             ProviderType::AzureSecretsManager => {
                 crate::config::ProviderConfig::AzureSecretsManager {
-                    vault_url: "https://my-vault.vault.azure.net/".to_string(),
-                    prefix: None,
+                    vault_url: StringOrSecretRef::from("https://my-vault.vault.azure.net/"),
+                    prefix: OptionStringOrSecretRef::none(),
                 }
             }
             ProviderType::GcpKms => crate::config::ProviderConfig::GcpKms {
-                project: "my-project".to_string(),
-                location: "global".to_string(),
-                keyring: "my-keyring".to_string(),
-                key: "my-key".to_string(),
+                project: StringOrSecretRef::from("my-project"),
+                location: StringOrSecretRef::from("global"),
+                keyring: StringOrSecretRef::from("my-keyring"),
+                key: StringOrSecretRef::from("my-key"),
             },
             ProviderType::Age => crate::config::ProviderConfig::AgeEncryption {
                 recipients: vec!["age1...".to_string()],
-                key_file: None,
+                key_file: OptionStringOrSecretRef::none(),
             },
             ProviderType::Infisical => crate::config::ProviderConfig::Infisical {
-                project_id: Some("your-project-id".to_string()),
-                environment: Some("dev".to_string()),
-                path: Some("/".to_string()),
+                project_id: OptionStringOrSecretRef::literal("your-project-id"),
+                environment: OptionStringOrSecretRef::literal("dev"),
+                path: OptionStringOrSecretRef::literal("/"),
             },
         };
 

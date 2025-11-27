@@ -1,7 +1,7 @@
 use crate::commands::Cli;
 use crate::config::{Config, ProviderConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
-use crate::providers::{WizardCategory, WizardInfo, get_provider};
+use crate::providers::{WizardCategory, WizardInfo, get_provider_from_resolved};
 use clap::Args;
 use demand::{Confirm, DemandOption, Input, Select};
 use std::collections::HashMap;
@@ -262,18 +262,27 @@ impl InitCommand {
     async fn test_provider_connection(&self, provider_config: &ProviderConfig) {
         println!("\n🔍 Testing provider connection...");
 
-        match get_provider(provider_config) {
-            Ok(provider) => match provider.test_connection().await {
-                Ok(()) => {
-                    println!("✓ Provider connection successful!\n");
-                }
+        // Wizard-created configs always have literal values, so we can use try_to_resolved
+        match provider_config.try_to_resolved() {
+            Ok(resolved) => match get_provider_from_resolved(&resolved) {
+                Ok(provider) => match provider.test_connection().await {
+                    Ok(()) => {
+                        println!("✓ Provider connection successful!\n");
+                    }
+                    Err(e) => {
+                        println!("⚠️  Provider connection test failed: {}", e);
+                        println!(
+                            "   You can still save the configuration and fix the issue later.\n"
+                        );
+                    }
+                },
                 Err(e) => {
-                    println!("⚠️  Provider connection test failed: {}", e);
+                    println!("⚠️  Could not create provider: {}", e);
                     println!("   You can still save the configuration and fix the issue later.\n");
                 }
             },
             Err(e) => {
-                println!("⚠️  Could not create provider: {}", e);
+                println!("⚠️  Could not resolve provider config: {}", e);
                 println!("   You can still save the configuration and fix the issue later.\n");
             }
         }
