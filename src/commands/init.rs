@@ -1,6 +1,7 @@
 use crate::commands::Cli;
 use crate::config::{Config, ProviderConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
+use crate::providers::get_provider;
 use clap::Args;
 use demand::{Confirm, DemandOption, Input, Select};
 
@@ -135,6 +136,9 @@ impl InitCommand {
             _ => return Err(FnoxError::Config("Unknown provider category".to_string())),
         };
 
+        // Test the connection using the Provider trait
+        self.test_provider_connection(&provider_config).await;
+
         // Create config with provider
         let mut config = Config::new();
         config
@@ -189,6 +193,16 @@ impl InitCommand {
                     .label("Age encryption")
                     .description("Modern encryption tool - encrypts values with age keys")
             )
+            .option(
+                DemandOption::new("keepass")
+                    .label("KeePass")
+                    .description("Store secrets in a local KeePass database (.kdbx file)")
+            )
+            .option(
+                DemandOption::new("password-store")
+                    .label("Password-Store (pass)")
+                    .description("GPG-encrypted password store - the standard Unix password manager")
+            )
             .run()
             .map_err(|e| FnoxError::Config(format!("Wizard cancelled: {}", e)))?;
 
@@ -233,6 +247,74 @@ impl InitCommand {
                     },
                 ))
             }
+            "keepass" => {
+                println!("\n🔐 KeePass setup:");
+                println!("   Stores secrets in a local KeePass database file (.kdbx)");
+                println!("   Set password via FNOX_KEEPASS_PASSWORD or KEEPASS_PASSWORD env var\n");
+
+                let database = Input::new("Database path:")
+                    .placeholder("~/.config/fnox/secrets.kdbx")
+                    .run()
+                    .map_err(|e| FnoxError::Config(format!("Wizard cancelled: {}", e)))?;
+
+                if database.is_empty() {
+                    return Err(FnoxError::Config(
+                        "Database path cannot be empty".to_string(),
+                    ));
+                }
+
+                let keyfile = Input::new("Keyfile path (optional, for additional security):")
+                    .placeholder("")
+                    .run()
+                    .ok()
+                    .filter(|s| !s.is_empty());
+
+                let name = Input::new("Provider name:")
+                    .placeholder("keepass")
+                    .run()
+                    .unwrap_or_else(|_| "keepass".to_string());
+
+                Ok((
+                    name,
+                    ProviderConfig::KeePass {
+                        database,
+                        keyfile,
+                        password: None, // Always use env var, not stored in config
+                    },
+                ))
+            }
+            "password-store" => {
+                println!("\n🔐 Password-Store (pass) setup:");
+                println!("   Uses GPG-encrypted files in ~/.password-store/");
+                println!("   Requires: pass CLI and a GPG key configured");
+                println!("   Initialize with: pass init <gpg-key-id>\n");
+
+                let prefix = Input::new("Secret name prefix (optional):")
+                    .placeholder("fnox/")
+                    .run()
+                    .ok()
+                    .filter(|s| !s.is_empty());
+
+                let store_dir = Input::new("Custom store directory (optional):")
+                    .placeholder("")
+                    .run()
+                    .ok()
+                    .filter(|s| !s.is_empty());
+
+                let name = Input::new("Provider name:")
+                    .placeholder("pass")
+                    .run()
+                    .unwrap_or_else(|_| "pass".to_string());
+
+                Ok((
+                    name,
+                    ProviderConfig::PasswordStore {
+                        prefix,
+                        store_dir,
+                        gpg_opts: None,
+                    },
+                ))
+            }
             _ => Err(FnoxError::Config("Unknown local provider".to_string())),
         }
     }
@@ -249,6 +331,11 @@ impl InitCommand {
                 DemandOption::new("bitwarden")
                     .label("Bitwarden")
                     .description("Requires Bitwarden CLI and session token"),
+            )
+            .option(
+                DemandOption::new("infisical")
+                    .label("Infisical")
+                    .description("Cloud secrets manager with Universal Auth"),
             )
             .run()
             .map_err(|e| FnoxError::Config(format!("Wizard cancelled: {}", e)))?;
@@ -313,6 +400,45 @@ impl InitCommand {
                         organization_id,
                         profile,
                         backend: None,
+                    },
+                ))
+            }
+            "infisical" => {
+                println!("\n🔐 Infisical setup:");
+                println!("   Requires: Infisical CLI and Universal Auth credentials");
+                println!("   Set credentials:");
+                println!("     export INFISICAL_CLIENT_ID=<client-id>");
+                println!("     export INFISICAL_CLIENT_SECRET=<client-secret>\n");
+
+                let project_id = Input::new("Project ID (optional if CLI is configured):")
+                    .placeholder("")
+                    .run()
+                    .ok()
+                    .filter(|s| !s.is_empty());
+
+                let environment = Input::new("Environment (optional, default: dev):")
+                    .placeholder("dev")
+                    .run()
+                    .ok()
+                    .filter(|s| !s.is_empty());
+
+                let path = Input::new("Secret path (optional, default: /):")
+                    .placeholder("/")
+                    .run()
+                    .ok()
+                    .filter(|s| !s.is_empty());
+
+                let name = Input::new("Provider name:")
+                    .placeholder("infisical")
+                    .run()
+                    .unwrap_or_else(|_| "infisical".to_string());
+
+                Ok((
+                    name,
+                    ProviderConfig::Infisical {
+                        project_id,
+                        environment,
+                        path,
                     },
                 ))
             }
@@ -445,6 +571,11 @@ impl InitCommand {
                     .description("AWS Secrets Manager"),
             )
             .option(
+                DemandOption::new("aws-ps")
+                    .label("AWS Parameter Store")
+                    .description("AWS Systems Manager Parameter Store"),
+            )
+            .option(
                 DemandOption::new("azure-sm")
                     .label("Azure Key Vault Secrets")
                     .description("Azure Key Vault secret storage"),
@@ -485,6 +616,30 @@ impl InitCommand {
                     .unwrap_or_else(|_| "sm".to_string());
 
                 Ok((name, ProviderConfig::AwsSecretsManager { region, prefix }))
+            }
+            "aws-ps" => {
+                println!("\n☁️  AWS Parameter Store setup:");
+                println!("   Stores secrets in AWS Systems Manager Parameter Store");
+                println!("   Uses SecureString parameters for encryption");
+                println!("   Requires AWS credentials configured\n");
+
+                let region = Input::new("AWS Region:")
+                    .placeholder("us-east-1")
+                    .run()
+                    .map_err(|e| FnoxError::Config(format!("Wizard cancelled: {}", e)))?;
+
+                let prefix = Input::new("Parameter path prefix (optional):")
+                    .placeholder("/myapp/prod/")
+                    .run()
+                    .ok()
+                    .filter(|s| !s.is_empty());
+
+                let name = Input::new("Provider name:")
+                    .placeholder("ps")
+                    .run()
+                    .unwrap_or_else(|_| "ps".to_string());
+
+                Ok((name, ProviderConfig::AwsParameterStore { region, prefix }))
             }
             "azure-sm" => {
                 println!("\n☁️  Azure Key Vault Secrets setup:");
@@ -604,5 +759,26 @@ impl InitCommand {
             .unwrap_or_else(|_| "keychain".to_string());
 
         Ok((name, ProviderConfig::Keychain { service, prefix }))
+    }
+
+    /// Test the provider connection and print the result
+    async fn test_provider_connection(&self, provider_config: &ProviderConfig) {
+        println!("\n🔍 Testing provider connection...");
+
+        match get_provider(provider_config) {
+            Ok(provider) => match provider.test_connection().await {
+                Ok(()) => {
+                    println!("✓ Provider connection successful!\n");
+                }
+                Err(e) => {
+                    println!("⚠️  Provider connection test failed: {}", e);
+                    println!("   You can still save the configuration and fix the issue later.\n");
+                }
+            },
+            Err(e) => {
+                println!("⚠️  Could not create provider: {}", e);
+                println!("   You can still save the configuration and fix the issue later.\n");
+            }
+        }
     }
 }
