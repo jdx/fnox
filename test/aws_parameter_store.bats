@@ -7,35 +7,17 @@
 #       Use `--no-parallelize-within-files` bats flag.
 #
 # Prerequisites:
-#   1. AWS credentials configured (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
-#   2. IAM permissions: ssm:GetParameter, ssm:GetParameters, ssm:PutParameter, ssm:DeleteParameter
+#   1. AWS credentials from fnox.toml (decrypted via fnox exec)
+#   2. IAM permissions: ssm:GetParameter, ssm:GetParameters, ssm:PutParameter, ssm:DeleteParameter, ssm:DescribeParameters
 #   3. Run tests: mise run test:bats -- test/aws_parameter_store.bats
-#
-# Note: Tests will automatically skip if AWS credentials are not available.
-#       The mise task runs `fnox exec` which automatically decrypts provider-based secrets.
 #
 
 setup() {
 	load 'test_helper/common_setup'
 	_common_setup
 
-	# Check if AWS credentials are available
-	if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-		skip "AWS credentials not available. Ensure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are configured."
-	fi
-
-	# Check if aws CLI is installed
-	if ! command -v aws >/dev/null 2>&1; then
-		skip "AWS CLI not installed. Install with: brew install awscli"
-	fi
-
 	# Set the region
 	export PS_REGION="us-east-1"
-
-	# Verify we can access Parameter Store
-	if ! aws ssm describe-parameters --region "$PS_REGION" --max-results 1 >/dev/null 2>&1; then
-		skip "Cannot access AWS Parameter Store. Permissions may be insufficient."
-	fi
 }
 
 teardown() {
@@ -92,7 +74,7 @@ create_test_parameter() {
 		--value "$param_value" \
 		--type "SecureString" \
 		--overwrite \
-		--region "$PS_REGION" >/dev/null 2>&1
+		--region "$PS_REGION"
 
 	# Give AWS Parameter Store time to propagate the parameter
 	sleep 1
