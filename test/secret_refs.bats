@@ -13,7 +13,7 @@ teardown() {
 	_common_teardown
 }
 
-@test "provider config can reference secret via { secret = \"NAME\" } syntax" {
+@test 'provider config can reference secret via { secret = "NAME" } syntax' {
 	# Skip if age not installed
 	if ! command -v age-keygen >/dev/null 2>&1; then
 		skip "age-keygen not installed"
@@ -152,7 +152,7 @@ EOF
 	# Verify VAULT_TOKEN is encrypted in config
 	assert_config_contains "VAULT_TOKEN"
 	assert_config_not_contains "my-vault-token"
-	assert_config_contains "provider = \"age\""
+	assert_config_contains 'provider = "age"'
 
 	# Now the vault provider should be able to resolve its token from the age-encrypted secret
 	# (We can't actually connect to vault, but we can verify the config is valid)
