@@ -49,6 +49,7 @@ Your `fnox.toml` config file either contains encrypted secrets or references to 
 
 ### ☁️ Cloud Secret Storage (remote, centralized)
 
+- [**aws-ps**](https://fnox.jdx.dev/providers/aws-ps) - AWS Parameter Store
 - [**aws-sm**](https://fnox.jdx.dev/providers/aws-sm) - AWS Secrets Manager
 - [**azure-sm**](https://fnox.jdx.dev/providers/azure-sm) - Azure Key Vault Secrets
 - [**gcp-sm**](https://fnox.jdx.dev/providers/gcp-sm) - Google Cloud Secret Manager

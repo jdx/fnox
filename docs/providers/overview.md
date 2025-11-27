@@ -21,6 +21,7 @@ Store secrets remotely in cloud providers. Your `fnox.toml` contains only refere
 
 | Provider                                       | Description              | Best For                       |
 | ---------------------------------------------- | ------------------------ | ------------------------------ |
+| [AWS Parameter Store](/providers/aws-ps)       | AWS SSM Parameter Store  | Config values, simple secrets  |
 | [AWS Secrets Manager](/providers/aws-sm)       | AWS centralized secrets  | Production AWS workloads       |
 | [Azure Key Vault Secrets](/providers/azure-sm) | Azure secret storage     | Production Azure workloads     |
 | [GCP Secret Manager](/providers/gcp-sm)        | Google Cloud secrets     | Production GCP workloads       |
