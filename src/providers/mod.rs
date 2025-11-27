@@ -6,6 +6,7 @@ use strum::AsRefStr;
 
 pub mod age;
 pub mod aws_kms;
+pub mod aws_ps;
 pub mod aws_sm;
 pub mod azure_kms;
 pub mod azure_sm;
@@ -58,6 +59,13 @@ pub enum ProviderConfig {
     #[serde(rename = "aws-sm")]
     #[strum(serialize = "aws-sm")]
     AwsSecretsManager {
+        region: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        prefix: Option<String>,
+    },
+    #[serde(rename = "aws-ps")]
+    #[strum(serialize = "aws-ps")]
+    AwsParameterStore {
         region: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         prefix: Option<String>,
@@ -264,6 +272,9 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
         ))),
         ProviderConfig::AwsSecretsManager { region, prefix } => Ok(Box::new(
             aws_sm::AwsSecretsManagerProvider::new(region.clone(), prefix.clone()),
+        )),
+        ProviderConfig::AwsParameterStore { region, prefix } => Ok(Box::new(
+            aws_ps::AwsParameterStoreProvider::new(region.clone(), prefix.clone()),
         )),
         ProviderConfig::AzureKms {
             vault_url,

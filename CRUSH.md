@@ -547,6 +547,107 @@ fnox exec -- ./my-app
 - Prefix is optional but recommended for namespacing
 - Connection testing via `ListSecrets` API call
 
+### AWS Parameter Store Provider
+
+The AWS Parameter Store provider retrieves secrets stored remotely in AWS Systems Manager Parameter Store.
+
+**Configuration:**
+
+```toml
+[providers]
+ps = { type = "aws-ps", region = "us-east-1", prefix = "/myapp/prod/" }  # prefix is optional
+
+[secrets]
+DATABASE_URL = { provider = "ps", value = "database/url" }  # Resolves to /myapp/prod/database/url
+```
+
+**Requirements:**
+
+- AWS credentials configured (via `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`, AWS CLI profile, or IAM role)
+- IAM permissions:
+  - `ssm:GetParameter` - for retrieving individual parameters
+  - `ssm:GetParameters` - for batch retrieval (more efficient)
+  - `ssm:DescribeParameters` - for connection testing
+  - For storing: `ssm:PutParameter`
+
+**Example IAM Policy:**
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ParameterStoreRead",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:GetParameters",
+        "ssm:DescribeParameters"
+      ],
+      "Resource": ["arn:aws:ssm:REGION:ACCOUNT_ID:parameter/myapp/*"]
+    },
+    {
+      "Sid": "ParameterStoreWrite",
+      "Effect": "Allow",
+      "Action": ["ssm:PutParameter"],
+      "Resource": ["arn:aws:ssm:REGION:ACCOUNT_ID:parameter/myapp/*"]
+    }
+  ]
+}
+```
+
+**Usage:**
+
+```bash
+# Set up provider in fnox.toml
+fnox provider add ps aws-ps
+
+# Add secret reference
+cat >> fnox.toml << EOF
+[secrets]
+DATABASE_URL = { provider = "ps", value = "database/url" }
+EOF
+
+# Store a secret in Parameter Store
+fnox set MY_SECRET "my-secret-value" --provider ps
+
+# Retrieve secret from AWS Parameter Store
+fnox get MY_SECRET
+
+# Use in shell commands
+fnox exec -- ./my-app
+```
+
+**How it works:**
+
+1. **Storage**: Secrets are stored remotely in AWS Parameter Store as SecureString parameters
+2. **Config**: fnox.toml only contains the parameter name/reference (not the actual value)
+3. **Retrieval**: When you run `fnox get`, it calls Parameter Store API with automatic decryption
+4. **Prefix**: If configured, the prefix is prepended to the parameter path (e.g., `value = "database/url"` becomes `/myapp/prod/database/url`)
+5. **Hierarchical**: Supports path-based organization for logical grouping
+
+**Implementation Notes:**
+
+- Uses AWS SDK for Rust (`aws-sdk-ssm`)
+- Automatically decrypts SecureString parameters
+- Stores new values as SecureString type for security
+- Supports batch retrieval (up to 10 parameters per call)
+- Respects standard AWS credential chain
+- Region must be specified in provider config
+- Prefix is optional but recommended for namespacing
+- Connection testing via `DescribeParameters` API call
+
+**Comparison with AWS Secrets Manager:**
+
+| Feature    | Parameter Store               | Secrets Manager                 |
+| ---------- | ----------------------------- | ------------------------------- |
+| Cost       | Free for standard params      | ~$0.40/secret/month             |
+| Max size   | 4KB (8KB for advanced)        | 64KB                            |
+| Rotation   | Manual                        | Built-in rotation               |
+| Versioning | Limited                       | Full versioning                 |
+| Hierarchy  | Path-based (`/a/b/c`)         | Flat with tags                  |
+| Best for   | Config values, simple secrets | Complex secrets, rotation needs |
+
 ### Keychain Provider
 
 The Keychain provider stores secrets in the operating system's native secure storage (macOS Keychain, Windows Credential Manager, Linux Secret Service).

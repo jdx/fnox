@@ -54,6 +54,10 @@ impl AddCommand {
                 region: "us-east-1".to_string(),
                 key_id: "alias/my-key".to_string(),
             },
+            ProviderType::AwsParameterStore => crate::config::ProviderConfig::AwsParameterStore {
+                region: "us-east-1".to_string(),
+                prefix: Some("/myapp/prod/".to_string()),
+            },
             ProviderType::AzureKms => crate::config::ProviderConfig::AzureKms {
                 vault_url: "https://my-vault.vault.azure.net/".to_string(),
                 key_name: "my-key".to_string(),

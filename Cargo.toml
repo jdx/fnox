@@ -55,6 +55,7 @@ age = { version = "0.11", features = ["ssh"] }
 aws-config = { version = "1" }
 aws-sdk-kms = { version = "1" }
 aws-sdk-secretsmanager = { version = "1" }
+aws-sdk-ssm = { version = "1" }
 azure_core = { version = "0.21" }
 azure_identity = { version = "0.21" }
 azure_security_keyvault = { version = "0.21" }
