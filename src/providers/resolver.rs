@@ -11,9 +11,8 @@ use crate::env;
 use crate::error::{FnoxError, Result};
 use std::collections::HashSet;
 
-use super::ProviderConfig;
-use super::resolved::ResolvedProviderConfig;
 use super::secret_ref::{OptionStringOrSecretRef, StringOrSecretRef};
+use super::{ProviderConfig, ResolvedProviderConfig};
 
 /// Context for resolving provider configurations, tracking the resolution stack
 /// to detect circular dependencies.

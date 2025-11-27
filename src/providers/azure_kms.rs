@@ -1,36 +1,10 @@
 use crate::error::{FnoxError, Result};
-use crate::providers::{WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use azure_core::auth::TokenCredential;
 use azure_identity::{DefaultAzureCredential, TokenCredentialOptions};
 use azure_security_keyvault::KeyClient;
 use azure_security_keyvault::prelude::*;
 use std::sync::Arc;
-
-pub const WIZARD_INFO: WizardInfo = WizardInfo {
-    provider_type: "azure-kms",
-    display_name: "Azure Key Vault",
-    description: "Azure Key Vault for encryption",
-    category: WizardCategory::CloudKms,
-    setup_instructions: "\
-Encrypts secrets using Azure Key Vault keys.
-Requires Azure credentials configured.",
-    default_name: "azure-kms",
-    fields: &[
-        WizardField {
-            name: "vault_url",
-            label: "Key Vault URL:",
-            placeholder: "https://my-vault.vault.azure.net/",
-            required: true,
-        },
-        WizardField {
-            name: "key_name",
-            label: "Key name:",
-            placeholder: "my-key",
-            required: true,
-        },
-    ],
-};
 
 pub struct AzureKeyVaultProvider {
     vault_url: String,

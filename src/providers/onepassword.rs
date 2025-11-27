@@ -1,37 +1,11 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
-use crate::providers::{WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use regex::Regex;
 use std::collections::HashMap;
 use std::io::Write;
 use std::process::{Command, Stdio};
 use std::sync::LazyLock;
-
-pub const WIZARD_INFO: WizardInfo = WizardInfo {
-    provider_type: "1password",
-    display_name: "1Password",
-    description: "Requires 1Password CLI and service account token",
-    category: WizardCategory::PasswordManager,
-    setup_instructions: "\
-Requires: 1Password CLI (op) and a service account token.
-Set token: export OP_SERVICE_ACCOUNT_TOKEN=<token>",
-    default_name: "onepass",
-    fields: &[
-        WizardField {
-            name: "vault",
-            label: "Vault name (optional):",
-            placeholder: "",
-            required: false,
-        },
-        WizardField {
-            name: "account",
-            label: "Account (optional, e.g., my.1password.com):",
-            placeholder: "",
-            required: false,
-        },
-    ],
-};
 
 /// Precompiled regex to remove leading error prefixes from stderr output of `op`.
 /// [ERROR] YYYY/MM/DD HH:MM:SS message

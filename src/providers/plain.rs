@@ -1,18 +1,5 @@
 use crate::error::Result;
-use crate::providers::{WizardCategory, WizardInfo};
 use async_trait::async_trait;
-
-pub const WIZARD_INFO: WizardInfo = WizardInfo {
-    provider_type: "plain",
-    display_name: "Plain text",
-    description: "No encryption - stores values directly in config (not recommended for sensitive data)",
-    category: WizardCategory::Local,
-    setup_instructions: "\
-Plain provider stores secrets unencrypted in your config file.
-Only use this for non-sensitive values or development.",
-    default_name: "plain",
-    fields: &[],
-};
 
 /// Plain provider that stores and returns values as-is without encryption.
 ///

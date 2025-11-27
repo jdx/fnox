@@ -1,0 +1,24 @@
+# AWS Secrets Manager provider - remote secrets storage
+display_name = "AWS Secrets Manager"
+serde_rename = "aws-sm"
+rust_variant = "AwsSecretsManager"
+module = "aws_sm"
+struct_name = "AwsSecretsManagerProvider"
+category = "CloudSecretsManager"
+description = "AWS Secrets Manager"
+default_name = "sm"
+setup_instructions = """
+Stores secrets in AWS Secrets Manager.
+Requires AWS credentials configured."""
+
+[fields.region]
+type = "required"
+placeholder = "us-east-1"
+label = "AWS Region:"
+wizard = true
+
+[fields.prefix]
+type = "optional"
+placeholder = "fnox/"
+label = "Secret name prefix (optional):"
+wizard = true

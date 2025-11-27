@@ -1,0 +1,25 @@
+# AWS KMS provider - encryption using AWS Key Management Service
+display_name = "AWS KMS"
+serde_rename = "aws-kms"
+rust_variant = "AwsKms"
+module = "aws_kms"
+struct_name = "AwsKmsProvider"
+category = "CloudKms"
+description = "AWS Key Management Service"
+default_name = "kms"
+setup_instructions = """
+Requires AWS credentials and KMS key.
+Configure: aws configure
+Create key: aws kms create-key"""
+
+[fields.key_id]
+type = "required"
+placeholder = "alias/my-key"
+label = "KMS Key ID or alias:"
+wizard = true
+
+[fields.region]
+type = "required"
+placeholder = "us-east-1"
+label = "AWS Region:"
+wizard = true

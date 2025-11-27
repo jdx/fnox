@@ -1,0 +1,31 @@
+# Infisical provider - retrieves secrets from Infisical
+display_name = "Infisical"
+serde_rename = "infisical"
+rust_variant = "Infisical"
+module = "infisical"
+struct_name = "InfisicalProvider"
+category = "PasswordManager"
+description = "Cloud secrets manager with E2E encryption"
+default_name = "infisical"
+setup_instructions = """
+Requires: Infisical CLI and service token.
+Get token from Infisical project settings.
+Set: export INFISICAL_TOKEN=<token>"""
+
+[fields.project_id]
+type = "optional"
+placeholder = "your-project-id"
+label = "Project ID:"
+wizard = true
+
+[fields.environment]
+type = "optional"
+placeholder = "dev"
+label = "Environment:"
+wizard = true
+
+[fields.path]
+type = "optional"
+placeholder = "/"
+label = "Secrets path:"
+wizard = true

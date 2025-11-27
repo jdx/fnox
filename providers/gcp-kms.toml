@@ -1,0 +1,37 @@
+# GCP KMS provider - encryption using Google Cloud KMS
+display_name = "GCP KMS"
+serde_rename = "gcp-kms"
+rust_variant = "GcpKms"
+module = "gcp_kms"
+struct_name = "GcpKmsProvider"
+category = "CloudKms"
+description = "Google Cloud Key Management Service"
+default_name = "gcp-kms"
+setup_instructions = """
+Requires GCP credentials and KMS keyring.
+Login: gcloud auth application-default login
+Create keyring: gcloud kms keyrings create"""
+
+[fields.project]
+type = "required"
+placeholder = "my-project"
+label = "GCP Project:"
+wizard = true
+
+[fields.location]
+type = "required"
+placeholder = "global"
+label = "Location:"
+wizard = true
+
+[fields.keyring]
+type = "required"
+placeholder = "my-keyring"
+label = "Key ring:"
+wizard = true
+
+[fields.key]
+type = "required"
+placeholder = "my-key"
+label = "Key name:"
+wizard = true

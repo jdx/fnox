@@ -1,5 +1,5 @@
 use crate::error::{FnoxError, Result};
-use crate::providers::{ProviderCapability, WizardCategory, WizardField, WizardInfo};
+use crate::providers::ProviderCapability;
 use async_trait::async_trait;
 use keepass::DatabaseKey;
 use keepass::db::{Database, Entry, Group, Node, Value};
@@ -8,31 +8,6 @@ use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use tempfile::NamedTempFile;
-
-pub const WIZARD_INFO: WizardInfo = WizardInfo {
-    provider_type: "keepass",
-    display_name: "KeePass",
-    description: "Store secrets in a local KeePass database (.kdbx file)",
-    category: WizardCategory::Local,
-    setup_instructions: "\
-Stores secrets in a local KeePass database file (.kdbx).
-Set password via FNOX_KEEPASS_PASSWORD or KEEPASS_PASSWORD env var.",
-    default_name: "keepass",
-    fields: &[
-        WizardField {
-            name: "database",
-            label: "Database path:",
-            placeholder: "~/.config/fnox/secrets.kdbx",
-            required: true,
-        },
-        WizardField {
-            name: "keyfile",
-            label: "Keyfile path (optional, for additional security):",
-            placeholder: "",
-            required: false,
-        },
-    ],
-};
 
 /// Provider that reads and writes secrets from KeePass database files (.kdbx)
 pub struct KeePassProvider {

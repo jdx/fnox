@@ -1,0 +1,15 @@
+# Plain provider - stores values as plain text in config
+display_name = "Plain text"
+serde_rename = "plain"
+rust_variant = "Plain"
+module = "plain"
+struct_name = "PlainProvider"
+category = "Local"
+description = "No encryption - stores values as plain text in config"
+default_name = "plain"
+setup_instructions = """
+No setup required.
+Secrets are stored as plain text in the config file.
+Only use for non-sensitive data or testing."""
+
+# Plain provider has no fields - it's a unit variant

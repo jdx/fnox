@@ -1,34 +1,8 @@
 use crate::error::{FnoxError, Result};
-use crate::providers::{WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
 use aws_sdk_secretsmanager::Client;
 use std::collections::HashMap;
-
-pub const WIZARD_INFO: WizardInfo = WizardInfo {
-    provider_type: "aws-sm",
-    display_name: "AWS Secrets Manager",
-    description: "AWS Secrets Manager",
-    category: WizardCategory::CloudSecretsManager,
-    setup_instructions: "\
-Stores secrets in AWS Secrets Manager.
-Requires AWS credentials configured.",
-    default_name: "sm",
-    fields: &[
-        WizardField {
-            name: "region",
-            label: "AWS Region:",
-            placeholder: "us-east-1",
-            required: true,
-        },
-        WizardField {
-            name: "prefix",
-            label: "Secret name prefix (optional):",
-            placeholder: "fnox/",
-            required: false,
-        },
-    ],
-};
 
 /// Extract the secret name from an AWS Secrets Manager ARN.
 /// ARN format: arn:aws:secretsmanager:region:account:secret:name-SUFFIX

@@ -1,0 +1,25 @@
+# Azure Key Vault KMS provider - encryption using Azure Key Vault keys
+display_name = "Azure Key Vault (KMS)"
+serde_rename = "azure-kms"
+rust_variant = "AzureKms"
+module = "azure_kms"
+struct_name = "AzureKeyVaultProvider"
+category = "CloudKms"
+description = "Azure Key Vault encryption"
+default_name = "azure-kms"
+setup_instructions = """
+Requires Azure credentials and Key Vault.
+Login: az login
+Create vault: az keyvault create --name my-vault"""
+
+[fields.vault_url]
+type = "required"
+placeholder = "https://my-vault.vault.azure.net/"
+label = "Vault URL:"
+wizard = true
+
+[fields.key_name]
+type = "required"
+placeholder = "my-key"
+label = "Key name:"
+wizard = true

@@ -1,34 +1,8 @@
 use crate::error::{FnoxError, Result};
-use crate::providers::{WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
 use aws_sdk_kms::Client;
 use aws_sdk_kms::primitives::Blob;
-
-pub const WIZARD_INFO: WizardInfo = WizardInfo {
-    provider_type: "aws-kms",
-    display_name: "AWS KMS",
-    description: "AWS Key Management Service",
-    category: WizardCategory::CloudKms,
-    setup_instructions: "\
-Encrypts secrets using AWS KMS keys.
-Requires AWS credentials configured.",
-    default_name: "kms",
-    fields: &[
-        WizardField {
-            name: "key_id",
-            label: "KMS Key ID (ARN or alias):",
-            placeholder: "arn:aws:kms:us-east-1:123456789012:key/...",
-            required: true,
-        },
-        WizardField {
-            name: "region",
-            label: "AWS Region:",
-            placeholder: "us-east-1",
-            required: true,
-        },
-    ],
-};
 
 pub struct AwsKmsProvider {
     key_id: String,

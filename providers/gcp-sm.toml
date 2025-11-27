@@ -1,0 +1,25 @@
+# GCP Secret Manager provider - remote secrets storage
+display_name = "GCP Secret Manager"
+serde_rename = "gcp-sm"
+rust_variant = "GoogleSecretManager"
+module = "gcp_sm"
+struct_name = "GoogleSecretManagerProvider"
+category = "CloudSecretsManager"
+description = "Google Cloud Secret Manager"
+default_name = "gcp-sm"
+setup_instructions = """
+Stores secrets in Google Cloud Secret Manager.
+Requires GCP credentials configured.
+Login: gcloud auth application-default login"""
+
+[fields.project]
+type = "required"
+placeholder = "my-project"
+label = "GCP Project:"
+wizard = true
+
+[fields.prefix]
+type = "optional"
+placeholder = ""
+label = "Secret name prefix (optional):"
+wizard = true

@@ -1,42 +1,10 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
-use crate::providers::{WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::process::Command;
 use std::sync::LazyLock;
-
-pub const WIZARD_INFO: WizardInfo = WizardInfo {
-    provider_type: "bitwarden",
-    display_name: "Bitwarden",
-    description: "Requires Bitwarden CLI and session token",
-    category: WizardCategory::PasswordManager,
-    setup_instructions: "\
-Requires: Bitwarden CLI (bw) and session token.
-Login: bw login && export BW_SESSION=$(bw unlock --raw)",
-    default_name: "bitwarden",
-    fields: &[
-        WizardField {
-            name: "collection",
-            label: "Collection ID (optional):",
-            placeholder: "",
-            required: false,
-        },
-        WizardField {
-            name: "organization_id",
-            label: "Organization ID (optional):",
-            placeholder: "",
-            required: false,
-        },
-        WizardField {
-            name: "profile",
-            label: "Bitwarden CLI profile (optional):",
-            placeholder: "",
-            required: false,
-        },
-    ],
-};
 
 pub struct BitwardenProvider {
     collection: Option<String>,

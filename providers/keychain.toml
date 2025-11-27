@@ -1,0 +1,25 @@
+# OS Keychain provider - native secure storage
+display_name = "OS Keychain"
+serde_rename = "keychain"
+rust_variant = "Keychain"
+module = "keychain"
+struct_name = "KeychainProvider"
+category = "OsKeychain"
+description = "macOS Keychain / Windows Credential Manager / Linux Secret Service"
+default_name = "keychain"
+setup_instructions = """
+Uses native OS secure storage.
+No setup required on macOS/Windows.
+Linux requires libsecret."""
+
+[fields.service]
+type = "required"
+placeholder = "fnox"
+label = "Service name:"
+wizard = true
+
+[fields.prefix]
+type = "optional"
+placeholder = ""
+label = "Secret name prefix (optional):"
+wizard = true

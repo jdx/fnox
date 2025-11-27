@@ -1,0 +1,39 @@
+# Bitwarden provider - retrieves secrets from Bitwarden
+display_name = "Bitwarden"
+serde_rename = "bitwarden"
+rust_variant = "Bitwarden"
+module = "bitwarden"
+struct_name = "BitwardenProvider"
+category = "PasswordManager"
+description = "Requires Bitwarden CLI and session token"
+default_name = "bitwarden"
+setup_instructions = """
+Requires: Bitwarden CLI (bw) and a session token.
+Login: bw login
+Unlock: export BW_SESSION=$(bw unlock --raw)"""
+
+# Note: bitwarden has a special 'backend' field that is an enum Option<BitwardenBackend>
+[special]
+has_backend_field = true
+
+[fields.collection]
+type = "optional"
+placeholder = ""
+label = "Collection ID (optional):"
+wizard = true
+
+[fields.organization_id]
+type = "optional"
+placeholder = ""
+label = "Organization ID (optional):"
+wizard = true
+
+[fields.profile]
+type = "optional"
+placeholder = ""
+label = "Profile (optional):"
+wizard = true
+
+[fields.backend]
+type = "backend_enum"
+wizard = false

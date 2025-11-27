@@ -1,32 +1,6 @@
 use crate::error::{FnoxError, Result};
-use crate::providers::{WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use google_cloud_secretmanager_v1::client::SecretManagerService;
-
-pub const WIZARD_INFO: WizardInfo = WizardInfo {
-    provider_type: "gcp-sm",
-    display_name: "GCP Secret Manager",
-    description: "Google Cloud Secret Manager",
-    category: WizardCategory::CloudSecretsManager,
-    setup_instructions: "\
-Stores secrets in Google Cloud Secret Manager.
-Requires GCP credentials configured.",
-    default_name: "gcp-sm",
-    fields: &[
-        WizardField {
-            name: "project",
-            label: "GCP Project ID:",
-            placeholder: "my-project",
-            required: true,
-        },
-        WizardField {
-            name: "prefix",
-            label: "Secret name prefix (optional):",
-            placeholder: "fnox-",
-            required: false,
-        },
-    ],
-};
 
 pub struct GoogleSecretManagerProvider {
     project: String,

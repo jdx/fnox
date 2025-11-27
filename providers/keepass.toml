@@ -1,0 +1,30 @@
+# KeePass provider - local KeePass database storage
+display_name = "KeePass"
+serde_rename = "keepass"
+rust_variant = "KeePass"
+module = "keepass"
+struct_name = "KeePassProvider"
+category = "Local"
+description = "Local KeePass database (.kdbx)"
+default_name = "keepass"
+setup_instructions = """
+Requires a KeePass database file (.kdbx).
+Set password via FNOX_KEEPASS_PASSWORD or KEEPASS_PASSWORD env var."""
+
+[fields.database]
+type = "required"
+placeholder = "~/secrets.kdbx"
+label = "Database path:"
+wizard = true
+
+[fields.keyfile]
+type = "optional"
+placeholder = ""
+label = "Key file (optional):"
+wizard = true
+
+[fields.password]
+type = "optional"
+placeholder = ""
+label = ""
+wizard = false

@@ -1,45 +1,7 @@
 use crate::error::{FnoxError, Result};
-use crate::providers::{WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use google_cloud_kms::client::{Client, ClientConfig};
 use google_cloud_kms::grpc::kms::v1::{DecryptRequest, EncryptRequest, GetCryptoKeyRequest};
-
-pub const WIZARD_INFO: WizardInfo = WizardInfo {
-    provider_type: "gcp-kms",
-    display_name: "GCP KMS",
-    description: "Google Cloud Key Management Service",
-    category: WizardCategory::CloudKms,
-    setup_instructions: "\
-Encrypts secrets using Google Cloud KMS.
-Requires GCP credentials configured.",
-    default_name: "gcp-kms",
-    fields: &[
-        WizardField {
-            name: "project",
-            label: "GCP Project ID:",
-            placeholder: "my-project",
-            required: true,
-        },
-        WizardField {
-            name: "location",
-            label: "Location:",
-            placeholder: "us-east1",
-            required: true,
-        },
-        WizardField {
-            name: "keyring",
-            label: "Keyring name:",
-            placeholder: "my-keyring",
-            required: true,
-        },
-        WizardField {
-            name: "key",
-            label: "Key name:",
-            placeholder: "my-key",
-            required: true,
-        },
-    ],
-};
 
 pub struct GcpKmsProvider {
     project: String,

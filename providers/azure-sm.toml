@@ -1,0 +1,25 @@
+# Azure Key Vault Secrets provider - remote secrets storage
+display_name = "Azure Key Vault (Secrets)"
+serde_rename = "azure-sm"
+rust_variant = "AzureSecretsManager"
+module = "azure_sm"
+struct_name = "AzureSecretsManagerProvider"
+category = "CloudSecretsManager"
+description = "Azure Key Vault secrets"
+default_name = "azure-sm"
+setup_instructions = """
+Stores secrets in Azure Key Vault.
+Requires Azure credentials configured.
+Login: az login"""
+
+[fields.vault_url]
+type = "required"
+placeholder = "https://my-vault.vault.azure.net/"
+label = "Vault URL:"
+wizard = true
+
+[fields.prefix]
+type = "optional"
+placeholder = ""
+label = "Secret name prefix (optional):"
+wizard = true

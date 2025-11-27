@@ -1,0 +1,24 @@
+# AWS Parameter Store provider - remote parameter storage
+display_name = "AWS Parameter Store"
+serde_rename = "aws-ps"
+rust_variant = "AwsParameterStore"
+module = "aws_ps"
+struct_name = "AwsParameterStoreProvider"
+category = "CloudSecretsManager"
+description = "AWS Systems Manager Parameter Store"
+default_name = "ps"
+setup_instructions = """
+Stores secrets in AWS Parameter Store.
+Requires AWS credentials configured."""
+
+[fields.region]
+type = "required"
+placeholder = "us-east-1"
+label = "AWS Region:"
+wizard = true
+
+[fields.prefix]
+type = "optional"
+placeholder = "/myapp/prod/"
+label = "Parameter path prefix (optional):"
+wizard = true
