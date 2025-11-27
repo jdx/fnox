@@ -50,8 +50,8 @@ impl ProviderTomlRaw {
         let module = self.module.unwrap_or_else(|| {
             let m = self.serde_rename.replace('-', "_");
             // Handle "1password" -> "onepassword"
-            if m.starts_with("1") {
-                format!("one{}", &m[1..])
+            if let Some(rest) = m.strip_prefix('1') {
+                format!("one{rest}")
             } else {
                 m
             }
