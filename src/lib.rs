@@ -1,6 +1,7 @@
 // Library interface for fnox
 pub mod commands;
 pub mod config;
+pub mod config_resolver;
 pub mod env;
 pub mod error;
 pub mod hook_env;

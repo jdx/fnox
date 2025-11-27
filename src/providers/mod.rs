@@ -1,3 +1,4 @@
+use crate::config::ConfigValue;
 use crate::error::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -207,8 +208,9 @@ pub enum ProviderConfig {
         database: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         keyfile: Option<String>,
+        /// Database password - can be a plain string or a secret reference like `{ secret = "KEEPASS_PASSWORD" }`
         #[serde(skip_serializing_if = "Option::is_none")]
-        password: Option<String>,
+        password: Option<ConfigValue>,
     },
     #[serde(rename = "keychain")]
     #[strum(serialize = "keychain")]
@@ -236,8 +238,9 @@ pub enum ProviderConfig {
         address: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         path: Option<String>,
+        /// Vault token - can be a plain string or a secret reference like `{ secret = "VAULT_TOKEN" }`
         #[serde(skip_serializing_if = "Option::is_none")]
-        token: Option<String>,
+        token: Option<ConfigValue>,
     },
 }
 
@@ -396,7 +399,7 @@ impl ProviderConfig {
             "keepass" => Ok(ProviderConfig::KeePass {
                 database: get_required("database")?,
                 keyfile: get_optional("keyfile"),
-                password: None, // Always use env var
+                password: None, // Always use env var or secret ref
             }),
             "password-store" => Ok(ProviderConfig::PasswordStore {
                 prefix: get_optional("prefix"),
@@ -451,7 +454,7 @@ impl ProviderConfig {
             "vault" => Ok(ProviderConfig::HashiCorpVault {
                 address: get_required("address")?,
                 path: get_optional("path"),
-                token: get_optional("token"),
+                token: get_optional("token").map(ConfigValue::Plain),
             }),
             "keychain" => Ok(ProviderConfig::Keychain {
                 service: get_required("service")?,
@@ -465,7 +468,34 @@ impl ProviderConfig {
     }
 }
 
-/// Create a provider from a provider configuration
+/// Helper to extract a plain string from ConfigValue, erroring on secret refs.
+fn extract_plain(value: &ConfigValue, field_name: &str) -> Result<String> {
+    match value {
+        ConfigValue::Plain(s) => Ok(s.clone()),
+        ConfigValue::SecretRef(r) => Err(crate::error::FnoxError::Config(format!(
+            "Field '{}' contains unresolved secret reference '{}'. \
+            Use get_provider_resolved() for providers with secret references.",
+            field_name, r.secret
+        ))),
+    }
+}
+
+/// Helper to extract an optional plain string from ConfigValue.
+fn extract_plain_optional(value: &Option<ConfigValue>, field_name: &str) -> Result<Option<String>> {
+    match value {
+        Some(v) => Ok(Some(extract_plain(v, field_name)?)),
+        None => Ok(None),
+    }
+}
+
+/// Create a provider from a provider configuration.
+///
+/// This function requires all ConfigValue fields to contain plain values.
+/// For providers with secret references, use `get_provider_resolved()` instead.
+///
+/// # Errors
+///
+/// Returns an error if any ConfigValue field contains a secret reference.
 pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
     match config {
         ProviderConfig::OnePassword { vault, account } => Ok(Box::new(
@@ -536,11 +566,15 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
             database,
             keyfile,
             password,
-        } => Ok(Box::new(keepass::KeePassProvider::new(
-            database.clone(),
-            keyfile.clone(),
-            password.clone(),
-        ))),
+        } => {
+            // Extract plain password if provided, error on secret refs
+            let resolved_password = extract_plain_optional(password, "password")?;
+            Ok(Box::new(keepass::KeePassProvider::new(
+                database.clone(),
+                keyfile.clone(),
+                resolved_password,
+            )))
+        }
         ProviderConfig::Keychain { service, prefix } => Ok(Box::new(
             keychain::KeychainProvider::new(service.clone(), prefix.clone()),
         )),
@@ -558,11 +592,79 @@ pub fn get_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
             address,
             path,
             token,
-        } => Ok(Box::new(vault::HashiCorpVaultProvider::new(
-            address.clone(),
-            path.clone(),
-            token.clone(),
-        ))),
+        } => {
+            // Extract plain token if provided, error on secret refs
+            let resolved_token = extract_plain_optional(token, "token")?;
+            Ok(Box::new(vault::HashiCorpVaultProvider::new(
+                address.clone(),
+                path.clone(),
+                resolved_token,
+            )))
+        }
+    }
+}
+
+/// Create a provider from a provider configuration without resolving secret refs.
+///
+/// This is used for "bootstrap" providers when resolving secret references
+/// in other provider configs. It will error if the config contains any
+/// secret references (ConfigValue::SecretRef).
+///
+/// Bootstrap providers (keychain, age, password-store, plain) should never
+/// have secret refs in their config.
+pub fn get_provider_simple(config: &ProviderConfig) -> Result<Box<dyn Provider>> {
+    // This is the same as get_provider - both error on secret refs
+    // Keeping as a separate function for clarity in the calling code
+    get_provider(config)
+}
+
+/// Create a provider from a provider configuration, resolving any secret references.
+///
+/// This is the preferred way to create providers when the config may contain
+/// secret references (e.g., `token = { secret = "VAULT_TOKEN" }`).
+///
+/// Secret references are resolved by:
+/// 1. Checking environment variables
+/// 2. Looking up the secret in config and resolving via its provider
+///
+/// Note: Secrets used in provider configs must use bootstrap providers
+/// (keychain, age, password-store, plain) to avoid circular dependencies.
+pub async fn get_provider_resolved(
+    provider_config: &ProviderConfig,
+    config: &crate::config::Config,
+    profile: &str,
+) -> Result<Box<dyn Provider>> {
+    use crate::config_resolver::resolve_config_value_optional;
+
+    match provider_config {
+        // Providers with ConfigValue fields that need resolution
+        ProviderConfig::HashiCorpVault {
+            address,
+            path,
+            token,
+        } => {
+            let resolved_token = resolve_config_value_optional(token, config, profile).await?;
+            Ok(Box::new(vault::HashiCorpVaultProvider::new(
+                address.clone(),
+                path.clone(),
+                resolved_token,
+            )))
+        }
+        ProviderConfig::KeePass {
+            database,
+            keyfile,
+            password,
+        } => {
+            let resolved_password =
+                resolve_config_value_optional(password, config, profile).await?;
+            Ok(Box::new(keepass::KeePassProvider::new(
+                database.clone(),
+                keyfile.clone(),
+                resolved_password,
+            )))
+        }
+        // All other providers don't have ConfigValue fields, delegate to get_provider
+        _ => get_provider(provider_config),
     }
 }
 

@@ -11,6 +11,81 @@ use strum::VariantNames;
 // Re-export ProviderConfig from providers module
 pub use crate::providers::ProviderConfig;
 
+/// A configuration value that can be either a plain string or a reference to a secret.
+/// This allows provider configurations to securely reference secrets stored elsewhere.
+///
+/// # Examples
+///
+/// Plain value (backward compatible):
+/// ```toml
+/// [providers.vault]
+/// type = "vault"
+/// address = "https://vault.example.com"
+/// ```
+///
+/// Secret reference:
+/// ```toml
+/// [providers.vault]
+/// type = "vault"
+/// address = "https://vault.example.com"
+/// token = { secret = "VAULT_TOKEN" }
+///
+/// [secrets]
+/// VAULT_TOKEN = { provider = "keychain", value = "vault-token" }
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum ConfigValue {
+    /// Plain string value
+    Plain(String),
+    /// Reference to a secret by name
+    SecretRef(SecretRef),
+}
+
+/// A reference to a secret by name.
+/// The secret will be looked up in the config's secrets section or from environment variables.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct SecretRef {
+    /// The name of the secret to reference
+    pub secret: String,
+}
+
+impl ConfigValue {
+    /// Check if this is a plain value
+    pub fn is_plain(&self) -> bool {
+        matches!(self, ConfigValue::Plain(_))
+    }
+
+    /// Get the plain value if this is a Plain variant
+    pub fn as_plain(&self) -> Option<&str> {
+        match self {
+            ConfigValue::Plain(s) => Some(s),
+            ConfigValue::SecretRef(_) => None,
+        }
+    }
+
+    /// Get the secret reference if this is a SecretRef variant
+    pub fn as_secret_ref(&self) -> Option<&SecretRef> {
+        match self {
+            ConfigValue::Plain(_) => None,
+            ConfigValue::SecretRef(r) => Some(r),
+        }
+    }
+}
+
+impl From<String> for ConfigValue {
+    fn from(s: String) -> Self {
+        ConfigValue::Plain(s)
+    }
+}
+
+impl From<&str> for ConfigValue {
+    fn from(s: &str) -> Self {
+        ConfigValue::Plain(s.to_string())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -929,5 +1004,116 @@ mod tests {
             !toml.contains("prod"),
             "Empty profile name should not appear"
         );
+    }
+
+    #[test]
+    fn test_config_value_plain_deserialize() {
+        // Plain string should deserialize to ConfigValue::Plain
+        let toml = r#"value = "plain-string""#;
+        #[derive(Deserialize)]
+        struct Test {
+            value: ConfigValue,
+        }
+        let test: Test = toml_edit::de::from_str(toml).unwrap();
+        assert!(test.value.is_plain());
+        match test.value {
+            ConfigValue::Plain(s) => assert_eq!(s, "plain-string"),
+            ConfigValue::SecretRef(_) => panic!("Expected Plain variant"),
+        }
+    }
+
+    #[test]
+    fn test_config_value_secret_ref_deserialize() {
+        // Secret reference should deserialize to ConfigValue::SecretRef
+        let toml = r#"value = { secret = "MY_SECRET" }"#;
+        #[derive(Deserialize)]
+        struct Test {
+            value: ConfigValue,
+        }
+        let test: Test = toml_edit::de::from_str(toml).unwrap();
+        assert!(!test.value.is_plain());
+        match test.value {
+            ConfigValue::Plain(_) => panic!("Expected SecretRef variant"),
+            ConfigValue::SecretRef(r) => assert_eq!(r.secret, "MY_SECRET"),
+        }
+    }
+
+    #[test]
+    fn test_config_value_in_provider_config() {
+        // Test that provider config with secret ref parses correctly
+        let toml = r#"
+[providers.vault]
+type = "vault"
+address = "https://vault.example.com"
+token = { secret = "VAULT_TOKEN" }
+"#;
+        let config: Config = toml_edit::de::from_str(toml).unwrap();
+        let vault_config = config.providers.get("vault").unwrap();
+        match vault_config {
+            ProviderConfig::HashiCorpVault { address, token, .. } => {
+                assert_eq!(address, "https://vault.example.com");
+                let token = token.as_ref().unwrap();
+                match token {
+                    ConfigValue::Plain(_) => panic!("Expected SecretRef variant"),
+                    ConfigValue::SecretRef(r) => assert_eq!(r.secret, "VAULT_TOKEN"),
+                }
+            }
+            _ => panic!("Expected HashiCorpVault variant"),
+        }
+    }
+
+    #[test]
+    fn test_config_value_plain_in_provider_config() {
+        // Test that provider config with plain token still works (backward compat)
+        let toml = r#"
+[providers.vault]
+type = "vault"
+address = "https://vault.example.com"
+token = "hvs.my-token"
+"#;
+        let config: Config = toml_edit::de::from_str(toml).unwrap();
+        let vault_config = config.providers.get("vault").unwrap();
+        match vault_config {
+            ProviderConfig::HashiCorpVault { address, token, .. } => {
+                assert_eq!(address, "https://vault.example.com");
+                let token = token.as_ref().unwrap();
+                match token {
+                    ConfigValue::Plain(s) => assert_eq!(s, "hvs.my-token"),
+                    ConfigValue::SecretRef(_) => panic!("Expected Plain variant"),
+                }
+            }
+            _ => panic!("Expected HashiCorpVault variant"),
+        }
+    }
+
+    #[test]
+    fn test_config_value_serialize_plain() {
+        // Serialize within a struct context (TOML requires table structure at root)
+        #[derive(Serialize)]
+        struct Test {
+            value: ConfigValue,
+        }
+        let test = Test {
+            value: ConfigValue::Plain("test-value".to_string()),
+        };
+        let serialized = toml_edit::ser::to_string(&test).unwrap();
+        assert!(serialized.contains(r#"value = "test-value""#));
+    }
+
+    #[test]
+    fn test_config_value_serialize_secret_ref() {
+        // Serialize within a struct context (TOML requires table structure at root)
+        #[derive(Serialize)]
+        struct Test {
+            value: ConfigValue,
+        }
+        let test = Test {
+            value: ConfigValue::SecretRef(SecretRef {
+                secret: "MY_SECRET".to_string(),
+            }),
+        };
+        let serialized = toml_edit::ser::to_string(&test).unwrap();
+        assert!(serialized.contains("secret"));
+        assert!(serialized.contains("MY_SECRET"));
     }
 }
