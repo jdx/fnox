@@ -56,22 +56,6 @@ impl ConfigValue {
     pub fn is_plain(&self) -> bool {
         matches!(self, ConfigValue::Plain(_))
     }
-
-    /// Get the plain value if this is a Plain variant
-    pub fn as_plain(&self) -> Option<&str> {
-        match self {
-            ConfigValue::Plain(s) => Some(s),
-            ConfigValue::SecretRef(_) => None,
-        }
-    }
-
-    /// Get the secret reference if this is a SecretRef variant
-    pub fn as_secret_ref(&self) -> Option<&SecretRef> {
-        match self {
-            ConfigValue::Plain(_) => None,
-            ConfigValue::SecretRef(r) => Some(r),
-        }
-    }
 }
 
 impl From<String> for ConfigValue {

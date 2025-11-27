@@ -21,14 +21,12 @@ Set token: export OP_SERVICE_ACCOUNT_TOKEN=<token>",
         WizardField {
             name: "vault",
             label: "Vault name (optional):",
-            placeholder: "",
-            required: false,
+            ..WizardField::DEFAULT
         },
         WizardField {
             name: "account",
             label: "Account (optional, e.g., my.1password.com):",
-            placeholder: "",
-            required: false,
+            ..WizardField::DEFAULT
         },
     ],
 };

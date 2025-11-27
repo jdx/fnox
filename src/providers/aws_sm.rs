@@ -20,12 +20,13 @@ Requires AWS credentials configured.",
             label: "AWS Region:",
             placeholder: "us-east-1",
             required: true,
+            ..WizardField::DEFAULT
         },
         WizardField {
             name: "prefix",
             label: "Secret name prefix (optional):",
             placeholder: "fnox/",
-            required: false,
+            ..WizardField::DEFAULT
         },
     ],
 };

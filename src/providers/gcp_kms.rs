@@ -19,24 +19,28 @@ Requires GCP credentials configured.",
             label: "GCP Project ID:",
             placeholder: "my-project",
             required: true,
+            ..WizardField::DEFAULT
         },
         WizardField {
             name: "location",
             label: "Location:",
             placeholder: "us-east1",
             required: true,
+            ..WizardField::DEFAULT
         },
         WizardField {
             name: "keyring",
             label: "Keyring name:",
             placeholder: "my-keyring",
             required: true,
+            ..WizardField::DEFAULT
         },
         WizardField {
             name: "key",
             label: "Key name:",
             placeholder: "my-key",
             required: true,
+            ..WizardField::DEFAULT
         },
     ],
 };

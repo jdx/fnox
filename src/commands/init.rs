@@ -225,6 +225,15 @@ impl InitCommand {
         let mut fields = HashMap::new();
 
         for field in info.fields {
+            // Skip sensitive fields - they should be configured via env vars or secret refs
+            if field.sensitive {
+                println!(
+                    "  ⚠️  Skipping '{}' - configure via environment variable or secret reference",
+                    field.name
+                );
+                continue;
+            }
+
             let result = Input::new(field.label).placeholder(field.placeholder).run();
 
             match result {

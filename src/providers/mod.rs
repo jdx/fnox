@@ -85,7 +85,7 @@ impl WizardCategory {
 }
 
 /// A field that the wizard needs to collect
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct WizardField {
     /// Internal field name (e.g., "region")
     pub name: &'static str,
@@ -95,6 +95,27 @@ pub struct WizardField {
     pub placeholder: &'static str,
     /// Whether field must have a value
     pub required: bool,
+    /// Whether field contains sensitive data (like tokens/passwords)
+    /// Sensitive fields should be stored as secret references, not plain values
+    pub sensitive: bool,
+}
+
+impl WizardField {
+    /// Default value for use in const contexts with struct update syntax.
+    /// Example: `WizardField { name: "foo", ..WizardField::DEFAULT }`
+    pub const DEFAULT: Self = Self {
+        name: "",
+        label: "",
+        placeholder: "",
+        required: false,
+        sensitive: false,
+    };
+}
+
+impl Default for WizardField {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
 }
 
 /// Complete wizard metadata for a provider type

@@ -18,12 +18,13 @@ Requires GCP credentials configured.",
             label: "GCP Project ID:",
             placeholder: "my-project",
             required: true,
+            ..WizardField::DEFAULT
         },
         WizardField {
             name: "prefix",
             label: "Secret name prefix (optional):",
             placeholder: "fnox-",
-            required: false,
+            ..WizardField::DEFAULT
         },
     ],
 };

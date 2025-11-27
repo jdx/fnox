@@ -20,20 +20,17 @@ Login: bw login && export BW_SESSION=$(bw unlock --raw)",
         WizardField {
             name: "collection",
             label: "Collection ID (optional):",
-            placeholder: "",
-            required: false,
+            ..WizardField::DEFAULT
         },
         WizardField {
             name: "organization_id",
             label: "Organization ID (optional):",
-            placeholder: "",
-            required: false,
+            ..WizardField::DEFAULT
         },
         WizardField {
             name: "profile",
             label: "Bitwarden CLI profile (optional):",
-            placeholder: "",
-            required: false,
+            ..WizardField::DEFAULT
         },
     ],
 };

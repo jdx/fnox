@@ -20,12 +20,14 @@ Requires AWS credentials configured.",
             label: "KMS Key ID (ARN or alias):",
             placeholder: "arn:aws:kms:us-east-1:123456789012:key/...",
             required: true,
+            ..WizardField::DEFAULT
         },
         WizardField {
             name: "region",
             label: "AWS Region:",
             placeholder: "us-east-1",
             required: true,
+            ..WizardField::DEFAULT
         },
     ],
 };

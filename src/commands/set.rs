@@ -195,18 +195,14 @@ impl SetCommand {
                                 keyfile,
                                 password,
                             } => {
-                                use crate::config::ConfigValue;
+                                use crate::config_resolver::resolve_config_value_optional;
                                 use crate::providers::Provider;
 
-                                // Extract plain password if provided, resolve secret refs via env var
-                                let resolved_password = match password {
-                                    Some(ConfigValue::Plain(p)) => Some(p.clone()),
-                                    Some(ConfigValue::SecretRef(r)) => {
-                                        // Try environment variable for secret reference
-                                        crate::env::var(&r.secret).ok()
-                                    }
-                                    None => None,
-                                };
+                                // Resolve password using the full resolution chain
+                                // (env var first, then config-defined secrets)
+                                let resolved_password =
+                                    resolve_config_value_optional(password, &config, &profile)
+                                        .await?;
 
                                 let keepass_provider =
                                     crate::providers::keepass::KeePassProvider::new(

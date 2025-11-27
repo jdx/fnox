@@ -19,6 +19,7 @@ Generate a key with: age-keygen -o ~/.config/fnox/age.txt",
         label: "Age public key (recipient):",
         placeholder: "age1...",
         required: true,
+        ..WizardField::DEFAULT
     }],
 };
 

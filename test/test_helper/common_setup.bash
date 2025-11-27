@@ -71,13 +71,16 @@ _common_setup() {
 
 	# Set up test environment variables
 	export HOME="$TEST_TEMP_DIR"
-	export FNOX_CONFIG_FILE="$TEST_TEMP_DIR/fnox.toml"
+
+	# Set FNOX_CONFIG_FILE to relative path - this makes fnox look for config
+	# in the current directory. Tests that need config recursion should unset this.
+	export FNOX_CONFIG_FILE="fnox.toml"
 
 	# Clear hook-env session state to ensure clean test environment
 	unset __FNOX_SESSION
 
-	# Ensure no existing config
-	rm -f "$FNOX_CONFIG_FILE"
+	# Ensure no existing config in test directory
+	rm -f fnox.toml
 }
 
 _common_teardown() {

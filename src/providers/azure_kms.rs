@@ -22,12 +22,14 @@ Requires Azure credentials configured.",
             label: "Key Vault URL:",
             placeholder: "https://my-vault.vault.azure.net/",
             required: true,
+            ..WizardField::DEFAULT
         },
         WizardField {
             name: "key_name",
             label: "Key name:",
             placeholder: "my-key",
             required: true,
+            ..WizardField::DEFAULT
         },
     ],
 };

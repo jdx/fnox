@@ -176,11 +176,102 @@ bitwarden = { type = "bitwarden", collection = "collection-id", organization_id 
 vault = { type = "vault", address = "https://vault.example.com:8200", path = "secret/myapp", token = "hvs.CAESIJ..." }  # token optional, can use VAULT_TOKEN env var
 ```
 
+#### KeePass
+
+```toml
+[providers]
+keepass = { type = "keepass", database = "~/secrets.kdbx", keyfile = "~/keyfile.key" }  # keyfile is optional
+# Password from KEEPASS_PASSWORD or FNOX_KEEPASS_PASSWORD env var
+```
+
 #### OS Keychain
 
 ```toml
 [providers]
 keychain = { type = "keychain", service = "fnox", prefix = "myapp/" }  # prefix is optional
+```
+
+### Provider Secret References
+
+Some provider fields contain sensitive values (like tokens or passwords). Instead of storing these as plain text in your config, you can reference secrets that are stored securely elsewhere.
+
+#### Syntax
+
+Use `{ secret = "SECRET_NAME" }` to reference a secret:
+
+```toml
+[providers]
+keychain = { type = "keychain", service = "fnox" }
+
+[providers.vault]
+type = "vault"
+address = "https://vault.example.com"
+token = { secret = "VAULT_TOKEN" }  # References a secret instead of plain text
+
+[secrets]
+VAULT_TOKEN = { provider = "keychain", value = "vault-token" }
+```
+
+#### Resolution Order
+
+When fnox encounters `{ secret = "NAME" }` in a provider config:
+
+1. **Environment variable**: Check if `NAME` is set as an env var
+2. **Config secret**: Look up `NAME` in the `[secrets]` section and resolve via its provider
+3. **Error**: If neither is available, return an error
+
+#### Supported Fields
+
+| Provider  | Field      | Description                          |
+| --------- | ---------- | ------------------------------------ |
+| `vault`   | `token`    | HashiCorp Vault authentication token |
+| `keepass` | `password` | KeePass database password            |
+
+#### Bootstrap Providers
+
+Secrets referenced in provider configs must use "bootstrap" providers—providers that don't themselves require secret references:
+
+- **`keychain`** - Uses OS-level authentication (macOS Keychain, Windows Credential Manager)
+- **`age`** - Uses `FNOX_AGE_KEY` environment variable
+- **`password-store`** - Uses GPG for encryption
+- **`plain`** - No encryption (for non-sensitive values)
+
+#### Example: Secure Vault Setup
+
+```toml
+# Store Vault token in OS keychain (more secure than plain text)
+[providers]
+keychain = { type = "keychain", service = "fnox" }
+
+[providers.vault]
+type = "vault"
+address = "https://vault.example.com"
+token = { secret = "VAULT_TOKEN" }
+
+[secrets]
+# This secret bootstraps the vault provider
+VAULT_TOKEN = { provider = "keychain", value = "vault-token" }
+
+# These secrets use the vault provider (after it's bootstrapped)
+DATABASE_URL = { provider = "vault", value = "secret/data/database" }
+API_KEY = { provider = "vault", value = "secret/data/api-key" }
+```
+
+#### Example: Age-Encrypted Token
+
+```toml
+# Store Vault token encrypted with age
+[providers]
+age = { type = "age", recipients = ["age1..."] }
+
+[providers.vault]
+type = "vault"
+address = "https://vault.example.com"
+token = { secret = "VAULT_TOKEN" }
+
+[secrets]
+VAULT_TOKEN = { provider = "age", value = "YWdlLWVuY3J5cHRpb24..." }
+DATABASE_URL = { provider = "vault", value = "secret/data/database" }
 ```
 
 ## Secret Configuration

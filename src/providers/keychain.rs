@@ -20,12 +20,13 @@ Uses your operating system's secure keychain:
             label: "Service name (namespace for your secrets):",
             placeholder: "fnox",
             required: true,
+            ..WizardField::DEFAULT
         },
         WizardField {
             name: "prefix",
             label: "Secret name prefix (optional):",
             placeholder: "myapp/",
-            required: false,
+            ..WizardField::DEFAULT
         },
     ],
 };

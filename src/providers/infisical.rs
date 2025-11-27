@@ -21,20 +21,19 @@ Set credentials:
         WizardField {
             name: "project_id",
             label: "Project ID (optional if CLI is configured):",
-            placeholder: "",
-            required: false,
+            ..WizardField::DEFAULT
         },
         WizardField {
             name: "environment",
             label: "Environment (optional, default: dev):",
             placeholder: "dev",
-            required: false,
+            ..WizardField::DEFAULT
         },
         WizardField {
             name: "path",
             label: "Secret path (optional, default: /):",
             placeholder: "/",
-            required: false,
+            ..WizardField::DEFAULT
         },
     ],
 };

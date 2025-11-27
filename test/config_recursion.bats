@@ -3,6 +3,10 @@
 setup() {
 	load 'test_helper/common_setup'
 	_common_setup
+
+	# Config recursion tests need fnox to search parent directories,
+	# which requires FNOX_CONFIG_FILE to be unset
+	unset FNOX_CONFIG_FILE
 }
 
 teardown() {

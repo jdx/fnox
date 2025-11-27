@@ -20,18 +20,19 @@ Requires Vault address and token.",
             label: "Vault address:",
             placeholder: "https://vault.example.com:8200",
             required: true,
+            ..WizardField::DEFAULT
         },
         WizardField {
             name: "path",
             label: "Vault path prefix (optional):",
             placeholder: "secret/data/fnox",
-            required: false,
+            ..WizardField::DEFAULT
         },
         WizardField {
             name: "token",
             label: "Vault token (optional, can use VAULT_TOKEN env var):",
-            placeholder: "",
-            required: false,
+            sensitive: true,
+            ..WizardField::DEFAULT
         },
     ],
 };

@@ -21,12 +21,13 @@ Requires AWS credentials configured.",
             label: "AWS Region:",
             placeholder: "us-east-1",
             required: true,
+            ..WizardField::DEFAULT
         },
         WizardField {
             name: "prefix",
             label: "Parameter path prefix (optional):",
             placeholder: "/myapp/prod/",
-            required: false,
+            ..WizardField::DEFAULT
         },
     ],
 };

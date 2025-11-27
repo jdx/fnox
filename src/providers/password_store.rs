@@ -19,13 +19,12 @@ Initialize with: pass init <gpg-key-id>",
             name: "prefix",
             label: "Secret name prefix (optional):",
             placeholder: "fnox/",
-            required: false,
+            ..WizardField::DEFAULT
         },
         WizardField {
             name: "store_dir",
             label: "Custom store directory (optional):",
-            placeholder: "",
-            required: false,
+            ..WizardField::DEFAULT
         },
     ],
 };

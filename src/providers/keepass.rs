@@ -24,12 +24,12 @@ Set password via FNOX_KEEPASS_PASSWORD or KEEPASS_PASSWORD env var.",
             label: "Database path:",
             placeholder: "~/.config/fnox/secrets.kdbx",
             required: true,
+            ..WizardField::DEFAULT
         },
         WizardField {
             name: "keyfile",
             label: "Keyfile path (optional, for additional security):",
-            placeholder: "",
-            required: false,
+            ..WizardField::DEFAULT
         },
     ],
 };

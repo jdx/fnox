@@ -21,12 +21,13 @@ Requires Azure credentials configured.",
             label: "Key Vault URL:",
             placeholder: "https://my-vault.vault.azure.net/",
             required: true,
+            ..WizardField::DEFAULT
         },
         WizardField {
             name: "prefix",
             label: "Secret name prefix (optional):",
             placeholder: "fnox-",
-            required: false,
+            ..WizardField::DEFAULT
         },
     ],
 };
