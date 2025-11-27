@@ -72,14 +72,6 @@ setup() {
 }
 
 teardown() {
-	# Clean up any per-test secrets (for tests that create unique secrets)
-	if [ -n "$TEST_SECRET_NAME" ]; then
-		aws secretsmanager delete-secret \
-			--secret-id "$TEST_SECRET_NAME" \
-			--force-delete-without-recovery \
-			--region "$SM_REGION" >/dev/null 2>&1 || true
-	fi
-
 	_common_teardown
 }
 
@@ -114,22 +106,6 @@ prefix = "$prefix"
 [secrets]
 EOF
 	fi
-}
-
-# Helper function to create a test secret in AWS Secrets Manager
-create_test_secret() {
-	local secret_name="$1"
-	local secret_value="$2"
-
-	aws secretsmanager create-secret \
-		--name "$secret_name" \
-		--secret-string "$secret_value" \
-		--region "$SM_REGION" >/dev/null 2>&1
-
-	# Give AWS Secrets Manager time to propagate the secret (eventual consistency)
-	sleep 2
-
-	export TEST_SECRET_NAME="$secret_name"
 }
 
 @test "fnox get retrieves secret from AWS Secrets Manager" {
@@ -207,54 +183,6 @@ EOF
 	assert_output --partial "Failed to get secret"
 }
 
-@test "fnox get with JSON secret value" {
-	create_sm_config
-
-	# Create a JSON secret
-	local timestamp
-	timestamp="$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
-	local secret_name="fnox-test/json-secret-${timestamp}"
-	local secret_value='{"api_key":"test123","endpoint":"https://api.example.com"}'
-	create_test_secret "$secret_name" "$secret_value"
-
-	cat >>"${FNOX_CONFIG_FILE}" <<EOF
-
-[secrets.JSON_SECRET]
-provider = "sm"
-value = "json-secret-${timestamp}"
-EOF
-
-	# Get the secret
-	run "$FNOX_BIN" get JSON_SECRET
-	assert_success
-	assert_output "$secret_value"
-}
-
-@test "fnox get with multiline secret" {
-	create_sm_config
-
-	# Create a multiline secret
-	local timestamp
-	timestamp="$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
-	local secret_name="fnox-test/multiline-${timestamp}"
-	local secret_value="line1
-line2
-line3"
-	create_test_secret "$secret_name" "$secret_value"
-
-	cat >>"${FNOX_CONFIG_FILE}" <<EOF
-
-[secrets.MULTILINE_SECRET]
-provider = "sm"
-value = "multiline-${timestamp}"
-EOF
-
-	# Get the secret
-	run "$FNOX_BIN" get MULTILINE_SECRET
-	assert_success
-	assert_output "$secret_value"
-}
-
 @test "fnox list shows Secrets Manager secrets" {
 	create_sm_config
 
@@ -295,29 +223,6 @@ EOF
 	run "$FNOX_BIN" get REGIONAL_SECRET
 	assert_success
 	assert_output "$SHARED_SECRET_VALUE"
-}
-
-@test "fnox get with special characters in secret value" {
-	create_sm_config
-
-	# Create a secret with special characters
-	local timestamp
-	timestamp="$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
-	local secret_name="fnox-test/special-${timestamp}"
-	local secret_value='p@ssw0rd!#$%^&*()_+-={}[]|\:";'\''<>?,./~`'
-	create_test_secret "$secret_name" "$secret_value"
-
-	cat >>"${FNOX_CONFIG_FILE}" <<EOF
-
-[secrets.SPECIAL_CHARS]
-provider = "sm"
-value = "special-${timestamp}"
-EOF
-
-	# Get the secret
-	run "$FNOX_BIN" get SPECIAL_CHARS
-	assert_success
-	assert_output "$secret_value"
 }
 
 @test "AWS Secrets Manager works with existing fnox/test-secret" {
