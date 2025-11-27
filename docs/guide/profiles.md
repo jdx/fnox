@@ -104,6 +104,27 @@ aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp/" }
 DATABASE_URL = { provider = "aws", value = "database-url" }
 ```
 
+## Secret References in Provider Config
+
+Provider configuration properties can reference secrets using `{ secret = "NAME" }`. This enables bootstrap scenarios where provider credentials are themselves managed as secrets:
+
+```toml
+[providers.age]
+type = "age"
+recipients = ["age1..."]
+
+[providers.vault]
+type = "vault"
+address = "http://vault.example.com:8200"
+token = { secret = "VAULT_TOKEN" }  # Resolved from secrets or env var
+
+[secrets]
+VAULT_TOKEN = { provider = "age", value = "AGE-ENCRYPTED-TOKEN..." }
+DATABASE_URL = { provider = "vault", value = "database/creds/myapp" }
+```
+
+Resolution order: config secrets first, then environment variables. fnox detects circular dependencies and errors if found.
+
 ## List Profiles
 
 See all available profiles:
