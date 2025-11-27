@@ -15,31 +15,64 @@
 #       The mise task runs `fnox exec` which automatically decrypts provider-based secrets.
 #
 
-setup() {
-	load 'test_helper/common_setup'
-	_common_setup
+# File-level setup - runs once before all tests (reduces API calls)
+setup_file() {
+	export SM_REGION="us-east-1"
 
 	# Check if AWS credentials are available
 	if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-		skip "AWS credentials not available. Ensure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are configured."
+		export SKIP_AWS_SM_TESTS="AWS credentials not available. Ensure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are configured."
+		return
 	fi
 
 	# Check if aws CLI is installed
 	if ! command -v aws >/dev/null 2>&1; then
-		skip "AWS CLI not installed. Install with: brew install awscli"
+		export SKIP_AWS_SM_TESTS="AWS CLI not installed. Install with: brew install awscli"
+		return
 	fi
 
-	# Set the region
-	export SM_REGION="us-east-1"
-
-	# Verify we can access Secrets Manager
+	# Verify we can access Secrets Manager (expensive call - do once)
 	if ! aws secretsmanager list-secrets --region "$SM_REGION" --max-results 1 >/dev/null 2>&1; then
-		skip "Cannot access AWS Secrets Manager. Permissions may be insufficient."
+		export SKIP_AWS_SM_TESTS="Cannot access AWS Secrets Manager. Permissions may be insufficient."
+		return
+	fi
+
+	# Create a shared test secret for reuse across multiple tests
+	# This reduces API calls vs creating/deleting per test
+	export SHARED_SECRET_NAME="fnox-test/shared-test-$$"
+	export SHARED_SECRET_VALUE="shared-test-value-for-fnox"
+	aws secretsmanager create-secret \
+		--name "$SHARED_SECRET_NAME" \
+		--secret-string "$SHARED_SECRET_VALUE" \
+		--region "$SM_REGION" >/dev/null 2>&1
+
+	# Wait for propagation (eventual consistency)
+	sleep 2
+}
+
+# File-level teardown - runs once after all tests
+teardown_file() {
+	# Clean up shared test secret
+	if [ -n "$SHARED_SECRET_NAME" ]; then
+		aws secretsmanager delete-secret \
+			--secret-id "$SHARED_SECRET_NAME" \
+			--force-delete-without-recovery \
+			--region "$SM_REGION" >/dev/null 2>&1 || true
+	fi
+}
+
+setup() {
+	load 'test_helper/common_setup'
+	_common_setup
+
+	# Skip if file-level setup determined we can't run
+	if [ -n "$SKIP_AWS_SM_TESTS" ]; then
+		skip "$SKIP_AWS_SM_TESTS"
 	fi
 }
 
 teardown() {
-	# Clean up any test secrets created during tests
+	# Clean up any per-test secrets (for tests that create unique secrets)
 	if [ -n "$TEST_SECRET_NAME" ]; then
 		aws secretsmanager delete-secret \
 			--secret-id "$TEST_SECRET_NAME" \
@@ -102,73 +135,60 @@ create_test_secret() {
 @test "fnox get retrieves secret from AWS Secrets Manager" {
 	create_sm_config
 
-	# Create a test secret
-	local timestamp
-	timestamp="$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
-	local secret_name="fnox-test/test-secret-${timestamp}"
-	local secret_value="my-test-secret-value"
-	create_test_secret "$secret_name" "$secret_value"
+	# Use the shared test secret (created in setup_file)
+	# Extract the suffix after "fnox-test/" prefix
+	local secret_suffix="${SHARED_SECRET_NAME#fnox-test/}"
 
 	# Add secret reference to config (using just the name without prefix)
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.SM_TEST]
 provider = "sm"
-value = "test-secret-${timestamp}"
+value = "${secret_suffix}"
 EOF
 
 	# Get the secret
 	run "$FNOX_BIN" get SM_TEST
 	assert_success
-	assert_output "$secret_value"
+	assert_output "$SHARED_SECRET_VALUE"
 }
 
 @test "fnox get with prefix prepends prefix to secret name" {
 	create_sm_config "us-east-1" "fnox-test/"
 
-	# Create a test secret with full path
-	local timestamp
-	timestamp="$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
-	local secret_name="fnox-test/prefixed-${timestamp}"
-	local secret_value="value-with-prefix"
-	create_test_secret "$secret_name" "$secret_value"
+	# Use the shared test secret (created in setup_file)
+	# Extract the suffix after "fnox-test/" prefix
+	local secret_suffix="${SHARED_SECRET_NAME#fnox-test/}"
 
-	# Add secret reference using just the suffix
+	# Add secret reference using just the suffix (prefix will be prepended)
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.PREFIXED_SECRET]
 provider = "sm"
-value = "prefixed-${timestamp}"
+value = "${secret_suffix}"
 EOF
 
 	# Get the secret
 	run "$FNOX_BIN" get PREFIXED_SECRET
 	assert_success
-	assert_output "$secret_value"
+	assert_output "$SHARED_SECRET_VALUE"
 }
 
 @test "fnox get without prefix uses full secret name" {
 	create_sm_config "us-east-1" ""
 
-	# Create a test secret without prefix
-	local timestamp
-	timestamp="$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
-	local secret_name="fnox-full-name-${timestamp}"
-	local secret_value="value-no-prefix"
-	create_test_secret "$secret_name" "$secret_value"
-
-	# Add secret reference
+	# Use existing fnox/test-secret (no prefix, so full path required)
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.FULL_NAME_SECRET]
 provider = "sm"
-value = "$secret_name"
+value = "fnox/test-secret"
 EOF
 
 	# Get the secret
 	run "$FNOX_BIN" get FULL_NAME_SECRET
 	assert_success
-	assert_output "$secret_value"
+	assert_output "This is a test secret in AWS Secrets Manager!"
 }
 
 @test "fnox get fails with non-existent secret" {
@@ -261,24 +281,20 @@ EOF
 @test "fnox get respects region configuration" {
 	create_sm_config "us-east-1"
 
-	# Create a secret in the specified region
-	local timestamp
-	timestamp="$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
-	local secret_name="fnox-test/regional-${timestamp}"
-	local secret_value="region-specific-value"
-	create_test_secret "$secret_name" "$secret_value"
+	# Use the shared test secret to verify region config works
+	local secret_suffix="${SHARED_SECRET_NAME#fnox-test/}"
 
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.REGIONAL_SECRET]
 provider = "sm"
-value = "regional-${timestamp}"
+value = "${secret_suffix}"
 EOF
 
 	# Get the secret
 	run "$FNOX_BIN" get REGIONAL_SECRET
 	assert_success
-	assert_output "$secret_value"
+	assert_output "$SHARED_SECRET_VALUE"
 }
 
 @test "fnox get with special characters in secret value" {
