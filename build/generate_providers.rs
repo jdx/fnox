@@ -314,26 +314,12 @@ fn generate_resolved_variant_fields(provider: &ProviderToml) -> Vec<TokenStream>
 fn generate_provider_methods(
     providers: &[(String, ProviderToml)],
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let mut has_secret_refs_arms = Vec::new();
     let mut try_to_resolved_arms = Vec::new();
     let mut from_wizard_fields_arms = Vec::new();
 
     for (_name, provider) in providers {
         let variant = Ident::new(&provider.rust_variant, Span::call_site());
         let serde_rename = &provider.serde_rename;
-
-        // has_secret_refs arm
-        let has_ref_body = generate_has_secret_refs_body(provider);
-        if provider.fields.is_empty() {
-            has_secret_refs_arms.push(quote! {
-                Self::#variant => false
-            });
-        } else {
-            let field_patterns = generate_field_patterns(provider);
-            has_secret_refs_arms.push(quote! {
-                Self::#variant { #(#field_patterns),* } => { #has_ref_body }
-            });
-        }
 
         // try_to_resolved arm
         let try_resolved_body = generate_try_to_resolved_body(provider);
@@ -369,13 +355,6 @@ fn generate_provider_methods(
             /// Get the provider type name (e.g., "age", "1password", "plain")
             pub fn provider_type(&self) -> &str {
                 self.as_ref()
-            }
-
-            /// Check if this config has any secret references that need resolution.
-            pub fn has_secret_refs(&self) -> bool {
-                match self {
-                    #(#has_secret_refs_arms),*
-                }
             }
 
             /// Convert to ResolvedProviderConfig if all values are literals.
@@ -481,30 +460,6 @@ fn generate_field_patterns(provider: &ProviderToml) -> Vec<TokenStream> {
             }
         })
         .collect()
-}
-
-fn generate_has_secret_refs_body(provider: &ProviderToml) -> TokenStream {
-    let mut checks = Vec::new();
-
-    for (name, field) in &provider.fields {
-        let local_name = local_var_name(name);
-        let local_ident = Ident::new(&local_name, Span::call_site());
-        match field.typ.as_str() {
-            "required" => {
-                checks.push(quote! { #local_ident.is_secret_ref() });
-            }
-            "optional" => {
-                checks.push(quote! { #local_ident.has_secret_ref() });
-            }
-            _ => {}
-        }
-    }
-
-    if checks.is_empty() {
-        quote! { false }
-    } else {
-        quote! { #(#checks)||* }
-    }
 }
 
 fn generate_try_to_resolved_body(provider: &ProviderToml) -> TokenStream {

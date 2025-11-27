@@ -31,11 +31,13 @@ pub enum StringOrSecretRef {
 
 impl StringOrSecretRef {
     /// Returns true if this is a secret reference
+    #[cfg(test)]
     pub fn is_secret_ref(&self) -> bool {
         matches!(self, Self::SecretRef { .. })
     }
 
     /// Returns the secret name if this is a secret reference
+    #[cfg(test)]
     pub fn secret_name(&self) -> Option<&str> {
         match self {
             Self::SecretRef { secret } => Some(secret),
@@ -120,19 +122,13 @@ impl OptionStringOrSecretRef {
         Self(Some(StringOrSecretRef::Literal(s.into())))
     }
 
-    /// Creates a new optional value with a secret reference
-    pub fn secret_ref(name: impl Into<String>) -> Self {
-        Self(Some(StringOrSecretRef::SecretRef {
-            secret: name.into(),
-        }))
-    }
-
     /// Returns true if this is None
     pub fn is_none(&self) -> bool {
         self.0.is_none()
     }
 
     /// Returns true if this is Some
+    #[cfg(test)]
     pub fn is_some(&self) -> bool {
         self.0.is_some()
     }
@@ -143,16 +139,22 @@ impl OptionStringOrSecretRef {
     }
 
     /// Returns true if this contains a secret reference
+    #[cfg(test)]
     pub fn has_secret_ref(&self) -> bool {
-        self.0.as_ref().is_some_and(|v| v.is_secret_ref())
+        matches!(self.0, Some(StringOrSecretRef::SecretRef { .. }))
     }
 
     /// Returns the secret name if this is a secret reference
+    #[cfg(test)]
     pub fn secret_name(&self) -> Option<&str> {
-        self.0.as_ref().and_then(|v| v.secret_name())
+        match &self.0 {
+            Some(StringOrSecretRef::SecretRef { secret }) => Some(secret),
+            _ => None,
+        }
     }
 
     /// Returns the literal value if this is a literal
+    #[cfg(test)]
     pub fn as_literal(&self) -> Option<&str> {
         self.0.as_ref().and_then(|v| v.as_literal())
     }
