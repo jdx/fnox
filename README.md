@@ -42,30 +42,30 @@ Your `fnox.toml` config file either contains encrypted secrets or references to 
 
 ### 🔐 Encryption (secrets in git, encrypted)
 
-- **age** - Modern encryption (works with SSH keys!)
-- **aws-kms** - AWS Key Management Service
-- **azure-kms** - Azure Key Vault encryption
-- **gcp-kms** - Google Cloud KMS
+- [**age**](https://fnox.jdx.dev/providers/age) - Modern encryption (works with SSH keys!)
+- [**aws-kms**](https://fnox.jdx.dev/providers/aws-kms) - AWS Key Management Service
+- [**azure-kms**](https://fnox.jdx.dev/providers/azure-kms) - Azure Key Vault encryption
+- [**gcp-kms**](https://fnox.jdx.dev/providers/gcp-kms) - Google Cloud KMS
 
 ### ☁️ Cloud Secret Storage (remote, centralized)
 
-- **aws-sm** - AWS Secrets Manager
-- **azure-sm** - Azure Key Vault Secrets
-- **gcp-sm** - Google Cloud Secret Manager
-- **vault** - HashiCorp Vault
+- [**aws-sm**](https://fnox.jdx.dev/providers/aws-sm) - AWS Secrets Manager
+- [**azure-sm**](https://fnox.jdx.dev/providers/azure-sm) - Azure Key Vault Secrets
+- [**gcp-sm**](https://fnox.jdx.dev/providers/gcp-sm) - Google Cloud Secret Manager
+- [**vault**](https://fnox.jdx.dev/providers/vault) - HashiCorp Vault
 
 ### 🔑 Password Managers & Secret Services
 
-- **1password** - 1Password CLI
-- **bitwarden** - Bitwarden/Vaultwarden
-- **infisical** - Infisical secrets management
+- [**1password**](https://fnox.jdx.dev/providers/1password) - 1Password CLI
+- [**bitwarden**](https://fnox.jdx.dev/providers/bitwarden) - Bitwarden/Vaultwarden
+- [**infisical**](https://fnox.jdx.dev/providers/infisical) - Infisical secrets management
 
 ### 💻 Local Storage
 
-- **keychain** - OS Keychain (macOS/Windows/Linux)
-- **keepass** - KeePass database files (.kdbx)
-- **password-store** - GPG-encrypted password store (Unix pass)
-- **plain** - Plain text (for defaults only!)
+- [**keychain**](https://fnox.jdx.dev/providers/keychain) - OS Keychain (macOS/Windows/Linux)
+- [**keepass**](https://fnox.jdx.dev/providers/keepass) - KeePass database files (.kdbx)
+- [**password-store**](https://fnox.jdx.dev/providers/password-store) - GPG-encrypted password store (Unix pass)
+- [**plain**](https://fnox.jdx.dev/providers/plain) - Plain text (for defaults only!)
 
 ## Documentation
 
