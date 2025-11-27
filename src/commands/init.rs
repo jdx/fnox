@@ -43,15 +43,16 @@ impl InitCommand {
 
         // Create parent directory if it doesn't exist (for global config)
         if self.global
-            && let Some(parent) = config_path.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| {
-                    FnoxError::Config(format!(
-                        "Failed to create config directory '{}': {}",
-                        parent.display(),
-                        e
-                    ))
-                })?;
-            }
+            && let Some(parent) = config_path.parent()
+        {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                FnoxError::Config(format!(
+                    "Failed to create config directory '{}': {}",
+                    parent.display(),
+                    e
+                ))
+            })?;
+        }
 
         let config = if self.skip_wizard || !atty::is(atty::Stream::Stdin) {
             // Non-interactive mode
