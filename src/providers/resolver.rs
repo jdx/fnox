@@ -44,9 +44,10 @@ impl ResolutionContext {
     }
 
     /// Pop a provider from the resolution stack
-    pub fn pop(&mut self, provider_name: &str) {
-        self.provider_stack.remove(provider_name);
-        self.resolution_path.pop();
+    pub fn pop(&mut self) {
+        if let Some(provider_name) = self.resolution_path.pop() {
+            self.provider_stack.remove(&provider_name);
+        }
     }
 
     /// Get the current resolution path as a string for error messages
@@ -117,7 +118,7 @@ pub fn resolve_provider_config_with_context<'a>(
         .await;
 
         // Pop from resolution stack (always runs, even on error)
-        ctx.pop(provider_name);
+        ctx.pop();
 
         result
     })
@@ -245,11 +246,11 @@ mod tests {
         assert!(ctx.is_resolving("provider_a"));
         assert!(ctx.is_resolving("provider_b"));
 
-        ctx.pop("provider_b");
+        ctx.pop();
         assert!(ctx.is_resolving("provider_a"));
         assert!(!ctx.is_resolving("provider_b"));
 
-        ctx.pop("provider_a");
+        ctx.pop();
         assert!(!ctx.is_resolving("provider_a"));
     }
 
