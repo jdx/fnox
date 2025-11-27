@@ -220,13 +220,6 @@ When fnox encounters `{ secret = "NAME" }` in a provider config:
 2. **Config secret**: Look up `NAME` in the `[secrets]` section and resolve via its provider
 3. **Error**: If neither is available, return an error
 
-#### Supported Fields
-
-| Provider  | Field      | Description                          |
-| --------- | ---------- | ------------------------------------ |
-| `vault`   | `token`    | HashiCorp Vault authentication token |
-| `keepass` | `password` | KeePass database password            |
-
 #### Bootstrap Providers
 
 Secrets referenced in provider configs must use "bootstrap" providers—providers that don't themselves require secret references:

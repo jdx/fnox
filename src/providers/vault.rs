@@ -32,10 +32,34 @@ Requires Vault address and token.",
             name: "token",
             label: "Vault token (optional, can use VAULT_TOKEN env var):",
             sensitive: true,
+            default_secret_name: Some("VAULT_TOKEN"),
             ..WizardField::DEFAULT
         },
     ],
 };
+
+use crate::config::{Config, ConfigValue};
+
+/// Create a HashiCorpVaultProvider with resolved config values.
+///
+/// This resolves any secret references in the token field before
+/// creating the provider.
+pub async fn new_resolved(
+    address: String,
+    path: Option<String>,
+    token: &Option<ConfigValue>,
+    config: &Config,
+    profile: &str,
+) -> Result<HashiCorpVaultProvider> {
+    use crate::config_resolver::resolve_config_value_optional;
+    let resolved_token = resolve_config_value_optional(token, config, profile).await?;
+    Ok(HashiCorpVaultProvider::new(address, path, resolved_token))
+}
+
+/// Check if the given token config contains a secret reference.
+pub fn has_secret_ref(token: &Option<ConfigValue>) -> bool {
+    token.as_ref().is_some_and(|t| !t.is_plain())
+}
 
 pub struct HashiCorpVaultProvider {
     address: String,

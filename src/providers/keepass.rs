@@ -34,6 +34,29 @@ Set password via FNOX_KEEPASS_PASSWORD or KEEPASS_PASSWORD env var.",
     ],
 };
 
+use crate::config::{Config, ConfigValue};
+
+/// Create a KeePassProvider with resolved config values.
+///
+/// This resolves any secret references in the password field before
+/// creating the provider.
+pub async fn new_resolved(
+    database: String,
+    keyfile: Option<String>,
+    password: &Option<ConfigValue>,
+    config: &Config,
+    profile: &str,
+) -> Result<KeePassProvider> {
+    use crate::config_resolver::resolve_config_value_optional;
+    let resolved_password = resolve_config_value_optional(password, config, profile).await?;
+    Ok(KeePassProvider::new(database, keyfile, resolved_password))
+}
+
+/// Check if the given password config contains a secret reference.
+pub fn has_secret_ref(password: &Option<ConfigValue>) -> bool {
+    password.as_ref().is_some_and(|p| !p.is_plain())
+}
+
 /// Provider that reads and writes secrets from KeePass database files (.kdbx)
 pub struct KeePassProvider {
     database_path: PathBuf,

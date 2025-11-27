@@ -98,6 +98,9 @@ pub struct WizardField {
     /// Whether field contains sensitive data (like tokens/passwords)
     /// Sensitive fields should be stored as secret references, not plain values
     pub sensitive: bool,
+    /// Suggested secret name for sensitive fields (e.g., "VAULT_TOKEN")
+    /// Used by the wizard to suggest a default when prompting for secret references
+    pub default_secret_name: Option<&'static str>,
 }
 
 impl WizardField {
@@ -109,6 +112,7 @@ impl WizardField {
         placeholder: "",
         required: false,
         sensitive: false,
+        default_secret_name: None,
     };
 }
 
@@ -391,7 +395,10 @@ impl ProviderConfig {
             .collect()
     }
 
-    /// Build a ProviderConfig from wizard field values
+    /// Build a ProviderConfig from wizard field values.
+    ///
+    /// Fields with the prefix `@secret:` are treated as secret references.
+    /// For example, `@secret:VAULT_TOKEN` becomes `{ secret = "VAULT_TOKEN" }`.
     pub fn from_wizard_fields(
         provider_type: &str,
         fields: &HashMap<String, String>,
@@ -410,6 +417,21 @@ impl ProviderConfig {
         // Helper to get an optional field
         let get_optional =
             |name: &str| -> Option<String> { fields.get(name).filter(|s| !s.is_empty()).cloned() };
+
+        // Helper to parse an optional ConfigValue, handling @secret: prefix for secret references
+        let get_config_value = |name: &str| -> Option<ConfigValue> {
+            fields.get(name).and_then(|s| {
+                if s.is_empty() {
+                    None
+                } else if let Some(secret_name) = s.strip_prefix("@secret:") {
+                    Some(ConfigValue::SecretRef(crate::config::SecretRef {
+                        secret: secret_name.to_string(),
+                    }))
+                } else {
+                    Some(ConfigValue::Plain(s.clone()))
+                }
+            })
+        };
 
         match provider_type {
             "plain" => Ok(ProviderConfig::Plain),
@@ -475,7 +497,7 @@ impl ProviderConfig {
             "vault" => Ok(ProviderConfig::HashiCorpVault {
                 address: get_required("address")?,
                 path: get_optional("path"),
-                token: get_optional("token").map(ConfigValue::Plain),
+                token: get_config_value("token"),
             }),
             "keychain" => Ok(ProviderConfig::Keychain {
                 service: get_required("service")?,
@@ -485,6 +507,19 @@ impl ProviderConfig {
                 "Unknown provider type: {}",
                 provider_type
             ))),
+        }
+    }
+
+    /// Check if this provider config has any secret references.
+    ///
+    /// Returns true if any field in the config is a ConfigValue::SecretRef.
+    pub fn has_secret_refs(&self) -> bool {
+        match self {
+            // Delegate to provider modules for provider-specific logic
+            ProviderConfig::HashiCorpVault { token, .. } => vault::has_secret_ref(token),
+            ProviderConfig::KeePass { password, .. } => keepass::has_secret_ref(password),
+            // All other providers don't have ConfigValue fields
+            _ => false,
         }
     }
 }
@@ -655,35 +690,23 @@ pub async fn get_provider_resolved(
     config: &crate::config::Config,
     profile: &str,
 ) -> Result<Box<dyn Provider>> {
-    use crate::config_resolver::resolve_config_value_optional;
-
     match provider_config {
-        // Providers with ConfigValue fields that need resolution
+        // Providers with ConfigValue fields that need resolution - delegate to provider modules
         ProviderConfig::HashiCorpVault {
             address,
             path,
             token,
-        } => {
-            let resolved_token = resolve_config_value_optional(token, config, profile).await?;
-            Ok(Box::new(vault::HashiCorpVaultProvider::new(
-                address.clone(),
-                path.clone(),
-                resolved_token,
-            )))
-        }
+        } => Ok(Box::new(
+            vault::new_resolved(address.clone(), path.clone(), token, config, profile).await?,
+        )),
         ProviderConfig::KeePass {
             database,
             keyfile,
             password,
-        } => {
-            let resolved_password =
-                resolve_config_value_optional(password, config, profile).await?;
-            Ok(Box::new(keepass::KeePassProvider::new(
-                database.clone(),
-                keyfile.clone(),
-                resolved_password,
-            )))
-        }
+        } => Ok(Box::new(
+            keepass::new_resolved(database.clone(), keyfile.clone(), password, config, profile)
+                .await?,
+        )),
         // All other providers don't have ConfigValue fields, delegate to get_provider
         _ => get_provider(provider_config),
     }

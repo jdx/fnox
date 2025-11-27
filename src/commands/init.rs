@@ -220,17 +220,52 @@ impl InitCommand {
         Err(FnoxError::Config("Unknown provider".to_string()))
     }
 
-    /// Collect field values from the user
+    /// Collect field values from the user.
+    ///
+    /// For sensitive fields, prompts to set up a secret reference instead of storing
+    /// the value directly. Secret references are returned with the prefix "@secret:"
+    /// (e.g., "@secret:VAULT_TOKEN").
     fn collect_fields(&self, info: &WizardInfo) -> Result<HashMap<String, String>> {
         let mut fields = HashMap::new();
 
         for field in info.fields {
-            // Skip sensitive fields - they should be configured via env vars or secret refs
             if field.sensitive {
-                println!(
-                    "  ⚠️  Skipping '{}' - configure via environment variable or secret reference",
+                // Prompt for secret reference setup
+                let default_name = field.default_secret_name.unwrap_or("SECRET_NAME");
+                let setup_ref = Confirm::new(format!(
+                    "Would you like to set up a secret reference for '{}'?",
                     field.name
-                );
+                ))
+                .affirmative("Yes")
+                .negative("No, skip for now")
+                .run()
+                .unwrap_or(false);
+
+                if setup_ref {
+                    let secret_name = Input::new("Secret name for reference:")
+                        .placeholder(default_name)
+                        .run()
+                        .map(|s| {
+                            if s.is_empty() {
+                                default_name.to_string()
+                            } else {
+                                s
+                            }
+                        })
+                        .map_err(|e| FnoxError::Config(format!("Wizard cancelled: {}", e)))?;
+
+                    // Store with @secret: prefix to indicate this is a secret reference
+                    fields.insert(field.name.to_string(), format!("@secret:{}", secret_name));
+                    println!(
+                        "  → Will use secret reference: {{ secret = \"{}\" }}",
+                        secret_name
+                    );
+                } else {
+                    println!(
+                        "  ⚠️  Skipping '{}' - configure via environment variable or secret reference later",
+                        field.name
+                    );
+                }
                 continue;
             }
 

@@ -6,7 +6,7 @@
 use crate::config::{Config, ConfigValue, SecretConfig};
 use crate::env;
 use crate::error::{FnoxError, Result};
-use crate::providers::{self, ProviderConfig};
+use crate::providers;
 
 /// Resolve a ConfigValue to a plain string.
 ///
@@ -126,7 +126,7 @@ async fn resolve_secret_for_provider_config(
             })?;
 
     // Ensure this is a bootstrap provider (no secret refs in its config)
-    if has_secret_refs(provider_config) {
+    if provider_config.has_secret_refs() {
         return Err(FnoxError::Config(format!(
             "Cannot resolve secret '{}': provider '{}' has secret references in its config. \
             Secrets used in provider configurations must use bootstrap providers \
@@ -146,20 +146,4 @@ async fn resolve_secret_for_provider_config(
         provider_name
     );
     Ok(value)
-}
-
-/// Check if a provider config has any secret references.
-///
-/// Returns true if any field in the config is a ConfigValue::SecretRef.
-pub fn has_secret_refs(config: &ProviderConfig) -> bool {
-    match config {
-        ProviderConfig::HashiCorpVault { token, .. } => {
-            token.as_ref().is_some_and(|t| !t.is_plain())
-        }
-        ProviderConfig::KeePass { password, .. } => {
-            password.as_ref().is_some_and(|p| !p.is_plain())
-        }
-        // All other providers don't have ConfigValue fields
-        _ => false,
-    }
 }
