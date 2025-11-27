@@ -1,8 +1,40 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
+use crate::providers::{WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use std::process::Command;
 use std::sync::LazyLock;
+
+pub const WIZARD_INFO: WizardInfo = WizardInfo {
+    provider_type: "vault",
+    display_name: "HashiCorp Vault",
+    description: "HashiCorp Vault",
+    category: WizardCategory::CloudSecretsManager,
+    setup_instructions: "\
+Stores secrets in HashiCorp Vault.
+Requires Vault address and token.",
+    default_name: "vault",
+    fields: &[
+        WizardField {
+            name: "address",
+            label: "Vault address:",
+            placeholder: "https://vault.example.com:8200",
+            required: true,
+        },
+        WizardField {
+            name: "path",
+            label: "Vault path prefix (optional):",
+            placeholder: "secret/data/fnox",
+            required: false,
+        },
+        WizardField {
+            name: "token",
+            label: "Vault token (optional, can use VAULT_TOKEN env var):",
+            placeholder: "",
+            required: false,
+        },
+    ],
+};
 
 pub struct HashiCorpVaultProvider {
     address: String,

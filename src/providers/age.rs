@@ -1,8 +1,26 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
+use crate::providers::{WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use std::io::Read;
 use std::path::PathBuf;
+
+pub const WIZARD_INFO: WizardInfo = WizardInfo {
+    provider_type: "age",
+    display_name: "Age encryption",
+    description: "Modern encryption tool - encrypts values with age keys",
+    category: WizardCategory::Local,
+    setup_instructions: "\
+Age uses public/private key pairs for encryption.
+Generate a key with: age-keygen -o ~/.config/fnox/age.txt",
+    default_name: "age",
+    fields: &[WizardField {
+        name: "recipient",
+        label: "Age public key (recipient):",
+        placeholder: "age1...",
+        required: true,
+    }],
+};
 
 pub struct AgeEncryptionProvider {
     recipients: Vec<String>,

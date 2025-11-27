@@ -1,8 +1,35 @@
 use crate::error::{FnoxError, Result};
+use crate::providers::{WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
 use aws_sdk_ssm::Client;
 use std::collections::HashMap;
+
+pub const WIZARD_INFO: WizardInfo = WizardInfo {
+    provider_type: "aws-ps",
+    display_name: "AWS Parameter Store",
+    description: "AWS Systems Manager Parameter Store",
+    category: WizardCategory::CloudSecretsManager,
+    setup_instructions: "\
+Stores secrets in AWS Systems Manager Parameter Store.
+Uses SecureString parameters for encryption.
+Requires AWS credentials configured.",
+    default_name: "ps",
+    fields: &[
+        WizardField {
+            name: "region",
+            label: "AWS Region:",
+            placeholder: "us-east-1",
+            required: true,
+        },
+        WizardField {
+            name: "prefix",
+            label: "Parameter path prefix (optional):",
+            placeholder: "/myapp/prod/",
+            required: false,
+        },
+    ],
+};
 
 pub struct AwsParameterStoreProvider {
     region: String,

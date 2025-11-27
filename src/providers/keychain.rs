@@ -1,6 +1,34 @@
 use crate::error::{FnoxError, Result};
+use crate::providers::{WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use keyring::Entry;
+
+pub const WIZARD_INFO: WizardInfo = WizardInfo {
+    provider_type: "keychain",
+    display_name: "OS Keychain",
+    description: "Use your operating system's secure keychain",
+    category: WizardCategory::OsKeychain,
+    setup_instructions: "\
+Uses your operating system's secure keychain:
+  - macOS: Keychain Access
+  - Windows: Credential Manager
+  - Linux: Secret Service (GNOME Keyring, KWallet)",
+    default_name: "keychain",
+    fields: &[
+        WizardField {
+            name: "service",
+            label: "Service name (namespace for your secrets):",
+            placeholder: "fnox",
+            required: true,
+        },
+        WizardField {
+            name: "prefix",
+            label: "Secret name prefix (optional):",
+            placeholder: "myapp/",
+            required: false,
+        },
+    ],
+};
 
 pub struct KeychainProvider {
     service: String,

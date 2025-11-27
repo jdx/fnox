@@ -1,9 +1,43 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
+use crate::providers::{WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::process::Command;
 use std::sync::{LazyLock, Mutex};
+
+pub const WIZARD_INFO: WizardInfo = WizardInfo {
+    provider_type: "infisical",
+    display_name: "Infisical",
+    description: "Cloud secrets manager with Universal Auth",
+    category: WizardCategory::PasswordManager,
+    setup_instructions: "\
+Requires: Infisical CLI and Universal Auth credentials.
+Set credentials:
+  export INFISICAL_CLIENT_ID=<client-id>
+  export INFISICAL_CLIENT_SECRET=<client-secret>",
+    default_name: "infisical",
+    fields: &[
+        WizardField {
+            name: "project_id",
+            label: "Project ID (optional if CLI is configured):",
+            placeholder: "",
+            required: false,
+        },
+        WizardField {
+            name: "environment",
+            label: "Environment (optional, default: dev):",
+            placeholder: "dev",
+            required: false,
+        },
+        WizardField {
+            name: "path",
+            label: "Secret path (optional, default: /):",
+            placeholder: "/",
+            required: false,
+        },
+    ],
+};
 
 pub struct InfisicalProvider {
     project_id: Option<String>,

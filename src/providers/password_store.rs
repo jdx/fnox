@@ -1,8 +1,34 @@
 use crate::error::{FnoxError, Result};
-use crate::providers::ProviderCapability;
+use crate::providers::{ProviderCapability, WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use std::process::Command;
 use std::sync::LazyLock;
+
+pub const WIZARD_INFO: WizardInfo = WizardInfo {
+    provider_type: "password-store",
+    display_name: "Password-Store (pass)",
+    description: "GPG-encrypted password store - the standard Unix password manager",
+    category: WizardCategory::Local,
+    setup_instructions: "\
+Uses GPG-encrypted files in ~/.password-store/.
+Requires: pass CLI and a GPG key configured.
+Initialize with: pass init <gpg-key-id>",
+    default_name: "pass",
+    fields: &[
+        WizardField {
+            name: "prefix",
+            label: "Secret name prefix (optional):",
+            placeholder: "fnox/",
+            required: false,
+        },
+        WizardField {
+            name: "store_dir",
+            label: "Custom store directory (optional):",
+            placeholder: "",
+            required: false,
+        },
+    ],
+};
 
 /// Provider that integrates with password-store (pass) CLI tool
 pub struct PasswordStoreProvider {

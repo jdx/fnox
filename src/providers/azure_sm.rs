@@ -1,9 +1,35 @@
 use crate::error::{FnoxError, Result};
+use crate::providers::{WizardCategory, WizardField, WizardInfo};
 use async_trait::async_trait;
 use azure_core::auth::TokenCredential;
 use azure_identity::{DefaultAzureCredential, TokenCredentialOptions};
 use azure_security_keyvault::SecretClient;
 use std::sync::Arc;
+
+pub const WIZARD_INFO: WizardInfo = WizardInfo {
+    provider_type: "azure-sm",
+    display_name: "Azure Key Vault Secrets",
+    description: "Azure Key Vault secret storage",
+    category: WizardCategory::CloudSecretsManager,
+    setup_instructions: "\
+Stores secrets in Azure Key Vault.
+Requires Azure credentials configured.",
+    default_name: "azure-sm",
+    fields: &[
+        WizardField {
+            name: "vault_url",
+            label: "Key Vault URL:",
+            placeholder: "https://my-vault.vault.azure.net/",
+            required: true,
+        },
+        WizardField {
+            name: "prefix",
+            label: "Secret name prefix (optional):",
+            placeholder: "fnox-",
+            required: false,
+        },
+    ],
+};
 
 pub struct AzureSecretsManagerProvider {
     vault_url: String,
