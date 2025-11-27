@@ -225,12 +225,18 @@ impl Config {
             found = true;
         }
 
-        // If this config marks root, stop recursion
+        // If this config marks root, stop recursion but still load global config
         if config.root {
             // Load imports if any
             for import_path in &config.import.clone() {
                 let import_config = Self::load_import(import_path, dir)?;
                 config = Self::merge_configs(import_config, config)?;
+            }
+            // Load global config as the base even for root configs
+            let (global_config, global_found) = Self::load_global()?;
+            if global_found {
+                config = Self::merge_configs(global_config, config)?;
+                found = true;
             }
             return Ok((config, found));
         }
@@ -246,9 +252,33 @@ impl Config {
             let (parent_config, parent_found) = Self::load_recursive(parent_dir, true, found)?;
             config = Self::merge_configs(parent_config, config)?;
             found = found || parent_found;
+        } else {
+            // At the filesystem root, try to load global config as base
+            let (global_config, global_found) = Self::load_global()?;
+            if global_found {
+                config = Self::merge_configs(global_config, config)?;
+                found = true;
+            }
         }
 
         Ok((config, found))
+    }
+
+    /// Load global configuration from FNOX_CONFIG_DIR/config.toml
+    /// This is the lowest priority config, overridden by all project-level configs
+    fn load_global() -> Result<(Self, bool)> {
+        let global_config_path = env::FNOX_CONFIG_DIR.join("config.toml");
+
+        if global_config_path.exists() {
+            tracing::debug!(
+                "Loading global config from {}",
+                global_config_path.display()
+            );
+            let config = Self::load(&global_config_path)?;
+            Ok((config, true))
+        } else {
+            Ok((Self::new(), false))
+        }
     }
 
     /// Load an imported config file

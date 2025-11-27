@@ -213,6 +213,7 @@ mise run test:bats -- test/infisical.bats
 - Named profiles in `[profiles.name]` sections
 - Each profile can have its own providers and encryption
 - Environment variable: `FNOX_PROFILE`
+- Global config: `~/.config/fnox/config.toml` for machine-wide secrets (e.g., AWS credentials)
 - Local overrides: `fnox.local.toml` (gitignored) is loaded alongside `fnox.toml` and takes precedence
 - Profile-specific config files: `fnox.$FNOX_PROFILE.toml` (e.g., `fnox.production.toml`, `fnox.staging.toml`)
 - Config recursion: searches parent directories for `fnox.toml` files
@@ -220,9 +221,13 @@ mise run test:bats -- test/infisical.bats
 
 **Config file loading order (later files override earlier ones):**
 
-1. `fnox.toml` (base config)
-2. `fnox.$FNOX_PROFILE.toml` (profile-specific config, if `FNOX_PROFILE` is set and not "default")
-3. `fnox.local.toml` (local overrides)
+1. `~/.config/fnox/config.toml` (global config - lowest priority, machine-wide secrets)
+2. Parent directory configs (via recursion, closer directories take precedence)
+3. `fnox.toml` (project config)
+4. `fnox.$FNOX_PROFILE.toml` (profile-specific config, if `FNOX_PROFILE` is set and not "default")
+5. `fnox.local.toml` (local overrides - highest priority)
+
+**Global config**: The global config file at `~/.config/fnox/config.toml` (or `FNOX_CONFIG_DIR/config.toml`) is loaded as the base for all projects. This is useful for machine-wide secrets like AWS credentials that you want available in all projects. Project-level configs always override global config. The global config is loaded even when `root = true` is set in a project config.
 
 Note: Profile-specific config files (`fnox.$FNOX_PROFILE.toml`) work with the default profile's secrets, not `[profiles.xxx]` sections. They're useful for environment-specific overrides that you want to commit to version control, while `fnox.local.toml` is for machine-specific overrides that should be gitignored.
 
