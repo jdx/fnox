@@ -4,7 +4,7 @@ fnox searches parent directories for `fnox.toml` files and merges them. This is 
 
 ## How It Works
 
-fnox walks up the directory tree from your current location and merges all `fnox.toml` and `fnox.local.toml` files it finds:
+fnox builds configuration by merging multiple sources, starting with the global config and walking up the directory tree:
 
 ```
 project/
@@ -21,12 +21,13 @@ project/
 
 When you run fnox from `project/services/api/`, the merge order is (lowest to highest priority):
 
-1. Loads `project/fnox.toml` (parent)
-2. Loads `project/fnox.local.toml` (parent local, if exists)
-3. Loads `project/services/api/fnox.toml` (current)
-4. Loads `project/services/api/fnox.local.toml` (current local, if exists)
+1. Loads `~/.config/fnox/config.toml` (global config, if exists)
+2. Loads `project/fnox.toml` (parent)
+3. Loads `project/fnox.local.toml` (parent local, if exists)
+4. Loads `project/services/api/fnox.toml` (current)
+5. Loads `project/services/api/fnox.local.toml` (current local, if exists)
 
-Each level merges both the main config and local overrides, with child configs taking precedence over parent configs, and local configs taking precedence over main configs at the same level.
+Each level merges both the main config and local overrides, with child configs taking precedence over parent configs, and local configs taking precedence over main configs at the same level. Global config provides the base layer available to all projects.
 
 ## Example Setup
 
@@ -138,13 +139,40 @@ EOF
 - Provide a `fnox.local.toml.example` (committed) for team guidance
 - Use explicit paths to bypass local overrides: `fnox -c ./fnox.toml get SECRET`
 
+## Global Configuration
+
+For machine-wide secrets that apply to all projects, use the global config:
+
+```bash
+# Initialize global config
+fnox init --global
+
+# Add secrets to global config
+fnox set GITHUB_TOKEN "ghp_..." --global
+fnox set NPM_TOKEN "npm_..." --global
+
+# Add providers to global config
+fnox provider add age age --global
+```
+
+**Location**: `~/.config/fnox/config.toml` (customizable via `FNOX_CONFIG_DIR`)
+
+**Use cases**:
+
+- Personal API tokens (GitHub, npm, etc.)
+- Machine-specific credentials
+- Default encryption provider available everywhere
+
+**Note**: Global config is always loaded, even when `root = true` stops parent directory recursion.
+
 ## Tips
 
 - **Keep root config minimal:** Only shared providers and secrets
 - **Service-specific secrets in subdirectories:** Each service manages its own
 - **Use `fnox.local.toml` for development:** Personal overrides without affecting team
+- **Use global config for personal tokens:** Machine-wide secrets like `GITHUB_TOKEN`
 - **Profile inheritance works too:** Each level can define profile-specific overrides
-- **Use `root = true` to stop recursion:** Prevents searching parent directories
+- **Use `root = true` to stop recursion:** Prevents searching parent directories (but not global config)
 
 ## Next Steps
 

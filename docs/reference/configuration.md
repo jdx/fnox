@@ -4,12 +4,37 @@ Complete reference for the `fnox.toml` configuration file.
 
 ## File Location
 
-fnox looks for configuration files in this order:
+fnox looks for configuration files in this order (lowest to highest priority):
 
-1. Path specified via `-c, --config` flag
-2. `fnox.toml` in current directory
-3. `fnox.toml` in parent directories (hierarchical search)
-4. `fnox.local.toml` alongside each `fnox.toml` (for local overrides)
+1. **Global config**: `~/.config/fnox/config.toml` (or `$FNOX_CONFIG_DIR/config.toml`)
+2. `fnox.toml` in parent directories (hierarchical search)
+3. `fnox.toml` in current directory
+4. `fnox.$FNOX_PROFILE.toml` alongside each `fnox.toml` (profile-specific)
+5. `fnox.local.toml` alongside each `fnox.toml` (for local overrides)
+6. Path specified via `-c, --config` flag
+
+### Global Configuration
+
+The global config file stores machine-wide secrets and providers that apply to all projects:
+
+```bash
+# Initialize global config
+fnox init --global
+
+# Add secrets to global config
+fnox set MY_TOKEN "secret-value" --global
+
+# Add providers to global config
+fnox provider add aws aws-sm --global
+```
+
+**Location**: `~/.config/fnox/config.toml` (customizable via `FNOX_CONFIG_DIR`)
+
+**Use cases**:
+
+- Personal API tokens used across multiple projects
+- Machine-specific credentials
+- Default providers available everywhere
 
 ## Basic Structure
 
@@ -377,12 +402,15 @@ project/
 
 Merge order (lowest to highest priority):
 
-1. Root `fnox.toml`
-2. Root `fnox.$FNOX_PROFILE.toml` (if `FNOX_PROFILE` is set and not "default")
-3. Root `fnox.local.toml`
-4. Child `fnox.toml`
-5. Child `fnox.$FNOX_PROFILE.toml` (if `FNOX_PROFILE` is set and not "default")
-6. Child `fnox.local.toml`
+1. **Global config** (`~/.config/fnox/config.toml`)
+2. Root `fnox.toml`
+3. Root `fnox.$FNOX_PROFILE.toml` (if `FNOX_PROFILE` is set and not "default")
+4. Root `fnox.local.toml`
+5. Child `fnox.toml`
+6. Child `fnox.$FNOX_PROFILE.toml` (if `FNOX_PROFILE` is set and not "default")
+7. Child `fnox.local.toml`
+
+**Note**: Global config is always loaded, even when `root = true` stops parent directory recursion.
 
 ## Next Steps
 
