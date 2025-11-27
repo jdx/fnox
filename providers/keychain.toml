@@ -2,8 +2,6 @@
 display_name = "OS Keychain"
 serde_rename = "keychain"
 rust_variant = "Keychain"
-module = "keychain"
-struct_name = "KeychainProvider"
 category = "OsKeychain"
 description = "macOS Keychain / Windows Credential Manager / Linux Secret Service"
 default_name = "keychain"

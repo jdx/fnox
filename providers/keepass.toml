@@ -2,8 +2,6 @@
 display_name = "KeePass"
 serde_rename = "keepass"
 rust_variant = "KeePass"
-module = "keepass"
-struct_name = "KeePassProvider"
 category = "Local"
 description = "Local KeePass database (.kdbx)"
 default_name = "keepass"

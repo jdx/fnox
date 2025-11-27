@@ -2,8 +2,6 @@
 display_name = "Infisical"
 serde_rename = "infisical"
 rust_variant = "Infisical"
-module = "infisical"
-struct_name = "InfisicalProvider"
 category = "PasswordManager"
 description = "Cloud secrets manager with E2E encryption"
 default_name = "infisical"

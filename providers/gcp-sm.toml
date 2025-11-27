@@ -2,8 +2,6 @@
 display_name = "GCP Secret Manager"
 serde_rename = "gcp-sm"
 rust_variant = "GoogleSecretManager"
-module = "gcp_sm"
-struct_name = "GoogleSecretManagerProvider"
 category = "CloudSecretsManager"
 description = "Google Cloud Secret Manager"
 default_name = "gcp-sm"

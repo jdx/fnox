@@ -2,7 +2,6 @@
 display_name = "Azure Key Vault (KMS)"
 serde_rename = "azure-kms"
 rust_variant = "AzureKms"
-module = "azure_kms"
 struct_name = "AzureKeyVaultProvider"
 category = "CloudKms"
 description = "Azure Key Vault encryption"

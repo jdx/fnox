@@ -2,8 +2,6 @@
 display_name = "Age encryption"
 serde_rename = "age"
 rust_variant = "AgeEncryption"
-module = "age"
-struct_name = "AgeEncryptionProvider"
 category = "Local"
 description = "Modern encryption tool - encrypts values with age keys"
 default_name = "age"

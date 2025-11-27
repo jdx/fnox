@@ -2,8 +2,6 @@
 display_name = "HashiCorp Vault"
 serde_rename = "vault"
 rust_variant = "HashiCorpVault"
-module = "vault"
-struct_name = "HashiCorpVaultProvider"
 category = "CloudSecretsManager"
 description = "HashiCorp Vault secrets engine"
 default_name = "vault"

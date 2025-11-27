@@ -2,8 +2,6 @@
 display_name = "Plain text"
 serde_rename = "plain"
 rust_variant = "Plain"
-module = "plain"
-struct_name = "PlainProvider"
 category = "Local"
 description = "No encryption - stores values as plain text in config"
 default_name = "plain"

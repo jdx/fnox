@@ -9,6 +9,26 @@ use std::fs;
 use std::path::PathBuf;
 
 #[derive(Debug, Deserialize)]
+struct ProviderTomlRaw {
+    display_name: String,
+    serde_rename: String,
+    rust_variant: String,
+    #[serde(default)]
+    module: Option<String>,
+    #[serde(default)]
+    struct_name: Option<String>,
+    category: String,
+    description: String,
+    default_name: String,
+    setup_instructions: String,
+    #[serde(default)]
+    fields: IndexMap<String, FieldDef>,
+    #[serde(default)]
+    wizard_fields: IndexMap<String, WizardFieldDef>,
+}
+
+/// Provider config with derived fields filled in
+#[derive(Debug)]
 struct ProviderToml {
     display_name: String,
     serde_rename: String,
@@ -19,10 +39,43 @@ struct ProviderToml {
     description: String,
     default_name: String,
     setup_instructions: String,
-    #[serde(default)]
     fields: IndexMap<String, FieldDef>,
-    #[serde(default)]
     wizard_fields: IndexMap<String, WizardFieldDef>,
+}
+
+impl ProviderTomlRaw {
+    /// Convert to ProviderToml, deriving module and struct_name if not specified
+    fn into_provider(self) -> ProviderToml {
+        // Derive module from serde_rename: replace `-` with `_`, handle leading digit
+        let module = self.module.unwrap_or_else(|| {
+            let m = self.serde_rename.replace('-', "_");
+            // Handle "1password" -> "onepassword"
+            if m.starts_with("1") {
+                format!("one{}", &m[1..])
+            } else {
+                m
+            }
+        });
+
+        // Derive struct_name from rust_variant + "Provider"
+        let struct_name = self
+            .struct_name
+            .unwrap_or_else(|| format!("{}Provider", self.rust_variant));
+
+        ProviderToml {
+            display_name: self.display_name,
+            serde_rename: self.serde_rename,
+            rust_variant: self.rust_variant,
+            module,
+            struct_name,
+            category: self.category,
+            description: self.description,
+            default_name: self.default_name,
+            setup_instructions: self.setup_instructions,
+            fields: self.fields,
+            wizard_fields: self.wizard_fields,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -99,8 +152,9 @@ fn load_providers() -> Result<Vec<(String, ProviderToml)>, Box<dyn std::error::E
         let path = entry.path();
         if path.extension().is_some_and(|ext| ext == "toml") {
             let content = fs::read_to_string(&path)?;
-            let provider: ProviderToml = toml_edit::de::from_str(&content)
+            let raw: ProviderTomlRaw = toml_edit::de::from_str(&content)
                 .map_err(|e| format!("Failed to parse {}: {}", path.display(), e))?;
+            let provider = raw.into_provider();
             let name = path.file_stem().unwrap().to_string_lossy().to_string();
             providers.push((name, provider));
         }

@@ -2,8 +2,6 @@
 display_name = "AWS Parameter Store"
 serde_rename = "aws-ps"
 rust_variant = "AwsParameterStore"
-module = "aws_ps"
-struct_name = "AwsParameterStoreProvider"
 category = "CloudSecretsManager"
 description = "AWS Systems Manager Parameter Store"
 default_name = "ps"

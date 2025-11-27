@@ -2,8 +2,6 @@
 display_name = "Bitwarden"
 serde_rename = "bitwarden"
 rust_variant = "Bitwarden"
-module = "bitwarden"
-struct_name = "BitwardenProvider"
 category = "PasswordManager"
 description = "Requires Bitwarden CLI and session token"
 default_name = "bitwarden"
