@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.1](https://github.com/jdx/fnox/compare/v1.7.0..v1.7.1) - 2025-11-28
+
+### 📦️ Dependency Updates
+
+- pin dependencies by [@renovate[bot]](https://github.com/renovate[bot]) in [#133](https://github.com/jdx/fnox/pull/133)
+- update rust crate demand to v1.8.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#134](https://github.com/jdx/fnox/pull/134)
+
 ## [1.7.0](https://github.com/jdx/fnox/compare/v1.6.1..v1.7.0) - 2025-11-27
 
 ### 🚀 Features
@@ -8,6 +15,7 @@
 - add KeePass provider support by [@jdx](https://github.com/jdx) in [#123](https://github.com/jdx/fnox/pull/123)
 - add AWS Parameter Store provider support by [@jdx](https://github.com/jdx) in [#126](https://github.com/jdx/fnox/pull/126)
 - support global config file for machine-wide secrets by [@jdx](https://github.com/jdx) in [#128](https://github.com/jdx/fnox/pull/128)
+- add secret references in provider configuration by [@jdx](https://github.com/jdx) in [#131](https://github.com/jdx/fnox/pull/131)
 
 ### 🐛 Bug Fixes
 
