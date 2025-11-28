@@ -21,16 +21,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           submodules: recursive
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
         with:
           shared-key: autofix
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libdbus-1-dev pkg-config
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # v3
       - run: "mise run render ::: lint-fix"
-      - uses: autofix-ci/action@v1.3.2
+      - uses: autofix-ci/action@635ffb0c9798bd160680f18fd73371e355b85f27 # v1.3.2
