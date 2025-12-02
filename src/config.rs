@@ -129,8 +129,8 @@ impl Config {
     pub fn load_smart<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path_ref = path.as_ref();
 
-        // If the path is exactly "fnox.toml" (default), use recursive loading
-        if path_ref == Path::new("fnox.toml") {
+        // If the path is exactly "fnox.toml/.fnox.toml" (default), use recursive loading
+        if path_ref == Path::new("fnox.toml") || path_ref == Path::new(".fnox.toml") {
             Self::load_with_recursion(path_ref)
         } else {
             // For explicit paths, resolve relative paths against current directory first
@@ -184,11 +184,13 @@ impl Config {
         }
     }
 
-    /// Recursively search for fnox.toml files and merge them
+    /// Recursively search for fnox.toml/.fnox.toml files and merge them
     /// Returns (config, found_any) where found_any indicates if any config file was found
     fn load_recursive(dir: &Path, _from_parent: bool, found_any: bool) -> Result<(Self, bool)> {
         let config_path = dir.join("fnox.toml");
+        let dotfile_config_path = dir.join(".fnox.toml");
         let local_config_path = dir.join("fnox.local.toml");
+        let dotfile_local_config_path = dir.join(".fnox.local.toml");
 
         // Get current profile to load profile-specific config if applicable
         // Use Settings system which respects: CLI flag > Env var > Default
@@ -202,7 +204,17 @@ impl Config {
         };
         let profile_config_path = if let Some(profile_name) = &profile {
             if profile_name != "default" {
-                Some(dir.join(format!("fnox.{}.toml", profile_name)))
+                let mut found_config_path: Option<PathBuf> = None;
+                for tmp in [
+                    format!(".fnox.{}.toml", profile_name),
+                    format!("fnox.{}.toml", profile_name),
+                ] {
+                    let path = dir.join(tmp);
+                    if path.exists() {
+                        found_config_path = Some(path);
+                    }
+                }
+                found_config_path
             } else {
                 None
             }
@@ -212,11 +224,13 @@ impl Config {
 
         let (mut config, mut found) = if config_path.exists() {
             (Self::load(&config_path)?, true)
+        } else if dotfile_config_path.exists() {
+            (Self::load(&dotfile_config_path)?, true)
         } else {
             (Self::new(), found_any)
         };
 
-        // Load fnox.$FNOX_PROFILE.toml if it exists and merge it (takes precedence over fnox.toml)
+        // Load fnox.$FNOX_PROFILE.toml or .fnox.$FNOX_PROFILE.toml if it exists and merge it (takes precedence over fnox.toml/.fnox.toml)
         if let Some(profile_path) = profile_config_path
             && profile_path.exists()
         {
@@ -225,11 +239,13 @@ impl Config {
             found = true;
         }
 
-        // Load fnox.local.toml if it exists and merge it (takes precedence over fnox.$FNOX_PROFILE.toml)
-        if local_config_path.exists() {
-            let local_config = Self::load(&local_config_path)?;
-            config = Self::merge_configs(config, local_config)?;
-            found = true;
+        // Load fnox.local.toml or .fnox.local.toml if it exists and merge it (takes precedence over fnox.$FNOX_PROFILE.toml/.fnox.$FNOX_PROFILE.toml)
+        for tmp in [local_config_path, dotfile_local_config_path] {
+            if tmp.exists() {
+                let local_config = Self::load(&tmp)?;
+                config = Self::merge_configs(config, local_config)?;
+                found = true;
+            }
         }
 
         // If this config marks root, stop recursion but still load global config
@@ -658,7 +674,8 @@ impl Config {
         // If no providers configured, that's an error
         if providers.is_empty() {
             return Err(FnoxError::Config(
-                "No providers configured. Add at least one provider to fnox.toml".to_string(),
+                "No providers configured. Add at least one provider to fnox.toml or .fnox.toml"
+                    .to_string(),
             ));
         }
 
@@ -748,7 +765,8 @@ impl Config {
         // Check that there's at least one provider if there are any secrets
         if self.providers.is_empty() && self.profiles.is_empty() && !self.secrets.is_empty() {
             return Err(FnoxError::Config(
-                "No providers configured. Add at least one provider to fnox.toml".to_string(),
+                "No providers configured. Add at least one provider to fnox.toml or .fnox.toml"
+                    .to_string(),
             ));
         }
 
