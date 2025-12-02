@@ -12,7 +12,7 @@ pub struct HookEnvSession {
     /// Current working directory when session was created
     #[serde(default)]
     pub dir: Option<PathBuf>,
-    /// Path to fnox.toml file that was loaded (if any)
+    /// Path to fnox.toml/.fnox.toml file that was loaded (if any)
     #[serde(default)]
     pub config_path: Option<PathBuf>,
     /// Last modification time of fnox.toml (milliseconds since epoch)
@@ -281,28 +281,38 @@ fn hash_fnox_env_vars() -> String {
 }
 
 /// Find fnox.toml, fnox.$FNOX_PROFILE.toml, or fnox.local.toml in current or parent directories
+/// Also look for their dot equivlants, i.e., .fnox.toml, .fnox.$FNOX_PROFILE.toml, or .fnox.local.toml
 pub fn find_config() -> Option<PathBuf> {
     let mut current = std::env::current_dir().ok()?;
 
     loop {
-        let config_path = current.join("fnox.toml");
-        if config_path.exists() {
-            return Some(config_path);
+        for config_file in [".fnox.toml", "fnox.toml"] {
+            let config_path = current.join(config_file);
+            if config_path.exists() {
+                return Some(config_path);
+            }
         }
 
         // Check for profile-specific config
         // Use Settings system which respects: CLI flag > Env var > Default
         let profile_name = crate::settings::Settings::get().profile.clone();
         if profile_name != "default" {
-            let profile_config_path = current.join(format!("fnox.{}.toml", profile_name));
-            if profile_config_path.exists() {
-                return Some(profile_config_path);
+            for config_file in [
+                format!(".fnox.{}.toml", profile_name),
+                format!("fnox.{}.toml", profile_name),
+            ] {
+                let profile_config_path = current.join(config_file);
+                if profile_config_path.exists() {
+                    return Some(profile_config_path);
+                }
             }
         }
 
-        let local_config_path = current.join("fnox.local.toml");
-        if local_config_path.exists() {
-            return Some(local_config_path);
+        for config_file in [".fnox.local.toml", "fnox.local.toml"] {
+            let local_config_path = current.join(config_file);
+            if local_config_path.exists() {
+                return Some(local_config_path);
+            }
         }
 
         if !current.pop() {

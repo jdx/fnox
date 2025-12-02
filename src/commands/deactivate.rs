@@ -8,7 +8,7 @@ use clap::Parser;
 /// Disable fnox shell integration in the current shell session
 ///
 /// This removes the hook that automatically loads secrets when entering
-/// directories with fnox.toml files. It also restores environment variables
+/// directories with fnox.toml/.fnox.toml files. It also restores environment variables
 /// to their state before fnox was activated.
 ///
 /// Note: This only affects the current shell session. To re-enable fnox,

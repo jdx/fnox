@@ -19,7 +19,7 @@ impl DoctorCommand {
 
         // Config file info
         println!("📄 Configuration:");
-        println!("  File: fnox.toml");
+        println!("  File: fnox.toml or .fnox.toml");
         println!("  Profile: {}", profile);
 
         config.validate()?;
