@@ -4,7 +4,7 @@
 
 **Usage**: `fnox [FLAGS] <SUBCOMMAND>`
 
-**Version**: 1.7.0
+**Version**: 1.7.1
 
 - **Usage**: `fnox [FLAGS] <SUBCOMMAND>`
 
@@ -13,6 +13,8 @@
 ### `-c --config <CONFIG>`
 
 Path to the configuration file (default: fnox.toml, searches parent directories)
+
+**Default:** `fnox.toml`
 
 ### `-P --profile <PROFILE>`
 

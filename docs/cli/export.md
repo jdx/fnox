@@ -20,6 +20,8 @@ Export format
 - `yaml`
 - `toml`
 
+**Default:** `env`
+
 ### `-o --output <OUTPUT>`
 
 Output file (default: stdout)
