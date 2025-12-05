@@ -12,6 +12,8 @@ Scan repository for potential secrets
 
 Directory to scan (default: current directory)
 
+**Default:** `.`
+
 ### `-i --ignore… <IGNORE>`
 
 Skip files matching this pattern (can be used multiple times)
