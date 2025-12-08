@@ -16,6 +16,17 @@ setup() {
 	load 'test_helper/common_setup'
 	_common_setup
 
+	# Check if AWS credentials are available
+	# (mise run test:bats automatically loads secrets via fnox exec)
+	if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+		skip "AWS credentials not available. Ensure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are configured."
+	fi
+
+	# Check if aws CLI is installed
+	if ! command -v aws >/dev/null 2>&1; then
+		skip "AWS CLI not installed. Install with: brew install awscli"
+	fi
+
 	# Set the region
 	export PS_REGION="us-east-1"
 }
