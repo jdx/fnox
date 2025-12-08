@@ -4,7 +4,7 @@ bin fnox
 version "1.7.0"
 about "A flexible secret management tool by @jdx"
 usage "Usage: fnox [OPTIONS] <COMMAND>"
-flag "-c --config" help="Path to the configuration file (default: fnox.toml, searches parent directories)" global=#true {
+flag "-c --config" help="Path to the configuration file (default: fnox.toml, searches parent directories)" global=#true default=fnox.toml {
     arg <CONFIG>
 }
 flag "-P --profile" help="Profile to use (default: default, or FNOX_PROFILE env var)" global=#true {
@@ -43,7 +43,7 @@ cmd exec help="Execute a command with secrets as environment variables" {
 }
 cmd export help="Export secrets in various formats" {
     alias ex
-    flag "-f --format" help="Export format" {
+    flag "-f --format" help="Export format" default=env {
         arg <FORMAT> {
             choices env json yaml toml
         }
@@ -126,7 +126,7 @@ cmd remove help="Remove a secret" {
     arg <KEY> help="Secret key to remove"
 }
 cmd scan help="Scan repository for potential secrets" {
-    flag "-d --dir" help="Directory to scan (default: current directory)" {
+    flag "-d --dir" help="Directory to scan (default: current directory)" default=. {
         arg <DIR>
     }
     flag "-i --ignore" help="Skip files matching this pattern (can be used multiple times)" var=#true {

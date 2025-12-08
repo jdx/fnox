@@ -194,7 +194,8 @@
               "choices": {
                 "choices": ["env", "json", "yaml", "toml"]
               }
-            }
+            },
+            "default": "env"
           },
           {
             "name": "output",
@@ -735,7 +736,8 @@
               "required": true,
               "double_dash": "Optional",
               "hide": false
-            }
+            },
+            "default": "."
           },
           {
             "name": "ignore",
@@ -952,7 +954,8 @@
           "required": true,
           "double_dash": "Optional",
           "hide": false
-        }
+        },
+        "default": "fnox.toml"
       },
       {
         "name": "profile",
