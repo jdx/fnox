@@ -82,18 +82,22 @@ impl PasswordstateProvider {
     /// - `123/field` - Password ID with specific field
     /// - `title` (non-numeric) - Search by title, returns password field
     /// - `title/field` - Search by title, get specific field
-    fn parse_reference(&self, value: &str) -> (String, String, bool) {
+    fn parse_reference(&self, value: &str) -> Result<(String, String, bool)> {
         let parts: Vec<&str> = value.split('/').collect();
 
         match parts.len() {
             1 => {
                 let is_id = parts[0].parse::<i64>().is_ok();
-                (parts[0].to_string(), "password".to_string(), is_id)
+                Ok((parts[0].to_string(), "password".to_string(), is_id))
             }
-            _ => {
+            2 => {
                 let is_id = parts[0].parse::<i64>().is_ok();
-                (parts[0].to_string(), parts[1].to_lowercase(), is_id)
+                Ok((parts[0].to_string(), parts[1].to_lowercase(), is_id))
             }
+            _ => Err(FnoxError::Provider(format!(
+                "Invalid Passwordstate reference format: '{}'. Expected 'id', 'id/field', 'title', or 'title/field'",
+                value
+            ))),
         }
     }
 
@@ -210,7 +214,7 @@ impl crate::providers::Provider for PasswordstateProvider {
     async fn get_secret(&self, value: &str) -> Result<String> {
         tracing::debug!("Getting secret '{}' from Passwordstate", value);
 
-        let (identifier, field, is_id) = self.parse_reference(value);
+        let (identifier, field, is_id) = self.parse_reference(value)?;
 
         let entry = if is_id {
             self.get_by_id(&identifier).await?
