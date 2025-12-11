@@ -560,6 +560,7 @@
                     "gcp",
                     "gcp-kms",
                     "infisical",
+                    "passwordstate",
                     "vault"
                   ]
                 }

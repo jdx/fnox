@@ -29,6 +29,7 @@ Provider type
 - `gcp`
 - `gcp-kms`
 - `infisical`
+- `passwordstate`
 - `vault`
 
 ## Flags

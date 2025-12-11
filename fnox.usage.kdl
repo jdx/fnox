@@ -103,7 +103,7 @@ cmd provider help="Manage providers (defaults to list)" {
         flag "-g --global" help="Add to the global config file (~/.config/fnox/config.toml)"
         arg <PROVIDER> help="Provider name"
         arg <PROVIDER_TYPE> help="Provider type" {
-            choices "1password" age aws aws-kms aws-ps azure-kms azure-sm gcp gcp-kms infisical vault
+            choices "1password" age aws aws-kms aws-ps azure-kms azure-sm gcp gcp-kms infisical passwordstate vault
         }
     }
     cmd list help="List available providers" {
