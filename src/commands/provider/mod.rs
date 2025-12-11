@@ -54,6 +54,9 @@ pub enum ProviderType {
     /// Infisical
     #[value(name = "infisical")]
     Infisical,
+    /// Click Studios Passwordstate
+    #[value(name = "passwordstate")]
+    Passwordstate,
     /// HashiCorp Vault
     #[value(name = "vault")]
     Vault,

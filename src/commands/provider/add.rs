@@ -116,6 +116,12 @@ impl AddCommand {
                 environment: OptionStringOrSecretRef::literal("dev"),
                 path: OptionStringOrSecretRef::literal("/"),
             },
+            ProviderType::Passwordstate => crate::config::ProviderConfig::Passwordstate {
+                base_url: StringOrSecretRef::from("https://passwordstate.example.com"),
+                api_key: OptionStringOrSecretRef::none(),
+                password_list_id: StringOrSecretRef::from("123"),
+                verify_ssl: OptionStringOrSecretRef::none(),
+            },
         };
 
         config

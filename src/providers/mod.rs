@@ -17,6 +17,7 @@ pub mod keepass;
 pub mod keychain;
 pub mod onepassword;
 pub mod password_store;
+pub mod passwordstate;
 pub mod plain;
 pub mod resolved;
 pub mod resolver;
@@ -131,7 +132,7 @@ mod generated {
         // Need to import provider modules for instantiation
         use super::super::{
             age, aws_kms, aws_ps, aws_sm, azure_kms, azure_sm, bitwarden, gcp_kms, gcp_sm,
-            infisical, keepass, keychain, onepassword, password_store, plain, vault,
+            infisical, keepass, keychain, onepassword, password_store, passwordstate, plain, vault,
         };
         include!(concat!(
             env!("OUT_DIR"),

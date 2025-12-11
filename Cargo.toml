@@ -50,6 +50,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 walkdir = "2"
 which = "7"
 
+# HTTP client for providers without SDKs or native CLIs
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+urlencoding = "2.1"
+
 # Provider dependencies
 age = { version = "0.11", features = ["ssh"] }
 aws-config = { version = "1" }

@@ -966,3 +966,111 @@ mise run test:bats -- test/keepass.bats
 - Tests will automatically skip if `KEEPASS_PASSWORD` is not available
 - Tests create and delete temporary databases during execution
 - No external services required - tests are fully self-contained
+
+### Passwordstate Provider
+
+The Passwordstate provider retrieves secrets from Click Studios Passwordstate via its REST API. Passwordstate is an enterprise on-premises password management solution.
+
+**Important**: In Passwordstate, each password list has its own API key. Create one fnox provider per password list you need to access.
+
+**Configuration:**
+
+```toml
+[providers]
+# One provider per password list (each list has its own API key)
+db-secrets = { type = "passwordstate", base_url = "https://passwordstate.example.com", password_list_id = "123", api_key = "list-123-api-key" }
+api-keys = { type = "passwordstate", base_url = "https://passwordstate.example.com", password_list_id = "456", api_key = "list-456-api-key" }
+
+[secrets]
+# By password ID (recommended - more robust)
+DB_PASSWORD = { provider = "db-secrets", value = "456" }
+
+# By password ID with specific field
+DB_USER = { provider = "db-secrets", value = "456/username" }
+
+# By title (less robust, but more readable)
+STRIPE_KEY = { provider = "api-keys", value = "Stripe API Key" }
+
+# By title with specific field
+STRIPE_USER = { provider = "api-keys", value = "Stripe API Key/username" }
+```
+
+**Requirements:**
+
+- Passwordstate server with API enabled
+- API key for each password list you need to access
+- Network access to the Passwordstate server
+
+**Reference Formats:**
+
+- `123` (numeric) - Get by password ID, returns password field
+- `123/field` - Get by password ID with specific field
+- `title` (non-numeric) - Search by title, returns password field
+- `title/field` - Search by title, get specific field
+
+Using password IDs is recommended as it's more robust than title-based search.
+
+**Supported Fields:**
+
+- `password` (default) - Entry password
+- `username` or `user` - Entry username
+- `title` - Entry title
+- `url` - Entry URL
+- `description` - Entry description
+- `notes` - Entry notes
+
+**Usage:**
+
+```bash
+# Set the API key (or store it encrypted)
+export PASSWORDSTATE_API_KEY="your-api-key"
+
+# Retrieve secrets
+fnox get DB_PASSWORD
+
+# Use in shell commands
+fnox exec -- ./my-app
+```
+
+**How it works:**
+
+1. **Storage**: Secrets are stored remotely in Passwordstate
+2. **Config**: fnox.toml only contains the password reference, not the actual secret value
+3. **Authentication**: Uses API key passed in the `APIKey` HTTP header (scoped to the password list)
+4. **Retrieval**: When you run `fnox get`, fnox calls the Passwordstate REST API to fetch the current value
+5. **Search**: Title searches use the `/api/searchpasswords/{ListID}?Title=...` endpoint
+
+**Implementation Notes:**
+
+- Uses `reqwest` HTTP client for REST API calls
+- Case-insensitive title matching
+- SSL verification can be disabled for self-signed certificates (`verify_ssl = "false"`)
+- API key can be stored encrypted with age provider for bootstrapping
+- Connection testing via `/api/passwords/{ListID}` endpoint
+
+**Environment Variables:**
+
+- `FNOX_PASSWORDSTATE_API_KEY` or `PASSWORDSTATE_API_KEY` - API key fallback when not specified in config
+
+### Running Passwordstate Tests
+
+The Passwordstate integration tests require access to a Passwordstate server:
+
+```bash
+# 1. Set required environment variables
+export PASSWORDSTATE_BASE_URL="https://passwordstate.example.com"
+export PASSWORDSTATE_API_KEY="your-api-key"
+export PASSWORDSTATE_LIST_ID="123"  # Password list ID (required)
+
+# 2. Optionally set for retrieval tests
+export PASSWORDSTATE_TEST_TITLE="Test Entry"  # A password title that exists in the list
+
+# 3. Run the tests
+mise run test:bats -- test/passwordstate.bats
+```
+
+**Note**:
+
+- Tests will automatically skip if credentials are not available
+- Some tests require specific password entries to exist in your Passwordstate server
+- The `list` test runs without authentication (only reads config file)
