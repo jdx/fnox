@@ -12,7 +12,7 @@
 
 ### `-c --config <CONFIG>`
 
-Path to the configuration file (default: fnox.toml, searches parent directories)
+Path to the configuration file (default: fnox.toml/.tnox.toml, searches parent directories)
 
 **Default:** `fnox.toml`
 
