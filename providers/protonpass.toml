@@ -1,0 +1,25 @@
+# Proton Pass provider - retrieves secrets from Proton Pass
+display_name = "Proton Pass"
+serde_rename = "protonpass"
+rust_variant = "ProtonPass"
+category = "PasswordManager"
+description = "Requires Proton Pass CLI (pass-cli) and authenticated session"
+default_name = "protonpass"
+setup_instructions = """
+Requires: Proton Pass CLI (pass-cli) and authenticated session.
+Install: brew install protonpass/tap/pass-cli
+Install: mise use -g github:tnfssc/protonpass-cli-bin
+Login: pass-cli login
+Test: pass-cli test"""
+
+[fields.vault_name]
+type = "optional"
+placeholder = ""
+label = "Vault name (optional):"
+wizard = true
+
+[fields.share_id]
+type = "optional"
+placeholder = ""
+label = "Share ID (optional):"
+wizard = true

@@ -19,6 +19,7 @@ pub mod onepassword;
 pub mod password_store;
 pub mod passwordstate;
 pub mod plain;
+pub mod protonpass;
 pub mod resolved;
 pub mod resolver;
 pub mod secret_ref;
@@ -66,7 +67,7 @@ impl WizardCategory {
         match self {
             Self::Local => "Plain text or local encryption - no external dependencies",
             Self::PasswordManager => {
-                "1Password, Bitwarden, Infisical - use your existing password manager"
+                "1Password, Bitwarden, Infisical, Proton Pass - use your existing password manager"
             }
             Self::CloudKms => "AWS KMS, Azure Key Vault, GCP KMS - encrypt with cloud keys",
             Self::CloudSecretsManager => {
@@ -132,7 +133,8 @@ mod generated {
         // Need to import provider modules for instantiation
         use super::super::{
             age, aws_kms, aws_ps, aws_sm, azure_kms, azure_sm, bitwarden, gcp_kms, gcp_sm,
-            infisical, keepass, keychain, onepassword, password_store, passwordstate, plain, vault,
+            infisical, keepass, keychain, onepassword, password_store, passwordstate, plain,
+            protonpass, vault,
         };
         include!(concat!(
             env!("OUT_DIR"),
