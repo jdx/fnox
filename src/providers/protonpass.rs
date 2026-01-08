@@ -101,7 +101,7 @@ impl ProtonPassProvider {
         // Default field is "password" if not specified
         let parts: Vec<&str> = value.split('/').collect();
 
-        let (item_name, field_name) = match parts.len() {
+        let (item_name, _field_name) = match parts.len() {
             1 => (parts[0], "password"),
             2 => (parts[0], parts[1]),
             _ => {
