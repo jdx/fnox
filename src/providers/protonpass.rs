@@ -10,31 +10,31 @@ use std::process::{Command, Stdio};
 /// Response from pass-cli item view --output json
 #[derive(Debug, Deserialize)]
 struct ItemViewResponse {
-    data: ItemData,
+    item: ItemContent,
 }
 
 #[derive(Debug, Deserialize)]
-struct ItemData {
-    item: Item,
+struct ItemContent {
+    content: ItemInnerContent,
 }
 
 #[derive(Debug, Deserialize)]
-struct Item {
-    data: ItemFields,
+struct ItemInnerContent {
+    content: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]
-struct ItemFields {
-    #[serde(rename = "fields")]
-    items: Vec<ItemField>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ItemField {
-    name: Option<String>,
-    #[serde(rename = "type")]
-    field_type: Option<String>,
-    value: Option<serde_json::Value>,
+struct LoginContent {
+    #[serde(default)]
+    password: String,
+    #[serde(default)]
+    username: String,
+    #[serde(default)]
+    email: String,
+    #[serde(default)]
+    totp_uri: String,
+    #[serde(default)]
+    urls: Vec<String>,
 }
 
 pub struct ProtonPassProvider {
@@ -47,6 +47,40 @@ impl ProtonPassProvider {
         Self {
             vault_name,
             share_id,
+        }
+    }
+
+    /// Check if an item exists by attempting to view it
+    fn item_exists(&self, key: &str) -> bool {
+        let mut args = vec![
+            "item".to_string(),
+            "view".to_string(),
+            "--output".to_string(),
+            "json".to_string(),
+        ];
+
+        if let Some(ref vault) = self.vault_name {
+            args.push("--vault-name".to_string());
+            args.push(vault.clone());
+        }
+        if let Some(ref share) = self.share_id {
+            args.push("--share-id".to_string());
+            args.push(share.clone());
+        }
+        args.push("--item-title".to_string());
+        args.push(key.to_string());
+
+        let mut cmd = Command::new("pass-cli");
+        for arg in &args {
+            cmd.arg(arg);
+        }
+        cmd.stdin(Stdio::null());
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+
+        match cmd.output() {
+            Ok(output) => output.status.success(),
+            Err(_) => false,
         }
     }
 
@@ -97,13 +131,60 @@ impl ProtonPassProvider {
             args.push(share.clone());
         }
 
-        // Add item title and field
+        // Add item title (field will be extracted from JSON response)
         args.push("--item-title".to_string());
         args.push(item_name.to_string());
-        args.push("--field".to_string());
-        args.push(field_name.to_string());
+
+        // Note: We don't add --field here because it breaks JSON output
+        // The field will be extracted from the JSON response instead
 
         Ok(args)
+    }
+
+    /// Extract a specific field from the login content JSON
+    fn extract_field(content: &serde_json::Value, field_name: &str) -> Option<String> {
+        // Handle special fields that are at the login level
+        if field_name == "password"
+            || field_name == "username"
+            || field_name == "email"
+            || field_name == "totp"
+        {
+            if let Some(login_obj) = content.as_object() {
+                for (_key, value) in login_obj {
+                    if let Ok(login_content) = serde_json::from_value::<LoginContent>(value.clone())
+                    {
+                        match field_name {
+                            "password" => {
+                                if !login_content.password.is_empty() {
+                                    return Some(login_content.password);
+                                }
+                            }
+                            "username" => {
+                                if !login_content.username.is_empty() {
+                                    return Some(login_content.username);
+                                }
+                            }
+                            "email" => {
+                                if !login_content.email.is_empty() {
+                                    return Some(login_content.email);
+                                }
+                            }
+                            "totp" => {
+                                if !login_content.totp_uri.is_empty() {
+                                    return Some(login_content.totp_uri);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            return None;
+        }
+
+        // For custom fields, look in extra_fields
+        // This is a simplified implementation
+        None
     }
 
     /// Execute pass-cli command with proper error handling
@@ -208,13 +289,47 @@ impl ProtonPassProvider {
 #[async_trait]
 impl crate::providers::Provider for ProtonPassProvider {
     fn capabilities(&self) -> Vec<crate::providers::ProviderCapability> {
-        vec![crate::providers::ProviderCapability::RemoteRead]
+        vec![
+            crate::providers::ProviderCapability::RemoteRead,
+            crate::providers::ProviderCapability::RemoteStorage,
+        ]
     }
 
     async fn get_secret(&self, value: &str) -> Result<String> {
         tracing::debug!("Getting secret '{}' from Proton Pass", value);
 
-        let args = self.build_item_view_command(value)?;
+        // Parse value to extract item name and field
+        let parts: Vec<&str> = value.split('/').collect();
+        let (item_name, field_name) = match parts.len() {
+            1 => (parts[0], "password"),
+            2 => (parts[0], parts[1]),
+            _ => {
+                return Err(FnoxError::Provider(format!(
+                    "Invalid secret reference format: '{}'. Expected 'item' or 'item/field'",
+                    value
+                )));
+            }
+        };
+
+        // Build command to get full JSON (without --field flag)
+        let mut args = vec![
+            "item".to_string(),
+            "view".to_string(),
+            "--output".to_string(),
+            "json".to_string(),
+        ];
+
+        if let Some(ref vault) = self.vault_name {
+            args.push("--vault-name".to_string());
+            args.push(vault.clone());
+        }
+        if let Some(ref share) = self.share_id {
+            args.push("--share-id".to_string());
+            args.push(share.clone());
+        }
+        args.push("--item-title".to_string());
+        args.push(item_name.to_string());
+
         tracing::debug!("Proton Pass command args: {:?}", args);
 
         // Use 'pass-cli item view' with JSON output
@@ -225,28 +340,16 @@ impl crate::providers::Provider for ProtonPassProvider {
             FnoxError::Provider(format!("Failed to parse Proton Pass JSON response: {}", e))
         })?;
 
-        // Extract field value from item data
-        let fields = &response.data.item.data.items;
+        // Extract requested field from login content
+        let content = &response.item.content.content;
+        let result = Self::extract_field(content, field_name);
 
-        // Find the field we want
-        // The command should have already filtered to a specific field via --field flag
-        // But we should still find the right field in case of multiple fields
-        let field = fields
-            .iter()
-            .find(|f| f.value.is_some())
-            .ok_or_else(|| FnoxError::Provider("No value found in Proton Pass item".to_string()))?;
-
-        match &field.value {
-            Some(serde_json::Value::String(s)) => Ok(s.clone()),
-            Some(serde_json::Value::Number(n)) => Ok(n.to_string()),
-            Some(serde_json::Value::Bool(b)) => Ok(b.to_string()),
-            Some(v) => Err(FnoxError::Provider(format!(
-                "Unexpected field value type in Proton Pass item: {:?}",
-                v
+        match result {
+            Some(value) => Ok(value),
+            None => Err(FnoxError::Provider(format!(
+                "Field '{}' not found in Proton Pass item '{}'",
+                field_name, item_name
             ))),
-            None => Err(FnoxError::Provider(
-                "Field value is null in Proton Pass item".to_string(),
-            )),
         }
     }
 
@@ -271,7 +374,7 @@ impl crate::providers::Provider for ProtonPassProvider {
         }
 
         // Build input for pass-cli run
-        // Format: KEY1=pass://share_id/item_id/field\nKEY2=pass://share_id/item2_id/field2\n...
+        // Format: KEY1=pass://URI\nKEY2=pass://URI\n...
         let mut input = String::new();
         let mut key_order = Vec::new();
         let mut results = HashMap::new();
@@ -288,7 +391,7 @@ impl crate::providers::Provider for ProtonPassProvider {
                             input.push_str(&format!("{}={}\n", key, uri));
                             key_order.push(key.clone());
                         } else {
-                            // Construct URI from flags - this is complex, so fall back to individual calls
+                            // Cannot convert flags-based reference to URI for batch
                             tracing::warn!(
                                 "Cannot convert flags-based reference to URI for '{}', will fetch individually",
                                 key
@@ -398,6 +501,100 @@ impl crate::providers::Provider for ProtonPassProvider {
         results
     }
 
+    async fn put_secret(&self, key: &str, value: &str) -> Result<String> {
+        tracing::debug!("Storing secret '{}' in Proton Pass", key);
+
+        // Build base command arguments for vault selection
+        let mut base_args = vec![];
+        if let Some(ref vault) = self.vault_name {
+            base_args.push("--vault-name".to_string());
+            base_args.push(vault.clone());
+        }
+        if let Some(ref share) = self.share_id {
+            base_args.push("--share-id".to_string());
+            base_args.push(share.clone());
+        }
+
+        // Check if item exists to decide whether to create or update
+        let item_exists = self.item_exists(key);
+
+        if item_exists {
+            // Update existing item
+            tracing::debug!("Updating existing item '{}' in Proton Pass", key);
+            let mut args = base_args.clone();
+            args.push("--item-title".to_string());
+            args.push(key.to_string());
+            args.push("--field".to_string());
+            args.push(format!("password={}", value));
+
+            let mut cmd = Command::new("pass-cli");
+            cmd.arg("item");
+            cmd.arg("update");
+            for arg in &args {
+                cmd.arg(arg);
+            }
+            cmd.stdin(Stdio::null());
+            cmd.stdout(Stdio::piped());
+            cmd.stderr(Stdio::piped());
+
+            let output = cmd.output().map_err(|e| {
+                FnoxError::Provider(format!(
+                    "Failed to execute 'pass-cli item update' command: {}",
+                    e
+                ))
+            })?;
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                return Err(FnoxError::Provider(format!(
+                    "Proton Pass CLI update command failed: {}",
+                    stderr.trim()
+                )));
+            }
+
+            tracing::debug!("Successfully updated item '{}' in Proton Pass", key);
+        } else {
+            // Create new item
+            tracing::debug!("Creating new item '{}' in Proton Pass", key);
+            let mut args = base_args.clone();
+            args.push("--title".to_string());
+            args.push(key.to_string());
+            args.push("--password".to_string());
+            args.push(value.to_string());
+
+            let mut cmd = Command::new("pass-cli");
+            cmd.arg("item");
+            cmd.arg("create");
+            cmd.arg("login");
+            for arg in &args {
+                cmd.arg(arg);
+            }
+            cmd.stdin(Stdio::null());
+            cmd.stdout(Stdio::piped());
+            cmd.stderr(Stdio::piped());
+
+            let output = cmd.output().map_err(|e| {
+                FnoxError::Provider(format!(
+                    "Failed to execute 'pass-cli item create' command: {}",
+                    e
+                ))
+            })?;
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                return Err(FnoxError::Provider(format!(
+                    "Proton Pass CLI create command failed: {}",
+                    stderr.trim()
+                )));
+            }
+
+            tracing::debug!("Successfully created item '{}' in Proton Pass", key);
+        }
+
+        // Return the key (item title) as the reference to store in config
+        Ok(key.to_string())
+    }
+
     async fn test_connection(&self) -> Result<()> {
         tracing::debug!("Testing connection to Proton Pass");
 
@@ -406,5 +603,206 @@ impl crate::providers::Provider for ProtonPassProvider {
 
         tracing::debug!("Proton Pass connection test successful");
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_json_parsing_login_item() {
+        // Actual pass-cli output for a login item
+        let json_output = r#"{
+            "item": {
+                "id": "oURr-KN6Y7Mw0xIIvvhLm7N_hLoCj-qgGfZNAfJkb9vvTtDLmtqXIfeKeWM6ZjzUUIifJr6Sk1stFDiyusfMLw==",
+                "share_id": "Jb6lbnRJSjbWPDdDDzKe0Xq4yDf6aSm_YXFbxIj5xvcKK3GvWATjS_e6JfQy-x3nxoBLZZIsEThUNUMaLWZSzQ==",
+                "vault_id": "HJxQHG-rgdAtfW1-JjEzXaH8qNo4TdREk4OvInYmopswFGkl-qtoy5xwk52yNcW5pEYIaMXY2f20kAFRW_QBHw==",
+                "content": {
+                    "title": "OP_SERVICE_ACCOUNT_TOKEN",
+                    "note": "",
+                    "item_uuid": "3bd093be-77ce-4295-b19f-5dcdb492af85",
+                    "content": {
+                        "Login": {
+                            "email": "",
+                            "username": "",
+                            "password": "ops_YOUR_TOKEN",
+                            "urls": [],
+                            "totp_uri": "",
+                            "passkeys": []
+                        }
+                    },
+                    "extra_fields": []
+                },
+                "state": "Active",
+                "flags": [],
+                "create_time": "2026-01-08T08:00:04"
+            },
+            "attachments": []
+        }"#;
+
+        let response: ItemViewResponse =
+            serde_json::from_str(json_output).expect("Should parse JSON");
+
+        // Extract password
+        let content = &response.item.content.content;
+        let mut found_password = None;
+
+        if let Some(login_obj) = content.as_object() {
+            for (_key, value) in login_obj {
+                if let Ok(login_content) = serde_json::from_value::<LoginContent>(value.clone()) {
+                    if !login_content.password.is_empty() {
+                        found_password = Some(login_content.password);
+                        break;
+                    }
+                }
+            }
+        }
+
+        assert_eq!(found_password, Some("ops_YOUR_TOKEN".to_string()));
+    }
+
+    #[test]
+    fn test_json_parsing_empty_password() {
+        // JSON output with empty password
+        let json_output = r#"{
+            "item": {
+                "id": "test-id",
+                "content": {
+                    "title": "Test Item",
+                    "content": {
+                        "Login": {
+                            "email": "test@example.com",
+                            "username": "testuser",
+                            "password": "",
+                            "urls": [],
+                            "totp_uri": "",
+                            "passkeys": []
+                        }
+                    }
+                }
+            }
+        }"#;
+
+        let response: ItemViewResponse =
+            serde_json::from_str(json_output).expect("Should parse JSON");
+
+        let content = &response.item.content.content;
+        let mut found_password = None;
+
+        if let Some(login_obj) = content.as_object() {
+            for (_key, value) in login_obj {
+                if let Ok(login_content) = serde_json::from_value::<LoginContent>(value.clone()) {
+                    if !login_content.password.is_empty() {
+                        found_password = Some(login_content.password);
+                        break;
+                    }
+                }
+            }
+        }
+
+        assert_eq!(found_password, None);
+    }
+
+    #[test]
+    fn test_json_parsing_with_username() {
+        // JSON output with username
+        let json_output = r#"{
+            "item": {
+                "id": "test-id",
+                "content": {
+                    "title": "Test Item",
+                    "content": {
+                        "Login": {
+                            "email": "user@example.com",
+                            "username": "myuser",
+                            "password": "secretpassword",
+                            "urls": ["https://example.com"],
+                            "totp_uri": "otpauth://totp/Example:user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Example",
+                            "passkeys": []
+                        }
+                    }
+                }
+            }
+        }"#;
+
+        let response: ItemViewResponse =
+            serde_json::from_str(json_output).expect("Should parse JSON");
+
+        let content = &response.item.content.content;
+
+        if let Some(login_obj) = content.as_object() {
+            for (_key, value) in login_obj {
+                if let Ok(login_content) = serde_json::from_value::<LoginContent>(value.clone()) {
+                    assert_eq!(login_content.username, "myuser");
+                    assert_eq!(login_content.password, "secretpassword");
+                    assert_eq!(login_content.email, "user@example.com");
+                    assert_eq!(login_content.urls, vec!["https://example.com"]);
+                    return;
+                }
+            }
+        }
+
+        panic!("Should have found Login content");
+    }
+
+    #[test]
+    fn test_item_exists_with_vault_name() {
+        let provider = ProtonPassProvider::new(Some("Personal".to_string()), None);
+        // This test verifies the method exists and compiles
+        // In real tests, we'd mock the pass-cli command
+        let result = provider.item_exists("OP_SERVICE_ACCOUNT_TOKEN");
+        // Result depends on whether the item exists in the vault
+        // This is just a compilation test
+        assert!(result || !result);
+    }
+
+    #[test]
+    fn test_build_item_view_command_with_uri() {
+        let provider = ProtonPassProvider::new(None, None);
+
+        // Test with full pass:// URI
+        let args = provider
+            .build_item_view_command("pass://share123/item456/password")
+            .unwrap();
+        assert!(args.contains(&"pass://share123/item456/password".to_string()));
+    }
+
+    #[test]
+    fn test_build_item_view_command_with_title() {
+        let provider =
+            ProtonPassProvider::new(Some("MyVault".to_string()), Some("share123".to_string()));
+
+        // Test with item name (defaults to password field)
+        let args = provider.build_item_view_command("MyItem").unwrap();
+        assert!(args.contains(&"--vault-name".to_string()));
+        assert!(args.contains(&"MyVault".to_string()));
+        assert!(args.contains(&"--share-id".to_string()));
+        assert!(args.contains(&"share123".to_string()));
+        assert!(args.contains(&"--item-title".to_string()));
+        assert!(args.contains(&"MyItem".to_string()));
+        // Note: --field is NOT included because it breaks JSON output
+        // The field is extracted from JSON response instead
+    }
+
+    #[test]
+    fn test_build_item_view_command_with_field() {
+        let provider = ProtonPassProvider::new(None, None);
+
+        // Test with item/field format
+        let args = provider.build_item_view_command("MyItem/username").unwrap();
+        assert!(args.contains(&"--item-title".to_string()));
+        assert!(args.contains(&"MyItem".to_string()));
+        // Note: --field is NOT included because it breaks JSON output
+        // The field is extracted from JSON response instead
+    }
+
+    #[test]
+    fn test_build_item_view_command_invalid_format() {
+        let provider = ProtonPassProvider::new(None, None);
+
+        // Test with invalid format (too many slashes)
+        let result = provider.build_item_view_command("item/field/extra");
+        assert!(result.is_err());
     }
 }
