@@ -3,6 +3,7 @@
 # Proton Pass Provider Tests
 #
 # These tests verify Proton Pass provider integration with fnox.
+# The provider stores all secrets for a project in a single custom item with hidden fields.
 #
 # Prerequisites:
 #   1. Install Proton Pass CLI: brew install protonpass/tap/pass-cli
@@ -17,18 +18,7 @@
 #       - The 'fnox' vault doesn't exist
 #
 #       These tests create and delete temporary items in the "fnox" vault.
-#       Tests should run serially (within this file) to avoid race conditions when
-#       creating/deleting items. Use `--no-parallelize-within-files` bats flag.
-#
-# CI Setup:
-#   Unlike Bitwarden (which can use a local vaultwarden server), Proton Pass requires
-#   a real Proton Pass account and authenticated session. In CI environments without
-#   proper Proton Pass setup, these tests will gracefully skip with informative messages.
-#
-#   To run these tests in CI:
-#   1. Create a Proton Pass account with access to a "fnox" vault
-#   2. Store credentials securely in CI secrets
-#   3. Configure pass-cli in CI to use those credentials
+#       Tests should run serially (within this file) to avoid race conditions.
 #
 
 setup() {
@@ -57,37 +47,16 @@ teardown() {
 
 # Helper function to create a Proton Pass test config
 create_protonpass_config() {
-	local vault="${1:-fnox}"
+	local item_name="${1:-fnox-test-project}"
+	local vault="${2:-fnox}"
 	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF
 [providers.protonpass]
 type = "protonpass"
+item_name = "$item_name"
 vault_name = "$vault"
 
 [secrets]
 EOF
-}
-
-# Helper function to create a test item in Proton Pass
-# Returns item name on success, empty string on failure
-create_test_pass_item() {
-	local vault="${1:-fnox}"
-	local item_name
-	item_name="fnox-test-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
-	local password
-	password="test-secret-value-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
-
-	# Create item with pass-cli
-	if pass-cli item create \
-		--category=password \
-		--title="$item_name" \
-		--vault-name="$vault" \
-		"password=$password" >/dev/null 2>&1; then
-		echo "$item_name"
-		return 0
-	else
-		# Return empty string on failure
-		return 1
-	fi
 }
 
 # Helper function to delete a test item from Proton Pass
@@ -97,217 +66,247 @@ delete_test_pass_item() {
 	pass-cli item delete "$item_name" --vault-name="$vault" >/dev/null 2>&1 || true
 }
 
-@test "fnox get retrieves secret from Proton Pass" {
-	create_protonpass_config "fnox"
+@test "fnox set creates custom item with Secrets section" {
+	local item_name
+	item_name="fnox-test-item-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
+	create_protonpass_config "$item_name" "fnox"
 
-	# Create a test item
-	if ! item_name=$(create_test_pass_item "fnox"); then
-		skip "Failed to create test item in Proton Pass"
-	fi
-
-	# Add secret reference to config
-	cat >>"${FNOX_CONFIG_FILE}" <<EOF
-
-[secrets.TEST_PP_SECRET]
-provider = "protonpass"
-value = "$item_name"
-EOF
-
-	# Get the secret
-	run "$FNOX_BIN" get TEST_PP_SECRET
+	# Set a secret to trigger item creation
+	run "$FNOX_BIN" set TEST_SECRET "test-value-123"
 	assert_success
-	assert_output --partial "test-secret-value-"
+
+	# Verify the item was created in Proton Pass
+	run pass-cli item list --vault-name="fnox" --output=json
+	assert_success
+
+	# Check if item exists in the output
+	assert_output --partial "$item_name"
 
 	# Cleanup
 	delete_test_pass_item "fnox" "$item_name"
 }
 
-@test "fnox get retrieves specific field from Proton Pass item" {
-	create_protonpass_config "fnox"
-
-	# Create a test item with custom field
+@test "fnox set adds hidden field to custom item" {
+	local item_name
 	item_name="fnox-test-field-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
-	if ! pass-cli item create \
-		--category=password \
-		--title="$item_name" \
-		--vault-name="fnox" \
-		"username=testuser" \
-		"password=testpass" >/dev/null 2>&1; then
-		skip "Failed to create test item in Proton Pass"
-	fi
+	create_protonpass_config "$item_name" "fnox"
 
-	# Add secret reference to config (fetch username field)
-	cat >>"${FNOX_CONFIG_FILE}" <<EOF
-
-[secrets.TEST_USERNAME]
-provider = "protonpass"
-value = "$item_name/username"
-EOF
-
-	# Get the secret
-	run "$FNOX_BIN" get TEST_USERNAME
+	# Set a secret
+	run "$FNOX_BIN" set API_KEY "secret-api-key-123"
 	assert_success
-	assert_output "testuser"
+
+	# View the item to verify field structure
+	run pass-cli item view --item-title="$item_name" --vault-name="fnox" --output=json
+	assert_success
+
+	# Verify it's a custom item with Secrets section
+	assert_output --partial '"sections"'
+	assert_output --partial '"Secrets"'
 
 	# Cleanup
-	pass-cli item delete "$item_name" --vault-name="fnox" >/dev/null 2>&1 || true
+	delete_test_pass_item "fnox" "$item_name"
 }
 
-@test "fnox get handles invalid item name" {
-	create_protonpass_config "fnox"
+@test "fnox get retrieves field from custom item" {
+	local item_name
+	item_name="fnox-test-get-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
+	create_protonpass_config "$item_name" "fnox"
 
-	cat >>"${FNOX_CONFIG_FILE}" <<EOF
+	# Set a secret
+	run "$FNOX_BIN" set MY_SECRET "my-secret-value-456"
+	assert_success
 
-[secrets.INVALID_ITEM]
-provider = "protonpass"
-value = "nonexistent-item-$(date +%s)"
-EOF
+	# Get the secret back
+	run "$FNOX_BIN" get MY_SECRET
+	assert_success
+	assert_output "my-secret-value-456"
 
-	# Try to get non-existent secret
-	run "$FNOX_BIN" get INVALID_ITEM
+	# Cleanup
+	delete_test_pass_item "fnox" "$item_name"
+}
+
+@test "fnox set updates existing field in custom item" {
+	local item_name
+	item_name="fnox-test-update-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
+	create_protonpass_config "$item_name" "fnox"
+
+	# Set a secret
+	run "$FNOX_BIN" set MY_KEY "initial-value"
+	assert_success
+
+	# Get the secret
+	run "$FNOX_BIN" get MY_KEY
+	assert_success
+	assert_output "initial-value"
+
+	# Update the secret
+	run "$FNOX_BIN" set MY_KEY "updated-value"
+	assert_success
+
+	# Get the updated secret
+	run "$FNOX_BIN" get MY_KEY
+	assert_success
+	assert_output "updated-value"
+
+	# Cleanup
+	delete_test_pass_item "fnox" "$item_name"
+}
+
+@test "multiple secrets in same item" {
+	local item_name
+	item_name="fnox-test-multi-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
+	create_protonpass_config "$item_name" "fnox"
+
+	# Set multiple secrets
+	run "$FNOX_BIN" set SECRET_1 "value-1"
+	assert_success
+
+	run "$FNOX_BIN" set SECRET_2 "value-2"
+	assert_success
+
+	run "$FNOX_BIN" set SECRET_3 "value-3"
+	assert_success
+
+	# Get all secrets back
+	run "$FNOX_BIN" get SECRET_1
+	assert_success
+	assert_output "value-1"
+
+	run "$FNOX_BIN" get SECRET_2
+	assert_success
+	assert_output "value-2"
+
+	run "$FNOX_BIN" get SECRET_3
+	assert_success
+	assert_output "value-3"
+
+	# Verify only one item exists (all secrets in same item)
+	run pass-cli item list --vault-name="fnox" --output=json | grep -o "\"name\":\"$item_name\"" | wc -l
+	assert_output "1"
+
+	# Cleanup
+	delete_test_pass_item "fnox" "$item_name"
+}
+
+@test "missing field returns error" {
+	local item_name
+	item_name="fnox-test-missing-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
+	create_protonpass_config "$item_name" "fnox"
+
+	# Set one secret
+	run "$FNOX_BIN" set EXISTING_SECRET "exists"
+	assert_success
+
+	# Try to get non-existent field
+	run "$FNOX_BIN" get NONEXISTENT_FIELD
+	assert_failure
+	assert_output --partial "not found"
+
+	# Cleanup
+	delete_test_pass_item "fnox" "$item_name"
+}
+
+@test "fnox get fails for nonexistent item" {
+	local item_name
+	item_name="fnox-nonexistent-item-$(date +%s)"
+	create_protonpass_config "$item_name" "fnox"
+
+	# Try to get secret from non-existent item
+	run "$FNOX_BIN" get SOME_FIELD
 	assert_failure
 	assert_output --partial "not found"
 }
 
 @test "fnox get fails with invalid vault" {
-	create_protonpass_config "nonexistent-vault-$(date +%s)"
-
-	cat >>"${FNOX_CONFIG_FILE}" <<EOF
-
-[secrets.TEST_SECRET]
-provider = "protonpass"
-value = "some-item"
-EOF
+	local item_name
+	item_name="fnox-test-vault-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
+	create_protonpass_config "$item_name" "nonexistent-vault-$(date +%s)"
 
 	# Try to get secret from non-existent vault
-	run "$FNOX_BIN" get TEST_SECRET
+	run "$FNOX_BIN" get SOME_FIELD
 	assert_failure
 }
 
 @test "fnox list shows Proton Pass secrets" {
-	create_protonpass_config "fnox"
+	local item_name
+	item_name="fnox-test-list-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
+	create_protonpass_config "$item_name" "fnox"
 
+	# Set multiple secrets
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
-[secrets.PP_SECRET_1]
-description = "First Proton Pass secret"
+[secrets.API_KEY]
 provider = "protonpass"
-value = "item1"
+value = "API_KEY"
+description = "API Key for service"
 
-[secrets.PP_SECRET_2]
-description = "Second Proton Pass secret"
+[secrets.DB_PASSWORD]
 provider = "protonpass"
-value = "item2/username"
+value = "DB_PASSWORD"
+description = "Database password"
 EOF
 
+	# List secrets
 	run "$FNOX_BIN" list
 	assert_success
-	assert_output --partial "PP_SECRET_1"
-	assert_output --partial "PP_SECRET_2"
-	assert_output --partial "First Proton Pass secret"
-}
-
-@test "fnox get handles invalid secret reference format" {
-	create_protonpass_config "fnox"
-
-	cat >>"${FNOX_CONFIG_FILE}" <<EOF
-
-[secrets.INVALID_FORMAT]
-provider = "protonpass"
-value = "invalid/format/with/too/many/slashes"
-EOF
-
-	run "$FNOX_BIN" get INVALID_FORMAT
-	assert_failure
-	assert_output --partial "Invalid secret reference format"
-}
-
-@test "fnox get with Proton Pass vault_name parameter" {
-	create_protonpass_config "fnox"
-
-	if ! item_name=$(create_test_pass_item "fnox"); then
-		skip "Failed to create test item in Proton Pass"
-	fi
-
-	cat >>"${FNOX_CONFIG_FILE}" <<EOF
-
-[secrets.TEST_WITH_VAULT]
-provider = "protonpass"
-value = "$item_name"
-EOF
-
-	# This should use the vault_name from provider config
-	run "$FNOX_BIN" get TEST_WITH_VAULT
-	assert_success
-	assert_output --partial "test-secret-value-"
+	assert_output --partial "API_KEY"
+	assert_output --partial "DB_PASSWORD"
+	assert_output --partial "API Key for service"
 
 	# Cleanup
 	delete_test_pass_item "fnox" "$item_name"
 }
 
-@test "Proton Pass provider handles multiline secrets" {
-	create_protonpass_config "fnox"
+@test "fnox get with vault_name parameter" {
+	local item_name
+	item_name="fnox-test-vault-param-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
+	create_protonpass_config "$item_name" "fnox"
 
-	# Create a test item with multiline notes
-	item_name="fnox-test-multiline-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
-	if ! pass-cli item create \
-		--category=password \
-		--title="$item_name" \
-		--vault-name="fnox" \
-		"password=testpass" \
-		"notes=line1
-line2
-line3" >/dev/null 2>&1; then
-		skip "Failed to create test item in Proton Pass"
-	fi
-
-	# Add secret reference to config (fetch notes field)
-	cat >>"${FNOX_CONFIG_FILE}" <<EOF
-
-[secrets.TEST_MULTILINE]
-provider = "protonpass"
-value = "$item_name/notes"
-EOF
-
-	# Get the secret
-	run "$FNOX_BIN" get TEST_MULTILINE
+	# Set and get secret with vault_name configured
+	run "$FNOX_BIN" set TEST_SECRET "vault-test-value"
 	assert_success
-	assert_output --partial "line1"
+
+	run "$FNOX_BIN" get TEST_SECRET
+	assert_success
+	assert_output "vault-test-value"
 
 	# Cleanup
-	pass-cli item delete "$item_name" --vault-name="fnox" >/dev/null 2>&1 || true
+	delete_test_pass_item "fnox" "$item_name"
 }
 
-@test "fnox get supports custom fields" {
-	create_protonpass_config "fnox"
+@test "Proton Pass provider handles field names with special characters" {
+	local item_name
+	item_name="fnox-test-special-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
+	create_protonpass_config "$item_name" "fnox"
 
-	# Create a test item with custom field
-	item_name="fnox-test-custom-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
-	if ! pass-cli item create \
-		--category=login \
-		--title="$item_name" \
-		--vault-name="fnox" \
-		"username=testuser" \
-		"password=testpass" \
-		"customField=customValue" >/dev/null 2>&1; then
-		skip "Failed to create test item in Proton Pass"
-	fi
-
-	# Add secret reference to config (fetch custom field)
-	cat >>"${FNOX_CONFIG_FILE}" <<EOF
-
-[secrets.TEST_CUSTOM_FIELD]
-provider = "protonpass"
-value = "$item_name/customField"
-EOF
-
-	# Get the secret
-	run "$FNOX_BIN" get TEST_CUSTOM_FIELD
+	# Set secret with underscore in name
+	run "$FNOX_BIN" set API_KEY_V2 "v2-secret"
 	assert_success
-	assert_output "customValue"
+
+	run "$FNOX_BIN" get API_KEY_V2
+	assert_success
+	assert_output "v2-secret"
 
 	# Cleanup
-	pass-cli item delete "$item_name" --vault-name="fnox" >/dev/null 2>&1 || true
+	delete_test_pass_item "fnox" "$item_name"
+}
+
+@test "fnox exec injects secrets from Proton Pass" {
+	local item_name
+	item_name="fnox-test-exec-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
+	create_protonpass_config "$item_name" "fnox"
+
+	# Set a secret
+	run "$FNOX_BIN" set TEST_VAR "exec-test-value"
+	assert_success
+
+	# Execute command with secret injected
+	run "$FNOX_BIN" exec -- env | grep "^TEST_VAR="
+	assert_success
+	assert_output "TEST_VAR=exec-test-value"
+
+	# Cleanup
+	delete_test_pass_item "fnox" "$item_name"
 }
 
 @test "Proton Pass provider with share_id parameter" {
@@ -320,15 +319,40 @@ EOF
 	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF
 [providers.protonpass]
 type = "protonpass"
+item_name = "test-item"
 share_id = "test-share-id"
 
 [secrets.TEST_SECRET]
 provider = "protonpass"
-value = "test-item"
+value = "TEST_SECRET"
 EOF
 
 	# This would test that share_id is passed to pass-cli
 	# but requires a real share_id to work
 	run "$FNOX_BIN" get TEST_SECRET
 	# Will fail without real share_id, but that's expected
+}
+
+@test "fnox get_secrets_batch retrieves multiple secrets" {
+	local item_name
+	item_name="fnox-test-batch-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
+	create_protonpass_config "$item_name" "fnox"
+
+	# Set multiple secrets
+	run "$FNOX_BIN" set BATCH_1 "value-1"
+	assert_success
+
+	run "$FNOX_BIN" set BATCH_2 "value-2"
+	assert_success
+
+	run "$FNOX_BIN" set BATCH_3 "value-3"
+	assert_success
+
+	# Execute command to verify all secrets are injected
+	run "$FNOX_BIN" exec -- sh -c 'echo "BATCH_1=$BATCH_1;BATCH_2=$BATCH_2;BATCH_3=$BATCH_3"'
+	assert_success
+	assert_output "BATCH_1=value-1;BATCH_2=value-2;BATCH_3=value-3"
+
+	# Cleanup
+	delete_test_pass_item "fnox" "$item_name"
 }

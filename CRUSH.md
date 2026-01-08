@@ -1074,3 +1074,122 @@ mise run test:bats -- test/passwordstate.bats
 - Tests will automatically skip if credentials are not available
 - Some tests require specific password entries to exist in your Passwordstate server
 - The `list` test runs without authentication (only reads config file)
+
+### Proton Pass Provider
+
+The Proton Pass provider stores all secrets for a project in a single Proton Pass item with custom fields.
+
+**Configuration:**
+
+```toml
+[providers.protonpass]
+type = "protonpass"
+item_name = "my-project"  # REQUIRED: name of the item in Proton Pass
+vault_name = "Personal"   # Optional: vault name
+# share_id = "xxx"        # Optional: share ID
+
+[secrets]
+MY_SECRET = { provider = "protonpass", value = "MY_SECRET" }
+API_KEY = { provider = "protonpass", value = "API_KEY" }
+DB_PASSWORD = { provider = "protonpass", value = "DB_PASSWORD" }
+```
+
+**Requirements:**
+
+- Proton Pass CLI installed and authenticated
+  ```bash
+  brew install protonpass/tap/pass-cli
+  # OR: mise use -g github:tnfssc/protonpass-cli-bin
+  pass-cli login
+  pass-cli test
+  ```
+
+**How it works:**
+
+1. Creates a custom item in Proton Pass named after your project (from `item_name`)
+2. All secrets are stored as "hidden" fields in a "Secrets" section within that item
+3. When you run `fnox set MY_SECRET "value"`, it adds/updates the `MY_SECRET` field
+4. When you run `fnox get MY_SECRET`, it retrieves the field value from the item
+
+**Usage:**
+
+```bash
+# Set up provider in fnox.toml
+cat > fnox.toml << EOF
+[providers.protonpass]
+type = "protonpass"
+item_name = "my-app"
+vault_name = "Personal"
+
+[secrets]
+EOF
+
+# Add secrets (creates item if it doesn't exist)
+fnox set API_KEY "sk_live_12345"
+fnox set DB_PASSWORD "supersecret"
+fnox set JWT_SECRET "jwt-secret-key"
+
+# Retrieve secrets
+fnox get API_KEY
+# Output: sk_live_12345
+
+# Use in shell commands
+fnox exec -- ./my-app
+
+# List all configured secrets
+fnox list
+```
+
+**Architecture Benefits:**
+
+- **One item per project**: Instead of creating separate items for each secret, all secrets are consolidated into a single custom item
+- **Hidden fields**: All fields use the "hidden" type for security
+- **Easy organization**: All secrets for a project are grouped together in one item
+- **No clutter**: Your Proton Pass vault stays organized with one entry per project
+
+**Reference Format:**
+
+- `SECRET_NAME` - Field name within the project item
+- The field name is used as the secret name (e.g., `API_KEY`, `DB_PASSWORD`)
+
+**Secret Value Format:**
+
+- Use the field name directly as the value (e.g., `value = "MY_SECRET"`)
+- No item/field format needed since the item name is configured in the provider
+
+**Implementation Notes:**
+
+- Uses `pass-cli item create custom` to create items with custom field support
+- Uses `pass-cli item update --field Secret.<field_name>=<value>` to add/update fields
+- All fields are stored in a "Secrets" section within the custom item
+- Fields use the "hidden" type for security (masked in UI)
+- Item is automatically created when first secret is set
+- Existing fields are updated when `fnox set` is called again
+
+**Environment Variables:**
+
+None required. All configuration is done in `fnox.toml`.
+
+**Running Proton Pass Tests:**
+
+```bash
+# 1. Install and authenticate with Proton Pass CLI
+brew install protonpass/tap/pass-cli
+pass-cli login
+
+# 2. Create a vault named "fnox" (if you want to use that vault)
+pass-cli vault create fnox
+
+# 3. Run the tests
+mise run test:bats -- test/protonpass.bats
+```
+
+**Note:**
+
+- Tests will automatically skip if:
+  - `pass-cli` is not installed
+  - Not logged in to Proton Pass
+  - The specified vault doesn't exist
+- Tests create and delete temporary items during execution
+- Each project gets a single custom item with all secrets as hidden fields
+- No external services required - tests use your actual Proton Pass account

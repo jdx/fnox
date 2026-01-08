@@ -1,4 +1,4 @@
-# Proton Pass provider - retrieves secrets from Proton Pass
+# Proton Pass provider - stores secrets in a custom item per project
 display_name = "Proton Pass"
 serde_rename = "protonpass"
 rust_variant = "ProtonPass"
@@ -11,6 +11,12 @@ Install: brew install protonpass/tap/pass-cli
 Install: mise use -g github:tnfssc/protonpass-cli-bin
 Login: pass-cli login
 Test: pass-cli test"""
+
+[fields.item_name]
+type = "required"
+placeholder = "my-project"
+label = "Project item name in Proton Pass:"
+wizard = true
 
 [fields.vault_name]
 type = "optional"
