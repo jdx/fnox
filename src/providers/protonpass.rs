@@ -54,6 +54,7 @@ struct ExtraField {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[allow(non_snake_case)]
 struct FieldContent {
     #[serde(default)]
     #[allow(dead_code)]
@@ -226,7 +227,7 @@ impl ProtonPassProvider {
         all_fields.push((target_name.clone(), value.to_string()));
 
         // Delete old item
-        let mut delete_args = vec![
+        let delete_args = vec![
             "item".to_string(),
             "delete".to_string(),
             "--item-id".to_string(),
