@@ -22,8 +22,34 @@ where
         }
         SdkError::DispatchFailure(dispatch_err) => {
             // Unwrap dispatch failure to show underlying cause
-            if let Some(source) = dispatch_err.as_connector_error() {
-                format!("Network error: {}", source)
+            if let Some(connector_err) = dispatch_err.as_connector_error() {
+                // Walk the error chain to find root cause
+                let mut error_chain = vec![connector_err.to_string()];
+                let mut source = std::error::Error::source(connector_err);
+                while let Some(err) = source {
+                    error_chain.push(err.to_string());
+                    source = std::error::Error::source(err);
+                }
+
+                // Build a detailed error message with the full chain
+                let full_error = error_chain.join(": ");
+
+                // Add helpful context based on common error patterns
+                let context = if full_error.contains("dns error") || full_error.contains("failed to lookup address") {
+                    " (DNS resolution failed - check network connectivity and AWS region endpoint)"
+                } else if full_error.contains("connection refused") {
+                    " (Connection refused - check if AWS endpoint is accessible and firewall rules)"
+                } else if full_error.contains("tls") || full_error.contains("ssl") || full_error.contains("certificate") {
+                    " (TLS/SSL error - check system certificates or network proxy configuration)"
+                } else if full_error.contains("timeout") {
+                    " (Connection timeout - check network connectivity and firewall rules)"
+                } else if full_error.contains("No credentials") || full_error.contains("Unable to load credentials") {
+                    " (AWS credentials not found or invalid - check AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, or AWS profile)"
+                } else {
+                    ""
+                };
+
+                format!("{}{}", full_error, context)
             } else {
                 format!("Dispatch failure: {:?}", dispatch_err)
             }
