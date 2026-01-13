@@ -4,6 +4,40 @@ use aws_config::BehaviorVersion;
 use aws_sdk_secretsmanager::Client;
 use std::collections::HashMap;
 
+/// Helper function to extract detailed error information from AWS SDK errors
+fn format_aws_error<E, R>(err: &aws_sdk_secretsmanager::error::SdkError<E, R>) -> String
+where
+    E: std::fmt::Debug + std::fmt::Display,
+    R: std::fmt::Debug,
+{
+    use aws_sdk_secretsmanager::error::SdkError;
+
+    match err {
+        SdkError::ServiceError(service_err) => {
+            // Extract service-specific error details
+            format!("{}", service_err.err())
+        }
+        SdkError::TimeoutError(timeout_err) => {
+            format!("Request timed out: {:?}", timeout_err)
+        }
+        SdkError::DispatchFailure(dispatch_err) => {
+            // Unwrap dispatch failure to show underlying cause
+            if let Some(source) = dispatch_err.as_connector_error() {
+                format!("Network error: {}", source)
+            } else {
+                format!("Dispatch failure: {:?}", dispatch_err)
+            }
+        }
+        SdkError::ConstructionFailure(construction_err) => {
+            format!("Request construction failed: {:?}", construction_err)
+        }
+        SdkError::ResponseError(response_err) => {
+            format!("Response error: {:?}", response_err)
+        }
+        _ => format!("{}", err),
+    }
+}
+
 /// Extract the secret name from an AWS Secrets Manager ARN.
 /// ARN format: arn:aws:secretsmanager:region:account:secret:name-SUFFIX
 /// The SUFFIX is a 6-character random string added by AWS.
@@ -72,7 +106,8 @@ impl AwsSecretsManagerProvider {
             .map_err(|e| {
                 FnoxError::Provider(format!(
                     "Failed to get secret '{}' from AWS Secrets Manager: {}",
-                    secret_name, e
+                    secret_name,
+                    format_aws_error(&e)
                 ))
             })?;
 
@@ -116,7 +151,8 @@ impl AwsSecretsManagerProvider {
                         .map_err(|e| {
                             FnoxError::Provider(format!(
                                 "Failed to create secret '{}' in AWS Secrets Manager: {}",
-                                secret_name, e
+                                secret_name,
+                                format_aws_error(&e)
                             ))
                         })?;
                     tracing::debug!("Created secret '{}' in AWS Secrets Manager", secret_name);
@@ -124,7 +160,8 @@ impl AwsSecretsManagerProvider {
                 } else {
                     Err(FnoxError::Provider(format!(
                         "Failed to update secret '{}' in AWS Secrets Manager: {}",
-                        secret_name, e
+                        secret_name,
+                        format_aws_error(&e)
                     )))
                 }
             }
@@ -278,7 +315,10 @@ impl crate::providers::Provider for AwsSecretsManagerProvider {
                 }
                 Err(e) => {
                     // Batch call failed entirely, return errors for all secrets in this chunk
-                    let error_msg = format!("AWS Secrets Manager batch call failed: {}", e);
+                    let error_msg = format!(
+                        "AWS Secrets Manager batch call failed: {}",
+                        format_aws_error(&e)
+                    );
                     for key in secret_id_to_key.values() {
                         results.insert(key.clone(), Err(FnoxError::Provider(error_msg.clone())));
                     }
@@ -301,7 +341,8 @@ impl crate::providers::Provider for AwsSecretsManagerProvider {
             .map_err(|e| {
                 FnoxError::Provider(format!(
                     "Failed to connect to AWS Secrets Manager in region '{}': {}",
-                    self.region, e
+                    self.region,
+                    format_aws_error(&e)
                 ))
             })?;
 

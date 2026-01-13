@@ -4,6 +4,40 @@ use aws_config::BehaviorVersion;
 use aws_sdk_ssm::Client;
 use std::collections::HashMap;
 
+/// Helper function to extract detailed error information from AWS SDK errors
+fn format_aws_error<E, R>(err: &aws_sdk_ssm::error::SdkError<E, R>) -> String
+where
+    E: std::fmt::Debug + std::fmt::Display,
+    R: std::fmt::Debug,
+{
+    use aws_sdk_ssm::error::SdkError;
+
+    match err {
+        SdkError::ServiceError(service_err) => {
+            // Extract service-specific error details
+            format!("{}", service_err.err())
+        }
+        SdkError::TimeoutError(timeout_err) => {
+            format!("Request timed out: {:?}", timeout_err)
+        }
+        SdkError::DispatchFailure(dispatch_err) => {
+            // Unwrap dispatch failure to show underlying cause
+            if let Some(source) = dispatch_err.as_connector_error() {
+                format!("Network error: {}", source)
+            } else {
+                format!("Dispatch failure: {:?}", dispatch_err)
+            }
+        }
+        SdkError::ConstructionFailure(construction_err) => {
+            format!("Request construction failed: {:?}", construction_err)
+        }
+        SdkError::ResponseError(response_err) => {
+            format!("Response error: {:?}", response_err)
+        }
+        _ => format!("{}", err),
+    }
+}
+
 pub struct AwsParameterStoreProvider {
     region: String,
     prefix: Option<String>,
@@ -45,7 +79,8 @@ impl AwsParameterStoreProvider {
             .map_err(|e| {
                 FnoxError::Provider(format!(
                     "Failed to get parameter '{}' from AWS Parameter Store: {}",
-                    parameter_name, e
+                    parameter_name,
+                    format_aws_error(&e)
                 ))
             })?;
 
@@ -74,7 +109,8 @@ impl AwsParameterStoreProvider {
             .map_err(|e| {
                 FnoxError::Provider(format!(
                     "Failed to put parameter '{}' in AWS Parameter Store: {}",
-                    parameter_name, e
+                    parameter_name,
+                    format_aws_error(&e)
                 ))
             })?;
 
@@ -213,7 +249,10 @@ impl crate::providers::Provider for AwsParameterStoreProvider {
                 }
                 Err(e) => {
                     // Batch call failed entirely, return errors for all keys in this chunk
-                    let error_msg = format!("AWS Parameter Store batch call failed: {}", e);
+                    let error_msg = format!(
+                        "AWS Parameter Store batch call failed: {}",
+                        format_aws_error(&e)
+                    );
                     for keys in param_name_to_keys.values() {
                         for key in keys {
                             results
@@ -239,7 +278,8 @@ impl crate::providers::Provider for AwsParameterStoreProvider {
             .map_err(|e| {
                 FnoxError::Provider(format!(
                     "Failed to connect to AWS Parameter Store in region '{}': {}",
-                    self.region, e
+                    self.region,
+                    format_aws_error(&e)
                 ))
             })?;
 
