@@ -56,7 +56,7 @@ urlencoding = "2.1"
 
 # Provider dependencies
 age = { version = "0.11", features = ["ssh"] }
-aws-config = { version = "1" }
+aws-config = { version = "1", features = ["sso", "credentials-process", "credentials-login"] }
 aws-sdk-kms = { version = "1" }
 aws-sdk-secretsmanager = { version = "1" }
 aws-sdk-ssm = { version = "1" }
