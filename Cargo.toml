@@ -62,7 +62,8 @@ aws-sdk-secretsmanager = { version = "1" }
 aws-sdk-ssm = { version = "1" }
 azure_core = { version = "0.30" }
 azure_identity = { version = "0.30" }
-azure_security_keyvault = { version = "0.21" }
+azure_security_keyvault_keys = { version = "0.9" }
+azure_security_keyvault_secrets = { version = "0.9" }
 google-cloud-kms = { version = "0.6" }
 google-cloud-secretmanager-v1 = { version = "1.1" }
 gcp_auth = { version = "0.12" }
