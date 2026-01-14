@@ -1,10 +1,12 @@
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
-use azure_identity::DeveloperToolsCredential;
+use azure_core::credentials::TokenCredential;
+use azure_identity::{ClientSecretCredential, DeveloperToolsCredential, ManagedIdentityCredential};
 use azure_security_keyvault_keys::{
     KeyClient,
     models::{EncryptionAlgorithm, KeyOperationParameters},
 };
+use std::sync::Arc;
 
 pub struct AzureKeyVaultProvider {
     vault_url: String,
@@ -19,14 +21,48 @@ impl AzureKeyVaultProvider {
         }
     }
 
+    /// Create an Azure credential that supports multiple authentication methods.
+    ///
+    /// Tries credentials in this order:
+    /// 1. ClientSecretCredential - if AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET are set
+    /// 2. ManagedIdentityCredential - for Azure-hosted environments (VMs, App Service, etc.)
+    /// 3. DeveloperToolsCredential - Azure CLI and Azure Developer CLI for local development
+    fn create_credential() -> Result<Arc<dyn TokenCredential>> {
+        // Try service principal authentication first (for CI/CD and production)
+        if let (Ok(tenant_id), Ok(client_id), Ok(client_secret)) = (
+            std::env::var("AZURE_TENANT_ID"),
+            std::env::var("AZURE_CLIENT_ID"),
+            std::env::var("AZURE_CLIENT_SECRET"),
+        ) {
+            tracing::debug!("Using ClientSecretCredential for Azure authentication");
+            return ClientSecretCredential::new(
+                &tenant_id,
+                client_id,
+                azure_core::credentials::Secret::new(client_secret),
+                None,
+            )
+            .map(|c| c as Arc<dyn TokenCredential>)
+            .map_err(|e| {
+                FnoxError::Provider(format!("Failed to create ClientSecretCredential: {}", e))
+            });
+        }
+
+        // Try managed identity (for Azure-hosted environments)
+        if let Ok(credential) = ManagedIdentityCredential::new(None) {
+            tracing::debug!("Using ManagedIdentityCredential for Azure authentication");
+            return Ok(credential as Arc<dyn TokenCredential>);
+        }
+
+        // Fall back to developer tools (Azure CLI, Azure Developer CLI)
+        tracing::debug!("Using DeveloperToolsCredential for Azure authentication");
+        DeveloperToolsCredential::new(None)
+            .map(|c| c as Arc<dyn TokenCredential>)
+            .map_err(|e| FnoxError::Provider(format!("Failed to create Azure credentials: {}", e)))
+    }
+
     /// Create an Azure Key Vault key client
     fn create_client(&self) -> Result<KeyClient> {
-        // Use DeveloperToolsCredential which supports multiple auth methods:
-        // - Azure CLI
-        // - Azure Developer CLI
-        let credential = DeveloperToolsCredential::new(None).map_err(|e| {
-            FnoxError::Provider(format!("Failed to create Azure credentials: {}", e))
-        })?;
+        let credential = Self::create_credential()?;
 
         KeyClient::new(&self.vault_url, credential, None).map_err(|e| {
             FnoxError::Provider(format!("Failed to create Azure Key Vault client: {}", e))
