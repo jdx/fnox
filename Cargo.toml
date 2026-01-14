@@ -60,8 +60,8 @@ aws-config = { version = "1", features = ["sso", "credentials-process", "credent
 aws-sdk-kms = { version = "1" }
 aws-sdk-secretsmanager = { version = "1" }
 aws-sdk-ssm = { version = "1" }
-azure_core = { version = "0.21" }
-azure_identity = { version = "0.21" }
+azure_core = { version = "0.30" }
+azure_identity = { version = "0.30" }
 azure_security_keyvault = { version = "0.21" }
 google-cloud-kms = { version = "0.6" }
 google-cloud-secretmanager-v1 = { version = "1.1" }
