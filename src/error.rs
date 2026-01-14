@@ -1,3 +1,5 @@
+#![allow(unused_assignments)] // Fields are used by thiserror/miette macros but clippy doesn't see it
+
 use miette::Diagnostic;
 use thiserror::Error;
 
@@ -7,7 +9,7 @@ pub enum FnoxError {
     // Configuration Errors
     // ========================================================================
     #[allow(dead_code)]
-    #[error("Configuration file not found")]
+    #[error("Configuration file not found: {}", path.display())]
     #[diagnostic(
         code(fnox::config::not_found),
         help("Run 'fnox init' to create a new configuration file")
@@ -15,7 +17,7 @@ pub enum FnoxError {
     ConfigFileNotFound { path: std::path::PathBuf },
 
     #[allow(dead_code)]
-    #[error("Failed to read configuration file")]
+    #[error("Failed to read configuration file: {}", path.display())]
     #[diagnostic(
         code(fnox::config::read_failed),
         help("Ensure the config file exists and you have read permissions")
@@ -27,7 +29,7 @@ pub enum FnoxError {
     },
 
     #[allow(dead_code)]
-    #[error("Failed to write configuration file")]
+    #[error("Failed to write configuration file: {}", path.display())]
     #[diagnostic(
         code(fnox::config::write_failed),
         help("Check that you have write permissions for the config directory")
@@ -56,10 +58,10 @@ pub enum FnoxError {
     },
 
     #[allow(dead_code)]
-    #[error("Configuration validation failed")]
+    #[error("Configuration validation failed:\n{}", issues.join("\n"))]
     #[diagnostic(
         code(fnox::config::validation_failed),
-        help("Review the errors below and update your fnox.toml file")
+        help("Review the errors above and update your fnox.toml file")
     )]
     ConfigValidationFailed { issues: Vec<String> },
 
@@ -221,7 +223,9 @@ pub enum FnoxError {
     )]
     ProviderConfigCycle { provider: String, cycle: String },
 
-    #[error("Failed to resolve secret '{secret}' for provider '{provider}' configuration")]
+    #[error(
+        "Failed to resolve secret '{secret}' for provider '{provider}' configuration: {details}"
+    )]
     #[diagnostic(
         code(fnox::provider::config_resolution_failed),
         help(
@@ -246,7 +250,7 @@ pub enum FnoxError {
     )]
     AgeNotConfigured,
 
-    #[error("Age identity file not found")]
+    #[error("Age identity file not found: {}", path.display())]
     #[diagnostic(
         code(fnox::encryption::age::identity_not_found),
         help("Create an age identity with: age-keygen -o {}", crate::env::FNOX_CONFIG_DIR.join("age.txt").display()),
@@ -254,7 +258,7 @@ pub enum FnoxError {
     )]
     AgeIdentityNotFound { path: std::path::PathBuf },
 
-    #[error("Failed to read age identity file")]
+    #[error("Failed to read age identity file: {}", path.display())]
     #[diagnostic(
         code(fnox::encryption::age::identity_read_failed),
         help("Ensure the identity file exists and is readable")
@@ -265,21 +269,21 @@ pub enum FnoxError {
         source: std::io::Error,
     },
 
-    #[error("Failed to parse age identity")]
+    #[error("Failed to parse age identity: {details}")]
     #[diagnostic(
         code(fnox::encryption::age::identity_parse_failed),
         help("Ensure the identity file contains a valid age secret key")
     )]
     AgeIdentityParseFailed { details: String },
 
-    #[error("Age encryption failed")]
+    #[error("Age encryption failed: {details}")]
     #[diagnostic(
         code(fnox::encryption::age::encrypt_failed),
         help("Ensure your age public key is configured correctly")
     )]
     AgeEncryptionFailed { details: String },
 
-    #[error("Age decryption failed")]
+    #[error("Age decryption failed: {details}")]
     #[diagnostic(
         code(fnox::encryption::age::decrypt_failed),
         help(
