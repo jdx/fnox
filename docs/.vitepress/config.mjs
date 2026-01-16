@@ -85,6 +85,7 @@ export default defineConfig({
             text: "Cloud Secret Storage",
             collapsed: true,
             items: [
+              { text: "AWS Parameter Store", link: "/providers/aws-ps" },
               { text: "AWS Secrets Manager", link: "/providers/aws-sm" },
               { text: "Azure Key Vault Secrets", link: "/providers/azure-sm" },
               { text: "GCP Secret Manager", link: "/providers/gcp-sm" },

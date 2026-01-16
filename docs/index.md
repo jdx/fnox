@@ -25,7 +25,7 @@ features:
     details: Store encrypted secrets in version control with age, AWS KMS, Azure KMS, or GCP KMS.
   - icon: ☁️
     title: Cloud Secret Storage
-    details: Reference secrets stored in AWS Secrets Manager, Azure Key Vault, GCP Secret Manager, or Vault.
+    details: Reference secrets stored in AWS Secrets Manager, AWS Parameter Store, Azure Key Vault, GCP Secret Manager, or Vault.
   - icon: 🔄
     title: Shell Integration
     details: Automatically load secrets when you cd into a directory with a fnox.toml file.
@@ -86,6 +86,7 @@ API_KEY = { default = "dev-key-12345" }  # ← plain default value for local dev
 
 ### ☁️ Cloud Secret Storage (remote, centralized)
 
+- **aws-ps** - AWS Parameter Store
 - **aws-sm** - AWS Secrets Manager
 - **azure-sm** - Azure Key Vault Secrets
 - **gcp-sm** - Google Cloud Secret Manager

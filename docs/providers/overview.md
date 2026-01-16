@@ -86,6 +86,7 @@ DATABASE_URL = { provider = "aws", value = "database-url" }
 Choose a provider and get started:
 
 - [Age Encryption](/providers/age) - Simple, free, works with SSH keys
-- [AWS Secrets Manager](/providers/aws-sm) - For AWS production workloads
+- [AWS Parameter Store](/providers/aws-ps) - Simple, cost-effective AWS secret storage
+- [AWS Secrets Manager](/providers/aws-sm) - For AWS production workloads with rotation
 - [1Password](/providers/1password) - Leverage existing 1Password setup
 - [Complete Example](/guide/real-world-example) - See providers in action
