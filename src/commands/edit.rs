@@ -79,18 +79,32 @@ impl EditCommand {
 
         // Step 3: Decrypt/fetch all secrets (force error mode in edit)
         tracing::debug!("Decrypting {} secrets", all_secrets.len());
-        for secret_entry in &mut all_secrets {
+        let mut secrets_by_profile: IndexMap<String, IndexMap<String, SecretConfig>> =
+            IndexMap::new();
+        for secret_entry in &all_secrets {
             // In edit mode, override if_missing to "error" to get the actual error
             let mut edit_secret_config = secret_entry.original_config.clone();
             edit_secret_config.if_missing = Some(crate::config::IfMissing::Error);
+            secrets_by_profile
+                .entry(secret_entry.profile.clone())
+                .or_default()
+                .insert(secret_entry.key.clone(), edit_secret_config);
+        }
 
-            secret_entry.plaintext_value = secret_resolver::resolve_secret(
-                &config,
-                &profile,
-                &secret_entry.key,
-                &edit_secret_config,
-            )
-            .await?;
+        let mut resolved_by_profile: IndexMap<String, IndexMap<String, Option<String>>> =
+            IndexMap::new();
+        for (profile_name, secrets) in secrets_by_profile {
+            let resolved =
+                secret_resolver::resolve_secrets_batch(&config, &profile_name, &secrets).await?;
+            resolved_by_profile.insert(profile_name, resolved);
+        }
+
+        for secret_entry in &mut all_secrets {
+            secret_entry.plaintext_value = resolved_by_profile
+                .get(&secret_entry.profile)
+                .and_then(|resolved| resolved.get(&secret_entry.key))
+                .cloned()
+                .flatten();
         }
 
         // Step 4: Create temporary file with decrypted TOML
