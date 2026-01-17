@@ -1,5 +1,55 @@
 # Changelog
 
+## [1.8.0](https://github.com/jdx/fnox/compare/v1.7.0..v1.8.0) - 2026-01-17
+
+### 🚀 Features
+
+- add passwordstate provider by [@davidolrik](https://github.com/davidolrik) in [#147](https://github.com/jdx/fnox/pull/147)
+- aws-ps batch concurrency, aws-kms 10 -> 100 concurrency by [@johnpyp](https://github.com/johnpyp) in [#180](https://github.com/jdx/fnox/pull/180)
+
+### 🐛 Bug Fixes
+
+- resolve clippy unused_assignments warnings in error.rs by [@jdx](https://github.com/jdx) in [#174](https://github.com/jdx/fnox/pull/174)
+- improve AWS SDK error messages and enable SSO support by [@daghoidahl](https://github.com/daghoidahl) in [#173](https://github.com/jdx/fnox/pull/173)
+
+### 📚 Documentation
+
+- add AWS Parameter store to sidebar and provider lists by [@johnpyp](https://github.com/johnpyp) in [#178](https://github.com/jdx/fnox/pull/178)
+
+### 🧪 Testing
+
+- Add missing skip logic to aws_parameter_store.bats by [@jdx](https://github.com/jdx) in [#145](https://github.com/jdx/fnox/pull/145)
+
+### 🛡️ Security
+
+- **(deps)** update azure-sdk-for-rust monorepo to 0.30 by [@renovate[bot]](https://github.com/renovate[bot]) in [#144](https://github.com/jdx/fnox/pull/144)
+
+### 📦️ Dependency Updates
+
+- pin dependencies by [@renovate[bot]](https://github.com/renovate[bot]) in [#133](https://github.com/jdx/fnox/pull/133)
+- update rust crate demand to v1.8.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#134](https://github.com/jdx/fnox/pull/134)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#137](https://github.com/jdx/fnox/pull/137)
+- update rust crate usage-lib to v2.9.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#143](https://github.com/jdx/fnox/pull/143)
+- update rust crate age to v0.11.2 by [@renovate[bot]](https://github.com/renovate[bot]) in [#149](https://github.com/jdx/fnox/pull/149)
+- update aws-sdk-rust monorepo to v1.8.12 by [@renovate[bot]](https://github.com/renovate[bot]) in [#148](https://github.com/jdx/fnox/pull/148)
+- update rust crate gcp_auth to v0.12.5 by [@renovate[bot]](https://github.com/renovate[bot]) in [#151](https://github.com/jdx/fnox/pull/151)
+- update rust crate dbus to v0.9.10 by [@renovate[bot]](https://github.com/renovate[bot]) in [#150](https://github.com/jdx/fnox/pull/150)
+- update rust crate google-cloud-secretmanager-v1 to v1.2.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#153](https://github.com/jdx/fnox/pull/153)
+- update rust crate reqwest to v0.12.25 by [@renovate[bot]](https://github.com/renovate[bot]) in [#152](https://github.com/jdx/fnox/pull/152)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#154](https://github.com/jdx/fnox/pull/154)
+- update dependency vue to v3.5.26 by [@renovate[bot]](https://github.com/renovate[bot]) in [#156](https://github.com/jdx/fnox/pull/156)
+- update rust crate console to v0.16.2 by [@renovate[bot]](https://github.com/renovate[bot]) in [#157](https://github.com/jdx/fnox/pull/157)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#162](https://github.com/jdx/fnox/pull/162)
+- update rust crate arc-swap to v1.8.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#167](https://github.com/jdx/fnox/pull/167)
+- update rust crate chrono to v0.4.43 by [@renovate[bot]](https://github.com/renovate[bot]) in [#176](https://github.com/jdx/fnox/pull/176)
+- update aws-sdk-rust monorepo to v1.98.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#177](https://github.com/jdx/fnox/pull/177)
+
+### New Contributors
+
+- @johnpyp made their first contribution in [#180](https://github.com/jdx/fnox/pull/180)
+- @daghoidahl made their first contribution in [#173](https://github.com/jdx/fnox/pull/173)
+- @davidolrik made their first contribution in [#147](https://github.com/jdx/fnox/pull/147)
+
 ## [1.7.0](https://github.com/jdx/fnox/compare/v1.6.1..v1.7.0) - 2025-11-27
 
 ### 🚀 Features
@@ -8,6 +58,7 @@
 - add KeePass provider support by [@jdx](https://github.com/jdx) in [#123](https://github.com/jdx/fnox/pull/123)
 - add AWS Parameter Store provider support by [@jdx](https://github.com/jdx) in [#126](https://github.com/jdx/fnox/pull/126)
 - support global config file for machine-wide secrets by [@jdx](https://github.com/jdx) in [#128](https://github.com/jdx/fnox/pull/128)
+- add secret references in provider configuration by [@jdx](https://github.com/jdx) in [#131](https://github.com/jdx/fnox/pull/131)
 
 ### 🐛 Bug Fixes
 
