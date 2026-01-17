@@ -127,6 +127,111 @@ impl AwsParameterStoreProvider {
             .map(|s| s.to_string())
     }
 
+    /// Fetch a batch of parameters (up to 10) from AWS Parameter Store
+    async fn fetch_batch(
+        &self,
+        client: &Client,
+        chunk: &[(String, String)],
+    ) -> HashMap<String, Result<String>> {
+        // Build mapping from parameter name to original keys (multiple keys can share same param)
+        let mut param_name_to_keys: HashMap<String, Vec<String>> = HashMap::new();
+        let mut param_names: Vec<String> = Vec::new();
+        for (key, value) in chunk {
+            let param_name = self.get_parameter_name(value);
+            param_name_to_keys
+                .entry(param_name.clone())
+                .or_default()
+                .push(key.clone());
+            // Only add unique parameter names to the request
+            if !param_names.contains(&param_name) {
+                param_names.push(param_name);
+            }
+        }
+
+        let mut results = HashMap::new();
+        tracing::debug!(
+            "Fetching batch of {} parameters from AWS Parameter Store",
+            param_names.len()
+        );
+
+        // Call GetParameters
+        match client
+            .get_parameters()
+            .set_names(Some(param_names.clone()))
+            .with_decryption(true)
+            .send()
+            .await
+        {
+            Ok(response) => {
+                // Process successfully retrieved parameters
+                for parameter in response.parameters() {
+                    if let Some(name) = parameter.name()
+                        && let Some(keys) = param_name_to_keys.get(name)
+                    {
+                        // Insert result for all keys that reference this parameter
+                        for key in keys {
+                            if let Some(value) = parameter.value() {
+                                results.insert(key.clone(), Ok(value.to_string()));
+                            } else {
+                                results.insert(
+                                    key.clone(),
+                                    Err(FnoxError::Provider(format!(
+                                        "Parameter '{}' has no value",
+                                        name
+                                    ))),
+                                );
+                            }
+                        }
+                    }
+                }
+
+                // Handle invalid parameters (not found)
+                for invalid_param in response.invalid_parameters() {
+                    if let Some(keys) = param_name_to_keys.get(invalid_param) {
+                        for key in keys {
+                            results.insert(
+                                key.clone(),
+                                Err(FnoxError::Provider(format!(
+                                    "Parameter '{}' not found in AWS Parameter Store",
+                                    invalid_param
+                                ))),
+                            );
+                        }
+                    }
+                }
+
+                // Check for any keys that weren't in response
+                for (param_name, keys) in &param_name_to_keys {
+                    for key in keys {
+                        if !results.contains_key(key) {
+                            results.insert(
+                                key.clone(),
+                                Err(FnoxError::Provider(format!(
+                                    "Parameter '{}' not found in batch response",
+                                    param_name
+                                ))),
+                            );
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                // Batch call failed entirely, return errors for all keys in this chunk
+                let error_msg = format!(
+                    "AWS Parameter Store batch call failed: {}",
+                    format_aws_error(&e)
+                );
+                for keys in param_name_to_keys.values() {
+                    for key in keys {
+                        results.insert(key.clone(), Err(FnoxError::Provider(error_msg.clone())));
+                    }
+                }
+            }
+        }
+
+        results
+    }
+
     /// Create or update a parameter in AWS Systems Manager Parameter Store
     pub async fn put_parameter(&self, parameter_name: &str, parameter_value: &str) -> Result<()> {
         let client = self.create_client().await?;
@@ -176,12 +281,12 @@ impl crate::providers::Provider for AwsParameterStoreProvider {
         &self,
         secrets: &[(String, String)],
     ) -> HashMap<String, Result<String>> {
+        use futures::stream::{self, StreamExt};
+
         tracing::debug!(
             "Getting {} parameters from AWS Parameter Store using batch API",
             secrets.len()
         );
-
-        let mut results = HashMap::new();
 
         // AWS SSM GetParameters supports up to 10 parameters per call
         const BATCH_SIZE: usize = 10;
@@ -191,112 +296,26 @@ impl crate::providers::Provider for AwsParameterStoreProvider {
             Err(e) => {
                 // If we can't create client, return errors for all secrets
                 let error_msg = format!("Failed to create AWS client: {}", e);
-                for (key, _) in secrets {
-                    results.insert(key.clone(), Err(FnoxError::Provider(error_msg.clone())));
-                }
-                return results;
+                return secrets
+                    .iter()
+                    .map(|(key, _)| (key.clone(), Err(FnoxError::Provider(error_msg.clone()))))
+                    .collect();
             }
         };
 
-        for chunk in secrets.chunks(BATCH_SIZE) {
-            // Build mapping from parameter name to original keys (multiple keys can share same param)
-            let mut param_name_to_keys: HashMap<String, Vec<String>> = HashMap::new();
-            let mut param_names: Vec<String> = Vec::new();
-            for (key, value) in chunk {
-                let param_name = self.get_parameter_name(value);
-                param_name_to_keys
-                    .entry(param_name.clone())
-                    .or_default()
-                    .push(key.clone());
-                // Only add unique parameter names to the request
-                if !param_names.contains(&param_name) {
-                    param_names.push(param_name);
-                }
-            }
+        // Process chunks concurrently (up to 10 concurrent batches)
+        let chunks: Vec<_> = secrets.chunks(BATCH_SIZE).map(|c| c.to_vec()).collect();
+        let chunk_results: Vec<_> = stream::iter(chunks)
+            .map(|chunk| {
+                let client = &client;
+                async move { self.fetch_batch(client, &chunk).await }
+            })
+            .buffer_unordered(10)
+            .collect()
+            .await;
 
-            tracing::debug!(
-                "Fetching batch of {} parameters from AWS Parameter Store",
-                param_names.len()
-            );
-
-            // Call GetParameters
-            match client
-                .get_parameters()
-                .set_names(Some(param_names.clone()))
-                .with_decryption(true)
-                .send()
-                .await
-            {
-                Ok(response) => {
-                    // Process successfully retrieved parameters
-                    for parameter in response.parameters() {
-                        if let Some(name) = parameter.name()
-                            && let Some(keys) = param_name_to_keys.get(name)
-                        {
-                            // Insert result for all keys that reference this parameter
-                            for key in keys {
-                                if let Some(value) = parameter.value() {
-                                    results.insert(key.clone(), Ok(value.to_string()));
-                                } else {
-                                    results.insert(
-                                        key.clone(),
-                                        Err(FnoxError::Provider(format!(
-                                            "Parameter '{}' has no value",
-                                            name
-                                        ))),
-                                    );
-                                }
-                            }
-                        }
-                    }
-
-                    // Handle invalid parameters (not found)
-                    for invalid_param in response.invalid_parameters() {
-                        if let Some(keys) = param_name_to_keys.get(invalid_param) {
-                            for key in keys {
-                                results.insert(
-                                    key.clone(),
-                                    Err(FnoxError::Provider(format!(
-                                        "Parameter '{}' not found in AWS Parameter Store",
-                                        invalid_param
-                                    ))),
-                                );
-                            }
-                        }
-                    }
-
-                    // Check for any keys that weren't in response
-                    for (param_name, keys) in &param_name_to_keys {
-                        for key in keys {
-                            if !results.contains_key(key) {
-                                results.insert(
-                                    key.clone(),
-                                    Err(FnoxError::Provider(format!(
-                                        "Parameter '{}' not found in batch response",
-                                        param_name
-                                    ))),
-                                );
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    // Batch call failed entirely, return errors for all keys in this chunk
-                    let error_msg = format!(
-                        "AWS Parameter Store batch call failed: {}",
-                        format_aws_error(&e)
-                    );
-                    for keys in param_name_to_keys.values() {
-                        for key in keys {
-                            results
-                                .insert(key.clone(), Err(FnoxError::Provider(error_msg.clone())));
-                        }
-                    }
-                }
-            }
-        }
-
-        results
+        // Merge all chunk results into a single HashMap
+        chunk_results.into_iter().flatten().collect()
     }
 
     async fn test_connection(&self) -> Result<()> {

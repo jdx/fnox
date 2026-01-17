@@ -167,27 +167,13 @@ pub trait Provider: Send + Sync {
     /// stop other secrets from being resolved.
     ///
     /// Default implementation fetches secrets in parallel using tokio tasks.
-    /// Providers can override this for true batch operations (e.g., single API call).
+    /// Providers can override this for true batch operations (e.g., single API call)
+    /// or different concurrency using `get_secrets_concurrent`.
     async fn get_secrets_batch(
         &self,
         secrets: &[(String, String)],
     ) -> HashMap<String, Result<String>> {
-        use futures::stream::{self, StreamExt};
-
-        // Clone the secrets to avoid lifetime issues with async closures
-        let secrets_vec: Vec<_> = secrets.to_vec();
-
-        // Fetch all secrets in parallel (up to 10 concurrent)
-        let results: Vec<_> = stream::iter(secrets_vec)
-            .map(|(key, value)| async move {
-                let result = self.get_secret(&value).await;
-                (key, result)
-            })
-            .buffer_unordered(10)
-            .collect()
-            .await;
-
-        results.into_iter().collect()
+        get_secrets_concurrent(self, secrets, 10).await
     }
 
     /// Encrypt a value with this provider (for encryption providers)
@@ -236,6 +222,33 @@ pub trait Provider: Send + Sync {
         // Default implementation does a basic check
         Ok(())
     }
+}
+
+/// Fetch secrets concurrently with configurable concurrency limit.
+///
+/// Helper for providers that want to use the default parallel fetch behavior
+/// but with a different concurrency level.
+pub async fn get_secrets_concurrent(
+    provider: &(impl Provider + ?Sized),
+    secrets: &[(String, String)],
+    concurrency: usize,
+) -> HashMap<String, Result<String>> {
+    use futures::stream::{self, StreamExt};
+
+    // Clone the secrets to avoid lifetime issues with async closures
+    let secrets_vec: Vec<_> = secrets.to_vec();
+
+    // Fetch all secrets in parallel (up to `concurrency` concurrent)
+    let results: Vec<_> = stream::iter(secrets_vec)
+        .map(|(key, value)| async move {
+            let result = provider.get_secret(&value).await;
+            (key, result)
+        })
+        .buffer_unordered(concurrency)
+        .collect()
+        .await;
+
+    results.into_iter().collect()
 }
 
 impl ProviderConfig {

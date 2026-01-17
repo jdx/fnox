@@ -183,4 +183,13 @@ impl crate::providers::Provider for AwsKmsProvider {
 
         Ok(())
     }
+
+    async fn get_secrets_batch(
+        &self,
+        secrets: &[(String, String)],
+    ) -> std::collections::HashMap<String, Result<String>> {
+        // AWS KMS has a rate limit allowance of 10000+ TPS by default.
+        // 10 -> 100 should generally not cause issues.
+        crate::providers::get_secrets_concurrent(self, secrets, 100).await
+    }
 }
