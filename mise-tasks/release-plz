@@ -51,6 +51,12 @@ if [[ -z $EDITORIALIZED_NOTES ]]; then
   EDITORIALIZED_NOTES="$(git cliff --bump --unreleased --strip all)"
 fi
 
+# Validate notes don't contain patterns that would corrupt changelog processing
+if echo "$EDITORIALIZED_NOTES" | grep -qE '^## \['; then
+  echo "Error: Release notes contain '## [' pattern which would corrupt changelog processing" >&2
+  exit 1
+fi
+
 # Create the release header with appropriate URL format
 RELEASE_DATE="$(date +%Y-%m-%d)"
 if [[ -n $prev_tag ]]; then
