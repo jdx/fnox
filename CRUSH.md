@@ -203,6 +203,7 @@ mise run test:bats -- test/infisical.bats
   - `FNOX_PROFILE`: Profile to use (default: "default")
   - `FNOX_CONFIG_DIR`: Configuration directory (default: ~/.config/fnox)
   - `FNOX_AGE_KEY`: Age encryption key
+  - `FNOX_PROMPT_AUTH`: Enable/disable auth prompting in TTY (default: true)
 - Import with `use crate::env;` and access via `env::FNOX_*` constants
 - Avoid direct `std::env::` calls throughout the codebase
 
@@ -253,6 +254,48 @@ MY_SECRET = { provider = "age", value = "...", if_missing = "warn" }  # Options:
 - `"ignore"` - Silently skip the secret if it cannot be resolved
 
 **Example use case**: In forked PRs, CI environments don't have access to secrets. Using `if_missing = "warn"` (or omitting it for the default) allows tests to run without failing on missing secrets.
+
+### Authentication Prompting
+
+When a provider fails to retrieve a secret (typically due to expired credentials), fnox can prompt you to run the appropriate authentication command and retry automatically.
+
+**Behavior:**
+
+| Context                     | Default   | Result                                              |
+| --------------------------- | --------- | --------------------------------------------------- |
+| TTY + auth fails            | Prompt    | "Authentication failed. Run `aws sso login`? [Y/n]" |
+| Non-TTY + auth fails        | No prompt | Warning/error, continues based on `if_missing`      |
+| TTY + `prompt_auth = false` | No prompt | Same as non-TTY                                     |
+
+**Configuration:**
+
+```toml
+# fnox.toml (top-level)
+prompt_auth = false  # Disable prompts even in TTY (default: true)
+```
+
+**Environment variable:** `FNOX_PROMPT_AUTH=false` to disable prompts.
+
+**Default auth commands by provider:**
+
+| Provider        | Default `auth_command`                  |
+| --------------- | --------------------------------------- |
+| 1Password       | `op signin`                             |
+| AWS (SM/KMS/PS) | `aws sso login`                         |
+| Azure (SM/KMS)  | `az login`                              |
+| GCP (SM/KMS)    | `gcloud auth application-default login` |
+| Bitwarden       | `bw login`                              |
+| Infisical       | `infisical login`                       |
+| HashiCorp Vault | `vault login`                           |
+
+**How it works:**
+
+1. fnox attempts to retrieve a secret from the provider
+2. If it fails and we're in a TTY with `prompt_auth` enabled:
+   - fnox shows the error and prompts to run the auth command
+   - If you accept, fnox runs the command and retries once
+   - If you decline, the original error is returned
+3. If not in a TTY or prompting is disabled, the error is returned immediately
 
 ### CLI Flags
 

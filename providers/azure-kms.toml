@@ -6,6 +6,7 @@ struct_name = "AzureKeyVaultProvider"
 category = "CloudKms"
 description = "Azure Key Vault encryption"
 default_name = "azure-kms"
+auth_command = "az login"
 setup_instructions = """
 Requires Azure credentials and Key Vault.
 Login: az login

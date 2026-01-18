@@ -5,6 +5,7 @@ rust_variant = "AwsKms"
 category = "CloudKms"
 description = "AWS Key Management Service"
 default_name = "kms"
+auth_command = "aws sso login"
 setup_instructions = """
 Requires AWS credentials and KMS key.
 Configure: aws configure

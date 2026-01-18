@@ -5,6 +5,7 @@ rust_variant = "AwsParameterStore"
 category = "CloudSecretsManager"
 description = "AWS Systems Manager Parameter Store"
 default_name = "ps"
+auth_command = "aws sso login"
 setup_instructions = """
 Stores secrets in AWS Parameter Store.
 Requires AWS credentials configured."""

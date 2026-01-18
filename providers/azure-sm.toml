@@ -5,6 +5,7 @@ rust_variant = "AzureSecretsManager"
 category = "CloudSecretsManager"
 description = "Azure Key Vault secrets"
 default_name = "azure-sm"
+auth_command = "az login"
 setup_instructions = """
 Stores secrets in Azure Key Vault.
 Requires Azure credentials configured.

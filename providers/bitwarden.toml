@@ -5,6 +5,7 @@ rust_variant = "Bitwarden"
 category = "PasswordManager"
 description = "Requires Bitwarden CLI and session token"
 default_name = "bitwarden"
+auth_command = "bw login"
 setup_instructions = """
 Requires: Bitwarden CLI (bw) and a session token.
 Login: bw login

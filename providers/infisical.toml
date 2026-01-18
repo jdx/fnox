@@ -5,6 +5,7 @@ rust_variant = "Infisical"
 category = "PasswordManager"
 description = "Cloud secrets manager with E2E encryption"
 default_name = "infisical"
+auth_command = "infisical login"
 setup_instructions = """
 Requires: Infisical CLI and service token.
 Get token from Infisical project settings.

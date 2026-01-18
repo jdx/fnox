@@ -22,6 +22,8 @@ struct ProviderTomlRaw {
     default_name: String,
     setup_instructions: String,
     #[serde(default)]
+    auth_command: Option<String>,
+    #[serde(default)]
     fields: IndexMap<String, FieldDef>,
     #[serde(default)]
     wizard_fields: IndexMap<String, WizardFieldDef>,
@@ -39,6 +41,7 @@ struct ProviderToml {
     description: String,
     default_name: String,
     setup_instructions: String,
+    auth_command: Option<String>,
     fields: IndexMap<String, FieldDef>,
     wizard_fields: IndexMap<String, WizardFieldDef>,
 }
@@ -72,6 +75,7 @@ impl ProviderTomlRaw {
             description: self.description,
             default_name: self.default_name,
             setup_instructions: self.setup_instructions,
+            auth_command: self.auth_command,
             fields: self.fields,
             wizard_fields: self.wizard_fields,
         }
@@ -316,6 +320,7 @@ fn generate_provider_methods(
 ) -> Result<String, Box<dyn std::error::Error>> {
     let mut try_to_resolved_arms = Vec::new();
     let mut from_wizard_fields_arms = Vec::new();
+    let mut auth_command_arms = Vec::new();
 
     for (_name, provider) in providers {
         let variant = Ident::new(&provider.rust_variant, Span::call_site());
@@ -341,6 +346,22 @@ fn generate_provider_methods(
         from_wizard_fields_arms.push(quote! {
             #serde_rename => { #from_wizard_body }
         });
+
+        // auth_command arm
+        let auth_cmd = if let Some(ref cmd) = provider.auth_command {
+            quote! { Some(#cmd) }
+        } else {
+            quote! { None }
+        };
+        if provider.fields.is_empty() {
+            auth_command_arms.push(quote! {
+                Self::#variant => #auth_cmd
+            });
+        } else {
+            auth_command_arms.push(quote! {
+                Self::#variant { .. } => #auth_cmd
+            });
+        }
     }
 
     // Note: Use super::super:: because this is included inside mod generated { mod providers_methods { ... } }
@@ -425,6 +446,14 @@ fn generate_provider_methods(
                         "Unknown provider type: {}",
                         provider_type
                     ))),
+                }
+            }
+
+            /// Get the default auth command for this provider type.
+            /// Returns None if no auth command is configured for this provider.
+            pub fn default_auth_command(&self) -> Option<&'static str> {
+                match self {
+                    #(#auth_command_arms),*
                 }
             }
         }

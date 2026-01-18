@@ -46,6 +46,10 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub if_missing: Option<IfMissing>,
 
+    /// Whether to prompt for authentication when provider auth fails (default: true in TTY)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_auth: Option<bool>,
+
     /// Track which config file each provider came from (not serialized)
     #[serde(skip)]
     pub provider_sources: HashMap<String, PathBuf>,
@@ -331,6 +335,11 @@ impl Config {
             merged.if_missing = overlay.if_missing;
         }
 
+        // Merge prompt_auth (overlay takes precedence)
+        if overlay.prompt_auth.is_some() {
+            merged.prompt_auth = overlay.prompt_auth;
+        }
+
         // Merge providers (overlay takes precedence)
         for (name, provider) in overlay.providers {
             merged.providers.insert(name, provider);
@@ -543,6 +552,7 @@ impl Config {
             profiles: IndexMap::new(),
             age_key_file: None,
             if_missing: None,
+            prompt_auth: None,
             provider_sources: HashMap::new(),
             secret_sources: HashMap::new(),
         }
@@ -554,6 +564,19 @@ impl Config {
             .map(String::from)
             .or_else(|| (*env::FNOX_PROFILE).clone())
             .unwrap_or_else(|| "default".to_string())
+    }
+
+    /// Determine if we should prompt for authentication when provider auth fails.
+    /// Priority: env var > config > default (true)
+    /// Returns true only if prompting is enabled AND we're in a TTY.
+    pub fn should_prompt_auth(&self) -> bool {
+        // Check env var first
+        let enabled = (*env::FNOX_PROMPT_AUTH)
+            .or(self.prompt_auth)
+            .unwrap_or(true);
+
+        // Only prompt if enabled AND we're in a TTY
+        enabled && atty::is(atty::Stream::Stdin)
     }
 
     /// Get secrets for the default profile (mutable)

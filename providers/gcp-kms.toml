@@ -5,6 +5,7 @@ rust_variant = "GcpKms"
 category = "CloudKms"
 description = "Google Cloud Key Management Service"
 default_name = "gcp-kms"
+auth_command = "gcloud auth application-default login"
 setup_instructions = """
 Requires GCP credentials and KMS keyring.
 Login: gcloud auth application-default login

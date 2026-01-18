@@ -1,4 +1,5 @@
 // Library interface for fnox
+pub mod auth_prompt;
 pub mod commands;
 pub mod config;
 pub mod env;

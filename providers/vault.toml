@@ -5,6 +5,7 @@ rust_variant = "HashiCorpVault"
 category = "CloudSecretsManager"
 description = "HashiCorp Vault secrets engine"
 default_name = "vault"
+auth_command = "vault login"
 setup_instructions = """
 Requires HashiCorp Vault server and token.
 Set: export VAULT_ADDR=http://localhost:8200

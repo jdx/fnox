@@ -28,6 +28,13 @@ pub static FNOX_PROFILE: LazyLock<Option<String>> = LazyLock::new(|| {
 // Age encryption key configuration
 pub static FNOX_AGE_KEY: LazyLock<Option<String>> = LazyLock::new(|| var("FNOX_AGE_KEY").ok());
 
+// Auth prompt configuration (defaults to true if not set)
+pub static FNOX_PROMPT_AUTH: LazyLock<Option<bool>> = LazyLock::new(|| {
+    var("FNOX_PROMPT_AUTH")
+        .ok()
+        .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
+});
+
 // Helper functions for parsing environment variables
 fn var_path(name: &str) -> Option<PathBuf> {
     var(name).map(PathBuf::from).ok()

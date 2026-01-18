@@ -5,6 +5,7 @@ rust_variant = "AwsSecretsManager"
 category = "CloudSecretsManager"
 description = "AWS Secrets Manager"
 default_name = "sm"
+auth_command = "aws sso login"
 setup_instructions = """
 Stores secrets in AWS Secrets Manager.
 Requires AWS credentials configured."""

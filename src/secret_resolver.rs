@@ -1,7 +1,8 @@
+use crate::auth_prompt::prompt_and_run_auth;
 use crate::config::{Config, IfMissing, SecretConfig};
 use crate::env;
 use crate::error::{FnoxError, Result};
-use crate::providers::get_provider_resolved;
+use crate::providers::{ProviderConfig, get_provider_resolved};
 use crate::settings::Settings;
 use indexmap::IndexMap;
 use std::collections::HashMap; // Used only for internal grouping by provider
@@ -155,10 +156,70 @@ async fn try_resolve_from_provider(
                 config_path: config.provider_sources.get(&provider_name).cloned(),
             })?;
 
-    // Resolve provider config (handles secret refs in provider config) and create provider
-    let provider = get_provider_resolved(config, profile, &provider_name, provider_config).await?;
-    let value = provider.get_secret(provider_value).await?;
-    Ok(Some(value))
+    // Try to resolve the secret, with auth retry on failure
+    try_resolve_with_auth_retry(
+        config,
+        profile,
+        &provider_name,
+        provider_config,
+        provider_value,
+    )
+    .await
+}
+
+/// Attempts to resolve a secret from a provider, with optional auth retry.
+/// If the initial attempt fails and we're in a TTY with auth prompting enabled,
+/// prompts the user to run the auth command and retries once.
+async fn try_resolve_with_auth_retry(
+    config: &Config,
+    profile: &str,
+    provider_name: &str,
+    provider_config: &ProviderConfig,
+    provider_value: &str,
+) -> Result<Option<String>> {
+    // Initial secret retrieval attempt before any authentication retry logic
+    match try_get_secret(
+        config,
+        profile,
+        provider_name,
+        provider_config,
+        provider_value,
+    )
+    .await
+    {
+        Ok(value) => Ok(Some(value)),
+        Err(error) => {
+            // Try auth prompt and retry
+            if prompt_and_run_auth(config, provider_config, provider_name, &error)? {
+                // Auth command ran successfully, retry
+                try_get_secret(
+                    config,
+                    profile,
+                    provider_name,
+                    provider_config,
+                    provider_value,
+                )
+                .await
+                .map(Some)
+            } else {
+                // No auth prompt or user declined
+                Err(error)
+            }
+        }
+    }
+}
+
+/// Helper to get a single secret from a provider without auth retry logic.
+/// Creates the provider instance and calls `get_secret`.
+async fn try_get_secret(
+    config: &Config,
+    profile: &str,
+    provider_name: &str,
+    provider_config: &ProviderConfig,
+    provider_value: &str,
+) -> Result<String> {
+    let provider = get_provider_resolved(config, profile, provider_name, provider_config).await?;
+    provider.get_secret(provider_value).await
 }
 
 fn handle_missing_secret(
@@ -319,32 +380,113 @@ async fn resolve_provider_batch(
         }
     };
 
-    // Get the provider instance (resolving any secret refs in provider config)
-    let provider = match get_provider_resolved(config, profile, provider_name, provider_config)
-        .await
+    // Try to get secrets with auth retry on failure
+    try_batch_with_auth_retry(
+        config,
+        profile,
+        secrets,
+        provider_name,
+        provider_config,
+        &provider_secrets,
+        &mut results,
+    )
+    .await
+}
+
+/// Attempts to resolve secrets in batch with optional auth retry.
+/// If the initial attempt fails and we're in a TTY with auth prompting enabled,
+/// prompts the user to run the auth command and retries once.
+async fn try_batch_with_auth_retry(
+    config: &Config,
+    profile: &str,
+    secrets: &IndexMap<String, SecretConfig>,
+    provider_name: &str,
+    provider_config: &ProviderConfig,
+    provider_secrets: &[(String, String)],
+    results: &mut HashMap<String, Option<String>>,
+) -> Result<HashMap<String, Option<String>>> {
+    // Initial batch secret retrieval attempt before any authentication retry logic
+    match try_get_secrets_batch(
+        config,
+        profile,
+        provider_name,
+        provider_config,
+        provider_secrets,
+    )
+    .await
     {
-        Ok(p) => p,
-        Err(e) => {
-            // Failed to create provider, handle errors for all secrets
-            let error_msg = format!("Failed to create provider: {}", e);
-            for (key, _) in &provider_secrets {
-                let secret_config = &secrets[key];
-                let if_missing = resolve_if_missing_behavior(secret_config, config);
-                let provider_error = FnoxError::Provider(error_msg.clone());
-                if let Some(error) = handle_provider_error(key, provider_error, if_missing, true) {
-                    // Fail fast if if_missing is error
-                    return Err(error);
-                }
-                results.insert(key.clone(), None);
-            }
-            return Ok(results);
+        Ok(batch_results) => {
+            process_batch_results(secrets, config, batch_results, results)?;
+            Ok(std::mem::take(results))
         }
-    };
+        Err(error) => {
+            // Try auth prompt and retry
+            if prompt_and_run_auth(config, provider_config, provider_name, &error)? {
+                // Auth command ran successfully, retry
+                match try_get_secrets_batch(
+                    config,
+                    profile,
+                    provider_name,
+                    provider_config,
+                    provider_secrets,
+                )
+                .await
+                {
+                    Ok(batch_results) => {
+                        process_batch_results(secrets, config, batch_results, results)?;
+                        Ok(std::mem::take(results))
+                    }
+                    Err(retry_error) => Err(retry_error),
+                }
+            } else {
+                // No auth prompt or user declined - apply if_missing handling per secret
+                handle_batch_error(secrets, config, provider_secrets, &error, results)
+            }
+        }
+    }
+}
 
-    // Call batch method
-    let batch_results = provider.get_secrets_batch(&provider_secrets).await;
+/// Handle a batch error by applying if_missing logic to each secret
+fn handle_batch_error(
+    secrets: &IndexMap<String, SecretConfig>,
+    config: &Config,
+    provider_secrets: &[(String, String)],
+    error: &FnoxError,
+    results: &mut HashMap<String, Option<String>>,
+) -> Result<HashMap<String, Option<String>>> {
+    for (key, _) in provider_secrets {
+        let secret_config = &secrets[key];
+        let if_missing = resolve_if_missing_behavior(secret_config, config);
+        let provider_error = FnoxError::Provider(error.to_string());
+        if let Some(err) = handle_provider_error(key, provider_error, if_missing, true) {
+            // Fail fast if if_missing is error
+            return Err(err);
+        }
+        results.insert(key.clone(), None);
+    }
+    Ok(std::mem::take(results))
+}
 
-    // Process batch results
+/// Helper to get multiple secrets in batch from a provider without auth retry logic.
+/// Creates the provider instance and calls `get_secrets_batch` on it.
+async fn try_get_secrets_batch(
+    config: &Config,
+    profile: &str,
+    provider_name: &str,
+    provider_config: &ProviderConfig,
+    provider_secrets: &[(String, String)],
+) -> Result<HashMap<String, Result<String>>> {
+    let provider = get_provider_resolved(config, profile, provider_name, provider_config).await?;
+    Ok(provider.get_secrets_batch(provider_secrets).await)
+}
+
+/// Process batch results and populate the results map
+fn process_batch_results(
+    secrets: &IndexMap<String, SecretConfig>,
+    config: &Config,
+    batch_results: HashMap<String, Result<String>>,
+    results: &mut HashMap<String, Option<String>>,
+) -> Result<()> {
     for (key, result) in batch_results {
         let secret_config = &secrets[&key];
         match result {
@@ -361,6 +503,5 @@ async fn resolve_provider_batch(
             }
         }
     }
-
-    Ok(results)
+    Ok(())
 }

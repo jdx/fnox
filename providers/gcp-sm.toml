@@ -5,6 +5,7 @@ rust_variant = "GoogleSecretManager"
 category = "CloudSecretsManager"
 description = "Google Cloud Secret Manager"
 default_name = "gcp-sm"
+auth_command = "gcloud auth application-default login"
 setup_instructions = """
 Stores secrets in Google Cloud Secret Manager.
 Requires GCP credentials configured.
