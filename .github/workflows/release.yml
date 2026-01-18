@@ -90,9 +90,10 @@ jobs:
         run: npm install -g @anthropic-ai/claude-code
       - name: Generate release notes
         run: |
-          TAG_NAME="${{ github.ref_name }}"
-          if [ -z "$TAG_NAME" ]; then
+          if [[ -n "${{ inputs.version }}" ]]; then
             TAG_NAME="v${{ inputs.version }}"
+          else
+            TAG_NAME="${{ github.ref_name }}"
           fi
           PREV_TAG="$(git describe --tags --abbrev=0 "$TAG_NAME^" 2>/dev/null || echo "")"
           # Generate rich release notes using LLM
@@ -120,9 +121,10 @@ jobs:
           ls -la release-assets/
       - name: Create release with all assets
         run: |
-          TAG_NAME="${{ github.ref_name }}"
-          if [ -z "$TAG_NAME" ]; then
+          if [[ -n "${{ inputs.version }}" ]]; then
             TAG_NAME="v${{ inputs.version }}"
+          else
+            TAG_NAME="${{ github.ref_name }}"
           fi
           gh release create "$TAG_NAME" \
             --title "$TAG_NAME" \
