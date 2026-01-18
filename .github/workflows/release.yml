@@ -86,11 +86,28 @@ jobs:
         with:
           experimental: true
       - run: mise trust --all
-      - name: Extract release notes from CHANGELOG
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Generate release notes
         run: |
-          # Extract the latest release section from CHANGELOG.md (includes LLM summary if available)
-          awk '/^## \[/{if(found) exit; found=1} found{print}' CHANGELOG.md > release-notes.md
+          TAG_NAME="${{ github.ref_name }}"
+          if [ -z "$TAG_NAME" ]; then
+            TAG_NAME="v${{ inputs.version }}"
+          fi
+          PREV_TAG="$(git describe --tags --abbrev=0 "$TAG_NAME^" 2>/dev/null || echo "")"
+          # Generate rich release notes using LLM
+          if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+            mise run gen-release-notes "$TAG_NAME" "$PREV_TAG" > release-notes.md || {
+              echo "LLM generation failed, falling back to CHANGELOG.md"
+              awk '/^## \[/{if(found) exit; found=1} found{print}' CHANGELOG.md > release-notes.md
+            }
+          else
+            echo "ANTHROPIC_API_KEY not set, using CHANGELOG.md"
+            awk '/^## \[/{if(found) exit; found=1} found{print}' CHANGELOG.md > release-notes.md
+          fi
           cat release-notes.md
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       - name: Download all artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
