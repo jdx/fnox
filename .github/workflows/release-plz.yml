@@ -34,7 +34,10 @@ jobs:
         with:
           experimental: true
       - run: mise trust --all
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
       - run: mise run release-plz
         env:
           GITHUB_TOKEN: ${{ secrets.FNOX_GH_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

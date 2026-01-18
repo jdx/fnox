@@ -86,8 +86,11 @@ jobs:
         with:
           experimental: true
       - run: mise trust --all
-      - name: Generate release notes
-        run: git cliff --latest > release-notes.md && cat release-notes.md
+      - name: Extract release notes from CHANGELOG
+        run: |
+          # Extract the latest release section from CHANGELOG.md (includes LLM summary if available)
+          awk '/^## \[/{if(found) exit; found=1} found{print}' CHANGELOG.md > release-notes.md
+          cat release-notes.md
       - name: Download all artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
