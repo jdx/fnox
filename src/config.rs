@@ -795,6 +795,16 @@ impl Config {
         for (profile_name, profile_config) in &self.profiles {
             let providers = self.get_providers(profile_name);
 
+            // Check for profile secrets with empty values (likely a mistake)
+            for (key, secret) in &profile_config.secrets {
+                if secret.value.as_ref().is_some_and(|v| v.is_empty()) {
+                    issues.push(ValidationIssue::new(format!(
+                        "Secret '{}' in profile '{}' has an empty value",
+                        key, profile_name
+                    )));
+                }
+            }
+
             // Each profile must have at least one provider (inherited or its own), unless root=true
             if providers.is_empty() && !self.root {
                 issues.push(ValidationIssue::with_help(
