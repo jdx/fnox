@@ -395,25 +395,31 @@ pub enum FnoxError {
     // ========================================================================
     // JSON/YAML Errors
     // ========================================================================
-    #[error("JSON error: {0}")]
+    #[error("JSON error")]
     #[diagnostic(code(fnox::json::error))]
-    Json(String),
+    Json {
+        #[source]
+        source: serde_json::Error,
+    },
 
-    #[error("YAML error: {0}")]
+    #[error("YAML error")]
     #[diagnostic(code(fnox::yaml::error))]
-    Yaml(String),
+    Yaml {
+        #[source]
+        source: serde_yaml::Error,
+    },
 }
 
 // Implement conversions for common error types
 impl From<serde_json::Error> for FnoxError {
-    fn from(err: serde_json::Error) -> Self {
-        FnoxError::Json(err.to_string())
+    fn from(source: serde_json::Error) -> Self {
+        FnoxError::Json { source }
     }
 }
 
 impl From<serde_yaml::Error> for FnoxError {
-    fn from(err: serde_yaml::Error) -> Self {
-        FnoxError::Yaml(err.to_string())
+    fn from(source: serde_yaml::Error) -> Self {
+        FnoxError::Yaml { source }
     }
 }
 
