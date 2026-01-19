@@ -1044,14 +1044,6 @@ impl SecretConfig {
             .map(|s: &SpannedValue<String>| s.value().as_str())
     }
 
-    /// Get the value's source span (byte range in the config file).
-    /// Returns None if the value wasn't set or was created programmatically.
-    pub fn value_span(&self) -> Option<Range<usize>> {
-        self.value
-            .as_ref()
-            .and_then(|s: &SpannedValue<String>| s.span())
-    }
-
     /// Set the value (without span information).
     pub fn set_value(&mut self, value: Option<String>) {
         self.value = value.map(SpannedValue::without_span);

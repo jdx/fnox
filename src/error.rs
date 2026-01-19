@@ -158,33 +158,6 @@ pub enum FnoxError {
         suggestion: Option<String>,
     },
 
-    #[error("Secret '{key}' already exists in profile '{profile}'{}",
-        config_path.as_ref()
-            .map(|p| format!("\n  Defined in: {}", p.display()))
-            .unwrap_or_default()
-    )]
-    #[diagnostic(
-        code(fnox::secret::already_exists),
-        help(
-            "To update this secret:\n  • Overwrite: fnox set {key} <value> --force -P {profile}{edit}",
-            edit = config_path.as_ref()
-                .map(|p| format!("\n  • Edit directly: {}", p.display()))
-                .unwrap_or_default()
-        )
-    )]
-    SecretAlreadyExists {
-        key: String,
-        profile: String,
-        config_path: Option<std::path::PathBuf>,
-    },
-
-    #[error("Invalid secret key: {key}")]
-    #[diagnostic(
-        code(fnox::secret::invalid_key),
-        help("Secret keys must be valid identifiers (alphanumeric, underscores, hyphens)")
-    )]
-    InvalidSecretKey { key: String },
-
     // ========================================================================
     // Provider Errors
     // ========================================================================
@@ -261,44 +234,6 @@ pub enum FnoxError {
         #[label("default_provider '{provider}' set here, but no such provider exists")]
         span: SourceSpan,
     },
-
-    #[error("Provider '{provider}' is not yet implemented")]
-    #[diagnostic(
-        code(fnox::provider::not_implemented),
-        help(
-            "This provider is planned but not yet available. Check the roadmap at https://github.com/jdx/fnox"
-        ),
-        url("https://github.com/jdx/fnox/issues")
-    )]
-    ProviderNotImplemented { provider: String },
-
-    #[error("Failed to get secret from {provider} provider")]
-    #[diagnostic(code(fnox::provider::get_failed))]
-    ProviderGetFailed {
-        provider: String,
-        key: String,
-        details: String,
-    },
-
-    #[error("Failed to set secret in {provider} provider")]
-    #[diagnostic(code(fnox::provider::set_failed))]
-    ProviderSetFailed {
-        provider: String,
-        key: String,
-        details: String,
-    },
-
-    #[error("Failed to delete secret from {provider} provider")]
-    #[diagnostic(code(fnox::provider::delete_failed))]
-    ProviderDeleteFailed {
-        provider: String,
-        key: String,
-        details: String,
-    },
-
-    #[error("Failed to list secrets from {provider} provider")]
-    #[diagnostic(code(fnox::provider::list_failed))]
-    ProviderListFailed { provider: String, details: String },
 
     /// Generic provider error for cases not covered by specific variants
     #[error("Provider error: {0}")]
@@ -388,38 +323,9 @@ pub enum FnoxError {
     )]
     AgeDecryptionFailed { details: String },
 
-    #[error("No encryption configuration found")]
-    #[diagnostic(
-        code(fnox::encryption::not_configured),
-        help(
-            "Add encryption configuration to your fnox.toml:\n  [encryption]\n  type = \"age\"\n  key_file = \"age.txt\""
-        ),
-        url("https://fnox.dev/providers/age")
-    )]
-    EncryptionNotConfigured,
-
-    #[error("Unsupported encryption type: {encryption_type}")]
-    #[diagnostic(
-        code(fnox::encryption::unsupported_type),
-        help("Currently only 'age' encryption is supported")
-    )]
-    UnsupportedEncryptionType { encryption_type: String },
-
-    /// Generic encryption error for cases not covered by specific variants
-    #[error("Encryption error: {0}")]
-    #[diagnostic(code(fnox::encryption::error))]
-    Encryption(String),
-
     // ========================================================================
     // Editor Errors
     // ========================================================================
-    #[error("No editor configured")]
-    #[diagnostic(
-        code(fnox::editor::not_configured),
-        help("Set the EDITOR or VISUAL environment variable")
-    )]
-    EditorNotConfigured,
-
     #[error("Failed to launch editor: {editor}")]
     #[diagnostic(code(fnox::editor::launch_failed))]
     EditorLaunchFailed {
@@ -475,17 +381,6 @@ pub enum FnoxError {
         #[source]
         source: std::io::Error,
     },
-
-    #[error("Failed to write to stdout")]
-    #[diagnostic(code(fnox::io::stdout_write_failed))]
-    StdoutWriteFailed {
-        #[source]
-        source: std::io::Error,
-    },
-
-    #[error("Invalid key type: {0}")]
-    #[diagnostic(code(fnox::key::invalid_type))]
-    InvalidKeyType(String),
 
     // ========================================================================
     // Generic I/O Errors (fallback)
