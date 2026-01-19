@@ -368,9 +368,10 @@ impl Config {
             merged.prompt_auth = overlay.prompt_auth;
         }
 
-        // Merge default_provider (overlay takes precedence)
+        // Merge default_provider and its source (overlay takes precedence)
         if overlay.default_provider.is_some() {
             merged.default_provider = overlay.default_provider;
+            merged.default_provider_source = overlay.default_provider_source;
         }
 
         // Merge providers (overlay takes precedence)
@@ -412,6 +413,11 @@ impl Config {
                     existing_profile
                         .secret_sources
                         .insert(secret_name.clone(), source.clone());
+                }
+                // Merge default_provider and its source (overlay takes precedence)
+                if profile.default_provider.is_some() {
+                    existing_profile.default_provider = profile.default_provider;
+                    existing_profile.default_provider_source = profile.default_provider_source;
                 }
             } else {
                 merged.profiles.insert(name, profile);
