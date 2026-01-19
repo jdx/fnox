@@ -809,8 +809,85 @@ impl Config {
         }
     }
 
+    /// Check if a secret has an empty value that should be flagged as a validation issue.
+    /// Returns a ValidationIssue if the secret has an empty value and is not using plain provider.
+    fn check_empty_value(
+        &self,
+        key: &str,
+        secret: &SecretConfig,
+        profile: &str,
+    ) -> Option<crate::error::ValidationIssue> {
+        // Early return if value is not an empty string
+        let Some(value) = secret.value() else {
+            return None; // No value specified - not an issue
+        };
+        if !value.is_empty() {
+            return None; // Non-empty value - not an issue
+        }
+
+        // At this point, value is an empty string
+        // Allow empty values for plain provider (empty string is a valid secret value)
+        if self.is_plain_provider(secret.provider(), profile) {
+            return None;
+        }
+        let message = if profile == "default" {
+            format!("Secret '{}' has an empty value", key)
+        } else {
+            format!(
+                "Secret '{}' in profile '{}' has an empty value",
+                key, profile
+            )
+        };
+        Some(crate::error::ValidationIssue::with_help(
+            message,
+            "Set a value for this secret or remove it from the configuration",
+        ))
+    }
+
+    /// Check if a secret uses the plain provider (where empty values are valid).
+    /// Returns true if the provider is "plain" type.
+    fn is_plain_provider(&self, secret_provider: Option<&str>, profile: &str) -> bool {
+        // Get providers for this profile first (needed for auto-selection)
+        let providers = self.get_providers(profile);
+
+        // Determine which provider name to use
+        let provider_name = secret_provider
+            .map(String::from)
+            .or_else(|| {
+                // Try profile's default_provider first (only for non-default profiles)
+                if profile != "default" {
+                    self.profiles
+                        .get(profile)
+                        .and_then(|p| p.default_provider().map(String::from))
+                } else {
+                    None
+                }
+            })
+            .or_else(|| self.default_provider().map(String::from))
+            .or_else(|| {
+                // Auto-select if exactly one provider exists (matching get_default_provider behavior)
+                if providers.len() == 1 {
+                    providers.keys().next().cloned()
+                } else {
+                    None
+                }
+            });
+
+        let Some(provider_name) = provider_name else {
+            return false;
+        };
+
+        // Look up the provider config
+        providers
+            .get(&provider_name)
+            .is_some_and(|p| p.provider_type() == "plain")
+    }
+
     /// Validate the configuration
+    /// Collects all validation issues and returns them together using #[related]
     pub fn validate(&self) -> Result<()> {
+        use crate::error::ValidationIssue;
+
         // If root=true and no providers AND no secrets, that's OK (empty config)
         if self.root
             && self.providers.is_empty()
@@ -820,75 +897,83 @@ impl Config {
             return Ok(());
         }
 
+        let mut issues = Vec::new();
+
+        // Check for secrets with empty values (likely a mistake, but allowed for plain provider)
+        for (key, secret) in &self.secrets {
+            if let Some(issue) = self.check_empty_value(key, secret, "default") {
+                issues.push(issue);
+            }
+        }
+
         // Check that there's at least one provider if there are any secrets
         if self.providers.is_empty() && self.profiles.is_empty() && !self.secrets.is_empty() {
-            return Err(FnoxError::Config(
-                "No providers configured. Add at least one provider to fnox.toml".to_string(),
+            issues.push(ValidationIssue::with_help(
+                "No providers configured",
+                "Add at least one provider to fnox.toml",
             ));
         }
 
         // If default_provider is set, validate it exists
-        if let Some(default_provider_name) = self.default_provider()
-            && !self.providers.contains_key(default_provider_name)
+        if let Some(default_provider) = self.default_provider()
+            && !self.providers.contains_key(default_provider)
         {
-            // Try to get source info for better error reporting
-            if let Some(source_path) = &self.default_provider_source
-                && let (Some(src), Some(span)) = (
-                    source_registry::get_named_source(source_path),
-                    self.default_provider_span(),
-                )
-            {
-                return Err(FnoxError::DefaultProviderNotFoundWithSource {
-                    provider: default_provider_name.to_string(),
-                    profile: "default".to_string(),
-                    src,
-                    span: span.into(),
-                });
-            }
-            return Err(FnoxError::Config(format!(
-                "Default provider '{}' not found in configuration",
-                default_provider_name
-            )));
+            issues.push(ValidationIssue::with_help(
+                format!(
+                    "Default provider '{}' not found in configuration",
+                    default_provider
+                ),
+                format!(
+                    "Add [providers.{}] to your config or remove the default_provider setting",
+                    default_provider
+                ),
+            ));
         }
 
         // Validate each profile
         for (profile_name, profile_config) in &self.profiles {
             let providers = self.get_providers(profile_name);
 
+            // Check for profile secrets with empty values (likely a mistake, but allowed for plain provider)
+            for (key, secret) in &profile_config.secrets {
+                if let Some(issue) = self.check_empty_value(key, secret, profile_name) {
+                    issues.push(issue);
+                }
+            }
+
             // Each profile must have at least one provider (inherited or its own), unless root=true
             if providers.is_empty() && !self.root {
-                return Err(FnoxError::Config(format!(
-                    "Profile '{}' has no providers configured",
-                    profile_name
-                )));
+                issues.push(ValidationIssue::with_help(
+                    format!("Profile '{}' has no providers configured", profile_name),
+                    format!(
+                        "Add [profiles.{}.providers.<name>] or inherit from top-level providers",
+                        profile_name
+                    ),
+                ));
             }
 
             // If profile has default_provider set, validate it exists
-            if let Some(default_provider_name) = profile_config.default_provider()
-                && !providers.contains_key(default_provider_name)
+            if let Some(default_provider) = profile_config.default_provider()
+                && !providers.contains_key(default_provider)
             {
-                // Try to get source info for better error reporting
-                if let Some(source_path) = &profile_config.default_provider_source
-                    && let (Some(src), Some(span)) = (
-                        source_registry::get_named_source(source_path),
-                        profile_config.default_provider_span(),
-                    )
-                {
-                    return Err(FnoxError::DefaultProviderNotFoundWithSource {
-                        provider: default_provider_name.to_string(),
-                        profile: profile_name.clone(),
-                        src,
-                        span: span.into(),
-                    });
-                }
-                return Err(FnoxError::Config(format!(
-                    "Default provider '{}' not found in profile '{}'",
-                    default_provider_name, profile_name
-                )));
+                issues.push(ValidationIssue::with_help(
+                    format!(
+                        "Default provider '{}' not found in profile '{}'",
+                        default_provider, profile_name
+                    ),
+                    format!(
+                        "Add [profiles.{}.providers.{}] or remove the default_provider setting",
+                        profile_name, default_provider
+                    ),
+                ));
             }
         }
 
-        Ok(())
+        if issues.is_empty() {
+            Ok(())
+        } else {
+            Err(FnoxError::ConfigValidationFailed { issues })
+        }
     }
 
     /// Get the default provider name, if set.

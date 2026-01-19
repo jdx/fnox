@@ -4,6 +4,33 @@ use miette::{Diagnostic, NamedSource, SourceSpan};
 use std::sync::Arc;
 use thiserror::Error;
 
+/// A single validation issue (used with #[related] for multiple error reporting)
+#[derive(Error, Debug, Diagnostic)]
+#[error("{message}")]
+#[diagnostic(code(fnox::config::validation_issue))]
+pub struct ValidationIssue {
+    pub message: String,
+    #[help]
+    pub help: Option<String>,
+}
+
+impl ValidationIssue {
+    #[allow(dead_code)]
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            help: None,
+        }
+    }
+
+    pub fn with_help(message: impl Into<String>, help: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            help: Some(help.into()),
+        }
+    }
+}
+
 #[derive(Error, Debug, Diagnostic)]
 pub enum FnoxError {
     // ========================================================================
@@ -71,13 +98,18 @@ pub enum FnoxError {
         source: toml_edit::ser::Error,
     },
 
-    #[error("Configuration validation failed:\n{}", issues.join("\n"))]
+    /// Configuration validation failed with one or more issues.
+    /// Uses #[related] to display all validation issues together.
+    #[error("Configuration validation failed ({})", pluralizer::pluralize("issue", std::cmp::min(issues.len(), isize::MAX as usize) as isize, true))]
     #[diagnostic(
         code(fnox::config::validation_failed),
-        help("Review the errors above and update your fnox.toml file"),
+        help("Fix the issues above in your fnox.toml file"),
         url("https://fnox.dev/guide/configuration")
     )]
-    ConfigValidationFailed { issues: Vec<String> },
+    ConfigValidationFailed {
+        #[related]
+        issues: Vec<ValidationIssue>,
+    },
 
     /// Backward compatibility for ConfigNotFound with custom message/help
     #[error("{message}")]

@@ -79,6 +79,7 @@ keepass = { version = "0.8", features = ["save_kdbx4"] }
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 # Required for rustls crypto provider (used by GCP SDKs)
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std"] }
+pluralizer = "0.5.0"
 
 # Linux-specific dependencies for cross-compilation
 [target.'cfg(target_os = "linux")'.dependencies]
