@@ -1,6 +1,6 @@
 [package]
 name = "fnox"
-version = "1.9.0"
+version = "1.9.1"
 edition = "2024"
 authors = ["@jdx"]
 description = "A flexible secret management tool supporting multiple providers and encryption methods"

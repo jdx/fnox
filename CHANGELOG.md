@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.9.1](https://github.com/jdx/fnox/compare/v1.9.0..v1.9.1) - 2026-01-19
+
+### 🐛 Bug Fixes
+
+- use positional args in gen-release-notes by [@jdx](https://github.com/jdx) in [#187](https://github.com/jdx/fnox/pull/187)
+
 ## [1.9.0](https://github.com/jdx/fnox/compare/v1.8.0..v1.9.0) - 2026-01-19
 
 ### 🚀 Features
