@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.9.1](https://github.com/jdx/fnox/compare/v1.9.0..v1.9.1) - 2026-01-19
+
+### 🐛 Bug Fixes
+
+- use positional args in gen-release-notes by [@jdx](https://github.com/jdx) in [#187](https://github.com/jdx/fnox/pull/187)
+
 ## [1.9.0](https://github.com/jdx/fnox/compare/v1.8.0..v1.9.0) - 2026-01-19
 
 ### 🚀 Features
@@ -197,7 +203,7 @@
 
 ### 🚜 Refactor
 
-- remove unused env_diff module and \_\_FNOX_DIFF by [@jdx](https://github.com/jdx) in [#70](https://github.com/jdx/fnox/pull/70)
+- remove unused env_diff module and __FNOX_DIFF by [@jdx](https://github.com/jdx) in [#70](https://github.com/jdx/fnox/pull/70)
 
 ### ⚡ Performance
 
@@ -205,7 +211,7 @@
 
 ### 🛡️ Security
 
-- **(security)** store only hashes in \_\_FNOX_SESSION instead of plaintext secrets by [@jdx](https://github.com/jdx) in [#71](https://github.com/jdx/fnox/pull/71)
+- **(security)** store only hashes in __FNOX_SESSION instead of plaintext secrets by [@jdx](https://github.com/jdx) in [#71](https://github.com/jdx/fnox/pull/71)
 
 ## [1.2.3](https://github.com/jdx/fnox/compare/v1.2.2..v1.2.3) - 2025-11-01
 

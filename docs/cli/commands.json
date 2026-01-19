@@ -1040,7 +1040,7 @@
   "config": {
     "props": {}
   },
-  "version": "1.9.0",
+  "version": "1.9.1",
   "usage": "Usage: fnox [OPTIONS] <COMMAND>",
   "complete": {
     "key": {
