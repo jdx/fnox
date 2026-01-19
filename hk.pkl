@@ -4,7 +4,7 @@ import "package://github.com/jdx/hk/releases/download/v1.19.0/hk@1.19.0#/Builtin
 local linters = new Mapping<String, Step> {
     ["actionlint"] = Builtins.actionlint
     ["prettier"] = (Builtins.prettier) {
-        exclude = List("CLAUDE.md") // TODO: fix symbolic links with prettier built-in: ([error] Explicitly specified pattern "CLAUDE.md" is a symbolic link.)
+        exclude = List("CLAUDE.md", "CHANGELOG.md") // TODO: fix symbolic links with prettier built-in: ([error] Explicitly specified pattern "CLAUDE.md" is a symbolic link.)
     }
     ["cargo-fmt"] = Builtins.cargo_fmt
     ["cargo-check"] = Builtins.cargo_check
