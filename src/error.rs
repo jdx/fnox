@@ -1,6 +1,7 @@
 #![allow(unused_assignments)] // Fields are used by thiserror/miette macros but clippy doesn't see it
 
-use miette::Diagnostic;
+use miette::{Diagnostic, NamedSource, SourceSpan};
+use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Error, Debug, Diagnostic)]
@@ -47,6 +48,20 @@ pub enum FnoxError {
     ConfigParseError {
         #[source]
         source: toml_edit::de::Error,
+    },
+
+    /// TOML parse error with source code context for precise error location display.
+    #[error("{message}")]
+    #[diagnostic(
+        code(fnox::config::invalid_toml),
+        help("Check the TOML syntax in your configuration file")
+    )]
+    ConfigParseErrorWithSource {
+        message: String,
+        #[source_code]
+        src: Arc<NamedSource<Arc<String>>>,
+        #[label("parse error here")]
+        span: SourceSpan,
     },
 
     #[error("Failed to serialize configuration to TOML")]
@@ -173,6 +188,49 @@ pub enum FnoxError {
         profile: String,
         config_path: Option<std::path::PathBuf>,
         suggestion: Option<String>,
+    },
+
+    /// Provider not configured error with source code context showing where the provider is referenced.
+    #[error("Provider '{provider}' not configured in profile '{profile}'")]
+    #[diagnostic(
+        code(fnox::provider::not_configured),
+        help(
+            "{suggestion}Add the provider to your config:\n  \
+            [providers.{provider}]\n  \
+            type = \"age\"  # or other provider type",
+            suggestion = suggestion.as_ref()
+                .map(|s| format!("{}\n\n", s))
+                .unwrap_or_default()
+        )
+    )]
+    ProviderNotConfiguredWithSource {
+        provider: String,
+        profile: String,
+        suggestion: Option<String>,
+        #[source_code]
+        src: Arc<NamedSource<Arc<String>>>,
+        #[label("provider '{provider}' referenced here")]
+        span: SourceSpan,
+    },
+
+    /// Default provider not found error with source code context showing where it was configured.
+    #[error("Default provider '{provider}' not found in profile '{profile}'")]
+    #[diagnostic(
+        code(fnox::config::default_provider_not_found),
+        help(
+            "The configured default_provider references a provider that doesn't exist.\n\
+            Add the provider to your config:\n  \
+            [providers.{provider}]\n  \
+            type = \"age\"  # or other provider type"
+        )
+    )]
+    DefaultProviderNotFoundWithSource {
+        provider: String,
+        profile: String,
+        #[source_code]
+        src: Arc<NamedSource<Arc<String>>>,
+        #[label("default_provider '{provider}' set here, but no such provider exists")]
+        span: SourceSpan,
     },
 
     #[allow(dead_code)]

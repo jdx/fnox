@@ -1,12 +1,16 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
+use crate::source_registry;
+use crate::spanned::SpannedValue;
 use clap::ValueEnum;
 use indexmap::IndexMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use strum::VariantNames;
 
 // Re-export ProviderConfig from providers module
@@ -28,8 +32,9 @@ pub struct Config {
     pub providers: IndexMap<String, ProviderConfig>,
 
     /// Default provider name for default profile
+    /// Wrapped in SpannedValue to track source location for error reporting.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub default_provider: Option<String>,
+    default_provider: Option<SpannedValue<String>>,
 
     /// Default profile secrets (top level)
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
@@ -58,6 +63,10 @@ pub struct Config {
     /// Track which config file each secret came from (not serialized)
     #[serde(skip)]
     pub secret_sources: HashMap<String, PathBuf>,
+
+    /// Track which config file the default_provider came from (not serialized)
+    #[serde(skip)]
+    pub default_provider_source: Option<PathBuf>,
 }
 
 /// Configuration for a single secret
@@ -77,12 +86,14 @@ pub struct SecretConfig {
     pub default: Option<String>,
 
     /// Provider to fetch from (age, aws-kms, 1password, aws, etc.)
+    /// Wrapped in SpannedValue to track source location for error reporting.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub provider: Option<String>,
+    provider: Option<SpannedValue<String>>,
 
     /// Value for the provider (secret name, encrypted blob, etc.)
+    /// Wrapped in SpannedValue to track source location for error reporting.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub value: Option<String>,
+    value: Option<SpannedValue<String>>,
 
     /// Path to the config file where this secret was defined (not serialized)
     #[serde(skip)]
@@ -98,8 +109,9 @@ pub struct ProfileConfig {
     pub providers: IndexMap<String, ProviderConfig>,
 
     /// Default provider name for this profile
+    /// Wrapped in SpannedValue to track source location for error reporting.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub default_provider: Option<String>,
+    default_provider: Option<SpannedValue<String>>,
 
     /// Secrets for this profile
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
@@ -112,6 +124,10 @@ pub struct ProfileConfig {
     /// Track which config file each secret came from (not serialized)
     #[serde(skip)]
     pub secret_sources: HashMap<String, PathBuf>,
+
+    /// Track which config file the default_provider came from (not serialized)
+    #[serde(skip)]
+    pub default_provider_source: Option<PathBuf>,
 }
 
 #[derive(
@@ -150,13 +166,33 @@ impl Config {
 
     /// Load configuration from a file
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
+        use miette::{NamedSource, SourceSpan};
+
         let path = path.as_ref();
         let content = fs::read_to_string(path).map_err(|source| FnoxError::ConfigReadFailed {
             path: path.to_path_buf(),
             source,
         })?;
 
-        let mut config: Config = toml_edit::de::from_str(&content)?;
+        // Register the source for error reporting
+        source_registry::register(path, content.clone());
+
+        let mut config: Config = toml_edit::de::from_str(&content).map_err(|e| {
+            // Try to create a source-aware error with span highlighting
+            if let Some(span) = e.span() {
+                FnoxError::ConfigParseErrorWithSource {
+                    message: e.message().to_string(),
+                    src: Arc::new(NamedSource::new(
+                        path.display().to_string(),
+                        Arc::new(content),
+                    )),
+                    span: SourceSpan::new(span.start.into(), span.end - span.start),
+                }
+            } else {
+                // Fall back to the basic error if no span available
+                FnoxError::ConfigParseError { source: e }
+            }
+        })?;
 
         // Set source paths for all secrets and providers
         config.set_source_paths(path);
@@ -565,6 +601,7 @@ impl Config {
             prompt_auth: None,
             provider_sources: HashMap::new(),
             secret_sources: HashMap::new(),
+            default_provider_source: None,
         }
     }
 
@@ -672,28 +709,56 @@ impl Config {
         // Check for profile-specific default provider
         if profile != "default"
             && let Some(profile_config) = self.profiles.get(profile)
-            && let Some(ref default_provider) = profile_config.default_provider
+            && let Some(default_provider_name) = profile_config.default_provider()
         {
             // Validate that the default provider exists
-            if !providers.contains_key(default_provider) {
+            if !providers.contains_key(default_provider_name) {
+                // Try to get source info for better error reporting
+                if let Some(source_path) = &profile_config.default_provider_source
+                    && let (Some(src), Some(span)) = (
+                        source_registry::get_named_source(source_path),
+                        profile_config.default_provider_span(),
+                    )
+                {
+                    return Err(FnoxError::DefaultProviderNotFoundWithSource {
+                        provider: default_provider_name.to_string(),
+                        profile: profile.to_string(),
+                        src,
+                        span: span.into(),
+                    });
+                }
                 return Err(FnoxError::Config(format!(
                     "Default provider '{}' not found in profile '{}'",
-                    default_provider, profile
+                    default_provider_name, profile
                 )));
             }
-            return Ok(Some(default_provider.clone()));
+            return Ok(Some(default_provider_name.to_string()));
         }
 
         // Check for global default provider (for default profile or as fallback)
-        if let Some(ref default_provider) = self.default_provider {
+        if let Some(default_provider_name) = self.default_provider() {
             // Validate that the default provider exists
-            if !providers.contains_key(default_provider) {
+            if !providers.contains_key(default_provider_name) {
+                // Try to get source info for better error reporting
+                if let Some(source_path) = &self.default_provider_source
+                    && let (Some(src), Some(span)) = (
+                        source_registry::get_named_source(source_path),
+                        self.default_provider_span(),
+                    )
+                {
+                    return Err(FnoxError::DefaultProviderNotFoundWithSource {
+                        provider: default_provider_name.to_string(),
+                        profile: profile.to_string(),
+                        src,
+                        span: span.into(),
+                    });
+                }
                 return Err(FnoxError::Config(format!(
                     "Default provider '{}' not found in configuration",
-                    default_provider
+                    default_provider_name
                 )));
             }
-            return Ok(Some(default_provider.clone()));
+            return Ok(Some(default_provider_name.to_string()));
         }
 
         // If there's exactly one provider, auto-select it
@@ -724,6 +789,11 @@ impl Config {
                 .insert(provider_name.clone(), path.to_path_buf());
         }
 
+        // Set source path for default_provider if set
+        if self.default_provider().is_some() {
+            self.default_provider_source = Some(path.to_path_buf());
+        }
+
         // Set source paths for named profiles
         for (_profile_name, profile) in self.profiles.iter_mut() {
             for (key, secret) in profile.secrets.iter_mut() {
@@ -737,6 +807,11 @@ impl Config {
                 profile
                     .provider_sources
                     .insert(provider_name.clone(), path.to_path_buf());
+            }
+
+            // Set source path for profile's default_provider if set
+            if profile.default_provider().is_some() {
+                profile.default_provider_source = Some(path.to_path_buf());
             }
         }
     }
@@ -760,12 +835,26 @@ impl Config {
         }
 
         // If default_provider is set, validate it exists
-        if let Some(ref default_provider) = self.default_provider
-            && !self.providers.contains_key(default_provider)
+        if let Some(default_provider_name) = self.default_provider()
+            && !self.providers.contains_key(default_provider_name)
         {
+            // Try to get source info for better error reporting
+            if let Some(source_path) = &self.default_provider_source
+                && let (Some(src), Some(span)) = (
+                    source_registry::get_named_source(source_path),
+                    self.default_provider_span(),
+                )
+            {
+                return Err(FnoxError::DefaultProviderNotFoundWithSource {
+                    provider: default_provider_name.to_string(),
+                    profile: "default".to_string(),
+                    src,
+                    span: span.into(),
+                });
+            }
             return Err(FnoxError::Config(format!(
                 "Default provider '{}' not found in configuration",
-                default_provider
+                default_provider_name
             )));
         }
 
@@ -782,17 +871,51 @@ impl Config {
             }
 
             // If profile has default_provider set, validate it exists
-            if let Some(ref default_provider) = profile_config.default_provider
-                && !providers.contains_key(default_provider)
+            if let Some(default_provider_name) = profile_config.default_provider()
+                && !providers.contains_key(default_provider_name)
             {
+                // Try to get source info for better error reporting
+                if let Some(source_path) = &profile_config.default_provider_source
+                    && let (Some(src), Some(span)) = (
+                        source_registry::get_named_source(source_path),
+                        profile_config.default_provider_span(),
+                    )
+                {
+                    return Err(FnoxError::DefaultProviderNotFoundWithSource {
+                        provider: default_provider_name.to_string(),
+                        profile: profile_name.clone(),
+                        src,
+                        span: span.into(),
+                    });
+                }
                 return Err(FnoxError::Config(format!(
                     "Default provider '{}' not found in profile '{}'",
-                    default_provider, profile_name
+                    default_provider_name, profile_name
                 )));
             }
         }
 
         Ok(())
+    }
+
+    /// Get the default provider name, if set.
+    pub fn default_provider(&self) -> Option<&str> {
+        self.default_provider
+            .as_ref()
+            .map(|s: &SpannedValue<String>| s.value().as_str())
+    }
+
+    /// Get the default provider's source span (byte range in the config file).
+    /// Returns None if the default_provider wasn't set or was created programmatically.
+    pub fn default_provider_span(&self) -> Option<Range<usize>> {
+        self.default_provider
+            .as_ref()
+            .and_then(|s: &SpannedValue<String>| s.span())
+    }
+
+    /// Set the default provider name (without span information).
+    pub fn set_default_provider(&mut self, provider: Option<String>) {
+        self.default_provider = provider.map(SpannedValue::without_span);
     }
 }
 
@@ -817,7 +940,44 @@ impl SecretConfig {
 
     /// Check if this secret has any value (provider, value, or default)
     pub fn has_value(&self) -> bool {
-        self.provider.is_some() || self.value.is_some() || self.default.is_some()
+        self.provider().is_some() || self.value().is_some() || self.default.is_some()
+    }
+
+    /// Get the provider name, if set.
+    pub fn provider(&self) -> Option<&str> {
+        self.provider.as_ref().map(|s| s.value().as_str())
+    }
+
+    /// Get the provider's source span (byte range in the config file).
+    /// Returns None if the provider wasn't set or was created programmatically.
+    pub fn provider_span(&self) -> Option<Range<usize>> {
+        self.provider.as_ref().and_then(|s| s.span())
+    }
+
+    /// Set the provider name (without span information).
+    pub fn set_provider(&mut self, provider: Option<String>) {
+        self.provider = provider.map(SpannedValue::without_span);
+    }
+
+    /// Get the value, if set.
+    pub fn value(&self) -> Option<&str> {
+        self.value
+            .as_ref()
+            .map(|s: &SpannedValue<String>| s.value().as_str())
+    }
+
+    /// Get the value's source span (byte range in the config file).
+    /// Returns None if the value wasn't set or was created programmatically.
+    #[allow(dead_code)] // Will be used for future error reporting with source spans
+    pub fn value_span(&self) -> Option<Range<usize>> {
+        self.value
+            .as_ref()
+            .and_then(|s: &SpannedValue<String>| s.span())
+    }
+
+    /// Set the value (without span information).
+    pub fn set_value(&mut self, value: Option<String>) {
+        self.value = value.map(SpannedValue::without_span);
     }
 }
 
@@ -830,12 +990,28 @@ impl ProfileConfig {
             secrets: IndexMap::new(),
             provider_sources: HashMap::new(),
             secret_sources: HashMap::new(),
+            default_provider_source: None,
         }
     }
 
     /// Check if the profile is effectively empty (no serializable content)
     pub fn is_empty(&self) -> bool {
-        self.providers.is_empty() && self.secrets.is_empty() && self.default_provider.is_none()
+        self.providers.is_empty() && self.secrets.is_empty() && self.default_provider().is_none()
+    }
+
+    /// Get the default provider name, if set.
+    pub fn default_provider(&self) -> Option<&str> {
+        self.default_provider
+            .as_ref()
+            .map(|s: &SpannedValue<String>| s.value().as_str())
+    }
+
+    /// Get the default provider's source span (byte range in the config file).
+    /// Returns None if the default_provider wasn't set or was created programmatically.
+    pub fn default_provider_span(&self) -> Option<Range<usize>> {
+        self.default_provider
+            .as_ref()
+            .and_then(|s: &SpannedValue<String>| s.span())
     }
 }
 
@@ -904,7 +1080,7 @@ mod tests {
             .providers
             .insert("plain".to_string(), ProviderConfig::Plain);
         let mut secret = SecretConfig::new();
-        secret.value = Some("test-value".to_string());
+        secret.set_value(Some("test-value".to_string()));
         prod_profile
             .secrets
             .insert("TEST_SECRET".to_string(), secret);

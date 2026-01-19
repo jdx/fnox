@@ -140,15 +140,15 @@ impl ListCommand {
         &self,
         secret_config: &crate::config::SecretConfig,
     ) -> (String, String) {
-        if let Some(ref provider) = secret_config.provider {
-            let pk = secret_config.value.as_deref().unwrap_or("");
+        if let Some(provider) = secret_config.provider() {
+            let pk = secret_config.value().unwrap_or("");
             let pk_display = if !self.full && pk.len() > 40 {
                 format!("{}...", &pk[..37])
             } else {
                 pk.to_string()
             };
             (format!("provider ({})", provider), pk_display)
-        } else if secret_config.value.is_some() {
+        } else if secret_config.value().is_some() {
             ("stored value".to_string(), String::new())
         } else if secret_config.default.is_some() {
             ("default value".to_string(), String::new())

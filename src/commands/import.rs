@@ -241,12 +241,12 @@ impl ImportCommand {
                 let secret_config = profile_secrets.entry(key.clone()).or_default();
 
                 // Set the provider
-                secret_config.provider = Some(self.provider.clone());
+                secret_config.set_provider(Some(self.provider.clone()));
 
                 // Encrypt the value (provider already validated as encryption provider)
                 match provider.encrypt(&value).await {
                     Ok(encrypted) => {
-                        secret_config.value = Some(encrypted);
+                        secret_config.set_value(Some(encrypted));
                     }
                     Err(e) => {
                         return Err(miette::miette!(
