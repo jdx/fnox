@@ -167,7 +167,9 @@ async fn load_secrets_from_config() -> Result<HashMap<String, String>> {
 
     // Use load_smart to ensure provider inheritance from parent configs
     // This handles fnox.toml and fnox.local.toml with proper recursion
-    let filenames = crate::config::all_config_filenames(None);
+    let settings =
+        Settings::try_get().map_err(|e| anyhow::anyhow!("Failed to get settings: {}", e))?;
+    let filenames = crate::config::all_config_filenames(Some(&settings.profile));
     let mut last_error = None;
     let mut config = None;
     for filename in &filenames {
@@ -196,10 +198,8 @@ async fn load_secrets_from_config() -> Result<HashMap<String, String>> {
             ));
         }
     };
-    let settings =
-        Settings::try_get().map_err(|e| anyhow::anyhow!("Failed to get settings: {}", e))?;
 
-    // Get the active profile
+    // Get the active profile (settings was already loaded above)
     let profile_name = &settings.profile;
 
     // Get secrets for the profile using the Config method (inherits top-level secrets)

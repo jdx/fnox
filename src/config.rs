@@ -333,6 +333,11 @@ impl Config {
             merged.prompt_auth = overlay.prompt_auth;
         }
 
+        // Merge default_provider (overlay takes precedence)
+        if overlay.default_provider.is_some() {
+            merged.default_provider = overlay.default_provider;
+        }
+
         // Merge providers (overlay takes precedence)
         for (name, provider) in overlay.providers {
             merged.providers.insert(name, provider);
