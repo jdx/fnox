@@ -69,6 +69,7 @@ impl AddCommand {
             ProviderType::OnePassword => crate::config::ProviderConfig::OnePassword {
                 vault: OptionStringOrSecretRef::literal("default"),
                 account: OptionStringOrSecretRef::none(),
+                token: OptionStringOrSecretRef::none(),
             },
             ProviderType::Aws => crate::config::ProviderConfig::AwsSecretsManager {
                 region: StringOrSecretRef::from("us-east-1"),

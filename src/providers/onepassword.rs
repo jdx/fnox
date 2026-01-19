@@ -15,11 +15,23 @@ static ERROR_PREFIX_RE: LazyLock<Regex> =
 pub struct OnePasswordProvider {
     vault: Option<String>,
     account: Option<String>,
+    token: Option<String>,
 }
 
 impl OnePasswordProvider {
-    pub fn new(vault: Option<String>, account: Option<String>) -> Self {
-        Self { vault, account }
+    pub fn new(vault: Option<String>, account: Option<String>, token: Option<String>) -> Self {
+        Self {
+            vault,
+            account,
+            token,
+        }
+    }
+
+    /// Get the service account token, preferring the configured token over environment variable.
+    fn get_token(&self) -> Option<&str> {
+        self.token
+            .as_deref()
+            .or_else(|| OP_SERVICE_ACCOUNT_TOKEN.as_deref())
     }
 
     /// Convert a value to an op:// reference
@@ -63,18 +75,14 @@ impl OnePasswordProvider {
         tracing::debug!("Executing op command with args: {:?}", args);
 
         let mut cmd = Command::new("op");
-        if let Some(token) = &*OP_SERVICE_ACCOUNT_TOKEN {
+        if let Some(token) = self.get_token() {
             tracing::debug!(
-                "Setting OP_SERVICE_ACCOUNT_TOKEN from LazyLock (token length: {})",
+                "Setting OP_SERVICE_ACCOUNT_TOKEN (token length: {})",
                 token.len()
             );
             cmd.env("OP_SERVICE_ACCOUNT_TOKEN", token);
         }
         cmd.args(args);
-
-        // The OP_SERVICE_ACCOUNT_TOKEN environment variable should be set externally
-        // Users should run: export OP_SERVICE_ACCOUNT_TOKEN=$(fnox get OP_SERVICE_ACCOUNT_TOKEN)
-        // The op CLI will automatically use this environment variable
 
         // Add account flag if specified
         if let Some(account) = &self.account {
@@ -109,9 +117,9 @@ impl OnePasswordProvider {
         tracing::debug!("Executing op inject");
 
         let mut cmd = Command::new("op");
-        if let Some(token) = &*OP_SERVICE_ACCOUNT_TOKEN {
+        if let Some(token) = self.get_token() {
             tracing::debug!(
-                "Setting OP_SERVICE_ACCOUNT_TOKEN from LazyLock (token length: {})",
+                "Setting OP_SERVICE_ACCOUNT_TOKEN (token length: {})",
                 token.len()
             );
             cmd.env("OP_SERVICE_ACCOUNT_TOKEN", token);
