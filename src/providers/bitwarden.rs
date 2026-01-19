@@ -1,6 +1,7 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::process::Command;
@@ -13,7 +14,7 @@ pub struct BitwardenProvider {
     backend: BitwardenBackend,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum BitwardenBackend {
     Bw,

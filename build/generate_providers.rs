@@ -220,6 +220,7 @@ fn generate_provider_config(
 
     // Note: Use super::super:: because this is included inside mod generated { mod providers_config { ... } }
     let output = quote! {
+        use schemars::JsonSchema;
         use serde::{Deserialize, Serialize};
         use strum::AsRefStr;
         use super::super::secret_ref::{OptionStringOrSecretRef, StringOrSecretRef};
@@ -233,7 +234,7 @@ fn generate_provider_config(
             backend.as_ref().is_none_or(|b| *b == BitwardenBackend::Bw)
         }
 
-        #[derive(Debug, Clone, Serialize, Deserialize, AsRefStr)]
+        #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, AsRefStr)]
         #[serde(tag = "type")]
         #[serde(deny_unknown_fields)]
         pub enum ProviderConfig {

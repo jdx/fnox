@@ -14,7 +14,9 @@
 //! VAULT_TOKEN = { provider = "age", value = "encrypted-token..." }
 //! ```
 
+use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Cow;
 
 /// A value that can be either a literal string or a reference to a secret.
 ///
@@ -27,6 +29,33 @@ pub enum StringOrSecretRef {
     Literal(String),
     /// A reference to a secret by name
     SecretRef { secret: String },
+}
+
+impl JsonSchema for StringOrSecretRef {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("StringOrSecretRef")
+    }
+
+    fn json_schema(generator: &mut SchemaGenerator) -> Schema {
+        // Get the string schema
+        let string_schema = generator.subschema_for::<String>();
+
+        // Create the oneOf schema: string or { secret: string }
+        json_schema!({
+            "description": "Either a literal string or a reference to a secret",
+            "oneOf": [
+                string_schema,
+                {
+                    "type": "object",
+                    "properties": {
+                        "secret": { "type": "string" }
+                    },
+                    "required": ["secret"],
+                    "additionalProperties": false
+                }
+            ]
+        })
+    }
 }
 
 impl StringOrSecretRef {
@@ -108,7 +137,8 @@ impl From<&str> for StringOrSecretRef {
 /// - Field absent: `None`
 /// - `field = "literal-value"`: `Some(Literal("literal-value"))`
 /// - `field = { secret = "SECRET_NAME" }`: `Some(SecretRef { secret: "SECRET_NAME" })`
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, JsonSchema)]
+#[schemars(transparent)]
 pub struct OptionStringOrSecretRef(pub Option<StringOrSecretRef>);
 
 impl OptionStringOrSecretRef {

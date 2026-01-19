@@ -65,6 +65,15 @@ depends = ["build", "test", "lint"]
 description = "Render documentation from usage"
 depends = ["render:*"]
 
+[tasks."render:schema"]
+description = "Generate JSON Schema for fnox configuration"
+depends = ["build"]
+run = [
+  "fnox schema > docs/public/schema.json",
+  "prettier --write docs/public/schema.json",
+  "git add docs/public/schema.json",
+]
+
 [tasks."render:usage"]
 description = "Generate CLI documentation from usage"
 depends = ["build"]

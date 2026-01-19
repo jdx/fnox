@@ -23,6 +23,7 @@ pub mod profiles;
 pub mod provider;
 pub mod remove;
 pub mod scan;
+pub mod schema;
 pub mod set;
 pub mod tui;
 pub mod usage;
@@ -120,6 +121,10 @@ pub enum Commands {
     /// Scan repository for potential secrets
     Scan(scan::ScanCommand),
 
+    /// Generate JSON Schema for fnox configuration
+    #[command(hide = true)]
+    Schema(schema::SchemaCommand),
+
     /// Set a secret value
     Set(set::SetCommand),
 
@@ -140,6 +145,7 @@ impl Commands {
             Commands::Version(cmd) => cmd.run(cli).await,
             Commands::Init(cmd) => cmd.run(cli).await,
             Commands::Completion(cmd) => cmd.run(cli).await,
+            Commands::Schema(cmd) => cmd.run(cli).await,
             Commands::Usage(cmd) => cmd.run(cli).await,
             Commands::Activate(cmd) => cmd
                 .run()

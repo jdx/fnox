@@ -2,6 +2,7 @@ use crate::env;
 use crate::error::{FnoxError, Result};
 use clap::ValueEnum;
 use indexmap::IndexMap;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -11,7 +12,7 @@ use strum::VariantNames;
 // Re-export ProviderConfig from providers module
 pub use crate::providers::ProviderConfig;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     /// Import paths to other config files
@@ -60,7 +61,7 @@ pub struct Config {
 }
 
 /// Configuration for a single secret
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SecretConfig {
     /// Description of the secret
@@ -89,7 +90,7 @@ pub struct SecretConfig {
 }
 
 /// Configuration for a profile
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProfileConfig {
     /// Provider configurations for this profile
@@ -113,7 +114,9 @@ pub struct ProfileConfig {
     pub secret_sources: HashMap<String, PathBuf>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ValueEnum, VariantNames)]
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq, ValueEnum, VariantNames,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum IfMissing {
     Error,
