@@ -51,8 +51,11 @@ impl EditCommand {
         tracing::debug!("Starting enhanced edit with profile: {}", profile);
 
         // Step 1: Load raw TOML with toml_edit to preserve formatting
-        let toml_content = fs::read_to_string(&cli.config)
-            .map_err(|e| FnoxError::Config(format!("Failed to read config file: {}", e)))?;
+        let toml_content =
+            fs::read_to_string(&cli.config).map_err(|source| FnoxError::ConfigReadFailed {
+                path: cli.config.clone(),
+                source,
+            })?;
         let doc = toml_content
             .parse::<DocumentMut>()
             .map_err(|e| FnoxError::Config(format!("Failed to parse TOML: {}", e)))?;
@@ -166,8 +169,10 @@ impl EditCommand {
         // Step 8: Save the modified config (preserves all user edits)
         // Strip the temporary file header comments before saving
         let output = Self::strip_temp_header(&modified_doc.to_string());
-        fs::write(&cli.config, output)
-            .map_err(|e| FnoxError::Config(format!("Failed to write config file: {}", e)))?;
+        fs::write(&cli.config, output).map_err(|source| FnoxError::ConfigWriteFailed {
+            path: cli.config.clone(),
+            source,
+        })?;
 
         let check = console::style("✓").green();
         let styled_config = console::style(cli.config.display()).cyan();
