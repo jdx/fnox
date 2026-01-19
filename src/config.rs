@@ -681,7 +681,7 @@ impl Config {
         // If no providers configured, that's an error
         if providers.is_empty() {
             return Err(FnoxError::Config(
-                "No providers configured. Add at least one provider to fnox.toml or .fnox.toml"
+                "No providers configured. Add at least one provider to fnox.toml"
                     .to_string(),
             ));
         }
@@ -772,7 +772,7 @@ impl Config {
         // Check that there's at least one provider if there are any secrets
         if self.providers.is_empty() && self.profiles.is_empty() && !self.secrets.is_empty() {
             return Err(FnoxError::Config(
-                "No providers configured. Add at least one provider to fnox.toml or .fnox.toml"
+                "No providers configured. Add at least one provider to fnox.toml"
                     .to_string(),
             ));
         }
