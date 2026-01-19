@@ -170,7 +170,7 @@ async fn load_secrets_from_config() -> Result<HashMap<String, String>> {
     let config = [".fnox.toml", "fnox.toml"]
         .iter()
         .find_map(|&filename| Config::load_smart(filename).ok())
-        .ok_or_else(|| anyhow::anyhow!("Failed to load config '.fnox.toml' or 'fnox.toml'."))?;
+        .ok_or_else(|| anyhow::anyhow!("Failed to load config 'fnox.toml'."))?;
     let settings =
         Settings::try_get().map_err(|e| anyhow::anyhow!("Failed to get settings: {}", e))?;
 
