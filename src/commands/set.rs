@@ -25,6 +25,10 @@ pub struct SetCommand {
     #[arg(short = 'k', long)]
     pub key_name: Option<String>,
 
+    /// Show what would be done without making changes
+    #[arg(short = 'n', long)]
+    pub dry_run: bool,
+
     /// Provider to fetch from
     #[arg(short = 'p', long)]
     pub provider: Option<String>,
@@ -120,17 +124,22 @@ impl SetCommand {
                             provider_name
                         );
 
-                        // Encrypt with the provider
-                        match provider.encrypt(value).await {
-                            Ok(encrypted) => (Some(encrypted), None),
-                            Err(e) => {
-                                // Provider doesn't support encryption, store plaintext
-                                tracing::warn!(
-                                    "Encryption not supported for provider '{}': {}. Storing plaintext.",
-                                    provider_name,
-                                    e
-                                );
-                                (Some(value.clone()), None)
+                        if self.dry_run {
+                            // In dry-run mode, skip actual encryption
+                            (Some("<encrypted>".to_string()), None)
+                        } else {
+                            // Encrypt with the provider
+                            match provider.encrypt(value).await {
+                                Ok(encrypted) => (Some(encrypted), None),
+                                Err(e) => {
+                                    // Provider doesn't support encryption, store plaintext
+                                    tracing::warn!(
+                                        "Encryption not supported for provider '{}': {}. Storing plaintext.",
+                                        provider_name,
+                                        e
+                                    );
+                                    (Some(value.clone()), None)
+                                }
                             }
                         }
                     } else if is_remote_storage_provider {
@@ -140,12 +149,18 @@ impl SetCommand {
                             provider_name
                         );
 
-                        // Use the already-resolved provider to store the secret
-                        let key_name = self.key_name.as_deref().unwrap_or(&self.key);
-                        let stored_key = provider.put_secret(key_name, value).await?;
+                        if self.dry_run {
+                            // In dry-run mode, skip actual remote storage
+                            let key_name = self.key_name.as_deref().unwrap_or(&self.key);
+                            (None, Some(key_name.to_string()))
+                        } else {
+                            // Use the already-resolved provider to store the secret
+                            let key_name = self.key_name.as_deref().unwrap_or(&self.key);
+                            let stored_key = provider.put_secret(key_name, value).await?;
 
-                        // Store just the key name (without prefix) in config
-                        (None, Some(stored_key))
+                            // Store just the key name (without prefix) in config
+                            (None, Some(stored_key))
+                        }
                     } else {
                         // Not an encryption or remote storage provider
                         (None, None)
@@ -220,7 +235,9 @@ impl SetCommand {
             // Save to global config
             let global_path = Config::global_config_path();
             // Create parent directory if it doesn't exist
-            if let Some(parent) = global_path.parent() {
+            if let Some(parent) = global_path.parent()
+                && !self.dry_run
+            {
                 std::fs::create_dir_all(parent).map_err(|e| {
                     FnoxError::Config(format!(
                         "Failed to create config directory '{}': {}",
@@ -237,16 +254,64 @@ impl SetCommand {
             })?;
             current_dir.join(&cli.config)
         };
-        config.save_secret_to_source(&self.key, &secret_config, &profile, &target_path)?;
 
-        let check = console::style("✓").green();
-        let styled_key = console::style(&self.key).cyan();
-        let styled_profile = console::style(&profile).magenta();
-        let global_suffix = if self.global { " (global)" } else { "" };
-        if profile == "default" {
-            println!("{check} Set secret {styled_key}{global_suffix}");
+        if self.dry_run {
+            // Show what would be done
+            let dry_run_label = console::style("[dry-run]").yellow().bold();
+            let styled_key = console::style(&self.key).cyan();
+            let styled_profile = console::style(&profile).magenta();
+            let styled_path = console::style(target_path.display()).dim();
+            let global_suffix = if self.global { " (global)" } else { "" };
+
+            if profile == "default" {
+                println!(
+                    "{dry_run_label} Would set secret {styled_key}{global_suffix} in {styled_path}"
+                );
+            } else {
+                println!(
+                    "{dry_run_label} Would set secret {styled_key} in profile {styled_profile}{global_suffix} in {styled_path}"
+                );
+            }
+
+            // Show the config that would be written
+            if let Some(ref provider) = secret_config.provider {
+                println!("  provider: {}", console::style(provider).green());
+            }
+            if let Some(ref value) = secret_config.value {
+                // Use character-aware truncation to avoid panicking on multi-byte UTF-8
+                let display_value = if value.chars().count() > 50 {
+                    format!("{}...", value.chars().take(50).collect::<String>())
+                } else {
+                    value.clone()
+                };
+                println!("  value: {}", console::style(display_value).dim());
+            }
+            if let Some(ref desc) = secret_config.description {
+                println!("  description: {}", console::style(desc).dim());
+            }
+            if let Some(ref default) = secret_config.default {
+                println!("  default: {}", console::style(default).dim());
+            }
+            if let Some(if_missing) = secret_config.if_missing {
+                println!(
+                    "  if_missing: {}",
+                    console::style(format!("{:?}", if_missing).to_lowercase()).dim()
+                );
+            }
         } else {
-            println!("{check} Set secret {styled_key} in profile {styled_profile}{global_suffix}");
+            config.save_secret_to_source(&self.key, &secret_config, &profile, &target_path)?;
+
+            let check = console::style("✓").green();
+            let styled_key = console::style(&self.key).cyan();
+            let styled_profile = console::style(&profile).magenta();
+            let global_suffix = if self.global { " (global)" } else { "" };
+            if profile == "default" {
+                println!("{check} Set secret {styled_key}{global_suffix}");
+            } else {
+                println!(
+                    "{check} Set secret {styled_key} in profile {styled_profile}{global_suffix}"
+                );
+            }
         }
 
         Ok(())

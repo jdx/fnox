@@ -9,6 +9,7 @@
 use crate::config::Config;
 use crate::env;
 use crate::error::{FnoxError, Result};
+use crate::suggest::{find_similar, format_suggestions};
 use std::collections::HashSet;
 
 use super::secret_ref::{OptionStringOrSecretRef, StringOrSecretRef};
@@ -202,10 +203,17 @@ fn resolve_secret_ref<'a>(
                     let provider = super::get_provider_from_resolved(&resolved_provider)?;
                     return provider.get_secret(provider_value).await;
                 } else {
+                    // Find similar provider names for suggestion
+                    let available_providers: Vec<_> =
+                        providers.keys().map(|s| s.as_str()).collect();
+                    let similar = find_similar(secret_provider_name, available_providers);
+                    let suggestion = format_suggestions(&similar);
+
                     return Err(FnoxError::ProviderNotConfigured {
                         provider: secret_provider_name.clone(),
                         profile: profile.to_string(),
                         config_path: config.provider_sources.get(secret_provider_name).cloned(),
+                        suggestion,
                     });
                 }
             }

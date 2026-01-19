@@ -2,6 +2,7 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
 use clap::{Args, ValueEnum};
+use console;
 use regex::Regex;
 use std::io::{self, Read};
 use std::{collections::HashMap, path::PathBuf};
@@ -41,6 +42,10 @@ pub struct ImportCommand {
     #[arg(short = 'i', long)]
     input: Option<PathBuf>,
 
+    /// Show what would be imported without making changes
+    #[arg(short = 'n', long)]
+    dry_run: bool,
+
     /// Provider to use for encrypting/storing imported secrets (required)
     #[arg(short = 'p', long)]
     provider: String,
@@ -66,15 +71,17 @@ impl ImportCommand {
         let input = self.read_input()?;
         let mut secrets = self.parse_input(&input)?;
 
-        // When importing from stdin, --force is required because stdin is consumed
+        // When importing from stdin, --force or --dry-run is required because stdin is consumed
         // by read_input() and won't be available for the confirmation prompt
-        if self.input.is_none() && !self.force {
+        // (dry-run doesn't need confirmation since it doesn't modify anything)
+        if self.input.is_none() && !self.force && !self.dry_run {
             return Err(miette::miette!(
-                "When importing from stdin, the --force flag is required\n\n\
+                "When importing from stdin, the --force or --dry-run flag is required\n\n\
                 This is because stdin is consumed during import and cannot be used \
                 for the confirmation prompt.\n\n\
                 Use: fnox import --force < input.env\n\
-                Or:  cat input.env | fnox import --force"
+                Or:  cat input.env | fnox import --force\n\
+                Or:  cat input.env | fnox import --dry-run"
             )
             .into());
         }
@@ -98,6 +105,79 @@ impl ImportCommand {
 
         if secrets.is_empty() {
             println!("No secrets to import");
+            return Ok(());
+        }
+
+        // Verify provider exists before dry-run or actual import
+        // (use merged config to find providers from any source)
+        let providers = merged_config.get_providers(&profile);
+        let provider_config = providers.get(&self.provider).ok_or_else(|| {
+            miette::miette!(
+                "Provider '{}' not found in profile '{}'. Available providers: {}",
+                self.provider,
+                profile,
+                providers
+                    .keys()
+                    .map(|k| k.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })?;
+
+        // Get provider and validate capabilities (needed for both dry-run and actual import)
+        let provider = crate::providers::get_provider_resolved(
+            &merged_config,
+            &profile,
+            &self.provider,
+            provider_config,
+        )
+        .await?;
+        let capabilities = provider.capabilities();
+
+        if capabilities.is_empty() {
+            return Err(miette::miette!(
+                "Provider '{}' has no capabilities defined",
+                self.provider
+            )
+            .into());
+        }
+
+        let is_encryption_provider =
+            capabilities.contains(&crate::providers::ProviderCapability::Encryption);
+        let is_remote_storage_provider =
+            capabilities.contains(&crate::providers::ProviderCapability::RemoteStorage);
+
+        // Validate that provider supports import (encryption capability required)
+        if !is_encryption_provider {
+            if is_remote_storage_provider {
+                return Err(miette::miette!(
+                    "Remote storage providers are not yet supported for import. Use an encryption provider like 'age' instead."
+                )
+                .into());
+            } else {
+                return Err(miette::miette!(
+                    "Provider '{}' does not support encryption or remote storage",
+                    self.provider
+                )
+                .into());
+            }
+        }
+
+        // In dry-run mode, show what would be imported and exit
+        // (provider and capability validation above ensures dry-run fails on invalid provider)
+        if self.dry_run {
+            let dry_run_label = console::style("[dry-run]").yellow().bold();
+            let styled_profile = console::style(&profile).magenta();
+            let styled_provider = console::style(&self.provider).green();
+            let global_suffix = if self.global { " (global)" } else { "" };
+
+            println!(
+                "{dry_run_label} Would import {} secrets into profile {styled_profile} using provider {styled_provider}{global_suffix}:",
+                secrets.len()
+            );
+            for key in secrets.keys() {
+                println!("  {}", console::style(key).cyan());
+            }
             return Ok(());
         }
 
@@ -126,44 +206,6 @@ impl ImportCommand {
                 return Ok(());
             }
         }
-
-        // Verify provider exists (use merged config to find providers from any source)
-        let providers = merged_config.get_providers(&profile);
-        let provider_config = providers.get(&self.provider).ok_or_else(|| {
-            miette::miette!(
-                "Provider '{}' not found in profile '{}'. Available providers: {}",
-                self.provider,
-                profile,
-                providers
-                    .keys()
-                    .map(|k| k.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        })?;
-
-        // Get provider and check its capabilities
-        let provider = crate::providers::get_provider_resolved(
-            &merged_config,
-            &profile,
-            &self.provider,
-            provider_config,
-        )
-        .await?;
-        let capabilities = provider.capabilities();
-
-        if capabilities.is_empty() {
-            return Err(miette::miette!(
-                "Provider '{}' has no capabilities defined",
-                self.provider
-            )
-            .into());
-        }
-
-        let is_encryption_provider =
-            capabilities.contains(&crate::providers::ProviderCapability::Encryption);
-        let is_remote_storage_provider =
-            capabilities.contains(&crate::providers::ProviderCapability::RemoteStorage);
 
         // Determine the target config file path
         let target_path = if self.global {
@@ -201,34 +243,20 @@ impl ImportCommand {
                 // Set the provider
                 secret_config.provider = Some(self.provider.clone());
 
-                // Handle encryption or remote storage based on provider capabilities
-                if is_encryption_provider {
-                    // Encrypt the value
-                    match provider.encrypt(&value).await {
-                        Ok(encrypted) => {
-                            secret_config.value = Some(encrypted);
-                        }
-                        Err(e) => {
-                            return Err(miette::miette!(
-                                "Failed to encrypt secret '{}' with provider '{}': {}",
-                                key,
-                                self.provider,
-                                e
-                            )
-                            .into());
-                        }
+                // Encrypt the value (provider already validated as encryption provider)
+                match provider.encrypt(&value).await {
+                    Ok(encrypted) => {
+                        secret_config.value = Some(encrypted);
                     }
-                } else if is_remote_storage_provider {
-                    return Err(miette::miette!(
-                        "Remote storage providers are not yet supported for import. Use an encryption provider like 'age' instead."
-                    )
-                    .into());
-                } else {
-                    return Err(miette::miette!(
-                        "Provider '{}' does not support encryption or remote storage",
-                        self.provider
-                    )
-                    .into());
+                    Err(e) => {
+                        return Err(miette::miette!(
+                            "Failed to encrypt secret '{}' with provider '{}': {}",
+                            key,
+                            self.provider,
+                            e
+                        )
+                        .into());
+                    }
                 }
             }
 

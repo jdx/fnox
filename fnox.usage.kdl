@@ -48,6 +48,7 @@ cmd export help="Export secrets in various formats" {
             choices env json yaml toml
         }
     }
+    flag "-n --dry-run" help="Show what would be exported without writing to file"
     flag "-o --output" help="Output file (default: stdout)" {
         arg <OUTPUT>
     }
@@ -67,6 +68,7 @@ cmd import help="Import secrets from various sources" {
     flag "-i --input" help="Source file or path to import from (default: stdin)" {
         arg <INPUT>
     }
+    flag "-n --dry-run" help="Show what would be imported without making changes"
     flag "-p --provider" help="Provider to use for encrypting/storing imported secrets (required)" required=#true {
         arg <PROVIDER>
     }
@@ -124,6 +126,7 @@ cmd provider help="Manage providers (defaults to list)" {
 cmd remove help="Remove a secret" {
     alias rm delete
     flag "-g --global" help="Remove from the global config file (~/.config/fnox/config.toml)"
+    flag "-n --dry-run" help="Show what would be removed without making changes"
     arg <KEY> help="Secret key to remove"
 }
 cmd scan help="Scan repository for potential secrets" {
@@ -145,6 +148,7 @@ cmd set help="Set a secret value" {
     flag "-k --key-name" help="Key name in the provider (if different from env var name)" {
         arg <KEY_NAME>
     }
+    flag "-n --dry-run" help="Show what would be done without making changes"
     flag "-p --provider" help="Provider to fetch from" {
         arg <PROVIDER>
     }

@@ -11,6 +11,7 @@ mod providers;
 mod secret_resolver;
 mod settings;
 mod shell;
+mod suggest;
 mod tui;
 
 #[cfg(test)]

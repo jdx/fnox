@@ -36,6 +36,10 @@ Import to the global config file (~/.config/fnox/config.toml)
 
 Source file or path to import from (default: stdin)
 
+### `-n --dry-run`
+
+Show what would be imported without making changes
+
 ### `-p --provider <PROVIDER>`
 
 Provider to use for encrypting/storing imported secrets (required)
