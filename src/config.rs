@@ -169,7 +169,7 @@ impl Config {
                 FnoxError::ConfigParseErrorWithSource {
                     message: e.message().to_string(),
                     src: NamedSource::new(path.display().to_string(), content),
-                    span: SourceSpan::new(span.start.into(), span.end - span.start ),
+                    span: SourceSpan::new(span.start.into(), span.end - span.start),
                 }
             } else {
                 // Fall back to the basic error if no span available
