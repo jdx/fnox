@@ -224,8 +224,8 @@ EOF
 	# (since there's no confirmation prompt in dry-run mode)
 	run bash -c 'echo "SECRET=value" | fnox import --provider age --dry-run'
 	[ "$status" -eq 0 ]
-	[[ "$output" =~ \[dry-run\] ]]
-	[[ "$output" =~ "Would import 1 secrets" ]]
+	[[ $output =~ \[dry-run\] ]]
+	[[ $output =~ "Would import 1 secrets" ]]
 }
 
 @test "fnox import --dry-run fails on non-existent provider" {
