@@ -199,7 +199,7 @@ impl ImportCommand {
                 let secret_config = profile_secrets.entry(key.clone()).or_default();
 
                 // Set the provider
-                secret_config.provider = Some(self.provider.clone());
+                secret_config.set_provider(Some(self.provider.clone()));
 
                 // Handle encryption or remote storage based on provider capabilities
                 if is_encryption_provider {

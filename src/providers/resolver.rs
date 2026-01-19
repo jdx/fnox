@@ -182,7 +182,7 @@ fn resolve_secret_ref<'a>(
 
         if let Some(secret_config) = secrets.get(secret_name) {
             // Secret found in config - resolve it
-            if let Some(ref secret_provider_name) = secret_config.provider
+            if let Some(secret_provider_name) = secret_config.provider()
                 && let Some(ref provider_value) = secret_config.value
             {
                 // This secret uses a provider - need to resolve that provider first
@@ -203,7 +203,7 @@ fn resolve_secret_ref<'a>(
                     return provider.get_secret(provider_value).await;
                 } else {
                     return Err(FnoxError::ProviderNotConfigured {
-                        provider: secret_provider_name.clone(),
+                        provider: secret_provider_name.to_string(),
                         profile: profile.to_string(),
                         config_path: config.provider_sources.get(secret_provider_name).cloned(),
                     });

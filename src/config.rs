@@ -1,11 +1,14 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
+use crate::source_registry;
+use crate::spanned::SpannedValue;
 use clap::ValueEnum;
 use indexmap::IndexMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use strum::VariantNames;
 
@@ -77,8 +80,9 @@ pub struct SecretConfig {
     pub default: Option<String>,
 
     /// Provider to fetch from (age, aws-kms, 1password, aws, etc.)
+    /// Wrapped in SpannedValue to track source location for error reporting.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub provider: Option<String>,
+    provider: Option<SpannedValue<String>>,
 
     /// Value for the provider (secret name, encrypted blob, etc.)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -150,11 +154,28 @@ impl Config {
 
     /// Load configuration from a file
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
+        use miette::{NamedSource, SourceSpan};
+
         let path = path.as_ref();
         let content = fs::read_to_string(path)
             .map_err(|e| FnoxError::Config(format!("Failed to read config file: {}", e)))?;
 
-        let mut config: Config = toml_edit::de::from_str(&content)?;
+        // Register the source for error reporting
+        source_registry::register(path, content.clone());
+
+        let mut config: Config = toml_edit::de::from_str(&content).map_err(|e| {
+            // Try to create a source-aware error with span highlighting
+            if let Some(span) = e.span() {
+                FnoxError::ConfigParseErrorWithSource {
+                    message: e.message().to_string(),
+                    src: NamedSource::new(path.display().to_string(), content),
+                    span: SourceSpan::new(span.start.into(), (span.end - span.start).into()),
+                }
+            } else {
+                // Fall back to the basic error if no span available
+                FnoxError::ConfigParseError { source: e }
+            }
+        })?;
 
         // Set source paths for all secrets and providers
         config.set_source_paths(path);
@@ -810,7 +831,32 @@ impl SecretConfig {
 
     /// Check if this secret has any value (provider, value, or default)
     pub fn has_value(&self) -> bool {
-        self.provider.is_some() || self.value.is_some() || self.default.is_some()
+        self.provider().is_some() || self.value.is_some() || self.default.is_some()
+    }
+
+    /// Get the provider name, if set.
+    pub fn provider(&self) -> Option<&str> {
+        self.provider
+            .as_ref()
+            .map(|s: &SpannedValue<String>| s.value().as_str())
+    }
+
+    /// Get the provider's source span (byte range in the config file).
+    /// Returns None if the provider wasn't set or was created programmatically.
+    pub fn provider_span(&self) -> Option<Range<usize>> {
+        self.provider
+            .as_ref()
+            .and_then(|s: &SpannedValue<String>| s.span())
+    }
+
+    /// Set the provider name (without span information).
+    pub fn set_provider(&mut self, provider: Option<String>) {
+        self.provider = provider.map(SpannedValue::without_span);
+    }
+
+    /// Set the provider name with span information.
+    pub fn set_provider_with_span(&mut self, provider: String, span: Range<usize>) {
+        self.provider = Some(SpannedValue::new(provider, span));
     }
 }
 

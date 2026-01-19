@@ -51,7 +51,7 @@ impl CheckCommand {
                     }
 
                     // Check provider configuration
-                    if let Some(provider) = &secret_config.provider {
+                    if let Some(provider) = secret_config.provider() {
                         let providers = config.get_providers(&profile);
                         if !providers.contains_key(provider) {
                             warnings.push(format!(

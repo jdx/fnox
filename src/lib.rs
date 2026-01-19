@@ -9,6 +9,8 @@ pub mod providers;
 pub mod secret_resolver;
 pub mod settings;
 pub mod shell;
+pub mod source_registry;
+pub mod spanned;
 pub mod tui;
 
 #[cfg(test)]

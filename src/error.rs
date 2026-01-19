@@ -1,6 +1,7 @@
 #![allow(unused_assignments)] // Fields are used by thiserror/miette macros but clippy doesn't see it
 
-use miette::Diagnostic;
+use miette::{Diagnostic, NamedSource, SourceSpan};
+use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Error, Debug, Diagnostic)]
@@ -48,6 +49,20 @@ pub enum FnoxError {
     ConfigParseError {
         #[source]
         source: toml_edit::de::Error,
+    },
+
+    /// TOML parse error with source code context for precise error location display.
+    #[error("{message}")]
+    #[diagnostic(
+        code(fnox::config::invalid_toml),
+        help("Check the TOML syntax in your configuration file")
+    )]
+    ConfigParseErrorWithSource {
+        message: String,
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("parse error here")]
+        span: SourceSpan,
     },
 
     #[error("Failed to serialize configuration to TOML")]
@@ -163,6 +178,25 @@ pub enum FnoxError {
         provider: String,
         profile: String,
         config_path: Option<std::path::PathBuf>,
+    },
+
+    /// Provider not configured error with source code context showing where the provider is referenced.
+    #[error("Provider '{provider}' not configured in profile '{profile}'")]
+    #[diagnostic(
+        code(fnox::provider::not_configured),
+        help(
+            "Add the provider to your config:\n  \
+            [providers.{provider}]\n  \
+            type = \"age\"  # or other provider type"
+        )
+    )]
+    ProviderNotConfiguredWithSource {
+        provider: String,
+        profile: String,
+        #[source_code]
+        src: NamedSource<Arc<String>>,
+        #[label("provider '{provider}' referenced here")]
+        span: SourceSpan,
     },
 
     #[allow(dead_code)]
