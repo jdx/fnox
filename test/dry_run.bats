@@ -237,7 +237,7 @@ EOF
 
 	# Should fail because provider doesn't exist (validation before dry-run output)
 	assert_fnox_failure import -i .env --provider nonexistent --dry-run
-	assert_output --partial "Provider 'nonexistent' not found"
+	assert_output --partial "Provider 'nonexistent' not configured"
 }
 
 # ============================================================================
