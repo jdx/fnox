@@ -1,13 +1,32 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
+use crate::source_registry;
+use crate::spanned::SpannedValue;
 use clap::ValueEnum;
 use indexmap::IndexMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use strum::VariantNames;
+
+/// Returns all config filenames in load order (first = lowest priority, last = highest priority).
+///
+/// Order: main configs → profile configs → local configs
+/// Within each group, dotfiles come first (higher priority than non-dotfiles).
+pub fn all_config_filenames(profile: Option<&str>) -> Vec<String> {
+    let mut files = vec!["fnox.toml".to_string(), ".fnox.toml".to_string()];
+    if let Some(p) = profile.filter(|p| *p != "default") {
+        files.push(format!("fnox.{p}.toml"));
+        files.push(format!(".fnox.{p}.toml"));
+    }
+    files.push("fnox.local.toml".to_string());
+    files.push(".fnox.local.toml".to_string());
+    files
+}
 
 // Re-export ProviderConfig from providers module
 pub use crate::providers::ProviderConfig;
@@ -77,8 +96,9 @@ pub struct SecretConfig {
     pub default: Option<String>,
 
     /// Provider to fetch from (age, aws-kms, 1password, aws, etc.)
+    /// Wrapped in SpannedValue to track source location for error reporting.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub provider: Option<String>,
+    provider: Option<SpannedValue<String>>,
 
     /// Value for the provider (secret name, encrypted blob, etc.)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -129,8 +149,9 @@ impl Config {
     pub fn load_smart<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path_ref = path.as_ref();
 
-        // If the path is exactly "fnox.toml" (default), use recursive loading
-        if path_ref == Path::new("fnox.toml") {
+        // If the path is one of the default config filenames, use recursive loading
+        let default_filenames = all_config_filenames(None);
+        if default_filenames.iter().any(|f| path_ref == Path::new(f)) {
             Self::load_with_recursion(path_ref)
         } else {
             // For explicit paths, resolve relative paths against current directory first
@@ -150,13 +171,33 @@ impl Config {
 
     /// Load configuration from a file
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
+        use miette::{NamedSource, SourceSpan};
+
         let path = path.as_ref();
         let content = fs::read_to_string(path).map_err(|source| FnoxError::ConfigReadFailed {
             path: path.to_path_buf(),
             source,
         })?;
 
-        let mut config: Config = toml_edit::de::from_str(&content)?;
+        // Register the source for error reporting
+        source_registry::register(path, content.clone());
+
+        let mut config: Config = toml_edit::de::from_str(&content).map_err(|e| {
+            // Try to create a source-aware error with span highlighting
+            if let Some(span) = e.span() {
+                FnoxError::ConfigParseErrorWithSource {
+                    message: e.message().to_string(),
+                    src: Arc::new(NamedSource::new(
+                        path.display().to_string(),
+                        Arc::new(content),
+                    )),
+                    span: SourceSpan::new(span.start.into(), span.end - span.start),
+                }
+            } else {
+                // Fall back to the basic error if no span available
+                FnoxError::ConfigParseError { source: e }
+            }
+        })?;
 
         // Set source paths for all secrets and providers
         config.set_source_paths(path);
@@ -170,7 +211,7 @@ impl Config {
         let current_dir = env::current_dir()
             .map_err(|e| FnoxError::Config(format!("Failed to get current directory: {}", e)))?;
 
-        match Self::load_recursive(&current_dir, false, false) {
+        match Self::load_recursive(&current_dir, false) {
             Ok((_config, found)) if !found => {
                 // No config file was found anywhere in the directory tree
                 Err(FnoxError::ConfigNotFound {
@@ -188,50 +229,22 @@ impl Config {
 
     /// Recursively search for fnox.toml files and merge them
     /// Returns (config, found_any) where found_any indicates if any config file was found
-    fn load_recursive(dir: &Path, _from_parent: bool, found_any: bool) -> Result<(Self, bool)> {
-        let config_path = dir.join("fnox.toml");
-        let local_config_path = dir.join("fnox.local.toml");
+    fn load_recursive(dir: &Path, found_any: bool) -> Result<(Self, bool)> {
+        // Get current profile from Settings (respects: CLI flag > Env var > Default)
+        let profile = crate::settings::Settings::get().profile.clone();
+        let filenames = all_config_filenames(Some(&profile));
 
-        // Get current profile to load profile-specific config if applicable
-        // Use Settings system which respects: CLI flag > Env var > Default
-        let profile = {
-            let settings_profile = crate::settings::Settings::get().profile.clone();
-            if settings_profile != "default" {
-                Some(settings_profile)
-            } else {
-                None
+        // Load all existing config files in order (later files override earlier ones)
+        let mut config = Self::new();
+        let mut found = found_any;
+
+        for filename in &filenames {
+            let path = dir.join(filename);
+            if path.exists() {
+                let file_config = Self::load(&path)?;
+                config = Self::merge_configs(config, file_config)?;
+                found = true;
             }
-        };
-        let profile_config_path = if let Some(profile_name) = &profile {
-            if profile_name != "default" {
-                Some(dir.join(format!("fnox.{}.toml", profile_name)))
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        let (mut config, mut found) = if config_path.exists() {
-            (Self::load(&config_path)?, true)
-        } else {
-            (Self::new(), found_any)
-        };
-
-        // Load fnox.$FNOX_PROFILE.toml if it exists and merge it (takes precedence over fnox.toml)
-        if let Some(profile_path) = profile_config_path
-            && profile_path.exists()
-        {
-            let profile_config = Self::load(&profile_path)?;
-            config = Self::merge_configs(config, profile_config)?;
-            found = true;
-        }
-
-        // Load fnox.local.toml if it exists and merge it (takes precedence over fnox.$FNOX_PROFILE.toml)
-        if local_config_path.exists() {
-            let local_config = Self::load(&local_config_path)?;
-            config = Self::merge_configs(config, local_config)?;
-            found = true;
         }
 
         // If this config marks root, stop recursion but still load global config
@@ -258,7 +271,7 @@ impl Config {
 
         // If we have a parent directory, recurse up and merge
         if let Some(parent_dir) = dir.parent() {
-            let (parent_config, parent_found) = Self::load_recursive(parent_dir, true, found)?;
+            let (parent_config, parent_found) = Self::load_recursive(parent_dir, found)?;
             config = Self::merge_configs(parent_config, config)?;
             found = found || parent_found;
         } else {
@@ -343,6 +356,11 @@ impl Config {
         // Merge prompt_auth (overlay takes precedence)
         if overlay.prompt_auth.is_some() {
             merged.prompt_auth = overlay.prompt_auth;
+        }
+
+        // Merge default_provider (overlay takes precedence)
+        if overlay.default_provider.is_some() {
+            merged.default_provider = overlay.default_provider;
         }
 
         // Merge providers (overlay takes precedence)
@@ -741,8 +759,85 @@ impl Config {
         }
     }
 
+    /// Check if a secret has an empty value that should be flagged as a validation issue.
+    /// Returns a ValidationIssue if the secret has an empty value and is not using plain provider.
+    fn check_empty_value(
+        &self,
+        key: &str,
+        secret: &SecretConfig,
+        profile: &str,
+    ) -> Option<crate::error::ValidationIssue> {
+        // Early return if value is not an empty string
+        let Some(value) = secret.value.as_deref() else {
+            return None; // No value specified - not an issue
+        };
+        if !value.is_empty() {
+            return None; // Non-empty value - not an issue
+        }
+
+        // At this point, value is an empty string
+        // Allow empty values for plain provider (empty string is a valid secret value)
+        if self.is_plain_provider(secret.provider.as_deref(), profile) {
+            return None;
+        }
+        let message = if profile == "default" {
+            format!("Secret '{}' has an empty value", key)
+        } else {
+            format!(
+                "Secret '{}' in profile '{}' has an empty value",
+                key, profile
+            )
+        };
+        Some(crate::error::ValidationIssue::with_help(
+            message,
+            "Set a value for this secret or remove it from the configuration",
+        ))
+    }
+
+    /// Check if a secret uses the plain provider (where empty values are valid).
+    /// Returns true if the provider is "plain" type.
+    fn is_plain_provider(&self, secret_provider: Option<&str>, profile: &str) -> bool {
+        // Get providers for this profile first (needed for auto-selection)
+        let providers = self.get_providers(profile);
+
+        // Determine which provider name to use
+        let provider_name = secret_provider
+            .map(String::from)
+            .or_else(|| {
+                // Try profile's default_provider first (only for non-default profiles)
+                if profile != "default" {
+                    self.profiles
+                        .get(profile)
+                        .and_then(|p| p.default_provider.clone())
+                } else {
+                    None
+                }
+            })
+            .or_else(|| self.default_provider.clone())
+            .or_else(|| {
+                // Auto-select if exactly one provider exists (matching get_default_provider behavior)
+                if providers.len() == 1 {
+                    providers.keys().next().cloned()
+                } else {
+                    None
+                }
+            });
+
+        let Some(provider_name) = provider_name else {
+            return false;
+        };
+
+        // Look up the provider config
+        providers
+            .get(&provider_name)
+            .is_some_and(|p| p.provider_type() == "plain")
+    }
+
     /// Validate the configuration
+    /// Collects all validation issues and returns them together using #[related]
     pub fn validate(&self) -> Result<()> {
+        use crate::error::ValidationIssue;
+
         // If root=true and no providers AND no secrets, that's OK (empty config)
         if self.root
             && self.providers.is_empty()
@@ -752,10 +847,20 @@ impl Config {
             return Ok(());
         }
 
+        let mut issues = Vec::new();
+
+        // Check for secrets with empty values (likely a mistake, but allowed for plain provider)
+        for (key, secret) in &self.secrets {
+            if let Some(issue) = self.check_empty_value(key, secret, "default") {
+                issues.push(issue);
+            }
+        }
+
         // Check that there's at least one provider if there are any secrets
         if self.providers.is_empty() && self.profiles.is_empty() && !self.secrets.is_empty() {
-            return Err(FnoxError::Config(
-                "No providers configured. Add at least one provider to fnox.toml".to_string(),
+            issues.push(ValidationIssue::with_help(
+                "No providers configured",
+                "Add at least one provider to fnox.toml",
             ));
         }
 
@@ -763,36 +868,62 @@ impl Config {
         if let Some(ref default_provider) = self.default_provider
             && !self.providers.contains_key(default_provider)
         {
-            return Err(FnoxError::Config(format!(
-                "Default provider '{}' not found in configuration",
-                default_provider
-            )));
+            issues.push(ValidationIssue::with_help(
+                format!(
+                    "Default provider '{}' not found in configuration",
+                    default_provider
+                ),
+                format!(
+                    "Add [providers.{}] to your config or remove the default_provider setting",
+                    default_provider
+                ),
+            ));
         }
 
         // Validate each profile
         for (profile_name, profile_config) in &self.profiles {
             let providers = self.get_providers(profile_name);
 
+            // Check for profile secrets with empty values (likely a mistake, but allowed for plain provider)
+            for (key, secret) in &profile_config.secrets {
+                if let Some(issue) = self.check_empty_value(key, secret, profile_name) {
+                    issues.push(issue);
+                }
+            }
+
             // Each profile must have at least one provider (inherited or its own), unless root=true
             if providers.is_empty() && !self.root {
-                return Err(FnoxError::Config(format!(
-                    "Profile '{}' has no providers configured",
-                    profile_name
-                )));
+                issues.push(ValidationIssue::with_help(
+                    format!("Profile '{}' has no providers configured", profile_name),
+                    format!(
+                        "Add [profiles.{}.providers.<name>] or inherit from top-level providers",
+                        profile_name
+                    ),
+                ));
             }
 
             // If profile has default_provider set, validate it exists
             if let Some(ref default_provider) = profile_config.default_provider
                 && !providers.contains_key(default_provider)
             {
-                return Err(FnoxError::Config(format!(
-                    "Default provider '{}' not found in profile '{}'",
-                    default_provider, profile_name
-                )));
+                issues.push(ValidationIssue::with_help(
+                    format!(
+                        "Default provider '{}' not found in profile '{}'",
+                        default_provider, profile_name
+                    ),
+                    format!(
+                        "Add [profiles.{}.providers.{}] or remove the default_provider setting",
+                        profile_name, default_provider
+                    ),
+                ));
             }
         }
 
-        Ok(())
+        if issues.is_empty() {
+            Ok(())
+        } else {
+            Err(FnoxError::ConfigValidationFailed { issues })
+        }
     }
 }
 
@@ -817,7 +948,23 @@ impl SecretConfig {
 
     /// Check if this secret has any value (provider, value, or default)
     pub fn has_value(&self) -> bool {
-        self.provider.is_some() || self.value.is_some() || self.default.is_some()
+        self.provider().is_some() || self.value.is_some() || self.default.is_some()
+    }
+
+    /// Get the provider name, if set.
+    pub fn provider(&self) -> Option<&str> {
+        self.provider.as_ref().map(|s| s.value().as_str())
+    }
+
+    /// Get the provider's source span (byte range in the config file).
+    /// Returns None if the provider wasn't set or was created programmatically.
+    pub fn provider_span(&self) -> Option<Range<usize>> {
+        self.provider.as_ref().and_then(|s| s.span())
+    }
+
+    /// Set the provider name (without span information).
+    pub fn set_provider(&mut self, provider: Option<String>) {
+        self.provider = provider.map(SpannedValue::without_span);
     }
 }
 

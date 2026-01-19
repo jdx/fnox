@@ -200,11 +200,11 @@ impl SetCommand {
 
         // Set the provider if explicitly specified
         if let Some(ref provider) = self.provider {
-            secret_config.provider = Some(provider.clone());
-        } else if provider_name_to_use.is_some() && secret_config.provider.is_none() {
+            secret_config.set_provider(Some(provider.clone()));
+        } else if provider_name_to_use.is_some() && secret_config.provider().is_none() {
             // If we have a default provider and the secret doesn't already have one,
             // store it explicitly for clarity
-            secret_config.provider = provider_name_to_use.clone();
+            secret_config.set_provider(provider_name_to_use.clone());
         }
 
         if let Some(ref key_name) = self.key_name {
@@ -274,7 +274,7 @@ impl SetCommand {
             }
 
             // Show the config that would be written
-            if let Some(ref provider) = secret_config.provider {
+            if let Some(provider) = secret_config.provider() {
                 println!("  provider: {}", console::style(provider).green());
             }
             if let Some(ref value) = secret_config.value {

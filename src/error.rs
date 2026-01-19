@@ -1,7 +1,35 @@
 #![allow(unused_assignments)] // Fields are used by thiserror/miette macros but clippy doesn't see it
 
-use miette::Diagnostic;
+use miette::{Diagnostic, NamedSource, SourceSpan};
+use std::sync::Arc;
 use thiserror::Error;
+
+/// A single validation issue (used with #[related] for multiple error reporting)
+#[derive(Error, Debug, Diagnostic)]
+#[error("{message}")]
+#[diagnostic(code(fnox::config::validation_issue))]
+pub struct ValidationIssue {
+    pub message: String,
+    #[help]
+    pub help: Option<String>,
+}
+
+impl ValidationIssue {
+    #[allow(dead_code)]
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            help: None,
+        }
+    }
+
+    pub fn with_help(message: impl Into<String>, help: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            help: Some(help.into()),
+        }
+    }
+}
 
 #[derive(Error, Debug, Diagnostic)]
 pub enum FnoxError {
@@ -49,6 +77,20 @@ pub enum FnoxError {
         source: toml_edit::de::Error,
     },
 
+    /// TOML parse error with source code context for precise error location display.
+    #[error("{message}")]
+    #[diagnostic(
+        code(fnox::config::invalid_toml),
+        help("Check the TOML syntax in your configuration file")
+    )]
+    ConfigParseErrorWithSource {
+        message: String,
+        #[source_code]
+        src: Arc<NamedSource<Arc<String>>>,
+        #[label("parse error here")]
+        span: SourceSpan,
+    },
+
     #[error("Failed to serialize configuration to TOML")]
     #[diagnostic(code(fnox::config::serialize_failed))]
     ConfigSerializeError {
@@ -56,14 +98,18 @@ pub enum FnoxError {
         source: toml_edit::ser::Error,
     },
 
-    #[allow(dead_code)]
-    #[error("Configuration validation failed:\n{}", issues.join("\n"))]
+    /// Configuration validation failed with one or more issues.
+    /// Uses #[related] to display all validation issues together.
+    #[error("Configuration validation failed ({})", pluralizer::pluralize("issue", std::cmp::min(issues.len(), isize::MAX as usize) as isize, true))]
     #[diagnostic(
         code(fnox::config::validation_failed),
-        help("Review the errors above and update your fnox.toml file"),
+        help("Fix the issues above in your fnox.toml file"),
         url("https://fnox.dev/guide/configuration")
     )]
-    ConfigValidationFailed { issues: Vec<String> },
+    ConfigValidationFailed {
+        #[related]
+        issues: Vec<ValidationIssue>,
+    },
 
     /// Backward compatibility for ConfigNotFound with custom message/help
     #[error("{message}")]
@@ -173,6 +219,29 @@ pub enum FnoxError {
         profile: String,
         config_path: Option<std::path::PathBuf>,
         suggestion: Option<String>,
+    },
+
+    /// Provider not configured error with source code context showing where the provider is referenced.
+    #[error("Provider '{provider}' not configured in profile '{profile}'")]
+    #[diagnostic(
+        code(fnox::provider::not_configured),
+        help(
+            "{suggestion}Add the provider to your config:\n  \
+            [providers.{provider}]\n  \
+            type = \"age\"  # or other provider type",
+            suggestion = suggestion.as_ref()
+                .map(|s| format!("{}\n\n", s))
+                .unwrap_or_default()
+        )
+    )]
+    ProviderNotConfiguredWithSource {
+        provider: String,
+        profile: String,
+        suggestion: Option<String>,
+        #[source_code]
+        src: Arc<NamedSource<Arc<String>>>,
+        #[label("provider '{provider}' referenced here")]
+        span: SourceSpan,
     },
 
     #[allow(dead_code)]

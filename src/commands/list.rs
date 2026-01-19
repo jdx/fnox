@@ -140,7 +140,7 @@ impl ListCommand {
         &self,
         secret_config: &crate::config::SecretConfig,
     ) -> (String, String) {
-        if let Some(ref provider) = secret_config.provider {
+        if let Some(provider) = secret_config.provider() {
             let pk = secret_config.value.as_deref().unwrap_or("");
             let pk_display = if !self.full && pk.len() > 40 {
                 format!("{}...", &pk[..37])

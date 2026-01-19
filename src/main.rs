@@ -11,6 +11,8 @@ mod providers;
 mod secret_resolver;
 mod settings;
 mod shell;
+mod source_registry;
+mod spanned;
 mod suggest;
 mod tui;
 

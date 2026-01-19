@@ -4,9 +4,46 @@ use crate::env;
 use crate::error::{FnoxError, Result};
 use crate::providers::{ProviderConfig, get_provider_resolved};
 use crate::settings::Settings;
+use crate::source_registry;
 use crate::suggest::{find_similar, format_suggestions};
 use indexmap::IndexMap;
+use miette::SourceSpan;
 use std::collections::HashMap; // Used only for internal grouping by provider
+
+/// Creates a ProviderNotConfigured error, using source spans when available for better error display.
+fn create_provider_not_configured_error(
+    provider_name: &str,
+    profile: &str,
+    secret_config: &SecretConfig,
+    config: &Config,
+) -> FnoxError {
+    // Find similar provider names for suggestion
+    let providers = config.get_providers(profile);
+    let available_providers: Vec<_> = providers.keys().map(|s| s.as_str()).collect();
+    let similar = find_similar(provider_name, available_providers);
+    let suggestion = format_suggestions(&similar);
+
+    // Try to create a source-aware error if we have both source path and span
+    if let (Some(path), Some(span)) = (&secret_config.source_path, secret_config.provider_span())
+        && let Some(src) = source_registry::get_named_source(path)
+    {
+        return FnoxError::ProviderNotConfiguredWithSource {
+            provider: provider_name.to_string(),
+            profile: profile.to_string(),
+            suggestion,
+            src,
+            span: SourceSpan::new(span.start.into(), span.end - span.start),
+        };
+    }
+
+    // Fall back to the basic error without source highlighting
+    FnoxError::ProviderNotConfigured {
+        provider: provider_name.to_string(),
+        profile: profile.to_string(),
+        config_path: secret_config.source_path.clone(),
+        suggestion,
+    }
+}
 
 /// Resolves the if_missing behavior using the complete priority chain:
 /// 1. CLI flag (--if-missing) via Settings
@@ -135,9 +172,9 @@ async fn try_resolve_from_provider(
     };
 
     // Determine which provider to use
-    let provider_name = if let Some(ref provider_name) = secret_config.provider {
+    let provider_name = if let Some(provider_name) = secret_config.provider() {
         // Explicit provider specified
-        provider_name.clone()
+        provider_name.to_string()
     } else if let Some(default_provider) = config.get_default_provider(profile)? {
         // Use default provider
         default_provider
@@ -149,17 +186,7 @@ async fn try_resolve_from_provider(
     // Get the provider config
     let providers = config.get_providers(profile);
     let provider_config = providers.get(&provider_name).ok_or_else(|| {
-        // Find similar provider names for suggestion
-        let available_providers: Vec<_> = providers.keys().map(|s| s.as_str()).collect();
-        let similar = find_similar(&provider_name, available_providers);
-        let suggestion = format_suggestions(&similar);
-
-        FnoxError::ProviderNotConfigured {
-            provider: provider_name.clone(),
-            profile: profile.to_string(),
-            config_path: config.provider_sources.get(&provider_name).cloned(),
-            suggestion,
-        }
+        create_provider_not_configured_error(&provider_name, profile, secret_config, config)
     })?;
 
     // Try to resolve the secret, with auth retry on failure
@@ -272,8 +299,8 @@ pub async fn resolve_secrets_batch(
         // Check if we can resolve from provider
         if let Some(ref provider_value) = secret_config.value {
             // Determine which provider to use
-            let provider_name = if let Some(ref provider_name) = secret_config.provider {
-                provider_name.clone()
+            let provider_name = if let Some(provider_name) = secret_config.provider() {
+                provider_name.to_string()
             } else if let Ok(Some(default_provider)) = config.get_default_provider(profile) {
                 default_provider
             } else {

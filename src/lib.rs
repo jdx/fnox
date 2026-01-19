@@ -1,4 +1,5 @@
 // Library interface for fnox
+
 pub mod auth_prompt;
 pub mod commands;
 pub mod config;
@@ -9,6 +10,8 @@ pub mod providers;
 pub mod secret_resolver;
 pub mod settings;
 pub mod shell;
+pub mod source_registry;
+pub mod spanned;
 pub mod suggest;
 pub mod tui;
 

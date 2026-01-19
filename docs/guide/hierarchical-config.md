@@ -1,6 +1,6 @@
 # Hierarchical Configuration
 
-fnox searches parent directories for `fnox.toml` files and merges them. This is perfect for monorepos and multi-service projects.
+fnox searches parent directories for `fnox.toml` (or `.fnox.toml`) files and merges them. This is perfect for monorepos and multi-service projects.
 
 ## How It Works
 
@@ -173,6 +173,7 @@ fnox provider add age age --global
 - **Use global config for personal tokens:** Machine-wide secrets like `GITHUB_TOKEN`
 - **Profile inheritance works too:** Each level can define profile-specific overrides
 - **Use `root = true` to stop recursion:** Prevents searching parent directories (but not global config)
+- **Use dotfiles to declutter:** `.fnox.toml` works the same as `fnox.toml` (same for `.fnox.local.toml`, `.fnox.staging.toml`, etc.)
 
 ## Next Steps
 
