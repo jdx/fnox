@@ -12,6 +12,10 @@ pub struct RemoveCommand {
     /// Remove from the global config file (~/.config/fnox/config.toml)
     #[arg(short = 'g', long)]
     pub global: bool,
+
+    /// Show what would be removed without making changes
+    #[arg(short = 'n', long)]
+    pub dry_run: bool,
 }
 
 impl RemoveCommand {
@@ -42,18 +46,36 @@ impl RemoveCommand {
         // Get the profile secrets
         let profile_secrets = config.get_secrets_mut(&profile);
 
-        if profile_secrets.shift_remove(&self.key).is_some() {
-            config.save(&target_path)?;
-            let check = console::style("✓").green();
-            let styled_key = console::style(&self.key).cyan();
-            let styled_profile = console::style(&profile).magenta();
-            let global_suffix = if self.global { " (global)" } else { "" };
-            if profile == "default" {
-                println!("{check} Removed secret {styled_key}{global_suffix}");
+        if profile_secrets.contains_key(&self.key) {
+            if self.dry_run {
+                let dry_run_label = console::style("[dry-run]").yellow().bold();
+                let styled_key = console::style(&self.key).cyan();
+                let styled_profile = console::style(&profile).magenta();
+                let styled_path = console::style(target_path.display()).dim();
+                let global_suffix = if self.global { " (global)" } else { "" };
+                if profile == "default" {
+                    println!(
+                        "{dry_run_label} Would remove secret {styled_key}{global_suffix} from {styled_path}"
+                    );
+                } else {
+                    println!(
+                        "{dry_run_label} Would remove secret {styled_key} from profile {styled_profile}{global_suffix} from {styled_path}"
+                    );
+                }
             } else {
-                println!(
-                    "{check} Removed secret {styled_key} from profile {styled_profile}{global_suffix}"
-                );
+                profile_secrets.shift_remove(&self.key);
+                config.save(&target_path)?;
+                let check = console::style("✓").green();
+                let styled_key = console::style(&self.key).cyan();
+                let styled_profile = console::style(&profile).magenta();
+                let global_suffix = if self.global { " (global)" } else { "" };
+                if profile == "default" {
+                    println!("{check} Removed secret {styled_key}{global_suffix}");
+                } else {
+                    println!(
+                        "{check} Removed secret {styled_key} from profile {styled_profile}{global_suffix}"
+                    );
+                }
             }
         } else {
             Err(miette::miette!(

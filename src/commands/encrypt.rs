@@ -45,16 +45,22 @@ impl EncryptCommand {
         tracing::debug!("Encrypting for {} recipients", recipients.len());
 
         // Create encryptor
-        let encryptor = AgeEncryptor::new(recipients)
-            .map_err(|e| miette::miette!("Failed to create encryptor: {}", e))?;
+        let encryptor = AgeEncryptor::new(recipients).map_err(|e| {
+            FnoxError::AgeEncryptionFailed {
+                details: format!("Failed to create encryptor: {}", e),
+            }
+        })?;
 
         // Serialize secrets to JSON
         let secrets_json = serde_json::to_string(&config.secrets)?;
         let plaintext = secrets_json.as_bytes();
 
         // Encrypt the data
-        let ciphertext = encryptor.encrypt(plaintext).await
-            .map_err(|e| miette::miette!("Encryption failed: {}", e))?;
+        let ciphertext = encryptor.encrypt(plaintext).await.map_err(|e| {
+            FnoxError::AgeEncryptionFailed {
+                details: e.to_string(),
+            }
+        })?;
 
         // Base64 encode the ciphertext
         use base64::Engine;
