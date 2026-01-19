@@ -12,7 +12,7 @@ pub struct HookEnvSession {
     /// Current working directory when session was created
     #[serde(default)]
     pub dir: Option<PathBuf>,
-    /// Path to fnox.toml/.fnox.toml file that was loaded (if any)
+    /// Path to fnox.toml file that was loaded (if any)
     #[serde(default)]
     pub config_path: Option<PathBuf>,
     /// Last modification time of fnox.toml (milliseconds since epoch)
@@ -281,7 +281,6 @@ fn hash_fnox_env_vars() -> String {
 }
 
 /// Find fnox.toml, fnox.$FNOX_PROFILE.toml, or fnox.local.toml in current or parent directories
-/// Also look for their dot equivlants, i.e., .fnox.toml, .fnox.$FNOX_PROFILE.toml, or .fnox.local.toml
 pub fn find_config() -> Option<PathBuf> {
     let mut current = std::env::current_dir().ok()?;
 

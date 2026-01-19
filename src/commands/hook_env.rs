@@ -75,7 +75,7 @@ impl HookEnvCommand {
             eprintln!("fnox: changes detected, loading secrets");
         }
 
-        // Find fnox.toml or .fnox.toml in current or parent directories
+        // Find fnox.toml in current or parent directories
         let config_path = hook_env::find_config();
 
         let mut output = String::new();
@@ -131,7 +131,7 @@ fn calculate_changes(
     old_hashes: &indexmap::IndexMap<String, String>,
     new_secrets: &HashMap<String, String>,
 ) -> (Vec<(String, String)>, Vec<String>) {
-    use crate::hook_env::{PREV_SESSION, hash_secret_value_with_session};
+    use crate::hook_env::{hash_secret_value_with_session, PREV_SESSION};
 
     let mut added = Vec::new();
     let mut removed = Vec::new();
@@ -161,12 +161,12 @@ fn calculate_changes(
     (added, removed)
 }
 
-/// Load all secrets from a fnox.toml or .fnox.toml config file
+/// Load all secrets from a fnox.toml config file
 async fn load_secrets_from_config() -> Result<HashMap<String, String>> {
     use crate::secret_resolver::resolve_secrets_batch;
 
     // Use load_smart to ensure provider inheritance from parent configs
-    // This handles both .fnox.toml, fnox.toml, .fnox.local.toml and fnox.local.toml with proper recursion
+    // This handles fnox.toml and fnox.local.toml with proper recursion
     let config = [".fnox.toml", "fnox.toml"]
         .iter()
         .find_map(|&filename| Config::load_smart(filename).ok())
