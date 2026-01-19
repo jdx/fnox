@@ -2,6 +2,27 @@
 
 Complete reference for the `fnox.toml` configuration file.
 
+## JSON Schema
+
+A JSON Schema is available for IDE autocompletion and validation:
+
+```
+https://fnox.jdx.dev/schema.json
+```
+
+### Editor Setup
+
+**VS Code** with [Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml):
+
+```toml
+#:schema https://fnox.jdx.dev/schema.json
+
+[providers]
+age = { type = "age", recipients = ["age1..."] }
+```
+
+**JetBrains IDEs**: Add the schema URL in Settings > Languages & Frameworks > Schemas and DTDs > JSON Schema Mappings.
+
 ## File Location
 
 fnox looks for configuration files in this order (lowest to highest priority):

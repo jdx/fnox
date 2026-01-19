@@ -1,0 +1,517 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://fnox.jdx.dev/schema.json",
+  "title": "fnox Configuration",
+  "description": "Configuration schema for fnox.toml files",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "import": {
+      "type": "array",
+      "description": "Import paths to other config files",
+      "items": {
+        "type": "string"
+      }
+    },
+    "root": {
+      "type": "boolean",
+      "description": "Root configuration - stops recursion at this level",
+      "default": false
+    },
+    "providers": {
+      "type": "object",
+      "description": "Provider configurations",
+      "additionalProperties": {
+        "$ref": "#/$defs/providerConfig"
+      }
+    },
+    "default_provider": {
+      "type": "string",
+      "description": "Default provider name"
+    },
+    "secrets": {
+      "type": "object",
+      "description": "Secret configurations",
+      "additionalProperties": {
+        "$ref": "#/$defs/secretConfig"
+      }
+    },
+    "profiles": {
+      "type": "object",
+      "description": "Named profiles for environment-specific configuration",
+      "additionalProperties": {
+        "$ref": "#/$defs/profileConfig"
+      }
+    },
+    "age_key_file": {
+      "type": "string",
+      "description": "Age encryption key file path"
+    },
+    "if_missing": {
+      "$ref": "#/$defs/ifMissing",
+      "description": "Default if_missing behavior for all secrets"
+    },
+    "prompt_auth": {
+      "type": "boolean",
+      "description": "Whether to prompt for authentication when provider auth fails (default: true in TTY)"
+    }
+  },
+  "$defs": {
+    "ifMissing": {
+      "type": "string",
+      "enum": ["error", "warn", "ignore"],
+      "description": "Behavior when a secret cannot be resolved"
+    },
+    "stringOrSecretRef": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "required": ["secret"],
+          "additionalProperties": false,
+          "properties": {
+            "secret": {
+              "type": "string",
+              "description": "Name of the secret to reference"
+            }
+          }
+        }
+      ],
+      "description": "Either a literal string or a reference to a secret"
+    },
+    "secretConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Description of the secret"
+        },
+        "if_missing": {
+          "$ref": "#/$defs/ifMissing",
+          "description": "What to do if the secret is missing"
+        },
+        "default": {
+          "type": "string",
+          "description": "Default value to use if provider fails"
+        },
+        "provider": {
+          "type": "string",
+          "description": "Provider to fetch from"
+        },
+        "value": {
+          "type": "string",
+          "description": "Value for the provider (secret name, encrypted blob, etc.)"
+        }
+      }
+    },
+    "profileConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "providers": {
+          "type": "object",
+          "description": "Provider configurations for this profile",
+          "additionalProperties": {
+            "$ref": "#/$defs/providerConfig"
+          }
+        },
+        "default_provider": {
+          "type": "string",
+          "description": "Default provider name for this profile"
+        },
+        "secrets": {
+          "type": "object",
+          "description": "Secrets for this profile",
+          "additionalProperties": {
+            "$ref": "#/$defs/secretConfig"
+          }
+        }
+      }
+    },
+    "providerConfig": {
+      "oneOf": [
+        { "$ref": "#/$defs/providers/plain" },
+        { "$ref": "#/$defs/providers/age" },
+        { "$ref": "#/$defs/providers/onePassword" },
+        { "$ref": "#/$defs/providers/awsKms" },
+        { "$ref": "#/$defs/providers/awsPs" },
+        { "$ref": "#/$defs/providers/awsSm" },
+        { "$ref": "#/$defs/providers/azureKms" },
+        { "$ref": "#/$defs/providers/azureSm" },
+        { "$ref": "#/$defs/providers/bitwarden" },
+        { "$ref": "#/$defs/providers/gcpKms" },
+        { "$ref": "#/$defs/providers/gcpSm" },
+        { "$ref": "#/$defs/providers/infisical" },
+        { "$ref": "#/$defs/providers/keepass" },
+        { "$ref": "#/$defs/providers/keychain" },
+        { "$ref": "#/$defs/providers/passwordStore" },
+        { "$ref": "#/$defs/providers/passwordstate" },
+        { "$ref": "#/$defs/providers/vault" }
+      ]
+    },
+    "providers": {
+      "plain": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "const": "plain"
+          }
+        },
+        "description": "Plain text provider - no encryption"
+      },
+      "age": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "const": "age"
+          },
+          "recipients": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Age public keys (recipients) for encryption"
+          },
+          "key_file": {
+            "type": "string",
+            "description": "Path to age key file"
+          }
+        },
+        "description": "Age encryption provider"
+      },
+      "onePassword": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "const": "1password"
+          },
+          "vault": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Vault name"
+          },
+          "account": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Account (e.g., my.1password.com)"
+          }
+        },
+        "description": "1Password provider"
+      },
+      "awsKms": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "key_id", "region"],
+        "properties": {
+          "type": {
+            "const": "aws-kms"
+          },
+          "key_id": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "KMS key ID or alias"
+          },
+          "region": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "AWS region"
+          }
+        },
+        "description": "AWS KMS encryption provider"
+      },
+      "awsPs": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "region"],
+        "properties": {
+          "type": {
+            "const": "aws-ps"
+          },
+          "region": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "AWS region"
+          },
+          "prefix": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Parameter path prefix"
+          }
+        },
+        "description": "AWS Parameter Store provider"
+      },
+      "awsSm": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "region"],
+        "properties": {
+          "type": {
+            "const": "aws-sm"
+          },
+          "region": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "AWS region"
+          },
+          "prefix": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Secret name prefix"
+          }
+        },
+        "description": "AWS Secrets Manager provider"
+      },
+      "azureKms": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "vault_url", "key_name"],
+        "properties": {
+          "type": {
+            "const": "azure-kms"
+          },
+          "vault_url": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Azure Key Vault URL"
+          },
+          "key_name": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Key name"
+          }
+        },
+        "description": "Azure Key Vault KMS provider"
+      },
+      "azureSm": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "vault_url"],
+        "properties": {
+          "type": {
+            "const": "azure-sm"
+          },
+          "vault_url": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Azure Key Vault URL"
+          },
+          "prefix": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Secret name prefix"
+          }
+        },
+        "description": "Azure Key Vault Secrets provider"
+      },
+      "bitwarden": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "const": "bitwarden"
+          },
+          "collection": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Collection ID"
+          },
+          "organization_id": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Organization ID"
+          },
+          "profile": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Profile name"
+          },
+          "backend": {
+            "type": "string",
+            "enum": ["cli", "sdk"],
+            "description": "Bitwarden backend to use"
+          }
+        },
+        "description": "Bitwarden provider"
+      },
+      "gcpKms": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "project", "location", "keyring", "key"],
+        "properties": {
+          "type": {
+            "const": "gcp-kms"
+          },
+          "project": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "GCP project ID"
+          },
+          "location": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Location (e.g., global, us-east1)"
+          },
+          "keyring": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Key ring name"
+          },
+          "key": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Key name"
+          }
+        },
+        "description": "GCP KMS encryption provider"
+      },
+      "gcpSm": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "project"],
+        "properties": {
+          "type": {
+            "const": "gcp-sm"
+          },
+          "project": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "GCP project ID"
+          },
+          "prefix": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Secret name prefix"
+          }
+        },
+        "description": "GCP Secret Manager provider"
+      },
+      "infisical": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "const": "infisical"
+          },
+          "project_id": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Infisical project ID"
+          },
+          "environment": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Environment (e.g., dev, staging, prod)"
+          },
+          "path": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Secrets path"
+          }
+        },
+        "description": "Infisical provider"
+      },
+      "keepass": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "database"],
+        "properties": {
+          "type": {
+            "const": "keepass"
+          },
+          "database": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Path to KeePass database file (.kdbx)"
+          },
+          "keyfile": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Path to key file"
+          },
+          "password": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Database password (use env var instead)"
+          }
+        },
+        "description": "KeePass provider"
+      },
+      "keychain": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "service"],
+        "properties": {
+          "type": {
+            "const": "keychain"
+          },
+          "service": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Service name"
+          },
+          "prefix": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Secret name prefix"
+          }
+        },
+        "description": "OS Keychain provider (macOS/Windows/Linux)"
+      },
+      "passwordStore": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "const": "password-store"
+          },
+          "prefix": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Secret name prefix"
+          },
+          "store_dir": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Password store directory"
+          },
+          "gpg_opts": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "GPG options"
+          }
+        },
+        "description": "Password-store (pass) provider"
+      },
+      "passwordstate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "base_url", "password_list_id"],
+        "properties": {
+          "type": {
+            "const": "passwordstate"
+          },
+          "base_url": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Passwordstate server URL"
+          },
+          "api_key": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "API key for the password list"
+          },
+          "password_list_id": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Password list ID"
+          },
+          "verify_ssl": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Verify SSL certificates"
+          }
+        },
+        "description": "Passwordstate provider"
+      },
+      "vault": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "address"],
+        "properties": {
+          "type": {
+            "const": "vault"
+          },
+          "address": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Vault server address"
+          },
+          "path": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Secrets path"
+          },
+          "token": {
+            "$ref": "#/$defs/stringOrSecretRef",
+            "description": "Vault token"
+          }
+        },
+        "description": "HashiCorp Vault provider"
+      }
+    }
+  }
+}
