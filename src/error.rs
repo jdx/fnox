@@ -436,9 +436,12 @@ pub enum FnoxError {
         source: serde_yaml::Error,
     },
 
-    #[error("TOML serialization error: {0}")]
+    #[error("TOML serialization error")]
     #[diagnostic(code(fnox::toml::error))]
-    Toml(String),
+    Toml {
+        #[source]
+        source: toml_edit::ser::Error,
+    },
 }
 
 // Implement conversions for common error types

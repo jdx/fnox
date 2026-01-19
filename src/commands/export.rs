@@ -100,11 +100,13 @@ impl ExportCommand {
                         println!("  {}", console::style(key).dim());
                     }
                 } else {
-                    std::fs::write(path, &output).map_err(|e| FnoxError::ExportWriteFailed {
-                        path: path.clone(),
-                        source: e,
-                    })?;
-                    println!("Secrets exported to: {}", path.display());
+                    let path = path.to_path_buf();
+                    std::fs::write(&path, &output)
+                        .map_err(|e| FnoxError::ExportWriteFailed { path, source: e })?;
+                    println!(
+                        "Secrets exported to: {}",
+                        self.output.as_ref().unwrap().display()
+                    );
                 }
             }
             None => {
@@ -143,6 +145,6 @@ impl ExportCommand {
     }
 
     fn export_as_toml(&self, data: &ExportData) -> Result<String> {
-        toml_edit::ser::to_string_pretty(data).map_err(|e| FnoxError::Toml(e.to_string()))
+        toml_edit::ser::to_string_pretty(data).map_err(|source| FnoxError::Toml { source })
     }
 }
