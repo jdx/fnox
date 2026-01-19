@@ -11,6 +11,7 @@ mod providers;
 mod secret_resolver;
 mod settings;
 mod shell;
+mod tui;
 
 #[cfg(test)]
 mod clap_sort;

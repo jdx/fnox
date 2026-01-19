@@ -50,6 +50,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 walkdir = "2"
 which = "7"
 
+# TUI dependencies
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+arboard = "3"
+
 # HTTP client for providers without SDKs or native CLIs
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 urlencoding = "2.1"
