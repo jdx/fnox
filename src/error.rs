@@ -8,7 +8,6 @@ pub enum FnoxError {
     // ========================================================================
     // Configuration Errors
     // ========================================================================
-    #[allow(dead_code)]
     #[error("Configuration file not found: {}", path.display())]
     #[diagnostic(
         code(fnox::config::not_found),
@@ -364,6 +363,17 @@ pub enum FnoxError {
     // ========================================================================
     // Input/Output Errors
     // ========================================================================
+    #[error("Failed to write export to file: {}", path.display())]
+    #[diagnostic(
+        code(fnox::export::write_failed),
+        help("Ensure you have write permissions for the output path")
+    )]
+    ExportWriteFailed {
+        path: std::path::PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
     #[allow(dead_code)]
     #[error("Failed to read from stdin")]
     #[diagnostic(code(fnox::io::stdin_read_failed))]
@@ -402,6 +412,10 @@ pub enum FnoxError {
     #[error("YAML error: {0}")]
     #[diagnostic(code(fnox::yaml::error))]
     Yaml(String),
+
+    #[error("TOML serialization error: {0}")]
+    #[diagnostic(code(fnox::toml::error))]
+    Toml(String),
 }
 
 // Implement conversions for common error types
