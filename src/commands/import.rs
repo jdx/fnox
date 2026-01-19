@@ -330,8 +330,8 @@ impl ImportCommand {
     }
 
     fn parse_toml(&self, input: &str) -> Result<HashMap<String, String>> {
-        let data: serde_json::Value =
-            toml_edit::de::from_str(input).map_err(|e| FnoxError::Toml(e.to_string()))?;
+        let data: serde_json::Value = toml_edit::de::from_str(input)
+            .map_err(|e| FnoxError::Config(format!("Failed to parse TOML: {}", e)))?;
         self.extract_string_values(&data)
     }
 
