@@ -8,7 +8,7 @@ use std::ops::Range;
 
 /// A value that optionally tracks its source location (byte span) in a config file.
 ///
-/// When deserializing from TOML with `toml_edit`, this captures the byte range
+/// When deserializing from TOML, this uses `serde_spanned` to capture the byte range
 /// where the value appeared. When serializing, only the value is written.
 ///
 /// # Example

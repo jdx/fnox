@@ -60,7 +60,7 @@ pub enum FnoxError {
     ConfigParseErrorWithSource {
         message: String,
         #[source_code]
-        src: NamedSource<String>,
+        src: NamedSource<Arc<String>>,
         #[label("parse error here")]
         span: SourceSpan,
     },

@@ -459,8 +459,15 @@
           ]
         },
         "provider": {
-          "description": "Provider to fetch from (age, aws-kms, 1password, aws, etc.)",
-          "type": ["string", "null"]
+          "description": "Provider to fetch from (age, aws-kms, 1password, aws, etc.)\nWrapped in SpannedValue to track source location for error reporting.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "value": {
           "description": "Value for the provider (secret name, encrypted blob, etc.)",
@@ -486,6 +493,9 @@
           "required": ["secret"]
         }
       ]
+    },
+    "string": {
+      "type": "string"
     }
   }
 }

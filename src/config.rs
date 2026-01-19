@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use strum::VariantNames;
 
 // Re-export ProviderConfig from providers module
@@ -180,7 +181,7 @@ impl Config {
             if let Some(span) = e.span() {
                 FnoxError::ConfigParseErrorWithSource {
                     message: e.message().to_string(),
-                    src: NamedSource::new(path.display().to_string(), content),
+                    src: NamedSource::new(path.display().to_string(), Arc::new(content)),
                     span: SourceSpan::new(span.start.into(), span.end - span.start),
                 }
             } else {
@@ -940,17 +941,13 @@ impl SecretConfig {
 
     /// Get the provider name, if set.
     pub fn provider(&self) -> Option<&str> {
-        self.provider
-            .as_ref()
-            .map(|s: &SpannedValue<String>| s.value().as_str())
+        self.provider.as_ref().map(|s| s.value().as_str())
     }
 
     /// Get the provider's source span (byte range in the config file).
     /// Returns None if the provider wasn't set or was created programmatically.
     pub fn provider_span(&self) -> Option<Range<usize>> {
-        self.provider
-            .as_ref()
-            .and_then(|s: &SpannedValue<String>| s.span())
+        self.provider.as_ref().and_then(|s| s.span())
     }
 
     /// Set the provider name (without span information).
