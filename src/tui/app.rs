@@ -362,19 +362,17 @@ impl App {
             }
             KeyCode::Enter => {
                 // Show secret detail view
-                if self.focus == Focus::Secrets {
-                    if let Some(key) = self.selected_secret() {
+                if self.focus == Focus::Secrets
+                    && let Some(key) = self.selected_secret() {
                         self.popup = Popup::SecretDetail(key.clone());
                     }
-                }
             }
             KeyCode::Char('d') => {
                 // Delete secret (with confirmation)
-                if self.focus == Focus::Secrets {
-                    if let Some(key) = self.selected_secret() {
+                if self.focus == Focus::Secrets
+                    && let Some(key) = self.selected_secret() {
                         self.popup = Popup::ConfirmDelete(key.clone());
                     }
-                }
             }
             KeyCode::Char('e') => {
                 // Edit selected secret value

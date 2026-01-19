@@ -157,6 +157,7 @@ cmd set help="Set a secret value" {
     arg <KEY> help="Secret key (environment variable name)"
     arg "[VALUE]" help="Secret value (reads from stdin if not provided)" required=#false
 }
+cmd tui help="Interactive TUI dashboard for managing secrets"
 cmd usage hide=#true help="Generate usage specification"
 cmd version help="Show version information" {
     alias v
