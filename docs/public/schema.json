@@ -8,8 +8,15 @@
       "type": ["string", "null"]
     },
     "default_provider": {
-      "description": "Default provider name for default profile",
-      "type": ["string", "null"]
+      "description": "Default provider name for default profile\nWrapped in SpannedValue to track source location for error reporting.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/string"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "if_missing": {
       "description": "Default if_missing behavior for all secrets in this config",
@@ -85,8 +92,15 @@
       "type": "object",
       "properties": {
         "default_provider": {
-          "description": "Default provider name for this profile",
-          "type": ["string", "null"]
+          "description": "Default provider name for this profile\nWrapped in SpannedValue to track source location for error reporting.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "providers": {
           "description": "Provider configurations for this profile",
