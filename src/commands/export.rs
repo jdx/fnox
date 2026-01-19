@@ -123,6 +123,6 @@ impl ExportCommand {
     }
 
     fn export_as_toml(&self, data: &ExportData) -> Result<String> {
-        Ok(toml_edit::ser::to_string_pretty(data).map_err(|e| FnoxError::Toml(e.to_string()))?)
+        toml_edit::ser::to_string_pretty(data).map_err(|e| FnoxError::Toml(e.to_string()))
     }
 }
