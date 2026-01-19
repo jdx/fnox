@@ -3,7 +3,7 @@
 //
 // This module provides a centralized settings system that merges configuration from:
 // 1. Default values (lowest precedence)
-// 2. Config files (fnox.toml/.fnox.toml)
+// 2. Config files (fnox.toml)
 // 3. Environment variables
 // 4. CLI flags (highest precedence)
 

@@ -129,7 +129,7 @@ impl Config {
     pub fn load_smart<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path_ref = path.as_ref();
 
-        // If the path is exactly "fnox.toml/.fnox.toml" (default), use recursive loading
+        // If the path is exactly "fnox.toml" (default), use recursive loading
         if path_ref == Path::new("fnox.toml") || path_ref == Path::new(".fnox.toml") {
             Self::load_with_recursion(path_ref)
         } else {
@@ -184,7 +184,7 @@ impl Config {
         }
     }
 
-    /// Recursively search for fnox.toml/.fnox.toml files and merge them
+    /// Recursively search for fnox.toml files and merge them
     /// Returns (config, found_any) where found_any indicates if any config file was found
     fn load_recursive(dir: &Path, _from_parent: bool, found_any: bool) -> Result<(Self, bool)> {
         let config_path = dir.join("fnox.toml");
@@ -230,7 +230,7 @@ impl Config {
             (Self::new(), found_any)
         };
 
-        // Load fnox.$FNOX_PROFILE.toml or .fnox.$FNOX_PROFILE.toml if it exists and merge it (takes precedence over fnox.toml/.fnox.toml)
+        // Load fnox.$FNOX_PROFILE.toml if it exists and merge it (takes precedence over fnox.toml)
         if let Some(profile_path) = profile_config_path
             && profile_path.exists()
         {
@@ -239,7 +239,7 @@ impl Config {
             found = true;
         }
 
-        // Load fnox.local.toml or .fnox.local.toml if it exists and merge it (takes precedence over fnox.$FNOX_PROFILE.toml/.fnox.$FNOX_PROFILE.toml)
+        // Load fnox.local.toml if it exists and merge it (takes precedence over fnox.$FNOX_PROFILE.toml/)
         for tmp in [local_config_path, dotfile_local_config_path] {
             if tmp.exists() {
                 let local_config = Self::load(&tmp)?;
