@@ -179,7 +179,7 @@ fn render_secrets(app: &mut App, frame: &mut Frame, area: Rect) {
             let secret_config = &app.secrets[*key];
 
             // Get provider name
-            let provider = secret_config.provider.as_deref().unwrap_or("env");
+            let provider = secret_config.provider().unwrap_or("env");
 
             // Get value status
             let value_status = if app.loading_secrets.contains(*key) || app.initial_loading {
@@ -504,10 +504,10 @@ fn render_secret_detail(app: &App, frame: &mut Frame, secret_key: &str) {
 
     if let Some(config) = secret_config {
         // Provider
-        if let Some(ref provider) = config.provider {
+        if let Some(provider) = config.provider() {
             lines.push(Line::from(vec![
                 Span::styled("Provider: ", Style::default().fg(Colors::cyan())),
-                Span::raw(provider.as_str()),
+                Span::raw(provider),
             ]));
         }
 

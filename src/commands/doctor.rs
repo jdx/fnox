@@ -40,7 +40,7 @@ impl DoctorCommand {
                         if secret.has_value() {
                             with_values += 1;
                         }
-                        if secret.provider.is_some() {
+                        if secret.provider().is_some() {
                             with_providers += 1;
                         }
                         if secret.if_missing == Some(crate::config::IfMissing::Error) {
@@ -56,7 +56,7 @@ impl DoctorCommand {
                         println!("  Secrets:");
                         for (name, secret) in secrets {
                             let status = if secret.has_value() { "✓" } else { "?" };
-                            let provider = secret.provider.as_deref().unwrap_or("plain");
+                            let provider = secret.provider().unwrap_or("plain");
                             println!("    {} {} (provider: {})", status, name, provider);
                         }
                     }

@@ -191,8 +191,8 @@ impl EditCommand {
     ) -> Result<()> {
         for (key, secret_config) in secrets {
             // Determine provider and check if read-only
-            let provider_name = if let Some(ref prov) = secret_config.provider {
-                Some(prov.clone())
+            let provider_name = if let Some(prov) = secret_config.provider() {
+                Some(prov.to_string())
             } else {
                 config.get_default_provider(profile)?
             };
@@ -448,7 +448,7 @@ impl EditCommand {
                 // to avoid false positives when secrets use default provider
                 let value_changed = Some(plaintext) != secret_entry.plaintext_value.as_deref();
                 let provider_changed =
-                    explicit_provider.as_ref() != secret_entry.original_config.provider.as_ref();
+                    explicit_provider.as_deref() != secret_entry.original_config.provider();
 
                 if !value_changed && !provider_changed {
                     // Nothing changed - restore original encrypted value to avoid version control churn

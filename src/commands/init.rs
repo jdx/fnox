@@ -150,17 +150,11 @@ impl InitCommand {
                 .run()
                 .ok();
 
-            config.secrets.insert(
-                secret_name,
-                SecretConfig {
-                    description: description.filter(|s| !s.is_empty()),
-                    provider: config.default_provider.clone(),
-                    value: None, // Will be set with `fnox set` later
-                    default: None,
-                    if_missing: None,
-                    source_path: None,
-                },
-            );
+            let mut secret_config = SecretConfig::new();
+            secret_config.description = description.filter(|s| !s.is_empty());
+            secret_config.set_provider(config.default_provider.clone());
+            // value will be set with `fnox set` later
+            config.secrets.insert(secret_name, secret_config);
         }
 
         Ok(config)
