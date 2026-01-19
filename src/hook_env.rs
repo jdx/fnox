@@ -282,35 +282,19 @@ fn hash_fnox_env_vars() -> String {
 
 /// Find fnox.toml, fnox.$FNOX_PROFILE.toml, or fnox.local.toml in current or parent directories
 pub fn find_config() -> Option<PathBuf> {
+    use crate::config::all_config_filenames;
+
+    let profile = crate::settings::Settings::get().profile.clone();
+    let filenames = all_config_filenames(Some(&profile));
+
     let mut current = std::env::current_dir().ok()?;
 
     loop {
-        for config_file in [".fnox.toml", "fnox.toml"] {
-            let config_path = current.join(config_file);
-            if config_path.exists() {
-                return Some(config_path);
-            }
-        }
-
-        // Check for profile-specific config
-        // Use Settings system which respects: CLI flag > Env var > Default
-        let profile_name = crate::settings::Settings::get().profile.clone();
-        if profile_name != "default" {
-            for config_file in [
-                format!(".fnox.{}.toml", profile_name),
-                format!("fnox.{}.toml", profile_name),
-            ] {
-                let profile_config_path = current.join(config_file);
-                if profile_config_path.exists() {
-                    return Some(profile_config_path);
-                }
-            }
-        }
-
-        for config_file in [".fnox.local.toml", "fnox.local.toml"] {
-            let local_config_path = current.join(config_file);
-            if local_config_path.exists() {
-                return Some(local_config_path);
+        // Check all config files (returns first match)
+        for filename in &filenames {
+            let path = current.join(filename);
+            if path.exists() {
+                return Some(path);
             }
         }
 

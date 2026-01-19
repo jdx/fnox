@@ -1022,8 +1022,8 @@
       {
         "name": "config",
         "usage": "-c --config <CONFIG>",
-        "help": "Path to the configuration file (default: fnox.toml/.tnox.toml, searches parent directories)",
-        "help_first_line": "Path to the configuration file (default: fnox.toml/.tnox.toml, searches parent directories)",
+        "help": "Path to the configuration file (default: fnox.toml, searches parent directories)",
+        "help_first_line": "Path to the configuration file (default: fnox.toml, searches parent directories)",
         "short": ["c"],
         "long": ["config"],
         "hide": false,

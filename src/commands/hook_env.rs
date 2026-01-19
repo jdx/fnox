@@ -131,7 +131,7 @@ fn calculate_changes(
     old_hashes: &indexmap::IndexMap<String, String>,
     new_secrets: &HashMap<String, String>,
 ) -> (Vec<(String, String)>, Vec<String>) {
-    use crate::hook_env::{hash_secret_value_with_session, PREV_SESSION};
+    use crate::hook_env::{PREV_SESSION, hash_secret_value_with_session};
 
     let mut added = Vec::new();
     let mut removed = Vec::new();
@@ -167,10 +167,13 @@ async fn load_secrets_from_config() -> Result<HashMap<String, String>> {
 
     // Use load_smart to ensure provider inheritance from parent configs
     // This handles fnox.toml and fnox.local.toml with proper recursion
-    let config = [".fnox.toml", "fnox.toml"]
+    let filenames = crate::config::all_config_filenames(None);
+    let config = filenames
         .iter()
-        .find_map(|&filename| Config::load_smart(filename).ok())
-        .ok_or_else(|| anyhow::anyhow!("Failed to load config 'fnox.toml'."))?;
+        .find_map(|filename| Config::load_smart(filename).ok())
+        .ok_or_else(|| {
+            anyhow::anyhow!("Failed to load config (tried: {})", filenames.join(", "))
+        })?;
     let settings =
         Settings::try_get().map_err(|e| anyhow::anyhow!("Failed to get settings: {}", e))?;
 

@@ -35,7 +35,7 @@ pub mod version;
 #[command(version)]
 #[command(help_expected = true)]
 pub struct Cli {
-    /// Path to the configuration file (default: fnox.toml/.tnox.toml, searches parent directories)
+    /// Path to the configuration file (default: fnox.toml, searches parent directories)
     #[arg(short, long, default_value = "fnox.toml", global = true)]
     pub config: PathBuf,
 
