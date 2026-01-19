@@ -449,12 +449,13 @@ pub enum FnoxError {
     // ========================================================================
     // Import Errors
     // ========================================================================
-    #[error("When importing from stdin, the --force flag is required")]
+    #[error("When importing from stdin, --force or --dry-run is required")]
     #[diagnostic(
         code(fnox::import::stdin_requires_force),
         help(
             "Stdin is consumed during import and cannot be used for the confirmation prompt.\n\n\
             Use: fnox import --force < input.env\n\
+            Or:  fnox import --dry-run < input.env  (to preview without changes)\n\
             Or:  cat input.env | fnox import --force"
         )
     )]
