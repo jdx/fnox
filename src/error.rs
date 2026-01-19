@@ -90,13 +90,16 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::secret::not_found),
         help(
-            "{init_help}Available actions:\n  • View defined secrets: fnox list -P {profile} --sources\n  • Add this secret: fnox set {key} <value> -P {profile}{suggest}",
+            "{suggestion}{init_help}Available actions:\n  • View defined secrets: fnox list -P {profile} --sources\n  • Add this secret: fnox set {key} <value> -P {profile}{file_suggest}",
+            suggestion = suggestion.as_ref()
+                .map(|s| format!("{}\n\n", s))
+                .unwrap_or_default(),
             init_help = if config_path.is_none() {
                 "No configuration file found. Create one with:\n  • fnox init\n\n"
             } else {
                 ""
             },
-            suggest = config_path.as_ref()
+            file_suggest = config_path.as_ref()
                 .map(|p| format!("\n  • Edit config file: {}", p.display()))
                 .unwrap_or_default()
         )
@@ -105,6 +108,7 @@ pub enum FnoxError {
         key: String,
         profile: String,
         config_path: Option<std::path::PathBuf>,
+        suggestion: Option<String>,
     },
 
     #[allow(dead_code)]
@@ -147,13 +151,16 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::provider::not_configured),
         help(
-            "To configure this provider:\n  \
+            "{suggestion}To configure this provider:\n  \
             1. Add provider configuration to your fnox.toml:\n     \
             [profiles.{profile}.providers.{provider}]\n     \
             type = \"age\"  # or other provider type\n  \
             2. Or configure it globally:\n     \
             [providers.{provider}]\n     \
             type = \"age\"{file}",
+            suggestion = suggestion.as_ref()
+                .map(|s| format!("{}\n\n", s))
+                .unwrap_or_default(),
             file = config_path.as_ref()
                 .map(|p| format!("\n  Edit: {}", p.display()))
                 .unwrap_or_default()
@@ -163,6 +170,7 @@ pub enum FnoxError {
         provider: String,
         profile: String,
         config_path: Option<std::path::PathBuf>,
+        suggestion: Option<String>,
     },
 
     #[allow(dead_code)]

@@ -1981,6 +1981,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "shellexpand",
+ "strsim",
  "strum 0.27.2",
  "tabled",
  "tempfile",
