@@ -236,15 +236,16 @@ impl SetCommand {
             let global_path = Config::global_config_path();
             // Create parent directory if it doesn't exist
             if let Some(parent) = global_path.parent()
-                && !self.dry_run {
-                    std::fs::create_dir_all(parent).map_err(|e| {
-                        FnoxError::Config(format!(
-                            "Failed to create config directory '{}': {}",
-                            parent.display(),
-                            e
-                        ))
-                    })?;
-                }
+                && !self.dry_run
+            {
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    FnoxError::Config(format!(
+                        "Failed to create config directory '{}': {}",
+                        parent.display(),
+                        e
+                    ))
+                })?;
+            }
             global_path
         } else {
             // Save to current directory's config
