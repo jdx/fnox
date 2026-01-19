@@ -14,6 +14,7 @@ pub struct ValidationIssue {
 }
 
 impl ValidationIssue {
+    #[allow(dead_code)]
     pub fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),

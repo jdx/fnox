@@ -770,12 +770,18 @@ impl Config {
                 key, profile
             )
         };
-        Some(crate::error::ValidationIssue::new(message))
+        Some(crate::error::ValidationIssue::with_help(
+            message,
+            "Set a value for this secret or remove it from the configuration",
+        ))
     }
 
     /// Check if a secret uses the plain provider (where empty values are valid).
     /// Returns true if the provider is "plain" type.
     fn is_plain_provider(&self, secret_provider: Option<&str>, profile: &str) -> bool {
+        // Get providers for this profile first (needed for auto-selection)
+        let providers = self.get_providers(profile);
+
         // Determine which provider name to use
         let provider_name = secret_provider
             .map(String::from)
@@ -789,14 +795,21 @@ impl Config {
                     None
                 }
             })
-            .or_else(|| self.default_provider.clone());
+            .or_else(|| self.default_provider.clone())
+            .or_else(|| {
+                // Auto-select if exactly one provider exists (matching get_default_provider behavior)
+                if providers.len() == 1 {
+                    providers.keys().next().cloned()
+                } else {
+                    None
+                }
+            });
 
         let Some(provider_name) = provider_name else {
             return false;
         };
 
         // Look up the provider config
-        let providers = self.get_providers(profile);
         providers
             .get(&provider_name)
             .is_some_and(|p| p.provider_type() == "plain")
