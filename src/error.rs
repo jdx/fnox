@@ -13,11 +13,11 @@ pub enum FnoxError {
     #[error("Configuration file not found: {}", path.display())]
     #[diagnostic(
         code(fnox::config::not_found),
-        help("Run 'fnox init' to create a new configuration file")
+        help("Run 'fnox init' to create a new configuration file"),
+        url("https://fnox.dev/guide/getting-started")
     )]
     ConfigFileNotFound { path: std::path::PathBuf },
 
-    #[allow(dead_code)]
     #[error("Failed to read configuration file: {}", path.display())]
     #[diagnostic(
         code(fnox::config::read_failed),
@@ -29,7 +29,6 @@ pub enum FnoxError {
         source: std::io::Error,
     },
 
-    #[allow(dead_code)]
     #[error("Failed to write configuration file: {}", path.display())]
     #[diagnostic(
         code(fnox::config::write_failed),
@@ -44,7 +43,8 @@ pub enum FnoxError {
     #[error("Invalid TOML in configuration file")]
     #[diagnostic(
         code(fnox::config::invalid_toml),
-        help("Check the TOML syntax in your fnox.toml file")
+        help("Check the TOML syntax in your fnox.toml file"),
+        url("https://fnox.dev/guide/configuration")
     )]
     ConfigParseError {
         #[source]
@@ -60,7 +60,7 @@ pub enum FnoxError {
     ConfigParseErrorWithSource {
         message: String,
         #[source_code]
-        src: NamedSource<String>,
+        src: NamedSource<Arc<String>>,
         #[label("parse error here")]
         span: SourceSpan,
     },
@@ -76,7 +76,8 @@ pub enum FnoxError {
     #[error("Configuration validation failed:\n{}", issues.join("\n"))]
     #[diagnostic(
         code(fnox::config::validation_failed),
-        help("Review the errors above and update your fnox.toml file")
+        help("Review the errors above and update your fnox.toml file"),
+        url("https://fnox.dev/guide/configuration")
     )]
     ConfigValidationFailed { issues: Vec<String> },
 
@@ -105,21 +106,26 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::secret::not_found),
         help(
-            "{init_help}Available actions:\n  • View defined secrets: fnox list -P {profile} --sources\n  • Add this secret: fnox set {key} <value> -P {profile}{suggest}",
+            "{suggestion}{init_help}Available actions:\n  • View defined secrets: fnox list -P {profile} --sources\n  • Add this secret: fnox set {key} <value> -P {profile}{file_suggest}",
+            suggestion = suggestion.as_ref()
+                .map(|s| format!("{}\n\n", s))
+                .unwrap_or_default(),
             init_help = if config_path.is_none() {
                 "No configuration file found. Create one with:\n  • fnox init\n\n"
             } else {
                 ""
             },
-            suggest = config_path.as_ref()
+            file_suggest = config_path.as_ref()
                 .map(|p| format!("\n  • Edit config file: {}", p.display()))
                 .unwrap_or_default()
-        )
+        ),
+        url("https://fnox.dev/guide/secrets")
     )]
     SecretNotFound {
         key: String,
         profile: String,
         config_path: Option<std::path::PathBuf>,
+        suggestion: Option<String>,
     },
 
     #[allow(dead_code)]
@@ -162,22 +168,27 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::provider::not_configured),
         help(
-            "To configure this provider:\n  \
+            "{suggestion}To configure this provider:\n  \
             1. Add provider configuration to your fnox.toml:\n     \
             [profiles.{profile}.providers.{provider}]\n     \
             type = \"age\"  # or other provider type\n  \
             2. Or configure it globally:\n     \
             [providers.{provider}]\n     \
             type = \"age\"{file}",
+            suggestion = suggestion.as_ref()
+                .map(|s| format!("{}\n\n", s))
+                .unwrap_or_default(),
             file = config_path.as_ref()
                 .map(|p| format!("\n  Edit: {}", p.display()))
                 .unwrap_or_default()
-        )
+        ),
+        url("https://fnox.dev/guide/providers")
     )]
     ProviderNotConfigured {
         provider: String,
         profile: String,
         config_path: Option<std::path::PathBuf>,
+        suggestion: Option<String>,
     },
 
     /// Provider not configured error with source code context showing where the provider is referenced.
@@ -253,7 +264,8 @@ pub enum FnoxError {
         help(
             "Resolution path: {cycle}\n\
             Break the cycle by using a literal value or environment variable for one provider."
-        )
+        ),
+        url("https://fnox.dev/guide/secret-references")
     )]
     ProviderConfigCycle { provider: String, cycle: String },
 
@@ -280,7 +292,8 @@ pub enum FnoxError {
         code(fnox::encryption::age::not_configured),
         help(
             "Add age encryption to your config:\n  [encryption]\n  type = \"age\"\n  key_file = \"age.txt\""
-        )
+        ),
+        url("https://fnox.dev/providers/age")
     )]
     AgeNotConfigured,
 
@@ -313,7 +326,8 @@ pub enum FnoxError {
     #[error("Age encryption failed: {details}")]
     #[diagnostic(
         code(fnox::encryption::age::encrypt_failed),
-        help("Ensure your age public key is configured correctly")
+        help("Ensure your age public key is configured correctly"),
+        url("https://fnox.dev/providers/age")
     )]
     AgeEncryptionFailed { details: String },
 
@@ -322,7 +336,8 @@ pub enum FnoxError {
         code(fnox::encryption::age::decrypt_failed),
         help(
             "Ensure you have the correct age identity file or FNOX_AGE_KEY environment variable set"
-        )
+        ),
+        url("https://fnox.dev/providers/age")
     )]
     AgeDecryptionFailed { details: String },
 
@@ -332,7 +347,8 @@ pub enum FnoxError {
         code(fnox::encryption::not_configured),
         help(
             "Add encryption configuration to your fnox.toml:\n  [encryption]\n  type = \"age\"\n  key_file = \"age.txt\""
-        )
+        ),
+        url("https://fnox.dev/providers/age")
     )]
     EncryptionNotConfigured,
 
@@ -379,7 +395,8 @@ pub enum FnoxError {
     #[error("No command specified")]
     #[diagnostic(
         code(fnox::command::not_specified),
-        help("Provide a command to run with your secrets. Example: fnox exec -- npm start")
+        help("Provide a command to run with your secrets. Example: fnox exec -- npm start"),
+        url("https://fnox.dev/guide/exec")
     )]
     CommandNotSpecified,
 
@@ -398,7 +415,6 @@ pub enum FnoxError {
     // ========================================================================
     // Input/Output Errors
     // ========================================================================
-    #[allow(dead_code)]
     #[error("Failed to read from stdin")]
     #[diagnostic(code(fnox::io::stdin_read_failed))]
     StdinReadFailed {
@@ -429,25 +445,31 @@ pub enum FnoxError {
     // ========================================================================
     // JSON/YAML Errors
     // ========================================================================
-    #[error("JSON error: {0}")]
+    #[error("JSON error")]
     #[diagnostic(code(fnox::json::error))]
-    Json(String),
+    Json {
+        #[source]
+        source: serde_json::Error,
+    },
 
-    #[error("YAML error: {0}")]
+    #[error("YAML error")]
     #[diagnostic(code(fnox::yaml::error))]
-    Yaml(String),
+    Yaml {
+        #[source]
+        source: serde_yaml::Error,
+    },
 }
 
 // Implement conversions for common error types
 impl From<serde_json::Error> for FnoxError {
-    fn from(err: serde_json::Error) -> Self {
-        FnoxError::Json(err.to_string())
+    fn from(source: serde_json::Error) -> Self {
+        FnoxError::Json { source }
     }
 }
 
 impl From<serde_yaml::Error> for FnoxError {
-    fn from(err: serde_yaml::Error) -> Self {
-        FnoxError::Yaml(err.to_string())
+    fn from(source: serde_yaml::Error) -> Self {
+        FnoxError::Yaml { source }
     }
 }
 

@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use strum::VariantNames;
 
 // Re-export ProviderConfig from providers module
@@ -157,8 +158,10 @@ impl Config {
         use miette::{NamedSource, SourceSpan};
 
         let path = path.as_ref();
-        let content = fs::read_to_string(path)
-            .map_err(|e| FnoxError::Config(format!("Failed to read config file: {}", e)))?;
+        let content = fs::read_to_string(path).map_err(|source| FnoxError::ConfigReadFailed {
+            path: path.to_path_buf(),
+            source,
+        })?;
 
         // Register the source for error reporting
         source_registry::register(path, content.clone());
@@ -168,7 +171,7 @@ impl Config {
             if let Some(span) = e.span() {
                 FnoxError::ConfigParseErrorWithSource {
                     message: e.message().to_string(),
-                    src: NamedSource::new(path.display().to_string(), content),
+                    src: NamedSource::new(path.display().to_string(), Arc::new(content)),
                     span: SourceSpan::new(span.start.into(), span.end - span.start),
                 }
             } else {
@@ -433,8 +436,12 @@ impl Config {
         // Convert secrets to inline tables
         Self::convert_secrets_to_inline(&mut doc)?;
 
-        fs::write(path.as_ref(), doc.to_string())
-            .map_err(|e| FnoxError::Config(format!("Failed to write config file: {}", e)))?;
+        fs::write(path.as_ref(), doc.to_string()).map_err(|source| {
+            FnoxError::ConfigWriteFailed {
+                path: path.as_ref().to_path_buf(),
+                source,
+            }
+        })?;
         Ok(())
     }
 
@@ -543,11 +550,12 @@ impl Config {
 
     /// Load a single config file without recursion or merging
     fn load_single(path: &Path) -> Result<Self> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| FnoxError::Config(format!("Failed to read config file: {}", e)))?;
+        let content = fs::read_to_string(path).map_err(|source| FnoxError::ConfigReadFailed {
+            path: path.to_path_buf(),
+            source,
+        })?;
 
-        let mut config: Self = toml_edit::de::from_str(&content)
-            .map_err(|e| FnoxError::Config(format!("Failed to parse config file: {}", e)))?;
+        let mut config: Self = toml_edit::de::from_str(&content)?;
 
         // Store the source path for all secrets in this file
         let source_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
@@ -836,27 +844,18 @@ impl SecretConfig {
 
     /// Get the provider name, if set.
     pub fn provider(&self) -> Option<&str> {
-        self.provider
-            .as_ref()
-            .map(|s: &SpannedValue<String>| s.value().as_str())
+        self.provider.as_ref().map(|s| s.value().as_str())
     }
 
     /// Get the provider's source span (byte range in the config file).
     /// Returns None if the provider wasn't set or was created programmatically.
     pub fn provider_span(&self) -> Option<Range<usize>> {
-        self.provider
-            .as_ref()
-            .and_then(|s: &SpannedValue<String>| s.span())
+        self.provider.as_ref().and_then(|s| s.span())
     }
 
     /// Set the provider name (without span information).
     pub fn set_provider(&mut self, provider: Option<String>) {
         self.provider = provider.map(SpannedValue::without_span);
-    }
-
-    /// Set the provider name with span information.
-    pub fn set_provider_with_span(&mut self, provider: String, span: Range<usize>) {
-        self.provider = Some(SpannedValue::new(provider, span));
     }
 }
 

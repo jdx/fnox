@@ -11,6 +11,7 @@ pub mod settings;
 pub mod shell;
 pub mod source_registry;
 pub mod spanned;
+pub mod suggest;
 pub mod tui;
 
 #[cfg(test)]

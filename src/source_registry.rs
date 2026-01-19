@@ -37,6 +37,7 @@ pub fn get_named_source(path: &Path) -> Option<NamedSource<Arc<String>>> {
 /// Get the raw source content for a path.
 ///
 /// Useful when you need the content without wrapping it in NamedSource.
+#[cfg(test)]
 pub fn get_content(path: &Path) -> Option<Arc<String>> {
     let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     let sources = SOURCES.read().ok()?;

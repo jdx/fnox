@@ -8,7 +8,7 @@ use std::ops::Range;
 
 /// A value that optionally tracks its source location (byte span) in a config file.
 ///
-/// When deserializing from TOML with `toml_edit`, this captures the byte range
+/// When deserializing from TOML, this uses `serde_spanned` to capture the byte range
 /// where the value appeared. When serializing, only the value is written.
 ///
 /// # Example
@@ -34,6 +34,7 @@ pub struct SpannedValue<T> {
 
 impl<T> SpannedValue<T> {
     /// Create a new spanned value with a known span.
+    #[cfg(test)]
     pub fn new(value: T, span: Range<usize>) -> Self {
         Self {
             value,
@@ -52,25 +53,10 @@ impl<T> SpannedValue<T> {
         &self.value
     }
 
-    /// Get a mutable reference to the inner value.
-    pub fn value_mut(&mut self) -> &mut T {
-        &mut self.value
-    }
-
-    /// Consume the wrapper and return the inner value.
-    pub fn into_inner(self) -> T {
-        self.value
-    }
-
     /// Get the byte span where this value was found in the source.
     /// Returns `None` if the value was created programmatically.
     pub fn span(&self) -> Option<Range<usize>> {
         self.span.clone()
-    }
-
-    /// Set the span (useful after merging configs).
-    pub fn set_span(&mut self, span: Option<Range<usize>>) {
-        self.span = span;
     }
 }
 

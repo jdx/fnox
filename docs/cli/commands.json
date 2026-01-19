@@ -172,7 +172,7 @@
       },
       "export": {
         "full_cmd": ["export"],
-        "usage": "export [-f --format <FORMAT>] [-o --output <OUTPUT>]",
+        "usage": "export [FLAGS]",
         "subcommands": {},
         "args": [],
         "flags": [
@@ -196,6 +196,16 @@
               }
             },
             "default": ["env"]
+          },
+          {
+            "name": "dry-run",
+            "usage": "-n --dry-run",
+            "help": "Show what would be exported without writing to file",
+            "help_first_line": "Show what would be exported without writing to file",
+            "short": ["n"],
+            "long": ["dry-run"],
+            "hide": false,
+            "global": false
           },
           {
             "name": "output",
@@ -335,6 +345,16 @@
               "double_dash": "Optional",
               "hide": false
             }
+          },
+          {
+            "name": "dry-run",
+            "usage": "-n --dry-run",
+            "help": "Show what would be imported without making changes",
+            "help_first_line": "Show what would be imported without making changes",
+            "short": ["n"],
+            "long": ["dry-run"],
+            "hide": false,
+            "global": false
           },
           {
             "name": "provider",
@@ -694,7 +714,7 @@
       },
       "remove": {
         "full_cmd": ["remove"],
-        "usage": "remove [-g --global] <KEY>",
+        "usage": "remove [-g --global] [-n --dry-run] <KEY>",
         "subcommands": {},
         "args": [
           {
@@ -715,6 +735,16 @@
             "help_first_line": "Remove from the global config file (~/.config/fnox/config.toml)",
             "short": ["g"],
             "long": ["global"],
+            "hide": false,
+            "global": false
+          },
+          {
+            "name": "dry-run",
+            "usage": "-n --dry-run",
+            "help": "Show what would be removed without making changes",
+            "help_first_line": "Show what would be removed without making changes",
+            "short": ["n"],
+            "long": ["dry-run"],
             "hide": false,
             "global": false
           }
@@ -870,6 +900,16 @@
               "double_dash": "Optional",
               "hide": false
             }
+          },
+          {
+            "name": "dry-run",
+            "usage": "-n --dry-run",
+            "help": "Show what would be done without making changes",
+            "help_first_line": "Show what would be done without making changes",
+            "short": ["n"],
+            "long": ["dry-run"],
+            "hide": false,
+            "global": false
           },
           {
             "name": "provider",

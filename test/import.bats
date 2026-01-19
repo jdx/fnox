@@ -242,7 +242,7 @@ EOF
 	# Second test: import with --provider but without --force should fail with stdin consumption error
 	run bash -c "echo -e 'TEST_VAR=test456' | $FNOX_BIN import --provider age"
 	assert_failure
-	assert_output --partial "the --force flag"
+	assert_output --partial "--force or --dry-run"
 	assert_output --partial "stdin is consumed"
 
 	# Verify secrets were NOT imported

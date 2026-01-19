@@ -13,6 +13,7 @@ mod settings;
 mod shell;
 mod source_registry;
 mod spanned;
+mod suggest;
 mod tui;
 
 #[cfg(test)]

@@ -5,6 +5,7 @@ use crate::error::{FnoxError, Result};
 use crate::providers::{ProviderConfig, get_provider_resolved};
 use crate::settings::Settings;
 use crate::source_registry;
+use crate::suggest::{find_similar, format_suggestions};
 use indexmap::IndexMap;
 use miette::SourceSpan;
 use std::collections::HashMap; // Used only for internal grouping by provider
@@ -14,8 +15,14 @@ fn create_provider_not_configured_error(
     provider_name: &str,
     profile: &str,
     secret_config: &SecretConfig,
-    _config: &Config,
+    config: &Config,
 ) -> FnoxError {
+    // Find similar provider names for suggestion
+    let providers = config.get_providers(profile);
+    let available_providers: Vec<_> = providers.keys().map(|s| s.as_str()).collect();
+    let similar = find_similar(provider_name, available_providers);
+    let suggestion = format_suggestions(&similar);
+
     // Try to create a source-aware error if we have both source path and span
     if let (Some(path), Some(span)) = (&secret_config.source_path, secret_config.provider_span())
         && let Some(src) = source_registry::get_named_source(path)
@@ -33,6 +40,7 @@ fn create_provider_not_configured_error(
         provider: provider_name.to_string(),
         profile: profile.to_string(),
         config_path: secret_config.source_path.clone(),
+        suggestion,
     }
 }
 
@@ -385,6 +393,11 @@ async fn resolve_provider_batch(
     let provider_config = match providers.get(provider_name) {
         Some(config) => config,
         None => {
+            // Find similar provider names for suggestion
+            let available_providers: Vec<_> = providers.keys().map(|s| s.as_str()).collect();
+            let similar = find_similar(provider_name, available_providers);
+            let suggestion = format_suggestions(&similar);
+
             // Provider not configured, handle errors for all secrets
             for (key, _) in &provider_secrets {
                 let secret_config = &secrets[key];
@@ -393,6 +406,7 @@ async fn resolve_provider_batch(
                     provider: provider_name.to_string(),
                     profile: profile.to_string(),
                     config_path: config.provider_sources.get(provider_name).cloned(),
+                    suggestion: suggestion.clone(),
                 };
                 if let Some(error) = handle_provider_error(key, error, if_missing, true) {
                     // Fail fast if if_missing is error

@@ -1982,6 +1982,7 @@ dependencies = [
  "serde_spanned 1.0.4",
  "serde_yaml",
  "shellexpand",
+ "strsim",
  "strum 0.27.2",
  "tabled",
  "tempfile",

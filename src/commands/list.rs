@@ -92,9 +92,7 @@ impl ListCommand {
         tracing::debug!("Listing secrets in profile '{}'", profile);
 
         // Get the profile secrets
-        let profile_secrets = config
-            .get_secrets(&profile)
-            .map_err(|e| miette::miette!(e))?;
+        let profile_secrets = config.get_secrets(&profile)?;
 
         if profile_secrets.is_empty() {
             if !self.complete {
