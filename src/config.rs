@@ -749,9 +749,15 @@ impl Config {
         secret: &SecretConfig,
         profile: &str,
     ) -> Option<crate::error::ValidationIssue> {
-        if !secret.value.as_ref().is_some_and(|v| v.is_empty()) {
-            return None;
+        // Early return if value is not an empty string
+        let Some(value) = secret.value.as_deref() else {
+            return None; // No value specified - not an issue
+        };
+        if !value.is_empty() {
+            return None; // Non-empty value - not an issue
         }
+
+        // At this point, value is an empty string
         // Allow empty values for plain provider (empty string is a valid secret value)
         if self.is_plain_provider(secret.provider.as_deref(), profile) {
             return None;
