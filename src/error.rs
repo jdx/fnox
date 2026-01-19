@@ -85,7 +85,7 @@ pub enum FnoxError {
 
     /// Configuration validation failed with one or more issues.
     /// Uses #[related] to display all validation issues together.
-    #[error("Configuration validation failed ({})", pluralizer::pluralize("issue", issues.len() as isize, true))]
+    #[error("Configuration validation failed ({})", pluralizer::pluralize("issue", std::cmp::min(issues.len(), isize::MAX as usize) as isize, true))]
     #[diagnostic(
         code(fnox::config::validation_failed),
         help("Fix the issues above in your fnox.toml file"),
