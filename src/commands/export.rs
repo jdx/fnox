@@ -94,7 +94,7 @@ impl ExportCommand {
                     println!(
                         "{dry_run_label} Would export {} secrets to {styled_path} in {} format:",
                         export_data.secrets.len(),
-                        self.format
+                        format!("{:?}", self.format).to_lowercase()
                     );
                     for key in export_data.secrets.keys() {
                         println!("  {}", console::style(key).dim());

@@ -124,8 +124,47 @@ impl ImportCommand {
             )
         })?;
 
+        // Get provider and validate capabilities (needed for both dry-run and actual import)
+        let provider = crate::providers::get_provider_resolved(
+            &merged_config,
+            &profile,
+            &self.provider,
+            provider_config,
+        )
+        .await?;
+        let capabilities = provider.capabilities();
+
+        if capabilities.is_empty() {
+            return Err(miette::miette!(
+                "Provider '{}' has no capabilities defined",
+                self.provider
+            )
+            .into());
+        }
+
+        let is_encryption_provider =
+            capabilities.contains(&crate::providers::ProviderCapability::Encryption);
+        let is_remote_storage_provider =
+            capabilities.contains(&crate::providers::ProviderCapability::RemoteStorage);
+
+        // Validate that provider supports import (encryption capability required)
+        if !is_encryption_provider {
+            if is_remote_storage_provider {
+                return Err(miette::miette!(
+                    "Remote storage providers are not yet supported for import. Use an encryption provider like 'age' instead."
+                )
+                .into());
+            } else {
+                return Err(miette::miette!(
+                    "Provider '{}' does not support encryption or remote storage",
+                    self.provider
+                )
+                .into());
+            }
+        }
+
         // In dry-run mode, show what would be imported and exit
-        // (provider validation above ensures dry-run fails on invalid provider)
+        // (provider and capability validation above ensures dry-run fails on invalid provider)
         if self.dry_run {
             let dry_run_label = console::style("[dry-run]").yellow().bold();
             let styled_profile = console::style(&profile).magenta();
@@ -168,29 +207,6 @@ impl ImportCommand {
             }
         }
 
-        // Get provider and check its capabilities
-        let provider = crate::providers::get_provider_resolved(
-            &merged_config,
-            &profile,
-            &self.provider,
-            provider_config,
-        )
-        .await?;
-        let capabilities = provider.capabilities();
-
-        if capabilities.is_empty() {
-            return Err(miette::miette!(
-                "Provider '{}' has no capabilities defined",
-                self.provider
-            )
-            .into());
-        }
-
-        let is_encryption_provider =
-            capabilities.contains(&crate::providers::ProviderCapability::Encryption);
-        let is_remote_storage_provider =
-            capabilities.contains(&crate::providers::ProviderCapability::RemoteStorage);
-
         // Determine the target config file path
         let target_path = if self.global {
             let global_path = Config::global_config_path();
@@ -227,34 +243,20 @@ impl ImportCommand {
                 // Set the provider
                 secret_config.provider = Some(self.provider.clone());
 
-                // Handle encryption or remote storage based on provider capabilities
-                if is_encryption_provider {
-                    // Encrypt the value
-                    match provider.encrypt(&value).await {
-                        Ok(encrypted) => {
-                            secret_config.value = Some(encrypted);
-                        }
-                        Err(e) => {
-                            return Err(miette::miette!(
-                                "Failed to encrypt secret '{}' with provider '{}': {}",
-                                key,
-                                self.provider,
-                                e
-                            )
-                            .into());
-                        }
+                // Encrypt the value (provider already validated as encryption provider)
+                match provider.encrypt(&value).await {
+                    Ok(encrypted) => {
+                        secret_config.value = Some(encrypted);
                     }
-                } else if is_remote_storage_provider {
-                    return Err(miette::miette!(
-                        "Remote storage providers are not yet supported for import. Use an encryption provider like 'age' instead."
-                    )
-                    .into());
-                } else {
-                    return Err(miette::miette!(
-                        "Provider '{}' does not support encryption or remote storage",
-                        self.provider
-                    )
-                    .into());
+                    Err(e) => {
+                        return Err(miette::miette!(
+                            "Failed to encrypt secret '{}' with provider '{}': {}",
+                            key,
+                            self.provider,
+                            e
+                        )
+                        .into());
+                    }
                 }
             }
 
