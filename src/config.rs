@@ -181,7 +181,10 @@ impl Config {
             if let Some(span) = e.span() {
                 FnoxError::ConfigParseErrorWithSource {
                     message: e.message().to_string(),
-                    src: NamedSource::new(path.display().to_string(), Arc::new(content)),
+                    src: Arc::new(NamedSource::new(
+                        path.display().to_string(),
+                        Arc::new(content),
+                    )),
                     span: SourceSpan::new(span.start.into(), span.end - span.start),
                 }
             } else {
@@ -719,7 +722,7 @@ impl Config {
                     return Err(FnoxError::DefaultProviderNotFoundWithSource {
                         provider: default_provider_name.to_string(),
                         profile: profile.to_string(),
-                        src,
+                        src: Arc::new(src),
                         span: span.into(),
                     });
                 }
@@ -745,7 +748,7 @@ impl Config {
                     return Err(FnoxError::DefaultProviderNotFoundWithSource {
                         provider: default_provider_name.to_string(),
                         profile: profile.to_string(),
-                        src,
+                        src: Arc::new(src),
                         span: span.into(),
                     });
                 }
@@ -844,7 +847,7 @@ impl Config {
                 return Err(FnoxError::DefaultProviderNotFoundWithSource {
                     provider: default_provider_name.to_string(),
                     profile: "default".to_string(),
-                    src,
+                    src: Arc::new(src),
                     span: span.into(),
                 });
             }
@@ -880,7 +883,7 @@ impl Config {
                     return Err(FnoxError::DefaultProviderNotFoundWithSource {
                         provider: default_provider_name.to_string(),
                         profile: profile_name.clone(),
-                        src,
+                        src: Arc::new(src),
                         span: span.into(),
                     });
                 }
