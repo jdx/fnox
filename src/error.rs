@@ -362,9 +362,66 @@ pub enum FnoxError {
     CommandExitFailed { command: String, status: i32 },
 
     // ========================================================================
+    // Import Errors
+    // ========================================================================
+    #[error("When importing from stdin, the --force flag is required")]
+    #[diagnostic(
+        code(fnox::import::stdin_requires_force),
+        help(
+            "Stdin is consumed during import and cannot be used for the confirmation prompt.\n\n\
+            Use: fnox import --force < input.env\n\
+            Or:  cat input.env | fnox import --force"
+        )
+    )]
+    ImportStdinRequiresForce,
+
+    #[error("Invalid regex filter pattern: {pattern}")]
+    #[diagnostic(
+        code(fnox::import::invalid_regex),
+        help("Ensure the filter is a valid regular expression")
+    )]
+    InvalidRegexFilter { pattern: String, details: String },
+
+    #[error("Failed to read import source: {}", path.display())]
+    #[diagnostic(
+        code(fnox::import::read_failed),
+        help("Ensure the file exists and you have read permissions")
+    )]
+    ImportReadFailed {
+        path: std::path::PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("Failed to encrypt secret '{key}' with provider '{provider}'")]
+    #[diagnostic(
+        code(fnox::import::encryption_failed),
+        help("Check the provider configuration and ensure the encryption key is available")
+    )]
+    ImportEncryptionFailed {
+        key: String,
+        provider: String,
+        details: String,
+    },
+
+    #[error("Provider '{provider}' cannot be used for import")]
+    #[diagnostic(code(fnox::import::provider_unsupported), help("{help}"))]
+    ImportProviderUnsupported { provider: String, help: String },
+
+    #[error("Failed to create directory: {}", path.display())]
+    #[diagnostic(
+        code(fnox::io::create_dir_failed),
+        help("Ensure you have write permissions for the parent directory")
+    )]
+    CreateDirFailed {
+        path: std::path::PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
+    // ========================================================================
     // Input/Output Errors
     // ========================================================================
-    #[allow(dead_code)]
     #[error("Failed to read from stdin")]
     #[diagnostic(code(fnox::io::stdin_read_failed))]
     StdinReadFailed {
@@ -402,6 +459,10 @@ pub enum FnoxError {
     #[error("YAML error: {0}")]
     #[diagnostic(code(fnox::yaml::error))]
     Yaml(String),
+
+    #[error("TOML error: {0}")]
+    #[diagnostic(code(fnox::toml::error))]
+    Toml(String),
 }
 
 // Implement conversions for common error types
