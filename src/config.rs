@@ -741,6 +741,31 @@ impl Config {
         }
     }
 
+    /// Check if a secret uses the plain provider (where empty values are valid).
+    /// Returns true if the provider is "plain" type.
+    fn is_plain_provider(&self, secret_provider: Option<&str>, profile: &str) -> bool {
+        // Determine which provider name to use
+        let provider_name = secret_provider
+            .map(String::from)
+            .or_else(|| {
+                // Try profile's default_provider first
+                self.profiles
+                    .get(profile)
+                    .and_then(|p| p.default_provider.clone())
+            })
+            .or_else(|| self.default_provider.clone());
+
+        let Some(provider_name) = provider_name else {
+            return false;
+        };
+
+        // Look up the provider config
+        let providers = self.get_providers(profile);
+        providers
+            .get(&provider_name)
+            .is_some_and(|p| p.provider_type() == "plain")
+    }
+
     /// Validate the configuration
     /// Collects all validation issues and returns them together using #[related]
     pub fn validate(&self) -> Result<()> {
@@ -757,13 +782,16 @@ impl Config {
 
         let mut issues = Vec::new();
 
-        // Check for secrets with empty values (likely a mistake)
+        // Check for secrets with empty values (likely a mistake, but allowed for plain provider)
         for (key, secret) in &self.secrets {
             if secret.value.as_ref().is_some_and(|v| v.is_empty()) {
-                issues.push(ValidationIssue::new(format!(
-                    "Secret '{}' has an empty value",
-                    key
-                )));
+                // Allow empty values for plain provider (empty string is a valid secret value)
+                if !self.is_plain_provider(secret.provider.as_deref(), "default") {
+                    issues.push(ValidationIssue::new(format!(
+                        "Secret '{}' has an empty value",
+                        key
+                    )));
+                }
             }
         }
 
@@ -795,13 +823,16 @@ impl Config {
         for (profile_name, profile_config) in &self.profiles {
             let providers = self.get_providers(profile_name);
 
-            // Check for profile secrets with empty values (likely a mistake)
+            // Check for profile secrets with empty values (likely a mistake, but allowed for plain provider)
             for (key, secret) in &profile_config.secrets {
                 if secret.value.as_ref().is_some_and(|v| v.is_empty()) {
-                    issues.push(ValidationIssue::new(format!(
-                        "Secret '{}' in profile '{}' has an empty value",
-                        key, profile_name
-                    )));
+                    // Allow empty values for plain provider (empty string is a valid secret value)
+                    if !self.is_plain_provider(secret.provider.as_deref(), profile_name) {
+                        issues.push(ValidationIssue::new(format!(
+                            "Secret '{}' in profile '{}' has an empty value",
+                            key, profile_name
+                        )));
+                    }
                 }
             }
 
