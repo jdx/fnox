@@ -2,6 +2,7 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::Result;
 use clap::{Args, ValueEnum};
+use console;
 use regex::Regex;
 use std::io::{self, Read};
 use std::{collections::HashMap, path::PathBuf};
@@ -40,6 +41,10 @@ pub struct ImportCommand {
     /// Source file or path to import from (default: stdin)
     #[arg(short = 'i', long)]
     input: Option<PathBuf>,
+
+    /// Show what would be imported without making changes
+    #[arg(short = 'n', long)]
+    dry_run: bool,
 
     /// Provider to use for encrypting/storing imported secrets (required)
     #[arg(short = 'p', long)]
@@ -98,6 +103,23 @@ impl ImportCommand {
 
         if secrets.is_empty() {
             println!("No secrets to import");
+            return Ok(());
+        }
+
+        // In dry-run mode, show what would be imported and exit
+        if self.dry_run {
+            let dry_run_label = console::style("[dry-run]").yellow().bold();
+            let styled_profile = console::style(&profile).magenta();
+            let styled_provider = console::style(&self.provider).green();
+            let global_suffix = if self.global { " (global)" } else { "" };
+
+            println!(
+                "{dry_run_label} Would import {} secrets into profile {styled_profile} using provider {styled_provider}{global_suffix}:",
+                secrets.len()
+            );
+            for key in secrets.keys() {
+                println!("  {}", console::style(key).cyan());
+            }
             return Ok(());
         }
 
