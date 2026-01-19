@@ -168,12 +168,34 @@ async fn load_secrets_from_config() -> Result<HashMap<String, String>> {
     // Use load_smart to ensure provider inheritance from parent configs
     // This handles fnox.toml and fnox.local.toml with proper recursion
     let filenames = crate::config::all_config_filenames(None);
-    let config = filenames
-        .iter()
-        .find_map(|filename| Config::load_smart(filename).ok())
-        .ok_or_else(|| {
-            anyhow::anyhow!("Failed to load config (tried: {})", filenames.join(", "))
-        })?;
+    let mut last_error = None;
+    let mut config = None;
+    for filename in &filenames {
+        match Config::load_smart(filename) {
+            Ok(c) => {
+                config = Some(c);
+                break;
+            }
+            Err(e) => {
+                // Only store parse errors (not "file not found" errors)
+                // to show detailed error messages for actual config issues
+                let is_not_found = matches!(&e, crate::error::FnoxError::ConfigNotFound { .. });
+                if !is_not_found {
+                    last_error = Some(e);
+                }
+            }
+        }
+    }
+    let config = match (config, last_error) {
+        (Some(c), _) => c,
+        (None, Some(e)) => return Err(anyhow::anyhow!("{}", e)),
+        (None, None) => {
+            return Err(anyhow::anyhow!(
+                "No configuration file found (tried: {})",
+                filenames.join(", ")
+            ));
+        }
+    };
     let settings =
         Settings::try_get().map_err(|e| anyhow::anyhow!("Failed to get settings: {}", e))?;
 
