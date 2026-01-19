@@ -37,63 +37,11 @@ git config user.email 123107610+mise-en-dev@users.noreply.github.com
 cargo update
 mise run render ::: lint-fix
 
-# Generate editorialized release notes using LLM (if available)
-echo "Generating editorialized release notes..."
-prev_tag="$(git describe --tags --abbrev=0 2>/dev/null || echo "")"
-EDITORIALIZED_NOTES=""
-if command -v claude >/dev/null 2>&1 && [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
-  EDITORIALIZED_NOTES="$(mise run gen-release-summary "$version" "$prev_tag" 2>/dev/null || echo "")"
-fi
+# Generate changelog using git-cliff (LLM editorialization happens in release.yml after merge)
+git cliff --bump -o CHANGELOG.md
 
-# Validate we got non-empty release notes, fall back to raw changelog
-if [[ -z $EDITORIALIZED_NOTES ]]; then
-  echo "LLM generation unavailable or failed, using raw changelog"
-  EDITORIALIZED_NOTES="$(git cliff --bump --unreleased --strip all)"
-fi
-
-# Validate notes don't contain patterns that would corrupt changelog processing
-if echo "$EDITORIALIZED_NOTES" | grep -qE '^## \['; then
-  echo "Error: Release notes contain '## [' pattern which would corrupt changelog processing" >&2
-  exit 1
-fi
-
-# Create the release header with appropriate URL format
-RELEASE_DATE="$(date +%Y-%m-%d)"
-if [[ -n $prev_tag ]]; then
-  RELEASE_HEADER="## [${version#v}](https://github.com/jdx/fnox/compare/$prev_tag..$version) - $RELEASE_DATE"
-else
-  # No previous tag - link to the tag directly instead of a compare URL
-  RELEASE_HEADER="## [${version#v}](https://github.com/jdx/fnox/releases/tag/$version) - $RELEASE_DATE"
-fi
-
-# Insert the new release before the first existing release section (## [)
-# This handles any CHANGELOG format as long as releases start with ## [
-# Use ENVIRON for notes to avoid awk interpreting backslash escape sequences
-export RELEASE_HEADER EDITORIALIZED_NOTES
-awk_exit_code=0
-awk '
-  /^## \[/ && !inserted {
-    # Insert new release before the first existing release
-    print ENVIRON["RELEASE_HEADER"]
-    print ""
-    print ENVIRON["EDITORIALIZED_NOTES"]
-    print ""
-    inserted = 1
-  }
-  { print }
-  END {
-    # Signal whether insertion happened via exit code
-    exit (inserted ? 0 : 1)
-  }
-' CHANGELOG.md >CHANGELOG.md.tmp || awk_exit_code=$?
-
-if [[ $awk_exit_code -ne 0 ]]; then
-  echo "Error: Failed to insert release notes into CHANGELOG.md (no existing release section found)" >&2
-  rm -f CHANGELOG.md.tmp
-  exit 1
-fi
-mv CHANGELOG.md.tmp CHANGELOG.md
-echo "Editorialized release notes added to CHANGELOG.md"
+# Get the unreleased notes for PR body
+PR_BODY="$(git cliff --bump --unreleased --strip all)"
 
 git add \
   Cargo.* \
@@ -106,7 +54,7 @@ git commit -m "chore: release $version"
 git push origin release --force
 
 # Try to create PR, if it already exists then edit it
-if ! gh pr create --title "chore: release $version" --body "$EDITORIALIZED_NOTES"; then
+if ! gh pr create --title "chore: release $version" --body "$PR_BODY"; then
   echo "Failed to create PR, attempting to update existing PR"
-  gh pr edit release --title "chore: release $version" --body "$EDITORIALIZED_NOTES" || true
+  gh pr edit release --title "chore: release $version" --body "$PR_BODY" || true
 fi
