@@ -60,36 +60,36 @@ mod tests {
 
     #[test]
     fn test_find_similar_exact_match() {
-        let candidates = vec!["DATABASE_URL", "API_KEY", "SECRET_TOKEN"];
-        let result = find_similar("DATABASE_URL", candidates.iter().map(|s| *s));
+        let candidates = ["DATABASE_URL", "API_KEY", "SECRET_TOKEN"];
+        let result = find_similar("DATABASE_URL", candidates.iter().copied());
         assert_eq!(result, vec!["DATABASE_URL"]);
     }
 
     #[test]
     fn test_find_similar_typo() {
-        let candidates = vec!["DATABASE_URL", "API_KEY", "SECRET_TOKEN"];
-        let result = find_similar("DATABSE_URL", candidates.iter().map(|s| *s));
+        let candidates = ["DATABASE_URL", "API_KEY", "SECRET_TOKEN"];
+        let result = find_similar("DATABSE_URL", candidates.iter().copied());
         assert_eq!(result, vec!["DATABASE_URL"]);
     }
 
     #[test]
     fn test_find_similar_case_insensitive() {
-        let candidates = vec!["DATABASE_URL", "API_KEY", "SECRET_TOKEN"];
-        let result = find_similar("database_url", candidates.iter().map(|s| *s));
+        let candidates = ["DATABASE_URL", "API_KEY", "SECRET_TOKEN"];
+        let result = find_similar("database_url", candidates.iter().copied());
         assert_eq!(result, vec!["DATABASE_URL"]);
     }
 
     #[test]
     fn test_find_similar_no_match() {
-        let candidates = vec!["DATABASE_URL", "API_KEY", "SECRET_TOKEN"];
-        let result = find_similar("COMPLETELY_DIFFERENT", candidates.iter().map(|s| *s));
+        let candidates = ["DATABASE_URL", "API_KEY", "SECRET_TOKEN"];
+        let result = find_similar("COMPLETELY_DIFFERENT", candidates.iter().copied());
         assert!(result.is_empty());
     }
 
     #[test]
     fn test_find_similar_provider_names() {
-        let candidates = vec!["age", "1password", "aws-kms", "aws-sm", "bitwarden"];
-        let result = find_similar("1passwrd", candidates.iter().map(|s| *s));
+        let candidates = ["age", "1password", "aws-kms", "aws-sm", "bitwarden"];
+        let result = find_similar("1passwrd", candidates.iter().copied());
         assert_eq!(result, vec!["1password"]);
     }
 

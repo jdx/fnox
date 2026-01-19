@@ -171,7 +171,10 @@ impl Config {
             if let Some(span) = e.span() {
                 FnoxError::ConfigParseErrorWithSource {
                     message: e.message().to_string(),
-                    src: NamedSource::new(path.display().to_string(), Arc::new(content)),
+                    src: Arc::new(NamedSource::new(
+                        path.display().to_string(),
+                        Arc::new(content),
+                    )),
                     span: SourceSpan::new(span.start.into(), span.end - span.start),
                 }
             } else {
