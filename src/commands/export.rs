@@ -3,6 +3,7 @@ use crate::config::Config;
 use crate::error::Result;
 use crate::secret_resolver::resolve_secrets_batch;
 use clap::{Args, ValueEnum};
+use console;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -29,6 +30,10 @@ pub struct ExportCommand {
     /// Export format
     #[arg(short, long, default_value = "env", value_enum)]
     format: ExportFormat,
+
+    /// Show what would be exported without writing to file
+    #[arg(short = 'n', long)]
+    dry_run: bool,
 
     /// Output file (default: stdout)
     #[arg(short = 'o', long)]
@@ -83,12 +88,27 @@ impl ExportCommand {
 
         match &self.output {
             Some(path) => {
-                std::fs::write(path, output).map_err(|e| {
-                    miette::miette!("Failed to write to file {}: {}", path.display(), e)
-                })?;
-                println!("Secrets exported to: {}", path.display());
+                if self.dry_run {
+                    let dry_run_label = console::style("[dry-run]").yellow().bold();
+                    let styled_path = console::style(path.display()).cyan();
+                    println!(
+                        "{dry_run_label} Would export {} secrets to {styled_path} in {} format:",
+                        export_data.secrets.len(),
+                        format!("{:?}", self.format).to_lowercase()
+                    );
+                    for key in export_data.secrets.keys() {
+                        println!("  {}", console::style(key).dim());
+                    }
+                } else {
+                    std::fs::write(path, output).map_err(|e| {
+                        miette::miette!("Failed to write to file {}: {}", path.display(), e)
+                    })?;
+                    println!("Secrets exported to: {}", path.display());
+                }
             }
             None => {
+                // When outputting to stdout, dry-run just outputs normally
+                // (there's nothing to "protect" since we're not writing a file)
                 print!("{}", output);
             }
         }

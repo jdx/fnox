@@ -4,6 +4,7 @@ use crate::env;
 use crate::error::{FnoxError, Result};
 use crate::providers::{ProviderConfig, get_provider_resolved};
 use crate::settings::Settings;
+use crate::suggest::{find_similar, format_suggestions};
 use indexmap::IndexMap;
 use std::collections::HashMap; // Used only for internal grouping by provider
 
@@ -147,14 +148,19 @@ async fn try_resolve_from_provider(
 
     // Get the provider config
     let providers = config.get_providers(profile);
-    let provider_config =
-        providers
-            .get(&provider_name)
-            .ok_or_else(|| FnoxError::ProviderNotConfigured {
-                provider: provider_name.clone(),
-                profile: profile.to_string(),
-                config_path: config.provider_sources.get(&provider_name).cloned(),
-            })?;
+    let provider_config = providers.get(&provider_name).ok_or_else(|| {
+        // Find similar provider names for suggestion
+        let available_providers: Vec<_> = providers.keys().map(|s| s.as_str()).collect();
+        let similar = find_similar(&provider_name, available_providers);
+        let suggestion = format_suggestions(&similar);
+
+        FnoxError::ProviderNotConfigured {
+            provider: provider_name.clone(),
+            profile: profile.to_string(),
+            config_path: config.provider_sources.get(&provider_name).cloned(),
+            suggestion,
+        }
+    })?;
 
     // Try to resolve the secret, with auth retry on failure
     try_resolve_with_auth_retry(
@@ -361,6 +367,11 @@ async fn resolve_provider_batch(
     let provider_config = match providers.get(provider_name) {
         Some(config) => config,
         None => {
+            // Find similar provider names for suggestion
+            let available_providers: Vec<_> = providers.keys().map(|s| s.as_str()).collect();
+            let similar = find_similar(provider_name, available_providers);
+            let suggestion = format_suggestions(&similar);
+
             // Provider not configured, handle errors for all secrets
             for (key, _) in &provider_secrets {
                 let secret_config = &secrets[key];
@@ -369,6 +380,7 @@ async fn resolve_provider_batch(
                     provider: provider_name.to_string(),
                     profile: profile.to_string(),
                     config_path: config.provider_sources.get(provider_name).cloned(),
+                    suggestion: suggestion.clone(),
                 };
                 if let Some(error) = handle_provider_error(key, error, if_missing, true) {
                     // Fail fast if if_missing is error
