@@ -1,6 +1,6 @@
 use crate::commands::Cli;
 use crate::config::Config;
-use crate::error::Result;
+use crate::error::{FnoxError, Result};
 use clap::{Args, ValueEnum};
 use regex::Regex;
 use std::io::{self, Read};
@@ -261,7 +261,7 @@ impl ImportCommand {
             let mut input = String::new();
             io::stdin()
                 .read_to_string(&mut input)
-                .map_err(|e| miette::miette!("Failed to read from stdin: {}", e))?;
+                .map_err(|source| FnoxError::StdinReadFailed { source })?;
             Ok(input)
         }
     }

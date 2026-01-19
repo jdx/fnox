@@ -64,7 +64,7 @@ impl SetCommand {
             let mut buffer = String::new();
             io::stdin()
                 .read_to_string(&mut buffer)
-                .map_err(|e| FnoxError::Config(format!("Failed to read from stdin: {}", e)))?;
+                .map_err(|source| FnoxError::StdinReadFailed { source })?;
             Some(buffer.trim().to_string())
         } else {
             // Interactive terminal - prompt for value
