@@ -20,7 +20,7 @@ version="$(git cliff --bumped-version)"
 
 if [ "$DRY_RUN" -ne 0 ]; then
   echo "version: $version"
-  echo "changelog: $(git cliff --bump --unreleased --strip all)"
+  echo "changelog: $(git cliff --bump --unreleased --strip all | tail -n +3)"
   exit 0
 fi
 
