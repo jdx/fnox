@@ -14,19 +14,18 @@ fn create_provider_not_configured_error(
     provider_name: &str,
     profile: &str,
     secret_config: &SecretConfig,
-    config: &Config,
+    _config: &Config,
 ) -> FnoxError {
     // Try to create a source-aware error if we have both source path and span
-    if let (Some(path), Some(span)) = (&secret_config.source_path, secret_config.provider_span()) {
-        if let Some(src) = source_registry::get_named_source(path) {
+    if let (Some(path), Some(span)) = (&secret_config.source_path, secret_config.provider_span())
+        && let Some(src) = source_registry::get_named_source(path) {
             return FnoxError::ProviderNotConfiguredWithSource {
                 provider: provider_name.to_string(),
                 profile: profile.to_string(),
                 src,
-                span: SourceSpan::new(span.start.into(), (span.end - span.start).into()),
+                span: SourceSpan::new(span.start.into(), span.end - span.start ),
             };
         }
-    }
 
     // Fall back to the basic error without source highlighting
     FnoxError::ProviderNotConfigured {
