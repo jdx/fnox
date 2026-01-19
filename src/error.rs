@@ -12,7 +12,8 @@ pub enum FnoxError {
     #[error("Configuration file not found: {}", path.display())]
     #[diagnostic(
         code(fnox::config::not_found),
-        help("Run 'fnox init' to create a new configuration file")
+        help("Run 'fnox init' to create a new configuration file"),
+        url("https://fnox.dev/guide/getting-started")
     )]
     ConfigFileNotFound { path: std::path::PathBuf },
 
@@ -43,7 +44,8 @@ pub enum FnoxError {
     #[error("Invalid TOML in configuration file")]
     #[diagnostic(
         code(fnox::config::invalid_toml),
-        help("Check the TOML syntax in your fnox.toml file")
+        help("Check the TOML syntax in your fnox.toml file"),
+        url("https://fnox.dev/guide/configuration")
     )]
     ConfigParseError {
         #[source]
@@ -61,7 +63,8 @@ pub enum FnoxError {
     #[error("Configuration validation failed:\n{}", issues.join("\n"))]
     #[diagnostic(
         code(fnox::config::validation_failed),
-        help("Review the errors above and update your fnox.toml file")
+        help("Review the errors above and update your fnox.toml file"),
+        url("https://fnox.dev/guide/configuration")
     )]
     ConfigValidationFailed { issues: Vec<String> },
 
@@ -99,7 +102,8 @@ pub enum FnoxError {
             suggest = config_path.as_ref()
                 .map(|p| format!("\n  • Edit config file: {}", p.display()))
                 .unwrap_or_default()
-        )
+        ),
+        url("https://fnox.dev/guide/secrets")
     )]
     SecretNotFound {
         key: String,
@@ -157,7 +161,8 @@ pub enum FnoxError {
             file = config_path.as_ref()
                 .map(|p| format!("\n  Edit: {}", p.display()))
                 .unwrap_or_default()
-        )
+        ),
+        url("https://fnox.dev/guide/providers")
     )]
     ProviderNotConfigured {
         provider: String,
@@ -219,7 +224,8 @@ pub enum FnoxError {
         help(
             "Resolution path: {cycle}\n\
             Break the cycle by using a literal value or environment variable for one provider."
-        )
+        ),
+        url("https://fnox.dev/guide/secret-references")
     )]
     ProviderConfigCycle { provider: String, cycle: String },
 
@@ -246,7 +252,8 @@ pub enum FnoxError {
         code(fnox::encryption::age::not_configured),
         help(
             "Add age encryption to your config:\n  [encryption]\n  type = \"age\"\n  key_file = \"age.txt\""
-        )
+        ),
+        url("https://fnox.dev/providers/age")
     )]
     AgeNotConfigured,
 
@@ -279,7 +286,8 @@ pub enum FnoxError {
     #[error("Age encryption failed: {details}")]
     #[diagnostic(
         code(fnox::encryption::age::encrypt_failed),
-        help("Ensure your age public key is configured correctly")
+        help("Ensure your age public key is configured correctly"),
+        url("https://fnox.dev/providers/age")
     )]
     AgeEncryptionFailed { details: String },
 
@@ -288,7 +296,8 @@ pub enum FnoxError {
         code(fnox::encryption::age::decrypt_failed),
         help(
             "Ensure you have the correct age identity file or FNOX_AGE_KEY environment variable set"
-        )
+        ),
+        url("https://fnox.dev/providers/age")
     )]
     AgeDecryptionFailed { details: String },
 
@@ -298,7 +307,8 @@ pub enum FnoxError {
         code(fnox::encryption::not_configured),
         help(
             "Add encryption configuration to your fnox.toml:\n  [encryption]\n  type = \"age\"\n  key_file = \"age.txt\""
-        )
+        ),
+        url("https://fnox.dev/providers/age")
     )]
     EncryptionNotConfigured,
 
@@ -345,7 +355,8 @@ pub enum FnoxError {
     #[error("No command specified")]
     #[diagnostic(
         code(fnox::command::not_specified),
-        help("Provide a command to run with your secrets. Example: fnox exec -- npm start")
+        help("Provide a command to run with your secrets. Example: fnox exec -- npm start"),
+        url("https://fnox.dev/guide/exec")
     )]
     CommandNotSpecified,
 
