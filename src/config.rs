@@ -742,7 +742,10 @@ impl Config {
     }
 
     /// Validate the configuration
+    /// Collects all validation issues and returns them together using #[related]
     pub fn validate(&self) -> Result<()> {
+        use crate::error::ValidationIssue;
+
         // If root=true and no providers AND no secrets, that's OK (empty config)
         if self.root
             && self.providers.is_empty()
@@ -752,10 +755,23 @@ impl Config {
             return Ok(());
         }
 
+        let mut issues = Vec::new();
+
+        // Check for secrets with empty values (likely a mistake)
+        for (key, secret) in &self.secrets {
+            if secret.value.as_ref().is_some_and(|v| v.is_empty()) {
+                issues.push(ValidationIssue::new(format!(
+                    "Secret '{}' has an empty value",
+                    key
+                )));
+            }
+        }
+
         // Check that there's at least one provider if there are any secrets
         if self.providers.is_empty() && self.profiles.is_empty() && !self.secrets.is_empty() {
-            return Err(FnoxError::Config(
-                "No providers configured. Add at least one provider to fnox.toml".to_string(),
+            issues.push(ValidationIssue::with_help(
+                "No providers configured",
+                "Add at least one provider to fnox.toml",
             ));
         }
 
@@ -763,10 +779,16 @@ impl Config {
         if let Some(ref default_provider) = self.default_provider
             && !self.providers.contains_key(default_provider)
         {
-            return Err(FnoxError::Config(format!(
-                "Default provider '{}' not found in configuration",
-                default_provider
-            )));
+            issues.push(ValidationIssue::with_help(
+                format!(
+                    "Default provider '{}' not found in configuration",
+                    default_provider
+                ),
+                format!(
+                    "Add [providers.{}] to your config or remove the default_provider setting",
+                    default_provider
+                ),
+            ));
         }
 
         // Validate each profile
@@ -775,24 +797,37 @@ impl Config {
 
             // Each profile must have at least one provider (inherited or its own), unless root=true
             if providers.is_empty() && !self.root {
-                return Err(FnoxError::Config(format!(
-                    "Profile '{}' has no providers configured",
-                    profile_name
-                )));
+                issues.push(ValidationIssue::with_help(
+                    format!("Profile '{}' has no providers configured", profile_name),
+                    format!(
+                        "Add [profiles.{}.providers.<name>] or inherit from top-level providers",
+                        profile_name
+                    ),
+                ));
             }
 
             // If profile has default_provider set, validate it exists
             if let Some(ref default_provider) = profile_config.default_provider
                 && !providers.contains_key(default_provider)
             {
-                return Err(FnoxError::Config(format!(
-                    "Default provider '{}' not found in profile '{}'",
-                    default_provider, profile_name
-                )));
+                issues.push(ValidationIssue::with_help(
+                    format!(
+                        "Default provider '{}' not found in profile '{}'",
+                        default_provider, profile_name
+                    ),
+                    format!(
+                        "Add [profiles.{}.providers.{}] or remove the default_provider setting",
+                        profile_name, default_provider
+                    ),
+                ));
             }
         }
 
-        Ok(())
+        if issues.is_empty() {
+            Ok(())
+        } else {
+            Err(FnoxError::ConfigValidationFailed { issues })
+        }
     }
 }
 
