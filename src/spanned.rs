@@ -35,7 +35,6 @@ pub struct SpannedValue<T> {
 impl<T> SpannedValue<T> {
     /// Create a new spanned value with a known span.
     #[cfg(test)]
-    #[allow(dead_code)]
     pub fn new(value: T, span: Range<usize>) -> Self {
         Self {
             value,
@@ -128,6 +127,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_spanned_value_creation() {
+        let sv = SpannedValue::new("hello".to_string(), 0..5);
+        assert_eq!(sv.value(), "hello");
+        assert_eq!(sv.span(), Some(0..5));
+    }
+
+    #[test]
     fn test_spanned_value_without_span() {
         let sv = SpannedValue::without_span("hello".to_string());
         assert_eq!(sv.value(), "hello");
@@ -143,7 +149,7 @@ mod tests {
 
     #[test]
     fn test_spanned_value_serialize() {
-        let sv = SpannedValue::without_span("test".to_string());
+        let sv = SpannedValue::new("test".to_string(), 10..14);
         let json = serde_json::to_string(&sv).unwrap();
         assert_eq!(json, r#""test""#);
     }
@@ -164,11 +170,11 @@ mod tests {
 
     #[test]
     fn test_spanned_value_equality() {
-        let sv1 = SpannedValue::without_span("hello".to_string());
-        let sv2 = SpannedValue::without_span("hello".to_string());
-        let sv3 = SpannedValue::without_span("world".to_string());
+        let sv1 = SpannedValue::new("hello".to_string(), 0..5);
+        let sv2 = SpannedValue::new("hello".to_string(), 10..15);
+        let sv3 = SpannedValue::new("world".to_string(), 0..5);
 
-        // Same value - should be equal
+        // Same value, different spans - should be equal
         assert_eq!(sv1, sv2);
         // Different values - should not be equal
         assert_ne!(sv1, sv3);

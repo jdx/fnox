@@ -13,6 +13,21 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use strum::VariantNames;
 
+/// Returns all config filenames in load order (first = lowest priority, last = highest priority).
+///
+/// Order: main configs → profile configs → local configs
+/// Within each group, dotfiles come first (higher priority than non-dotfiles).
+pub fn all_config_filenames(profile: Option<&str>) -> Vec<String> {
+    let mut files = vec!["fnox.toml".to_string(), ".fnox.toml".to_string()];
+    if let Some(p) = profile.filter(|p| *p != "default") {
+        files.push(format!("fnox.{p}.toml"));
+        files.push(format!(".fnox.{p}.toml"));
+    }
+    files.push("fnox.local.toml".to_string());
+    files.push(".fnox.local.toml".to_string());
+    files
+}
+
 // Re-export ProviderConfig from providers module
 pub use crate::providers::ProviderConfig;
 
@@ -145,8 +160,9 @@ impl Config {
     pub fn load_smart<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path_ref = path.as_ref();
 
-        // If the path is exactly "fnox.toml" (default), use recursive loading
-        if path_ref == Path::new("fnox.toml") {
+        // If the path is one of the default config filenames, use recursive loading
+        let default_filenames = all_config_filenames(None);
+        if default_filenames.iter().any(|f| path_ref == Path::new(f)) {
             Self::load_with_recursion(path_ref)
         } else {
             // For explicit paths, resolve relative paths against current directory first
@@ -206,7 +222,7 @@ impl Config {
         let current_dir = env::current_dir()
             .map_err(|e| FnoxError::Config(format!("Failed to get current directory: {}", e)))?;
 
-        match Self::load_recursive(&current_dir, false, false) {
+        match Self::load_recursive(&current_dir, false) {
             Ok((_config, found)) if !found => {
                 // No config file was found anywhere in the directory tree
                 Err(FnoxError::ConfigNotFound {
@@ -224,50 +240,22 @@ impl Config {
 
     /// Recursively search for fnox.toml files and merge them
     /// Returns (config, found_any) where found_any indicates if any config file was found
-    fn load_recursive(dir: &Path, _from_parent: bool, found_any: bool) -> Result<(Self, bool)> {
-        let config_path = dir.join("fnox.toml");
-        let local_config_path = dir.join("fnox.local.toml");
+    fn load_recursive(dir: &Path, found_any: bool) -> Result<(Self, bool)> {
+        // Get current profile from Settings (respects: CLI flag > Env var > Default)
+        let profile = crate::settings::Settings::get().profile.clone();
+        let filenames = all_config_filenames(Some(&profile));
 
-        // Get current profile to load profile-specific config if applicable
-        // Use Settings system which respects: CLI flag > Env var > Default
-        let profile = {
-            let settings_profile = crate::settings::Settings::get().profile.clone();
-            if settings_profile != "default" {
-                Some(settings_profile)
-            } else {
-                None
+        // Load all existing config files in order (later files override earlier ones)
+        let mut config = Self::new();
+        let mut found = found_any;
+
+        for filename in &filenames {
+            let path = dir.join(filename);
+            if path.exists() {
+                let file_config = Self::load(&path)?;
+                config = Self::merge_configs(config, file_config)?;
+                found = true;
             }
-        };
-        let profile_config_path = if let Some(profile_name) = &profile {
-            if profile_name != "default" {
-                Some(dir.join(format!("fnox.{}.toml", profile_name)))
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        let (mut config, mut found) = if config_path.exists() {
-            (Self::load(&config_path)?, true)
-        } else {
-            (Self::new(), found_any)
-        };
-
-        // Load fnox.$FNOX_PROFILE.toml if it exists and merge it (takes precedence over fnox.toml)
-        if let Some(profile_path) = profile_config_path
-            && profile_path.exists()
-        {
-            let profile_config = Self::load(&profile_path)?;
-            config = Self::merge_configs(config, profile_config)?;
-            found = true;
-        }
-
-        // Load fnox.local.toml if it exists and merge it (takes precedence over fnox.$FNOX_PROFILE.toml)
-        if local_config_path.exists() {
-            let local_config = Self::load(&local_config_path)?;
-            config = Self::merge_configs(config, local_config)?;
-            found = true;
         }
 
         // If this config marks root, stop recursion but still load global config
@@ -294,7 +282,7 @@ impl Config {
 
         // If we have a parent directory, recurse up and merge
         if let Some(parent_dir) = dir.parent() {
-            let (parent_config, parent_found) = Self::load_recursive(parent_dir, true, found)?;
+            let (parent_config, parent_found) = Self::load_recursive(parent_dir, found)?;
             config = Self::merge_configs(parent_config, config)?;
             found = found || parent_found;
         } else {
@@ -379,6 +367,11 @@ impl Config {
         // Merge prompt_auth (overlay takes precedence)
         if overlay.prompt_auth.is_some() {
             merged.prompt_auth = overlay.prompt_auth;
+        }
+
+        // Merge default_provider (overlay takes precedence)
+        if overlay.default_provider.is_some() {
+            merged.default_provider = overlay.default_provider;
         }
 
         // Merge providers (overlay takes precedence)
@@ -968,7 +961,6 @@ impl SecretConfig {
 
     /// Get the value's source span (byte range in the config file).
     /// Returns None if the value wasn't set or was created programmatically.
-    #[allow(dead_code)] // Will be used for future error reporting with source spans
     pub fn value_span(&self) -> Option<Range<usize>> {
         self.value
             .as_ref()

@@ -42,7 +42,6 @@ pub fn get_named_source(path: &Path) -> Option<Arc<NamedSource<Arc<String>>>> {
 ///
 /// Useful when you need the content without wrapping it in NamedSource.
 #[cfg(test)]
-#[allow(dead_code)]
 pub fn get_content(path: &Path) -> Option<Arc<String>> {
     let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     let sources = SOURCES.read().ok()?;
@@ -75,6 +74,9 @@ mod tests {
 
         let source = get_named_source(path);
         assert!(source.is_some());
+
+        let content = get_content(path);
+        assert_eq!(content.as_deref(), Some(&"test content\n".to_string()));
     }
 
     #[test]
@@ -83,5 +85,6 @@ mod tests {
 
         let path = Path::new("/nonexistent/path/to/file.toml");
         assert!(get_named_source(path).is_none());
+        assert!(get_content(path).is_none());
     }
 }

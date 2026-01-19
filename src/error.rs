@@ -71,7 +71,6 @@ pub enum FnoxError {
         source: toml_edit::ser::Error,
     },
 
-    #[allow(dead_code)]
     #[error("Configuration validation failed:\n{}", issues.join("\n"))]
     #[diagnostic(
         code(fnox::config::validation_failed),
@@ -127,7 +126,6 @@ pub enum FnoxError {
         suggestion: Option<String>,
     },
 
-    #[allow(dead_code)]
     #[error("Secret '{key}' already exists in profile '{profile}'{}",
         config_path.as_ref()
             .map(|p| format!("\n  Defined in: {}", p.display()))
@@ -148,7 +146,6 @@ pub enum FnoxError {
         config_path: Option<std::path::PathBuf>,
     },
 
-    #[allow(dead_code)]
     #[error("Invalid secret key: {key}")]
     #[diagnostic(
         code(fnox::secret::invalid_key),
@@ -233,7 +230,6 @@ pub enum FnoxError {
         span: SourceSpan,
     },
 
-    #[allow(dead_code)]
     #[error("Provider '{provider}' is not yet implemented")]
     #[diagnostic(
         code(fnox::provider::not_implemented),
@@ -244,7 +240,6 @@ pub enum FnoxError {
     )]
     ProviderNotImplemented { provider: String },
 
-    #[allow(dead_code)]
     #[error("Failed to get secret from {provider} provider")]
     #[diagnostic(code(fnox::provider::get_failed))]
     ProviderGetFailed {
@@ -253,7 +248,6 @@ pub enum FnoxError {
         details: String,
     },
 
-    #[allow(dead_code)]
     #[error("Failed to set secret in {provider} provider")]
     #[diagnostic(code(fnox::provider::set_failed))]
     ProviderSetFailed {
@@ -262,7 +256,6 @@ pub enum FnoxError {
         details: String,
     },
 
-    #[allow(dead_code)]
     #[error("Failed to delete secret from {provider} provider")]
     #[diagnostic(code(fnox::provider::delete_failed))]
     ProviderDeleteFailed {
@@ -271,7 +264,6 @@ pub enum FnoxError {
         details: String,
     },
 
-    #[allow(dead_code)]
     #[error("Failed to list secrets from {provider} provider")]
     #[diagnostic(code(fnox::provider::list_failed))]
     ProviderListFailed { provider: String, details: String },
@@ -364,7 +356,6 @@ pub enum FnoxError {
     )]
     AgeDecryptionFailed { details: String },
 
-    #[allow(dead_code)]
     #[error("No encryption configuration found")]
     #[diagnostic(
         code(fnox::encryption::not_configured),
@@ -375,7 +366,6 @@ pub enum FnoxError {
     )]
     EncryptionNotConfigured,
 
-    #[allow(dead_code)]
     #[error("Unsupported encryption type: {encryption_type}")]
     #[diagnostic(
         code(fnox::encryption::unsupported_type),
@@ -384,7 +374,6 @@ pub enum FnoxError {
     UnsupportedEncryptionType { encryption_type: String },
 
     /// Generic encryption error for cases not covered by specific variants
-    #[allow(dead_code)]
     #[error("Encryption error: {0}")]
     #[diagnostic(code(fnox::encryption::error))]
     Encryption(String),
@@ -392,7 +381,6 @@ pub enum FnoxError {
     // ========================================================================
     // Editor Errors
     // ========================================================================
-    #[allow(dead_code)]
     #[error("No editor configured")]
     #[diagnostic(
         code(fnox::editor::not_configured),
@@ -449,7 +437,6 @@ pub enum FnoxError {
         source: std::io::Error,
     },
 
-    #[allow(dead_code)]
     #[error("Failed to read from stdin")]
     #[diagnostic(code(fnox::io::stdin_read_failed))]
     StdinReadFailed {
@@ -457,7 +444,6 @@ pub enum FnoxError {
         source: std::io::Error,
     },
 
-    #[allow(dead_code)]
     #[error("Failed to write to stdout")]
     #[diagnostic(code(fnox::io::stdout_write_failed))]
     StdoutWriteFailed {
@@ -465,7 +451,6 @@ pub enum FnoxError {
         source: std::io::Error,
     },
 
-    #[allow(dead_code)]
     #[error("Invalid key type: {0}")]
     #[diagnostic(code(fnox::key::invalid_type))]
     InvalidKeyType(String),
