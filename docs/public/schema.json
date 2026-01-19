@@ -257,6 +257,9 @@
             "account": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
+            "token": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "type": {
               "type": "string",
               "const": "1password"
