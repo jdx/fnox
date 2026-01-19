@@ -30,6 +30,7 @@ fn create_provider_not_configured_error(
         return FnoxError::ProviderNotConfiguredWithSource {
             provider: provider_name.to_string(),
             profile: profile.to_string(),
+            suggestion,
             src,
             span: SourceSpan::new(span.start.into(), span.end - span.start),
         };

@@ -196,14 +196,18 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::provider::not_configured),
         help(
-            "Add the provider to your config:\n  \
+            "{suggestion}Add the provider to your config:\n  \
             [providers.{provider}]\n  \
-            type = \"age\"  # or other provider type"
+            type = \"age\"  # or other provider type",
+            suggestion = suggestion.as_ref()
+                .map(|s| format!("{}\n\n", s))
+                .unwrap_or_default()
         )
     )]
     ProviderNotConfiguredWithSource {
         provider: String,
         profile: String,
+        suggestion: Option<String>,
         #[source_code]
         src: NamedSource<Arc<String>>,
         #[label("provider '{provider}' referenced here")]
