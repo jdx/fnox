@@ -6078,9 +6078,9 @@ checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
 
 [[package]]
 name = "usage-lib"
-version = "2.12.0"
+version = "2.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc4aa51ba63f3a75ed3a0ae077ceb3f65fb685c90b616508f7e32f846176a727"
+checksum = "740feb3935827422f9e7c1311a48c138d8c7c3788e802b274afd029080b77d53"
 dependencies = [
  "clap",
  "heck",
@@ -6089,7 +6089,6 @@ dependencies = [
  "kdl",
  "log",
  "miette",
- "once_cell",
  "regex",
  "roff",
  "serde",
