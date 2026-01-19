@@ -22,7 +22,7 @@ teardown() {
 	# Try to get with a typo
 	run fnox get DATABSE_URL # Missing 'A'
 	[ "$status" -ne 0 ]
-	[[ "$output" =~ "Did you mean 'DATABASE_URL'?" ]]
+	[[ $output =~ "Did you mean 'DATABASE_URL'?" ]]
 }
 
 @test "get: suggests multiple similar secret names" {
@@ -35,7 +35,7 @@ teardown() {
 	run fnox get DATABSE # Partial match
 	[ "$status" -ne 0 ]
 	# Should suggest at least one of the similar names
-	[[ "$output" =~ "Did you mean" ]]
+	[[ $output =~ "Did you mean" ]]
 }
 
 @test "get: no suggestion for completely different name" {
@@ -46,7 +46,7 @@ teardown() {
 	run fnox get COMPLETELY_UNRELATED_NAME
 	[ "$status" -ne 0 ]
 	# Should not have "Did you mean" since nothing is similar
-	[[ ! "$output" =~ "Did you mean" ]]
+	[[ ! $output =~ "Did you mean" ]]
 }
 
 # ============================================================================
@@ -68,7 +68,7 @@ EOF
 	# Try to get the secret (provider name has typo)
 	run fnox get MY_SECRET
 	[ "$status" -ne 0 ]
-	[[ "$output" =~ "Did you mean 'onepassword'?" ]]
+	[[ $output =~ "Did you mean 'onepassword'?" ]]
 }
 
 @test "get: suggests provider when using bitwarden typo" {
@@ -84,7 +84,7 @@ EOF
 
 	run fnox get MY_SECRET
 	[ "$status" -ne 0 ]
-	[[ "$output" =~ "Did you mean 'bitwarden'?" ]]
+	[[ $output =~ "Did you mean 'bitwarden'?" ]]
 }
 
 # ============================================================================
@@ -98,5 +98,5 @@ EOF
 	# Try to get with wrong case
 	run fnox get api_key
 	[ "$status" -ne 0 ]
-	[[ "$output" =~ "Did you mean 'API_KEY'?" ]]
+	[[ $output =~ "Did you mean 'API_KEY'?" ]]
 }
