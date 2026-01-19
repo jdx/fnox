@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.9.2](https://github.com/jdx/fnox/compare/v1.9.1..v1.9.2) - 2026-01-19
+
+### 🐛 Bug Fixes
+
+- gen-release-notes improvements by [@jdx](https://github.com/jdx) in [#191](https://github.com/jdx/fnox/pull/191)
+
+### 🔍 Other Changes
+
+- exclude CHANGELOG.md from prettier by [@jdx](https://github.com/jdx) in [#190](https://github.com/jdx/fnox/pull/190)
+
 ## [1.9.1](https://github.com/jdx/fnox/compare/v1.9.0..v1.9.1) - 2026-01-19
 
 ### 🐛 Bug Fixes
@@ -203,7 +213,7 @@
 
 ### 🚜 Refactor
 
-- remove unused env_diff module and \_\_FNOX_DIFF by [@jdx](https://github.com/jdx) in [#70](https://github.com/jdx/fnox/pull/70)
+- remove unused env_diff module and __FNOX_DIFF by [@jdx](https://github.com/jdx) in [#70](https://github.com/jdx/fnox/pull/70)
 
 ### ⚡ Performance
 
@@ -211,7 +221,7 @@
 
 ### 🛡️ Security
 
-- **(security)** store only hashes in \_\_FNOX_SESSION instead of plaintext secrets by [@jdx](https://github.com/jdx) in [#71](https://github.com/jdx/fnox/pull/71)
+- **(security)** store only hashes in __FNOX_SESSION instead of plaintext secrets by [@jdx](https://github.com/jdx) in [#71](https://github.com/jdx/fnox/pull/71)
 
 ## [1.2.3](https://github.com/jdx/fnox/compare/v1.2.2..v1.2.3) - 2025-11-01
 
