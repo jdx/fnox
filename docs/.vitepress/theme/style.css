@@ -2,7 +2,7 @@
  * Customize default theme styling by overriding CSS variables:
  * https://github.com/vuejs/vitepress/blob/main/src/client/theme-default/styles/vars.css
  */
-@import url('https://fonts.googleapis.com/css2?family=Black+Ops+One&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Black+Ops+One&display=swap");
 
 /**
  * Colors - Fort Knox theme (dark blue/gold)
@@ -148,13 +148,13 @@
 
 /* Black Ops One branding */
 .VPNavBarTitle .title {
-  font-family: 'Black Ops One', cursive;
+  font-family: "Black Ops One", cursive;
   font-size: 1.5rem;
   color: var(--vp-c-brand-1) !important;
 }
 
 .VPHero .name {
-  font-family: 'Black Ops One', cursive !important;
+  font-family: "Black Ops One", cursive !important;
   font-size: 4rem !important;
   font-weight: 400 !important;
 }
