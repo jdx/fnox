@@ -131,7 +131,7 @@ fn calculate_changes(
     old_hashes: &indexmap::IndexMap<String, String>,
     new_secrets: &HashMap<String, String>,
 ) -> (Vec<(String, String)>, Vec<String>) {
-    use crate::hook_env::{hash_secret_value_with_session, PREV_SESSION};
+    use crate::hook_env::{PREV_SESSION, hash_secret_value_with_session};
 
     let mut added = Vec::new();
     let mut removed = Vec::new();
