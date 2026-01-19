@@ -648,20 +648,31 @@
           },
           "test": {
             "full_cmd": ["provider", "test"],
-            "usage": "provider test <PROVIDER>",
+            "usage": "provider test [-a --all] [PROVIDER]",
             "subcommands": {},
             "args": [
               {
                 "name": "PROVIDER",
-                "usage": "<PROVIDER>",
-                "help": "Provider name",
-                "help_first_line": "Provider name",
-                "required": true,
+                "usage": "[PROVIDER]",
+                "help": "Provider name (optional when using --all)",
+                "help_first_line": "Provider name (optional when using --all)",
+                "required": false,
                 "double_dash": "Optional",
                 "hide": false
               }
             ],
-            "flags": [],
+            "flags": [
+              {
+                "name": "all",
+                "usage": "-a --all",
+                "help": "Test all configured providers",
+                "help_first_line": "Test all configured providers",
+                "short": ["a"],
+                "long": ["all"],
+                "hide": false,
+                "global": false
+              }
+            ],
             "mounts": [],
             "hide": false,
             "help": "Test a provider connection",

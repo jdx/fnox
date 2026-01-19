@@ -51,7 +51,7 @@ Disable colored output
 - [`fnox provider add [-g --global] <PROVIDER> <PROVIDER_TYPE>`](/cli/provider/add.md)
 - [`fnox provider list`](/cli/provider/list.md)
 - [`fnox provider remove [-g --global] <PROVIDER>`](/cli/provider/remove.md)
-- [`fnox provider test <PROVIDER>`](/cli/provider/test.md)
+- [`fnox provider test [-a --all] [PROVIDER]`](/cli/provider/test.md)
 - [`fnox remove [-g --global] <KEY>`](/cli/remove.md)
 - [`fnox scan [FLAGS]`](/cli/scan.md)
 - [`fnox set [FLAGS] <KEY> [VALUE]`](/cli/set.md)

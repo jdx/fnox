@@ -117,7 +117,8 @@ cmd provider help="Manage providers (defaults to list)" {
     }
     cmd test help="Test a provider connection" {
         alias t
-        arg <PROVIDER> help="Provider name"
+        flag "-a --all" help="Test all configured providers"
+        arg "[PROVIDER]" help="Provider name (optional when using --all)" required=#false
     }
 }
 cmd remove help="Remove a secret" {
