@@ -31,6 +31,10 @@ Save to the global config file (~/.config/fnox/config.toml)
 
 Key name in the provider (if different from env var name)
 
+### `-n --dry-run`
+
+Show what would be done without making changes
+
 ### `-p --provider <PROVIDER>`
 
 Provider to fetch from
