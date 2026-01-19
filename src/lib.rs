@@ -9,6 +9,7 @@ pub mod providers;
 pub mod secret_resolver;
 pub mod settings;
 pub mod shell;
+pub mod tui;
 
 #[cfg(test)]
 mod clap_sort;

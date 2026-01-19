@@ -24,6 +24,7 @@ pub mod provider;
 pub mod remove;
 pub mod scan;
 pub mod set;
+pub mod tui;
 pub mod usage;
 pub mod version;
 
@@ -122,6 +123,9 @@ pub enum Commands {
     /// Set a secret value
     Set(set::SetCommand),
 
+    /// Interactive TUI dashboard for managing secrets
+    Tui(tui::TuiCommand),
+
     /// Generate usage specification
     Usage(usage::UsageCommand),
 
@@ -165,6 +169,7 @@ impl Commands {
             Commands::Exec(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Set(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Scan(cmd) => cmd.run(cli, self.load_config(cli)?).await,
+            Commands::Tui(cmd) => cmd.run(cli, self.load_config(cli)?).await,
         }
     }
 

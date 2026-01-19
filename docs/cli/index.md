@@ -55,4 +55,5 @@ Disable colored output
 - [`fnox remove [-g --global] <KEY>`](/cli/remove.md)
 - [`fnox scan [FLAGS]`](/cli/scan.md)
 - [`fnox set [FLAGS] <KEY> [VALUE]`](/cli/set.md)
+- [`fnox tui`](/cli/tui.md)
 - [`fnox version`](/cli/version.md)

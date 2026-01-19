@@ -1,17 +1,19 @@
-use crate::commands::Cli;
-use crate::config::{Config, SecretConfig};
-use crate::error::{FnoxError, Result};
-use crate::providers::{ProviderCapability, get_provider_resolved};
-use crate::secret_resolver;
-use clap::Args;
-use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::io::Write as _;
 use std::process::Command;
+
+use clap::Args;
+use indexmap::IndexMap;
 use tempfile::NamedTempFile;
 use toml_edit::{DocumentMut, Table, Value};
+
+use crate::commands::Cli;
+use crate::config::{Config, SecretConfig};
+use crate::error::{FnoxError, Result};
+use crate::providers::{ProviderCapability, get_provider_resolved};
+use crate::secret_resolver;
 
 /// Header added to temporary edit file for user reference
 const TEMP_FILE_HEADER: &str = "\
@@ -24,7 +26,7 @@ const TEMP_FILE_HEADER: &str = "\
 ";
 
 #[derive(Debug, Args)]
-pub struct EditCommand {}
+pub struct EditCommand;
 
 /// Represents a secret with its metadata for tracking during editing
 #[derive(Debug, Clone)]
