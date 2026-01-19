@@ -278,8 +278,9 @@ impl SetCommand {
                 println!("  provider: {}", console::style(provider).green());
             }
             if let Some(ref value) = secret_config.value {
-                let display_value = if value.len() > 50 {
-                    format!("{}...", &value[..50])
+                // Use character-aware truncation to avoid panicking on multi-byte UTF-8
+                let display_value = if value.chars().count() > 50 {
+                    format!("{}...", value.chars().take(50).collect::<String>())
                 } else {
                     value.clone()
                 };

@@ -71,15 +71,17 @@ impl ImportCommand {
         let input = self.read_input()?;
         let mut secrets = self.parse_input(&input)?;
 
-        // When importing from stdin, --force is required because stdin is consumed
+        // When importing from stdin, --force or --dry-run is required because stdin is consumed
         // by read_input() and won't be available for the confirmation prompt
-        if self.input.is_none() && !self.force {
+        // (dry-run doesn't need confirmation since it doesn't modify anything)
+        if self.input.is_none() && !self.force && !self.dry_run {
             return Err(miette::miette!(
-                "When importing from stdin, the --force flag is required\n\n\
+                "When importing from stdin, the --force or --dry-run flag is required\n\n\
                 This is because stdin is consumed during import and cannot be used \
                 for the confirmation prompt.\n\n\
                 Use: fnox import --force < input.env\n\
-                Or:  cat input.env | fnox import --force"
+                Or:  cat input.env | fnox import --force\n\
+                Or:  cat input.env | fnox import --dry-run"
             )
             .into());
         }
@@ -106,7 +108,24 @@ impl ImportCommand {
             return Ok(());
         }
 
+        // Verify provider exists before dry-run or actual import
+        // (use merged config to find providers from any source)
+        let providers = merged_config.get_providers(&profile);
+        let provider_config = providers.get(&self.provider).ok_or_else(|| {
+            miette::miette!(
+                "Provider '{}' not found in profile '{}'. Available providers: {}",
+                self.provider,
+                profile,
+                providers
+                    .keys()
+                    .map(|k| k.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })?;
+
         // In dry-run mode, show what would be imported and exit
+        // (provider validation above ensures dry-run fails on invalid provider)
         if self.dry_run {
             let dry_run_label = console::style("[dry-run]").yellow().bold();
             let styled_profile = console::style(&profile).magenta();
@@ -148,21 +167,6 @@ impl ImportCommand {
                 return Ok(());
             }
         }
-
-        // Verify provider exists (use merged config to find providers from any source)
-        let providers = merged_config.get_providers(&profile);
-        let provider_config = providers.get(&self.provider).ok_or_else(|| {
-            miette::miette!(
-                "Provider '{}' not found in profile '{}'. Available providers: {}",
-                self.provider,
-                profile,
-                providers
-                    .keys()
-                    .map(|k| k.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        })?;
 
         // Get provider and check its capabilities
         let provider = crate::providers::get_provider_resolved(

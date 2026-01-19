@@ -217,6 +217,29 @@ EOF
 	assert_output --partial "MYAPP_SECRET"
 }
 
+@test "fnox import --dry-run from stdin works without --force" {
+	setup_age_provider
+
+	# Dry-run should work with stdin without requiring --force
+	# (since there's no confirmation prompt in dry-run mode)
+	run bash -c 'echo "SECRET=value" | fnox import --provider age --dry-run'
+	[ "$status" -eq 0 ]
+	[[ "$output" =~ \[dry-run\] ]]
+	[[ "$output" =~ "Would import 1 secrets" ]]
+}
+
+@test "fnox import --dry-run fails on non-existent provider" {
+	setup_age_provider
+
+	cat >.env <<EOF
+SECRET=value
+EOF
+
+	# Should fail because provider doesn't exist (validation before dry-run output)
+	assert_fnox_failure import -i .env --provider nonexistent --dry-run
+	assert_output --partial "Provider 'nonexistent' not found"
+}
+
 # ============================================================================
 # EXPORT COMMAND DRY-RUN TESTS
 # ============================================================================
@@ -231,7 +254,7 @@ EOF
 	assert_output --partial "secrets.env"
 
 	# Verify file was NOT created
-	[ ! -f secrets.env ]
+	assert [ ! -f secrets.env ]
 }
 
 @test "fnox export -n is alias for --dry-run" {
@@ -240,7 +263,7 @@ EOF
 	assert_fnox_success export -o secrets.env -n
 	assert_output --partial "[dry-run]"
 
-	[ ! -f secrets.env ]
+	assert [ ! -f secrets.env ]
 }
 
 @test "fnox export --dry-run to stdout still outputs normally" {
