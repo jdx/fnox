@@ -210,6 +210,26 @@ pub enum FnoxError {
         span: SourceSpan,
     },
 
+    /// Default provider not found error with source code context showing where it was configured.
+    #[error("Default provider '{provider}' not found in profile '{profile}'")]
+    #[diagnostic(
+        code(fnox::config::default_provider_not_found),
+        help(
+            "The configured default_provider references a provider that doesn't exist.\n\
+            Add the provider to your config:\n  \
+            [providers.{provider}]\n  \
+            type = \"age\"  # or other provider type"
+        )
+    )]
+    DefaultProviderNotFoundWithSource {
+        provider: String,
+        profile: String,
+        #[source_code]
+        src: NamedSource<Arc<String>>,
+        #[label("default_provider '{provider}' set here, but no such provider exists")]
+        span: SourceSpan,
+    },
+
     #[allow(dead_code)]
     #[error("Provider '{provider}' is not yet implemented")]
     #[diagnostic(

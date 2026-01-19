@@ -130,7 +130,7 @@ impl InitCommand {
         config
             .providers
             .insert(provider_name.clone(), provider_config);
-        config.default_provider = Some(provider_name);
+        config.set_default_provider(Some(provider_name));
 
         // Ask if they want to add an example secret
         let add_example = Confirm::new("Would you like to add an example secret?")
@@ -152,7 +152,7 @@ impl InitCommand {
 
             let mut secret_config = SecretConfig::new();
             secret_config.description = description.filter(|s| !s.is_empty());
-            secret_config.set_provider(config.default_provider.clone());
+            secret_config.set_provider(config.default_provider().map(|s| s.to_string()));
             // value will be set with `fnox set` later
             config.secrets.insert(secret_name, secret_config);
         }
