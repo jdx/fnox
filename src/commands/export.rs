@@ -1,6 +1,6 @@
 use crate::commands::Cli;
 use crate::config::Config;
-use crate::error::Result;
+use crate::error::{FnoxError, Result};
 use crate::secret_resolver::resolve_secrets_batch;
 use clap::{Args, ValueEnum};
 use console;
@@ -100,10 +100,13 @@ impl ExportCommand {
                         println!("  {}", console::style(key).dim());
                     }
                 } else {
-                    std::fs::write(path, output).map_err(|e| {
-                        miette::miette!("Failed to write to file {}: {}", path.display(), e)
-                    })?;
-                    println!("Secrets exported to: {}", path.display());
+                    let path = path.to_path_buf();
+                    std::fs::write(&path, &output)
+                        .map_err(|e| FnoxError::ExportWriteFailed { path, source: e })?;
+                    println!(
+                        "Secrets exported to: {}",
+                        self.output.as_ref().unwrap().display()
+                    );
                 }
             }
             None => {
@@ -134,17 +137,14 @@ impl ExportCommand {
     }
 
     fn export_as_json(&self, data: &ExportData) -> Result<String> {
-        Ok(serde_json::to_string_pretty(data)
-            .map_err(|e| miette::miette!("JSON serialization error: {}", e))?)
+        Ok(serde_json::to_string_pretty(data)?)
     }
 
     fn export_as_yaml(&self, data: &ExportData) -> Result<String> {
-        Ok(serde_yaml::to_string(data)
-            .map_err(|e| miette::miette!("YAML serialization error: {}", e))?)
+        Ok(serde_yaml::to_string(data)?)
     }
 
     fn export_as_toml(&self, data: &ExportData) -> Result<String> {
-        Ok(toml_edit::ser::to_string_pretty(data)
-            .map_err(|e| miette::miette!("TOML serialization error: {}", e))?)
+        toml_edit::ser::to_string_pretty(data).map_err(|source| FnoxError::Toml { source })
     }
 }

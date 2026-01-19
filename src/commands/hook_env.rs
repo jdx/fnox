@@ -166,13 +166,40 @@ async fn load_secrets_from_config() -> Result<HashMap<String, String>> {
     use crate::secret_resolver::resolve_secrets_batch;
 
     // Use load_smart to ensure provider inheritance from parent configs
-    // This handles both fnox.toml and fnox.local.toml with proper recursion
-    let config = Config::load_smart("fnox.toml")
-        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    // This handles fnox.toml and fnox.local.toml with proper recursion
     let settings =
         Settings::try_get().map_err(|e| anyhow::anyhow!("Failed to get settings: {}", e))?;
+    let filenames = crate::config::all_config_filenames(Some(&settings.profile));
+    let mut last_error = None;
+    let mut config = None;
+    for filename in &filenames {
+        match Config::load_smart(filename) {
+            Ok(c) => {
+                config = Some(c);
+                break;
+            }
+            Err(e) => {
+                // Only store parse errors (not "file not found" errors)
+                // to show detailed error messages for actual config issues
+                let is_not_found = matches!(&e, crate::error::FnoxError::ConfigNotFound { .. });
+                if !is_not_found {
+                    last_error = Some(e);
+                }
+            }
+        }
+    }
+    let config = match (config, last_error) {
+        (Some(c), _) => c,
+        (None, Some(e)) => return Err(anyhow::anyhow!("{}", e)),
+        (None, None) => {
+            return Err(anyhow::anyhow!(
+                "No configuration file found (tried: {})",
+                filenames.join(", ")
+            ));
+        }
+    };
 
-    // Get the active profile
+    // Get the active profile (settings was already loaded above)
     let profile_name = &settings.profile;
 
     // Get secrets for the profile using the Config method (inherits top-level secrets)

@@ -26,12 +26,16 @@ pub fn register(path: &Path, content: String) {
 /// Get a NamedSource for the given path, suitable for use with miette errors.
 ///
 /// Returns None if the path was never registered or if the lock cannot be acquired.
-pub fn get_named_source(path: &Path) -> Option<NamedSource<Arc<String>>> {
+/// Returns Arc<NamedSource<...>> to keep the error type size small (Arc is pointer-sized).
+pub fn get_named_source(path: &Path) -> Option<Arc<NamedSource<Arc<String>>>> {
     let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     let sources = SOURCES.read().ok()?;
-    sources
-        .get(&canonical)
-        .map(|content| NamedSource::new(path.display().to_string(), Arc::clone(content)))
+    sources.get(&canonical).map(|content| {
+        Arc::new(NamedSource::new(
+            path.display().to_string(),
+            Arc::clone(content),
+        ))
+    })
 }
 
 /// Get the raw source content for a path.

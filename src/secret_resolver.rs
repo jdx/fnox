@@ -9,7 +9,6 @@ use crate::suggest::{find_similar, format_suggestions};
 use indexmap::IndexMap;
 use miette::SourceSpan;
 use std::collections::HashMap; // Used only for internal grouping by provider
-use std::sync::Arc;
 
 /// Creates a ProviderNotConfigured error, using source spans when available for better error display.
 fn create_provider_not_configured_error(
@@ -32,7 +31,7 @@ fn create_provider_not_configured_error(
             provider: provider_name.to_string(),
             profile: profile.to_string(),
             suggestion,
-            src: Arc::new(src),
+            src,
             span: SourceSpan::new(span.start.into(), span.end - span.start),
         };
     }

@@ -4,12 +4,38 @@ use miette::{Diagnostic, NamedSource, SourceSpan};
 use std::sync::Arc;
 use thiserror::Error;
 
+/// A single validation issue (used with #[related] for multiple error reporting)
+#[derive(Error, Debug, Diagnostic)]
+#[error("{message}")]
+#[diagnostic(code(fnox::config::validation_issue))]
+pub struct ValidationIssue {
+    pub message: String,
+    #[help]
+    pub help: Option<String>,
+}
+
+impl ValidationIssue {
+    #[allow(dead_code)]
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            help: None,
+        }
+    }
+
+    pub fn with_help(message: impl Into<String>, help: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            help: Some(help.into()),
+        }
+    }
+}
+
 #[derive(Error, Debug, Diagnostic)]
 pub enum FnoxError {
     // ========================================================================
     // Configuration Errors
     // ========================================================================
-    #[allow(dead_code)]
     #[error("Configuration file not found: {}", path.display())]
     #[diagnostic(
         code(fnox::config::not_found),
@@ -72,14 +98,18 @@ pub enum FnoxError {
         source: toml_edit::ser::Error,
     },
 
-    #[allow(dead_code)]
-    #[error("Configuration validation failed:\n{}", issues.join("\n"))]
+    /// Configuration validation failed with one or more issues.
+    /// Uses #[related] to display all validation issues together.
+    #[error("Configuration validation failed ({})", pluralizer::pluralize("issue", std::cmp::min(issues.len(), isize::MAX as usize) as isize, true))]
     #[diagnostic(
         code(fnox::config::validation_failed),
-        help("Review the errors above and update your fnox.toml file"),
+        help("Fix the issues above in your fnox.toml file"),
         url("https://fnox.dev/guide/configuration")
     )]
-    ConfigValidationFailed { issues: Vec<String> },
+    ConfigValidationFailed {
+        #[related]
+        issues: Vec<ValidationIssue>,
+    },
 
     /// Backward compatibility for ConfigNotFound with custom message/help
     #[error("{message}")]
@@ -439,6 +469,18 @@ pub enum FnoxError {
     // ========================================================================
     // Input/Output Errors
     // ========================================================================
+    #[error("Failed to write export to file: {}", path.display())]
+    #[diagnostic(
+        code(fnox::export::write_failed),
+        help("Ensure you have write permissions for the output path")
+    )]
+    ExportWriteFailed {
+        path: std::path::PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[allow(dead_code)]
     #[error("Failed to read from stdin")]
     #[diagnostic(code(fnox::io::stdin_read_failed))]
     StdinReadFailed {
@@ -481,6 +523,13 @@ pub enum FnoxError {
     Yaml {
         #[source]
         source: serde_yaml::Error,
+    },
+
+    #[error("TOML serialization error")]
+    #[diagnostic(code(fnox::toml::error))]
+    Toml {
+        #[source]
+        source: toml_edit::ser::Error,
     },
 }
 

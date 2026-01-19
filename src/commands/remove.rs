@@ -35,10 +35,9 @@ impl RemoveCommand {
 
         // Load the target config file directly (not the merged config)
         if !target_path.exists() {
-            return Err(miette::miette!(
-                "Config file '{}' not found",
-                target_path.display()
-            ))?;
+            return Err(FnoxError::ConfigFileNotFound {
+                path: target_path.clone(),
+            });
         }
 
         let mut config = Config::load(&target_path)?;
@@ -78,11 +77,12 @@ impl RemoveCommand {
                 }
             }
         } else {
-            Err(miette::miette!(
-                "Secret '{}' not found in profile '{}'",
-                self.key,
-                profile
-            ))?;
+            return Err(FnoxError::SecretNotFound {
+                key: self.key.clone(),
+                profile: profile.to_string(),
+                config_path: Some(target_path),
+                suggestion: None,
+            });
         }
 
         Ok(())
