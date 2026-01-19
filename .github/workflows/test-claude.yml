@@ -1,0 +1,39 @@
+name: test-claude
+
+on:
+  workflow_dispatch:
+
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+jobs:
+  test-claude:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Test Claude CLI
+        run: |
+          echo "Testing Claude Code CLI with Opus 4.5..."
+          echo "Claude version: $(claude --version)"
+
+          # Simple test: ask Claude to summarize what this repo does
+          # Uses only Read tool, with bypassPermissions for CI
+          output=$(claude -p \
+            --model claude-opus-4-5-20251101 \
+            --permission-mode bypassPermissions \
+            --output-format text \
+            --allowedTools "Read,Grep,Glob" \
+            "Read the README.md and Cargo.toml files and write a one-sentence summary of what this project does.")
+
+          echo "Claude output:"
+          echo "$output"
+
+          # Verify we got non-empty output
+          if [[ -z "$output" ]]; then
+            echo "ERROR: Claude returned empty output"
+            exit 1
+          fi
+
+          echo "Test passed!"
