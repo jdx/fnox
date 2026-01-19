@@ -102,21 +102,17 @@ impl ImportCommand {
             return Ok(());
         }
 
-        // Verify provider exists before dry-run or actual import
-        // (use merged config to find providers from any source)
+        // Verify provider exists (use merged config to find providers from any source)
         let providers = merged_config.get_providers(&profile);
-        let provider_config = providers.get(&self.provider).ok_or_else(|| {
-            miette::miette!(
-                "Provider '{}' not found in profile '{}'. Available providers: {}",
-                self.provider,
-                profile,
-                providers
-                    .keys()
-                    .map(|k| k.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        })?;
+        let provider_config =
+            providers
+                .get(&self.provider)
+                .ok_or_else(|| FnoxError::ProviderNotConfigured {
+                    provider: self.provider.clone(),
+                    profile: profile.to_string(),
+                    config_path: None,
+                    suggestion: None,
+                })?;
 
         // Get provider and validate capabilities (needed for both dry-run and actual import)
         let provider = crate::providers::get_provider_resolved(
@@ -129,11 +125,10 @@ impl ImportCommand {
         let capabilities = provider.capabilities();
 
         if capabilities.is_empty() {
-            return Err(miette::miette!(
-                "Provider '{}' has no capabilities defined",
-                self.provider
-            )
-            .into());
+            return Err(FnoxError::ImportProviderUnsupported {
+                provider: self.provider.clone(),
+                help: "Provider has no capabilities defined".to_string(),
+            });
         }
 
         let is_encryption_provider =
@@ -144,16 +139,15 @@ impl ImportCommand {
         // Validate that provider supports import (encryption capability required)
         if !is_encryption_provider {
             if is_remote_storage_provider {
-                return Err(miette::miette!(
-                    "Remote storage providers are not yet supported for import. Use an encryption provider like 'age' instead."
-                )
-                .into());
+                return Err(FnoxError::ImportProviderUnsupported {
+                    provider: self.provider.clone(),
+                    help: "Remote storage providers are not yet supported for import. Use an encryption provider like 'age' instead.".to_string(),
+                });
             } else {
-                return Err(miette::miette!(
-                    "Provider '{}' does not support encryption or remote storage",
-                    self.provider
-                )
-                .into());
+                return Err(FnoxError::ImportProviderUnsupported {
+                    provider: self.provider.clone(),
+                    help: "Provider does not support encryption or remote storage".to_string(),
+                });
             }
         }
 
@@ -198,55 +192,6 @@ impl ImportCommand {
             if !response.trim().to_lowercase().starts_with('y') {
                 println!("Import cancelled");
                 return Ok(());
-            }
-        }
-
-        // Verify provider exists (use merged config to find providers from any source)
-        let providers = merged_config.get_providers(&profile);
-        let provider_config =
-            providers
-                .get(&self.provider)
-                .ok_or_else(|| FnoxError::ProviderNotConfigured {
-                    provider: self.provider.clone(),
-                    profile: profile.to_string(),
-                    config_path: None,
-                    suggestion: None,
-                })?;
-
-        // Get provider and check its capabilities
-        let provider = crate::providers::get_provider_resolved(
-            &merged_config,
-            &profile,
-            &self.provider,
-            provider_config,
-        )
-        .await?;
-        let capabilities = provider.capabilities();
-
-        if capabilities.is_empty() {
-            return Err(FnoxError::ImportProviderUnsupported {
-                provider: self.provider.clone(),
-                help: "Provider has no capabilities defined".to_string(),
-            });
-        }
-
-        let is_encryption_provider =
-            capabilities.contains(&crate::providers::ProviderCapability::Encryption);
-        let is_remote_storage_provider =
-            capabilities.contains(&crate::providers::ProviderCapability::RemoteStorage);
-
-        // Validate that provider supports import (encryption capability required)
-        if !is_encryption_provider {
-            if is_remote_storage_provider {
-                return Err(FnoxError::ImportProviderUnsupported {
-                    provider: self.provider.clone(),
-                    help: "Remote storage providers are not yet supported for import. Use an encryption provider like 'age' instead.".to_string(),
-                });
-            } else {
-                return Err(FnoxError::ImportProviderUnsupported {
-                    provider: self.provider.clone(),
-                    help: "Provider does not support encryption or remote storage".to_string(),
-                });
             }
         }
 
