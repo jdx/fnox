@@ -322,8 +322,8 @@
           },
           "backend": {
             "type": "string",
-            "enum": ["cli", "sdk"],
-            "description": "Bitwarden backend to use"
+            "enum": ["bw", "rbw"],
+            "description": "Bitwarden backend to use (bw = official CLI, rbw = unofficial Rust client)"
           }
         },
         "description": "Bitwarden provider"
