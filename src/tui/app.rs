@@ -57,10 +57,13 @@ pub enum SetField {
 /// Messages that can be sent to the app
 #[derive(Debug)]
 pub enum Message {
-    /// Secrets have been resolved
-    SecretsResolved(IndexMap<String, Option<String>>),
-    /// Error occurred
-    Error(String),
+    /// Secrets have been resolved (includes resolution_id to handle race conditions)
+    SecretsResolved {
+        resolution_id: u64,
+        resolved: IndexMap<String, Option<String>>,
+    },
+    /// Error occurred (includes resolution_id to handle race conditions)
+    Error { resolution_id: u64, message: String },
 }
 
 /// Main application state
@@ -107,6 +110,9 @@ pub struct App {
     /// Whether initial load is in progress
     pub initial_loading: bool,
 
+    /// Current resolution ID (incremented on each resolution to handle race conditions)
+    pub current_resolution_id: u64,
+
     /// Current error message to display
     pub error_message: Option<String>,
 
@@ -128,6 +134,10 @@ pub struct App {
     /// Layout areas for mouse click detection
     pub providers_area: Rect,
     pub secrets_area: Rect,
+
+    /// Scroll offsets for mouse click handling (updated during render)
+    pub providers_scroll_offset: usize,
+    pub secrets_scroll_offset: usize,
 }
 
 impl App {
@@ -157,6 +167,7 @@ impl App {
             resolved_values: IndexMap::new(),
             loading_secrets: HashSet::new(),
             initial_loading: true,
+            current_resolution_id: 0,
             error_message: None,
             status_message: None,
             search_filter: String::new(),
@@ -165,12 +176,36 @@ impl App {
             event_tx: None,
             providers_area: Rect::default(),
             secrets_area: Rect::default(),
+            providers_scroll_offset: 0,
+            secrets_scroll_offset: 0,
         })
     }
 
     /// Set the event channel sender
     pub fn set_event_tx(&mut self, tx: mpsc::UnboundedSender<Event>) {
         self.event_tx = Some(tx);
+    }
+
+    /// Get byte index from character index (UTF-8 safe)
+    fn char_to_byte_index(s: &str, char_idx: usize) -> usize {
+        s.char_indices()
+            .nth(char_idx)
+            .map(|(i, _)| i)
+            .unwrap_or(s.len())
+    }
+
+    /// Insert a character at a character position (UTF-8 safe)
+    fn insert_char_at(s: &mut String, char_idx: usize, c: char) {
+        let byte_idx = Self::char_to_byte_index(s, char_idx);
+        s.insert(byte_idx, c);
+    }
+
+    /// Remove a character at a character position (UTF-8 safe)
+    fn remove_char_at(s: &mut String, char_idx: usize) {
+        let byte_idx = Self::char_to_byte_index(s, char_idx);
+        if byte_idx < s.len() {
+            s.remove(byte_idx);
+        }
     }
 
     /// Get list of secret keys, filtered by search
@@ -194,6 +229,12 @@ impl App {
 
     /// Spawn async task to resolve all secrets
     pub fn spawn_resolve_secrets(&mut self, tx: mpsc::UnboundedSender<Event>) {
+        // Increment resolution ID to invalidate any in-flight resolutions
+        self.current_resolution_id = self.current_resolution_id.wrapping_add(1);
+        let resolution_id = self.current_resolution_id;
+
+        // Clear stale resolved values to prevent showing wrong data
+        self.resolved_values.clear();
         self.initial_loading = true;
         self.loading_secrets = self.secrets.keys().cloned().collect();
 
@@ -204,10 +245,16 @@ impl App {
         tokio::spawn(async move {
             match resolve_secrets_batch(&config, &profile, &secrets).await {
                 Ok(resolved) => {
-                    let _ = tx.send(Event::Message(Message::SecretsResolved(resolved)));
+                    let _ = tx.send(Event::Message(Message::SecretsResolved {
+                        resolution_id,
+                        resolved,
+                    }));
                 }
                 Err(e) => {
-                    let _ = tx.send(Event::Message(Message::Error(e.to_string())));
+                    let _ = tx.send(Event::Message(Message::Error {
+                        resolution_id,
+                        message: e.to_string(),
+                    }));
                 }
             }
         });
@@ -216,13 +263,28 @@ impl App {
     /// Handle an incoming message
     pub fn handle_message(&mut self, msg: Message) {
         match msg {
-            Message::SecretsResolved(resolved) => {
+            Message::SecretsResolved {
+                resolution_id,
+                resolved,
+            } => {
+                // Ignore results from stale resolution tasks (e.g., after profile switch)
+                if resolution_id != self.current_resolution_id {
+                    return;
+                }
                 self.resolved_values = resolved;
                 self.loading_secrets.clear();
                 self.initial_loading = false;
             }
-            Message::Error(e) => {
-                self.error_message = Some(e);
+            Message::Error {
+                resolution_id,
+                message,
+            } => {
+                // Ignore errors from stale resolution tasks
+                if resolution_id != self.current_resolution_id {
+                    return;
+                }
+                self.error_message = Some(message);
+                self.loading_secrets.clear();
                 self.initial_loading = false;
             }
         }
@@ -250,9 +312,34 @@ impl App {
                 self.handle_profile_picker_key(key);
                 return;
             }
-            Popup::SecretDetail(_) => {
-                // Any key closes detail view
-                self.popup = Popup::None;
+            Popup::SecretDetail(secret_key) => {
+                // Handle copy, otherwise close
+                match key.code {
+                    KeyCode::Char('c') => {
+                        // Copy the secret value
+                        if let Some(Some(value)) = self.resolved_values.get(secret_key) {
+                            match arboard::Clipboard::new() {
+                                Ok(mut clipboard) => {
+                                    if let Err(e) = clipboard.set_text(value.clone()) {
+                                        self.error_message = Some(format!("Failed to copy: {}", e));
+                                    } else {
+                                        self.status_message = Some("Copied!".to_string());
+                                    }
+                                }
+                                Err(e) => {
+                                    self.error_message =
+                                        Some(format!("Clipboard not available: {}", e));
+                                }
+                            }
+                        } else {
+                            self.error_message = Some("Secret value not available".to_string());
+                        }
+                        self.popup = Popup::None;
+                    }
+                    _ => {
+                        self.popup = Popup::None;
+                    }
+                }
                 return;
             }
             Popup::ConfirmDelete(secret_key) => {
@@ -363,16 +450,18 @@ impl App {
             KeyCode::Enter => {
                 // Show secret detail view
                 if self.focus == Focus::Secrets
-                    && let Some(key) = self.selected_secret() {
-                        self.popup = Popup::SecretDetail(key.clone());
-                    }
+                    && let Some(key) = self.selected_secret()
+                {
+                    self.popup = Popup::SecretDetail(key.clone());
+                }
             }
             KeyCode::Char('d') => {
                 // Delete secret (with confirmation)
                 if self.focus == Focus::Secrets
-                    && let Some(key) = self.selected_secret() {
-                        self.popup = Popup::ConfirmDelete(key.clone());
-                    }
+                    && let Some(key) = self.selected_secret()
+                {
+                    self.popup = Popup::ConfirmDelete(key.clone());
+                }
             }
             KeyCode::Char('e') => {
                 // Edit selected secret value
@@ -424,20 +513,22 @@ impl App {
                 // Check if click is in providers area
                 if self.is_in_area(x, y, self.providers_area) {
                     self.focus = Focus::Providers;
-                    // Calculate which item was clicked (accounting for border)
+                    // Calculate which item was clicked (accounting for border and scroll)
                     let relative_y = y.saturating_sub(self.providers_area.y + 1);
-                    if (relative_y as usize) < self.providers.len() {
-                        self.provider_index = relative_y as usize;
+                    let actual_index = self.providers_scroll_offset + relative_y as usize;
+                    if actual_index < self.providers.len() {
+                        self.provider_index = actual_index;
                     }
                 }
                 // Check if click is in secrets area
                 else if self.is_in_area(x, y, self.secrets_area) {
                     self.focus = Focus::Secrets;
-                    // Calculate which item was clicked (accounting for border)
+                    // Calculate which item was clicked (accounting for border and scroll)
                     let relative_y = y.saturating_sub(self.secrets_area.y + 1);
+                    let actual_index = self.secrets_scroll_offset + relative_y as usize;
                     let filtered = self.filtered_secrets();
-                    if (relative_y as usize) < filtered.len() {
-                        self.secret_index = relative_y as usize;
+                    if actual_index < filtered.len() {
+                        self.secret_index = actual_index;
                     }
                 }
             }
@@ -516,7 +607,7 @@ impl App {
             .and_then(|v| v.clone())
             .unwrap_or_default();
 
-        let cursor = current_value.len();
+        let cursor = current_value.chars().count();
         self.popup = Popup::EditSecret(EditState {
             key,
             value: current_value,
@@ -547,29 +638,29 @@ impl App {
             }
             KeyCode::Backspace => {
                 if state.cursor > 0 {
-                    state.value.remove(state.cursor - 1);
+                    Self::remove_char_at(&mut state.value, state.cursor - 1);
                     state.cursor -= 1;
                 }
             }
             KeyCode::Delete => {
-                if state.cursor < state.value.len() {
-                    state.value.remove(state.cursor);
+                if state.cursor < state.value.chars().count() {
+                    Self::remove_char_at(&mut state.value, state.cursor);
                 }
             }
             KeyCode::Left => {
                 state.cursor = state.cursor.saturating_sub(1);
             }
             KeyCode::Right => {
-                state.cursor = (state.cursor + 1).min(state.value.len());
+                state.cursor = (state.cursor + 1).min(state.value.chars().count());
             }
             KeyCode::Home => {
                 state.cursor = 0;
             }
             KeyCode::End => {
-                state.cursor = state.value.len();
+                state.cursor = state.value.chars().count();
             }
             KeyCode::Char(c) => {
-                state.value.insert(state.cursor, c);
+                Self::insert_char_at(&mut state.value, state.cursor, c);
                 state.cursor += 1;
             }
             _ => {}
@@ -582,6 +673,11 @@ impl App {
             return;
         };
 
+        // Clear error on any keypress except Esc (which closes the popup)
+        if key.code != KeyCode::Esc {
+            self.error_message = None;
+        }
+
         match key.code {
             KeyCode::Esc => {
                 self.popup = Popup::None;
@@ -590,11 +686,11 @@ impl App {
                 // Switch between key and value fields
                 state.field = match state.field {
                     SetField::Key => {
-                        state.cursor = state.value.len();
+                        state.cursor = state.value.chars().count();
                         SetField::Value
                     }
                     SetField::Value => {
-                        state.cursor = state.key.len();
+                        state.cursor = state.key.chars().count();
                         SetField::Key
                     }
                 };
@@ -611,17 +707,28 @@ impl App {
                 self.popup = Popup::None;
 
                 // Note: Actually saving would require modifying the config file
-                // For now, just update the in-memory resolved value
+                // For now, just update the in-memory state
+                self.secrets.insert(
+                    key.clone(),
+                    SecretConfig {
+                        description: None,
+                        if_missing: None,
+                        default: None,
+                        provider: None,
+                        value: Some(value.clone()),
+                        source_path: None,
+                    },
+                );
                 self.resolved_values.insert(key.clone(), Some(value));
                 self.status_message = Some(format!("Set {} (in memory only)", key));
             }
             KeyCode::Backspace => {
-                let field = match state.field {
-                    SetField::Key => &mut state.key,
-                    SetField::Value => &mut state.value,
-                };
                 if state.cursor > 0 {
-                    field.remove(state.cursor - 1);
+                    let field = match state.field {
+                        SetField::Key => &mut state.key,
+                        SetField::Value => &mut state.value,
+                    };
+                    Self::remove_char_at(field, state.cursor - 1);
                     state.cursor -= 1;
                 }
             }
@@ -630,8 +737,8 @@ impl App {
                     SetField::Key => &mut state.key,
                     SetField::Value => &mut state.value,
                 };
-                if state.cursor < field.len() {
-                    field.remove(state.cursor);
+                if state.cursor < field.chars().count() {
+                    Self::remove_char_at(field, state.cursor);
                 }
             }
             KeyCode::Left => {
@@ -639,8 +746,8 @@ impl App {
             }
             KeyCode::Right => {
                 let max = match state.field {
-                    SetField::Key => state.key.len(),
-                    SetField::Value => state.value.len(),
+                    SetField::Key => state.key.chars().count(),
+                    SetField::Value => state.value.chars().count(),
                 };
                 state.cursor = (state.cursor + 1).min(max);
             }
@@ -649,7 +756,7 @@ impl App {
                     SetField::Key => &mut state.key,
                     SetField::Value => &mut state.value,
                 };
-                field.insert(state.cursor, c);
+                Self::insert_char_at(field, state.cursor, c);
                 state.cursor += 1;
             }
             _ => {}
@@ -693,25 +800,25 @@ impl App {
             return;
         }
 
-        self.profile = new_profile;
-
-        // Reload providers and secrets for new profile
-        self.providers = self
-            .config
-            .get_providers(&self.profile)
-            .keys()
-            .cloned()
-            .collect();
-        self.provider_index = 0;
-
-        match self.config.get_secrets(&self.profile) {
+        // Try to load secrets first before committing to the change
+        match self.config.get_secrets(&new_profile) {
             Ok(secrets) => {
+                // Success - now update all state
+                self.profile = new_profile;
+                self.providers = self
+                    .config
+                    .get_providers(&self.profile)
+                    .keys()
+                    .cloned()
+                    .collect();
+                self.provider_index = 0;
                 self.secrets = secrets;
                 self.secret_index = 0;
                 self.search_filter.clear();
                 self.refresh();
             }
             Err(e) => {
+                // Failed - don't change anything, just show error
                 self.error_message = Some(format!("Failed to load profile: {}", e));
             }
         }

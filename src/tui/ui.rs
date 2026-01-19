@@ -164,6 +164,9 @@ fn render_providers(app: &mut App, frame: &mut Frame, area: Rect) {
     }
 
     frame.render_stateful_widget(list, area, &mut state);
+
+    // Save scroll offset for mouse click handling
+    app.providers_scroll_offset = state.offset();
 }
 
 fn render_secrets(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -183,9 +186,9 @@ fn render_secrets(app: &mut App, frame: &mut Frame, area: Rect) {
                 Span::styled("loading...", Style::default().fg(Colors::yellow()))
             } else if let Some(Some(value)) = app.resolved_values.get(*key) {
                 if app.show_values {
-                    // Truncate long values for display
-                    let display_val = if value.len() > 40 {
-                        format!("{}...", &value[..37])
+                    // Truncate long values for display (UTF-8 safe)
+                    let display_val: String = if value.chars().count() > 40 {
+                        format!("{}...", value.chars().take(37).collect::<String>())
                     } else {
                         value.clone()
                     };
@@ -244,6 +247,9 @@ fn render_secrets(app: &mut App, frame: &mut Frame, area: Rect) {
     }
 
     frame.render_stateful_widget(list, area, &mut state);
+
+    // Save scroll offset for mouse click handling
+    app.secrets_scroll_offset = state.offset();
 }
 
 fn render_status(app: &App, frame: &mut Frame, area: Rect) {
@@ -554,7 +560,7 @@ fn render_secret_detail(app: &App, frame: &mut Frame, secret_key: &str) {
             lines.push(Line::from(vec![
                 Span::styled("Value: ", Style::default().fg(Colors::cyan())),
                 Span::styled(
-                    format!("({} chars)", val.len()),
+                    format!("({} chars)", val.chars().count()),
                     Style::default().fg(Colors::green()),
                 ),
             ]));
@@ -653,14 +659,12 @@ fn render_confirm_delete(frame: &mut Frame, secret_key: &str) {
 fn render_edit_secret(frame: &mut Frame, state: &EditState) {
     let area = centered_rect(60, 30, frame.area());
 
-    // Create input display with cursor
-    let (before, after) = state.value.split_at(state.cursor.min(state.value.len()));
-    let cursor_char = after.chars().next().unwrap_or(' ');
-    let after_cursor = if after.is_empty() {
-        ""
-    } else {
-        &after[cursor_char.len_utf8()..]
-    };
+    // Create input display with cursor (UTF-8 safe using char indices)
+    let char_count = state.value.chars().count();
+    let cursor_pos = state.cursor.min(char_count);
+    let before: String = state.value.chars().take(cursor_pos).collect();
+    let cursor_char = state.value.chars().nth(cursor_pos).unwrap_or(' ');
+    let after_cursor: String = state.value.chars().skip(cursor_pos + 1).collect();
 
     let input_line = Line::from(vec![
         Span::raw(before),
@@ -729,18 +733,16 @@ fn render_set_secret(frame: &mut Frame, state: &SetState) {
         Style::default().fg(Colors::dark_gray())
     };
 
-    // Render key input
+    // Render key input (UTF-8 safe using char indices)
     let key_line = if key_active {
-        let (before, after) = state.key.split_at(state.cursor.min(state.key.len()));
-        let cursor_char = after.chars().next().unwrap_or(' ');
-        let after_cursor = if after.is_empty() {
-            String::new()
-        } else {
-            after[cursor_char.len_utf8()..].to_string()
-        };
+        let char_count = state.key.chars().count();
+        let cursor_pos = state.cursor.min(char_count);
+        let before: String = state.key.chars().take(cursor_pos).collect();
+        let cursor_char = state.key.chars().nth(cursor_pos).unwrap_or(' ');
+        let after_cursor: String = state.key.chars().skip(cursor_pos + 1).collect();
         Line::from(vec![
             Span::raw("  "),
-            Span::raw(before.to_string()),
+            Span::raw(before),
             Span::styled(
                 cursor_char.to_string(),
                 Style::default().bg(Colors::white()).fg(Color::Black),
@@ -751,18 +753,16 @@ fn render_set_secret(frame: &mut Frame, state: &SetState) {
         Line::from(vec![Span::raw(format!("  {}", state.key))])
     };
 
-    // Render value input
+    // Render value input (UTF-8 safe using char indices)
     let value_line = if value_active {
-        let (before, after) = state.value.split_at(state.cursor.min(state.value.len()));
-        let cursor_char = after.chars().next().unwrap_or(' ');
-        let after_cursor = if after.is_empty() {
-            String::new()
-        } else {
-            after[cursor_char.len_utf8()..].to_string()
-        };
+        let char_count = state.value.chars().count();
+        let cursor_pos = state.cursor.min(char_count);
+        let before: String = state.value.chars().take(cursor_pos).collect();
+        let cursor_char = state.value.chars().nth(cursor_pos).unwrap_or(' ');
+        let after_cursor: String = state.value.chars().skip(cursor_pos + 1).collect();
         Line::from(vec![
             Span::raw("  "),
-            Span::raw(before.to_string()),
+            Span::raw(before),
             Span::styled(
                 cursor_char.to_string(),
                 Style::default().bg(Colors::white()).fg(Color::Black),

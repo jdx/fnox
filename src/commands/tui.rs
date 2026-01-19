@@ -11,6 +11,16 @@ use crate::tui::terminal::install_panic_hook;
 use crate::tui::ui;
 use crate::tui::{App, Event, EventHandler, enter_terminal, leave_terminal};
 
+/// Guard that ensures terminal is restored when dropped
+struct TerminalGuard;
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        // Best-effort terminal restoration on drop
+        let _ = leave_terminal();
+    }
+}
+
 #[derive(Debug, Args)]
 pub struct TuiCommand;
 
@@ -25,6 +35,9 @@ impl TuiCommand {
         let mut terminal = enter_terminal().map_err(|e| {
             crate::error::FnoxError::Config(format!("Failed to initialize terminal: {}", e))
         })?;
+
+        // Create guard to ensure terminal cleanup on any exit (error or success)
+        let _guard = TerminalGuard;
 
         // Create app state
         let mut app = App::new(config, profile)?;
@@ -58,11 +71,7 @@ impl TuiCommand {
             }
         }
 
-        // Restore terminal
-        leave_terminal().map_err(|e| {
-            crate::error::FnoxError::Config(format!("Failed to restore terminal: {}", e))
-        })?;
-
+        // Guard will restore terminal when dropped
         Ok(())
     }
 }
