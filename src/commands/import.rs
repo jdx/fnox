@@ -123,14 +123,6 @@ impl ImportCommand {
         )
         .await?;
         let capabilities = provider.capabilities();
-
-        if capabilities.is_empty() {
-            return Err(FnoxError::ImportProviderUnsupported {
-                provider: self.provider.clone(),
-                help: "Provider has no capabilities defined".to_string(),
-            });
-        }
-
         let is_encryption_provider =
             capabilities.contains(&crate::providers::ProviderCapability::Encryption);
         let is_remote_storage_provider =
