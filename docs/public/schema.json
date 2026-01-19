@@ -180,7 +180,7 @@
             "description": "Age public keys (recipients) for encryption"
           },
           "key_file": {
-            "type": "string",
+            "$ref": "#/$defs/stringOrSecretRef",
             "description": "Path to age key file"
           }
         },
