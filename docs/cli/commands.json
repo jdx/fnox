@@ -195,7 +195,7 @@
                 "choices": ["env", "json", "yaml", "toml"]
               }
             },
-            "default": "env"
+            "default": ["env"]
           },
           {
             "name": "output",
@@ -292,7 +292,7 @@
             "required": false,
             "double_dash": "Optional",
             "hide": false,
-            "default": "env",
+            "default": ["env"],
             "choices": {
               "choices": ["env", "json", "yaml", "toml"]
             }
@@ -738,7 +738,7 @@
               "double_dash": "Optional",
               "hide": false
             },
-            "default": "."
+            "default": ["."]
           },
           {
             "name": "ignore",
@@ -773,6 +773,20 @@
         "hide": false,
         "help": "Scan repository for potential secrets",
         "name": "scan",
+        "aliases": [],
+        "hidden_aliases": [],
+        "examples": []
+      },
+      "schema": {
+        "full_cmd": ["schema"],
+        "usage": "schema",
+        "subcommands": {},
+        "args": [],
+        "flags": [],
+        "mounts": [],
+        "hide": true,
+        "help": "Generate JSON Schema for fnox configuration",
+        "name": "schema",
         "aliases": [],
         "hidden_aliases": [],
         "examples": []
@@ -970,7 +984,7 @@
           "double_dash": "Optional",
           "hide": false
         },
-        "default": "fnox.toml"
+        "default": ["fnox.toml"]
       },
       {
         "name": "profile",

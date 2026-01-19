@@ -134,6 +134,7 @@ cmd scan help="Scan repository for potential secrets" {
     }
     flag "-q --quiet" help="Show only files with potential secrets"
 }
+cmd schema hide=#true help="Generate JSON Schema for fnox configuration"
 cmd set help="Set a secret value" {
     alias s
     flag "-d --description" help="Description of the secret" {
