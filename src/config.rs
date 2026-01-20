@@ -47,7 +47,6 @@ pub struct Config {
     pub providers: IndexMap<String, ProviderConfig>,
 
     /// Default provider name for default profile
-    /// Wrapped in SpannedValue to track source location for error reporting.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     default_provider: Option<SpannedValue<String>>,
 
@@ -101,12 +100,10 @@ pub struct SecretConfig {
     pub default: Option<String>,
 
     /// Provider to fetch from (age, aws-kms, 1password, aws, etc.)
-    /// Wrapped in SpannedValue to track source location for error reporting.
     #[serde(skip_serializing_if = "Option::is_none")]
     provider: Option<SpannedValue<String>>,
 
     /// Value for the provider (secret name, encrypted blob, etc.)
-    /// Wrapped in SpannedValue to track source location for error reporting.
     #[serde(skip_serializing_if = "Option::is_none")]
     value: Option<SpannedValue<String>>,
 
@@ -124,7 +121,6 @@ pub struct ProfileConfig {
     pub providers: IndexMap<String, ProviderConfig>,
 
     /// Default provider name for this profile
-    /// Wrapped in SpannedValue to track source location for error reporting.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     default_provider: Option<SpannedValue<String>>,
 
@@ -369,9 +365,10 @@ impl Config {
             merged.prompt_auth = overlay.prompt_auth;
         }
 
-        // Merge default_provider (overlay takes precedence)
+        // Merge default_provider and its source (overlay takes precedence)
         if overlay.default_provider.is_some() {
             merged.default_provider = overlay.default_provider;
+            merged.default_provider_source = overlay.default_provider_source;
         }
 
         // Merge providers (overlay takes precedence)
@@ -413,6 +410,11 @@ impl Config {
                     existing_profile
                         .secret_sources
                         .insert(secret_name.clone(), source.clone());
+                }
+                // Merge default_provider and its source (overlay takes precedence)
+                if profile.default_provider.is_some() {
+                    existing_profile.default_provider = profile.default_provider;
+                    existing_profile.default_provider_source = profile.default_provider_source;
                 }
             } else {
                 merged.profiles.insert(name, profile);
@@ -858,12 +860,12 @@ impl Config {
                 if profile != "default" {
                     self.profiles
                         .get(profile)
-                        .and_then(|p| p.default_provider().map(String::from))
+                        .and_then(|p| p.default_provider().map(|s| s.to_string()))
                 } else {
                     None
                 }
             })
-            .or_else(|| self.default_provider().map(String::from))
+            .or_else(|| self.default_provider().map(|s| s.to_string()))
             .or_else(|| {
                 // Auto-select if exactly one provider exists (matching get_default_provider behavior)
                 if providers.len() == 1 {
@@ -915,17 +917,31 @@ impl Config {
         }
 
         // If default_provider is set, validate it exists
-        if let Some(default_provider) = self.default_provider()
-            && !self.providers.contains_key(default_provider)
+        if let Some(default_provider_name) = self.default_provider()
+            && !self.providers.contains_key(default_provider_name)
         {
+            // Try to get source info for better error reporting
+            if let Some(source_path) = &self.default_provider_source
+                && let (Some(src), Some(span)) = (
+                    source_registry::get_named_source(source_path),
+                    self.default_provider_span(),
+                )
+            {
+                return Err(FnoxError::DefaultProviderNotFoundWithSource {
+                    provider: default_provider_name.to_string(),
+                    profile: "default".to_string(),
+                    src,
+                    span: span.into(),
+                });
+            }
             issues.push(ValidationIssue::with_help(
                 format!(
                     "Default provider '{}' not found in configuration",
-                    default_provider
+                    default_provider_name
                 ),
                 format!(
                     "Add [providers.{}] to your config or remove the default_provider setting",
-                    default_provider
+                    default_provider_name
                 ),
             ));
         }
@@ -953,17 +969,31 @@ impl Config {
             }
 
             // If profile has default_provider set, validate it exists
-            if let Some(default_provider) = profile_config.default_provider()
-                && !providers.contains_key(default_provider)
+            if let Some(default_provider_name) = profile_config.default_provider()
+                && !providers.contains_key(default_provider_name)
             {
+                // Try to get source info for better error reporting
+                if let Some(source_path) = &profile_config.default_provider_source
+                    && let (Some(src), Some(span)) = (
+                        source_registry::get_named_source(source_path),
+                        profile_config.default_provider_span(),
+                    )
+                {
+                    return Err(FnoxError::DefaultProviderNotFoundWithSource {
+                        provider: default_provider_name.to_string(),
+                        profile: profile_name.clone(),
+                        src,
+                        span: span.into(),
+                    });
+                }
                 issues.push(ValidationIssue::with_help(
                     format!(
                         "Default provider '{}' not found in profile '{}'",
-                        default_provider, profile_name
+                        default_provider_name, profile_name
                     ),
                     format!(
                         "Add [profiles.{}.providers.{}] or remove the default_provider setting",
-                        profile_name, default_provider
+                        profile_name, default_provider_name
                     ),
                 ));
             }

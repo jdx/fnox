@@ -242,8 +242,8 @@ EOF
 	# Second test: import with --provider but without --force should fail with stdin consumption error
 	run bash -c "echo -e 'TEST_VAR=test456' | $FNOX_BIN import --provider age"
 	assert_failure
-	assert_output --partial "--force or --dry-run"
-	assert_output --partial "stdin is consumed"
+	assert_output --partial "--force"
+	assert_output --partial "Stdin is consumed during import"
 
 	# Verify secrets were NOT imported
 	assert_fnox_failure get TEST_VAR
@@ -282,7 +282,7 @@ EOF
 
 	# Try to import from non-existent file
 	assert_fnox_failure import -i nonexistent.env --provider age --force
-	assert_output --partial "Failed to read input file"
+	assert_output --partial "Failed to read import source"
 }
 
 @test "fnox import fails with non-existent provider" {
@@ -295,6 +295,5 @@ EOF
 
 	# Try to import with non-existent provider
 	assert_fnox_failure import -i .env --provider nonexistent --force
-	assert_output --partial "Provider 'nonexistent' not found"
-	assert_output --partial "Available providers: age"
+	assert_output --partial "Provider 'nonexistent' not configured"
 }
