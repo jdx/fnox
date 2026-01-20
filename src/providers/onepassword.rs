@@ -117,10 +117,14 @@ impl OnePasswordProvider {
             let replaced = ERROR_PREFIX_RE.replace_all(&cow, "");
             let stderr = replaced.trim();
 
-            // Check for common auth errors
-            if stderr.contains("signed in")
+            // Check for 1Password CLI auth errors (tested with op CLI v2.x)
+            // Common patterns: "not signed in", "authenticate", "authorization invalid"
+            if stderr.contains("not signed in")
+                || stderr.contains("signed in to an account")
                 || stderr.contains("authenticate")
                 || stderr.contains("authorization")
+                || stderr.contains("session expired")
+                || stderr.contains("invalid session")
             {
                 return Err(FnoxError::ProviderAuthFailed {
                     provider: "1Password".to_string(),

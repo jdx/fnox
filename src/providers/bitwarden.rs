@@ -211,9 +211,13 @@ impl BitwardenProvider {
             let stderr = String::from_utf8_lossy(&output.stderr);
             let stderr_str = stderr.trim();
 
-            if stderr_str.contains("locked")
-                || stderr_str.contains("session")
-                || stderr_str.contains("login")
+            // Check for Bitwarden CLI auth errors (tested with bw CLI)
+            // More specific patterns to avoid false positives
+            if stderr_str.contains("vault is locked")
+                || stderr_str.contains("You are not logged in")
+                || stderr_str.contains("session key is invalid")
+                || stderr_str.contains("BW_SESSION")
+                || (stderr_str.contains("login") && stderr_str.contains("You must"))
             {
                 return Err(FnoxError::ProviderAuthFailed {
                     provider: "Bitwarden".to_string(),

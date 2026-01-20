@@ -76,7 +76,13 @@ impl HashiCorpVaultProvider {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             let stderr_str = stderr.trim();
-            if stderr_str.contains("permission denied") || stderr_str.contains("403") {
+            // Check for Vault-specific permission/auth error patterns
+            if stderr_str.contains("permission denied")
+                || stderr_str.contains("Code: 403")
+                || stderr_str.contains("* permission denied")
+                || stderr_str.contains("missing client token")
+                || stderr_str.contains("token expired")
+            {
                 return Err(FnoxError::ProviderAuthFailed {
                     provider: "HashiCorp Vault".to_string(),
                     details: stderr_str.to_string(),

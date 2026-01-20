@@ -74,8 +74,9 @@ where
                     "Connection timeout - check network and firewall"
                 } else if full_error.contains("No credentials")
                     || full_error.contains("Unable to load credentials")
+                    || full_error.contains("expired")
                 {
-                    "Run 'aws sso login' or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY"
+                    "Configure AWS credentials: run 'aws configure', 'aws sso login', or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY"
                 } else {
                     "Check network connectivity"
                 };

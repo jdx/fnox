@@ -51,7 +51,11 @@ impl AzureSecretsManagerProvider {
 
         let response = client.get_secret(secret_name, None).await.map_err(|e| {
             let err_str = e.to_string();
-            if err_str.contains("SecretNotFound") || err_str.contains("not found") {
+            // Check for Azure-specific "not found" error codes
+            if err_str.contains("SecretNotFound")
+                || err_str.contains("ResourceNotFound")
+                || err_str.contains("Secret not found")
+            {
                 FnoxError::ProviderSecretNotFound {
                     provider: "Azure Key Vault".to_string(),
                     secret: secret_name.to_string(),

@@ -377,29 +377,40 @@ impl ImportCommand {
         self.extract_string_values(&data)
     }
 
-    /// Convert line/column (1-indexed) to byte offset
-    /// Handles both LF and CRLF line endings
+    /// Convert line/column (1-indexed) to byte offset for miette source spans.
+    ///
+    /// Handles both LF and CRLF line endings. The column is treated as a character
+    /// count, which is converted to the correct byte offset for multi-byte UTF-8.
     fn offset_from_line_col(&self, input: &str, line: usize, col: usize) -> usize {
         let mut current_line = 1;
-        let mut line_start = 0;
+        let mut line_start_byte = 0;
 
-        for (i, c) in input.char_indices() {
+        // First, find the byte offset of the target line
+        for (byte_idx, c) in input.char_indices() {
             if current_line == line {
-                // Found the target line, add column offset (col is 1-indexed)
-                return line_start + col.saturating_sub(1);
+                line_start_byte = byte_idx;
+                break;
             }
             if c == '\n' {
                 current_line += 1;
-                line_start = i + 1;
             }
         }
 
-        // If we're looking for the last line (or beyond), return line_start + col
-        if current_line == line {
-            return line_start + col.saturating_sub(1);
+        // If we didn't find the line, it's the last line (no trailing newline)
+        if current_line < line {
+            return input.len();
         }
 
-        input.len()
+        // Now count characters from line_start to find the column byte offset
+        // col is 1-indexed, so we want to skip (col - 1) characters
+        let chars_to_skip = col.saturating_sub(1);
+        let line_slice = &input[line_start_byte..];
+
+        line_slice
+            .char_indices()
+            .nth(chars_to_skip)
+            .map(|(byte_offset, _)| line_start_byte + byte_offset)
+            .unwrap_or(input.len())
     }
 
     fn extract_string_values<V>(&self, data: &V) -> Result<HashMap<String, String>>
