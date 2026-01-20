@@ -180,7 +180,7 @@ EOF
 	# Try to get non-existent secret
 	run "$FNOX_BIN" get NONEXISTENT
 	assert_failure
-	assert_output --partial "Failed to get secret"
+	assert_output --partial "secret_not_found"
 }
 
 @test "fnox list shows Secrets Manager secrets" {

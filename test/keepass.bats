@@ -344,7 +344,7 @@ EOF
 	# Try to get - should fail
 	run "$FNOX_BIN" get CREATE_DB
 	assert_failure
-	assert_output --partial "Failed to open KeePass database"
+	assert_output --partial "auth_failed"
 }
 
 @test "fnox fails with missing database file for get" {
@@ -362,7 +362,7 @@ EOF
 	# Try to get - should fail because database doesn't exist
 	run "$FNOX_BIN" get MISSING_DB
 	assert_failure
-	assert_output --partial "Failed to open KeePass database"
+	assert_output --partial "api_error"
 }
 
 @test "keepass provider respects FNOX_KEEPASS_PASSWORD" {
