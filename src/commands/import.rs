@@ -3,8 +3,10 @@ use crate::config::Config;
 use crate::error::{FnoxError, Result};
 use clap::{Args, ValueEnum};
 use console;
+use miette::{NamedSource, SourceSpan};
 use regex::Regex;
 use std::io::{self, Read};
+use std::sync::Arc;
 use std::{collections::HashMap, path::PathBuf};
 use strum::{Display, EnumString, VariantNames};
 
@@ -268,11 +270,17 @@ impl ImportCommand {
     }
 
     fn parse_input(&self, input: &str) -> Result<HashMap<String, String>> {
+        let source_name = self
+            .input
+            .as_ref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "<stdin>".to_string());
+
         match self.format {
             ImportFormat::Env => self.parse_env(input),
-            ImportFormat::Json => self.parse_json(input),
-            ImportFormat::Yaml => self.parse_yaml(input),
-            ImportFormat::Toml => self.parse_toml(input),
+            ImportFormat::Json => self.parse_json(input, &source_name),
+            ImportFormat::Yaml => self.parse_yaml(input, &source_name),
+            ImportFormat::Toml => self.parse_toml(input, &source_name),
         }
     }
 
@@ -319,20 +327,63 @@ impl ImportCommand {
         Ok(())
     }
 
-    fn parse_json(&self, input: &str) -> Result<HashMap<String, String>> {
-        let data: serde_json::Value = serde_json::from_str(input)?;
+    fn parse_json(&self, input: &str, source_name: &str) -> Result<HashMap<String, String>> {
+        let data: serde_json::Value = serde_json::from_str(input).map_err(|e| {
+            // serde_json provides line and column
+            let offset = self.offset_from_line_col(input, e.line(), e.column());
+            FnoxError::ImportParseErrorWithSource {
+                format: "JSON".to_string(),
+                src: Arc::new(NamedSource::new(source_name, Arc::new(input.to_string()))),
+                span: SourceSpan::new(offset.into(), 1usize.into()),
+            }
+        })?;
         self.extract_string_values(&data)
     }
 
-    fn parse_yaml(&self, input: &str) -> Result<HashMap<String, String>> {
-        let data: serde_yaml::Value = serde_yaml::from_str(input)?;
+    fn parse_yaml(&self, input: &str, source_name: &str) -> Result<HashMap<String, String>> {
+        let data: serde_yaml::Value = serde_yaml::from_str(input).map_err(|e| {
+            // serde_yaml provides location via e.location()
+            if let Some(loc) = e.location() {
+                let offset = self.offset_from_line_col(input, loc.line(), loc.column());
+                FnoxError::ImportParseErrorWithSource {
+                    format: "YAML".to_string(),
+                    src: Arc::new(NamedSource::new(source_name, Arc::new(input.to_string()))),
+                    span: SourceSpan::new(offset.into(), 1usize.into()),
+                }
+            } else {
+                FnoxError::Config(format!("Failed to parse YAML: {}", e))
+            }
+        })?;
         self.extract_string_values(&data)
     }
 
-    fn parse_toml(&self, input: &str) -> Result<HashMap<String, String>> {
-        let data: serde_json::Value = toml_edit::de::from_str(input)
-            .map_err(|e| FnoxError::Config(format!("Failed to parse TOML: {}", e)))?;
+    fn parse_toml(&self, input: &str, source_name: &str) -> Result<HashMap<String, String>> {
+        let data: serde_json::Value = toml_edit::de::from_str(input).map_err(|e| {
+            // toml_edit provides span via e.span()
+            if let Some(span) = e.span() {
+                FnoxError::ImportParseErrorWithSource {
+                    format: "TOML".to_string(),
+                    src: Arc::new(NamedSource::new(source_name, Arc::new(input.to_string()))),
+                    span: SourceSpan::new(span.start.into(), (span.end - span.start).into()),
+                }
+            } else {
+                FnoxError::Config(format!("Failed to parse TOML: {}", e))
+            }
+        })?;
         self.extract_string_values(&data)
+    }
+
+    /// Convert line/column (1-indexed) to byte offset
+    fn offset_from_line_col(&self, input: &str, line: usize, col: usize) -> usize {
+        let mut offset = 0;
+        for (i, l) in input.lines().enumerate() {
+            if i + 1 == line {
+                // Found the line, add column offset (col is 1-indexed)
+                return offset + col.saturating_sub(1);
+            }
+            offset += l.len() + 1; // +1 for newline
+        }
+        offset
     }
 
     fn extract_string_values<V>(&self, data: &V) -> Result<HashMap<String, String>>

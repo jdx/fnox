@@ -4,8 +4,13 @@ use aws_config::BehaviorVersion;
 use aws_sdk_kms::Client;
 use aws_sdk_kms::primitives::Blob;
 
-/// Helper function to extract detailed error information from AWS SDK errors
-fn format_aws_error<E, R>(err: &aws_sdk_kms::error::SdkError<E, R>) -> String
+const URL: &str = "https://fnox.jdx.dev/providers/aws-kms";
+
+/// Convert AWS SDK errors to structured FnoxError with appropriate hints
+fn aws_kms_error_to_fnox<E, R>(
+    err: &aws_sdk_kms::error::SdkError<E, R>,
+    operation: &str,
+) -> FnoxError
 where
     E: std::fmt::Debug + std::fmt::Display,
     R: std::fmt::Debug,
@@ -14,60 +19,97 @@ where
 
     match err {
         SdkError::ServiceError(service_err) => {
-            // Extract service-specific error details
-            format!("{}", service_err.err())
+            let err_str = service_err.err().to_string();
+            if err_str.contains("AccessDenied") || err_str.contains("UnauthorizedAccess") {
+                FnoxError::ProviderAuthFailed {
+                    provider: "AWS KMS".to_string(),
+                    details: err_str,
+                    hint: format!("Check IAM permissions for kms:{}", operation),
+                    url: URL.to_string(),
+                }
+            } else if err_str.contains("NotFoundException") {
+                FnoxError::ProviderSecretNotFound {
+                    provider: "AWS KMS".to_string(),
+                    secret: "key".to_string(),
+                    hint: "Check that the KMS key exists and is accessible".to_string(),
+                    url: URL.to_string(),
+                }
+            } else {
+                FnoxError::ProviderApiError {
+                    provider: "AWS KMS".to_string(),
+                    details: err_str,
+                    hint: "Check AWS KMS configuration".to_string(),
+                    url: URL.to_string(),
+                }
+            }
         }
-        SdkError::TimeoutError(timeout_err) => {
-            format!("Request timed out: {:?}", timeout_err)
-        }
+        SdkError::TimeoutError(_) => FnoxError::ProviderApiError {
+            provider: "AWS KMS".to_string(),
+            details: "Request timed out".to_string(),
+            hint: "Check network connectivity and AWS region endpoint".to_string(),
+            url: URL.to_string(),
+        },
         SdkError::DispatchFailure(dispatch_err) => {
-            // Unwrap dispatch failure to show underlying cause
             if let Some(connector_err) = dispatch_err.as_connector_error() {
-                // Walk the error chain to find root cause
                 let mut error_chain = vec![connector_err.to_string()];
                 let mut source = std::error::Error::source(connector_err);
                 while let Some(err) = source {
                     error_chain.push(err.to_string());
                     source = std::error::Error::source(err);
                 }
-
-                // Build a detailed error message with the full chain
                 let full_error = error_chain.join(": ");
 
-                // Add helpful context based on common error patterns
-                let context = if full_error.contains("dns error")
+                let hint = if full_error.contains("dns error")
                     || full_error.contains("failed to lookup address")
                 {
-                    " (DNS resolution failed - check network connectivity and AWS region endpoint)"
+                    "DNS resolution failed - check network and AWS region"
                 } else if full_error.contains("connection refused") {
-                    " (Connection refused - check if AWS endpoint is accessible and firewall rules)"
+                    "Connection refused - check AWS endpoint accessibility"
                 } else if full_error.contains("tls")
                     || full_error.contains("ssl")
                     || full_error.contains("certificate")
                 {
-                    " (TLS/SSL error - check system certificates or network proxy configuration)"
+                    "TLS/SSL error - check certificates or proxy config"
                 } else if full_error.contains("timeout") {
-                    " (Connection timeout - check network connectivity and firewall rules)"
+                    "Connection timeout - check network and firewall"
                 } else if full_error.contains("No credentials")
                     || full_error.contains("Unable to load credentials")
                 {
-                    " (AWS credentials not found or invalid - check AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, or AWS profile)"
+                    "Run 'aws sso login' or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY"
                 } else {
-                    ""
+                    "Check network connectivity"
                 };
 
-                format!("{}{}", full_error, context)
+                if full_error.contains("credentials") {
+                    FnoxError::ProviderAuthFailed {
+                        provider: "AWS KMS".to_string(),
+                        details: full_error,
+                        hint: hint.to_string(),
+                        url: URL.to_string(),
+                    }
+                } else {
+                    FnoxError::ProviderApiError {
+                        provider: "AWS KMS".to_string(),
+                        details: full_error,
+                        hint: hint.to_string(),
+                        url: URL.to_string(),
+                    }
+                }
             } else {
-                format!("Dispatch failure: {:?}", dispatch_err)
+                FnoxError::ProviderApiError {
+                    provider: "AWS KMS".to_string(),
+                    details: format!("{:?}", dispatch_err),
+                    hint: "Check network connectivity".to_string(),
+                    url: URL.to_string(),
+                }
             }
         }
-        SdkError::ConstructionFailure(construction_err) => {
-            format!("Request construction failed: {:?}", construction_err)
-        }
-        SdkError::ResponseError(response_err) => {
-            format!("Response error: {:?}", response_err)
-        }
-        _ => format!("{}", err),
+        _ => FnoxError::ProviderApiError {
+            provider: "AWS KMS".to_string(),
+            details: err.to_string(),
+            hint: "Check AWS configuration".to_string(),
+            url: URL.to_string(),
+        },
     }
 }
 
@@ -101,7 +143,12 @@ impl AwsKmsProvider {
             &base64::engine::general_purpose::STANDARD,
             ciphertext_base64,
         )
-        .map_err(|e| FnoxError::Provider(format!("Failed to decode base64 ciphertext: {}", e)))?;
+        .map_err(|e| FnoxError::ProviderInvalidResponse {
+            provider: "AWS KMS".to_string(),
+            details: format!("Failed to decode base64 ciphertext: {}", e),
+            hint: "The encrypted value appears to be corrupted".to_string(),
+            url: URL.to_string(),
+        })?;
 
         let result = client
             .decrypt()
@@ -109,20 +156,27 @@ impl AwsKmsProvider {
             .ciphertext_blob(Blob::new(ciphertext_bytes))
             .send()
             .await
-            .map_err(|e| {
-                FnoxError::Provider(format!(
-                    "Failed to decrypt with AWS KMS: {}",
-                    format_aws_error(&e)
-                ))
-            })?;
+            .map_err(|e| aws_kms_error_to_fnox(&e, "Decrypt"))?;
 
-        let plaintext_blob = result.plaintext().ok_or_else(|| {
-            FnoxError::Provider("AWS KMS decrypt returned no plaintext".to_string())
-        })?;
+        let plaintext_blob =
+            result
+                .plaintext()
+                .ok_or_else(|| FnoxError::ProviderInvalidResponse {
+                    provider: "AWS KMS".to_string(),
+                    details: "Decrypt returned no plaintext".to_string(),
+                    hint: "The KMS key may not be able to decrypt this ciphertext".to_string(),
+                    url: URL.to_string(),
+                })?;
 
         // Convert bytes to string
-        String::from_utf8(plaintext_blob.as_ref().to_vec())
-            .map_err(|e| FnoxError::Provider(format!("Decrypted value is not valid UTF-8: {}", e)))
+        String::from_utf8(plaintext_blob.as_ref().to_vec()).map_err(|e| {
+            FnoxError::ProviderInvalidResponse {
+                provider: "AWS KMS".to_string(),
+                details: format!("Decrypted value is not valid UTF-8: {}", e),
+                hint: "The decrypted value contains invalid UTF-8 characters".to_string(),
+                url: URL.to_string(),
+            }
+        })
     }
 }
 
@@ -146,16 +200,17 @@ impl crate::providers::Provider for AwsKmsProvider {
             .plaintext(Blob::new(plaintext.as_bytes()))
             .send()
             .await
-            .map_err(|e| {
-                FnoxError::Provider(format!(
-                    "Failed to encrypt with AWS KMS: {}",
-                    format_aws_error(&e)
-                ))
-            })?;
+            .map_err(|e| aws_kms_error_to_fnox(&e, "Encrypt"))?;
 
-        let ciphertext_blob = result.ciphertext_blob().ok_or_else(|| {
-            FnoxError::Provider("AWS KMS encrypt returned no ciphertext".to_string())
-        })?;
+        let ciphertext_blob =
+            result
+                .ciphertext_blob()
+                .ok_or_else(|| FnoxError::ProviderInvalidResponse {
+                    provider: "AWS KMS".to_string(),
+                    details: "Encrypt returned no ciphertext".to_string(),
+                    hint: "This is an unexpected error".to_string(),
+                    url: URL.to_string(),
+                })?;
 
         // Encode as base64 for storage
         Ok(base64::Engine::encode(
@@ -173,13 +228,7 @@ impl crate::providers::Provider for AwsKmsProvider {
             .key_id(&self.key_id)
             .send()
             .await
-            .map_err(|e| {
-                FnoxError::Provider(format!(
-                    "Failed to connect to AWS KMS or access key '{}': {}",
-                    self.key_id,
-                    format_aws_error(&e)
-                ))
-            })?;
+            .map_err(|e| aws_kms_error_to_fnox(&e, "DescribeKey"))?;
 
         Ok(())
     }

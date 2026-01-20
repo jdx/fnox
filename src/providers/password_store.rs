@@ -63,21 +63,57 @@ impl PasswordStoreProvider {
         cmd.stderr(std::process::Stdio::piped());
 
         let output = cmd.output().map_err(|e| {
-            FnoxError::Provider(format!(
-                "Failed to execute 'pass' command: {e}. Make sure password-store is installed."
-            ))
+            if e.kind() == std::io::ErrorKind::NotFound {
+                FnoxError::ProviderCliNotFound {
+                    provider: "password-store".to_string(),
+                    cli: "pass".to_string(),
+                    install_hint: "brew install pass".to_string(),
+                    url: "https://fnox.jdx.dev/providers/password-store".to_string(),
+                }
+            } else {
+                FnoxError::ProviderCliFailed {
+                    provider: "password-store".to_string(),
+                    details: e.to_string(),
+                    hint: "Check that password-store is installed and accessible".to_string(),
+                    url: "https://fnox.jdx.dev/providers/password-store".to_string(),
+                }
+            }
         })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(FnoxError::Provider(format!(
-                "password-store CLI command failed: {}",
-                stderr.trim()
-            )));
+            let stderr_str = stderr.trim();
+            if stderr_str.contains("not in the password store") {
+                return Err(FnoxError::ProviderSecretNotFound {
+                    provider: "password-store".to_string(),
+                    secret: args.last().unwrap_or(&"unknown").to_string(),
+                    hint: "Check that the secret exists in your password store".to_string(),
+                    url: "https://fnox.jdx.dev/providers/password-store".to_string(),
+                });
+            }
+            if stderr_str.contains("gpg") || stderr_str.contains("decrypt") {
+                return Err(FnoxError::ProviderAuthFailed {
+                    provider: "password-store".to_string(),
+                    details: stderr_str.to_string(),
+                    hint: "Check that your GPG key is available and unlocked".to_string(),
+                    url: "https://fnox.jdx.dev/providers/password-store".to_string(),
+                });
+            }
+            return Err(FnoxError::ProviderCliFailed {
+                provider: "password-store".to_string(),
+                details: stderr_str.to_string(),
+                hint: "Check your password-store configuration".to_string(),
+                url: "https://fnox.jdx.dev/providers/password-store".to_string(),
+            });
         }
 
-        let stdout = String::from_utf8(output.stdout)
-            .map_err(|e| FnoxError::Provider(format!("Invalid UTF-8 in command output: {e}")))?;
+        let stdout =
+            String::from_utf8(output.stdout).map_err(|e| FnoxError::ProviderInvalidResponse {
+                provider: "password-store".to_string(),
+                details: format!("Invalid UTF-8 in command output: {}", e),
+                hint: "The secret value contains invalid UTF-8 characters".to_string(),
+                url: "https://fnox.jdx.dev/providers/password-store".to_string(),
+            })?;
 
         Ok(stdout.trim().to_string())
     }
@@ -117,29 +153,64 @@ impl crate::providers::Provider for PasswordStoreProvider {
             .stderr(std::process::Stdio::piped());
 
         let mut child = cmd.spawn().map_err(|e| {
-            FnoxError::Provider(format!("Failed to spawn 'pass insert' command: {e}"))
+            if e.kind() == std::io::ErrorKind::NotFound {
+                FnoxError::ProviderCliNotFound {
+                    provider: "password-store".to_string(),
+                    cli: "pass".to_string(),
+                    install_hint: "brew install pass".to_string(),
+                    url: "https://fnox.jdx.dev/providers/password-store".to_string(),
+                }
+            } else {
+                FnoxError::ProviderCliFailed {
+                    provider: "password-store".to_string(),
+                    details: format!("Failed to spawn 'pass insert': {}", e),
+                    hint: "Check that password-store is installed and accessible".to_string(),
+                    url: "https://fnox.jdx.dev/providers/password-store".to_string(),
+                }
+            }
         })?;
 
         // Write value to stdin
         if let Some(mut stdin) = child.stdin.take() {
             use std::io::Write;
 
-            stdin.write_all(value.as_bytes()).map_err(|e| {
-                FnoxError::Provider(format!("Failed to write to 'pass insert' stdin: {e}"))
-            })?;
+            stdin
+                .write_all(value.as_bytes())
+                .map_err(|e| FnoxError::ProviderCliFailed {
+                    provider: "password-store".to_string(),
+                    details: format!("Failed to write to stdin: {}", e),
+                    hint: "This is an internal error".to_string(),
+                    url: "https://fnox.jdx.dev/providers/password-store".to_string(),
+                })?;
             drop(stdin); // Explicitly close stdin to signal EOF
         }
 
-        let output = child.wait_with_output().map_err(|e| {
-            FnoxError::Provider(format!("Failed to wait for 'pass insert' command: {e}"))
-        })?;
+        let output = child
+            .wait_with_output()
+            .map_err(|e| FnoxError::ProviderCliFailed {
+                provider: "password-store".to_string(),
+                details: format!("Failed to wait for command: {}", e),
+                hint: "This is an internal error".to_string(),
+                url: "https://fnox.jdx.dev/providers/password-store".to_string(),
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(FnoxError::Provider(format!(
-                "Failed to store secret in password-store: {}",
-                stderr.trim()
-            )));
+            let stderr_str = stderr.trim();
+            if stderr_str.contains("gpg") || stderr_str.contains("encrypt") {
+                return Err(FnoxError::ProviderAuthFailed {
+                    provider: "password-store".to_string(),
+                    details: stderr_str.to_string(),
+                    hint: "Check that your GPG key is available".to_string(),
+                    url: "https://fnox.jdx.dev/providers/password-store".to_string(),
+                });
+            }
+            return Err(FnoxError::ProviderCliFailed {
+                provider: "password-store".to_string(),
+                details: stderr_str.to_string(),
+                hint: "Check your password-store configuration".to_string(),
+                url: "https://fnox.jdx.dev/providers/password-store".to_string(),
+            });
         }
 
         tracing::debug!("Successfully stored secret '{secret_path}' in password-store");

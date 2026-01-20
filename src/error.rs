@@ -39,7 +39,8 @@ pub enum FnoxError {
     #[error("Failed to read configuration file: {}", path.display())]
     #[diagnostic(
         code(fnox::config::read_failed),
-        help("Ensure the config file exists and you have read permissions")
+        help("Ensure the config file exists and you have read permissions"),
+        url("https://fnox.jdx.dev/configuration")
     )]
     ConfigReadFailed {
         path: std::path::PathBuf,
@@ -50,7 +51,8 @@ pub enum FnoxError {
     #[error("Failed to write configuration file: {}", path.display())]
     #[diagnostic(
         code(fnox::config::write_failed),
-        help("Check that you have write permissions for the config directory")
+        help("Check that you have write permissions for the config directory"),
+        url("https://fnox.jdx.dev/configuration")
     )]
     ConfigWriteFailed {
         path: std::path::PathBuf,
@@ -73,7 +75,8 @@ pub enum FnoxError {
     #[error("{message}")]
     #[diagnostic(
         code(fnox::config::invalid_toml),
-        help("Check the TOML syntax in your configuration file")
+        help("Check the TOML syntax in your configuration file"),
+        url("https://fnox.jdx.dev/configuration")
     )]
     ConfigParseErrorWithSource {
         message: String,
@@ -84,7 +87,10 @@ pub enum FnoxError {
     },
 
     #[error("Failed to serialize configuration to TOML")]
-    #[diagnostic(code(fnox::config::serialize_failed))]
+    #[diagnostic(
+        code(fnox::config::serialize_failed),
+        url("https://fnox.jdx.dev/configuration")
+    )]
     ConfigSerializeError {
         #[source]
         source: toml_edit::ser::Error,
@@ -195,7 +201,8 @@ pub enum FnoxError {
             suggestion = suggestion.as_ref()
                 .map(|s| format!("{}\n\n", s))
                 .unwrap_or_default()
-        )
+        ),
+        url("https://fnox.jdx.dev/providers")
     )]
     ProviderNotConfiguredWithSource {
         provider: String,
@@ -216,7 +223,8 @@ pub enum FnoxError {
             Add the provider to your config:\n  \
             [providers.{provider}]\n  \
             type = \"age\"  # or other provider type"
-        )
+        ),
+        url("https://fnox.jdx.dev/providers")
     )]
     DefaultProviderNotFoundWithSource {
         provider: String,
@@ -231,6 +239,78 @@ pub enum FnoxError {
     #[error("Provider error: {0}")]
     #[diagnostic(code(fnox::provider::error))]
     Provider(String),
+
+    #[error("{provider}: CLI tool '{cli}' not found")]
+    #[diagnostic(
+        code(fnox::provider::cli_not_found),
+        help(
+            "Install the {cli} CLI tool:\n  \
+            {install_hint}"
+        ),
+        url("{url}")
+    )]
+    ProviderCliNotFound {
+        provider: String,
+        cli: String,
+        install_hint: String,
+        url: String,
+    },
+
+    #[error("{provider}: command failed: {details}")]
+    #[diagnostic(code(fnox::provider::cli_failed), help("{hint}"), url("{url}"))]
+    ProviderCliFailed {
+        provider: String,
+        details: String,
+        hint: String,
+        url: String,
+    },
+
+    #[error("{provider}: authentication failed")]
+    #[diagnostic(
+        code(fnox::provider::auth_failed),
+        help("Authentication with {provider} failed. {hint}"),
+        url("{url}")
+    )]
+    ProviderAuthFailed {
+        provider: String,
+        details: String,
+        hint: String,
+        url: String,
+    },
+
+    #[error("{provider}: secret '{secret}' not found")]
+    #[diagnostic(
+        code(fnox::provider::secret_not_found),
+        help(
+            "The secret '{secret}' does not exist in {provider}.\n\
+            {hint}"
+        ),
+        url("{url}")
+    )]
+    ProviderSecretNotFound {
+        provider: String,
+        secret: String,
+        hint: String,
+        url: String,
+    },
+
+    #[error("{provider}: invalid response: {details}")]
+    #[diagnostic(code(fnox::provider::invalid_response), help("{hint}"), url("{url}"))]
+    ProviderInvalidResponse {
+        provider: String,
+        details: String,
+        hint: String,
+        url: String,
+    },
+
+    #[error("{provider}: API error: {details}")]
+    #[diagnostic(code(fnox::provider::api_error), help("{hint}"), url("{url}"))]
+    ProviderApiError {
+        provider: String,
+        details: String,
+        hint: String,
+        url: String,
+    },
 
     #[error("Circular dependency detected in provider configuration for '{provider}'")]
     #[diagnostic(
@@ -250,7 +330,8 @@ pub enum FnoxError {
         code(fnox::provider::config_resolution_failed),
         help(
             "Ensure the secret '{secret}' is defined in your config or as an environment variable"
-        )
+        ),
+        url("https://fnox.jdx.dev/guide/secret-references")
     )]
     ProviderConfigResolutionFailed {
         provider: String,
@@ -282,7 +363,8 @@ pub enum FnoxError {
     #[error("Failed to read age identity file: {}", path.display())]
     #[diagnostic(
         code(fnox::encryption::age::identity_read_failed),
-        help("Ensure the identity file exists and is readable")
+        help("Ensure the identity file exists and is readable"),
+        url("https://fnox.jdx.dev/providers/age")
     )]
     AgeIdentityReadFailed {
         path: std::path::PathBuf,
@@ -293,7 +375,8 @@ pub enum FnoxError {
     #[error("Failed to parse age identity: {details}")]
     #[diagnostic(
         code(fnox::encryption::age::identity_parse_failed),
-        help("Ensure the identity file contains a valid age secret key")
+        help("Ensure the identity file contains a valid age secret key"),
+        url("https://fnox.jdx.dev/providers/age")
     )]
     AgeIdentityParseFailed { details: String },
 
@@ -364,21 +447,24 @@ pub enum FnoxError {
             Use: fnox import --force < input.env\n\
             Or:  fnox import --dry-run < input.env  (to preview without changes)\n\
             Or:  cat input.env | fnox import --force"
-        )
+        ),
+        url("https://fnox.jdx.dev/commands/import")
     )]
     ImportStdinRequiresForce,
 
     #[error("Invalid regex filter pattern: {pattern}: {details}")]
     #[diagnostic(
         code(fnox::import::invalid_regex),
-        help("Ensure the filter is a valid regular expression")
+        help("Ensure the filter is a valid regular expression"),
+        url("https://fnox.jdx.dev/commands/import")
     )]
     InvalidRegexFilter { pattern: String, details: String },
 
     #[error("Failed to read import source: {}", path.display())]
     #[diagnostic(
         code(fnox::import::read_failed),
-        help("Ensure the file exists and you have read permissions")
+        help("Ensure the file exists and you have read permissions"),
+        url("https://fnox.jdx.dev/commands/import")
     )]
     ImportReadFailed {
         path: std::path::PathBuf,
@@ -389,7 +475,8 @@ pub enum FnoxError {
     #[error("Failed to encrypt secret '{key}' with provider '{provider}': {details}")]
     #[diagnostic(
         code(fnox::import::encryption_failed),
-        help("Check the provider configuration and ensure the encryption key is available")
+        help("Check the provider configuration and ensure the encryption key is available"),
+        url("https://fnox.jdx.dev/commands/import")
     )]
     ImportEncryptionFailed {
         key: String,
@@ -397,8 +484,27 @@ pub enum FnoxError {
         details: String,
     },
 
+    /// Import parse error with source code context for precise error location display.
+    #[error("Failed to parse {format} input")]
+    #[diagnostic(
+        code(fnox::import::parse_failed),
+        help("Check the {format} syntax in the input file"),
+        url("https://fnox.jdx.dev/commands/import")
+    )]
+    ImportParseErrorWithSource {
+        format: String,
+        #[source_code]
+        src: Arc<NamedSource<Arc<String>>>,
+        #[label("parse error here")]
+        span: SourceSpan,
+    },
+
     #[error("Provider '{provider}' cannot be used for import")]
-    #[diagnostic(code(fnox::import::provider_unsupported), help("{help}"))]
+    #[diagnostic(
+        code(fnox::import::provider_unsupported),
+        help("{help}"),
+        url("https://fnox.jdx.dev/commands/import")
+    )]
     ImportProviderUnsupported { provider: String, help: String },
 
     #[error("Failed to create directory: {}", path.display())]
@@ -418,7 +524,8 @@ pub enum FnoxError {
     #[error("Failed to write export to file: {}", path.display())]
     #[diagnostic(
         code(fnox::export::write_failed),
-        help("Ensure you have write permissions for the output path")
+        help("Ensure you have write permissions for the output path"),
+        url("https://fnox.jdx.dev/commands/export")
     )]
     ExportWriteFailed {
         path: std::path::PathBuf,

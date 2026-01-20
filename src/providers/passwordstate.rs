@@ -69,7 +69,12 @@ impl PasswordstateProvider {
         reqwest::Client::builder()
             .danger_accept_invalid_certs(!self.verify_ssl)
             .build()
-            .map_err(|e| FnoxError::Provider(format!("Failed to create HTTP client: {}", e)))
+            .map_err(|e| FnoxError::ProviderApiError {
+                provider: "Passwordstate".to_string(),
+                details: format!("Failed to create HTTP client: {}", e),
+                hint: "Check your network configuration".to_string(),
+                url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+            })
     }
 
     /// Parse value reference into (identifier, field, is_id)
@@ -91,10 +96,12 @@ impl PasswordstateProvider {
                 let is_id = parts[0].parse::<i64>().is_ok();
                 Ok((parts[0].to_string(), parts[1].to_lowercase(), is_id))
             }
-            _ => Err(FnoxError::Provider(format!(
-                "Invalid Passwordstate reference format: '{}'. Expected 'id', 'id/field', 'title', or 'title/field'",
-                value
-            ))),
+            _ => Err(FnoxError::ProviderInvalidResponse {
+                provider: "Passwordstate".to_string(),
+                details: format!("Invalid reference format: '{}'", value),
+                hint: "Expected 'id', 'id/field', 'title', or 'title/field'".to_string(),
+                url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+            }),
         }
     }
 
@@ -110,25 +117,55 @@ impl PasswordstateProvider {
             .header("APIKey", &self.api_key)
             .send()
             .await
-            .map_err(|e| FnoxError::Provider(format!("HTTP request failed: {}", e)))?;
+            .map_err(|e| FnoxError::ProviderApiError {
+                provider: "Passwordstate".to_string(),
+                details: format!("HTTP request failed: {}", e),
+                hint: "Check network connectivity to the Passwordstate server".to_string(),
+                url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+            })?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(FnoxError::Provider(format!(
-                "Passwordstate API error (HTTP {}): {}",
-                status, body
-            )));
+            if status.as_u16() == 401 || status.as_u16() == 403 {
+                return Err(FnoxError::ProviderAuthFailed {
+                    provider: "Passwordstate".to_string(),
+                    details: format!("HTTP {}: {}", status, body),
+                    hint: "Check your API key is valid and has access to this password list"
+                        .to_string(),
+                    url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+                });
+            }
+            return Err(FnoxError::ProviderApiError {
+                provider: "Passwordstate".to_string(),
+                details: format!("HTTP {}: {}", status, body),
+                hint: "Check your Passwordstate server configuration".to_string(),
+                url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+            });
         }
 
         // API returns an array even for single password
-        let entries: Vec<PasswordEntry> = response.json().await.map_err(|e| {
-            FnoxError::Provider(format!("Failed to parse Passwordstate response: {}", e))
-        })?;
+        let entries: Vec<PasswordEntry> =
+            response
+                .json()
+                .await
+                .map_err(|e| FnoxError::ProviderInvalidResponse {
+                    provider: "Passwordstate".to_string(),
+                    details: format!("Failed to parse response: {}", e),
+                    hint: "The Passwordstate API returned an unexpected response format"
+                        .to_string(),
+                    url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+                })?;
 
-        entries.into_iter().next().ok_or_else(|| {
-            FnoxError::Provider(format!("Password with ID '{}' not found", password_id))
-        })
+        entries
+            .into_iter()
+            .next()
+            .ok_or_else(|| FnoxError::ProviderSecretNotFound {
+                provider: "Passwordstate".to_string(),
+                secret: password_id.to_string(),
+                hint: "Check that the password ID exists in Passwordstate".to_string(),
+                url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+            })
     }
 
     /// Extract a specific field from a password entry
@@ -143,11 +180,12 @@ impl PasswordstateProvider {
             _ => None,
         };
 
-        value.ok_or_else(|| {
-            FnoxError::Provider(format!(
-                "Field '{}' not found or empty in password entry",
-                field
-            ))
+        value.ok_or_else(|| FnoxError::ProviderInvalidResponse {
+            provider: "Passwordstate".to_string(),
+            details: format!("Field '{}' not found or empty in password entry", field),
+            hint: "Available fields: password, username, title, url, description, notes"
+                .to_string(),
+            url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
         })
     }
 
@@ -169,20 +207,44 @@ impl PasswordstateProvider {
             .header("APIKey", &self.api_key)
             .send()
             .await
-            .map_err(|e| FnoxError::Provider(format!("HTTP request failed: {}", e)))?;
+            .map_err(|e| FnoxError::ProviderApiError {
+                provider: "Passwordstate".to_string(),
+                details: format!("HTTP request failed: {}", e),
+                hint: "Check network connectivity to the Passwordstate server".to_string(),
+                url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+            })?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(FnoxError::Provider(format!(
-                "Passwordstate API error (HTTP {}): {}",
-                status, body
-            )));
+            if status.as_u16() == 401 || status.as_u16() == 403 {
+                return Err(FnoxError::ProviderAuthFailed {
+                    provider: "Passwordstate".to_string(),
+                    details: format!("HTTP {}: {}", status, body),
+                    hint: "Check your API key is valid and has access to this password list"
+                        .to_string(),
+                    url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+                });
+            }
+            return Err(FnoxError::ProviderApiError {
+                provider: "Passwordstate".to_string(),
+                details: format!("HTTP {}: {}", status, body),
+                hint: "Check your Passwordstate server configuration".to_string(),
+                url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+            });
         }
 
-        let entries: Vec<PasswordEntry> = response.json().await.map_err(|e| {
-            FnoxError::Provider(format!("Failed to parse Passwordstate response: {}", e))
-        })?;
+        let entries: Vec<PasswordEntry> =
+            response
+                .json()
+                .await
+                .map_err(|e| FnoxError::ProviderInvalidResponse {
+                    provider: "Passwordstate".to_string(),
+                    details: format!("Failed to parse response: {}", e),
+                    hint: "The Passwordstate API returned an unexpected response format"
+                        .to_string(),
+                    url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+                })?;
 
         // Find exact title match (case-insensitive)
         entries
@@ -193,11 +255,12 @@ impl PasswordstateProvider {
                     .map(|t| t.eq_ignore_ascii_case(title))
                     .unwrap_or(false)
             })
-            .ok_or_else(|| {
-                FnoxError::Provider(format!(
-                    "Password '{}' not found in password list {}",
-                    title, self.password_list_id
-                ))
+            .ok_or_else(|| FnoxError::ProviderSecretNotFound {
+                provider: "Passwordstate".to_string(),
+                secret: format!("{} (in list {})", title, self.password_list_id),
+                hint: "Check that the password title exists in the specified password list"
+                    .to_string(),
+                url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
             })
     }
 }
@@ -256,18 +319,30 @@ impl crate::providers::Provider for PasswordstateProvider {
             .header("APIKey", &self.api_key)
             .send()
             .await
-            .map_err(|e| {
-                FnoxError::Provider(format!(
-                    "Failed to connect to Passwordstate at '{}': {}",
-                    self.base_url, e
-                ))
+            .map_err(|e| FnoxError::ProviderApiError {
+                provider: "Passwordstate".to_string(),
+                details: format!("Failed to connect to '{}': {}", self.base_url, e),
+                hint: "Check network connectivity to the Passwordstate server".to_string(),
+                url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
             })?;
 
         if !response.status().is_success() {
-            return Err(FnoxError::Provider(format!(
-                "Passwordstate connection test failed: HTTP {}",
-                response.status()
-            )));
+            let status = response.status();
+            if status.as_u16() == 401 || status.as_u16() == 403 {
+                return Err(FnoxError::ProviderAuthFailed {
+                    provider: "Passwordstate".to_string(),
+                    details: format!("Connection test failed: HTTP {}", status),
+                    hint: "Check your API key is valid and has access to this password list"
+                        .to_string(),
+                    url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+                });
+            }
+            return Err(FnoxError::ProviderApiError {
+                provider: "Passwordstate".to_string(),
+                details: format!("Connection test failed: HTTP {}", status),
+                hint: "Check your Passwordstate server configuration".to_string(),
+                url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+            });
         }
 
         tracing::debug!("Passwordstate connection test successful");

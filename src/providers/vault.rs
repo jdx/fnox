@@ -40,10 +40,11 @@ impl HashiCorpVaultProvider {
             .token
             .as_ref()
             .or(VAULT_TOKEN.as_ref())
-            .ok_or_else(|| {
-                FnoxError::Provider(
-                    "VAULT_TOKEN not set. Set it in provider config or environment.".to_string(),
-                )
+            .ok_or_else(|| FnoxError::ProviderAuthFailed {
+                provider: "HashiCorp Vault".to_string(),
+                details: "VAULT_TOKEN not set".to_string(),
+                hint: "Set VAULT_TOKEN in provider config or environment".to_string(),
+                url: "https://fnox.jdx.dev/providers/vault".to_string(),
             })?;
 
         tracing::debug!(
@@ -55,22 +56,49 @@ impl HashiCorpVaultProvider {
         cmd.args(args);
 
         let output = cmd.output().map_err(|e| {
-            FnoxError::Provider(format!(
-                "Failed to execute 'vault' command: {}. Make sure the Vault CLI is installed.",
-                e
-            ))
+            if e.kind() == std::io::ErrorKind::NotFound {
+                FnoxError::ProviderCliNotFound {
+                    provider: "HashiCorp Vault".to_string(),
+                    cli: "vault".to_string(),
+                    install_hint: "brew install vault".to_string(),
+                    url: "https://fnox.jdx.dev/providers/vault".to_string(),
+                }
+            } else {
+                FnoxError::ProviderCliFailed {
+                    provider: "HashiCorp Vault".to_string(),
+                    details: e.to_string(),
+                    hint: "Check that the Vault CLI is installed and accessible".to_string(),
+                    url: "https://fnox.jdx.dev/providers/vault".to_string(),
+                }
+            }
         })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(FnoxError::Provider(format!(
-                "Vault CLI command failed: {}",
-                stderr.trim()
-            )));
+            let stderr_str = stderr.trim();
+            if stderr_str.contains("permission denied") || stderr_str.contains("403") {
+                return Err(FnoxError::ProviderAuthFailed {
+                    provider: "HashiCorp Vault".to_string(),
+                    details: stderr_str.to_string(),
+                    hint: "Check your Vault token has the required permissions".to_string(),
+                    url: "https://fnox.jdx.dev/providers/vault".to_string(),
+                });
+            }
+            return Err(FnoxError::ProviderCliFailed {
+                provider: "HashiCorp Vault".to_string(),
+                details: stderr_str.to_string(),
+                hint: "Check your Vault configuration".to_string(),
+                url: "https://fnox.jdx.dev/providers/vault".to_string(),
+            });
         }
 
-        let stdout = String::from_utf8(output.stdout)
-            .map_err(|e| FnoxError::Provider(format!("Invalid UTF-8 in command output: {}", e)))?;
+        let stdout =
+            String::from_utf8(output.stdout).map_err(|e| FnoxError::ProviderInvalidResponse {
+                provider: "HashiCorp Vault".to_string(),
+                details: format!("Invalid UTF-8 in command output: {}", e),
+                hint: "The secret value contains invalid UTF-8 characters".to_string(),
+                url: "https://fnox.jdx.dev/providers/vault".to_string(),
+            })?;
 
         Ok(stdout.trim().to_string())
     }
@@ -93,10 +121,12 @@ impl crate::providers::Provider for HashiCorpVaultProvider {
             1 => (parts[0], "value"),
             2 => (parts[0], parts[1]),
             _ => {
-                return Err(FnoxError::Provider(format!(
-                    "Invalid secret reference format: '{}'. Expected 'secret' or 'secret/field'",
-                    value
-                )));
+                return Err(FnoxError::ProviderInvalidResponse {
+                    provider: "HashiCorp Vault".to_string(),
+                    details: format!("Invalid secret reference format: '{}'", value),
+                    hint: "Expected 'secret' or 'secret/field'".to_string(),
+                    url: "https://fnox.jdx.dev/providers/vault".to_string(),
+                });
             }
         };
 

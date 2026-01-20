@@ -101,12 +101,12 @@ impl BitwardenProvider {
             tracing::error!(
                 "BW_SESSION token not found in environment. Set BW_SESSION=$(bw unlock --raw) or FNOX_BW_SESSION_TOKEN"
             );
-            return Err(FnoxError::Provider(
-                "Bitwarden session not found. Please set BW_SESSION environment variable:\n  \
-                 export BW_SESSION=$(bw unlock --raw)\n\
-                 Or set FNOX_BW_SESSION_TOKEN in your configuration."
-                    .to_string(),
-            ));
+            return Err(FnoxError::ProviderAuthFailed {
+                provider: "Bitwarden".to_string(),
+                details: "Session token not found".to_string(),
+                hint: "Set BW_SESSION=$(bw unlock --raw) or FNOX_BW_SESSION_TOKEN".to_string(),
+                url: "https://fnox.jdx.dev/providers/bitwarden".to_string(),
+            });
         };
 
         // Pass session token as --session flag
@@ -182,24 +182,62 @@ impl BitwardenProvider {
         // Users should run: export BW_SESSION=$(bw unlock --raw)
         // Or they can set FNOX_BW_SESSION_TOKEN and we'll use that
 
+        let cli = match self.backend {
+            BitwardenBackend::Bw => "bw",
+            BitwardenBackend::Rbw => "rbw",
+        };
         let output = cmd.output().map_err(|e| {
-            FnoxError::Provider(format!(
-                "Failed to execute 'bw' command: {}. Make sure the Bitwarden CLI is installed.",
-                e
-            ))
+            if e.kind() == std::io::ErrorKind::NotFound {
+                FnoxError::ProviderCliNotFound {
+                    provider: "Bitwarden".to_string(),
+                    cli: cli.to_string(),
+                    install_hint: match self.backend {
+                        BitwardenBackend::Bw => "brew install bitwarden-cli".to_string(),
+                        BitwardenBackend::Rbw => "brew install rbw".to_string(),
+                    },
+                    url: "https://fnox.jdx.dev/providers/bitwarden".to_string(),
+                }
+            } else {
+                FnoxError::ProviderCliFailed {
+                    provider: "Bitwarden".to_string(),
+                    details: e.to_string(),
+                    hint: format!("Check that {} is installed and accessible", cli),
+                    url: "https://fnox.jdx.dev/providers/bitwarden".to_string(),
+                }
+            }
         })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(FnoxError::Provider(format!(
-                "Bitwarden backend '{}' command failed: {}",
-                self.backend,
-                stderr.trim()
-            )));
+            let stderr_str = stderr.trim();
+
+            if stderr_str.contains("locked")
+                || stderr_str.contains("session")
+                || stderr_str.contains("login")
+            {
+                return Err(FnoxError::ProviderAuthFailed {
+                    provider: "Bitwarden".to_string(),
+                    details: stderr_str.to_string(),
+                    hint: format!("Run '{} unlock' and set BW_SESSION", cli),
+                    url: "https://fnox.jdx.dev/providers/bitwarden".to_string(),
+                });
+            }
+
+            return Err(FnoxError::ProviderCliFailed {
+                provider: "Bitwarden".to_string(),
+                details: stderr_str.to_string(),
+                hint: "Check your Bitwarden configuration".to_string(),
+                url: "https://fnox.jdx.dev/providers/bitwarden".to_string(),
+            });
         }
 
-        let stdout = String::from_utf8(output.stdout)
-            .map_err(|e| FnoxError::Provider(format!("Invalid UTF-8 in command output: {}", e)))?;
+        let stdout =
+            String::from_utf8(output.stdout).map_err(|e| FnoxError::ProviderInvalidResponse {
+                provider: "Bitwarden".to_string(),
+                details: format!("Invalid UTF-8: {}", e),
+                hint: "The secret value contains invalid UTF-8 characters".to_string(),
+                url: "https://fnox.jdx.dev/providers/bitwarden".to_string(),
+            })?;
 
         Ok(stdout.trim().to_string())
     }
@@ -218,10 +256,12 @@ impl crate::providers::Provider for BitwardenProvider {
             1 => (parts[0], "password"),
             2 => (parts[0], parts[1]),
             _ => {
-                return Err(FnoxError::Provider(format!(
-                    "Invalid secret reference format: '{}'. Expected 'item' or 'item/field'",
-                    value
-                )));
+                return Err(FnoxError::ProviderInvalidResponse {
+                    provider: "Bitwarden".to_string(),
+                    details: format!("Invalid secret reference format: '{}'", value),
+                    hint: "Expected 'item' or 'item/field'".to_string(),
+                    url: "https://fnox.jdx.dev/providers/bitwarden".to_string(),
+                });
             }
         };
 

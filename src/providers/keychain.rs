@@ -23,11 +23,14 @@ impl KeychainProvider {
     /// Create a keyring entry
     fn create_entry(&self, key: &str) -> Result<Entry> {
         let full_key = self.build_key_name(key);
-        Entry::new(&self.service, &full_key).map_err(|e| {
-            FnoxError::Provider(format!(
-                "Failed to create keyring entry for service '{}', key '{}': {}",
+        Entry::new(&self.service, &full_key).map_err(|e| FnoxError::ProviderApiError {
+            provider: "Keychain".to_string(),
+            details: format!(
+                "Failed to create entry for service '{}', key '{}': {}",
                 self.service, full_key, e
-            ))
+            ),
+            hint: "Check that the keychain is accessible".to_string(),
+            url: "https://fnox.jdx.dev/providers/keychain".to_string(),
         })
     }
 
@@ -43,12 +46,17 @@ impl KeychainProvider {
             full_key
         );
 
-        entry.set_password(value).map_err(|e| {
-            FnoxError::Provider(format!(
-                "Failed to store secret '{}' in keychain (service: '{}'): {}",
-                full_key, self.service, e
-            ))
-        })?;
+        entry
+            .set_password(value)
+            .map_err(|e| FnoxError::ProviderApiError {
+                provider: "Keychain".to_string(),
+                details: format!(
+                    "Failed to store secret '{}' (service: '{}'): {}",
+                    full_key, self.service, e
+                ),
+                hint: "Check that the keychain is accessible and writable".to_string(),
+                url: "https://fnox.jdx.dev/providers/keychain".to_string(),
+            })?;
 
         tracing::debug!(
             "Successfully stored secret '{}' in OS keychain (service: '{}')",
@@ -75,12 +83,17 @@ impl crate::providers::Provider for KeychainProvider {
             self.service
         );
 
-        entry.get_password().map_err(|e| {
-            FnoxError::Provider(format!(
-                "Failed to retrieve secret '{}' from keychain: {}",
-                full_key, e
-            ))
-        })
+        entry
+            .get_password()
+            .map_err(|_| FnoxError::ProviderSecretNotFound {
+                provider: "Keychain".to_string(),
+                secret: full_key.clone(),
+                hint: format!(
+                    "Check that the secret exists in the keychain (service: '{}')",
+                    self.service
+                ),
+                url: "https://fnox.jdx.dev/providers/keychain".to_string(),
+            })
     }
 
     async fn test_connection(&self) -> Result<()> {
@@ -89,20 +102,30 @@ impl crate::providers::Provider for KeychainProvider {
         let entry = self.create_entry(test_key)?;
 
         // Try to set a test value to verify we have keychain access
-        entry.set_password("test").map_err(|e| {
-            FnoxError::Provider(format!(
-                "Failed to access OS keychain (service: '{}'): {}",
-                self.service, e
-            ))
-        })?;
+        entry
+            .set_password("test")
+            .map_err(|e| FnoxError::ProviderAuthFailed {
+                provider: "Keychain".to_string(),
+                details: format!(
+                    "Failed to access keychain (service: '{}'): {}",
+                    self.service, e
+                ),
+                hint: "Check that you have permission to access the OS keychain".to_string(),
+                url: "https://fnox.jdx.dev/providers/keychain".to_string(),
+            })?;
 
         // Try to read it back to verify it worked
-        entry.get_password().map_err(|e| {
-            FnoxError::Provider(format!(
-                "Failed to verify OS keychain access (service: '{}'): {}",
-                self.service, e
-            ))
-        })?;
+        entry
+            .get_password()
+            .map_err(|e| FnoxError::ProviderAuthFailed {
+                provider: "Keychain".to_string(),
+                details: format!(
+                    "Failed to verify keychain access (service: '{}'): {}",
+                    self.service, e
+                ),
+                hint: "Check that you have permission to access the OS keychain".to_string(),
+                url: "https://fnox.jdx.dev/providers/keychain".to_string(),
+            })?;
 
         // Clean up the test entry (delete_credential in keyring v3)
         let _ = entry.delete_credential();
