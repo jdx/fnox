@@ -81,7 +81,8 @@ where
                     "Check network connectivity"
                 };
 
-                if full_error.contains("credentials") {
+                // Use ProviderAuthFailed for credential-related errors
+                if full_error.contains("credentials") || full_error.contains("expired") {
                     FnoxError::ProviderAuthFailed {
                         provider: "AWS Secrets Manager".to_string(),
                         details: full_error,

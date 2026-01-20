@@ -406,10 +406,9 @@ impl ImportCommand {
             return input.len();
         }
 
-        // Clamp line_start_byte to input length (for trailing newline case)
-        if line_start_byte > input.len() {
-            return input.len();
-        }
+        // Defensive: clamp line_start_byte to input length
+        // (should not happen with current logic, but guards against edge cases)
+        let line_start_byte = line_start_byte.min(input.len());
 
         // Now count characters from line_start to find the column byte offset
         // col is 1-indexed, so we want to skip (col - 1) characters

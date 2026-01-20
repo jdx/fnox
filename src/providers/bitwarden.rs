@@ -217,7 +217,7 @@ impl BitwardenProvider {
                 || stderr_str.contains("You are not logged in")
                 || stderr_str.contains("session key is invalid")
                 || stderr_str.contains("BW_SESSION")
-                || (stderr_str.contains("login") && stderr_str.contains("You must"))
+                || stderr_str.contains("You must login")
             {
                 return Err(FnoxError::ProviderAuthFailed {
                     provider: "Bitwarden".to_string(),
