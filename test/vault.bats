@@ -166,7 +166,7 @@ EOF
 	# Try to get non-existent secret
 	run "$FNOX_BIN" get INVALID_SECRET
 	assert_failure
-	assert_output --partial "Vault CLI command failed"
+	assert_output --partial "HashiCorp Vault: command failed"
 }
 
 @test "fnox get handles invalid secret reference format" {

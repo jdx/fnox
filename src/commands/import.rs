@@ -333,6 +333,7 @@ impl ImportCommand {
             let offset = self.offset_from_line_col(input, e.line(), e.column());
             FnoxError::ImportParseErrorWithSource {
                 format: "JSON".to_string(),
+                details: e.to_string(),
                 src: Arc::new(NamedSource::new(source_name, Arc::new(input.to_string()))),
                 span: SourceSpan::new(offset.into(), 1usize),
             }
@@ -348,6 +349,7 @@ impl ImportCommand {
                 let offset = self.offset_from_line_col(input, loc.line() + 1, loc.column() + 1);
                 FnoxError::ImportParseErrorWithSource {
                     format: "YAML".to_string(),
+                    details: e.to_string(),
                     src: Arc::new(NamedSource::new(source_name, Arc::new(input.to_string()))),
                     span: SourceSpan::new(offset.into(), 1usize),
                 }
@@ -364,6 +366,7 @@ impl ImportCommand {
             if let Some(span) = e.span() {
                 FnoxError::ImportParseErrorWithSource {
                     format: "TOML".to_string(),
+                    details: e.to_string(),
                     src: Arc::new(NamedSource::new(source_name, Arc::new(input.to_string()))),
                     span: SourceSpan::new(span.start.into(), span.end - span.start),
                 }

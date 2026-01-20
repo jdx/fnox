@@ -481,7 +481,7 @@ pub enum FnoxError {
     },
 
     /// Import parse error with source code context for precise error location display.
-    #[error("Failed to parse {format} input")]
+    #[error("Failed to parse {format} input: {details}")]
     #[diagnostic(
         code(fnox::import::parse_failed),
         help("Check the {format} syntax in the input file"),
@@ -489,6 +489,7 @@ pub enum FnoxError {
     )]
     ImportParseErrorWithSource {
         format: String,
+        details: String,
         #[source_code]
         src: Arc<NamedSource<Arc<String>>>,
         #[label("parse error here")]
