@@ -17,9 +17,6 @@ static PASSWORDSTATE_API_KEY: LazyLock<Option<String>> = LazyLock::new(|| {
 #[serde(rename_all = "PascalCase")]
 struct PasswordEntry {
     #[serde(default)]
-    #[allow(dead_code)]
-    password_id: i64,
-    #[serde(default)]
     title: Option<String>,
     #[serde(default)]
     user_name: Option<String>,

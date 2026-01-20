@@ -15,14 +15,6 @@ pub struct ValidationIssue {
 }
 
 impl ValidationIssue {
-    #[allow(dead_code)]
-    pub fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-            help: None,
-        }
-    }
-
     pub fn with_help(message: impl Into<String>, help: impl Into<String>) -> Self {
         Self {
             message: message.into(),
