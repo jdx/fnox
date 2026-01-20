@@ -83,17 +83,44 @@ impl crate::providers::Provider for KeychainProvider {
             self.service
         );
 
-        entry
-            .get_password()
-            .map_err(|_| FnoxError::ProviderSecretNotFound {
-                provider: "Keychain".to_string(),
-                secret: full_key.clone(),
-                hint: format!(
-                    "Check that the secret exists in the keychain (service: '{}')",
-                    self.service
-                ),
-                url: "https://fnox.jdx.dev/providers/keychain".to_string(),
-            })
+        entry.get_password().map_err(|e| {
+            let err_str = e.to_string();
+            // keyring errors can be: NoEntry, NoStorageAccess, PlatformFailure, etc.
+            if err_str.contains("No entry")
+                || err_str.contains("not found")
+                || err_str.contains("ItemNotFound")
+            {
+                FnoxError::ProviderSecretNotFound {
+                    provider: "Keychain".to_string(),
+                    secret: full_key.clone(),
+                    hint: format!(
+                        "Check that the secret exists in the keychain (service: '{}')",
+                        self.service
+                    ),
+                    url: "https://fnox.jdx.dev/providers/keychain".to_string(),
+                }
+            } else if err_str.contains("access")
+                || err_str.contains("permission")
+                || err_str.contains("locked")
+            {
+                FnoxError::ProviderAuthFailed {
+                    provider: "Keychain".to_string(),
+                    details: err_str,
+                    hint: "Check that the keychain is unlocked and accessible".to_string(),
+                    url: "https://fnox.jdx.dev/providers/keychain".to_string(),
+                }
+            } else {
+                FnoxError::ProviderApiError {
+                    provider: "Keychain".to_string(),
+                    details: err_str,
+                    hint: format!(
+                        "Failed to get secret from keychain (service: '{}')",
+                        self.service
+                    ),
+                    url: "https://fnox.jdx.dev/providers/keychain".to_string(),
+                }
+            }
+        })
     }
 
     async fn test_connection(&self) -> Result<()> {

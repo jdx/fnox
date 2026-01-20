@@ -86,7 +86,7 @@ impl PasswordStoreProvider {
             if stderr_str.contains("not in the password store") {
                 return Err(FnoxError::ProviderSecretNotFound {
                     provider: "password-store".to_string(),
-                    secret: args.last().unwrap_or(&"unknown").to_string(),
+                    secret: args.last().copied().unwrap_or("<unspecified>").to_string(),
                     hint: "Check that the secret exists in your password store".to_string(),
                     url: "https://fnox.jdx.dev/providers/password-store".to_string(),
                 });

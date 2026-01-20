@@ -343,8 +343,9 @@ impl ImportCommand {
     fn parse_yaml(&self, input: &str, source_name: &str) -> Result<HashMap<String, String>> {
         let data: serde_yaml::Value = serde_yaml::from_str(input).map_err(|e| {
             // serde_yaml provides location via e.location()
+            // Note: serde_yaml uses 0-indexed line/column, so we add 1 for our 1-indexed function
             if let Some(loc) = e.location() {
-                let offset = self.offset_from_line_col(input, loc.line(), loc.column());
+                let offset = self.offset_from_line_col(input, loc.line() + 1, loc.column() + 1);
                 FnoxError::ImportParseErrorWithSource {
                     format: "YAML".to_string(),
                     src: Arc::new(NamedSource::new(source_name, Arc::new(input.to_string()))),
@@ -374,16 +375,28 @@ impl ImportCommand {
     }
 
     /// Convert line/column (1-indexed) to byte offset
+    /// Handles both LF and CRLF line endings
     fn offset_from_line_col(&self, input: &str, line: usize, col: usize) -> usize {
-        let mut offset = 0;
-        for (i, l) in input.lines().enumerate() {
-            if i + 1 == line {
-                // Found the line, add column offset (col is 1-indexed)
-                return offset + col.saturating_sub(1);
+        let mut current_line = 1;
+        let mut line_start = 0;
+
+        for (i, c) in input.char_indices() {
+            if current_line == line {
+                // Found the target line, add column offset (col is 1-indexed)
+                return line_start + col.saturating_sub(1);
             }
-            offset += l.len() + 1; // +1 for newline
+            if c == '\n' {
+                current_line += 1;
+                line_start = i + 1;
+            }
         }
-        offset
+
+        // If we're looking for the last line (or beyond), return line_start + col
+        if current_line == line {
+            return line_start + col.saturating_sub(1);
+        }
+
+        input.len()
     }
 
     fn extract_string_values<V>(&self, data: &V) -> Result<HashMap<String, String>>

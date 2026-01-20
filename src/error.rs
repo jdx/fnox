@@ -265,12 +265,8 @@ pub enum FnoxError {
         url: String,
     },
 
-    #[error("{provider}: authentication failed")]
-    #[diagnostic(
-        code(fnox::provider::auth_failed),
-        help("Authentication with {provider} failed. {hint}"),
-        url("{url}")
-    )]
+    #[error("{provider}: authentication failed: {details}")]
+    #[diagnostic(code(fnox::provider::auth_failed), help("{hint}"), url("{url}"))]
     ProviderAuthFailed {
         provider: String,
         details: String,
