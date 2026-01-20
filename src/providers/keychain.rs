@@ -86,7 +86,9 @@ impl crate::providers::Provider for KeychainProvider {
         entry.get_password().map_err(|e| {
             let err_str = e.to_string();
             // keyring errors can be: NoEntry, NoStorageAccess, PlatformFailure, etc.
+            // Linux Secret Service returns "No matching entry found in secure storage"
             if err_str.contains("No entry")
+                || err_str.contains("No matching entry")
                 || err_str.contains("not found")
                 || err_str.contains("ItemNotFound")
             {
