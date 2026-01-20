@@ -52,6 +52,7 @@ export default defineConfig({
         text: "Features",
         items: [
           { text: "Shell Integration", link: "/guide/shell-integration" },
+          { text: "Mise Integration", link: "/guide/mise-integration" },
           { text: "TUI Dashboard", link: "/guide/tui" },
           { text: "Profiles", link: "/guide/profiles" },
           { text: "Hierarchical Config", link: "/guide/hierarchical-config" },
