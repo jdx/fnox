@@ -364,7 +364,7 @@ impl ImportCommand {
                 FnoxError::ImportParseErrorWithSource {
                     format: "TOML".to_string(),
                     src: Arc::new(NamedSource::new(source_name, Arc::new(input.to_string()))),
-                    span: SourceSpan::new(span.start.into(), span.end - span.start ),
+                    span: SourceSpan::new(span.start.into(), span.end - span.start),
                 }
             } else {
                 FnoxError::Config(format!("Failed to parse TOML: {}", e))
