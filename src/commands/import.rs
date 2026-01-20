@@ -379,25 +379,35 @@ impl ImportCommand {
 
     /// Convert line/column (1-indexed) to byte offset for miette source spans.
     ///
-    /// Handles both LF and CRLF line endings. The column is treated as a character
-    /// count, which is converted to the correct byte offset for multi-byte UTF-8.
+    /// Handles both LF and CRLF line endings (CRLF is handled because we detect
+    /// line boundaries at '\n', and '\r' is just part of line content).
+    /// The column is treated as a character count, which is converted to the
+    /// correct byte offset for multi-byte UTF-8.
     fn offset_from_line_col(&self, input: &str, line: usize, col: usize) -> usize {
         let mut current_line = 1;
         let mut line_start_byte = 0;
 
-        // First, find the byte offset of the target line
+        // Find the byte offset of the target line by scanning for newlines
         for (byte_idx, c) in input.char_indices() {
             if current_line == line {
+                // Found the start of target line
                 line_start_byte = byte_idx;
                 break;
             }
             if c == '\n' {
                 current_line += 1;
+                // Set line_start_byte to byte after newline for next iteration
+                line_start_byte = byte_idx + 1;
             }
         }
 
-        // If we didn't find the line, it's the last line (no trailing newline)
+        // If requested line is beyond the file, return end of input
         if current_line < line {
+            return input.len();
+        }
+
+        // Clamp line_start_byte to input length (for trailing newline case)
+        if line_start_byte > input.len() {
             return input.len();
         }
 
