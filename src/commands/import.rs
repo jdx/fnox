@@ -75,21 +75,15 @@ impl ImportCommand {
         // by read_input() and won't be available for the confirmation prompt
         // (dry-run doesn't need confirmation since it doesn't modify anything)
         if self.input.is_none() && !self.force && !self.dry_run {
-            return Err(miette::miette!(
-                "When importing from stdin, the --force or --dry-run flag is required\n\n\
-                This is because stdin is consumed during import and cannot be used \
-                for the confirmation prompt.\n\n\
-                Use: fnox import --force < input.env\n\
-                Or:  cat input.env | fnox import --force\n\
-                Or:  cat input.env | fnox import --dry-run"
-            )
-            .into());
+            return Err(FnoxError::ImportStdinRequiresForce);
         }
 
         // Apply filter if specified
         if let Some(ref filter) = self.filter {
-            let regex = Regex::new(filter)
-                .map_err(|e| miette::miette!("Invalid regex filter '{}': {}", filter, e))?;
+            let regex = Regex::new(filter).map_err(|e| FnoxError::InvalidRegexFilter {
+                pattern: filter.clone(),
+                details: e.to_string(),
+            })?;
             secrets.retain(|key, _| regex.is_match(key));
         }
 
@@ -108,21 +102,17 @@ impl ImportCommand {
             return Ok(());
         }
 
-        // Verify provider exists before dry-run or actual import
-        // (use merged config to find providers from any source)
+        // Verify provider exists (use merged config to find providers from any source)
         let providers = merged_config.get_providers(&profile);
-        let provider_config = providers.get(&self.provider).ok_or_else(|| {
-            miette::miette!(
-                "Provider '{}' not found in profile '{}'. Available providers: {}",
-                self.provider,
-                profile,
-                providers
-                    .keys()
-                    .map(|k| k.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        })?;
+        let provider_config =
+            providers
+                .get(&self.provider)
+                .ok_or_else(|| FnoxError::ProviderNotConfigured {
+                    provider: self.provider.clone(),
+                    profile: profile.to_string(),
+                    config_path: None,
+                    suggestion: None,
+                })?;
 
         // Get provider and validate capabilities (needed for both dry-run and actual import)
         let provider = crate::providers::get_provider_resolved(
@@ -133,15 +123,6 @@ impl ImportCommand {
         )
         .await?;
         let capabilities = provider.capabilities();
-
-        if capabilities.is_empty() {
-            return Err(miette::miette!(
-                "Provider '{}' has no capabilities defined",
-                self.provider
-            )
-            .into());
-        }
-
         let is_encryption_provider =
             capabilities.contains(&crate::providers::ProviderCapability::Encryption);
         let is_remote_storage_provider =
@@ -150,16 +131,15 @@ impl ImportCommand {
         // Validate that provider supports import (encryption capability required)
         if !is_encryption_provider {
             if is_remote_storage_provider {
-                return Err(miette::miette!(
-                    "Remote storage providers are not yet supported for import. Use an encryption provider like 'age' instead."
-                )
-                .into());
+                return Err(FnoxError::ImportProviderUnsupported {
+                    provider: self.provider.clone(),
+                    help: "Remote storage providers are not yet supported for import. Use an encryption provider like 'age' instead.".to_string(),
+                });
             } else {
-                return Err(miette::miette!(
-                    "Provider '{}' does not support encryption or remote storage",
-                    self.provider
-                )
-                .into());
+                return Err(FnoxError::ImportProviderUnsupported {
+                    provider: self.provider.clone(),
+                    help: "Provider does not support encryption or remote storage".to_string(),
+                });
             }
         }
 
@@ -199,7 +179,7 @@ impl ImportCommand {
             let mut response = String::new();
             io::stdin()
                 .read_line(&mut response)
-                .map_err(|e| miette::miette!("Failed to read response: {}", e))?;
+                .map_err(|e| FnoxError::StdinReadFailed { source: e })?;
 
             if !response.trim().to_lowercase().starts_with('y') {
                 println!("Import cancelled");
@@ -212,12 +192,9 @@ impl ImportCommand {
             let global_path = Config::global_config_path();
             // Create parent directory if it doesn't exist
             if let Some(parent) = global_path.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| {
-                    miette::miette!(
-                        "Failed to create config directory '{}': {}",
-                        parent.display(),
-                        e
-                    )
+                std::fs::create_dir_all(parent).map_err(|e| FnoxError::CreateDirFailed {
+                    path: parent.to_path_buf(),
+                    source: e,
                 })?;
             }
             global_path
@@ -249,13 +226,11 @@ impl ImportCommand {
                         secret_config.value = Some(encrypted);
                     }
                     Err(e) => {
-                        return Err(miette::miette!(
-                            "Failed to encrypt secret '{}' with provider '{}': {}",
-                            key,
-                            self.provider,
-                            e
-                        )
-                        .into());
+                        return Err(FnoxError::ImportEncryptionFailed {
+                            key: key.clone(),
+                            provider: self.provider.clone(),
+                            details: e.to_string(),
+                        });
                     }
                 }
             }
@@ -276,13 +251,11 @@ impl ImportCommand {
     fn read_input(&self) -> Result<String> {
         if let Some(ref input_path) = self.input {
             // Read from specified file
-            let input = std::fs::read_to_string(input_path).map_err(|e| {
-                miette::miette!(
-                    "Failed to read input file '{}': {}",
-                    input_path.display(),
-                    e
-                )
-            })?;
+            let input =
+                std::fs::read_to_string(input_path).map_err(|e| FnoxError::ImportReadFailed {
+                    path: input_path.clone(),
+                    source: e,
+                })?;
             Ok(input)
         } else {
             // Read from stdin
@@ -347,23 +320,18 @@ impl ImportCommand {
     }
 
     fn parse_json(&self, input: &str) -> Result<HashMap<String, String>> {
-        let data: serde_json::Value = serde_json::from_str(input)
-            .map_err(|e| miette::miette!("Failed to parse JSON: {}", e))?;
-
+        let data: serde_json::Value = serde_json::from_str(input)?;
         self.extract_string_values(&data)
     }
 
     fn parse_yaml(&self, input: &str) -> Result<HashMap<String, String>> {
-        let data: serde_yaml::Value = serde_yaml::from_str(input)
-            .map_err(|e| miette::miette!("Failed to parse YAML: {}", e))?;
-
+        let data: serde_yaml::Value = serde_yaml::from_str(input)?;
         self.extract_string_values(&data)
     }
 
     fn parse_toml(&self, input: &str) -> Result<HashMap<String, String>> {
         let data: serde_json::Value = toml_edit::de::from_str(input)
-            .map_err(|e| miette::miette!("Failed to parse TOML: {}", e))?;
-
+            .map_err(|e| FnoxError::Config(format!("Failed to parse TOML: {}", e)))?;
         self.extract_string_values(&data)
     }
 
@@ -371,8 +339,7 @@ impl ImportCommand {
     where
         V: serde::Serialize,
     {
-        let json_value = serde_json::to_value(data)
-            .map_err(|e| miette::miette!("Failed to convert data: {}", e))?;
+        let json_value = serde_json::to_value(data)?;
 
         let mut secrets = HashMap::new();
 

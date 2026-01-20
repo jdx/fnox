@@ -777,7 +777,7 @@ impl Config {
 
         // At this point, value is an empty string
         // Allow empty values for plain provider (empty string is a valid secret value)
-        if self.is_plain_provider(secret.provider.as_deref(), profile) {
+        if self.is_plain_provider(secret.provider(), profile) {
             return None;
         }
         let message = if profile == "default" {
