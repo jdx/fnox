@@ -88,7 +88,7 @@ impl GcpKmsProvider {
             } else if err_str.contains("NOT_FOUND") || err_str.contains("not found") {
                 FnoxError::ProviderSecretNotFound {
                     provider: "GCP KMS".to_string(),
-                    secret: "key".to_string(),
+                    secret: self.key_name(),
                     hint: "Check that the KMS key exists and is accessible".to_string(),
                     url: URL.to_string(),
                 }

@@ -10,6 +10,7 @@ const URL: &str = "https://fnox.jdx.dev/providers/aws-kms";
 fn aws_kms_error_to_fnox<E, R>(
     err: &aws_sdk_kms::error::SdkError<E, R>,
     operation: &str,
+    key_id: &str,
 ) -> FnoxError
 where
     E: std::fmt::Debug + std::fmt::Display,
@@ -30,7 +31,7 @@ where
             } else if err_str.contains("NotFoundException") {
                 FnoxError::ProviderSecretNotFound {
                     provider: "AWS KMS".to_string(),
-                    secret: "key".to_string(),
+                    secret: key_id.to_string(),
                     hint: "Check that the KMS key exists and is accessible".to_string(),
                     url: URL.to_string(),
                 }
@@ -156,7 +157,7 @@ impl AwsKmsProvider {
             .ciphertext_blob(Blob::new(ciphertext_bytes))
             .send()
             .await
-            .map_err(|e| aws_kms_error_to_fnox(&e, "Decrypt"))?;
+            .map_err(|e| aws_kms_error_to_fnox(&e, "Decrypt", &self.key_id))?;
 
         let plaintext_blob =
             result
@@ -200,7 +201,7 @@ impl crate::providers::Provider for AwsKmsProvider {
             .plaintext(Blob::new(plaintext.as_bytes()))
             .send()
             .await
-            .map_err(|e| aws_kms_error_to_fnox(&e, "Encrypt"))?;
+            .map_err(|e| aws_kms_error_to_fnox(&e, "Encrypt", &self.key_id))?;
 
         let ciphertext_blob =
             result
@@ -228,7 +229,7 @@ impl crate::providers::Provider for AwsKmsProvider {
             .key_id(&self.key_id)
             .send()
             .await
-            .map_err(|e| aws_kms_error_to_fnox(&e, "DescribeKey"))?;
+            .map_err(|e| aws_kms_error_to_fnox(&e, "DescribeKey", &self.key_id))?;
 
         Ok(())
     }
