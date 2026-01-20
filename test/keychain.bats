@@ -185,7 +185,7 @@ EOF
 	# Try to get non-existent secret
 	run "$FNOX_BIN" get NONEXISTENT
 	assert_failure
-	assert_output --partial "Failed to retrieve secret"
+	assert_output --partial "secret_not_found"
 }
 
 @test "fnox set with special characters" {

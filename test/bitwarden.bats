@@ -185,7 +185,7 @@ EOF
 	# Try to get non-existent secret
 	run "$FNOX_BIN" get INVALID_ITEM
 	assert_failure
-	assert_output --partial "Bitwarden backend 'bw' command failed"
+	assert_output --partial "cli_failed"
 }
 
 @test "fnox get handles invalid secret reference format" {

@@ -365,7 +365,7 @@ EOF
 
 	run "$FNOX_BIN" get TEST_SECRET
 	assert_failure
-	assert_output --partial "Infisical authentication not found"
+	assert_output --partial "auth_failed"
 
 	# Restore credentials
 	export INFISICAL_TOKEN="$original_token"
