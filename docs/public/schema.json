@@ -1,83 +1,14 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Config",
-  "type": "object",
-  "properties": {
-    "age_key_file": {
-      "description": "Age encryption key file path (optional, can also be set via env var or CLI flag)",
-      "type": ["string", "null"]
-    },
-    "default_provider": {
-      "description": "Default provider name for default profile",
-      "anyOf": [
-        {
-          "$ref": "#/$defs/string"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "if_missing": {
-      "description": "Default if_missing behavior for all secrets in this config",
-      "anyOf": [
-        {
-          "$ref": "#/$defs/IfMissing"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "import": {
-      "description": "Import paths to other config files",
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "profiles": {
-      "description": "Named profiles",
-      "type": "object",
-      "additionalProperties": {
-        "$ref": "#/$defs/ProfileConfig"
-      }
-    },
-    "prompt_auth": {
-      "description": "Whether to prompt for authentication when provider auth fails (default: true in TTY)",
-      "type": ["boolean", "null"]
-    },
-    "providers": {
-      "description": "Provider configurations (for default profile)",
-      "type": "object",
-      "additionalProperties": {
-        "$ref": "#/$defs/ProviderConfig"
-      }
-    },
-    "root": {
-      "description": "Root configuration - stops recursion at this level",
-      "type": "boolean"
-    },
-    "secrets": {
-      "description": "Default profile secrets (top level)",
-      "type": "object",
-      "additionalProperties": {
-        "$ref": "#/$defs/SecretConfig"
-      }
-    }
-  },
-  "additionalProperties": false,
   "$defs": {
     "BitwardenBackend": {
-      "type": "string",
-      "enum": ["bw", "rbw"]
+      "enum": ["bw", "rbw"],
+      "type": "string"
     },
     "IfMissing": {
-      "type": "string",
-      "enum": ["error", "warn", "ignore"]
+      "enum": ["error", "warn", "ignore"],
+      "type": "string"
     },
     "OptionStringOrSecretRef": {
-      "description": "An optional value that can be a literal string, a secret reference, or absent.\n\nIn TOML, this deserializes from:\n- Field absent: `None`\n- `field = \"literal-value\"`: `Some(Literal(\"literal-value\"))`\n- `field = { secret = \"SECRET_NAME\" }`: `Some(SecretRef { secret: \"SECRET_NAME\" })`",
       "anyOf": [
         {
           "$ref": "#/$defs/StringOrSecretRef"
@@ -85,14 +16,14 @@
         {
           "type": "null"
         }
-      ]
+      ],
+      "description": "An optional value that can be a literal string, a secret reference, or absent.\n\nIn TOML, this deserializes from:\n- Field absent: `None`\n- `field = \"literal-value\"`: `Some(Literal(\"literal-value\"))`\n- `field = { secret = \"SECRET_NAME\" }`: `Some(SecretRef { secret: \"SECRET_NAME\" })`"
     },
     "ProfileConfig": {
+      "additionalProperties": false,
       "description": "Configuration for a profile",
-      "type": "object",
       "properties": {
         "default_provider": {
-          "description": "Default provider name for this profile",
           "anyOf": [
             {
               "$ref": "#/$defs/string"
@@ -100,29 +31,30 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Default provider name for this profile"
         },
         "providers": {
-          "description": "Provider configurations for this profile",
-          "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/ProviderConfig"
-          }
+          },
+          "description": "Provider configurations for this profile",
+          "type": "object"
         },
         "secrets": {
-          "description": "Secrets for this profile",
-          "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/SecretConfig"
-          }
+          },
+          "description": "Secrets for this profile",
+          "type": "object"
         }
       },
-      "additionalProperties": false
+      "type": "object"
     },
     "ProviderConfig": {
       "oneOf": [
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "database": {
               "$ref": "#/$defs/StringOrSecretRef"
@@ -134,46 +66,46 @@
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "type": {
-              "type": "string",
-              "const": "keepass"
+              "const": "keepass",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
-          "required": ["type", "database"]
+          "required": ["type", "database"],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "key_file": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "recipients": {
-              "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "type": "array"
             },
             "type": {
-              "type": "string",
-              "const": "age"
+              "const": "age",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
-          "required": ["type", "recipients"]
+          "required": ["type", "recipients"],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "type": {
-              "type": "string",
-              "const": "plain"
+              "const": "plain",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
-          "required": ["type"]
+          "required": ["type"],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "gpg_opts": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -185,15 +117,15 @@
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "type": {
-              "type": "string",
-              "const": "password-store"
+              "const": "password-store",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
-          "required": ["type"]
+          "required": ["type"],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "account": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -202,18 +134,18 @@
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "type": {
-              "type": "string",
-              "const": "1password"
+              "const": "1password",
+              "type": "string"
             },
             "vault": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             }
           },
-          "additionalProperties": false,
-          "required": ["type"]
+          "required": ["type"],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "api_key": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -225,18 +157,18 @@
               "$ref": "#/$defs/StringOrSecretRef"
             },
             "type": {
-              "type": "string",
-              "const": "passwordstate"
+              "const": "passwordstate",
+              "type": "string"
             },
             "verify_ssl": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             }
           },
-          "additionalProperties": false,
-          "required": ["type", "base_url", "password_list_id"]
+          "required": ["type", "base_url", "password_list_id"],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "backend": {
               "anyOf": [
@@ -258,15 +190,15 @@
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "type": {
-              "type": "string",
-              "const": "bitwarden"
+              "const": "bitwarden",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
-          "required": ["type"]
+          "required": ["type"],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "environment": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -278,15 +210,15 @@
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "type": {
-              "type": "string",
-              "const": "infisical"
+              "const": "infisical",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
-          "required": ["type"]
+          "required": ["type"],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "key_id": {
               "$ref": "#/$defs/StringOrSecretRef"
@@ -295,15 +227,15 @@
               "$ref": "#/$defs/StringOrSecretRef"
             },
             "type": {
-              "type": "string",
-              "const": "aws-kms"
+              "const": "aws-kms",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
-          "required": ["type", "key_id", "region"]
+          "required": ["type", "key_id", "region"],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "key": {
               "$ref": "#/$defs/StringOrSecretRef"
@@ -318,49 +250,49 @@
               "$ref": "#/$defs/StringOrSecretRef"
             },
             "type": {
-              "type": "string",
-              "const": "gcp-kms"
+              "const": "gcp-kms",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
-          "required": ["type", "project", "location", "keyring", "key"]
+          "required": ["type", "project", "location", "keyring", "key"],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "key_name": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
             "type": {
-              "type": "string",
-              "const": "azure-kms"
+              "const": "azure-kms",
+              "type": "string"
             },
             "vault_url": {
               "$ref": "#/$defs/StringOrSecretRef"
             }
           },
-          "additionalProperties": false,
-          "required": ["type", "vault_url", "key_name"]
+          "required": ["type", "vault_url", "key_name"],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "type": {
-              "type": "string",
-              "const": "azure-sm"
+              "const": "azure-sm",
+              "type": "string"
             },
             "vault_url": {
               "$ref": "#/$defs/StringOrSecretRef"
             }
           },
-          "additionalProperties": false,
-          "required": ["type", "vault_url"]
+          "required": ["type", "vault_url"],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -369,15 +301,15 @@
               "$ref": "#/$defs/StringOrSecretRef"
             },
             "type": {
-              "type": "string",
-              "const": "aws-ps"
+              "const": "aws-ps",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
-          "required": ["type", "region"]
+          "required": ["type", "region"],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -386,15 +318,15 @@
               "$ref": "#/$defs/StringOrSecretRef"
             },
             "type": {
-              "type": "string",
-              "const": "aws-sm"
+              "const": "aws-sm",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
-          "required": ["type", "region"]
+          "required": ["type", "region"],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "address": {
               "$ref": "#/$defs/StringOrSecretRef"
@@ -406,15 +338,15 @@
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "type": {
-              "type": "string",
-              "const": "vault"
+              "const": "vault",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
-          "required": ["type", "address"]
+          "required": ["type", "address"],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -423,15 +355,15 @@
               "$ref": "#/$defs/StringOrSecretRef"
             },
             "type": {
-              "type": "string",
-              "const": "gcp-sm"
+              "const": "gcp-sm",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
-          "required": ["type", "project"]
+          "required": ["type", "project"],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -440,18 +372,18 @@
               "$ref": "#/$defs/StringOrSecretRef"
             },
             "type": {
-              "type": "string",
-              "const": "keychain"
+              "const": "keychain",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
-          "required": ["type", "service"]
+          "required": ["type", "service"],
+          "type": "object"
         }
       ]
     },
     "SecretConfig": {
+      "additionalProperties": false,
       "description": "Configuration for a single secret",
-      "type": "object",
       "properties": {
         "default": {
           "description": "Default value to use if provider fails or secret is not found",
@@ -462,7 +394,6 @@
           "type": ["string", "null"]
         },
         "if_missing": {
-          "description": "What to do if the secret is missing (error, warn, or ignore)",
           "anyOf": [
             {
               "$ref": "#/$defs/IfMissing"
@@ -470,10 +401,10 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "What to do if the secret is missing (error, warn, or ignore)"
         },
         "provider": {
-          "description": "Provider to fetch from (age, aws-kms, 1password, aws, etc.)",
           "anyOf": [
             {
               "$ref": "#/$defs/string"
@@ -481,10 +412,10 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Provider to fetch from (age, aws-kms, 1password, aws, etc.)"
         },
         "value": {
-          "description": "Value for the provider (secret name, encrypted blob, etc.)",
           "anyOf": [
             {
               "$ref": "#/$defs/string"
@@ -492,10 +423,11 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Value for the provider (secret name, encrypted blob, etc.)"
         }
       },
-      "additionalProperties": false
+      "type": "object"
     },
     "StringOrSecretRef": {
       "description": "Either a literal string or a reference to a secret",
@@ -504,19 +436,87 @@
           "type": "string"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "secret": {
               "type": "string"
             }
           },
-          "additionalProperties": false,
-          "required": ["secret"]
+          "required": ["secret"],
+          "type": "object"
         }
       ]
     },
     "string": {
       "type": "string"
     }
-  }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "age_key_file": {
+      "description": "Age encryption key file path (optional, can also be set via env var or CLI flag)",
+      "type": ["string", "null"]
+    },
+    "default_provider": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Default provider name for default profile"
+    },
+    "if_missing": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/IfMissing"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Default if_missing behavior for all secrets in this config"
+    },
+    "import": {
+      "description": "Import paths to other config files",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "profiles": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ProfileConfig"
+      },
+      "description": "Named profiles",
+      "type": "object"
+    },
+    "prompt_auth": {
+      "description": "Whether to prompt for authentication when provider auth fails (default: true in TTY)",
+      "type": ["boolean", "null"]
+    },
+    "providers": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ProviderConfig"
+      },
+      "description": "Provider configurations (for default profile)",
+      "type": "object"
+    },
+    "root": {
+      "description": "Root configuration - stops recursion at this level",
+      "type": "boolean"
+    },
+    "secrets": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SecretConfig"
+      },
+      "description": "Default profile secrets (top level)",
+      "type": "object"
+    }
+  },
+  "title": "Config",
+  "type": "object"
 }
