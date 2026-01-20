@@ -178,7 +178,7 @@ EOF
 	# Try to get non-existent parameter
 	run "$FNOX_BIN" get NONEXISTENT
 	assert_failure
-	assert_output --partial "Failed to get parameter"
+	assert_output --partial "not found"
 }
 
 @test "fnox get with multiline parameter" {
