@@ -334,7 +334,7 @@ impl ImportCommand {
             FnoxError::ImportParseErrorWithSource {
                 format: "JSON".to_string(),
                 src: Arc::new(NamedSource::new(source_name, Arc::new(input.to_string()))),
-                span: SourceSpan::new(offset.into(), 1usize.into()),
+                span: SourceSpan::new(offset.into(), 1usize),
             }
         })?;
         self.extract_string_values(&data)
@@ -348,7 +348,7 @@ impl ImportCommand {
                 FnoxError::ImportParseErrorWithSource {
                     format: "YAML".to_string(),
                     src: Arc::new(NamedSource::new(source_name, Arc::new(input.to_string()))),
-                    span: SourceSpan::new(offset.into(), 1usize.into()),
+                    span: SourceSpan::new(offset.into(), 1usize),
                 }
             } else {
                 FnoxError::Config(format!("Failed to parse YAML: {}", e))
@@ -364,7 +364,7 @@ impl ImportCommand {
                 FnoxError::ImportParseErrorWithSource {
                     format: "TOML".to_string(),
                     src: Arc::new(NamedSource::new(source_name, Arc::new(input.to_string()))),
-                    span: SourceSpan::new(span.start.into(), (span.end - span.start).into()),
+                    span: SourceSpan::new(span.start.into(), span.end - span.start ),
                 }
             } else {
                 FnoxError::Config(format!("Failed to parse TOML: {}", e))
