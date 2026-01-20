@@ -73,7 +73,7 @@ impl PasswordstateProvider {
                 provider: "Passwordstate".to_string(),
                 details: format!("Failed to create HTTP client: {}", e),
                 hint: "Check your network configuration".to_string(),
-                url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+                url: "https://fnox.jdx.dev/providers/overview".to_string(),
             })
     }
 
@@ -100,7 +100,7 @@ impl PasswordstateProvider {
                 provider: "Passwordstate".to_string(),
                 details: format!("Invalid reference format: '{}'", value),
                 hint: "Expected 'id', 'id/field', 'title', or 'title/field'".to_string(),
-                url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+                url: "https://fnox.jdx.dev/providers/overview".to_string(),
             }),
         }
     }
@@ -121,7 +121,7 @@ impl PasswordstateProvider {
                 provider: "Passwordstate".to_string(),
                 details: format!("HTTP request failed: {}", e),
                 hint: "Check network connectivity to the Passwordstate server".to_string(),
-                url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+                url: "https://fnox.jdx.dev/providers/overview".to_string(),
             })?;
 
         if !response.status().is_success() {
@@ -133,14 +133,14 @@ impl PasswordstateProvider {
                     details: format!("HTTP {}: {}", status, body),
                     hint: "Check your API key is valid and has access to this password list"
                         .to_string(),
-                    url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+                    url: "https://fnox.jdx.dev/providers/overview".to_string(),
                 });
             }
             return Err(FnoxError::ProviderApiError {
                 provider: "Passwordstate".to_string(),
                 details: format!("HTTP {}: {}", status, body),
                 hint: "Check your Passwordstate server configuration".to_string(),
-                url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+                url: "https://fnox.jdx.dev/providers/overview".to_string(),
             });
         }
 
@@ -154,7 +154,7 @@ impl PasswordstateProvider {
                     details: format!("Failed to parse response: {}", e),
                     hint: "The Passwordstate API returned an unexpected response format"
                         .to_string(),
-                    url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+                    url: "https://fnox.jdx.dev/providers/overview".to_string(),
                 })?;
 
         entries
@@ -164,7 +164,7 @@ impl PasswordstateProvider {
                 provider: "Passwordstate".to_string(),
                 secret: password_id.to_string(),
                 hint: "Check that the password ID exists in Passwordstate".to_string(),
-                url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+                url: "https://fnox.jdx.dev/providers/overview".to_string(),
             })
     }
 
@@ -185,7 +185,7 @@ impl PasswordstateProvider {
             details: format!("Field '{}' not found or empty in password entry", field),
             hint: "Available fields: password, username, title, url, description, notes"
                 .to_string(),
-            url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+            url: "https://fnox.jdx.dev/providers/overview".to_string(),
         })
     }
 
@@ -211,7 +211,7 @@ impl PasswordstateProvider {
                 provider: "Passwordstate".to_string(),
                 details: format!("HTTP request failed: {}", e),
                 hint: "Check network connectivity to the Passwordstate server".to_string(),
-                url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+                url: "https://fnox.jdx.dev/providers/overview".to_string(),
             })?;
 
         if !response.status().is_success() {
@@ -223,14 +223,14 @@ impl PasswordstateProvider {
                     details: format!("HTTP {}: {}", status, body),
                     hint: "Check your API key is valid and has access to this password list"
                         .to_string(),
-                    url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+                    url: "https://fnox.jdx.dev/providers/overview".to_string(),
                 });
             }
             return Err(FnoxError::ProviderApiError {
                 provider: "Passwordstate".to_string(),
                 details: format!("HTTP {}: {}", status, body),
                 hint: "Check your Passwordstate server configuration".to_string(),
-                url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+                url: "https://fnox.jdx.dev/providers/overview".to_string(),
             });
         }
 
@@ -243,7 +243,7 @@ impl PasswordstateProvider {
                     details: format!("Failed to parse response: {}", e),
                     hint: "The Passwordstate API returned an unexpected response format"
                         .to_string(),
-                    url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+                    url: "https://fnox.jdx.dev/providers/overview".to_string(),
                 })?;
 
         // Find exact title match (case-insensitive)
@@ -260,7 +260,7 @@ impl PasswordstateProvider {
                 secret: format!("{} (in list {})", title, self.password_list_id),
                 hint: "Check that the password title exists in the specified password list"
                     .to_string(),
-                url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+                url: "https://fnox.jdx.dev/providers/overview".to_string(),
             })
     }
 }
@@ -323,7 +323,7 @@ impl crate::providers::Provider for PasswordstateProvider {
                 provider: "Passwordstate".to_string(),
                 details: format!("Failed to connect to '{}': {}", self.base_url, e),
                 hint: "Check network connectivity to the Passwordstate server".to_string(),
-                url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+                url: "https://fnox.jdx.dev/providers/overview".to_string(),
             })?;
 
         if !response.status().is_success() {
@@ -334,14 +334,14 @@ impl crate::providers::Provider for PasswordstateProvider {
                     details: format!("Connection test failed: HTTP {}", status),
                     hint: "Check your API key is valid and has access to this password list"
                         .to_string(),
-                    url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+                    url: "https://fnox.jdx.dev/providers/overview".to_string(),
                 });
             }
             return Err(FnoxError::ProviderApiError {
                 provider: "Passwordstate".to_string(),
                 details: format!("Connection test failed: HTTP {}", status),
                 hint: "Check your Passwordstate server configuration".to_string(),
-                url: "https://fnox.jdx.dev/providers/passwordstate".to_string(),
+                url: "https://fnox.jdx.dev/providers/overview".to_string(),
             });
         }
 

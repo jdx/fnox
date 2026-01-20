@@ -32,7 +32,7 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::config::not_found),
         help("Run 'fnox init' to create a new configuration file"),
-        url("https://fnox.dev/guide/getting-started")
+        url("https://fnox.jdx.dev/guide/quick-start")
     )]
     ConfigFileNotFound { path: std::path::PathBuf },
 
@@ -40,7 +40,7 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::config::read_failed),
         help("Ensure the config file exists and you have read permissions"),
-        url("https://fnox.jdx.dev/configuration")
+        url("https://fnox.jdx.dev/reference/configuration")
     )]
     ConfigReadFailed {
         path: std::path::PathBuf,
@@ -52,7 +52,7 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::config::write_failed),
         help("Check that you have write permissions for the config directory"),
-        url("https://fnox.jdx.dev/configuration")
+        url("https://fnox.jdx.dev/reference/configuration")
     )]
     ConfigWriteFailed {
         path: std::path::PathBuf,
@@ -64,7 +64,7 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::config::invalid_toml),
         help("Check the TOML syntax in your fnox.toml file"),
-        url("https://fnox.dev/guide/configuration")
+        url("https://fnox.jdx.dev/reference/configuration")
     )]
     ConfigParseError {
         #[source]
@@ -76,7 +76,7 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::config::invalid_toml),
         help("Check the TOML syntax in your configuration file"),
-        url("https://fnox.jdx.dev/configuration")
+        url("https://fnox.jdx.dev/reference/configuration")
     )]
     ConfigParseErrorWithSource {
         message: String,
@@ -89,7 +89,7 @@ pub enum FnoxError {
     #[error("Failed to serialize configuration to TOML")]
     #[diagnostic(
         code(fnox::config::serialize_failed),
-        url("https://fnox.jdx.dev/configuration")
+        url("https://fnox.jdx.dev/reference/configuration")
     )]
     ConfigSerializeError {
         #[source]
@@ -102,7 +102,7 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::config::validation_failed),
         help("Fix the issues above in your fnox.toml file"),
-        url("https://fnox.dev/guide/configuration")
+        url("https://fnox.jdx.dev/reference/configuration")
     )]
     ConfigValidationFailed {
         #[related]
@@ -147,7 +147,7 @@ pub enum FnoxError {
                 .map(|p| format!("\n  • Edit config file: {}", p.display()))
                 .unwrap_or_default()
         ),
-        url("https://fnox.dev/guide/secrets")
+        url("https://fnox.jdx.dev/guide/what-is-fnox")
     )]
     SecretNotFound {
         key: String,
@@ -181,7 +181,7 @@ pub enum FnoxError {
                 .map(|p| format!("\n  Edit: {}", p.display()))
                 .unwrap_or_default()
         ),
-        url("https://fnox.dev/guide/providers")
+        url("https://fnox.jdx.dev/providers/overview")
     )]
     ProviderNotConfigured {
         provider: String,
@@ -319,7 +319,7 @@ pub enum FnoxError {
             "Resolution path: {cycle}\n\
             Break the cycle by using a literal value or environment variable for one provider."
         ),
-        url("https://fnox.dev/guide/secret-references")
+        url("https://fnox.jdx.dev/guide/what-is-fnox")
     )]
     ProviderConfigCycle { provider: String, cycle: String },
 
@@ -331,7 +331,7 @@ pub enum FnoxError {
         help(
             "Ensure the secret '{secret}' is defined in your config or as an environment variable"
         ),
-        url("https://fnox.jdx.dev/guide/secret-references")
+        url("https://fnox.jdx.dev/guide/what-is-fnox")
     )]
     ProviderConfigResolutionFailed {
         provider: String,
@@ -348,7 +348,7 @@ pub enum FnoxError {
         help(
             "Add age encryption to your config:\n  [encryption]\n  type = \"age\"\n  key_file = \"age.txt\""
         ),
-        url("https://fnox.dev/providers/age")
+        url("https://fnox.jdx.dev/providers/age")
     )]
     AgeNotConfigured,
 
@@ -384,7 +384,7 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::encryption::age::encrypt_failed),
         help("Ensure your age public key is configured correctly"),
-        url("https://fnox.dev/providers/age")
+        url("https://fnox.jdx.dev/providers/age")
     )]
     AgeEncryptionFailed { details: String },
 
@@ -394,7 +394,7 @@ pub enum FnoxError {
         help(
             "Ensure you have the correct age identity file or FNOX_AGE_KEY environment variable set"
         ),
-        url("https://fnox.dev/providers/age")
+        url("https://fnox.jdx.dev/providers/age")
     )]
     AgeDecryptionFailed { details: String },
 
@@ -420,7 +420,7 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::command::not_specified),
         help("Provide a command to run with your secrets. Example: fnox exec -- npm start"),
-        url("https://fnox.dev/guide/exec")
+        url("https://fnox.jdx.dev/cli/exec")
     )]
     CommandNotSpecified,
 
@@ -448,7 +448,7 @@ pub enum FnoxError {
             Or:  fnox import --dry-run < input.env  (to preview without changes)\n\
             Or:  cat input.env | fnox import --force"
         ),
-        url("https://fnox.jdx.dev/commands/import")
+        url("https://fnox.jdx.dev/cli/import")
     )]
     ImportStdinRequiresForce,
 
@@ -456,7 +456,7 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::import::invalid_regex),
         help("Ensure the filter is a valid regular expression"),
-        url("https://fnox.jdx.dev/commands/import")
+        url("https://fnox.jdx.dev/cli/import")
     )]
     InvalidRegexFilter { pattern: String, details: String },
 
@@ -464,7 +464,7 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::import::read_failed),
         help("Ensure the file exists and you have read permissions"),
-        url("https://fnox.jdx.dev/commands/import")
+        url("https://fnox.jdx.dev/cli/import")
     )]
     ImportReadFailed {
         path: std::path::PathBuf,
@@ -476,7 +476,7 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::import::encryption_failed),
         help("Check the provider configuration and ensure the encryption key is available"),
-        url("https://fnox.jdx.dev/commands/import")
+        url("https://fnox.jdx.dev/cli/import")
     )]
     ImportEncryptionFailed {
         key: String,
@@ -489,7 +489,7 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::import::parse_failed),
         help("Check the {format} syntax in the input file"),
-        url("https://fnox.jdx.dev/commands/import")
+        url("https://fnox.jdx.dev/cli/import")
     )]
     ImportParseErrorWithSource {
         format: String,
@@ -503,7 +503,7 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::import::provider_unsupported),
         help("{help}"),
-        url("https://fnox.jdx.dev/commands/import")
+        url("https://fnox.jdx.dev/cli/import")
     )]
     ImportProviderUnsupported { provider: String, help: String },
 
@@ -525,7 +525,7 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::export::write_failed),
         help("Ensure you have write permissions for the output path"),
-        url("https://fnox.jdx.dev/commands/export")
+        url("https://fnox.jdx.dev/cli/export")
     )]
     ExportWriteFailed {
         path: std::path::PathBuf,
