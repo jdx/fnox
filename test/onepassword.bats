@@ -205,7 +205,7 @@ EOF
 	# Try to get non-existent secret
 	run "$FNOX_BIN" get INVALID_ITEM
 	assert_failure
-	assert_output --partial "1Password CLI command failed"
+	assert_output --partial "cli_failed"
 }
 
 @test "fnox get fails with invalid vault" {
