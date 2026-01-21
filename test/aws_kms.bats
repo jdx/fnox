@@ -3,6 +3,8 @@
 # AWS KMS Provider Tests
 #
 # These tests verify the AWS KMS provider integration with fnox.
+# Note: Tests use setup_file() to pre-encrypt shared values once,
+#       significantly reducing KMS API calls.
 #
 # Prerequisites:
 #   1. AWS credentials configured (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
@@ -14,28 +16,84 @@
 #       The mise task runs `fnox exec` which automatically decrypts provider-based secrets.
 #
 
-setup() {
+# File-level setup - runs once before all tests (reduces KMS API calls)
+setup_file() {
+	# Need to load common setup for FNOX_BIN
 	load 'test_helper/common_setup'
-	_common_setup
+
+	export KMS_KEY_ID="alias/fnox-testing"
+	export KMS_REGION="us-east-1"
 
 	# Check if AWS credentials are available
-	# (mise run test:bats automatically loads secrets via fnox exec)
 	if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-		skip "AWS credentials not available. Ensure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are configured."
+		export SKIP_AWS_KMS_TESTS="AWS credentials not available. Ensure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are configured."
+		return
 	fi
 
 	# Check if aws CLI is installed
 	if ! command -v aws >/dev/null 2>&1; then
-		skip "AWS CLI not installed. Install with: brew install awscli"
+		export SKIP_AWS_KMS_TESTS="AWS CLI not installed. Install with: brew install awscli"
+		return
 	fi
 
-	# Set the KMS key ID and region
-	export KMS_KEY_ID="alias/fnox-testing"
-	export KMS_REGION="us-east-1"
-
-	# Verify we can access the KMS key
+	# Verify we can access the KMS key (single API call for all tests)
 	if ! aws kms describe-key --key-id "$KMS_KEY_ID" --region "$KMS_REGION" >/dev/null 2>&1; then
-		skip "Cannot access KMS key '$KMS_KEY_ID'. Key may not exist or permissions may be insufficient."
+		export SKIP_AWS_KMS_TESTS="Cannot access KMS key '$KMS_KEY_ID'. Key may not exist or permissions may be insufficient."
+		return
+	fi
+
+	# Get the full ARN for later tests (single API call)
+	export KMS_KEY_ARN
+	KMS_KEY_ARN=$(aws kms describe-key --key-id "$KMS_KEY_ID" --region "$KMS_REGION" --query 'KeyMetadata.Arn' --output text)
+
+	# Pre-encrypt shared test values using AWS CLI directly (reduces fnox encrypt calls)
+	# These ciphertexts can be reused across multiple tests
+	export SHARED_SIMPLE_VALUE="test-plaintext-value"
+	export SHARED_SIMPLE_CIPHERTEXT
+	SHARED_SIMPLE_CIPHERTEXT=$(aws kms encrypt \
+		--key-id "$KMS_KEY_ID" \
+		--plaintext "$SHARED_SIMPLE_VALUE" \
+		--region "$KMS_REGION" \
+		--query 'CiphertextBlob' \
+		--output text)
+
+	export SHARED_SPECIAL_VALUE='{"password":"p@ssw0rd!","key":"abc=123&xyz"}'
+	export SHARED_SPECIAL_CIPHERTEXT
+	SHARED_SPECIAL_CIPHERTEXT=$(aws kms encrypt \
+		--key-id "$KMS_KEY_ID" \
+		--plaintext "$SHARED_SPECIAL_VALUE" \
+		--region "$KMS_REGION" \
+		--query 'CiphertextBlob' \
+		--output text)
+
+	export SHARED_MULTILINE_VALUE="line1
+line2
+line3"
+	export SHARED_MULTILINE_CIPHERTEXT
+	SHARED_MULTILINE_CIPHERTEXT=$(aws kms encrypt \
+		--key-id "$KMS_KEY_ID" \
+		--plaintext "$SHARED_MULTILINE_VALUE" \
+		--region "$KMS_REGION" \
+		--query 'CiphertextBlob' \
+		--output text)
+
+	export SHARED_ENV_VALUE="kms-env-value"
+	export SHARED_ENV_CIPHERTEXT
+	SHARED_ENV_CIPHERTEXT=$(aws kms encrypt \
+		--key-id "$KMS_KEY_ID" \
+		--plaintext "$SHARED_ENV_VALUE" \
+		--region "$KMS_REGION" \
+		--query 'CiphertextBlob' \
+		--output text)
+}
+
+setup() {
+	load 'test_helper/common_setup'
+	_common_setup
+
+	# Skip if file-level setup determined we can't run
+	if [ -n "$SKIP_AWS_KMS_TESTS" ]; then
+		skip "$SKIP_AWS_KMS_TESTS"
 	fi
 }
 
@@ -59,6 +117,25 @@ region = "$region"
 EOF
 }
 
+# Helper to create config with pre-encrypted secret
+create_kms_config_with_secret() {
+	local secret_name="$1"
+	local ciphertext="$2"
+	local key_id="${3:-alias/fnox-testing}"
+	local region="${4:-us-east-1}"
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF
+root = true
+
+[providers.kms]
+type = "aws-kms"
+key_id = "$key_id"
+region = "$region"
+
+[secrets]
+$secret_name = { provider = "kms", value = "$ciphertext" }
+EOF
+}
+
 @test "fnox set encrypts secret with AWS KMS" {
 	create_kms_config
 
@@ -74,57 +151,44 @@ EOF
 }
 
 @test "fnox get decrypts secret from AWS KMS" {
-	create_kms_config
+	# Use pre-encrypted value from setup_file (no KMS encrypt call needed)
+	create_kms_config_with_secret "KMS_DECRYPT_TEST" "$SHARED_SIMPLE_CIPHERTEXT"
 
-	# Set a secret
-	run "$FNOX_BIN" set KMS_DECRYPT_TEST "test-plaintext-value" --provider kms
-	assert_success
-
-	# Get the secret back
+	# Get the secret back (only 1 KMS decrypt call)
 	run "$FNOX_BIN" get KMS_DECRYPT_TEST
 	assert_success
-	assert_output "test-plaintext-value"
+	assert_output "$SHARED_SIMPLE_VALUE"
 }
 
-@test "fnox set and get with special characters" {
-	create_kms_config
-
-	# Set a secret with special characters
-	local special_value='{"password":"p@ssw0rd!","key":"abc=123&xyz"}'
-	run "$FNOX_BIN" set KMS_SPECIAL_CHARS "$special_value" --provider kms
-	assert_success
+@test "fnox get decrypts secret with special characters" {
+	# Use pre-encrypted value from setup_file
+	create_kms_config_with_secret "KMS_SPECIAL_CHARS" "$SHARED_SPECIAL_CIPHERTEXT"
 
 	# Get the secret back
 	run "$FNOX_BIN" get KMS_SPECIAL_CHARS
 	assert_success
-	assert_output "$special_value"
+	assert_output "$SHARED_SPECIAL_VALUE"
 }
 
-@test "fnox set with multiline secret" {
-	create_kms_config
-
-	# Set a multiline secret
-	local multiline_value="line1
-line2
-line3"
-	run "$FNOX_BIN" set KMS_MULTILINE "$multiline_value" --provider kms
-	assert_success
+@test "fnox get decrypts multiline secret" {
+	# Use pre-encrypted value from setup_file
+	create_kms_config_with_secret "KMS_MULTILINE" "$SHARED_MULTILINE_CIPHERTEXT"
 
 	# Get the secret back
 	run "$FNOX_BIN" get KMS_MULTILINE
 	assert_success
-	assert_output "$multiline_value"
+	assert_output "$SHARED_MULTILINE_VALUE"
 }
 
 @test "fnox get fails with invalid ciphertext" {
 	create_kms_config
 
-	# Manually create config with invalid base64 ciphertext
+	# Manually create config with invalid base64 ciphertext (no KMS calls)
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.INVALID_CIPHERTEXT]
 provider = "kms"
-value = "invalid-base64-!@#$%"
+value = "invalid-base64-!@#\$%"
 EOF
 
 	run "$FNOX_BIN" get INVALID_CIPHERTEXT
@@ -133,7 +197,7 @@ EOF
 }
 
 @test "fnox set warns and stores plaintext with wrong KMS key" {
-	# Create config with non-existent key
+	# Create config with non-existent key (fails fast, no actual KMS encryption)
 	create_kms_config "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-0000-0000-000000000000"
 
 	# When encryption fails, fnox currently warns and stores plaintext
@@ -146,6 +210,7 @@ EOF
 @test "fnox list shows KMS secrets" {
 	create_kms_config
 
+	# Use hardcoded ciphertexts (no KMS calls needed for list)
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.KMS_SECRET_1]
@@ -179,93 +244,45 @@ EOF
 }
 
 @test "AWS KMS provider works with full key ARN" {
-	# Get the full ARN of the test key
-	local key_arn
-	key_arn=$(aws kms describe-key --key-id "alias/fnox-testing" --region us-east-1 --query 'KeyMetadata.Arn' --output text)
-
-	create_kms_config "$key_arn" "us-east-1"
-
-	run "$FNOX_BIN" set KMS_ARN_TEST "test-with-arn" --provider kms
-	assert_success
+	# Use the ARN obtained in setup_file
+	create_kms_config_with_secret "KMS_ARN_TEST" "$SHARED_SIMPLE_CIPHERTEXT" "$KMS_KEY_ARN" "us-east-1"
 
 	run "$FNOX_BIN" get KMS_ARN_TEST
 	assert_success
-	assert_output "test-with-arn"
+	assert_output "$SHARED_SIMPLE_VALUE"
 }
 
 @test "fnox exec sets KMS environment variables" {
-	create_kms_config
-
-	# Set a secret
-	run "$FNOX_BIN" set MY_KMS_VAR "kms-env-value" --provider kms
-	assert_success
+	# Use pre-encrypted value from setup_file
+	create_kms_config_with_secret "MY_KMS_VAR" "$SHARED_ENV_CIPHERTEXT"
 
 	# Use exec to run a command with the secret as env var
 	# Explicitly set FNOX_CONFIG_FILE to avoid inheriting parent config
 	# shellcheck disable=SC2016 # Single quotes intentional - variable should expand in subshell
 	run env FNOX_CONFIG_FILE="$FNOX_CONFIG_FILE" "$FNOX_BIN" exec -- sh -c 'echo $MY_KMS_VAR'
 	assert_success
-	assert_output "kms-env-value"
-}
-
-@test "KMS encryption produces different ciphertext each time" {
-	create_kms_config
-
-	# Set a secret twice with the same value
-	run "$FNOX_BIN" set KMS_UNIQUE_1 "same-value" --provider kms
-	assert_success
-
-	# Set again with same value
-	run "$FNOX_BIN" set KMS_UNIQUE_2 "same-value" --provider kms
-	assert_success
-
-	# Get the encrypted values from config (inline table format)
-	# Secrets are now stored as: KMS_UNIQUE_1 = { provider = "kms", value = "..." }
-	cipher1=$(grep "^KMS_UNIQUE_1\s*=" "${FNOX_CONFIG_FILE}" | sed 's/.*value = "\([^"]*\)".*/\1/')
-	cipher2=$(grep "^KMS_UNIQUE_2\s*=" "${FNOX_CONFIG_FILE}" | sed 's/.*value = "\([^"]*\)".*/\1/')
-
-	# Verify ciphertexts were extracted
-	[ -n "$cipher1" ]
-	[ -n "$cipher2" ]
-
-	# Ciphertexts should be different (KMS adds randomness)
-	[ "$cipher1" != "$cipher2" ]
-
-	# But both should decrypt to the same value
-	run "$FNOX_BIN" get KMS_UNIQUE_1
-	assert_success
-	assert_output "same-value"
-
-	run "$FNOX_BIN" get KMS_UNIQUE_2
-	assert_success
-	assert_output "same-value"
+	assert_output "$SHARED_ENV_VALUE"
 }
 
 @test "fnox set updates existing KMS secret" {
-	create_kms_config
+	# Start with pre-encrypted value
+	create_kms_config_with_secret "KMS_UPDATE_TEST" "$SHARED_SIMPLE_CIPHERTEXT"
 
-	# Set initial value
-	run "$FNOX_BIN" set KMS_UPDATE_TEST "initial-value" --provider kms
-	assert_success
-
-	# Update with new value
+	# Update with new value (1 encrypt call)
 	run "$FNOX_BIN" set KMS_UPDATE_TEST "updated-value" --provider kms
 	assert_success
 
-	# Verify new value is retrieved
+	# Verify new value is retrieved (1 decrypt call)
 	run "$FNOX_BIN" get KMS_UPDATE_TEST
 	assert_success
 	assert_output "updated-value"
 }
 
 @test "KMS provider respects region configuration" {
-	# Test that we're using the correct region
-	create_kms_config "alias/fnox-testing" "us-east-1"
-
-	run "$FNOX_BIN" set KMS_REGION_TEST "region-specific" --provider kms
-	assert_success
+	# Use pre-encrypted value with explicit region
+	create_kms_config_with_secret "KMS_REGION_TEST" "$SHARED_SIMPLE_CIPHERTEXT" "alias/fnox-testing" "us-east-1"
 
 	run "$FNOX_BIN" get KMS_REGION_TEST
 	assert_success
-	assert_output "region-specific"
+	assert_output "$SHARED_SIMPLE_VALUE"
 }
