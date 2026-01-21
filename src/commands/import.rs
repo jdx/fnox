@@ -383,7 +383,15 @@ impl ImportCommand {
     /// line boundaries at '\n', and '\r' is just part of line content).
     /// The column is treated as a character count, which is converted to the
     /// correct byte offset for multi-byte UTF-8.
+    ///
+    /// Note: serde_json may return line=0, col=0 for certain errors (type mismatches,
+    /// custom errors) where position info isn't available. We return 0 in that case.
     fn offset_from_line_col(&self, input: &str, line: usize, col: usize) -> usize {
+        // Handle invalid 0-indexed values (serde_json can return 0,0 for some errors)
+        if line == 0 || col == 0 {
+            return 0;
+        }
+
         let mut current_line = 1;
         let mut line_start_byte = 0;
 
