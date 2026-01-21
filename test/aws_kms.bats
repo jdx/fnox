@@ -48,20 +48,21 @@ setup_file() {
 
 	# Pre-encrypt shared test values using AWS CLI directly (reduces fnox encrypt calls)
 	# These ciphertexts can be reused across multiple tests
+	# Note: Using fileb:///dev/stdin to pass raw plaintext bytes to aws kms encrypt
 	export SHARED_SIMPLE_VALUE="test-plaintext-value"
 	export SHARED_SIMPLE_CIPHERTEXT
-	SHARED_SIMPLE_CIPHERTEXT=$(aws kms encrypt \
+	SHARED_SIMPLE_CIPHERTEXT=$(echo -n "$SHARED_SIMPLE_VALUE" | aws kms encrypt \
 		--key-id "$KMS_KEY_ID" \
-		--plaintext "$SHARED_SIMPLE_VALUE" \
+		--plaintext fileb:///dev/stdin \
 		--region "$KMS_REGION" \
 		--query 'CiphertextBlob' \
 		--output text)
 
 	export SHARED_SPECIAL_VALUE='{"password":"p@ssw0rd!","key":"abc=123&xyz"}'
 	export SHARED_SPECIAL_CIPHERTEXT
-	SHARED_SPECIAL_CIPHERTEXT=$(aws kms encrypt \
+	SHARED_SPECIAL_CIPHERTEXT=$(echo -n "$SHARED_SPECIAL_VALUE" | aws kms encrypt \
 		--key-id "$KMS_KEY_ID" \
-		--plaintext "$SHARED_SPECIAL_VALUE" \
+		--plaintext fileb:///dev/stdin \
 		--region "$KMS_REGION" \
 		--query 'CiphertextBlob' \
 		--output text)
@@ -70,18 +71,18 @@ setup_file() {
 line2
 line3"
 	export SHARED_MULTILINE_CIPHERTEXT
-	SHARED_MULTILINE_CIPHERTEXT=$(aws kms encrypt \
+	SHARED_MULTILINE_CIPHERTEXT=$(printf '%s' "$SHARED_MULTILINE_VALUE" | aws kms encrypt \
 		--key-id "$KMS_KEY_ID" \
-		--plaintext "$SHARED_MULTILINE_VALUE" \
+		--plaintext fileb:///dev/stdin \
 		--region "$KMS_REGION" \
 		--query 'CiphertextBlob' \
 		--output text)
 
 	export SHARED_ENV_VALUE="kms-env-value"
 	export SHARED_ENV_CIPHERTEXT
-	SHARED_ENV_CIPHERTEXT=$(aws kms encrypt \
+	SHARED_ENV_CIPHERTEXT=$(echo -n "$SHARED_ENV_VALUE" | aws kms encrypt \
 		--key-id "$KMS_KEY_ID" \
-		--plaintext "$SHARED_ENV_VALUE" \
+		--plaintext fileb:///dev/stdin \
 		--region "$KMS_REGION" \
 		--query 'CiphertextBlob' \
 		--output text)
