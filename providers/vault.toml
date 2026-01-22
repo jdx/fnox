@@ -28,3 +28,9 @@ type = "optional"
 placeholder = ""
 label = "Token (optional, uses env var if not set):"
 wizard = true
+
+[fields.namespace]
+type = "optional"
+placeholder = ""
+label = "Namespace (optional, uses env var if not set):"
+wizard = true

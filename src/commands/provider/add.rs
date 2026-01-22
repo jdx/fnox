@@ -79,6 +79,7 @@ impl AddCommand {
                 address: StringOrSecretRef::from("http://localhost:8200"),
                 path: OptionStringOrSecretRef::literal("secret"),
                 token: OptionStringOrSecretRef::none(),
+                namespace: OptionStringOrSecretRef::none(),
             },
             ProviderType::Gcp => crate::config::ProviderConfig::GoogleSecretManager {
                 project: StringOrSecretRef::from("my-project"),

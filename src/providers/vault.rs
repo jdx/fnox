@@ -8,14 +8,16 @@ pub struct HashiCorpVaultProvider {
     address: String,
     path: Option<String>,
     token: Option<String>,
+    namespace: Option<String>,
 }
 
 impl HashiCorpVaultProvider {
-    pub fn new(address: String, path: Option<String>, token: Option<String>) -> Self {
+    pub fn new(address: String, path: Option<String>, token: Option<String>, namespace: Option<String>) -> Self {
         Self {
             address,
             path,
             token,
+            namespace,
         }
     }
 
@@ -34,6 +36,12 @@ impl HashiCorpVaultProvider {
 
         // Set VAULT_ADDR from provider config
         cmd.env("VAULT_ADDR", &self.address);
+
+        // Set VAULT_NAMESPACE if provided
+        if let Some(namespace) = &self.namespace {
+            tracing::debug!("Setting VAULT_NAMESPACE to '{}'", namespace);
+            cmd.env("VAULT_NAMESPACE", namespace);
+        }
 
         // Set VAULT_TOKEN from provider config or environment
         let token = self
