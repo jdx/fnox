@@ -12,7 +12,12 @@ pub struct HashiCorpVaultProvider {
 }
 
 impl HashiCorpVaultProvider {
-    pub fn new(address: String, path: Option<String>, token: Option<String>, namespace: Option<String>) -> Self {
+    pub fn new(
+        address: String,
+        path: Option<String>,
+        token: Option<String>,
+        namespace: Option<String>,
+    ) -> Self {
         Self {
             address,
             path,

@@ -382,6 +382,9 @@
             "address": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
+            "namespace": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "path": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
