@@ -518,6 +518,9 @@ impl Config {
     /// Always saves to the default_target (local config file), creating a local
     /// override if the secret exists in a parent config. This aligns with the
     /// hierarchical config model where child configs override parent configs.
+    ///
+    /// This method preserves comments and formatting in the TOML file by
+    /// directly manipulating the document AST rather than re-serializing.
     pub fn save_secret_to_source(
         &self,
         secret_name: &str,
@@ -525,61 +528,58 @@ impl Config {
         profile: &str,
         default_target: &Path,
     ) -> Result<()> {
-        // Always save to the local config file (default_target)
-        // If a secret exists in a parent config, this creates a local override
-        // rather than modifying the parent - matching user expectations for
-        // hierarchical configs (fixes #104, #121)
+        use toml_edit::{DocumentMut, Item, Value};
+
         let target_file = default_target.to_path_buf();
 
-        // Load the target file (or create new config if it doesn't exist)
-        let mut target_config = if target_file.exists() {
-            Self::load_single(&target_file)?
+        // Load existing document or create new one (preserves comments)
+        let mut doc = if target_file.exists() {
+            let content =
+                fs::read_to_string(&target_file).map_err(|source| FnoxError::ConfigReadFailed {
+                    path: target_file.clone(),
+                    source,
+                })?;
+            content
+                .parse::<DocumentMut>()
+                .map_err(|e| FnoxError::Config(format!("Failed to parse TOML: {}", e)))?
         } else {
-            Self::new()
+            DocumentMut::new()
         };
 
-        // Update the secret in the appropriate location
-        if profile == "default" {
-            target_config
-                .secrets
-                .insert(secret_name.to_string(), secret_config.clone());
+        // Get or create the secrets table
+        let secrets_table = if profile == "default" {
+            if doc.get("secrets").is_none() {
+                doc["secrets"] = Item::Table(toml_edit::Table::new());
+            }
+            doc["secrets"].as_table_mut().unwrap()
         } else {
-            target_config
-                .profiles
-                .entry(profile.to_string())
-                .or_default()
-                .secrets
-                .insert(secret_name.to_string(), secret_config.clone());
-        }
+            if doc.get("profiles").is_none() {
+                doc["profiles"] = Item::Table(toml_edit::Table::new());
+            }
+            let profiles = doc["profiles"].as_table_mut().unwrap();
+            if profiles.get(profile).is_none() {
+                profiles[profile] = Item::Table(toml_edit::Table::new());
+            }
+            let profile_table = profiles[profile].as_table_mut().unwrap();
+            if profile_table.get("secrets").is_none() {
+                profile_table["secrets"] = Item::Table(toml_edit::Table::new());
+            }
+            profile_table["secrets"].as_table_mut().unwrap()
+        };
 
-        // Save back to the target file
-        target_config.save(&target_file)?;
-        Ok(())
-    }
+        // Update/insert the secret as inline table
+        let inline = secret_config.to_inline_table();
+        secrets_table[secret_name] = Item::Value(Value::InlineTable(inline));
 
-    /// Load a single config file without recursion or merging
-    fn load_single(path: &Path) -> Result<Self> {
-        let content = fs::read_to_string(path).map_err(|source| FnoxError::ConfigReadFailed {
-            path: path.to_path_buf(),
-            source,
+        // Write back (preserves all comments and formatting)
+        fs::write(&target_file, doc.to_string()).map_err(|source| {
+            FnoxError::ConfigWriteFailed {
+                path: target_file,
+                source,
+            }
         })?;
 
-        let mut config: Self = toml_edit::de::from_str(&content)?;
-
-        // Store the source path for all secrets in this file
-        let source_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-
-        for secret in config.secrets.values_mut() {
-            secret.source_path = Some(source_path.clone());
-        }
-
-        for profile in config.profiles.values_mut() {
-            for secret in profile.secrets.values_mut() {
-                secret.source_path = Some(source_path.clone());
-            }
-        }
-
-        Ok(config)
+        Ok(())
     }
 
     /// Create a new default configuration
@@ -1044,6 +1044,35 @@ impl SecretConfig {
             value: None,
             source_path: None,
         }
+    }
+
+    /// Convert this secret config to a TOML inline table for saving
+    pub fn to_inline_table(&self) -> toml_edit::InlineTable {
+        let mut inline = toml_edit::InlineTable::new();
+
+        if let Some(provider) = self.provider() {
+            inline.insert("provider", toml_edit::Value::from(provider));
+        }
+        if let Some(value) = self.value() {
+            inline.insert("value", toml_edit::Value::from(value));
+        }
+        if let Some(ref description) = self.description {
+            inline.insert("description", toml_edit::Value::from(description.as_str()));
+        }
+        if let Some(ref default) = self.default {
+            inline.insert("default", toml_edit::Value::from(default.as_str()));
+        }
+        if let Some(if_missing) = self.if_missing {
+            let if_missing_str = match if_missing {
+                IfMissing::Error => "error",
+                IfMissing::Warn => "warn",
+                IfMissing::Ignore => "ignore",
+            };
+            inline.insert("if_missing", toml_edit::Value::from(if_missing_str));
+        }
+
+        inline.fmt();
+        inline
     }
 
     /// Check if this secret has any value (provider, value, or default)

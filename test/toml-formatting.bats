@@ -112,3 +112,73 @@ EOF
 	grep -q "SECRET2.*{" fnox.toml
 	grep -q "SECRET3.*{" fnox.toml
 }
+
+@test "fnox set preserves comments in fnox.toml" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+	mkdir -p "$HOME/.config/fnox"
+	age-keygen -o "$HOME/.config/fnox/age.txt" 2>/dev/null
+
+	# Create config with comments
+	cat >fnox.toml <<'EOF'
+# Header comment
+root = true
+
+[providers.age]
+type = "age"
+recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
+
+# Secrets section comment
+[secrets]
+# Comment for existing secret
+EXISTING = { provider = "age", value = "test" }
+# Trailing comment
+EOF
+
+	# Set a new secret
+	run fnox set NEW_SECRET "test-value" --provider age
+	assert_success
+
+	# Verify all comments are preserved
+	run cat fnox.toml
+	assert_output --partial "# Header comment"
+	assert_output --partial "# Secrets section comment"
+	assert_output --partial "# Comment for existing secret"
+	assert_output --partial "# Trailing comment"
+	assert_output --partial "NEW_SECRET"
+}
+
+@test "fnox set preserves comments when updating existing secret" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+	mkdir -p "$HOME/.config/fnox"
+	age-keygen -o "$HOME/.config/fnox/age.txt" 2>/dev/null
+
+	# Create config with comments around the secret to be updated
+	cat >fnox.toml <<'EOF'
+# Config header
+root = true
+
+[providers.age]
+type = "age"
+recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
+
+[secrets]
+# This is the API key
+API_KEY = { provider = "age", value = "old-encrypted-value" }
+# End of secrets
+EOF
+
+	# Update the existing secret
+	run fnox set API_KEY "new-value" --provider age
+	assert_success
+
+	# Verify comments are still there
+	run cat fnox.toml
+	assert_output --partial "# Config header"
+	assert_output --partial "# This is the API key"
+	assert_output --partial "# End of secrets"
+	assert_output --partial "API_KEY"
+}
