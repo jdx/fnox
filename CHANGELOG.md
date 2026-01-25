@@ -1,6 +1,66 @@
 # Changelog
 
+## [1.10.0](https://github.com/jdx/fnox/compare/v1.9.2..v1.10.0) - 2026-01-25
+
+### 🚀 Features
+
+- **(1password)** add token field supporting secret references by [@jdx](https://github.com/jdx) in [#200](https://github.com/jdx/fnox/pull/200)
+- **(vault)** add namespace option by [@pierrop](https://github.com/pierrop) in [#220](https://github.com/jdx/fnox/pull/220)
+- add JSON schema for fnox.toml by [@jdx](https://github.com/jdx) in [#196](https://github.com/jdx/fnox/pull/196)
+- add --all flag to provider test command by [@jdx](https://github.com/jdx) in [#202](https://github.com/jdx/fnox/pull/202)
+- add documentation URLs to error diagnostics by [@jdx](https://github.com/jdx) in [#212](https://github.com/jdx/fnox/pull/212)
+- preserve source error chains for JSON/YAML errors by [@jdx](https://github.com/jdx) in [#214](https://github.com/jdx/fnox/pull/214)
+- use structured error variants instead of generic Config/Provider by [@jdx](https://github.com/jdx) in [#213](https://github.com/jdx/fnox/pull/213)
+- add "Did you mean?" suggestions for typos by [@jdx](https://github.com/jdx) in [#204](https://github.com/jdx/fnox/pull/204)
+- add --dry-run flag to data-modifying commands by [@jdx](https://github.com/jdx) in [#201](https://github.com/jdx/fnox/pull/201)
+- Support fnox.toml (and variants) dotfiles. by [@dharrigan](https://github.com/dharrigan) in [#141](https://github.com/jdx/fnox/pull/141)
+- add source code spans for better error reporting by [@jdx](https://github.com/jdx) in [#205](https://github.com/jdx/fnox/pull/205)
+- use #[related] for validation errors to show all issues at once by [@jdx](https://github.com/jdx) in [#211](https://github.com/jdx/fnox/pull/211)
+- add source code span tracking for default_provider errors by [@jdx](https://github.com/jdx) in [#209](https://github.com/jdx/fnox/pull/209)
+- add source code span tracking for SecretConfig.value by [@jdx](https://github.com/jdx) in [#210](https://github.com/jdx/fnox/pull/210)
+- improve miette error handling with structured provider errors and URLs by [@jdx](https://github.com/jdx) in [#216](https://github.com/jdx/fnox/pull/216)
+
+### 🐛 Bug Fixes
+
+- update claude CLI model and add bypassPermissions by [@jdx](https://github.com/jdx) in [#194](https://github.com/jdx/fnox/pull/194)
+- update claude CLI model and add bypassPermissions by [@jdx](https://github.com/jdx) in [#195](https://github.com/jdx/fnox/pull/195)
+- preserve TOML comments in `fnox set` by [@jdx](https://github.com/jdx) in [#223](https://github.com/jdx/fnox/pull/223)
+
+### 🚜 Refactor
+
+- convert miette::miette!() to FnoxError in encrypt.rs and list.rs by [@jdx](https://github.com/jdx) in [#208](https://github.com/jdx/fnox/pull/208)
+- use structured errors in remove and export commands by [@jdx](https://github.com/jdx) in [#206](https://github.com/jdx/fnox/pull/206)
+- use structured errors in import command by [@jdx](https://github.com/jdx) in [#207](https://github.com/jdx/fnox/pull/207)
+
+### 📚 Documentation
+
+- add comprehensive TUI dashboard guide by [@jdx](https://github.com/jdx) in [#203](https://github.com/jdx/fnox/pull/203)
+- add mise integration guide by [@jdx](https://github.com/jdx) in [#215](https://github.com/jdx/fnox/pull/215)
+
+### ⚡ Performance
+
+- reduce KMS API calls in CI tests by [@jdx](https://github.com/jdx) in [#217](https://github.com/jdx/fnox/pull/217)
+
+### 🛡️ Security
+
+- add Black Ops One font branding to docs by [@jdx](https://github.com/jdx) in [#198](https://github.com/jdx/fnox/pull/198)
+
+### 📦️ Dependency Updates
+
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#197](https://github.com/jdx/fnox/pull/197)
+- update jdx/mise-action digest to 6d1e696 by [@renovate[bot]](https://github.com/renovate[bot]) in [#218](https://github.com/jdx/fnox/pull/218)
+- update rust crate proc-macro2 to v1.0.106 by [@renovate[bot]](https://github.com/renovate[bot]) in [#219](https://github.com/jdx/fnox/pull/219)
+
+### New Contributors
+
+- @pierrop made their first contribution in [#220](https://github.com/jdx/fnox/pull/220)
+- @dharrigan made their first contribution in [#141](https://github.com/jdx/fnox/pull/141)
+
 ## [1.9.2](https://github.com/jdx/fnox/compare/v1.9.1..v1.9.2) - 2026-01-19
+
+### 🚀 Features
+
+- add interactive TUI dashboard using ratatui by [@jdx](https://github.com/jdx) in [#188](https://github.com/jdx/fnox/pull/188)
 
 ### 🐛 Bug Fixes
 

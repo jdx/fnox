@@ -1119,7 +1119,7 @@
   "config": {
     "props": {}
   },
-  "version": "1.9.2",
+  "version": "1.10.0",
   "usage": "Usage: fnox [OPTIONS] <COMMAND>",
   "complete": {
     "key": {
