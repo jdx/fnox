@@ -99,12 +99,8 @@ jobs:
           # Generate rich release notes using LLM
           # Output format: "# vX.X.X - Creative Title" followed by release notes
           if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
-            mise run gen-release-notes "$TAG_NAME" "$PREV_TAG" > /tmp/release-raw.txt || {
-              echo "LLM generation failed, falling back to CHANGELOG.md"
-              awk '/^## \[/{if(found) exit; found=1} found{print}' CHANGELOG.md > release-notes.md
-              echo "$TAG_NAME" > /tmp/release-title.txt
-            }
-            if [[ -s /tmp/release-raw.txt ]]; then
+            # Only process output if command succeeds - prevents partial output from overwriting fallback
+            if mise run gen-release-notes "$TAG_NAME" "$PREV_TAG" > /tmp/release-raw.txt 2>&1; then
               # Strip any preamble before the "# vX.X.X -" line
               sed -n '/^# v[0-9]/,$p' /tmp/release-raw.txt > /tmp/release-full.txt
               if [[ -s /tmp/release-full.txt ]]; then
@@ -113,11 +109,13 @@ jobs:
                 echo "$RELEASE_TITLE" > /tmp/release-title.txt
                 # Body is everything after the first line
                 tail -n +2 /tmp/release-full.txt > release-notes.md
-              else
-                echo "LLM output missing expected format, falling back to CHANGELOG.md"
-                awk '/^## \[/{if(found) exit; found=1} found{print}' CHANGELOG.md > release-notes.md
-                echo "$TAG_NAME" > /tmp/release-title.txt
               fi
+            fi
+            # Fallback if LLM generation failed or output was invalid
+            if [[ ! -s release-notes.md ]]; then
+              echo "LLM release notes failed, falling back to CHANGELOG.md"
+              awk '/^## \[/{if(found) exit; found=1} found{print}' CHANGELOG.md > release-notes.md
+              echo "$TAG_NAME" > /tmp/release-title.txt
             fi
           else
             echo "ANTHROPIC_API_KEY not set, using CHANGELOG.md"
