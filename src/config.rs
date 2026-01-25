@@ -571,6 +571,11 @@ impl Config {
         let inline = secret_config.to_inline_table();
         secrets_table[secret_name] = Item::Value(Value::InlineTable(inline));
 
+        // Remove trailing space from key to match format: KEY= { ... } instead of KEY = { ... }
+        if let Some(mut key) = secrets_table.key_mut(secret_name) {
+            key.leaf_decor_mut().set_suffix("");
+        }
+
         // Write back (preserves all comments and formatting)
         fs::write(&target_file, doc.to_string()).map_err(|source| {
             FnoxError::ConfigWriteFailed {
