@@ -1,5 +1,43 @@
 # Fnox Development Guide
 
+## Conventional Commits
+
+All commit messages and PR titles MUST follow conventional commit format:
+
+**Format:** `<type>(<scope>): <description>`
+
+**Types:**
+
+- `feat:` - New features
+- `fix:` - Bug fixes
+- `refactor:` - Code refactoring
+- `docs:` - Documentation changes
+- `style:` - Code style/formatting (no logic changes)
+- `perf:` - Performance improvements
+- `test:` - Testing changes
+- `chore:` - Maintenance tasks, releases, dependency updates
+- `security:` - Security-related changes
+
+**Scopes:**
+
+- For command-specific changes, use the command name: `get`, `set`, `exec`, `list`, `provider`, etc.
+- For provider changes: `age`, `1password`, `bitwarden`, `aws-kms`, `aws-sm`, `aws-ps`, `keychain`, `keepass`, `infisical`, `passwordstate`, `pass`
+- For subsystem changes: `config`, `encryption`, `env`, `deps`
+
+**Description Style:**
+
+- Use lowercase after the colon
+- Use imperative mood ("add feature" not "added feature")
+- Keep it concise but descriptive
+
+**Examples:**
+
+- `fix(aws-sm): handle pagination for large secret lists`
+- `feat(exec): add --no-inherit flag to exclude parent env`
+- `feat(keepass): add support for KDBX4 format`
+- `docs: update 1password provider examples`
+- `chore: release 0.3.0`
+
 ## Build & Test Commands
 
 ```bash
