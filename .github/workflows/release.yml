@@ -107,11 +107,17 @@ jobs:
             if [[ -s /tmp/release-raw.txt ]]; then
               # Strip any preamble before the "# vX.X.X -" line
               sed -n '/^# v[0-9]/,$p' /tmp/release-raw.txt > /tmp/release-full.txt
-              # Extract title from first line (format: "# vX.X.X - Creative Title")
-              RELEASE_TITLE="$(head -1 /tmp/release-full.txt | sed 's/^# //')"
-              echo "$RELEASE_TITLE" > /tmp/release-title.txt
-              # Body is everything after the first line
-              tail -n +2 /tmp/release-full.txt > release-notes.md
+              if [[ -s /tmp/release-full.txt ]]; then
+                # Extract title from first line (format: "# vX.X.X - Creative Title")
+                RELEASE_TITLE="$(head -1 /tmp/release-full.txt | sed 's/^# //')"
+                echo "$RELEASE_TITLE" > /tmp/release-title.txt
+                # Body is everything after the first line
+                tail -n +2 /tmp/release-full.txt > release-notes.md
+              else
+                echo "LLM output missing expected format, falling back to CHANGELOG.md"
+                awk '/^## \[/{if(found) exit; found=1} found{print}' CHANGELOG.md > release-notes.md
+                echo "$TAG_NAME" > /tmp/release-title.txt
+              fi
             fi
           else
             echo "ANTHROPIC_API_KEY not set, using CHANGELOG.md"
@@ -139,7 +145,8 @@ jobs:
           else
             TAG_NAME="${{ github.ref_name }}"
           fi
-          RELEASE_TITLE="$(cat /tmp/release-title.txt 2>/dev/null || echo "$TAG_NAME")"
+          RELEASE_TITLE="$(cat /tmp/release-title.txt 2>/dev/null)"
+          RELEASE_TITLE="${RELEASE_TITLE:-$TAG_NAME}"
           gh release create "$TAG_NAME" \
             --title "$RELEASE_TITLE" \
             --notes-file release-notes.md \
