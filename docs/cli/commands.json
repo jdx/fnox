@@ -849,8 +849,9 @@
           {
             "name": "VALUE",
             "usage": "[VALUE]",
-            "help": "Secret value (reads from stdin if not provided)",
-            "help_first_line": "Secret value (reads from stdin if not provided)",
+            "help": "Secret value to store",
+            "help_long": "Secret value to store.\n\nIf omitted: reads from stdin when piped (`echo \"x\" | fnox set KEY`), or prompts interactively with hidden input.\n\nPassing secrets as arguments exposes them in shell history and `ps` output. For sensitive values, prefer stdin or the interactive prompt.",
+            "help_first_line": "Secret value to store",
             "required": false,
             "double_dash": "Optional",
             "hide": false

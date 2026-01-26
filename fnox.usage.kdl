@@ -161,7 +161,7 @@ cmd set help="Set a secret value" {
         }
     }
     arg <KEY> help="Secret key (environment variable name)"
-    arg "[VALUE]" help="Secret value (reads from stdin if not provided)" required=#false
+    arg "[VALUE]" help="Secret value to store" help_long="Secret value to store.\n\nIf omitted: reads from stdin when piped (`echo \"x\" | fnox set KEY`), or prompts interactively with hidden input.\n\nPassing secrets as arguments exposes them in shell history and `ps` output. For sensitive values, prefer stdin or the interactive prompt." required=#false
 }
 cmd tui help="Interactive TUI dashboard for managing secrets"
 cmd usage hide=#true help="Generate usage specification"
