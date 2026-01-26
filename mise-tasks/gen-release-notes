@@ -47,7 +47,7 @@ After the title line, write the release notes:
 2. Organize into ### sections (Highlights, Bug Fixes, etc.)
 3. Explain WHY changes matter to users
 4. Include PR links and documentation links (https://fnox.jdx.dev/)
-5. Include contributor usernames (@username)
+5. Include contributor usernames (@username). Do not thank @jdx since that is who is writing these notes.
 6. Skip internal changes
 INSTRUCTIONS
 )
