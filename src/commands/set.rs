@@ -10,7 +10,13 @@ pub struct SetCommand {
     /// Secret key (environment variable name)
     pub key: String,
 
-    /// Secret value (reads from stdin if not provided)
+    /// Secret value to store.
+    ///
+    /// If omitted: reads from stdin when piped (`echo "x" | fnox set KEY`),
+    /// or prompts interactively with hidden input.
+    ///
+    /// Passing secrets as arguments exposes them in shell history and `ps` output.
+    /// For sensitive values, prefer stdin or the interactive prompt.
     pub value: Option<String>,
 
     /// Description of the secret
