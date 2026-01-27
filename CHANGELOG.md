@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.10.1](https://github.com/jdx/fnox/compare/v1.10.0..v1.10.1) - 2026-01-27
+
+### 🐛 Bug Fixes
+
+- don't thank @jdx in LLM-generated release notes by [@jdx](https://github.com/jdx) in [#230](https://github.com/jdx/fnox/pull/230)
+
+### 📚 Documentation
+
+- add conventional commit guidance to CRUSH.md by [@jdx](https://github.com/jdx) in [#226](https://github.com/jdx/fnox/pull/226)
+- clarify fix type is for CLI bugs only by [@jdx](https://github.com/jdx) in [#231](https://github.com/jdx/fnox/pull/231)
+
+### 🛡️ Security
+
+- **(set)** add security guidance for secret value argument by [@jdx](https://github.com/jdx) in [#229](https://github.com/jdx/fnox/pull/229)
+
+### 🔍 Other Changes
+
+- add creative titles to GitHub releases by [@jdx](https://github.com/jdx) in [#224](https://github.com/jdx/fnox/pull/224)
+
 ## [1.10.0](https://github.com/jdx/fnox/compare/v1.9.2..v1.10.0) - 2026-01-25
 
 ### 🚀 Features
