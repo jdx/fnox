@@ -1,0 +1,19 @@
+# Proton Pass provider - retrieves secrets from Proton Pass
+display_name = "Proton Pass"
+serde_rename = "proton-pass"
+rust_variant = "ProtonPass"
+category = "PasswordManager"
+description = "Requires Proton Pass CLI and authenticated session"
+default_name = "protonpass"
+auth_command = "pass-cli login --interactive"
+setup_instructions = """
+Requires: Proton Pass CLI (pass-cli) and authenticated session.
+Login: pass-cli login --interactive (username/password login)
+Or: pass-cli login (opens browser for authentication)
+Set: export PROTON_PASS_PASSWORD=<password> for non-interactive login"""
+
+[fields.vault]
+type = "optional"
+placeholder = ""
+label = "Default vault name (optional):"
+wizard = true

@@ -20,6 +20,7 @@ pub mod onepassword;
 pub mod password_store;
 pub mod passwordstate;
 pub mod plain;
+pub mod proton_pass;
 pub mod resolved;
 pub mod resolver;
 pub mod secret_ref;
@@ -134,7 +135,7 @@ mod generated {
         use super::super::{
             age, aws_kms, aws_ps, aws_sm, azure_kms, azure_sm, bitwarden, bitwarden_sm, gcp_kms,
             gcp_sm, infisical, keepass, keychain, onepassword, password_store, passwordstate,
-            plain, vault,
+            plain, proton_pass, vault,
         };
         include!(concat!(
             env!("OUT_DIR"),
