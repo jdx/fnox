@@ -9,13 +9,13 @@ All commit messages and PR titles MUST follow conventional commit format:
 **Types:**
 
 - `feat:` - New features
-- `fix:` - Bug fixes
+- `fix:` - Bug fixes that affect the CLI behavior (not CI, docs, or infrastructure)
 - `refactor:` - Code refactoring
 - `docs:` - Documentation changes
 - `style:` - Code style/formatting (no logic changes)
 - `perf:` - Performance improvements
 - `test:` - Testing changes
-- `chore:` - Maintenance tasks, releases, dependency updates
+- `chore:` - Maintenance tasks, releases, dependency updates, CI/infrastructure changes
 - `security:` - Security-related changes
 
 **Scopes:**
