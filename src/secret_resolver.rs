@@ -8,7 +8,7 @@ use crate::source_registry;
 use crate::suggest::{find_similar, format_suggestions};
 use indexmap::IndexMap;
 use miette::SourceSpan;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Creates a ProviderNotConfigured error, using source spans when available for better error display.
 fn create_provider_not_configured_error(
@@ -293,8 +293,6 @@ pub async fn resolve_secrets_batch(
     profile: &str,
     secrets: &IndexMap<String, SecretConfig>,
 ) -> Result<IndexMap<String, Option<String>>> {
-    use std::collections::HashSet;
-
     // Classify each secret: provider-backed vs no-provider
     let mut secret_provider: HashMap<String, (String, String)> = HashMap::new(); // key -> (provider_name, provider_value)
     let mut no_provider = Vec::new();
@@ -318,67 +316,34 @@ pub async fn resolve_secrets_batch(
         }
     }
 
-    // Build dependency graph using Kahn's algorithm.
-    // A secret S depends on secret D if S's provider declares an env var dependency
-    // that matches D's key name (case-sensitive).
-    let secret_keys: HashSet<&str> = secrets.keys().map(|k| k.as_str()).collect();
-    let mut in_degree: HashMap<String, usize> = HashMap::new();
-    let mut dependents: HashMap<String, Vec<String>> = HashMap::new(); // dep -> secrets that depend on it
+    // Build dependency graph and compute resolution levels using Kahn's algorithm.
+    let env_deps_for_secret: HashMap<String, &[&str]> = secret_provider
+        .iter()
+        .map(|(key, (provider_name, _))| {
+            let deps = providers
+                .get(provider_name)
+                .map(|pc| pc.env_dependencies())
+                .unwrap_or(&[]);
+            (key.clone(), deps)
+        })
+        .collect();
 
-    for (key, (provider_name, _)) in &secret_provider {
-        let env_deps = if let Some(pc) = providers.get(provider_name) {
-            pc.env_dependencies()
-        } else {
-            &[]
-        };
+    let all_keys: Vec<String> = secrets.keys().cloned().collect();
+    let no_provider_set: HashSet<&str> = no_provider.iter().map(|s| s.as_str()).collect();
+    let (levels, cycle) =
+        compute_resolution_levels(&all_keys, &env_deps_for_secret, &no_provider_set);
 
-        let mut degree = 0usize;
-        for dep_env in env_deps {
-            if secret_keys.contains(dep_env) && *dep_env != key.as_str() {
-                degree += 1;
-                dependents
-                    .entry(dep_env.to_string())
-                    .or_default()
-                    .push(key.clone());
-            }
-        }
-        in_degree.insert(key.clone(), degree);
-    }
-
-    // Also include no_provider secrets with in_degree 0 (they have no deps)
-    for key in &no_provider {
-        in_degree.insert(key.clone(), 0);
-    }
-
-    // Kahn's algorithm: resolve in levels
+    // Resolve each level in order
     let mut temp_results: HashMap<String, Option<String>> = HashMap::new();
-    let mut remaining: HashSet<String> = in_degree.keys().cloned().collect();
 
-    loop {
-        // Collect all secrets with in_degree 0
-        let ready: Vec<String> = remaining
-            .iter()
-            .filter(|k| in_degree.get(*k).copied().unwrap_or(0) == 0)
-            .cloned()
-            .collect();
-
-        if ready.is_empty() {
-            break;
-        }
-
-        // Remove ready secrets from remaining
-        for k in &ready {
-            remaining.remove(k);
-        }
-
-        // Resolve this level
+    for ready in &levels {
         let level_results = resolve_level(
             config,
             profile,
             secrets,
             &secret_provider,
             &no_provider,
-            &ready,
+            ready,
         )
         .await?;
 
@@ -389,26 +354,14 @@ pub async fn resolve_secrets_batch(
             }
         }
 
-        // Decrement in-degrees for dependents
-        for key in &ready {
-            if let Some(deps) = dependents.get(key) {
-                for dep in deps {
-                    if let Some(d) = in_degree.get_mut(dep) {
-                        *d = d.saturating_sub(1);
-                    }
-                }
-            }
-        }
-
         temp_results.extend(level_results);
     }
 
     // Handle any remaining secrets (cycles) - resolve best-effort
-    if !remaining.is_empty() {
-        let cycle_keys: Vec<String> = remaining.into_iter().collect();
+    if !cycle.is_empty() {
         tracing::warn!(
             "Detected dependency cycle among secrets: {}. Resolving best-effort.",
-            cycle_keys.join(", ")
+            cycle.join(", ")
         );
         let level_results = resolve_level(
             config,
@@ -416,7 +369,7 @@ pub async fn resolve_secrets_batch(
             secrets,
             &secret_provider,
             &no_provider,
-            &cycle_keys,
+            &cycle,
         )
         .await?;
         temp_results.extend(level_results);
@@ -431,6 +384,80 @@ pub async fn resolve_secrets_batch(
     }
 
     Ok(results)
+}
+
+/// Build a dependency graph and compute resolution levels using Kahn's algorithm.
+///
+/// Returns `(levels, cycle)` where `levels` is a vec of vecs (each inner vec is a set of
+/// secrets that can be resolved in parallel), and `cycle` contains any secrets involved
+/// in dependency cycles that couldn't be ordered.
+///
+/// A secret S depends on secret D if S's provider declares an env var dependency
+/// (via `env_dependencies()`) that matches D's key name.
+fn compute_resolution_levels(
+    all_keys: &[String],
+    env_deps_for_secret: &HashMap<String, &[&str]>,
+    no_provider: &HashSet<&str>,
+) -> (Vec<Vec<String>>, Vec<String>) {
+    let secret_keys: HashSet<&str> = all_keys.iter().map(|k| k.as_str()).collect();
+    let mut in_degree: HashMap<String, usize> = HashMap::new();
+    let mut dependents: HashMap<String, Vec<String>> = HashMap::new();
+
+    for (key, deps) in env_deps_for_secret {
+        let mut degree = 0usize;
+        for dep_env in *deps {
+            if secret_keys.contains(dep_env) && *dep_env != key.as_str() {
+                degree += 1;
+                dependents
+                    .entry(dep_env.to_string())
+                    .or_default()
+                    .push(key.clone());
+            }
+        }
+        in_degree.insert(key.clone(), degree);
+    }
+
+    // No-provider secrets always have in_degree 0
+    for key in all_keys {
+        if no_provider.contains(key.as_str()) {
+            in_degree.insert(key.clone(), 0);
+        }
+    }
+
+    let mut remaining: std::collections::HashSet<String> = in_degree.keys().cloned().collect();
+    let mut levels = Vec::new();
+
+    loop {
+        let ready: Vec<String> = remaining
+            .iter()
+            .filter(|k| in_degree.get(*k).copied().unwrap_or(0) == 0)
+            .cloned()
+            .collect();
+
+        if ready.is_empty() {
+            break;
+        }
+
+        for k in &ready {
+            remaining.remove(k);
+        }
+
+        // Decrement in-degrees for dependents of this level
+        for key in &ready {
+            if let Some(deps) = dependents.get(key) {
+                for dep in deps {
+                    if let Some(d) = in_degree.get_mut(dep) {
+                        *d = d.saturating_sub(1);
+                    }
+                }
+            }
+        }
+
+        levels.push(ready);
+    }
+
+    let cycle: Vec<String> = remaining.into_iter().collect();
+    (levels, cycle)
 }
 
 /// Resolve a single level of secrets (all can be resolved in parallel).
@@ -672,4 +699,154 @@ fn process_batch_results(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper to call compute_resolution_levels and sort each level for deterministic assertions.
+    fn compute_sorted(
+        all_keys: &[&str],
+        env_deps: &[(&str, &[&str])],
+        no_provider: &[&str],
+    ) -> (Vec<Vec<String>>, Vec<String>) {
+        let all: Vec<String> = all_keys.iter().map(|s| s.to_string()).collect();
+        let deps: HashMap<String, &[&str]> =
+            env_deps.iter().map(|(k, v)| (k.to_string(), *v)).collect();
+        let np: HashSet<&str> = no_provider.iter().copied().collect();
+        let (mut levels, mut cycle) = compute_resolution_levels(&all, &deps, &np);
+        for level in &mut levels {
+            level.sort();
+        }
+        cycle.sort();
+        (levels, cycle)
+    }
+
+    #[test]
+    fn test_no_dependencies() {
+        // All secrets independent — resolved in a single level.
+        let (levels, cycle) =
+            compute_sorted(&["A", "B", "C"], &[("A", &[]), ("B", &[]), ("C", &[])], &[]);
+        assert!(cycle.is_empty());
+        assert_eq!(levels.len(), 1);
+        assert_eq!(levels[0], vec!["A", "B", "C"]);
+    }
+
+    #[test]
+    fn test_linear_dependency_chain() {
+        // A has no deps, B depends on A, C depends on B.
+        let (levels, cycle) = compute_sorted(
+            &["A", "B", "C"],
+            &[("A", &[]), ("B", &["A"]), ("C", &["B"])],
+            &[],
+        );
+        assert!(cycle.is_empty());
+        assert_eq!(levels.len(), 3);
+        assert_eq!(levels[0], vec!["A"]);
+        assert_eq!(levels[1], vec!["B"]);
+        assert_eq!(levels[2], vec!["C"]);
+    }
+
+    #[test]
+    fn test_diamond_dependency() {
+        // A has no deps, B and C both depend on A, D depends on B and C.
+        let (levels, cycle) = compute_sorted(
+            &["A", "B", "C", "D"],
+            &[("A", &[]), ("B", &["A"]), ("C", &["A"]), ("D", &["B", "C"])],
+            &[],
+        );
+        assert!(cycle.is_empty());
+        assert_eq!(levels.len(), 3);
+        assert_eq!(levels[0], vec!["A"]);
+        assert_eq!(levels[1], vec!["B", "C"]);
+        assert_eq!(levels[2], vec!["D"]);
+    }
+
+    #[test]
+    fn test_cycle_detection() {
+        // A depends on B, B depends on A — cycle.
+        let (levels, cycle) = compute_sorted(&["A", "B"], &[("A", &["B"]), ("B", &["A"])], &[]);
+        assert!(levels.is_empty());
+        assert_eq!(cycle, vec!["A", "B"]);
+    }
+
+    #[test]
+    fn test_partial_cycle() {
+        // A has no deps, B depends on C, C depends on B — B/C cycle, A resolves fine.
+        let (levels, cycle) = compute_sorted(
+            &["A", "B", "C"],
+            &[("A", &[]), ("B", &["C"]), ("C", &["B"])],
+            &[],
+        );
+        assert_eq!(levels.len(), 1);
+        assert_eq!(levels[0], vec!["A"]);
+        assert_eq!(cycle, vec!["B", "C"]);
+    }
+
+    #[test]
+    fn test_no_provider_secrets_at_level_zero() {
+        // NO_PROV has no provider (env-only), OP_SECRET depends on it via env.
+        let (levels, cycle) = compute_sorted(
+            &["NO_PROV", "OP_SECRET"],
+            &[("OP_SECRET", &["NO_PROV"])],
+            &["NO_PROV"],
+        );
+        assert!(cycle.is_empty());
+        assert_eq!(levels.len(), 2);
+        assert_eq!(levels[0], vec!["NO_PROV"]);
+        assert_eq!(levels[1], vec!["OP_SECRET"]);
+    }
+
+    #[test]
+    fn test_dep_on_nonexistent_key_ignored() {
+        // B declares a dependency on "MISSING" which isn't a secret key — ignored.
+        let (levels, cycle) = compute_sorted(&["A", "B"], &[("A", &[]), ("B", &["MISSING"])], &[]);
+        assert!(cycle.is_empty());
+        assert_eq!(levels.len(), 1);
+        assert_eq!(levels[0], vec!["A", "B"]);
+    }
+
+    #[test]
+    fn test_self_dependency_ignored() {
+        // A declares itself as a dependency — should be ignored (not a cycle).
+        let (levels, cycle) = compute_sorted(&["A"], &[("A", &["A"])], &[]);
+        assert!(cycle.is_empty());
+        assert_eq!(levels.len(), 1);
+        assert_eq!(levels[0], vec!["A"]);
+    }
+
+    #[test]
+    fn test_real_world_scenario() {
+        // OP_SERVICE_ACCOUNT_TOKEN is age-encrypted (no env deps).
+        // TUNNEL_TOKEN uses 1Password provider which depends on OP_SERVICE_ACCOUNT_TOKEN.
+        // DB_PASSWORD also uses 1Password.
+        // PLAIN_VAR has no provider.
+        let (levels, cycle) = compute_sorted(
+            &[
+                "OP_SERVICE_ACCOUNT_TOKEN",
+                "TUNNEL_TOKEN",
+                "DB_PASSWORD",
+                "PLAIN_VAR",
+            ],
+            &[
+                ("OP_SERVICE_ACCOUNT_TOKEN", &[]), // age provider
+                (
+                    "TUNNEL_TOKEN",
+                    &["OP_SERVICE_ACCOUNT_TOKEN", "FNOX_OP_SERVICE_ACCOUNT_TOKEN"],
+                ), // 1password
+                (
+                    "DB_PASSWORD",
+                    &["OP_SERVICE_ACCOUNT_TOKEN", "FNOX_OP_SERVICE_ACCOUNT_TOKEN"],
+                ), // 1password
+            ],
+            &["PLAIN_VAR"],
+        );
+        assert!(cycle.is_empty());
+        assert_eq!(levels.len(), 2);
+        // Level 0: age secret + no-provider secret
+        assert_eq!(levels[0], vec!["OP_SERVICE_ACCOUNT_TOKEN", "PLAIN_VAR"]);
+        // Level 1: 1Password secrets that depend on the token
+        assert_eq!(levels[1], vec!["DB_PASSWORD", "TUNNEL_TOKEN"]);
+    }
 }
