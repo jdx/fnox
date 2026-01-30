@@ -392,7 +392,8 @@ pub async fn resolve_secrets_batch(
             for (key, value) in &level_results {
                 if let Some(val) = value {
                     // SAFETY: set_var is unsafe in Rust 2024 edition. Access is
-                    // serialized via ENV_MUTEX.
+                    // serialized via ENV_MUTEX. Note: these values become visible
+                    // to child processes spawned after this point.
                     unsafe {
                         std::env::set_var(key, val);
                     }
@@ -416,11 +417,11 @@ pub async fn resolve_secrets_batch(
 
     // Handle any remaining secrets (cycles) - resolve best-effort
     if !remaining.is_empty() {
-        tracing::warn!(
-            "Detected dependency cycle among secrets: {:?}. Resolving best-effort.",
-            remaining
-        );
         let cycle_keys: Vec<String> = remaining.into_iter().collect();
+        tracing::warn!(
+            "Detected dependency cycle among secrets: {}. Resolving best-effort.",
+            cycle_keys.join(", ")
+        );
         let level_results = resolve_level(
             config,
             profile,
