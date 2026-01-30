@@ -9,10 +9,6 @@ use crate::suggest::{find_similar, format_suggestions};
 use indexmap::IndexMap;
 use miette::SourceSpan;
 use std::collections::HashMap;
-use std::sync::Mutex;
-
-/// Mutex to serialize access to std::env::set_var, which is unsafe in Rust 2024 edition.
-static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
 /// Creates a ProviderNotConfigured error, using source spans when available for better error display.
 fn create_provider_not_configured_error(
@@ -387,17 +383,9 @@ pub async fn resolve_secrets_batch(
         .await?;
 
         // Set resolved env vars so next level's providers can see them
-        {
-            let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-            for (key, value) in &level_results {
-                if let Some(val) = value {
-                    // SAFETY: set_var is unsafe in Rust 2024 edition. Access is
-                    // serialized via ENV_MUTEX. Note: these values become visible
-                    // to child processes spawned after this point.
-                    unsafe {
-                        std::env::set_var(key, val);
-                    }
-                }
+        for (key, value) in &level_results {
+            if let Some(val) = value {
+                env::set_var(key, val);
             }
         }
 
