@@ -2,6 +2,10 @@ use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
 use keyring::Entry;
 
+pub fn env_dependencies() -> &'static [&'static str] {
+    &[]
+}
+
 pub struct KeychainProvider {
     service: String,
     prefix: Option<String>,

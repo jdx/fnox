@@ -3,6 +3,10 @@ use async_trait::async_trait;
 use google_cloud_kms::client::{Client, ClientConfig};
 use google_cloud_kms::grpc::kms::v1::{DecryptRequest, EncryptRequest, GetCryptoKeyRequest};
 
+pub fn env_dependencies() -> &'static [&'static str] {
+    &[]
+}
+
 const URL: &str = "https://fnox.jdx.dev/providers/gcp-kms";
 
 pub struct GcpKmsProvider {

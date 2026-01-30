@@ -6,6 +6,10 @@ use azure_security_keyvault_keys::{
     models::{EncryptionAlgorithm, KeyOperationParameters},
 };
 
+pub fn env_dependencies() -> &'static [&'static str] {
+    &[]
+}
+
 const URL: &str = "https://fnox.jdx.dev/providers/azure-kms";
 
 pub struct AzureKeyVaultProvider {

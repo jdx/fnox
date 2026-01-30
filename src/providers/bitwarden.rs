@@ -5,7 +5,6 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::process::Command;
-use std::sync::LazyLock;
 
 pub struct BitwardenProvider {
     collection: Option<String>,
@@ -90,7 +89,8 @@ impl BitwardenProvider {
         }
 
         // Check if session token is available
-        let token = if let Some(token) = &*BW_SESSION_TOKEN {
+        let session_token = bw_session_token();
+        let token = if let Some(token) = &session_token {
             tracing::debug!(
                 "Found BW_SESSION token in environment (length: {})",
                 token.len()
@@ -280,8 +280,12 @@ impl crate::providers::Provider for BitwardenProvider {
     }
 }
 
-static BW_SESSION_TOKEN: LazyLock<Option<String>> = LazyLock::new(|| {
+pub fn env_dependencies() -> &'static [&'static str] {
+    &["BW_SESSION", "FNOX_BW_SESSION"]
+}
+
+fn bw_session_token() -> Option<String> {
     env::var("FNOX_BW_SESSION")
         .or_else(|_| env::var("BW_SESSION"))
         .ok()
-});
+}

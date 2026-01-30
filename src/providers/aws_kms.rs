@@ -4,6 +4,10 @@ use aws_config::BehaviorVersion;
 use aws_sdk_kms::Client;
 use aws_sdk_kms::primitives::Blob;
 
+pub fn env_dependencies() -> &'static [&'static str] {
+    &[]
+}
+
 const URL: &str = "https://fnox.jdx.dev/providers/aws-kms";
 
 /// Convert AWS SDK errors to structured FnoxError with appropriate hints

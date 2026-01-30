@@ -8,7 +8,7 @@ use crate::source_registry;
 use crate::suggest::{find_similar, format_suggestions};
 use indexmap::IndexMap;
 use miette::SourceSpan;
-use std::collections::HashMap; // Used only for internal grouping by provider
+use std::collections::HashMap;
 
 /// Creates a ProviderNotConfigured error, using source spans when available for better error display.
 fn create_provider_not_configured_error(
@@ -280,8 +280,12 @@ fn handle_missing_secret(
 
 /// Resolves multiple secrets efficiently using batch operations when possible.
 ///
-/// This groups secrets by provider and uses `get_secrets_batch` to minimize
-/// external API calls. Providers are processed in parallel for maximum efficiency.
+/// Secrets are resolved in dependency order using Kahn's algorithm. If a provider
+/// declares env var dependencies (e.g., 1Password needs `OP_SERVICE_ACCOUNT_TOKEN`),
+/// and another secret provides that env var (e.g., an age-encrypted secret named
+/// `OP_SERVICE_ACCOUNT_TOKEN`), the dependency is resolved first. Between resolution
+/// levels, resolved values are set as environment variables so subsequent providers
+/// can read them.
 ///
 /// Returns an error immediately if any secret with `if_missing = "error"` fails to resolve.
 pub async fn resolve_secrets_batch(
@@ -289,77 +293,137 @@ pub async fn resolve_secrets_batch(
     profile: &str,
     secrets: &IndexMap<String, SecretConfig>,
 ) -> Result<IndexMap<String, Option<String>>> {
-    use futures::stream::{self, StreamExt};
+    use std::collections::HashSet;
 
-    // Group secrets by provider
-    let mut by_provider: HashMap<String, Vec<(String, String)>> = HashMap::new();
+    // Classify each secret: provider-backed vs no-provider
+    let mut secret_provider: HashMap<String, (String, String)> = HashMap::new(); // key -> (provider_name, provider_value)
     let mut no_provider = Vec::new();
 
+    let providers = config.get_providers(profile);
+
     for (key, secret_config) in secrets {
-        // Check if we can resolve from provider
         if let Some(provider_value) = secret_config.value() {
-            // Determine which provider to use
             let provider_name = if let Some(provider_name) = secret_config.provider() {
                 provider_name.to_string()
             } else if let Ok(Some(default_provider)) = config.get_default_provider(profile) {
                 default_provider
             } else {
-                // No provider, fall back to individual resolution
                 no_provider.push(key.clone());
                 continue;
             };
 
-            by_provider
-                .entry(provider_name)
-                .or_default()
-                .push((key.clone(), provider_value.to_string()));
+            secret_provider.insert(key.clone(), (provider_name, provider_value.to_string()));
         } else {
-            // No value for provider, use individual resolution
             no_provider.push(key.clone());
         }
     }
 
-    // Resolve secrets grouped by provider in parallel
-    let provider_results: Vec<_> = stream::iter(by_provider)
-        .map(|(provider_name, provider_secrets)| async move {
-            resolve_provider_batch(config, profile, secrets, &provider_name, provider_secrets).await
-        })
-        .buffer_unordered(10)
-        .collect()
-        .await;
+    // Build dependency graph using Kahn's algorithm.
+    // A secret S depends on secret D if S's provider declares an env var dependency
+    // that matches D's key name (case-sensitive).
+    let secret_keys: HashSet<&str> = secrets.keys().map(|k| k.as_str()).collect();
+    let mut in_degree: HashMap<String, usize> = HashMap::new();
+    let mut dependents: HashMap<String, Vec<String>> = HashMap::new(); // dep -> secrets that depend on it
 
-    // Combine results from all providers into a temporary HashMap, failing fast on errors
-    let mut temp_results = HashMap::new();
-    for provider_result in provider_results {
-        temp_results.extend(provider_result?);
+    for (key, (provider_name, _)) in &secret_provider {
+        let env_deps = if let Some(pc) = providers.get(provider_name) {
+            pc.env_dependencies()
+        } else {
+            &[]
+        };
+
+        let mut degree = 0usize;
+        for dep_env in env_deps {
+            if secret_keys.contains(dep_env) && *dep_env != key.as_str() {
+                degree += 1;
+                dependents
+                    .entry(dep_env.to_string())
+                    .or_default()
+                    .push(key.clone());
+            }
+        }
+        in_degree.insert(key.clone(), degree);
     }
 
-    // Resolve secrets that couldn't be batched using individual resolution in parallel
-    let no_provider_results: Vec<_> = stream::iter(no_provider)
-        .map(|key| async move {
-            let secret_config = &secrets[&key];
-            match resolve_secret(config, profile, &key, secret_config).await {
-                Ok(value) => Ok((key, value)),
-                Err(e) => {
-                    let if_missing = resolve_if_missing_behavior(secret_config, config);
-                    if let Some(error) = handle_provider_error(&key, e, if_missing, true) {
-                        // Error should fail fast - return the error
-                        Err(error)
-                    } else {
-                        // Warn or ignore - continue with None
-                        Ok((key, None))
+    // Also include no_provider secrets with in_degree 0 (they have no deps)
+    for key in &no_provider {
+        in_degree.insert(key.clone(), 0);
+    }
+
+    // Kahn's algorithm: resolve in levels
+    let mut temp_results: HashMap<String, Option<String>> = HashMap::new();
+    let mut remaining: HashSet<String> = in_degree.keys().cloned().collect();
+
+    loop {
+        // Collect all secrets with in_degree 0
+        let ready: Vec<String> = remaining
+            .iter()
+            .filter(|k| in_degree.get(*k).copied().unwrap_or(0) == 0)
+            .cloned()
+            .collect();
+
+        if ready.is_empty() {
+            break;
+        }
+
+        // Remove ready secrets from remaining
+        for k in &ready {
+            remaining.remove(k);
+        }
+
+        // Resolve this level
+        let level_results = resolve_level(
+            config,
+            profile,
+            secrets,
+            &secret_provider,
+            &no_provider,
+            &ready,
+        )
+        .await?;
+
+        // Set resolved env vars so next level's providers can see them
+        for (key, value) in &level_results {
+            if let Some(val) = value {
+                // SAFETY: We're single-threaded here (between await points) and no other
+                // thread is reading these env vars concurrently at this point.
+                unsafe {
+                    std::env::set_var(key, val);
+                }
+            }
+        }
+
+        // Decrement in-degrees for dependents
+        for key in &ready {
+            if let Some(deps) = dependents.get(key) {
+                for dep in deps {
+                    if let Some(d) = in_degree.get_mut(dep) {
+                        *d = d.saturating_sub(1);
                     }
                 }
             }
-        })
-        .buffer_unordered(10)
-        .collect()
-        .await;
+        }
 
-    // Add no-provider results to temporary HashMap, failing fast on errors
-    for result in no_provider_results {
-        let (key, value) = result?;
-        temp_results.insert(key, value);
+        temp_results.extend(level_results);
+    }
+
+    // Handle any remaining secrets (cycles) - resolve best-effort
+    if !remaining.is_empty() {
+        tracing::warn!(
+            "Detected dependency cycle among secrets: {:?}. Resolving best-effort.",
+            remaining
+        );
+        let cycle_keys: Vec<String> = remaining.into_iter().collect();
+        let level_results = resolve_level(
+            config,
+            profile,
+            secrets,
+            &secret_provider,
+            &no_provider,
+            &cycle_keys,
+        )
+        .await?;
+        temp_results.extend(level_results);
     }
 
     // Build final results in the original order from the input secrets IndexMap
@@ -371,6 +435,75 @@ pub async fn resolve_secrets_batch(
     }
 
     Ok(results)
+}
+
+/// Resolve a single level of secrets (all can be resolved in parallel).
+async fn resolve_level(
+    config: &Config,
+    profile: &str,
+    secrets: &IndexMap<String, SecretConfig>,
+    secret_provider: &HashMap<String, (String, String)>,
+    no_provider: &[String],
+    ready: &[String],
+) -> Result<HashMap<String, Option<String>>> {
+    use futures::stream::{self, StreamExt};
+
+    // Split ready keys into provider-backed and no-provider
+    let mut by_provider: HashMap<String, Vec<(String, String)>> = HashMap::new();
+    let mut level_no_provider = Vec::new();
+
+    for key in ready {
+        if let Some((provider_name, provider_value)) = secret_provider.get(key) {
+            by_provider
+                .entry(provider_name.clone())
+                .or_default()
+                .push((key.clone(), provider_value.clone()));
+        } else if no_provider.contains(key) {
+            level_no_provider.push(key.clone());
+        }
+    }
+
+    let mut temp_results = HashMap::new();
+
+    // Resolve provider-backed secrets in parallel by provider
+    let provider_results: Vec<_> = stream::iter(by_provider)
+        .map(|(provider_name, provider_secrets)| async move {
+            resolve_provider_batch(config, profile, secrets, &provider_name, provider_secrets).await
+        })
+        .buffer_unordered(10)
+        .collect()
+        .await;
+
+    for provider_result in provider_results {
+        temp_results.extend(provider_result?);
+    }
+
+    // Resolve no-provider secrets in parallel
+    let no_provider_results: Vec<_> = stream::iter(level_no_provider)
+        .map(|key| async move {
+            let secret_config = &secrets[&key];
+            match resolve_secret(config, profile, &key, secret_config).await {
+                Ok(value) => Ok((key, value)),
+                Err(e) => {
+                    let if_missing = resolve_if_missing_behavior(secret_config, config);
+                    if let Some(error) = handle_provider_error(&key, e, if_missing, true) {
+                        Err(error)
+                    } else {
+                        Ok((key, None))
+                    }
+                }
+            }
+        })
+        .buffer_unordered(10)
+        .collect()
+        .await;
+
+    for result in no_provider_results {
+        let (key, value) = result?;
+        temp_results.insert(key, value);
+    }
+
+    Ok(temp_results)
 }
 
 /// Resolve all secrets for a single provider using batch operations
