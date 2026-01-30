@@ -34,6 +34,7 @@ age.txt
 
 # Local configuration overrides (user-specific, should not be committed)
 fnox.local.toml
+mise.local.toml
 
 # VitePress
 node_modules/
