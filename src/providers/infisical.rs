@@ -432,6 +432,8 @@ pub fn env_dependencies() -> &'static [&'static str] {
         "FNOX_INFISICAL_CLIENT_ID",
         "INFISICAL_CLIENT_SECRET",
         "FNOX_INFISICAL_CLIENT_SECRET",
+        "INFISICAL_API_URL",
+        "FNOX_INFISICAL_API_URL",
     ]
 }
 

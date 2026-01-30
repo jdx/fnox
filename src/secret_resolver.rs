@@ -385,8 +385,9 @@ pub async fn resolve_secrets_batch(
         // Set resolved env vars so next level's providers can see them
         for (key, value) in &level_results {
             if let Some(val) = value {
-                // SAFETY: We're single-threaded here (between await points) and no other
-                // thread is reading these env vars concurrently at this point.
+                // SAFETY: set_var is unsafe in Rust 2024 edition. No other thread
+                // reads these specific env vars concurrently — provider functions
+                // that consume them only run in subsequent levels after this point.
                 unsafe {
                     std::env::set_var(key, val);
                 }

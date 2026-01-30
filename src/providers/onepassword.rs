@@ -29,7 +29,10 @@ impl OnePasswordProvider {
 
     /// Get the service account token, preferring the configured token over environment variable.
     fn get_token(&self) -> Option<String> {
-        self.token.clone().or_else(op_service_account_token)
+        self.token
+            .as_ref()
+            .cloned()
+            .or_else(op_service_account_token)
     }
 
     /// Convert a value to an op:// reference
