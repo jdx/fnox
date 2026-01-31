@@ -103,6 +103,20 @@
         "hidden_aliases": ["complete", "completions"],
         "examples": []
       },
+      "config-files": {
+        "full_cmd": ["config-files"],
+        "usage": "config-files",
+        "subcommands": {},
+        "args": [],
+        "flags": [],
+        "mounts": [],
+        "hide": false,
+        "help": "List all config files that would be loaded",
+        "name": "config-files",
+        "aliases": [],
+        "hidden_aliases": [],
+        "examples": []
+      },
       "deactivate": {
         "full_cmd": ["deactivate"],
         "usage": "deactivate",

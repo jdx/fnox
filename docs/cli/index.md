@@ -37,6 +37,7 @@ Disable colored output
 - [`fnox activate [--no-hook-env] [SHELL]`](/cli/activate.md)
 - [`fnox check [-a --all]`](/cli/check.md)
 - [`fnox completion <SHELL>`](/cli/completion.md)
+- [`fnox config-files`](/cli/config-files.md)
 - [`fnox deactivate`](/cli/deactivate.md)
 - [`fnox doctor`](/cli/doctor.md)
 - [`fnox edit`](/cli/edit.md)

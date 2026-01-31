@@ -31,6 +31,7 @@ cmd completion help="Generate shell completions" {
     alias complete completions hide=#true
     arg <SHELL> help="Shell type to generate completions for"
 }
+cmd config-files help="List all config files that would be loaded"
 cmd deactivate help="Disable fnox shell integration in the current shell session"
 cmd doctor help="Show diagnostic information about the current fnox state" {
     alias dr
