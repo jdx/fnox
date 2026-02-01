@@ -48,7 +48,7 @@ jobs:
         os:
           - macos-latest
           - ubuntu-latest
-        tranche: [0, 1, 2]
+        tranche: [0, 1]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
@@ -147,7 +147,7 @@ jobs:
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3
         env:
           TRANCHE: ${{ matrix.tranche }}
-          TRANCHE_COUNT: 3
+          TRANCHE_COUNT: 2
           KEEPASS_PASSWORD: fnox-test-password
         with:
           timeout_minutes: 10
