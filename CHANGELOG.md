@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.11.0](https://github.com/jdx/fnox/compare/v1.10.1..v1.11.0) - 2026-02-01
+
+### 🚀 Features
+
+- add `config-files` subcommand by [@jdx](https://github.com/jdx) in [#238](https://github.com/jdx/fnox/pull/238)
+
+### 🧪 Testing
+
+- **(bitwarden)** serialize tests to prevent flaky CI failures by [@jdx](https://github.com/jdx) in [#242](https://github.com/jdx/fnox/pull/242)
+- add unit tests for dependency resolution level computation by [@jdx](https://github.com/jdx) in [#239](https://github.com/jdx/fnox/pull/239)
+
 ## [1.10.1](https://github.com/jdx/fnox/compare/v1.10.0..v1.10.1) - 2026-01-30
 
 ### 🐛 Bug Fixes
