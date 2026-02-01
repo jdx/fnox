@@ -15,7 +15,9 @@
 #       These tests create and delete temporary items in your Bitwarden vault.
 #
 
-# bats file_tags=bats:no-parallelize-within-file
+# Serialize tests within this file to prevent concurrent bw CLI state corruption
+# shellcheck disable=SC2034
+export BATS_NO_PARALLELIZE_WITHIN_FILE=true
 
 setup() {
 	load 'test_helper/common_setup'
