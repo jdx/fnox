@@ -27,35 +27,27 @@ impl InfisicalProvider {
     /// Get authentication token - either from environment or by logging in with client credentials
     fn get_auth_token(&self) -> Result<String> {
         // Check if we already have a token
-        if let Some(token) = &*INFISICAL_TOKEN {
+        if let Some(token) = infisical_token() {
             tracing::debug!("Using INFISICAL_TOKEN from environment");
-            return Ok(token.clone());
+            return Ok(token);
         }
 
         // Check if we have client credentials to obtain a token
-        let client_id =
-            INFISICAL_CLIENT_ID
-                .as_ref()
-                .ok_or_else(|| {
-                    FnoxError::ProviderAuthFailed {
-                provider: "Infisical".to_string(),
-                details: "Authentication not found".to_string(),
-                hint:
-                    "Set INFISICAL_TOKEN, or both INFISICAL_CLIENT_ID and INFISICAL_CLIENT_SECRET"
-                        .to_string(),
-                url: "https://fnox.jdx.dev/providers/infisical".to_string(),
-            }
-                })?;
+        let client_id = infisical_client_id().ok_or_else(|| FnoxError::ProviderAuthFailed {
+            provider: "Infisical".to_string(),
+            details: "Authentication not found".to_string(),
+            hint: "Set INFISICAL_TOKEN, or both INFISICAL_CLIENT_ID and INFISICAL_CLIENT_SECRET"
+                .to_string(),
+            url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+        })?;
 
         let client_secret =
-            INFISICAL_CLIENT_SECRET
-                .as_ref()
-                .ok_or_else(|| FnoxError::ProviderAuthFailed {
-                    provider: "Infisical".to_string(),
-                    details: "Client secret not found".to_string(),
-                    hint: "Set INFISICAL_CLIENT_SECRET or FNOX_INFISICAL_CLIENT_SECRET".to_string(),
-                    url: "https://fnox.jdx.dev/providers/infisical".to_string(),
-                })?;
+            infisical_client_secret().ok_or_else(|| FnoxError::ProviderAuthFailed {
+                provider: "Infisical".to_string(),
+                details: "Client secret not found".to_string(),
+                hint: "Set INFISICAL_CLIENT_SECRET or FNOX_INFISICAL_CLIENT_SECRET".to_string(),
+                url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+            })?;
 
         // Acquire lock for the entire check-and-login operation to prevent race condition
         // where multiple threads might all see no cached token and perform expensive login operations
@@ -76,16 +68,16 @@ impl InfisicalProvider {
             "--method",
             "universal-auth",
             "--client-id",
-            client_id,
+            &client_id,
             "--client-secret",
-            client_secret,
+            &client_secret,
             "--plain",
             "--silent",
         ]);
 
         // Add custom domain if specified, stripping /api suffix if present
         // The CLI's --domain flag expects base URL (some commands append /api automatically)
-        if let Some(api_url) = &*INFISICAL_API_URL {
+        if let Some(api_url) = infisical_api_url() {
             let base_url = api_url.trim_end_matches("/api").trim_end_matches('/');
             cmd.arg("--domain");
             cmd.arg(base_url);
@@ -159,7 +151,7 @@ impl InfisicalProvider {
 
         // Add custom domain if specified, stripping /api suffix if present
         // The CLI's --domain flag expects base URL (some commands append /api automatically)
-        if let Some(api_url) = &*INFISICAL_API_URL {
+        if let Some(api_url) = infisical_api_url() {
             let base_url = api_url.trim_end_matches("/api").trim_end_matches('/');
             cmd.arg("--domain");
             cmd.arg(base_url);
@@ -432,29 +424,42 @@ impl crate::providers::Provider for InfisicalProvider {
     }
 }
 
-static INFISICAL_TOKEN: LazyLock<Option<String>> = LazyLock::new(|| {
+pub fn env_dependencies() -> &'static [&'static str] {
+    &[
+        "INFISICAL_TOKEN",
+        "FNOX_INFISICAL_TOKEN",
+        "INFISICAL_CLIENT_ID",
+        "FNOX_INFISICAL_CLIENT_ID",
+        "INFISICAL_CLIENT_SECRET",
+        "FNOX_INFISICAL_CLIENT_SECRET",
+        "INFISICAL_API_URL",
+        "FNOX_INFISICAL_API_URL",
+    ]
+}
+
+fn infisical_token() -> Option<String> {
     env::var("FNOX_INFISICAL_TOKEN")
         .or_else(|_| env::var("INFISICAL_TOKEN"))
         .ok()
-});
+}
 
-static INFISICAL_CLIENT_ID: LazyLock<Option<String>> = LazyLock::new(|| {
+fn infisical_client_id() -> Option<String> {
     env::var("FNOX_INFISICAL_CLIENT_ID")
         .or_else(|_| env::var("INFISICAL_CLIENT_ID"))
         .ok()
-});
+}
 
-static INFISICAL_CLIENT_SECRET: LazyLock<Option<String>> = LazyLock::new(|| {
+fn infisical_client_secret() -> Option<String> {
     env::var("FNOX_INFISICAL_CLIENT_SECRET")
         .or_else(|_| env::var("INFISICAL_CLIENT_SECRET"))
         .ok()
-});
+}
 
-static INFISICAL_API_URL: LazyLock<Option<String>> = LazyLock::new(|| {
+fn infisical_api_url() -> Option<String> {
     env::var("FNOX_INFISICAL_API_URL")
         .or_else(|_| env::var("INFISICAL_API_URL"))
         .ok()
-});
+}
 
 // Cache login token to avoid repeated login calls
 static CACHED_LOGIN_TOKEN: LazyLock<Mutex<Option<String>>> = LazyLock::new(|| Mutex::new(None));

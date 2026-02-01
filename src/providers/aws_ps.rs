@@ -4,6 +4,10 @@ use aws_config::BehaviorVersion;
 use aws_sdk_ssm::Client;
 use std::collections::HashMap;
 
+pub fn env_dependencies() -> &'static [&'static str] {
+    &[]
+}
+
 const URL: &str = "https://fnox.jdx.dev/providers/aws-ps";
 
 /// Convert AWS SDK errors to structured FnoxError with appropriate hints

@@ -4,6 +4,10 @@ use async_trait::async_trait;
 use std::io::Read;
 use std::path::PathBuf;
 
+pub fn env_dependencies() -> &'static [&'static str] {
+    &[]
+}
+
 pub struct AgeEncryptionProvider {
     recipients: Vec<String>,
     key_file: Option<PathBuf>,

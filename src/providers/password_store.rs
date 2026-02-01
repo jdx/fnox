@@ -2,7 +2,6 @@ use crate::error::{FnoxError, Result};
 use crate::providers::ProviderCapability;
 use async_trait::async_trait;
 use std::process::Command;
-use std::sync::LazyLock;
 
 /// Provider that integrates with password-store (pass) CLI tool
 pub struct PasswordStoreProvider {
@@ -35,16 +34,15 @@ impl PasswordStoreProvider {
     /// Configure environment variables for pass command
     fn configure_command_env(&self, cmd: &mut Command) {
         // Set custom PASSWORD_STORE_DIR if configured
-        let store_dir = self.store_dir.as_deref().or(PASSWORD_STORE_DIR.as_deref());
+        let env_store_dir = password_store_dir();
+        let store_dir = self.store_dir.as_deref().or(env_store_dir.as_deref());
         if let Some(store_dir) = store_dir {
             cmd.env("PASSWORD_STORE_DIR", store_dir);
         }
 
         // Set custom GPG options if configured
-        let gpg_opts = self
-            .gpg_opts
-            .as_deref()
-            .or(PASSWORD_STORE_GPG_OPTS.as_deref());
+        let env_gpg_opts = password_store_gpg_opts();
+        let gpg_opts = self.gpg_opts.as_deref().or(env_gpg_opts.as_deref());
         if let Some(gpg_opts) = gpg_opts {
             cmd.env("PASSWORD_STORE_GPG_OPTS", gpg_opts);
         }
@@ -228,14 +226,23 @@ impl crate::providers::Provider for PasswordStoreProvider {
     }
 }
 
-static PASSWORD_STORE_DIR: LazyLock<Option<String>> = LazyLock::new(|| {
+pub fn env_dependencies() -> &'static [&'static str] {
+    &[
+        "PASSWORD_STORE_DIR",
+        "FNOX_PASSWORD_STORE_DIR",
+        "PASSWORD_STORE_GPG_OPTS",
+        "FNOX_PASSWORD_STORE_GPG_OPTS",
+    ]
+}
+
+fn password_store_dir() -> Option<String> {
     std::env::var("FNOX_PASSWORD_STORE_DIR")
         .or_else(|_| std::env::var("PASSWORD_STORE_DIR"))
         .ok()
-});
+}
 
-static PASSWORD_STORE_GPG_OPTS: LazyLock<Option<String>> = LazyLock::new(|| {
+fn password_store_gpg_opts() -> Option<String> {
     std::env::var("FNOX_PASSWORD_STORE_GPG_OPTS")
         .or_else(|_| std::env::var("PASSWORD_STORE_GPG_OPTS"))
         .ok()
-});
+}

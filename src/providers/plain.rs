@@ -1,6 +1,10 @@
 use crate::error::Result;
 use async_trait::async_trait;
 
+pub fn env_dependencies() -> &'static [&'static str] {
+    &[]
+}
+
 /// Plain provider that stores and returns values as-is without encryption.
 ///
 /// This provider is useful for:

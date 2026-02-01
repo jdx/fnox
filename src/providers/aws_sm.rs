@@ -4,6 +4,10 @@ use aws_config::BehaviorVersion;
 use aws_sdk_secretsmanager::Client;
 use std::collections::HashMap;
 
+pub fn env_dependencies() -> &'static [&'static str] {
+    &[]
+}
+
 /// Convert AWS SDK errors to structured FnoxError with appropriate hints
 fn aws_error_to_fnox<E, R>(
     err: &aws_sdk_secretsmanager::error::SdkError<E, R>,

@@ -9,6 +9,7 @@ pub mod activate;
 pub mod check;
 pub mod ci_redact;
 pub mod completion;
+pub mod config_files;
 pub mod deactivate;
 pub mod doctor;
 pub mod edit;
@@ -78,6 +79,9 @@ pub enum Commands {
     /// Generate shell completions
     Completion(completion::CompletionCommand),
 
+    /// List all config files that would be loaded
+    ConfigFiles(config_files::ConfigFilesCommand),
+
     /// Disable fnox shell integration in the current shell session
     Deactivate(deactivate::DeactivateCommand),
 
@@ -145,6 +149,7 @@ impl Commands {
             Commands::Version(cmd) => cmd.run(cli).await,
             Commands::Init(cmd) => cmd.run(cli).await,
             Commands::Completion(cmd) => cmd.run(cli).await,
+            Commands::ConfigFiles(cmd) => cmd.run(cli).await,
             Commands::Schema(cmd) => cmd.run(cli).await,
             Commands::Usage(cmd) => cmd.run(cli).await,
             Commands::Activate(cmd) => cmd
