@@ -1,5 +1,21 @@
 pub use std::env::*;
+use std::ffi::OsStr;
+use std::sync::Mutex;
 use std::{path::PathBuf, sync::LazyLock};
+
+/// Mutex to serialize access to std::env::set_var, which is unsafe in Rust 2024 edition.
+static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
+/// Set an environment variable, serializing access via ENV_MUTEX.
+///
+/// Values set here become visible to child processes spawned after this point.
+pub fn set_var<K: AsRef<OsStr>, V: AsRef<OsStr>>(key: K, val: V) {
+    let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    // SAFETY: set_var is unsafe in Rust 2024 edition. Access is serialized via ENV_MUTEX.
+    unsafe {
+        std::env::set_var(key, val);
+    }
+}
 
 // Directory configuration
 pub static HOME_DIR: LazyLock<PathBuf> = LazyLock::new(|| dirs::home_dir().unwrap_or_default());

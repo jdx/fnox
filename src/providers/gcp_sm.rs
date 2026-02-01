@@ -2,6 +2,10 @@ use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
 use google_cloud_secretmanager_v1::client::SecretManagerService;
 
+pub fn env_dependencies() -> &'static [&'static str] {
+    &[]
+}
+
 const URL: &str = "https://fnox.jdx.dev/providers/gcp-sm";
 
 pub struct GoogleSecretManagerProvider {

@@ -28,10 +28,11 @@ impl OnePasswordProvider {
     }
 
     /// Get the service account token, preferring the configured token over environment variable.
-    fn get_token(&self) -> Option<&str> {
+    fn get_token(&self) -> Option<String> {
         self.token
-            .as_deref()
-            .or_else(|| OP_SERVICE_ACCOUNT_TOKEN.as_deref())
+            .as_ref()
+            .cloned()
+            .or_else(op_service_account_token)
     }
 
     /// Convert a value to an op:// reference
@@ -399,8 +400,12 @@ impl crate::providers::Provider for OnePasswordProvider {
     }
 }
 
-static OP_SERVICE_ACCOUNT_TOKEN: LazyLock<Option<String>> = LazyLock::new(|| {
+pub fn env_dependencies() -> &'static [&'static str] {
+    &["OP_SERVICE_ACCOUNT_TOKEN", "FNOX_OP_SERVICE_ACCOUNT_TOKEN"]
+}
+
+fn op_service_account_token() -> Option<String> {
     env::var("FNOX_OP_SERVICE_ACCOUNT_TOKEN")
         .or_else(|_| env::var("OP_SERVICE_ACCOUNT_TOKEN"))
         .ok()
-});
+}

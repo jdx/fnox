@@ -6,7 +6,6 @@ use keepass::db::{Database, Entry, Group, Node, Value};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
 use tempfile::NamedTempFile;
 
 /// Provider that reads and writes secrets from KeePass database files (.kdbx)
@@ -28,8 +27,8 @@ impl KeePassProvider {
     /// Get the password from environment variable or config
     fn get_password(&self) -> Result<String> {
         // Priority: env var > config
-        if let Some(password) = KEEPASS_PASSWORD.as_ref() {
-            return Ok(password.clone());
+        if let Some(password) = keepass_password() {
+            return Ok(password);
         }
 
         if let Some(password) = &self.password {
@@ -499,12 +498,16 @@ impl crate::providers::Provider for KeePassProvider {
     }
 }
 
-/// Environment variable for KeePass password
-static KEEPASS_PASSWORD: LazyLock<Option<String>> = LazyLock::new(|| {
+pub fn env_dependencies() -> &'static [&'static str] {
+    &["KEEPASS_PASSWORD", "FNOX_KEEPASS_PASSWORD"]
+}
+
+/// Read KeePass password from environment
+fn keepass_password() -> Option<String> {
     std::env::var("FNOX_KEEPASS_PASSWORD")
         .or_else(|_| std::env::var("KEEPASS_PASSWORD"))
         .ok()
-});
+}
 
 #[cfg(test)]
 mod tests {

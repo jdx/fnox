@@ -3,14 +3,16 @@ use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::sync::LazyLock;
+pub fn env_dependencies() -> &'static [&'static str] {
+    &["PASSWORDSTATE_API_KEY", "FNOX_PASSWORDSTATE_API_KEY"]
+}
 
-/// Environment variable fallback for API key
-static PASSWORDSTATE_API_KEY: LazyLock<Option<String>> = LazyLock::new(|| {
+/// Read API key from environment
+fn passwordstate_api_key() -> Option<String> {
     env::var("FNOX_PASSWORDSTATE_API_KEY")
         .or_else(|_| env::var("PASSWORDSTATE_API_KEY"))
         .ok()
-});
+}
 
 /// Password entry returned from Passwordstate API
 #[derive(Debug, Deserialize)]
@@ -45,9 +47,7 @@ impl PasswordstateProvider {
         password_list_id: String,
         verify_ssl: Option<String>,
     ) -> Self {
-        let api_key = api_key
-            .or_else(|| PASSWORDSTATE_API_KEY.clone())
-            .unwrap_or_default();
+        let api_key = api_key.or_else(passwordstate_api_key).unwrap_or_default();
 
         let verify_ssl = verify_ssl
             .map(|v| v.to_lowercase() != "false")

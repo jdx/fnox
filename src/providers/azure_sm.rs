@@ -3,6 +3,10 @@ use async_trait::async_trait;
 use azure_identity::DeveloperToolsCredential;
 use azure_security_keyvault_secrets::{SecretClient, models::SetSecretParameters};
 
+pub fn env_dependencies() -> &'static [&'static str] {
+    &[]
+}
+
 const URL: &str = "https://fnox.jdx.dev/providers/azure-sm";
 
 pub struct AzureSecretsManagerProvider {

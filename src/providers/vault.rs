@@ -2,7 +2,6 @@ use crate::env;
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
 use std::process::Command;
-use std::sync::LazyLock;
 
 pub struct HashiCorpVaultProvider {
     address: String,
@@ -49,16 +48,15 @@ impl HashiCorpVaultProvider {
         }
 
         // Set VAULT_TOKEN from provider config or environment
-        let token = self
-            .token
-            .as_ref()
-            .or(VAULT_TOKEN.as_ref())
-            .ok_or_else(|| FnoxError::ProviderAuthFailed {
+        let env_token = vault_token();
+        let token = self.token.as_ref().or(env_token.as_ref()).ok_or_else(|| {
+            FnoxError::ProviderAuthFailed {
                 provider: "HashiCorp Vault".to_string(),
                 details: "VAULT_TOKEN not set".to_string(),
                 hint: "Set VAULT_TOKEN in provider config or environment".to_string(),
                 url: "https://fnox.jdx.dev/providers/vault".to_string(),
-            })?;
+            }
+        })?;
 
         tracing::debug!(
             "Setting VAULT_TOKEN environment variable (token length: {})",
@@ -193,8 +191,12 @@ impl crate::providers::Provider for HashiCorpVaultProvider {
     }
 }
 
-static VAULT_TOKEN: LazyLock<Option<String>> = LazyLock::new(|| {
+pub fn env_dependencies() -> &'static [&'static str] {
+    &["VAULT_TOKEN", "FNOX_VAULT_TOKEN"]
+}
+
+fn vault_token() -> Option<String> {
     env::var("FNOX_VAULT_TOKEN")
         .or_else(|_| env::var("VAULT_TOKEN"))
         .ok()
-});
+}

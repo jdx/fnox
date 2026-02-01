@@ -322,10 +322,12 @@ fn generate_provider_methods(
     let mut try_to_resolved_arms = Vec::new();
     let mut from_wizard_fields_arms = Vec::new();
     let mut auth_command_arms = Vec::new();
+    let mut env_deps_arms = Vec::new();
 
     for (_name, provider) in providers {
         let variant = Ident::new(&provider.rust_variant, Span::call_site());
         let serde_rename = &provider.serde_rename;
+        let module = Ident::new(&provider.module, Span::call_site());
 
         // try_to_resolved arm
         let try_resolved_body = generate_try_to_resolved_body(provider);
@@ -358,25 +360,49 @@ fn generate_provider_methods(
             auth_command_arms.push(quote! {
                 Self::#variant => #auth_cmd
             });
+            env_deps_arms.push(quote! {
+                Self::#variant => #module::env_dependencies()
+            });
         } else {
             auth_command_arms.push(quote! {
                 Self::#variant { .. } => #auth_cmd
+            });
+            env_deps_arms.push(quote! {
+                Self::#variant { .. } => #module::env_dependencies()
             });
         }
     }
 
     // Note: Use super::super:: because this is included inside mod generated { mod providers_methods { ... } }
     // Also reference providers_config module for ProviderConfig and ResolvedProviderConfig
+    // Build use statements for provider modules
+    let module_uses: Vec<TokenStream> = providers
+        .iter()
+        .map(|(_name, provider)| {
+            let module = Ident::new(&provider.module, Span::call_site());
+            quote! { use super::super::#module; }
+        })
+        .collect();
+
     let output = quote! {
         use crate::error::{FnoxError, Result};
         use super::providers_config::{ProviderConfig, ResolvedProviderConfig};
         use super::super::secret_ref::{OptionStringOrSecretRef, StringOrSecretRef};
         use std::collections::HashMap;
+        #(#module_uses)*
 
         impl ProviderConfig {
             /// Get the provider type name (e.g., "age", "1password", "plain")
             pub fn provider_type(&self) -> &str {
                 self.as_ref()
+            }
+
+            /// Get the environment variable names this provider depends on.
+            /// Used by the dependency-ordered secret resolver (Kahn's algorithm).
+            pub fn env_dependencies(&self) -> &'static [&'static str] {
+                match self {
+                    #(#env_deps_arms),*
+                }
             }
 
             /// Convert to ResolvedProviderConfig if all values are literals.
