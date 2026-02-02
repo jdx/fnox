@@ -1,5 +1,7 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
+use age::secrecy::SecretString;
+use age_xwing::{HybridIdentity, HybridRecipient};
 use async_trait::async_trait;
 use std::io::Read;
 use std::path::PathBuf;
@@ -39,7 +41,25 @@ impl crate::providers::Provider for AgeEncryptionProvider {
         let mut parsed_recipients: Vec<Box<dyn age::Recipient + Send + Sync>> = Vec::new();
 
         for recipient in &self.recipients {
-            // Try parsing as SSH recipient first
+            // Try parsing as post-quantum recipient first
+            if recipient.starts_with("age1pq") {
+                match HybridRecipient::from_string(recipient) {
+                    Ok(pq_recipient) => {
+                        parsed_recipients.push(Box::new(pq_recipient));
+                        continue;
+                    }
+                    Err(e) => {
+                        return Err(FnoxError::AgeEncryptionFailed {
+                            details: format!(
+                                "Failed to parse post-quantum recipient '{}': {}",
+                                recipient, e
+                            ),
+                        });
+                    }
+                }
+            }
+
+            // Try parsing as SSH recipient
             if let Ok(ssh_recipient) = recipient.parse::<age::ssh::Recipient>() {
                 parsed_recipients.push(Box::new(ssh_recipient));
                 continue;
@@ -57,6 +77,9 @@ impl crate::providers::Provider for AgeEncryptionProvider {
                 }
             }
         }
+
+        // Note: The age library does not support mixing different recipient types (e.g., x25519 and post-quantum)
+        // in the same encryption operation due to incompatible labels. All recipients must be of the same type.
 
         if parsed_recipients.is_empty() {
             return Err(FnoxError::AgeNotConfigured);
@@ -156,30 +179,52 @@ impl crate::providers::Provider for AgeEncryptionProvider {
 
         // Try parsing as SSH identity first, then fall back to age identity file
         let identities = {
-            let mut cursor = std::io::Cursor::new(identity_content.as_bytes());
+            // Check if identity content contains post-quantum key
+            if identity_content
+                .lines()
+                .any(|line| line.starts_with("AGE-SECRET-KEY-PQ-"))
+            {
+                // Parse as HybridIdentity
+                let pq_line = identity_content
+                    .lines()
+                    .find(|line| line.starts_with("AGE-SECRET-KEY-PQ-"))
+                    .ok_or_else(|| FnoxError::AgeIdentityParseFailed {
+                        details: "Post-quantum key prefix found but no key line".to_string(),
+                    })?;
 
-            // First try to parse as SSH identity
-            match age::ssh::Identity::from_buffer(
-                &mut cursor,
-                key_file_path_opt
-                    .as_ref()
-                    .map(|p| p.to_string_lossy().to_string()),
-            ) {
-                Ok(ssh_identity) => {
-                    // SSH identity parsed successfully
-                    vec![Box::new(ssh_identity) as Box<dyn age::Identity>]
-                }
-                Err(_) => {
-                    // Not an SSH identity, try age identity file
-                    cursor.set_position(0);
-                    age::IdentityFile::from_buffer(cursor)
+                let identity =
+                    HybridIdentity::from_string(SecretString::new(pq_line.to_string().into()))
                         .map_err(|e| FnoxError::AgeIdentityParseFailed {
-                            details: e.to_string(),
-                        })?
-                        .into_identities()
-                        .map_err(|e| FnoxError::AgeIdentityParseFailed {
-                            details: e.to_string(),
-                        })?
+                            details: format!("Failed to parse post-quantum identity: {}", e),
+                        })?;
+
+                vec![Box::new(identity) as Box<dyn age::Identity>]
+            } else {
+                let mut cursor = std::io::Cursor::new(identity_content.as_bytes());
+
+                // First try to parse as SSH identity
+                match age::ssh::Identity::from_buffer(
+                    &mut cursor,
+                    key_file_path_opt
+                        .as_ref()
+                        .map(|p| p.to_string_lossy().to_string()),
+                ) {
+                    Ok(ssh_identity) => {
+                        // SSH identity parsed successfully
+                        vec![Box::new(ssh_identity) as Box<dyn age::Identity>]
+                    }
+                    Err(_) => {
+                        // Not an SSH identity, try age identity file
+                        cursor.set_position(0);
+                        age::IdentityFile::from_buffer(cursor)
+                            .map_err(|e| FnoxError::AgeIdentityParseFailed {
+                                details: e.to_string(),
+                            })?
+                            .into_identities()
+                            .map_err(|e| FnoxError::AgeIdentityParseFailed {
+                                details: e.to_string(),
+                            })?
+                    }
                 }
             }
         };

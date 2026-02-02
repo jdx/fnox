@@ -64,6 +64,7 @@ urlencoding = "2.1"
 
 # Provider dependencies
 age = { version = "0.11", features = ["ssh"] }
+age-xwing = { git = "https://github.com/thrzl/age-xwing", tag = "0.1.0" }
 aws-config = { version = "1", features = ["sso", "credentials-process", "credentials-login"] }
 aws-sdk-kms = { version = "1" }
 aws-sdk-secretsmanager = { version = "1" }
