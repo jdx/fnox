@@ -461,7 +461,7 @@ cat fnox.toml | grep recipients
 ### Post-quantum key not working
 
 - Check that the public key starts with `age1pq`
-- Check that the private key starts with `AGE-SECRET-KEY` (works for both traditional and post-quantum)
+- Check that the private key starts with `AGE-SECRET-KEY-PQ-`
 
 ## Next Steps
 
