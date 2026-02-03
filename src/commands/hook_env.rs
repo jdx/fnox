@@ -2,9 +2,11 @@ use crate::config::Config;
 use crate::hook_env::{self, HookEnvSession, PREV_SESSION};
 use crate::settings::Settings;
 use crate::shell;
+use crate::temp_file_secrets::create_persistent_secret_file;
 use anyhow::Result;
 use clap::Parser;
 use std::collections::HashMap;
+use std::fs;
 
 /// Output mode for shell integration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -81,21 +83,30 @@ impl HookEnvCommand {
         let mut output = String::new();
 
         // Load secrets if config exists
-        let loaded_secrets = if config_path.is_some() {
+        let loaded_data = if config_path.is_some() {
             match load_secrets_from_config().await {
-                Ok(secrets) => secrets,
+                Ok(data) => data,
                 Err(e) => {
                     // Log error but don't fail the shell hook
                     tracing::warn!("failed to load secrets: {}", e);
-                    HashMap::new()
+                    LoadedSecrets {
+                        secrets: HashMap::new(),
+                        temp_files: HashMap::new(),
+                    }
                 }
             }
         } else {
-            HashMap::new()
+            LoadedSecrets {
+                secrets: HashMap::new(),
+                temp_files: HashMap::new(),
+            }
         };
 
+        // Clean up old temp files that are no longer needed
+        cleanup_old_temp_files(&PREV_SESSION.temp_files, &loaded_data.temp_files);
+
         // Calculate changes from previous session using hashes
-        let (added, removed) = calculate_changes(&PREV_SESSION.secret_hashes, &loaded_secrets);
+        let (added, removed) = calculate_changes(&PREV_SESSION.secret_hashes, &loaded_data.secrets);
 
         // Display summary of changes if enabled
         if output_mode.should_show_summary() && (!added.is_empty() || !removed.is_empty()) {
@@ -114,7 +125,12 @@ impl HookEnvCommand {
 
         // Create new session
         let current_dir = std::env::current_dir().ok();
-        let session = HookEnvSession::new(current_dir, config_path, loaded_secrets)?;
+        let session = HookEnvSession::new(
+            current_dir,
+            config_path,
+            loaded_data.secrets,
+            loaded_data.temp_files,
+        )?;
 
         // Export session state for next invocation
         let session_encoded = session.encode()?;
@@ -161,8 +177,16 @@ fn calculate_changes(
     (added, removed)
 }
 
+/// Result of loading secrets with file-based information
+struct LoadedSecrets {
+    /// Secret values (or file paths for file-based secrets)
+    secrets: HashMap<String, String>,
+    /// Temp file paths for file-based secrets
+    temp_files: HashMap<String, String>,
+}
+
 /// Load all secrets from a fnox.toml config file
-async fn load_secrets_from_config() -> Result<HashMap<String, String>> {
+async fn load_secrets_from_config() -> Result<LoadedSecrets> {
     use crate::secret_resolver::resolve_secrets_batch;
 
     // Use load_smart to ensure provider inheritance from parent configs
@@ -203,29 +227,79 @@ async fn load_secrets_from_config() -> Result<HashMap<String, String>> {
     let profile_name = &settings.profile;
 
     // Get secrets for the profile using the Config method (inherits top-level secrets)
-    let secrets = config
+    let profile_secrets = config
         .get_secrets(profile_name)
         .map_err(|e| anyhow::anyhow!("Failed to get secrets: {}", e))?;
 
     // Use batch resolution for better performance
-    let resolved = match resolve_secrets_batch(&config, profile_name, &secrets).await {
+    let resolved = match resolve_secrets_batch(&config, profile_name, &profile_secrets).await {
         Ok(r) => r,
         Err(e) => {
             // Log error but don't fail the shell hook
             tracing::warn!("failed to resolve secrets: {}", e);
-            return Ok(HashMap::new());
+            return Ok(LoadedSecrets {
+                secrets: HashMap::new(),
+                temp_files: HashMap::new(),
+            });
         }
     };
 
-    // Convert to HashMap, filtering out None values
+    // Process secrets: create temp files for file-based secrets
     let mut loaded_secrets = HashMap::new();
-    for (key, value) in resolved {
-        if let Some(value) = value {
-            loaded_secrets.insert(key, value);
+    let mut temp_files = HashMap::new();
+
+    for (key, value_opt) in resolved {
+        if let Some(value) = value_opt {
+            // Check if this secret should be file-based
+            if let Some(secret_config) = profile_secrets.get(&key) {
+                if secret_config.as_file {
+                    // Create a persistent temp file for this secret
+                    match create_persistent_secret_file("fnox-hook-", &key, &value) {
+                        Ok(file_path) => {
+                            // Store the file path as the "value" to set in env
+                            loaded_secrets.insert(key.clone(), file_path.clone());
+                            temp_files.insert(key, file_path);
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "failed to create temp file for secret '{}': {}",
+                                key,
+                                e
+                            );
+                        }
+                    }
+                } else {
+                    // Regular secret - store value directly
+                    loaded_secrets.insert(key, value);
+                }
+            } else {
+                loaded_secrets.insert(key, value);
+            }
         }
     }
 
-    Ok(loaded_secrets)
+    Ok(LoadedSecrets {
+        secrets: loaded_secrets,
+        temp_files,
+    })
+}
+
+/// Clean up old temp files that are no longer needed
+fn cleanup_old_temp_files(
+    old_files: &HashMap<String, String>,
+    new_files: &HashMap<String, String>,
+) {
+    for (key, old_path) in old_files {
+        // Only delete if this secret is no longer file-based or has a different path
+        if !new_files.contains_key(key) || new_files.get(key) != Some(old_path) {
+            if let Err(e) = fs::remove_file(old_path) {
+                // Log but don't fail - file might already be deleted
+                tracing::debug!("failed to clean up temp file for '{}': {}", key, e);
+            } else {
+                tracing::debug!("cleaned up temp file for secret '{}'", key);
+            }
+        }
+    }
 }
 
 /// Display a summary of environment changes

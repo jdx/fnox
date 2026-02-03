@@ -1,6 +1,7 @@
 use crate::error::{FnoxError, Result};
 use crate::secret_resolver::resolve_secret;
 use crate::suggest::{find_similar, format_suggestions};
+use crate::temp_file_secrets::create_persistent_secret_file;
 use crate::{commands::Cli, config::Config};
 use clap::Args;
 
@@ -39,7 +40,13 @@ impl GetCommand {
         // Resolve the secret using centralized resolver
         match resolve_secret(&config, &profile, &self.key, secret_config).await {
             Ok(Some(value)) => {
-                println!("{}", value);
+                // Check if this secret should be written to a file
+                if secret_config.as_file {
+                    let file_path = create_persistent_secret_file("fnox-", &self.key, &value)?;
+                    println!("{}", file_path);
+                } else {
+                    println!("{}", value);
+                }
                 Ok(())
             }
             Ok(None) => {

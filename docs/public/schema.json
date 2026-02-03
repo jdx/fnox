@@ -456,6 +456,10 @@
       "description": "Configuration for a single secret",
       "type": "object",
       "properties": {
+        "as_file": {
+          "description": "Write secret to a temporary file and set env var to the file path instead of the secret value",
+          "type": "boolean"
+        },
         "default": {
           "description": "Default value to use if provider fails or secret is not found",
           "type": ["string", "null"]

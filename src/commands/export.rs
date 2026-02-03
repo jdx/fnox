@@ -2,6 +2,7 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
 use crate::secret_resolver::resolve_secrets_batch;
+use crate::temp_file_secrets::create_persistent_secret_file;
 use clap::{Args, ValueEnum};
 use console;
 use indexmap::IndexMap;
@@ -64,10 +65,35 @@ impl ExportCommand {
         let resolved_secrets = resolve_secrets_batch(&config, &profile, &profile_secrets).await?;
 
         // Build secrets map, preserving insertion order
+        // For file-based secrets, create persistent temp files
         let mut secrets = IndexMap::new();
-        for (key, value) in resolved_secrets {
-            if let Some(value) = value {
-                secrets.insert(key, value);
+        for (key, value_opt) in resolved_secrets {
+            if let Some(value) = value_opt {
+                // Check if this secret should be file-based
+                if let Some(secret_config) = profile_secrets.get(&key) {
+                    if secret_config.as_file {
+                        // Create a persistent temp file for this secret
+                        match create_persistent_secret_file("fnox-export-", &key, &value) {
+                            Ok(file_path) => {
+                                secrets.insert(key, file_path);
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Failed to create temp file for secret '{}': {}",
+                                    key,
+                                    e
+                                );
+                                // Fall back to storing the value
+                                secrets.insert(key, value);
+                            }
+                        }
+                    } else {
+                        // Regular secret - store value directly
+                        secrets.insert(key, value);
+                    }
+                } else {
+                    secrets.insert(key, value);
+                }
             }
         }
 

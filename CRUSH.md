@@ -153,25 +153,12 @@ mise run test:bats -- test/bitwarden.bats
 
 ### Running Infisical Tests
 
-The Infisical integration tests require an Infisical account and service token:
+The Infisical tests require an account and service token:
 
 ```bash
-# 1. Install Infisical CLI
 brew install infisical/get-cli/infisical
-
-# 2. Get a service token from Infisical
-#    - Go to your Infisical project settings
-#    - Navigate to "Service Tokens"
-#    - Create a new token with read/write permissions for dev environment
-#    - Copy the token (st.xxx.yyy.zzz format)
-
-# 3. Export the token
+# Get service token from Infisical project settings → Service Tokens
 export INFISICAL_TOKEN="st.xxx.yyy.zzz"
-
-# 4. Optionally store it encrypted for reuse
-fnox set INFISICAL_TOKEN "st.xxx.yyy.zzz" --provider age
-
-# 5. Run the Infisical tests
 mise run test:bats -- test/infisical.bats
 ```
 
@@ -179,24 +166,10 @@ mise run test:bats -- test/infisical.bats
 
 - Tests will automatically skip if `INFISICAL_TOKEN` is not available
 - The `list` test runs without authentication
-- Tests create and delete temporary secrets in your Infisical project
-- Secret names are prefixed with `FNOX_TEST_` and include timestamps for uniqueness
+- Tests create/delete temporary secrets in your Infisical project
+- Secret names are prefixed with `FNOX_TEST_` with timestamps
 
-**CI Behavior**:
-
-- GitHub Actions uses self-hosted Infisical (similar to Vaultwarden for Bitwarden):
-  - On Ubuntu runners:
-    1. Docker Compose starts Infisical with PostgreSQL and Redis
-    2. Setup script (`test/setup-infisical-ci.sh`) creates test account and project
-    3. Service token is automatically generated and exported
-    4. Tests run against local Infisical instance (no external dependencies)
-  - On macOS runners: Tests skip (Docker Compose services not available)
-- Self-hosted setup ensures:
-  - No external Infisical account needed for CI
-  - Tests are isolated and reproducible
-  - Faster test execution (local instance)
-  - No risk of API rate limits or token exposure
-- Tests clean up created secrets, but orphaned secrets may remain if tests fail
+**CI Behavior**: Ubuntu runners use self-hosted Infisical via Docker Compose (`test/setup-infisical-ci.sh`). macOS runners skip (no Docker). Tests clean up secrets but orphans may remain on failure.
 
 ## Code Style Guidelines
 
@@ -292,6 +265,34 @@ MY_SECRET = { provider = "age", value = "...", if_missing = "warn" }  # Options:
 - `"ignore"` - Silently skip the secret if it cannot be resolved
 
 **Example use case**: In forked PRs, CI environments don't have access to secrets. Using `if_missing = "warn"` (or omitting it for the default) allows tests to run without failing on missing secrets.
+
+### File-Based Secrets
+
+Secrets can be written to temporary files instead of environment variables using `as_file = true`. Useful for apps that read secrets from files, large secrets, or avoiding secrets in process listings.
+
+**Configuration:**
+
+```toml
+[secrets]
+MY_FILE_SECRET = { provider = "age", value = "...", as_file = true }
+```
+
+**Behavior by command:**
+
+- **`fnox exec`**: Creates temp files (0600 permissions), sets env vars to file paths, cleans up after command exits
+- **`fnox get`**: Creates persistent temp file, outputs its path
+- **`fnox list`**: Shows `[file]` indicator
+- **`fnox hook-env`/`activate`**: Persistent temp files for shell session, auto-cleanup on directory change
+- **`fnox export`**: Creates persistent temp files, exports file paths (not values)
+
+**Example:**
+
+```bash
+# DB_PASSWORD env var contains file path, API_KEY contains actual value
+fnox exec -- myapp --db-password-file "$DB_PASSWORD" --api-key "$API_KEY"
+```
+
+**Security:** Files use 0600 permissions. `fnox exec` auto-cleans; `get`/`export` files persist until manual cleanup. Shell integration (`hook-env`) auto-cleans on config change or directory exit.
 
 ### Authentication Prompting
 

@@ -14,6 +14,7 @@ mod shell;
 mod source_registry;
 mod spanned;
 mod suggest;
+mod temp_file_secrets;
 mod tui;
 
 #[cfg(test)]

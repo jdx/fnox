@@ -107,6 +107,10 @@ pub struct SecretConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     value: Option<SpannedValue<String>>,
 
+    /// Write secret to a temporary file and set env var to the file path instead of the secret value
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub as_file: bool,
+
     /// Path to the config file where this secret was defined (not serialized)
     #[serde(skip)]
     pub source_path: Option<PathBuf>,
@@ -1047,6 +1051,7 @@ impl SecretConfig {
             default: None,
             provider: None,
             value: None,
+            as_file: false,
             source_path: None,
         }
     }
@@ -1074,6 +1079,9 @@ impl SecretConfig {
                 IfMissing::Ignore => "ignore",
             };
             inline.insert("if_missing", toml_edit::Value::from(if_missing_str));
+        }
+        if self.as_file {
+            inline.insert("as_file", toml_edit::Value::from(true));
         }
 
         inline.fmt();

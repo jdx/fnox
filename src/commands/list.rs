@@ -140,7 +140,7 @@ impl ListCommand {
         &self,
         secret_config: &crate::config::SecretConfig,
     ) -> (String, String) {
-        if let Some(provider) = secret_config.provider() {
+        let (base_type, provider_key) = if let Some(provider) = secret_config.provider() {
             let pk = secret_config.value().unwrap_or("");
             let pk_display = if !self.full && pk.len() > 40 {
                 format!("{}...", &pk[..37])
@@ -154,7 +154,15 @@ impl ListCommand {
             ("default value".to_string(), String::new())
         } else {
             ("env var".to_string(), String::new())
-        }
+        };
+
+        let source_type = if secret_config.as_file {
+            format!("{} [file]", base_type)
+        } else {
+            base_type
+        };
+
+        (source_type, provider_key)
     }
 
     fn display_basic(

@@ -34,6 +34,9 @@ pub struct HookEnvSession {
     /// Hash of all config files in the hierarchy for change detection
     #[serde(default)]
     pub config_files_hash: String,
+    /// Paths to temporary files for file-based secrets (key -> file_path)
+    #[serde(default)]
+    pub temp_files: HashMap<String, String>,
 }
 
 /// Global previous session state, loaded from __FNOX_SESSION env var
@@ -52,6 +55,7 @@ impl HookEnvSession {
         dir: Option<PathBuf>,
         config_path: Option<PathBuf>,
         loaded_secrets: HashMap<String, String>,
+        temp_files: HashMap<String, String>,
     ) -> Result<Self> {
         let config_mtime = if let Some(ref path) = config_path {
             std::fs::metadata(path)
@@ -103,6 +107,7 @@ impl HookEnvSession {
             hash_key,
             env_var_hash,
             config_files_hash,
+            temp_files,
         })
     }
 
