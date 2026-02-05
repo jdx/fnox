@@ -10,7 +10,6 @@ flag "-c --config" help="Path to the configuration file (default: fnox.toml, sea
 flag "-P --profile" help="Profile to use (default: default, or FNOX_PROFILE env var)" global=#true {
     arg <PROFILE>
 }
-flag --no-defaults help="Do not merge top-level secrets into the selected profile" global=#true
 flag "-v --verbose" help="Enable verbose logging" global=#true
 flag --age-key-file help="Path to age key file for decryption (deprecated: use provider config instead)" hide=#true global=#true {
     arg <AGE_KEY_FILE>
@@ -19,6 +18,7 @@ flag --if-missing help="What to do if a secret is missing (error, warn, ignore)"
     arg <IF_MISSING>
 }
 flag --no-color help="Disable colored output" global=#true
+flag --no-defaults help="Do not merge top-level secrets into the selected profile" global=#true
 cmd activate help="Output shell activation code to enable automatic secret loading" {
     flag --no-hook-env help="Don't automatically invoke hook-env (for testing)"
     arg "[SHELL]" help="Shell to generate activation code for (bash, zsh, fish)" required=#false

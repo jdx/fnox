@@ -20,10 +20,6 @@ Path to the configuration file (default: fnox.toml, searches parent directories)
 
 Profile to use (default: default, or FNOX_PROFILE env var)
 
-### `--no-defaults`
-
-Do not merge top-level secrets into the selected profile
-
 ### `-v --verbose`
 
 Enable verbose logging
@@ -35,6 +31,10 @@ What to do if a secret is missing (error, warn, ignore)
 ### `--no-color`
 
 Disable colored output
+
+### `--no-defaults`
+
+Do not merge top-level secrets into the selected profile
 
 ## Subcommands
 
