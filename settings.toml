@@ -50,6 +50,23 @@ examples = [
 ]
 since = "0.1.0"
 
+[no_defaults]
+type = "bool"
+default = "false"
+sources.cli = ["--no-defaults"]
+sources.env = ["FNOX_NO_DEFAULTS"]
+docs = """
+When a non-default profile is selected, do not merge top-level [secrets] into
+the profile. Only [profiles.<name>.secrets] will be used.
+
+Priority (highest to lowest): CLI > Environment > Default
+"""
+examples = [
+  "fnox exec --profile dev --no-defaults -- ./my-app",
+  "FNOX_NO_DEFAULTS=true fnox exec --profile dev -- ./my-app",
+]
+since = "1.12.0"
+
 [shell_integration_output]
 type = "string"
 default = "\"normal\""

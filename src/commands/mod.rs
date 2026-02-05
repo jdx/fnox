@@ -60,6 +60,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub no_color: bool,
 
+    /// Do not merge top-level secrets into the selected profile
+    #[arg(long, global = true)]
+    pub no_defaults: bool,
+
     #[command(subcommand)]
     pub command: Commands,
 }

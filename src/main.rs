@@ -35,6 +35,7 @@ async fn main() -> miette::Result<()> {
         age_key_file: cli.age_key_file.clone(),
         profile: cli.profile.clone(),
         if_missing: cli.if_missing.clone(),
+        no_defaults: cli.no_defaults,
     });
 
     // Handle --no-color flag

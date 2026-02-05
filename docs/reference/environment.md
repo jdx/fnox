@@ -23,6 +23,15 @@ fnox get DATABASE_URL
 fnox exec -- ./deploy.sh
 ```
 
+### `FNOX_NO_DEFAULTS`
+
+When set to `true`, do not merge top-level secrets into the selected profile.
+
+```bash
+export FNOX_NO_DEFAULTS=true
+fnox exec --profile production -- ./deploy.sh
+```
+
 ### `FNOX_CONFIG_DIR`
 
 Configuration directory path.

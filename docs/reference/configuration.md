@@ -326,6 +326,14 @@ DATABASE_URL = { provider = "aws", value = "prod-db" }  # Overrides top-level DA
 # Inherits LOG_LEVEL="info" from top-level
 ```
 
+You can disable this merge behavior at runtime:
+
+```bash
+fnox exec --profile production --no-defaults -- ./deploy.sh
+```
+
+With `--no-defaults`, only `[profiles.<name>.secrets]` are used for the selected profile.
+
 ## Complete Example
 
 ```toml

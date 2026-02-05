@@ -1,4 +1,5 @@
 use crate::env;
+use crate::settings::Settings;
 use crate::error::{FnoxError, Result};
 use crate::source_registry;
 use crate::spanned::SpannedValue;
@@ -653,17 +654,26 @@ impl Config {
         if profile == "default" {
             Ok(self.secrets.clone())
         } else {
-            // Start with top-level secrets as base
-            let mut secrets = self.secrets.clone();
+            if Settings::get().no_defaults {
+                // Profile-only mode: do not merge top-level secrets.
+                if let Some(profile_config) = self.profiles.get(profile) {
+                    Ok(profile_config.secrets.clone())
+                } else {
+                    Ok(IndexMap::new())
+                }
+            } else {
+                // Start with top-level secrets as base
+                let mut secrets = self.secrets.clone();
 
-            // Get profile-specific secrets and merge/override (if profile exists)
-            if let Some(profile_config) = self.profiles.get(profile) {
-                // Profile-specific secrets override top-level ones
-                secrets.extend(profile_config.secrets.clone());
+                // Get profile-specific secrets and merge/override (if profile exists)
+                if let Some(profile_config) = self.profiles.get(profile) {
+                    // Profile-specific secrets override top-level ones
+                    secrets.extend(profile_config.secrets.clone());
+                }
+                // If profile doesn't exist in [profiles], that's OK - just use top-level secrets
+                // This allows fnox.$FNOX_PROFILE.toml to work without requiring [profiles.xxx]
+                Ok(secrets)
             }
-            // If profile doesn't exist in [profiles], that's OK - just use top-level secrets
-            // This allows fnox.$FNOX_PROFILE.toml to work without requiring [profiles.xxx]
-            Ok(secrets)
         }
     }
 
