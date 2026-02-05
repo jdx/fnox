@@ -1278,4 +1278,49 @@ mod tests {
             "Empty profile name should not appear"
         );
     }
+
+    #[test]
+    fn test_no_defaults_profile_only_secrets() {
+        crate::settings::Settings::reset_for_tests();
+        crate::settings::Settings::set_cli_snapshot(crate::settings::CliSnapshot {
+            age_key_file: None,
+            profile: Some("prod".to_string()),
+            if_missing: None,
+            no_defaults: true,
+        });
+
+        let mut config = Config::new();
+        config
+            .secrets
+            .insert("DEFAULT_ONLY".to_string(), SecretConfig::new());
+
+        let mut prod_profile = ProfileConfig::new();
+        prod_profile
+            .secrets
+            .insert("PROD_ONLY".to_string(), SecretConfig::new());
+        config.profiles.insert("prod".to_string(), prod_profile);
+
+        let secrets = config.get_secrets("prod").unwrap();
+        assert!(secrets.contains_key("PROD_ONLY"));
+        assert!(!secrets.contains_key("DEFAULT_ONLY"));
+    }
+
+    #[test]
+    fn test_no_defaults_profile_without_section_is_empty() {
+        crate::settings::Settings::reset_for_tests();
+        crate::settings::Settings::set_cli_snapshot(crate::settings::CliSnapshot {
+            age_key_file: None,
+            profile: Some("prod".to_string()),
+            if_missing: None,
+            no_defaults: true,
+        });
+
+        let mut config = Config::new();
+        config
+            .secrets
+            .insert("DEFAULT_ONLY".to_string(), SecretConfig::new());
+
+        let secrets = config.get_secrets("prod").unwrap();
+        assert!(secrets.is_empty());
+    }
 }

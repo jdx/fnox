@@ -208,6 +208,13 @@ impl Settings {
 
         serde_json::from_value(val).unwrap_or_else(|_| defaults.clone())
     }
+
+    #[cfg(test)]
+    pub fn reset_for_tests() {
+        GLOBAL_SETTINGS.store(Arc::new(GeneratedSettings::default()));
+        *INITIALIZED.lock().unwrap() = false;
+        *CLI_SNAPSHOT.lock().unwrap() = None;
+    }
 }
 
 #[cfg(test)]
