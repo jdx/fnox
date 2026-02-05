@@ -652,27 +652,25 @@ impl Config {
     /// This allows fnox.$FNOX_PROFILE.toml files to work without requiring a [profiles] section.
     pub fn get_secrets(&self, profile: &str) -> Result<IndexMap<String, SecretConfig>> {
         if profile == "default" {
-            Ok(self.secrets.clone())
-        } else if Settings::get().no_defaults {
+            return Ok(self.secrets.clone());
+        }
+
+        let mut secrets = if Settings::get().no_defaults {
             // Profile-only mode: do not merge top-level secrets.
-            if let Some(profile_config) = self.profiles.get(profile) {
-                Ok(profile_config.secrets.clone())
-            } else {
-                Ok(IndexMap::new())
-            }
+            IndexMap::new()
         } else {
             // Start with top-level secrets as base
-            let mut secrets = self.secrets.clone();
+            self.secrets.clone()
+        };
 
-            // Get profile-specific secrets and merge/override (if profile exists)
-            if let Some(profile_config) = self.profiles.get(profile) {
-                // Profile-specific secrets override top-level ones
-                secrets.extend(profile_config.secrets.clone());
-            }
-            // If profile doesn't exist in [profiles], that's OK - just use top-level secrets
-            // This allows fnox.$FNOX_PROFILE.toml to work without requiring [profiles.xxx]
-            Ok(secrets)
+        // Get profile-specific secrets and merge/override (if profile exists)
+        if let Some(profile_config) = self.profiles.get(profile) {
+            // Profile-specific secrets override top-level ones
+            secrets.extend(profile_config.secrets.clone());
         }
+        // If profile doesn't exist in [profiles], that's OK - just use top-level secrets
+        // This allows fnox.$FNOX_PROFILE.toml to work without requiring [profiles.xxx]
+        Ok(secrets)
     }
 
     /// Get effective secrets (default or profile, mutable)
