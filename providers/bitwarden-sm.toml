@@ -1,0 +1,22 @@
+# Bitwarden Secrets Manager provider - remote secrets storage
+display_name = "Bitwarden Secrets Manager"
+serde_rename = "bitwarden-sm"
+rust_variant = "BitwardenSecretsManager"
+category = "CloudSecretsManager"
+description = "Bitwarden Secrets Manager (bws CLI)"
+default_name = "bsm"
+setup_instructions = """
+Requires: Bitwarden Secrets Manager access token.
+Set: export BWS_ACCESS_TOKEN=<token>"""
+
+[fields.project_id]
+type = "required"
+placeholder = ""
+label = "Project ID:"
+wizard = true
+
+[fields.profile]
+type = "optional"
+placeholder = ""
+label = "Profile (optional):"
+wizard = true

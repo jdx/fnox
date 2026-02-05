@@ -10,6 +10,7 @@ pub mod aws_sm;
 pub mod azure_kms;
 pub mod azure_sm;
 pub mod bitwarden;
+pub mod bitwarden_sm;
 pub mod gcp_kms;
 pub mod gcp_sm;
 pub mod infisical;
@@ -131,8 +132,9 @@ mod generated {
     pub(super) mod providers_instantiate {
         // Need to import provider modules for instantiation
         use super::super::{
-            age, aws_kms, aws_ps, aws_sm, azure_kms, azure_sm, bitwarden, gcp_kms, gcp_sm,
-            infisical, keepass, keychain, onepassword, password_store, passwordstate, plain, vault,
+            age, aws_kms, aws_ps, aws_sm, azure_kms, azure_sm, bitwarden, bitwarden_sm, gcp_kms,
+            gcp_sm, infisical, keepass, keychain, onepassword, password_store, passwordstate,
+            plain, vault,
         };
         include!(concat!(
             env!("OUT_DIR"),
