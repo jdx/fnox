@@ -84,19 +84,6 @@ impl BitwardenSecretsManagerProvider {
                 });
             }
 
-            if stderr_str.contains("not found")
-                || stderr_str.contains("Not found")
-                || stderr_str.contains("NotFound")
-            {
-                return Err(FnoxError::ProviderSecretNotFound {
-                    provider: "Bitwarden Secrets Manager".to_string(),
-                    secret: args.last().unwrap_or(&"unknown").to_string(),
-                    hint: "Check that the secret exists in Bitwarden Secrets Manager"
-                        .to_string(),
-                    url: URL.to_string(),
-                });
-            }
-
             return Err(FnoxError::ProviderCliFailed {
                 provider: "Bitwarden Secrets Manager".to_string(),
                 details: stderr_str.to_string(),
