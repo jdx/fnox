@@ -111,18 +111,18 @@ Supported fields: `value` (default), `key`, `note`
 bws = { type = "bitwarden-sm", project_id = "...", profile = "..." }
 ```
 
-| Field        | Required | Description                                              |
-| ------------ | -------- | -------------------------------------------------------- |
-| `project_id` | No       | BSM project ID (or set `BWS_PROJECT_ID` env var)         |
-| `profile`    | No       | bws CLI profile (for self-hosted or multiple servers)     |
+| Field        | Required | Description                                           |
+| ------------ | -------- | ----------------------------------------------------- |
+| `project_id` | No       | BSM project ID (or set `BWS_PROJECT_ID` env var)      |
+| `profile`    | No       | bws CLI profile (for self-hosted or multiple servers) |
 
 ## Environment Variables
 
-| Variable               | Description                          |
-| ---------------------- | ------------------------------------ |
-| `BWS_ACCESS_TOKEN`     | Bitwarden Secrets Manager access token |
-| `FNOX_BWS_ACCESS_TOKEN`| Alternative (takes priority)          |
-| `BWS_PROJECT_ID`       | Project ID fallback (if not in config) |
+| Variable                | Description                            |
+| ----------------------- | -------------------------------------- |
+| `BWS_ACCESS_TOKEN`      | Bitwarden Secrets Manager access token |
+| `FNOX_BWS_ACCESS_TOKEN` | Alternative (takes priority)           |
+| `BWS_PROJECT_ID`        | Project ID fallback (if not in config) |
 
 ## Usage
 
