@@ -553,6 +553,16 @@ sm = { type = "aws-sm", region = "us-east-1", prefix = "fnox/" }  # prefix is op
 
 [secrets]
 MY_SECRET = { provider = "sm", value = "my-secret-name" }  # Name of secret in AWS Secrets Manager
+
+# JSON secret extraction: if the secret contains {"username":"admin","password":"secret123"}
+DB_USER = { provider = "sm", value = "db-credentials", json_path = "username" }
+DB_PASS = { provider = "sm", value = "db-credentials", json_path = "password" }
+
+# Nested JSON paths use dot notation: {"database":{"host":"localhost"}}
+DB_HOST = { provider = "sm", value = "config", json_path = "database.host" }
+
+# Escape literal dots in paths with backslash: {"foo.bar":"value"}
+MY_KEY = { provider = "sm", value = "config", json_path = 'foo\.bar' }
 ```
 
 **Requirements:**
@@ -627,7 +637,7 @@ fnox exec -- ./my-app
 **Implementation Notes:**
 
 - Uses AWS SDK for Rust (`aws-sdk-secretsmanager`)
-- Supports JSON secrets (returns the full JSON string)
+- Supports JSON secrets (accessing parts via `json_path`)
 - Only supports string secrets (binary secrets not supported)
 - Respects standard AWS credential chain
 - Region must be specified in provider config
