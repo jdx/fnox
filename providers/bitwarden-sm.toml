@@ -4,7 +4,7 @@ serde_rename = "bitwarden-sm"
 rust_variant = "BitwardenSecretsManager"
 category = "CloudSecretsManager"
 description = "Bitwarden Secrets Manager (bws CLI)"
-default_name = "bsm"
+default_name = "bws"
 setup_instructions = """
 Requires: Bitwarden Secrets Manager access token.
 Set: export BWS_ACCESS_TOKEN=<token>"""

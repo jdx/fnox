@@ -14,13 +14,13 @@ export BWS_ACCESS_TOKEN=<your-access-token>
 # 3. Configure provider
 cat >> fnox.toml << 'EOF'
 [providers]
-bsm = { type = "bitwarden-sm", project_id = "your-project-id" }
+bws = { type = "bitwarden-sm", project_id = "your-project-id" }
 EOF
 
 # 4. Reference secrets by name
 cat >> fnox.toml << 'EOF'
 [secrets]
-DATABASE_URL = { provider = "bsm", value = "database-url" }
+DATABASE_URL = { provider = "bws", value = "database-url" }
 EOF
 
 # 5. Use it
@@ -31,7 +31,7 @@ fnox exec -- npm start
 ## Prerequisites
 
 - [Bitwarden Secrets Manager](https://bitwarden.com/products/secrets-manager/) account
-- `bws` CLI (automatically installed via mise)
+- [Bitwarden Secrets Manager CLI](https://bitwarden.com/help/secrets-manager-cli/) `bws` CLI (automatically installed via mise)
 - Access token (machine account or personal)
 
 ## Installation
@@ -71,7 +71,7 @@ fnox set BWS_ACCESS_TOKEN "<your-access-token>" --provider age
 
 ```toml
 [providers]
-bsm = { type = "bitwarden-sm", project_id = "your-project-id" }
+bws = { type = "bitwarden-sm", project_id = "your-project-id" }
 ```
 
 The `project_id` can also be provided via the `BWS_PROJECT_ID` environment variable instead of in the config file.
@@ -82,8 +82,8 @@ Secrets are referenced by their key name in Bitwarden Secrets Manager:
 
 ```toml
 [secrets]
-DATABASE_URL = { provider = "bsm", value = "database-url" }
-API_KEY = { provider = "bsm", value = "stripe-api-key" }
+DATABASE_URL = { provider = "bws", value = "database-url" }
+API_KEY = { provider = "bws", value = "stripe-api-key" }
 ```
 
 ### Field Access
@@ -93,13 +93,13 @@ By default, the secret's `value` field is returned. You can also access `key` an
 ```toml
 [secrets]
 # Gets the secret value (default)
-MY_SECRET = { provider = "bsm", value = "my-secret-name" }
+MY_SECRET = { provider = "bws", value = "my-secret-name" }
 
 # Gets the secret's note
-MY_NOTE = { provider = "bsm", value = "my-secret-name/note" }
+MY_NOTE = { provider = "bws", value = "my-secret-name/note" }
 
 # Gets the secret's key name
-MY_KEY = { provider = "bsm", value = "my-secret-name/key" }
+MY_KEY = { provider = "bws", value = "my-secret-name/key" }
 ```
 
 Supported fields: `value` (default), `key`, `note`
@@ -108,7 +108,7 @@ Supported fields: `value` (default), `key`, `note`
 
 ```toml
 [providers]
-bsm = { type = "bitwarden-sm", project_id = "...", profile = "..." }
+bws = { type = "bitwarden-sm", project_id = "...", profile = "..." }
 ```
 
 | Field        | Required | Description                                              |
@@ -137,7 +137,7 @@ fnox exec -- npm start
 fnox list
 
 # Set a secret (creates or updates in BSM)
-fnox set NEW_SECRET "secret-value" --provider bsm --key-name "my-new-secret"
+fnox set NEW_SECRET "secret-value" --provider bws --key-name "my-new-secret"
 ```
 
 ## Multi-Environment Example
@@ -145,17 +145,17 @@ fnox set NEW_SECRET "secret-value" --provider bsm --key-name "my-new-secret"
 ```toml
 [providers]
 age = { type = "age", recipients = ["age1..."] }
-bsm = { type = "bitwarden-sm", project_id = "dev-project-id" }
+bws = { type = "bitwarden-sm", project_id = "dev-project-id" }
 
 [secrets]
 BWS_ACCESS_TOKEN = { provider = "age", value = "encrypted-token..." }
-DATABASE_URL = { provider = "bsm", value = "dev-database-url" }
+DATABASE_URL = { provider = "bws", value = "dev-database-url" }
 
 [profiles.production.providers]
-bsm = { type = "bitwarden-sm", project_id = "prod-project-id" }
+bws = { type = "bitwarden-sm", project_id = "prod-project-id" }
 
 [profiles.production.secrets]
-DATABASE_URL = { provider = "bsm", value = "prod-database-url" }
+DATABASE_URL = { provider = "bws", value = "prod-database-url" }
 ```
 
 ## CI/CD Example
@@ -204,7 +204,7 @@ Either set it in the provider config:
 
 ```toml
 [providers]
-bsm = { type = "bitwarden-sm", project_id = "your-project-id" }
+bws = { type = "bitwarden-sm", project_id = "your-project-id" }
 ```
 
 Or via environment variable:

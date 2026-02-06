@@ -21,7 +21,7 @@ All commit messages and PR titles MUST follow conventional commit format:
 **Scopes:**
 
 - For command-specific changes, use the command name: `get`, `set`, `exec`, `list`, `provider`, etc.
-- For provider changes: `age`, `1password`, `bitwarden`, `aws-kms`, `aws-sm`, `aws-ps`, `keychain`, `keepass`, `infisical`, `passwordstate`, `pass`
+- For provider changes: `age`, `1password`, `bitwarden`, `bitwarden-sm`, `aws-kms`, `aws-sm`, `aws-ps`, `keychain`, `keepass`, `infisical`, `passwordstate`, `pass`
 - For subsystem changes: `config`, `encryption`, `env`, `deps`
 
 **Description Style:**

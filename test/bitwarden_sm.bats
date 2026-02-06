@@ -47,7 +47,7 @@ create_bsm_config() {
 	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF
 root = true
 
-[providers.bsm]
+[providers.bws]
 type = "bitwarden-sm"
 project_id = "${BWS_PROJECT_ID:-test-project-id}"
 
@@ -103,7 +103,7 @@ delete_test_bsm_secret() {
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.TEST_BSM_SECRET]
-provider = "bsm"
+provider = "bws"
 value = "$secret_name"
 EOF
 
@@ -126,7 +126,7 @@ EOF
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.TEST_BSM_NOTE]
-provider = "bsm"
+provider = "bws"
 value = "$secret_name/note"
 EOF
 
@@ -145,7 +145,7 @@ EOF
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.NONEXISTENT_SECRET]
-provider = "bsm"
+provider = "bws"
 value = "this-secret-does-not-exist"
 EOF
 
@@ -160,7 +160,7 @@ EOF
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.INVALID_FIELD]
-provider = "bsm"
+provider = "bws"
 value = "some-secret/badfield"
 EOF
 
@@ -177,12 +177,12 @@ EOF
 
 [secrets.BSM_SECRET_1]
 description = "First BSM secret"
-provider = "bsm"
+provider = "bws"
 value = "my-database-password"
 
 [secrets.BSM_SECRET_2]
 description = "Second BSM secret"
-provider = "bsm"
+provider = "bws"
 value = "my-api-key/note"
 EOF
 
@@ -201,7 +201,7 @@ EOF
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.TEST_WITH_ENV_TOKEN]
-provider = "bsm"
+provider = "bws"
 value = "$secret_name"
 EOF
 
@@ -221,7 +221,7 @@ EOF
 	test_secret_name="fnox-set-test-$(date +%s)-$$"
 
 	# Use fnox set to create a new secret
-	run "$FNOX_BIN" set TEST_NEW_SECRET "my-new-secret-value" --provider bsm --key-name "$test_secret_name"
+	run "$FNOX_BIN" set TEST_NEW_SECRET "my-new-secret-value" --provider bws --key-name "$test_secret_name"
 	assert_success
 
 	# Verify we can retrieve it
@@ -246,7 +246,7 @@ EOF
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.TEST_UPDATE_SECRET]
-provider = "bsm"
+provider = "bws"
 value = "$test_secret_name"
 EOF
 
@@ -276,7 +276,7 @@ EOF
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.TEST_BSM_EXEC]
-provider = "bsm"
+provider = "bws"
 value = "$secret_name"
 EOF
 
