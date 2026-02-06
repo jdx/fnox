@@ -419,6 +419,23 @@
         {
           "type": "object",
           "properties": {
+            "profile": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "project_id": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "bitwarden-sm"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
