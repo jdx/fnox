@@ -85,7 +85,7 @@ delete_test_bsm_secret() {
 	local json_output
 	json_output=$(bws secret list "$BWS_PROJECT_ID" --output json 2>/dev/null) || return 0
 	local secret_id
-	secret_id=$(echo "$json_output" | python3 -c "import sys,json; secrets=json.load(sys.stdin); ids=[s['id'] for s in secrets if s['key']=='$secret_name']; print(ids[0] if ids else '')" 2>/dev/null)
+	secret_id=$(echo "$json_output" | jq -r --arg name "$secret_name" '.[] | select(.key == $name) | .id' 2>/dev/null)
 	if [ -n "$secret_id" ]; then
 		bws secret delete "$secret_id" >/dev/null 2>&1 || true
 	fi
