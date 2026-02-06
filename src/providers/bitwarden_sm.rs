@@ -274,7 +274,7 @@ impl crate::providers::Provider for BitwardenSecretsManagerProvider {
 
     async fn test_connection(&self) -> Result<()> {
         tracing::debug!("Testing connection to Bitwarden Secrets Manager");
-        self.execute_bws_command(&["project", "list", "--output", "json"])?;
+        self.list_secrets()?;
         Ok(())
     }
 }
