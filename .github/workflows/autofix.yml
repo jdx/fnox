@@ -33,4 +33,4 @@ jobs:
           sudo apt-get install -y libdbus-1-dev pkg-config
       - uses: jdx/mise-action@6d1e696aa24c1aa1bcc1adea0212707c71ab78a8 # v3
       - run: "mise run render ::: lint-fix"
-      - uses: autofix-ci/action@635ffb0c9798bd160680f18fd73371e355b85f27 # v1.3.2
+      - uses: autofix-ci/action@7a166d7532b277f34e16238930461bf77f9d7ed8 # v1.3.3
