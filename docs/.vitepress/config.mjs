@@ -91,6 +91,7 @@ export default defineConfig({
               { text: "AWS Secrets Manager", link: "/providers/aws-sm" },
               { text: "Azure Key Vault Secrets", link: "/providers/azure-sm" },
               { text: "GCP Secret Manager", link: "/providers/gcp-sm" },
+              { text: "Bitwarden Secrets Manager", link: "/providers/bitwarden-sm" },
               { text: "HashiCorp Vault", link: "/providers/vault" },
             ],
           },

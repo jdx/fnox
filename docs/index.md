@@ -19,7 +19,7 @@ hero:
 features:
   - icon: 🔐
     title: Multiple Provider Support
-    details: Works with age, AWS KMS/SM, Azure, GCP, 1Password, Bitwarden, Infisical, password-store, HashiCorp Vault, and more.
+    details: Works with age, AWS KMS/SM, Azure, GCP, 1Password, Bitwarden, Bitwarden Secrets Manager, Infisical, password-store, HashiCorp Vault, and more.
   - icon: 📝
     title: Secrets in Git (Encrypted)
     details: Store encrypted secrets in version control with age, AWS KMS, Azure KMS, or GCP KMS.
@@ -90,6 +90,7 @@ API_KEY = { default = "dev-key-12345" }  # ← plain default value for local dev
 - **aws-sm** - AWS Secrets Manager
 - **azure-sm** - Azure Key Vault Secrets
 - **gcp-sm** - Google Cloud Secret Manager
+- **bitwarden-sm** - Bitwarden Secrets Manager
 - **vault** - HashiCorp Vault
 
 ### 🔑 Password Managers & Secret Services
