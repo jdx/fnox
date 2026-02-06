@@ -90,7 +90,7 @@ impl BitwardenSecretsManagerProvider {
                 return Err(FnoxError::ProviderSecretNotFound {
                     provider: "Bitwarden Secrets Manager".to_string(),
                     secret: args.last().unwrap_or(&"unknown").to_string(),
-                    hint: "Check that the secret ID exists in Bitwarden Secrets Manager"
+                    hint: "Check that the secret exists in Bitwarden Secrets Manager"
                         .to_string(),
                     url: URL.to_string(),
                 });
@@ -115,24 +115,36 @@ impl BitwardenSecretsManagerProvider {
         Ok(stdout.trim().to_string())
     }
 
-    fn parse_secret_json(json_str: &str, field: &str) -> Result<String> {
-        let parsed: serde_json::Value =
-            serde_json::from_str(json_str).map_err(|e| FnoxError::ProviderInvalidResponse {
+    fn find_secret_by_key<'a>(
+        secrets: &'a [serde_json::Value],
+        key: &str,
+    ) -> Result<&'a serde_json::Value> {
+        secrets
+            .iter()
+            .find(|s| s["key"].as_str() == Some(key))
+            .ok_or_else(|| FnoxError::ProviderSecretNotFound {
                 provider: "Bitwarden Secrets Manager".to_string(),
-                details: format!("Failed to parse JSON: {}", e),
-                hint: "Unexpected response from bws CLI".to_string(),
-                url: URL.to_string(),
-            })?;
-
-        parsed[field]
-            .as_str()
-            .map(|s| s.to_string())
-            .ok_or_else(|| FnoxError::ProviderInvalidResponse {
-                provider: "Bitwarden Secrets Manager".to_string(),
-                details: format!("Field '{}' not found in secret JSON", field),
-                hint: "Supported fields: value, key, note".to_string(),
+                secret: key.to_string(),
+                hint: "Check that the secret name exists in the project".to_string(),
                 url: URL.to_string(),
             })
+    }
+
+    fn list_secrets(&self) -> Result<Vec<serde_json::Value>> {
+        let json_output = self.execute_bws_command(&[
+            "secret",
+            "list",
+            &self.project_id,
+            "--output",
+            "json",
+        ])?;
+
+        serde_json::from_str(&json_output).map_err(|e| FnoxError::ProviderInvalidResponse {
+            provider: "Bitwarden Secrets Manager".to_string(),
+            details: format!("Failed to parse JSON: {}", e),
+            hint: "Unexpected response from bws CLI".to_string(),
+            url: URL.to_string(),
+        })
     }
 }
 
@@ -148,21 +160,11 @@ impl crate::providers::Provider for BitwardenSecretsManagerProvider {
             value
         );
 
-        // Parse value as "<secret_id>" or "<secret_id>/field"
+        // Parse value as "<key_name>" or "<key_name>/field"
         // Default field is "value" if not specified
-        let parts: Vec<&str> = value.split('/').collect();
-
-        let (secret_id, field_name) = match parts.len() {
-            1 => (parts[0], "value"),
-            2 => (parts[0], parts[1]),
-            _ => {
-                return Err(FnoxError::ProviderInvalidResponse {
-                    provider: "Bitwarden Secrets Manager".to_string(),
-                    details: format!("Invalid secret reference format: '{}'", value),
-                    hint: "Expected '<secret_id>' or '<secret_id>/field' (fields: value, key, note)".to_string(),
-                    url: URL.to_string(),
-                });
-            }
+        let (key_name, field_name) = match value.split_once('/') {
+            None => (value, "value"),
+            Some((name, field)) => (name, field),
         };
 
         // Validate field name before making the API call
@@ -177,41 +179,56 @@ impl crate::providers::Provider for BitwardenSecretsManagerProvider {
 
         tracing::debug!(
             "Reading BSM secret '{}' field '{}'",
-            secret_id,
+            key_name,
             field_name
         );
 
-        let json_output =
-            self.execute_bws_command(&["secret", "get", secret_id, "--output", "json"])?;
-        Self::parse_secret_json(&json_output, field_name)
+        let secrets = self.list_secrets()?;
+        let secret = Self::find_secret_by_key(&secrets, key_name)?;
+
+        secret[field_name]
+            .as_str()
+            .map(|s| s.to_string())
+            .ok_or_else(|| FnoxError::ProviderInvalidResponse {
+                provider: "Bitwarden Secrets Manager".to_string(),
+                details: format!("Field '{}' not found in secret", field_name),
+                hint: "Supported fields: value, key, note".to_string(),
+                url: URL.to_string(),
+            })
     }
 
     async fn put_secret(&self, key: &str, value: &str) -> Result<String> {
-        // Try editing as an existing secret (key is a UUID) first,
-        // fall back to creating a new secret if that fails
-        tracing::debug!("Attempting to edit BSM secret '{}'", key);
-        match self.execute_bws_command(&["secret", "edit", key, "--value", value]) {
-            Ok(_) => Ok(key.to_string()),
-            Err(_) => {
-                tracing::debug!(
-                    "Edit failed, creating new BSM secret '{}' in project '{}'",
-                    key,
-                    self.project_id
-                );
-                let json_output = self.execute_bws_command(&[
-                    "secret",
-                    "create",
-                    key,
-                    value,
-                    &self.project_id,
-                    "--output",
-                    "json",
-                ])?;
+        let secrets = self.list_secrets()?;
 
-                // Return the new secret's UUID so it can be stored in config
-                Self::parse_secret_json(&json_output, "id")
-            }
+        if let Some(existing) = secrets.iter().find(|s| s["key"].as_str() == Some(key)) {
+            // Update existing secret by its UUID
+            let id = existing["id"].as_str().ok_or_else(|| {
+                FnoxError::ProviderInvalidResponse {
+                    provider: "Bitwarden Secrets Manager".to_string(),
+                    details: "Secret missing 'id' field".to_string(),
+                    hint: "Unexpected response from bws CLI".to_string(),
+                    url: URL.to_string(),
+                }
+            })?;
+            tracing::debug!("Editing existing BSM secret '{}' ({})", key, id);
+            self.execute_bws_command(&["secret", "edit", id, "--value", value])?;
+        } else {
+            tracing::debug!(
+                "Creating new BSM secret '{}' in project '{}'",
+                key,
+                self.project_id
+            );
+            self.execute_bws_command(&[
+                "secret",
+                "create",
+                key,
+                value,
+                &self.project_id,
+            ])?;
         }
+
+        // Return the key name to store in config
+        Ok(key.to_string())
     }
 
     async fn test_connection(&self) -> Result<()> {

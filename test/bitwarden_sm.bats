@@ -54,55 +54,55 @@ EOF
 }
 
 # Helper function to create a test secret in BSM
-# Returns the secret ID (UUID)
+# Returns the secret name (key)
 create_test_bsm_secret() {
 	local secret_name
 	secret_name="fnox-test-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
 	local secret_value
 	secret_value="test-secret-value-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
 
-	# Create secret with bws CLI, parse JSON output for the ID
-	local json_output
-	json_output=$(bws secret create "$secret_name" "$secret_value" "$BWS_PROJECT_ID" --output json 2>/dev/null)
-	local secret_id
-	secret_id=$(echo "$json_output" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+	bws secret create "$secret_name" "$secret_value" "$BWS_PROJECT_ID" >/dev/null 2>&1
 
-	echo "$secret_id"
+	echo "$secret_name"
 }
 
 # Helper function to create a test secret with a note
+# Returns the secret name (key)
 create_test_bsm_secret_with_note() {
 	local secret_name
 	secret_name="fnox-test-note-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
 	local secret_value="test-value"
 	local secret_note="test-note-content"
 
-	local json_output
-	json_output=$(bws secret create "$secret_name" "$secret_value" "$BWS_PROJECT_ID" --note "$secret_note" --output json 2>/dev/null)
-	local secret_id
-	secret_id=$(echo "$json_output" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+	bws secret create "$secret_name" "$secret_value" "$BWS_PROJECT_ID" --note "$secret_note" >/dev/null 2>&1
 
-	echo "$secret_id"
+	echo "$secret_name"
 }
 
-# Helper function to delete a test secret from BSM
+# Helper function to delete a test secret from BSM by name
 delete_test_bsm_secret() {
-	local secret_id="${1}"
-	bws secret delete "$secret_id" >/dev/null 2>&1 || true
+	local secret_name="${1}"
+	local json_output
+	json_output=$(bws secret list "$BWS_PROJECT_ID" --output json 2>/dev/null) || return 0
+	local secret_id
+	secret_id=$(echo "$json_output" | python3 -c "import sys,json; secrets=json.load(sys.stdin); ids=[s['id'] for s in secrets if s['key']=='$secret_name']; print(ids[0] if ids else '')" 2>/dev/null)
+	if [ -n "$secret_id" ]; then
+		bws secret delete "$secret_id" >/dev/null 2>&1 || true
+	fi
 }
 
 @test "fnox get retrieves secret from Bitwarden Secrets Manager" {
 	create_bsm_config
 
 	# Create a test secret
-	secret_id=$(create_test_bsm_secret)
+	secret_name=$(create_test_bsm_secret)
 
-	# Add secret reference to config
+	# Add secret reference to config (by name)
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.TEST_BSM_SECRET]
 provider = "bsm"
-value = "$secret_id"
+value = "$secret_name"
 EOF
 
 	# Get the secret
@@ -111,21 +111,21 @@ EOF
 	assert_output --partial "test-secret-value-"
 
 	# Cleanup
-	delete_test_bsm_secret "$secret_id"
+	delete_test_bsm_secret "$secret_name"
 }
 
 @test "fnox get retrieves note field from BSM secret" {
 	create_bsm_config
 
 	# Create a test secret with a note
-	secret_id=$(create_test_bsm_secret_with_note)
+	secret_name=$(create_test_bsm_secret_with_note)
 
 	# Add secret reference to config (fetch note field)
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.TEST_BSM_NOTE]
 provider = "bsm"
-value = "$secret_id/note"
+value = "$secret_name/note"
 EOF
 
 	# Get the secret note
@@ -134,37 +134,37 @@ EOF
 	assert_output "test-note-content"
 
 	# Cleanup
-	delete_test_bsm_secret "$secret_id"
+	delete_test_bsm_secret "$secret_name"
 }
 
-@test "fnox get fails with invalid secret ID" {
+@test "fnox get fails with nonexistent secret name" {
 	create_bsm_config
 
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
-[secrets.INVALID_SECRET]
+[secrets.NONEXISTENT_SECRET]
 provider = "bsm"
-value = "00000000-0000-0000-0000-000000000000"
+value = "this-secret-does-not-exist"
 EOF
 
 	# Try to get non-existent secret
-	run "$FNOX_BIN" get INVALID_SECRET
+	run "$FNOX_BIN" get NONEXISTENT_SECRET
 	assert_failure
 }
 
-@test "fnox get handles invalid reference format" {
+@test "fnox get handles unknown field name" {
 	create_bsm_config
 
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
-[secrets.INVALID_FORMAT]
+[secrets.INVALID_FIELD]
 provider = "bsm"
-value = "invalid/format/with/too/many/slashes"
+value = "some-secret/badfield"
 EOF
 
-	run "$FNOX_BIN" get INVALID_FORMAT
+	run "$FNOX_BIN" get INVALID_FIELD
 	assert_failure
-	assert_output --partial "Invalid secret reference format"
+	assert_output --partial "Unknown field"
 }
 
 @test "fnox list shows BSM secrets" {
@@ -176,12 +176,12 @@ EOF
 [secrets.BSM_SECRET_1]
 description = "First BSM secret"
 provider = "bsm"
-value = "00000000-0000-0000-0000-000000000001"
+value = "my-database-password"
 
 [secrets.BSM_SECRET_2]
 description = "Second BSM secret"
 provider = "bsm"
-value = "00000000-0000-0000-0000-000000000002/note"
+value = "my-api-key/note"
 EOF
 
 	run "$FNOX_BIN" list
@@ -194,13 +194,13 @@ EOF
 @test "BSM provider works with token from environment" {
 	create_bsm_config
 
-	secret_id=$(create_test_bsm_secret)
+	secret_name=$(create_test_bsm_secret)
 
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.TEST_WITH_ENV_TOKEN]
 provider = "bsm"
-value = "$secret_id"
+value = "$secret_name"
 EOF
 
 	# BWS_ACCESS_TOKEN should be set by setup()
@@ -209,40 +209,37 @@ EOF
 	assert_output --partial "test-secret-value-"
 
 	# Cleanup
-	delete_test_bsm_secret "$secret_id"
+	delete_test_bsm_secret "$secret_name"
 }
 
 @test "fnox set creates a new secret in BSM" {
 	create_bsm_config
 
+	local test_secret_name="fnox-set-test-$(date +%s)-$$"
+
 	# Use fnox set to create a new secret
-	run "$FNOX_BIN" set TEST_NEW_SECRET "my-new-secret-value" --provider bsm
+	run "$FNOX_BIN" set TEST_NEW_SECRET "my-new-secret-value" --provider bsm --key-name "$test_secret_name"
 	assert_success
 
-	# The set command should have stored a UUID in the config
 	# Verify we can retrieve it
 	run "$FNOX_BIN" get TEST_NEW_SECRET
 	assert_success
 	assert_output "my-new-secret-value"
 
-	# Read the config to get the secret ID for cleanup
-	local secret_id
-	secret_id=$(grep -oP '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' "${FNOX_CONFIG_FILE}" | tail -1)
-	if [ -n "$secret_id" ]; then
-		delete_test_bsm_secret "$secret_id"
-	fi
+	# Cleanup
+	delete_test_bsm_secret "$test_secret_name"
 }
 
 @test "fnox exec loads BSM secrets into environment" {
 	create_bsm_config
 
-	secret_id=$(create_test_bsm_secret)
+	secret_name=$(create_test_bsm_secret)
 
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.TEST_BSM_EXEC]
 provider = "bsm"
-value = "$secret_id"
+value = "$secret_name"
 EOF
 
 	# Use fnox exec to load secrets into environment
@@ -251,5 +248,5 @@ EOF
 	assert_output --partial "test-secret-value-"
 
 	# Cleanup
-	delete_test_bsm_secret "$secret_id"
+	delete_test_bsm_secret "$secret_name"
 }
