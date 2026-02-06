@@ -7,7 +7,7 @@ use std::process::Command;
 const URL: &str = "https://fnox.jdx.dev/providers/bitwarden-sm";
 
 pub fn env_dependencies() -> &'static [&'static str] {
-    &["BWS_ACCESS_TOKEN", "FNOX_BWS_ACCESS_TOKEN"]
+    &["FNOX_BWS_ACCESS_TOKEN", "BWS_ACCESS_TOKEN"]
 }
 
 pub struct BitwardenSecretsManagerProvider {
@@ -119,13 +119,8 @@ impl BitwardenSecretsManagerProvider {
     }
 
     fn list_secrets(&self) -> Result<Vec<serde_json::Value>> {
-        let json_output = self.execute_bws_command(&[
-            "secret",
-            "list",
-            &self.project_id,
-            "--output",
-            "json",
-        ])?;
+        let json_output =
+            self.execute_bws_command(&["secret", "list", &self.project_id, "--output", "json"])?;
 
         serde_json::from_str(&json_output).map_err(|e| FnoxError::ProviderInvalidResponse {
             provider: "Bitwarden Secrets Manager".to_string(),
@@ -171,10 +166,7 @@ impl crate::providers::Provider for BitwardenSecretsManagerProvider {
     }
 
     async fn get_secret(&self, value: &str) -> Result<String> {
-        tracing::debug!(
-            "Getting secret '{}' from Bitwarden Secrets Manager",
-            value
-        );
+        tracing::debug!("Getting secret '{}' from Bitwarden Secrets Manager", value);
         let secrets = self.list_secrets()?;
         Self::resolve_reference(&secrets, value)
     }
@@ -230,14 +222,14 @@ impl crate::providers::Provider for BitwardenSecretsManagerProvider {
 
         if let Some(existing) = secrets.iter().find(|s| s["key"].as_str() == Some(key)) {
             // Update existing secret by its UUID
-            let id = existing["id"].as_str().ok_or_else(|| {
-                FnoxError::ProviderInvalidResponse {
+            let id = existing["id"]
+                .as_str()
+                .ok_or_else(|| FnoxError::ProviderInvalidResponse {
                     provider: "Bitwarden Secrets Manager".to_string(),
                     details: "Secret missing 'id' field".to_string(),
                     hint: "Unexpected response from bws CLI".to_string(),
                     url: URL.to_string(),
-                }
-            })?;
+                })?;
             tracing::debug!("Editing existing BSM secret '{}' ({})", key, id);
             self.execute_bws_command(&["secret", "edit", id, "--value", value])?;
         } else {
@@ -246,13 +238,7 @@ impl crate::providers::Provider for BitwardenSecretsManagerProvider {
                 key,
                 self.project_id
             );
-            self.execute_bws_command(&[
-                "secret",
-                "create",
-                key,
-                value,
-                &self.project_id,
-            ])?;
+            self.execute_bws_command(&["secret", "create", key, value, &self.project_id])?;
         }
 
         // Return the key name to store in config
