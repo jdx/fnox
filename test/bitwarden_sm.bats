@@ -217,7 +217,8 @@ EOF
 @test "fnox set creates a new secret in BSM" {
 	create_bsm_config
 
-	local test_secret_name="fnox-set-test-$(date +%s)-$$"
+	local test_secret_name
+	test_secret_name="fnox-set-test-$(date +%s)-$$"
 
 	# Use fnox set to create a new secret
 	run "$FNOX_BIN" set TEST_NEW_SECRET "my-new-secret-value" --provider bsm --key-name "$test_secret_name"
@@ -235,7 +236,8 @@ EOF
 @test "fnox set updates an existing secret in BSM" {
 	create_bsm_config
 
-	local test_secret_name="fnox-update-test-$(date +%s)-$$"
+	local test_secret_name
+	test_secret_name="fnox-update-test-$(date +%s)-$$"
 
 	# Create an initial secret directly
 	bws secret create "$test_secret_name" "initial-value" "$BWS_PROJECT_ID" >/dev/null 2>&1
