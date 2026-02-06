@@ -27,7 +27,7 @@ impl BitwardenSecretsManagerProvider {
         self.project_id
             .clone()
             .or_else(|| env::var("BWS_PROJECT_ID").ok())
-            .ok_or_else(|| FnoxError::ProviderAuthFailed {
+            .ok_or_else(|| FnoxError::ProviderCliFailed {
                 provider: "Bitwarden Secrets Manager".to_string(),
                 details: "Project ID not configured".to_string(),
                 hint: "Set project_id in provider config or BWS_PROJECT_ID env var".to_string(),
