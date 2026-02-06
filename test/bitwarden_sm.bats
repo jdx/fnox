@@ -45,6 +45,8 @@ teardown() {
 # Helper function to create a BSM test config
 create_bsm_config() {
 	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF
+root = true
+
 [providers.bsm]
 type = "bitwarden-sm"
 project_id = "${BWS_PROJECT_ID:-test-project-id}"
