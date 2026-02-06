@@ -81,12 +81,10 @@ impl BitwardenSecretsManagerProvider {
             let stderr = String::from_utf8_lossy(&output.stderr);
             let stderr_str = stderr.trim();
 
-            if stderr_str.contains("Unauthorized")
-                || stderr_str.contains("unauthorized")
-                || stderr_str.contains("access token")
-                || stderr_str.contains("Access token")
-                || stderr_str.contains("authentication")
-                || stderr_str.contains("Authentication")
+            let stderr_lower = stderr_str.to_lowercase();
+            if stderr_lower.contains("unauthorized")
+                || stderr_lower.contains("access token")
+                || stderr_lower.contains("authentication")
             {
                 return Err(FnoxError::ProviderAuthFailed {
                     provider: "Bitwarden Secrets Manager".to_string(),
