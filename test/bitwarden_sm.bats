@@ -20,6 +20,7 @@ export BATS_NO_PARALLELIZE_WITHIN_FILE=true
 setup() {
 	load 'test_helper/common_setup'
 	_common_setup
+	_bsm_secrets_to_cleanup=()
 
 	# Check if bws CLI is installed
 	if ! command -v bws >/dev/null 2>&1; then
@@ -39,6 +40,12 @@ setup() {
 }
 
 teardown() {
+	# Clean up any test secrets created during this test
+	if [ ${#_bsm_secrets_to_cleanup[@]} -gt 0 ]; then
+		for secret_name in "${_bsm_secrets_to_cleanup[@]}"; do
+			delete_test_bsm_secret "$secret_name"
+		done
+	fi
 	_common_teardown
 }
 
@@ -97,7 +104,9 @@ delete_test_bsm_secret() {
 	create_bsm_config
 
 	# Create a test secret
+	local secret_name
 	secret_name=$(create_test_bsm_secret)
+	_bsm_secrets_to_cleanup+=("$secret_name")
 
 	# Add secret reference to config (by name)
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
@@ -111,16 +120,15 @@ EOF
 	run "$FNOX_BIN" get TEST_BSM_SECRET
 	assert_success
 	assert_output --partial "test-secret-value-"
-
-	# Cleanup
-	delete_test_bsm_secret "$secret_name"
 }
 
 @test "fnox get retrieves note field from BSM secret" {
 	create_bsm_config
 
 	# Create a test secret with a note
+	local secret_name
 	secret_name=$(create_test_bsm_secret_with_note)
+	_bsm_secrets_to_cleanup+=("$secret_name")
 
 	# Add secret reference to config (fetch note field)
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
@@ -134,9 +142,6 @@ EOF
 	run "$FNOX_BIN" get TEST_BSM_NOTE
 	assert_success
 	assert_output "test-note-content"
-
-	# Cleanup
-	delete_test_bsm_secret "$secret_name"
 }
 
 @test "fnox get fails with nonexistent secret name" {
@@ -196,7 +201,9 @@ EOF
 @test "BSM provider works with token from environment" {
 	create_bsm_config
 
+	local secret_name
 	secret_name=$(create_test_bsm_secret)
+	_bsm_secrets_to_cleanup+=("$secret_name")
 
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
@@ -209,9 +216,6 @@ EOF
 	run "$FNOX_BIN" get TEST_WITH_ENV_TOKEN
 	assert_success
 	assert_output --partial "test-secret-value-"
-
-	# Cleanup
-	delete_test_bsm_secret "$secret_name"
 }
 
 @test "fnox set creates a new secret in BSM" {
@@ -219,6 +223,7 @@ EOF
 
 	local test_secret_name
 	test_secret_name="fnox-set-test-$(date +%s)-$$"
+	_bsm_secrets_to_cleanup+=("$test_secret_name")
 
 	# Use fnox set to create a new secret
 	run "$FNOX_BIN" set TEST_NEW_SECRET "my-new-secret-value" --provider bws --key-name "$test_secret_name"
@@ -228,9 +233,6 @@ EOF
 	run "$FNOX_BIN" get TEST_NEW_SECRET
 	assert_success
 	assert_output "my-new-secret-value"
-
-	# Cleanup
-	delete_test_bsm_secret "$test_secret_name"
 }
 
 @test "fnox set updates an existing secret in BSM" {
@@ -238,6 +240,7 @@ EOF
 
 	local test_secret_name
 	test_secret_name="fnox-update-test-$(date +%s)-$$"
+	_bsm_secrets_to_cleanup+=("$test_secret_name")
 
 	# Create an initial secret directly
 	bws secret create "$test_secret_name" "initial-value" "$BWS_PROJECT_ID" >/dev/null 2>&1
@@ -263,15 +266,14 @@ EOF
 	run "$FNOX_BIN" get TEST_UPDATE_SECRET
 	assert_success
 	assert_output "updated-value"
-
-	# Cleanup
-	delete_test_bsm_secret "$test_secret_name"
 }
 
 @test "fnox exec loads BSM secrets into environment" {
 	create_bsm_config
 
+	local secret_name
 	secret_name=$(create_test_bsm_secret)
+	_bsm_secrets_to_cleanup+=("$secret_name")
 
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
@@ -284,7 +286,4 @@ EOF
 	run "$FNOX_BIN" exec -- sh -c 'echo "$TEST_BSM_EXEC"'
 	assert_success
 	assert_output --partial "test-secret-value-"
-
-	# Cleanup
-	delete_test_bsm_secret "$secret_name"
 }
