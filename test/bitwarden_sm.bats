@@ -232,6 +232,40 @@ EOF
 	delete_test_bsm_secret "$test_secret_name"
 }
 
+@test "fnox set updates an existing secret in BSM" {
+	create_bsm_config
+
+	local test_secret_name="fnox-update-test-$(date +%s)-$$"
+
+	# Create an initial secret directly
+	bws secret create "$test_secret_name" "initial-value" "$BWS_PROJECT_ID" >/dev/null 2>&1
+
+	# Add to config
+	cat >>"${FNOX_CONFIG_FILE}" <<EOF
+
+[secrets.TEST_UPDATE_SECRET]
+provider = "bsm"
+value = "$test_secret_name"
+EOF
+
+	# Verify initial value
+	run "$FNOX_BIN" get TEST_UPDATE_SECRET
+	assert_success
+	assert_output "initial-value"
+
+	# Use fnox set to update the secret
+	run "$FNOX_BIN" set TEST_UPDATE_SECRET "updated-value"
+	assert_success
+
+	# Verify it was updated
+	run "$FNOX_BIN" get TEST_UPDATE_SECRET
+	assert_success
+	assert_output "updated-value"
+
+	# Cleanup
+	delete_test_bsm_secret "$test_secret_name"
+}
+
 @test "fnox exec loads BSM secrets into environment" {
 	create_bsm_config
 
