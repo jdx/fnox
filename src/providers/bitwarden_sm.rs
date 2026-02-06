@@ -11,16 +11,28 @@ pub fn env_dependencies() -> &'static [&'static str] {
 }
 
 pub struct BitwardenSecretsManagerProvider {
-    project_id: String,
+    project_id: Option<String>,
     profile: Option<String>,
 }
 
 impl BitwardenSecretsManagerProvider {
-    pub fn new(project_id: String, profile: Option<String>) -> Self {
+    pub fn new(project_id: Option<String>, profile: Option<String>) -> Self {
         Self {
             project_id,
             profile,
         }
+    }
+
+    fn resolve_project_id(&self) -> Result<String> {
+        self.project_id
+            .clone()
+            .or_else(|| env::var("BWS_PROJECT_ID").ok())
+            .ok_or_else(|| FnoxError::ProviderAuthFailed {
+                provider: "Bitwarden Secrets Manager".to_string(),
+                details: "Project ID not configured".to_string(),
+                hint: "Set project_id in provider config or BWS_PROJECT_ID env var".to_string(),
+                url: URL.to_string(),
+            })
     }
 
     fn get_access_token() -> Result<String> {
@@ -119,8 +131,9 @@ impl BitwardenSecretsManagerProvider {
     }
 
     fn list_secrets(&self) -> Result<Vec<serde_json::Value>> {
+        let project_id = self.resolve_project_id()?;
         let json_output =
-            self.execute_bws_command(&["secret", "list", &self.project_id, "--output", "json"])?;
+            self.execute_bws_command(&["secret", "list", &project_id, "--output", "json"])?;
 
         serde_json::from_str(&json_output).map_err(|e| FnoxError::ProviderInvalidResponse {
             provider: "Bitwarden Secrets Manager".to_string(),
@@ -233,12 +246,13 @@ impl crate::providers::Provider for BitwardenSecretsManagerProvider {
             tracing::debug!("Editing existing BSM secret '{}' ({})", key, id);
             self.execute_bws_command(&["secret", "edit", id, "--value", value])?;
         } else {
+            let project_id = self.resolve_project_id()?;
             tracing::debug!(
                 "Creating new BSM secret '{}' in project '{}'",
                 key,
-                self.project_id
+                project_id
             );
-            self.execute_bws_command(&["secret", "create", key, value, &self.project_id])?;
+            self.execute_bws_command(&["secret", "create", key, value, &project_id])?;
         }
 
         // Return the key name to store in config

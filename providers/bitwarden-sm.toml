@@ -10,9 +10,9 @@ Requires: Bitwarden Secrets Manager access token.
 Set: export BWS_ACCESS_TOKEN=<token>"""
 
 [fields.project_id]
-type = "required"
+type = "optional"
 placeholder = ""
-label = "Project ID:"
+label = "Project ID (or set BWS_PROJECT_ID):"
 wizard = true
 
 [fields.profile]
