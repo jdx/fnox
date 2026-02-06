@@ -1,6 +1,7 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
+use std::collections::HashMap;
 use std::process::Command;
 
 const URL: &str = "https://fnox.jdx.dev/providers/bitwarden-sm";
@@ -146,6 +147,34 @@ impl BitwardenSecretsManagerProvider {
             url: URL.to_string(),
         })
     }
+
+    fn resolve_reference(secrets: &[serde_json::Value], value: &str) -> Result<String> {
+        let (key_name, field_name) = match value.split_once('/') {
+            None => (value, "value"),
+            Some((name, field)) => (name, field),
+        };
+
+        if !matches!(field_name, "value" | "key" | "note") {
+            return Err(FnoxError::ProviderInvalidResponse {
+                provider: "Bitwarden Secrets Manager".to_string(),
+                details: format!("Unknown field '{}' in secret reference", field_name),
+                hint: "Supported fields: value, key, note".to_string(),
+                url: URL.to_string(),
+            });
+        }
+
+        let secret = Self::find_secret_by_key(secrets, key_name)?;
+
+        secret[field_name]
+            .as_str()
+            .map(|s| s.to_string())
+            .ok_or_else(|| FnoxError::ProviderInvalidResponse {
+                provider: "Bitwarden Secrets Manager".to_string(),
+                details: format!("Field '{}' not found in secret", field_name),
+                hint: "Supported fields: value, key, note".to_string(),
+                url: URL.to_string(),
+            })
+    }
 }
 
 #[async_trait]
@@ -159,42 +188,54 @@ impl crate::providers::Provider for BitwardenSecretsManagerProvider {
             "Getting secret '{}' from Bitwarden Secrets Manager",
             value
         );
+        let secrets = self.list_secrets()?;
+        Self::resolve_reference(&secrets, value)
+    }
 
-        // Parse value as "<key_name>" or "<key_name>/field"
-        // Default field is "value" if not specified
-        let (key_name, field_name) = match value.split_once('/') {
-            None => (value, "value"),
-            Some((name, field)) => (name, field),
-        };
-
-        // Validate field name before making the API call
-        if !matches!(field_name, "value" | "key" | "note") {
-            return Err(FnoxError::ProviderInvalidResponse {
-                provider: "Bitwarden Secrets Manager".to_string(),
-                details: format!("Unknown field '{}' in secret reference", field_name),
-                hint: "Supported fields: value, key, note".to_string(),
-                url: URL.to_string(),
-            });
+    async fn get_secrets_batch(
+        &self,
+        secrets: &[(String, String)],
+    ) -> HashMap<String, Result<String>> {
+        if secrets.is_empty() {
+            return HashMap::new();
         }
 
         tracing::debug!(
-            "Reading BSM secret '{}' field '{}'",
-            key_name,
-            field_name
+            "Batch fetching {} secrets from Bitwarden Secrets Manager",
+            secrets.len()
         );
 
-        let secrets = self.list_secrets()?;
-        let secret = Self::find_secret_by_key(&secrets, key_name)?;
+        // Single list call for all secrets
+        let all_secrets = match self.list_secrets() {
+            Ok(s) => s,
+            Err(e) => {
+                // Return the same error for all secrets
+                return secrets
+                    .iter()
+                    .map(|(key, _)| {
+                        (
+                            key.clone(),
+                            Err(FnoxError::ProviderCliFailed {
+                                provider: "Bitwarden Secrets Manager".to_string(),
+                                details: e.to_string(),
+                                hint: "Check your Bitwarden Secrets Manager configuration"
+                                    .to_string(),
+                                url: URL.to_string(),
+                            }),
+                        )
+                    })
+                    .collect();
+            }
+        };
 
-        secret[field_name]
-            .as_str()
-            .map(|s| s.to_string())
-            .ok_or_else(|| FnoxError::ProviderInvalidResponse {
-                provider: "Bitwarden Secrets Manager".to_string(),
-                details: format!("Field '{}' not found in secret", field_name),
-                hint: "Supported fields: value, key, note".to_string(),
-                url: URL.to_string(),
+        // Resolve each secret from the single listing
+        secrets
+            .iter()
+            .map(|(key, value)| {
+                let result = Self::resolve_reference(&all_secrets, value);
+                (key.clone(), result)
             })
+            .collect()
     }
 
     async fn put_secret(&self, key: &str, value: &str) -> Result<String> {
