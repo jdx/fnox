@@ -496,6 +496,10 @@
             }
           ]
         },
+        "json_path": {
+          "description": "JSON path to extract from the secret value (supports dot notation: \"nested.key\")\nWhen set, the secret value is parsed as JSON and the specified path is extracted.",
+          "type": ["string", "null"]
+        },
         "provider": {
           "description": "Provider to fetch from (age, aws-kms, 1password, aws, etc.)",
           "anyOf": [
