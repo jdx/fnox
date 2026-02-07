@@ -42,7 +42,7 @@ Your `fnox.toml` config file either contains encrypted secrets or references to 
 
 ### 🔐 Encryption (secrets in git, encrypted)
 
-- [**age**](https://fnox.jdx.dev/providers/age) - Modern encryption (works with SSH keys!)
+- [**age**](https://fnox.jdx.dev/providers/age) - Modern encryption (works with SSH keys and post-quantum keys!)
 - [**aws-kms**](https://fnox.jdx.dev/providers/aws-kms) - AWS Key Management Service
 - [**azure-kms**](https://fnox.jdx.dev/providers/azure-kms) - Azure Key Vault encryption
 - [**gcp-kms**](https://fnox.jdx.dev/providers/gcp-kms) - Google Cloud KMS

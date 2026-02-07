@@ -1,6 +1,6 @@
 # Age Encryption
 
-Age is a modern encryption tool that's simple, secure, and works beautifully with SSH keys.
+Age is a modern encryption tool that's simple, secure, and works beautifully with SSH keys and post-quantum keys.
 
 ## Quick Start
 
@@ -177,6 +177,79 @@ cat ~/.ssh/id_ed25519.pub
 cat ~/.ssh/id_rsa.pub
 ```
 
+## Post-Quantum Key Support
+
+fnox supports age post-quantum keys (ML-KEM-768 + X25519 hybrid encryption), providing future-proof security against quantum attacks.
+
+### Generate Post-Quantum Key
+
+```bash
+# Generate post-quantum key (age CLI >= 1.3.0 required)
+age-keygen -pq -o ~/.config/fnox/age.txt
+
+# View the generated key
+cat ~/.config/fnox/age.txt
+```
+
+Output:
+
+```
+# created: 2024-01-15T10:30:45-08:00
+# public key: age1pqzwq3l6x6z8x9y0z1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t1u2v3w4x5y6z7a8b9c0d1e2f3g4h5i6j7k8l9m0n1o2p3q4r5s6t7u8v9w0x1y2z3a4b5c6d7e8f9g0h1i2j3k4l5m6n7o8p9q0r1s2t3u4v5w6x7y8z9a0b1c2d3e4f5g6h7i8j9k0l1m2n3o4p5q6r7s8t9u0v1w2x3y4z5a6b7c8d9e0f1g2h3i4j5k6l7m8n9o0p1q2r3s4t5u6v7w8x9y0z1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t1u2v3w4x5y6z7
+AGE-SECRET-KEY-PQ-1ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDEFGHIJKLMNOPQRSTUVWX
+```
+
+### Configure Post-Quantum Keys
+
+Add to `fnox.toml`:
+
+```toml
+[providers]
+age = { type = "age", recipients = ["age1pqzwq3l6x6z8x9y0z1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t1u2v3w4x5y6z7a8b9c0d1e2f3g4h5i6j7k8l9m0n1o2p3q4r5s6t7u8v9w0x1y2z3a4b5c6d7e8f9g0h1i2j3k4l5m6n7o8p9q0r1s2t3u4v5w6x7y8z9a0b1c2d3e4f5g6h7i8j9k0l1m2n3o4p5q6r7s8t7u8v9w0x1y2z3a4b5c6d7e8f9g0h1i2j3k4l5m6n7o8p9q0r1s2t3u4v5w6x7y8z9"] }
+```
+
+Set the private key:
+
+```bash
+export FNOX_AGE_KEY=$(cat ~/.config/fnox/age.txt | grep "AGE-SECRET-KEY")
+```
+
+### Post-Quantum Key Formats
+
+- **Public keys**: Start with `age1pq` (bech32-encoded)
+- **Private keys**: Start with `AGE-SECRET-KEY-PQ-`
+
+### Post-Quantum vs Traditional Keys
+
+| Feature     | Traditional (age/ssh) | Post-Quantum      |
+| ----------- | --------------------- | ----------------- |
+| Security    | Classical             | Quantum-resistant |
+| Key Size    | ~60 bytes (age)       | ~180 bytes (PQ)   |
+| Performance | Faster                | Slightly slower   |
+| Age CLI     | Any version           | >= 1.3.0 required |
+
+### Limitations
+
+::: warning Recipient Type Mixing
+**You cannot mix different recipient types in a single encryption operation.** This means:
+
+- All recipients must be either: traditional age keys OR SSH keys OR post-quantum keys
+- You cannot encrypt for both `age1...` and `age1pq...` recipients in the same secret
+
+If you need to support multiple key types, create separate providers:
+
+```toml
+[providers.age-traditional]
+type = "age"
+recipients = ["age1...", "ssh-ed25519 ..."]
+
+[providers.age-pq]
+type = "age"
+recipients = ["age1pq..."]
+```
+
+:::
+
 ## Team Workflow
 
 ### 1. Collect Public Keys
@@ -345,6 +418,7 @@ jobs:
 - ✅ Zero runtime dependencies (after initial setup)
 - ✅ Free forever
 - ✅ Works with SSH keys you already have
+- ✅ Post-quantum key support for future-proof security
 - ✅ Simple and secure
 - ✅ Team-friendly (multiple recipients)
 
@@ -366,6 +440,7 @@ Your private key doesn't match any of the recipients. Check:
 # Verify your public key matches a recipient
 cat ~/.config/fnox/age.txt  # Check public key
 cat ~/.ssh/id_ed25519.pub   # Check SSH public key
+cat ~/.config/fnox/age-pq.txt  # Check post-quantum public key
 
 # Compare with fnox.toml recipients
 cat fnox.toml | grep recipients
@@ -382,6 +457,11 @@ cat fnox.toml | grep recipients
 - Verify SSH key type is supported (ed25519 or rsa)
 - Check that the private key file path is correct
 - Ensure the private key is NOT password-protected
+
+### Post-quantum key not working
+
+- Check that the public key starts with `age1pq`
+- Check that the private key starts with `AGE-SECRET-KEY-PQ-`
 
 ## Next Steps
 
