@@ -143,4 +143,17 @@ export default defineConfig({
       provider: "local",
     },
   },
+  head: [
+    ["meta", { property: "og:site_name", content: "fnox" }],
+    ["meta", { property: "og:type", content: "website" }],
+    [
+      "meta",
+      { property: "og:image", content: "https://fnox.jdx.dev/logo.svg" },
+    ],
+    ["meta", { name: "twitter:card", content: "summary" }],
+    [
+      "meta",
+      { name: "twitter:image", content: "https://fnox.jdx.dev/logo.svg" },
+    ],
+  ],
 });
