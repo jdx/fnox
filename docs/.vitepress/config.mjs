@@ -148,12 +148,12 @@ export default defineConfig({
     ["meta", { property: "og:type", content: "website" }],
     [
       "meta",
-      { property: "og:image", content: "https://fnox.jdx.dev/logo.svg" },
+      { property: "og:image", content: "https://fnox.jdx.dev/logo.png" },
     ],
     ["meta", { name: "twitter:card", content: "summary" }],
     [
       "meta",
-      { name: "twitter:image", content: "https://fnox.jdx.dev/logo.svg" },
+      { name: "twitter:image", content: "https://fnox.jdx.dev/logo.png" },
     ],
   ],
 });
