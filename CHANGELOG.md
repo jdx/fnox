@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.12.0](https://github.com/jdx/fnox/compare/v1.11.0..v1.12.0) - 2026-02-08
+
+### 🚀 Features
+
+- implement as_file to inject a secret as a file instead of as a value by [@kfkonrad](https://github.com/kfkonrad) in [#250](https://github.com/jdx/fnox/pull/250)
+- add a `--no-defaults` CLI flag by [@jaydenfyi](https://github.com/jaydenfyi) in [#252](https://github.com/jdx/fnox/pull/252)
+
+### 📚 Documentation
+
+- document tools=true requirement for mise integration by [@jdx](https://github.com/jdx) in [#245](https://github.com/jdx/fnox/pull/245)
+- add opengraph meta tags by [@jdx](https://github.com/jdx) in [#256](https://github.com/jdx/fnox/pull/256)
+
+### 🔍 Other Changes
+
+- reduce CI bats test parallelism from 3 to 2 tranches by [@jdx](https://github.com/jdx) in [#243](https://github.com/jdx/fnox/pull/243)
+- add tone calibration to release notes prompt by [@jdx](https://github.com/jdx) in [#251](https://github.com/jdx/fnox/pull/251)
+- Add Bitwarden SM provider by [@nikuda](https://github.com/nikuda) in [#253](https://github.com/jdx/fnox/pull/253)
+
+### 📦️ Dependency Updates
+
+- update autofix-ci/action action to v1.3.3 by [@renovate[bot]](https://github.com/renovate[bot]) in [#254](https://github.com/jdx/fnox/pull/254)
+- update aws-sdk-rust monorepo to v1.8.13 by [@renovate[bot]](https://github.com/renovate[bot]) in [#255](https://github.com/jdx/fnox/pull/255)
+
+### New Contributors
+
+- @nikuda made their first contribution in [#253](https://github.com/jdx/fnox/pull/253)
+- @jaydenfyi made their first contribution in [#252](https://github.com/jdx/fnox/pull/252)
+- @kfkonrad made their first contribution in [#250](https://github.com/jdx/fnox/pull/250)
+
 ## [1.11.0](https://github.com/jdx/fnox/compare/v1.10.1..v1.11.0) - 2026-02-01
 
 ### 🚀 Features
