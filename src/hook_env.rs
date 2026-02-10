@@ -203,8 +203,11 @@ fn has_config_been_modified() -> bool {
     current_hash != PREV_SESSION.config_files_hash
 }
 
-/// Collect all config files (including dotfile variants) from dir up to root
+/// Collect all config files (including dotfile variants) from dir up to root,
+/// plus the global config, for change detection.
 fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
+    use crate::config::Config;
+
     let mut configs = Vec::new();
     let mut current = start_dir.to_path_buf();
 
@@ -228,6 +231,15 @@ fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
         if !current.pop() {
             break;
         }
+    }
+
+    // Also check global config for change detection
+    let global = Config::global_config_path();
+    if let Ok(metadata) = std::fs::metadata(&global)
+        && let Ok(modified) = metadata.modified()
+        && let Ok(duration) = modified.duration_since(SystemTime::UNIX_EPOCH)
+    {
+        configs.push((global, duration.as_millis()));
     }
 
     configs
@@ -269,9 +281,11 @@ fn hash_fnox_env_vars() -> String {
     format!("{:x}", hasher.finish())
 }
 
-/// Find fnox.toml, fnox.$FNOX_PROFILE.toml, or fnox.local.toml in current or parent directories
+/// Find fnox.toml, fnox.$FNOX_PROFILE.toml, or fnox.local.toml, searching
+/// from the current directory up through parent directories, then falling
+/// back to the global config path if no local config is found.
 pub fn find_config() -> Option<PathBuf> {
-    use crate::config::all_config_filenames;
+    use crate::config::{Config, all_config_filenames};
 
     let profile = crate::settings::Settings::get().profile.clone();
     let filenames = all_config_filenames(Some(&profile));
@@ -290,6 +304,12 @@ pub fn find_config() -> Option<PathBuf> {
         if !current.pop() {
             break;
         }
+    }
+
+    // Check global config as fallback
+    let global = Config::global_config_path();
+    if global.is_file() {
+        return Some(global);
     }
 
     None
