@@ -70,7 +70,7 @@ cd my-app
 
 # Switch to staging
 export FNOX_PROFILE=staging
-cd .  # Reload secrets
+# fnox detects the change on the next prompt automatically
 # fnox: -3 +3 DATABASE_URL, API_KEY, JWT_SECRET (from staging profile)
 ```
 
@@ -95,13 +95,9 @@ When you `cd services/api/`, fnox loads:
 
 ## Manual Reload
 
-Force a reload without changing directories:
+fnox's shell hook runs on every prompt and automatically detects changes to config files and environment variables like `FNOX_PROFILE`. In most cases, no manual reload is needed.
 
-```bash
-cd .
-```
-
-Or temporarily disable and re-enable:
+To force a full reload, temporarily disable and re-enable:
 
 ```bash
 # Disable

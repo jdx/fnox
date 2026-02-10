@@ -58,7 +58,7 @@ export FNOX_PROFILE=production
 cd my-app  # Loads production secrets
 
 export FNOX_PROFILE=staging
-cd .       # Reloads with staging secrets
+# fnox detects the change on the next prompt automatically
 ```
 
 ## Profile Inheritance
