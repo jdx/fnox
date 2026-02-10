@@ -1,6 +1,24 @@
 # Changelog
 
-## [1.12.0](https://github.com/jdx/fnox/compare/v1.11.0..v1.12.0) - 2026-02-08
+## [1.12.1](https://github.com/jdx/fnox/compare/v1.12.0..v1.12.1) - 2026-02-10
+
+### 🐛 Bug Fixes
+
+- load global config in shell integration hook-env by [@jdx](https://github.com/jdx) in [#262](https://github.com/jdx/fnox/pull/262)
+
+### 📚 Documentation
+
+- condense CLAUDE.md from 1159 to 96 lines by [@jdx](https://github.com/jdx) in [#260](https://github.com/jdx/fnox/pull/260)
+
+### 🛡️ Security
+
+- disable light mode in documentation site by [@jdx](https://github.com/jdx) in [#261](https://github.com/jdx/fnox/pull/261)
+
+### 📦️ Dependency Updates
+
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#257](https://github.com/jdx/fnox/pull/257)
+
+## [1.12.0](https://github.com/jdx/fnox/compare/v1.11.0..v1.12.0) - 2026-02-09
 
 ### 🚀 Features
 
