@@ -544,9 +544,13 @@ impl Config {
                     path: target_file.clone(),
                     source,
                 })?;
-            content
-                .parse::<DocumentMut>()
-                .map_err(|e| FnoxError::Config(format!("Failed to parse TOML: {}", e)))?
+            content.parse::<DocumentMut>().map_err(|e| {
+                FnoxError::Config(format!(
+                    "Failed to parse TOML in {}: {}",
+                    target_file.display(),
+                    e
+                ))
+            })?
         } else {
             DocumentMut::new()
         };
@@ -608,9 +612,13 @@ impl Config {
                 path: target_file.to_path_buf(),
                 source,
             })?;
-        let mut doc = content
-            .parse::<DocumentMut>()
-            .map_err(|e| FnoxError::Config(format!("Failed to parse TOML: {}", e)))?;
+        let mut doc = content.parse::<DocumentMut>().map_err(|e| {
+            FnoxError::Config(format!(
+                "Failed to parse TOML in {}: {}",
+                target_file.display(),
+                e
+            ))
+        })?;
 
         // Navigate to the secrets table
         let removed = if profile == "default" {
@@ -658,9 +666,13 @@ impl Config {
                     path: target_file.to_path_buf(),
                     source,
                 })?;
-            content
-                .parse::<DocumentMut>()
-                .map_err(|e| FnoxError::Config(format!("Failed to parse TOML: {}", e)))?
+            content.parse::<DocumentMut>().map_err(|e| {
+                FnoxError::Config(format!(
+                    "Failed to parse TOML in {}: {}",
+                    target_file.display(),
+                    e
+                ))
+            })?
         } else {
             DocumentMut::new()
         };

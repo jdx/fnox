@@ -205,12 +205,24 @@ impl ImportCommand {
             cli.config.clone()
         };
 
+        // Load existing target config to preserve metadata on re-import
+        let mut existing_config = if target_path.exists() {
+            Some(Config::load(&target_path)?)
+        } else {
+            None
+        };
+
         // Build the secrets to import (encrypt each value)
         let mut import_secrets = IndexMap::new();
         let total_secrets = secrets.len();
 
         for (key, value) in secrets {
-            let mut secret_config = crate::config::SecretConfig::default();
+            // Start from existing config if key already exists, to preserve metadata
+            // (description, if_missing, default, as_file, etc.)
+            let mut secret_config = existing_config
+                .as_mut()
+                .and_then(|c| c.get_secrets_mut(&profile).shift_remove(&key))
+                .unwrap_or_default();
 
             // Set the provider
             secret_config.set_provider(Some(self.provider.clone()));

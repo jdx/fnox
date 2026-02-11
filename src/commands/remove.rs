@@ -70,7 +70,15 @@ impl RemoveCommand {
             }
         } else {
             // Remove secret directly from the TOML document, preserving comments
-            Config::remove_secret_from_source(&self.key, &profile, &target_path)?;
+            let removed = Config::remove_secret_from_source(&self.key, &profile, &target_path)?;
+            if !removed {
+                return Err(FnoxError::SecretNotFound {
+                    key: self.key.clone(),
+                    profile: profile.to_string(),
+                    config_path: Some(target_path),
+                    suggestion: None,
+                });
+            }
             let check = console::style("✓").green();
             let styled_key = console::style(&self.key).cyan();
             let styled_profile = console::style(&profile).magenta();
