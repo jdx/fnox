@@ -89,6 +89,7 @@ jobs:
       - name: Install Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code
       - name: Generate release notes
+        continue-on-error: true
         run: |
           if [[ -n "${{ inputs.version }}" ]]; then
             TAG_NAME="v${{ inputs.version }}"
@@ -96,20 +97,14 @@ jobs:
             TAG_NAME="${{ github.ref_name }}"
           fi
           PREV_TAG="$(git describe --tags --abbrev=0 "$TAG_NAME^" 2>/dev/null || echo "")"
+
           # Generate rich release notes using LLM
-          # Output format: "# vX.X.X - Creative Title" followed by release notes
           if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
-            # Only process output if command succeeds - prevents partial output from overwriting fallback
-            if mise run gen-release-notes "$TAG_NAME" "$PREV_TAG" > /tmp/release-raw.txt 2>&1; then
-              # Strip any preamble before the "# vX.X.X -" line
-              sed -n '/^# v[0-9]/,$p' /tmp/release-raw.txt > /tmp/release-full.txt
-              if [[ -s /tmp/release-full.txt ]]; then
-                # Extract title from first line (format: "# vX.X.X - Creative Title")
-                RELEASE_TITLE="$(head -1 /tmp/release-full.txt | sed 's/^# //')"
-                echo "$RELEASE_TITLE" > /tmp/release-title.txt
-                # Body is everything after the first line
-                tail -n +2 /tmp/release-full.txt > release-notes.md
-              fi
+            OUTPUT_DIR=$(mktemp -d)
+            if mise run gen-release-notes "$TAG_NAME" "$OUTPUT_DIR" "$PREV_TAG"; then
+              RELEASE_TITLE="$(cat "$OUTPUT_DIR/title")"
+              cp "$OUTPUT_DIR/notes" release-notes.md
+              echo "$RELEASE_TITLE" > /tmp/release-title.txt
             fi
             # Fallback if LLM generation failed or output was invalid
             if [[ ! -s release-notes.md ]]; then
