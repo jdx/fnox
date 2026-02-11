@@ -266,18 +266,44 @@ aws secretsmanager create-secret \
   --secret-string '{"host":"db.example.com","port":"5432","username":"admin","password":"secret"}'
 ```
 
-fnox returns the entire JSON string:
+By default, `fnox` returns the entire JSON string. Use `json_path` to extract specific fields:
+
+```toml
+[providers]
+aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp/" }
+
+[secrets]
+DB_CREDENTIALS = { provider = "aws", value = "db-credentials" }
+DB_PASS = { provider = "aws", value = "db-credentials", json_path = "password" }
+```
 
 ```bash
 fnox get DB_CREDENTIALS
 # Output: {"host":"db.example.com","port":"5432","username":"admin","password":"secret"}
+
+fnox get DB_PASS
+# Output: secret
 ```
 
-To extract a specific field, use `jq`:
+This also supports nested JSON paths using dot notation.
+
+Literal dots need to be escaped (`\.`).
+In TOML, either literal strings have to be used (`'\.'`) or the backslash itself has to be escaped (`"\\."`):
 
 ```bash
-fnox get DB_CREDENTIALS | jq -r '.password'
-# Output: secret
+# Create nested JSON secret
+aws secretsmanager create-secret \
+  --name "myapp/config" \
+  --secret-string '{"database":{"host":"db.example.com","cache.key":"foo"}}'
+```
+
+```toml
+[providers]
+aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp/" }
+
+[secrets]
+DB_HOST = { provider = "aws", value = "config", json_path = "database.host" }
+DB_CACHE_KEY = { provider = "aws", value = "config", json_path = 'database.cache\.key' }
 ```
 
 ## Secret Rotation

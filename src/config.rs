@@ -111,6 +111,10 @@ pub struct SecretConfig {
     /// Write secret to a temporary file and set env var to the file path instead of the secret value
     #[serde(default, skip_serializing_if = "is_false")]
     pub as_file: bool,
+    /// JSON path to extract from the secret value (supports dot notation: "nested.key")
+    /// When set, the secret value is parsed as JSON and the specified path is extracted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub json_path: Option<String>,
 
     /// Path to the config file where this secret was defined (not serialized)
     #[serde(skip)]
@@ -1193,6 +1197,7 @@ impl SecretConfig {
             provider: None,
             value: None,
             as_file: false,
+            json_path: None,
             source_path: None,
         }
     }
@@ -1206,6 +1211,9 @@ impl SecretConfig {
         }
         if let Some(value) = self.value() {
             inline.insert("value", toml_edit::Value::from(value));
+        }
+        if let Some(ref json_path) = self.json_path {
+            inline.insert("json_path", toml_edit::Value::from(json_path.as_str()));
         }
         if let Some(ref description) = self.description {
             inline.insert("description", toml_edit::Value::from(description.as_str()));

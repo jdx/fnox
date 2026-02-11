@@ -10,6 +10,70 @@ use indexmap::IndexMap;
 use miette::SourceSpan;
 use std::collections::{HashMap, HashSet};
 
+/// Extract a value from JSON using dot notation (e.g., "nested.path")
+/// Supports escaped dots: "foo\.bar" accesses the literal key "foo.bar"
+fn extract_json_path(json_str: &str, path: &str) -> Result<String> {
+    let value: serde_json::Value = serde_json::from_str(json_str)
+        .map_err(|e| FnoxError::Config(format!("Failed to parse JSON secret: {}", e)))?;
+
+    let mut current = &value;
+    for part in split_key_path(path) {
+        current = current.get(&part).ok_or_else(|| {
+            FnoxError::Config(format!("JSON path '{}' not found in secret", path))
+        })?;
+    }
+
+    match current {
+        serde_json::Value::String(s) => Ok(s.clone()),
+        serde_json::Value::Null => Ok("null".to_string()),
+        other => Ok(other.to_string()), // Numbers, bools, arrays, objects
+    }
+}
+
+/// Split a key path on unescaped dots, unescaping `\.` to `.` in each part.
+/// Examples:
+///   "foo.bar" -> ["foo", "bar"]
+///   "foo\.bar" -> ["foo.bar"]
+///   "a.b\.c.d" -> ["a", "b.c", "d"]
+///   "foo\\\.bar" -> ["foo\.bar"] (escaped backslash + escaped dot)
+fn split_key_path(key: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut chars = key.chars();
+
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            // Escape the next character.
+            if let Some(next_char) = chars.next() {
+                current.push(next_char);
+            } else {
+                // A trailing backslash is treated as a literal backslash.
+                current.push('\\');
+            }
+        } else if c == '.' {
+            parts.push(std::mem::take(&mut current));
+        } else {
+            current.push(c);
+        }
+    }
+
+    parts.push(current);
+    parts
+}
+
+/// Apply post-processing to a secret value based on SecretConfig settings.
+/// When json_path is set, extracts the specified path from a JSON value.
+fn apply_post_processing(value: String, secret_config: &SecretConfig) -> Result<String> {
+    if let Some(ref json_path) = secret_config.json_path {
+        if json_path.is_empty() {
+            return Err(FnoxError::Config("json_path must not be empty".to_string()).into());
+        }
+        extract_json_path(&value, json_path)
+    } else {
+        Ok(value)
+    }
+}
+
 /// Creates a ProviderNotConfigured error, using source spans when available for better error display.
 fn create_provider_not_configured_error(
     provider_name: &str,
@@ -47,7 +111,7 @@ fn create_provider_not_configured_error(
 
 /// Resolves the if_missing behavior using the complete priority chain:
 /// 1. CLI flag (--if-missing) via Settings
-/// 2. Environment variable (FNOX_IF_MISSING) via Settings  
+/// 2. Environment variable (FNOX_IF_MISSING) via Settings
 /// 3. Secret-level if_missing
 /// 4. Top-level config if_missing
 /// 5. Base default environment variable (FNOX_IF_MISSING_DEFAULT) via Settings
@@ -134,27 +198,34 @@ pub fn handle_provider_error(
 /// 3. Environment variable
 ///
 /// The raw `value` field is NEVER used directly - it's only used as input to providers.
+/// Post-processing (e.g., JSON path extraction) is applied to all sources consistently.
 pub async fn resolve_secret(
     config: &Config,
     profile: &str,
     key: &str,
     secret_config: &SecretConfig,
 ) -> Result<Option<String>> {
-    // Priority 1: Provider (if specified and has a value)
-    if let Some(value) = try_resolve_from_provider(config, profile, secret_config).await? {
-        return Ok(Some(value));
-    }
+    // Try to get a value from any source (provider, default, or env var)
+    let value_to_process =
+        // Priority 1: Provider (if specified and has a value)
+        if let Some(value) = try_resolve_from_provider(config, profile, secret_config).await? {
+            Some(value)
+        // Priority 2: Default value
+        } else if let Some(default) = &secret_config.default {
+            tracing::debug!("Using default value for secret '{}'", key);
+            Some(default.clone())
+        // Priority 3: Environment variable
+        } else if let Ok(env_value) = env::var(key) {
+            tracing::debug!("Found secret '{}' in current environment", key);
+            Some(env_value)
+        } else {
+            None
+        };
 
-    // Priority 2: Default value
-    if let Some(default) = &secret_config.default {
-        tracing::debug!("Using default value for secret '{}'", key);
-        return Ok(Some(default.clone()));
-    }
-
-    // Priority 3: Environment variable
-    if let Ok(env_value) = env::var(key) {
-        tracing::debug!("Found secret '{}' in current environment", key);
-        return Ok(Some(env_value));
+    // Apply post-processing to whatever value we found (e.g., JSON path extraction)
+    if let Some(value) = value_to_process {
+        let processed = apply_post_processing(value, secret_config)?;
+        return Ok(Some(processed));
     }
 
     // No value found - handle based on if_missing with priority chain
@@ -502,20 +573,11 @@ async fn resolve_level(
     }
 
     // Resolve no-provider secrets in parallel
-    let no_provider_results: Vec<_> = stream::iter(level_no_provider)
+    let no_provider_results: Vec<Result<_>> = stream::iter(level_no_provider)
         .map(|key| async move {
             let secret_config = &secrets[&key];
-            match resolve_secret(config, profile, &key, secret_config).await {
-                Ok(value) => Ok((key, value)),
-                Err(e) => {
-                    let if_missing = resolve_if_missing_behavior(secret_config, config);
-                    if let Some(error) = handle_provider_error(&key, e, if_missing, true) {
-                        Err(error)
-                    } else {
-                        Ok((key, None))
-                    }
-                }
-            }
+            let value = resolve_secret(config, profile, &key, secret_config).await?;
+            Ok((key, value))
         })
         .buffer_unordered(10)
         .collect()
@@ -686,7 +748,17 @@ fn process_batch_results(
         let secret_config = &secrets[&key];
         match result {
             Ok(value) => {
-                results.insert(key, Some(value));
+                // Apply post-processing (e.g., JSON path extraction)
+                match apply_post_processing(value, secret_config) {
+                    Ok(processed) => {
+                        results.insert(key, Some(processed));
+                    }
+                    Err(e) => {
+                        // Post-processing errors (invalid JSON, missing key) are config/data errors,
+                        // not "missing secret" — always fail hard regardless of if_missing.
+                        return Err(e);
+                    }
+                }
             }
             Err(e) => {
                 let if_missing = resolve_if_missing_behavior(secret_config, config);
@@ -848,5 +920,44 @@ mod tests {
         assert_eq!(levels[0], vec!["OP_SERVICE_ACCOUNT_TOKEN", "PLAIN_VAR"]);
         // Level 1: 1Password secrets that depend on the token
         assert_eq!(levels[1], vec!["DB_PASSWORD", "TUNNEL_TOKEN"]);
+    }
+
+    #[test]
+    fn test_split_key_path_simple() {
+        assert_eq!(split_key_path("foo"), vec!["foo"]);
+        assert_eq!(split_key_path("foo.bar"), vec!["foo", "bar"]);
+        assert_eq!(split_key_path("a.b.c"), vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn test_split_key_path_escaped_dot() {
+        // Single escaped dot
+        assert_eq!(split_key_path(r"foo\.bar"), vec!["foo.bar"]);
+        // Escaped dot in the middle of a path
+        assert_eq!(split_key_path(r"a.b\.c.d"), vec!["a", "b.c", "d"]);
+        // Multiple escaped dots
+        assert_eq!(split_key_path(r"foo\.bar\.baz"), vec!["foo.bar.baz"]);
+    }
+
+    #[test]
+    fn test_split_key_path_escaped_backslash() {
+        // Escaped backslash followed by dot (literal backslash + path separator)
+        assert_eq!(split_key_path(r"foo\\.bar"), vec!["foo\\", "bar"]);
+        // Escaped backslash followed by escaped dot
+        assert_eq!(split_key_path(r"foo\\\.bar"), vec!["foo\\.bar"]);
+    }
+
+    #[test]
+    fn test_split_key_path_edge_cases() {
+        // Empty string
+        assert_eq!(split_key_path(""), vec![""]);
+        // Just a dot
+        assert_eq!(split_key_path("."), vec!["", ""]);
+        // Trailing dot
+        assert_eq!(split_key_path("foo."), vec!["foo", ""]);
+        // Leading dot
+        assert_eq!(split_key_path(".foo"), vec!["", "foo"]);
+        // Backslash at end (kept as-is)
+        assert_eq!(split_key_path(r"foo\"), vec!["foo\\"]);
     }
 }
