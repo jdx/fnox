@@ -698,13 +698,23 @@ impl Config {
             profile_table["secrets"].as_table_mut().unwrap()
         };
 
-        // Insert each secret as an inline table
+        // Insert/update each secret as an inline table
         for (name, config) in secrets {
             let inline = config.to_inline_table();
-            secrets_table[name.as_str()] = Item::Value(Value::InlineTable(inline));
 
-            if let Some(mut key) = secrets_table.key_mut(name.as_str()) {
-                key.leaf_decor_mut().set_suffix("");
+            // Update existing values in-place to preserve decor/comments on the entry
+            if let Some(item) = secrets_table.get_mut(name.as_str()) {
+                if let Item::Value(Value::InlineTable(existing_inline)) = item {
+                    *existing_inline = inline;
+                } else {
+                    *item = Item::Value(Value::InlineTable(inline));
+                }
+            } else {
+                secrets_table[name.as_str()] = Item::Value(Value::InlineTable(inline));
+
+                if let Some(mut key) = secrets_table.key_mut(name.as_str()) {
+                    key.leaf_decor_mut().set_suffix("");
+                }
             }
         }
 
