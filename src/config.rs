@@ -592,6 +592,119 @@ impl Config {
         Ok(())
     }
 
+    /// Remove a single secret from a config file, preserving comments and formatting.
+    ///
+    /// This method directly manipulates the TOML document AST rather than
+    /// re-serializing, so all comments, whitespace, and formatting are preserved.
+    pub fn remove_secret_from_source(
+        secret_name: &str,
+        profile: &str,
+        target_file: &Path,
+    ) -> Result<bool> {
+        use toml_edit::DocumentMut;
+
+        let content =
+            fs::read_to_string(target_file).map_err(|source| FnoxError::ConfigReadFailed {
+                path: target_file.to_path_buf(),
+                source,
+            })?;
+        let mut doc = content
+            .parse::<DocumentMut>()
+            .map_err(|e| FnoxError::Config(format!("Failed to parse TOML: {}", e)))?;
+
+        // Navigate to the secrets table
+        let removed = if profile == "default" {
+            doc.get_mut("secrets")
+                .and_then(|s| s.as_table_mut())
+                .map(|t| t.remove(secret_name).is_some())
+                .unwrap_or(false)
+        } else {
+            doc.get_mut("profiles")
+                .and_then(|p| p.as_table_mut())
+                .and_then(|p| p.get_mut(profile))
+                .and_then(|p| p.as_table_mut())
+                .and_then(|p| p.get_mut("secrets"))
+                .and_then(|s| s.as_table_mut())
+                .map(|t| t.remove(secret_name).is_some())
+                .unwrap_or(false)
+        };
+
+        if removed {
+            fs::write(target_file, doc.to_string()).map_err(|source| {
+                FnoxError::ConfigWriteFailed {
+                    path: target_file.to_path_buf(),
+                    source,
+                }
+            })?;
+        }
+
+        Ok(removed)
+    }
+
+    /// Save multiple secrets to a config file, preserving comments and formatting.
+    ///
+    /// This is the batch equivalent of `save_secret_to_source`, used by `fnox import`.
+    pub fn save_secrets_to_source(
+        secrets: &IndexMap<String, SecretConfig>,
+        profile: &str,
+        target_file: &Path,
+    ) -> Result<()> {
+        use toml_edit::{DocumentMut, Item, Value};
+
+        // Load existing document or create new one (preserves comments)
+        let mut doc = if target_file.exists() {
+            let content =
+                fs::read_to_string(target_file).map_err(|source| FnoxError::ConfigReadFailed {
+                    path: target_file.to_path_buf(),
+                    source,
+                })?;
+            content
+                .parse::<DocumentMut>()
+                .map_err(|e| FnoxError::Config(format!("Failed to parse TOML: {}", e)))?
+        } else {
+            DocumentMut::new()
+        };
+
+        // Get or create the secrets table
+        let secrets_table = if profile == "default" {
+            if doc.get("secrets").is_none() {
+                doc["secrets"] = Item::Table(toml_edit::Table::new());
+            }
+            doc["secrets"].as_table_mut().unwrap()
+        } else {
+            if doc.get("profiles").is_none() {
+                doc["profiles"] = Item::Table(toml_edit::Table::new());
+            }
+            let profiles = doc["profiles"].as_table_mut().unwrap();
+            if profiles.get(profile).is_none() {
+                profiles[profile] = Item::Table(toml_edit::Table::new());
+            }
+            let profile_table = profiles[profile].as_table_mut().unwrap();
+            if profile_table.get("secrets").is_none() {
+                profile_table["secrets"] = Item::Table(toml_edit::Table::new());
+            }
+            profile_table["secrets"].as_table_mut().unwrap()
+        };
+
+        // Insert each secret as an inline table
+        for (name, config) in secrets {
+            let inline = config.to_inline_table();
+            secrets_table[name.as_str()] = Item::Value(Value::InlineTable(inline));
+
+            if let Some(mut key) = secrets_table.key_mut(name.as_str()) {
+                key.leaf_decor_mut().set_suffix("");
+            }
+        }
+
+        // Write back (preserves all comments and formatting)
+        fs::write(target_file, doc.to_string()).map_err(|source| FnoxError::ConfigWriteFailed {
+            path: target_file.to_path_buf(),
+            source,
+        })?;
+
+        Ok(())
+    }
+
     /// Create a new default configuration
     pub fn new() -> Self {
         Self {

@@ -3,6 +3,7 @@ use crate::config::Config;
 use crate::error::{FnoxError, Result};
 use clap::{Args, ValueEnum};
 use console;
+use indexmap::IndexMap;
 use miette::{NamedSource, SourceSpan};
 use regex::Regex;
 use std::io::{self, Read};
@@ -204,48 +205,41 @@ impl ImportCommand {
             cli.config.clone()
         };
 
-        // Load only the target config file (not merged) for modification
-        let mut target_config = if target_path.exists() {
-            Config::load(&target_path)?
-        } else {
-            Config::new()
-        };
+        // Build the secrets to import (encrypt each value)
+        let mut import_secrets = IndexMap::new();
+        let total_secrets = secrets.len();
 
-        // Process and encrypt/store each secret into the target config
-        {
-            let profile_secrets = target_config.get_secrets_mut(&profile);
-            let total_secrets = secrets.len();
+        for (key, value) in secrets {
+            let mut secret_config = crate::config::SecretConfig::default();
 
-            for (key, value) in secrets {
-                let secret_config = profile_secrets.entry(key.clone()).or_default();
+            // Set the provider
+            secret_config.set_provider(Some(self.provider.clone()));
 
-                // Set the provider
-                secret_config.set_provider(Some(self.provider.clone()));
-
-                // Encrypt the value (provider already validated as encryption provider)
-                match provider.encrypt(&value).await {
-                    Ok(encrypted) => {
-                        secret_config.set_value(Some(encrypted));
-                    }
-                    Err(e) => {
-                        return Err(FnoxError::ImportEncryptionFailed {
-                            key: key.clone(),
-                            provider: self.provider.clone(),
-                            details: e.to_string(),
-                        });
-                    }
+            // Encrypt the value (provider already validated as encryption provider)
+            match provider.encrypt(&value).await {
+                Ok(encrypted) => {
+                    secret_config.set_value(Some(encrypted));
+                }
+                Err(e) => {
+                    return Err(FnoxError::ImportEncryptionFailed {
+                        key: key.clone(),
+                        provider: self.provider.clone(),
+                        details: e.to_string(),
+                    });
                 }
             }
 
-            let global_suffix = if self.global { " (global)" } else { "" };
-            println!(
-                "✓ Imported {} secrets into profile '{}' using provider '{}'{}",
-                total_secrets, profile, self.provider, global_suffix
-            );
+            import_secrets.insert(key, secret_config);
         }
 
-        // Save only the target config
-        target_config.save(&target_path)?;
+        // Save secrets directly to the TOML document, preserving comments
+        Config::save_secrets_to_source(&import_secrets, &profile, &target_path)?;
+
+        let global_suffix = if self.global { " (global)" } else { "" };
+        println!(
+            "✓ Imported {} secrets into profile '{}' using provider '{}'{}",
+            total_secrets, profile, self.provider, global_suffix
+        );
 
         Ok(())
     }

@@ -40,49 +40,48 @@ impl RemoveCommand {
             });
         }
 
-        let mut config = Config::load(&target_path)?;
+        // Check the secret exists before attempting removal
+        let config = Config::load(&target_path)?;
+        let profile_secrets = config.get_secrets(&profile)?;
 
-        // Get the profile secrets
-        let profile_secrets = config.get_secrets_mut(&profile);
-
-        if profile_secrets.contains_key(&self.key) {
-            if self.dry_run {
-                let dry_run_label = console::style("[dry-run]").yellow().bold();
-                let styled_key = console::style(&self.key).cyan();
-                let styled_profile = console::style(&profile).magenta();
-                let styled_path = console::style(target_path.display()).dim();
-                let global_suffix = if self.global { " (global)" } else { "" };
-                if profile == "default" {
-                    println!(
-                        "{dry_run_label} Would remove secret {styled_key}{global_suffix} from {styled_path}"
-                    );
-                } else {
-                    println!(
-                        "{dry_run_label} Would remove secret {styled_key} from profile {styled_profile}{global_suffix} from {styled_path}"
-                    );
-                }
-            } else {
-                profile_secrets.shift_remove(&self.key);
-                config.save(&target_path)?;
-                let check = console::style("✓").green();
-                let styled_key = console::style(&self.key).cyan();
-                let styled_profile = console::style(&profile).magenta();
-                let global_suffix = if self.global { " (global)" } else { "" };
-                if profile == "default" {
-                    println!("{check} Removed secret {styled_key}{global_suffix}");
-                } else {
-                    println!(
-                        "{check} Removed secret {styled_key} from profile {styled_profile}{global_suffix}"
-                    );
-                }
-            }
-        } else {
+        if !profile_secrets.contains_key(&self.key) {
             return Err(FnoxError::SecretNotFound {
                 key: self.key.clone(),
                 profile: profile.to_string(),
                 config_path: Some(target_path),
                 suggestion: None,
             });
+        }
+
+        if self.dry_run {
+            let dry_run_label = console::style("[dry-run]").yellow().bold();
+            let styled_key = console::style(&self.key).cyan();
+            let styled_profile = console::style(&profile).magenta();
+            let styled_path = console::style(target_path.display()).dim();
+            let global_suffix = if self.global { " (global)" } else { "" };
+            if profile == "default" {
+                println!(
+                    "{dry_run_label} Would remove secret {styled_key}{global_suffix} from {styled_path}"
+                );
+            } else {
+                println!(
+                    "{dry_run_label} Would remove secret {styled_key} from profile {styled_profile}{global_suffix} from {styled_path}"
+                );
+            }
+        } else {
+            // Remove secret directly from the TOML document, preserving comments
+            Config::remove_secret_from_source(&self.key, &profile, &target_path)?;
+            let check = console::style("✓").green();
+            let styled_key = console::style(&self.key).cyan();
+            let styled_profile = console::style(&profile).magenta();
+            let global_suffix = if self.global { " (global)" } else { "" };
+            if profile == "default" {
+                println!("{check} Removed secret {styled_key}{global_suffix}");
+            } else {
+                println!(
+                    "{check} Removed secret {styled_key} from profile {styled_profile}{global_suffix}"
+                );
+            }
         }
 
         Ok(())
