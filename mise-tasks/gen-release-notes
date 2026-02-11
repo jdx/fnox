@@ -19,7 +19,7 @@ else
 fi
 
 if [[ -z $changelog ]]; then
-	echo "Error: No changes found for release"
+	echo "Error: No changes found for release" >&2
 	exit 1
 fi
 
@@ -58,10 +58,10 @@ INSTRUCTIONS
 )
 
 # Use Claude Code to generate the release notes
-echo "Generating release notes with Claude..."
-echo "Version: $version"
-echo "Previous version: ${prev_version:-none}"
-echo "Changelog length: ${#changelog} chars"
+echo "Generating release notes with Claude..." >&2
+echo "Version: $version" >&2
+echo "Previous version: ${prev_version:-none}" >&2
+echo "Changelog length: ${#changelog} chars" >&2
 
 if ! output=$(
 	printf '%s' "$prompt" | claude -p \
@@ -70,32 +70,32 @@ if ! output=$(
 		--output-format text \
 		--allowedTools "Read,Grep,Glob"
 ); then
-	echo "Error: Claude CLI failed"
+	echo "Error: Claude CLI failed" >&2
 	exit 1
 fi
 
 # Validate we got non-empty output
 if [[ -z $output ]]; then
-	echo "Error: Claude returned empty output"
+	echo "Error: Claude returned empty output" >&2
 	exit 1
 fi
 
 # Strip any preamble before the "# vX.X.X -" line
-output=$(echo "$output" | sed -n '/^# v[0-9]/,$p')
+output=$(printf '%s\n' "$output" | sed -n '/^# v[0-9]/,$p')
 
 if [[ -z $output ]]; then
-	echo "Error: No '# vX.X.X -' line found in Claude output"
+	echo "Error: No '# vX.X.X -' line found in Claude output" >&2
 	exit 1
 fi
 
-echo "Raw output:"
-echo "$output"
+echo "Raw output:" >&2
+printf '%s\n' "$output" >&2
 
 # Extract title from first line (format: "# vX.X.X - Creative Title")
-title=$(echo "$output" | head -1 | sed 's/^# //')
-body=$(echo "$output" | tail -n +2)
+title=$(printf '%s\n' "$output" | head -1 | sed 's/^# //')
+body=$(printf '%s\n' "$output" | tail -n +2)
 
 # Write parsed results to output directory
-echo "$title" >"$output_dir/title"
-echo "$body" >"$output_dir/notes"
+printf '%s\n' "$title" >"$output_dir/title"
+printf '%s\n' "$body" >"$output_dir/notes"
 echo "Wrote title and notes to $output_dir"
