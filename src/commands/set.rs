@@ -39,6 +39,10 @@ pub struct SetCommand {
     #[arg(short = 'p', long)]
     pub provider: Option<String>,
 
+    /// Base64 encode the secret
+    #[arg(long)]
+    pub base64_encode: bool,
+
     /// Default value to use if secret is not found
     #[arg(long)]
     pub default: Option<String>,
@@ -93,6 +97,15 @@ impl SetCommand {
             // Try to use default provider if available, but it's OK if there isn't one
             // (will store as plaintext)
             config.get_default_provider(&profile)?
+        };
+
+        // Check if secret should be base64 encoded
+        let secret_value = if self.base64_encode {
+            secret_value
+                .as_ref()
+                .map(|value| data_encoding::BASE64.encode(value.as_bytes()))
+        } else {
+            secret_value
         };
 
         // Handle provider-specific behavior (before we get mutable borrow)
