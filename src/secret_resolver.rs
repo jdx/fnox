@@ -66,7 +66,7 @@ fn split_key_path(key: &str) -> Vec<String> {
 fn apply_post_processing(value: String, secret_config: &SecretConfig) -> Result<String> {
     if let Some(ref json_path) = secret_config.json_path {
         if json_path.is_empty() {
-            return Err(FnoxError::Config("json_path must not be empty".to_string()).into());
+            return Err(FnoxError::Config("json_path must not be empty".to_string()));
         }
         extract_json_path(&value, json_path)
     } else {
