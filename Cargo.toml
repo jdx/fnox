@@ -55,7 +55,7 @@ which = "7"
 
 # TUI dependencies
 ratatui = "0.29"
-crossterm = { version = "0.28", features = ["event-stream"] }
+crossterm = { version = "0.29", features = ["event-stream"] }
 arboard = "3"
 
 # HTTP client for providers without SDKs or native CLIs
