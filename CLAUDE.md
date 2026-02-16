@@ -1,1 +1,1 @@
-CRUSH.md
+AGENTS.md
