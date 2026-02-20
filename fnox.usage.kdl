@@ -56,6 +56,7 @@ cmd export help="Export secrets in various formats" {
     }
 }
 cmd get help="Get a secret value" {
+    flag --base64-decode help="Base64 decode the secret"
     arg <KEY> help="Secret key to retrieve"
 }
 cmd hook-env hide=#true help="Internal command used by shell hooks to load secrets" {
@@ -146,6 +147,7 @@ cmd set help="Set a secret value" {
     flag "-d --description" help="Description of the secret" {
         arg <DESCRIPTION>
     }
+    flag --base64-encode help="Base64 encode the secret"
     flag "-g --global" help="Save to the global config file (~/.config/fnox/config.toml)"
     flag "-k --key-name" help="Key name in the provider (if different from env var name)" {
         arg <KEY_NAME>
