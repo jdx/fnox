@@ -2,7 +2,7 @@ use crate::error::{FnoxError, Result};
 use crate::providers::ProviderCapability;
 use async_trait::async_trait;
 use keepass::DatabaseKey;
-use keepass::db::{Database, Entry, Group, Node, Value};
+use keepass::db::{Database, Entry, Group, Value};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -239,10 +239,8 @@ impl KeePassProvider {
         } else {
             // Navigate to subgroup first
             let group_name = path[0];
-            for node in &group.children {
-                if let Node::Group(subgroup) = node
-                    && subgroup.name == group_name
-                {
+            for subgroup in &group.groups {
+                if subgroup.name == group_name {
                     return Self::find_entry(subgroup, &path[1..]);
                 }
             }
@@ -252,18 +250,14 @@ impl KeePassProvider {
 
     /// Search for an entry by title in a group and all its subgroups
     fn find_entry_by_title<'a>(group: &'a Group, title: &str) -> Option<&'a Entry> {
-        for node in &group.children {
-            match node {
-                Node::Entry(entry) => {
-                    if entry.get_title() == Some(title) {
-                        return Some(entry);
-                    }
-                }
-                Node::Group(subgroup) => {
-                    if let Some(entry) = Self::find_entry_by_title(subgroup, title) {
-                        return Some(entry);
-                    }
-                }
+        for entry in &group.entries {
+            if entry.get_title() == Some(title) {
+                return Some(entry);
+            }
+        }
+        for subgroup in &group.groups {
+            if let Some(entry) = Self::find_entry_by_title(subgroup, title) {
+                return Some(entry);
             }
         }
         None
@@ -271,37 +265,26 @@ impl KeePassProvider {
 
     /// Search for an entry by title in a group and all its subgroups (mutable version)
     fn find_entry_by_title_mut<'a>(group: &'a mut Group, title: &str) -> Option<&'a mut Entry> {
-        // First find the index of the entry or subgroup containing it
-        let mut found_entry_idx = None;
-        let mut found_in_subgroup_idx = None;
+        // First check if entry is in this group's direct entries
+        let found_entry_idx = group
+            .entries
+            .iter()
+            .position(|e| e.get_title() == Some(title));
 
-        for (i, node) in group.children.iter().enumerate() {
-            match node {
-                Node::Entry(entry) if entry.get_title() == Some(title) => {
-                    found_entry_idx = Some(i);
-                    break;
-                }
-                Node::Group(subgroup) => {
-                    // Check if entry exists in this subgroup (read-only check)
-                    if Self::find_entry_by_title(subgroup, title).is_some() {
-                        found_in_subgroup_idx = Some(i);
-                        break;
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        // Now access mutably based on what we found
         if let Some(idx) = found_entry_idx {
-            if let Node::Entry(entry) = &mut group.children[idx] {
-                return Some(entry);
-            }
-        } else if let Some(idx) = found_in_subgroup_idx
-            && let Node::Group(subgroup) = &mut group.children[idx]
-        {
-            return Self::find_entry_by_title_mut(subgroup, title);
+            return Some(&mut group.entries[idx]);
         }
+
+        // Check subgroups
+        let found_in_subgroup_idx = group
+            .groups
+            .iter()
+            .position(|sg| Self::find_entry_by_title(sg, title).is_some());
+
+        if let Some(idx) = found_in_subgroup_idx {
+            return Self::find_entry_by_title_mut(&mut group.groups[idx], title);
+        }
+
         None
     }
 
@@ -357,17 +340,15 @@ impl KeePassProvider {
                 Value::Unprotected(entry_name.to_string()),
             );
             entry.fields.insert(field.to_string(), field_value);
-            group.children.push(Node::Entry(entry));
+            group.entries.push(entry);
             Ok(entry_name.to_string())
         } else {
             // Navigate to or create subgroup
             let group_name = path[0];
 
             // Look for existing group
-            for node in &mut group.children {
-                if let Node::Group(subgroup) = node
-                    && subgroup.name == group_name
-                {
+            for subgroup in &mut group.groups {
+                if subgroup.name == group_name {
                     return Self::find_or_create_entry(subgroup, &path[1..], value, field);
                 }
             }
@@ -375,7 +356,7 @@ impl KeePassProvider {
             // Create new group
             let mut new_group = Group::new(group_name);
             let result = Self::find_or_create_entry(&mut new_group, &path[1..], value, field)?;
-            group.children.push(Node::Group(new_group));
+            group.groups.push(new_group);
             Ok(result)
         }
     }
