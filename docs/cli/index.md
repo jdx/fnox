@@ -47,7 +47,7 @@ Do not merge top-level secrets into the selected profile
 - [`fnox edit`](/cli/edit.md)
 - [`fnox exec [COMMAND]…`](/cli/exec.md)
 - [`fnox export [FLAGS]`](/cli/export.md)
-- [`fnox get <KEY>`](/cli/get.md)
+- [`fnox get [--base64-decode] <KEY>`](/cli/get.md)
 - [`fnox import <FLAGS> [FORMAT]`](/cli/import.md)
 - [`fnox init [FLAGS]`](/cli/init.md)
 - [`fnox list [FLAGS]`](/cli/list.md)

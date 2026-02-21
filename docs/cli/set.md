@@ -27,6 +27,10 @@ Passing secrets as arguments exposes them in shell history and `ps` output. For 
 
 Description of the secret
 
+### `--base64-encode`
+
+Base64 encode the secret
+
 ### `-g --global`
 
 Save to the global config file (~/.config/fnox/config.toml)
