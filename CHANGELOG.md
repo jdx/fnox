@@ -1,5 +1,43 @@
 # Changelog
 
+## [1.13.0](https://github.com/jdx/fnox/compare/v1.12.1..v1.13.0) - 2026-02-21
+
+### 🚀 Features
+
+- add JSON secrets by [@halms](https://github.com/halms) in [#247](https://github.com/jdx/fnox/pull/247)
+
+### 🐛 Bug Fixes
+
+- **(config)** preserve TOML comments in import and remove by [@jdx](https://github.com/jdx) in [#268](https://github.com/jdx/fnox/pull/268)
+- **(release)** write release notes to file instead of capturing stdout by [@jdx](https://github.com/jdx) in [#263](https://github.com/jdx/fnox/pull/263)
+- **(release)** make release notes editorialization non-blocking by [@jdx](https://github.com/jdx) in [#269](https://github.com/jdx/fnox/pull/269)
+
+### 📚 Documentation
+
+- **(config)** fix env-specific config example in mise integration guide by [@jdx](https://github.com/jdx) in [#267](https://github.com/jdx/fnox/pull/267)
+- **(shell)** remove incorrect `cd .` reload instructions by [@jdx](https://github.com/jdx) in [#265](https://github.com/jdx/fnox/pull/265)
+- rename CRUSH.md to AGENTS.md by [@sweepies](https://github.com/sweepies) in [#282](https://github.com/jdx/fnox/pull/282)
+
+### 🔍 Other Changes
+
+- replace gen-release-notes script with communique by [@jdx](https://github.com/jdx) in [#285](https://github.com/jdx/fnox/pull/285)
+
+### 📦️ Dependency Updates
+
+- update taiki-e/upload-rust-binary-action digest to f391289 by [@renovate[bot]](https://github.com/renovate[bot]) in [#274](https://github.com/jdx/fnox/pull/274)
+- update rust crate usage-lib to v2.16.2 by [@renovate[bot]](https://github.com/renovate[bot]) in [#277](https://github.com/jdx/fnox/pull/277)
+- update rust crate clap to v4.5.58 by [@renovate[bot]](https://github.com/renovate[bot]) in [#276](https://github.com/jdx/fnox/pull/276)
+- update rust crate google-cloud-secretmanager-v1 to v1.5.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#278](https://github.com/jdx/fnox/pull/278)
+- update rust crate crossterm to 0.29 by [@renovate[bot]](https://github.com/renovate[bot]) in [#279](https://github.com/jdx/fnox/pull/279)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#281](https://github.com/jdx/fnox/pull/281)
+- update aws-sdk-rust monorepo to v1.8.14 by [@renovate[bot]](https://github.com/renovate[bot]) in [#275](https://github.com/jdx/fnox/pull/275)
+- update keepass to 0.8.21 and adapt to new API by [@jdx](https://github.com/jdx) in [#286](https://github.com/jdx/fnox/pull/286)
+
+### New Contributors
+
+- @sweepies made their first contribution in [#282](https://github.com/jdx/fnox/pull/282)
+- @halms made their first contribution in [#247](https://github.com/jdx/fnox/pull/247)
+
 ## [1.12.1](https://github.com/jdx/fnox/compare/v1.12.0..v1.12.1) - 2026-02-10
 
 ### 🐛 Bug Fixes
