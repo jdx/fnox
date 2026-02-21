@@ -5,6 +5,7 @@ _.path = ["target/debug", "test/bats/bin"]
 age = "latest"
 "cargo:cargo-msrv" = "latest"
 cargo-binstall = "latest"
+communique = "latest"
 "cargo:cargo-edit" = "latest"
 git-cliff = "latest"
 hk = "latest"

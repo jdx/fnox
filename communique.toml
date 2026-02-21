@@ -1,0 +1,4 @@
+context = "fnox is a secrets management CLI that encrypts and manages secrets in config files, supporting multiple providers (1Password, AWS, Azure, GCP, Bitwarden, etc.)."
+
+[defaults]
+emoji = false
