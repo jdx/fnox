@@ -7,7 +7,7 @@ description = "A flexible secret management tool supporting multiple providers a
 license = "MIT"
 repository = "https://github.com/jdx/fnox"
 readme = "README.md"
-rust-version = "1.88"
+rust-version = "1.91"
 
 [[bin]]
 name = "fnox"
