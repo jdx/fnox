@@ -20,6 +20,7 @@ bitwarden-secrets-manager = "latest"
 vault = "latest"
 infisical = "latest"
 usage = "latest"
+rust = "latest"
 
 [tasks.test]
 description = "Run both cargo and bats tests"

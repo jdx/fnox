@@ -8,12 +8,12 @@ fnox supports multiple secret storage and encryption providers. Choose the ones 
 
 Store encrypted secrets in your `fnox.toml` file. The encrypted ciphertext is safe to commit to version control.
 
-| Provider                          | Description                              | Best For                                  |
-| --------------------------------- | ---------------------------------------- | ----------------------------------------- |
-| [age](/providers/age)             | Modern encryption (works with SSH keys!) | Development secrets, open source projects |
-| [AWS KMS](/providers/aws-kms)     | AWS Key Management Service               | AWS-based projects requiring IAM control  |
-| [Azure KMS](/providers/azure-kms) | Azure Key Vault encryption               | Azure-based projects                      |
-| [GCP KMS](/providers/gcp-kms)     | Google Cloud KMS                         | GCP-based projects                        |
+| Provider                          | Description                                               | Best For                                  |
+| --------------------------------- | --------------------------------------------------------- | ----------------------------------------- |
+| [age](/providers/age)             | Modern encryption (works with SSH keys and post-quantum!) | Development secrets, open source projects |
+| [AWS KMS](/providers/aws-kms)     | AWS Key Management Service                                | AWS-based projects requiring IAM control  |
+| [Azure KMS](/providers/azure-kms) | Azure Key Vault encryption                                | Azure-based projects                      |
+| [GCP KMS](/providers/gcp-kms)     | Google Cloud KMS                                          | GCP-based projects                        |
 
 ### ☁️ Cloud Secret Storage (remote, centralized)
 
@@ -86,7 +86,7 @@ DATABASE_URL = { provider = "aws", value = "database-url" }
 
 Choose a provider and get started:
 
-- [Age Encryption](/providers/age) - Simple, free, works with SSH keys
+- [Age Encryption](/providers/age) - Simple, free, works with SSH keys and post-quantum keys
 - [AWS Parameter Store](/providers/aws-ps) - Simple, cost-effective AWS secret storage
 - [AWS Secrets Manager](/providers/aws-sm) - For AWS production workloads with rotation
 - [1Password](/providers/1password) - Leverage existing 1Password setup
