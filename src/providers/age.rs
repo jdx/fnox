@@ -43,20 +43,16 @@ impl crate::providers::Provider for AgeEncryptionProvider {
         for recipient in &self.recipients {
             // Try parsing as post-quantum recipient first
             if recipient.starts_with("age1pq") {
-                match HybridRecipient::from_string(recipient) {
-                    Ok(pq_recipient) => {
-                        parsed_recipients.push(Box::new(pq_recipient));
-                        continue;
+                let pq_recipient = HybridRecipient::from_string(recipient).map_err(|e| {
+                    FnoxError::AgeEncryptionFailed {
+                        details: format!(
+                            "Failed to parse post-quantum recipient '{}': {}",
+                            recipient, e
+                        ),
                     }
-                    Err(e) => {
-                        return Err(FnoxError::AgeEncryptionFailed {
-                            details: format!(
-                                "Failed to parse post-quantum recipient '{}': {}",
-                                recipient, e
-                            ),
-                        });
-                    }
-                }
+                })?;
+                parsed_recipients.push(Box::new(pq_recipient));
+                continue;
             }
 
             // Try parsing as SSH recipient
@@ -180,18 +176,11 @@ impl crate::providers::Provider for AgeEncryptionProvider {
         // Try parsing as SSH identity first, then fall back to age identity file
         let identities = {
             // Check if identity content contains post-quantum key
-            if identity_content
+            if let Some(pq_line) = identity_content
                 .lines()
-                .any(|line| line.starts_with("AGE-SECRET-KEY-PQ-"))
+                .find(|line| line.starts_with("AGE-SECRET-KEY-PQ-"))
             {
                 // Parse as HybridIdentity
-                let pq_line = identity_content
-                    .lines()
-                    .find(|line| line.starts_with("AGE-SECRET-KEY-PQ-"))
-                    .ok_or_else(|| FnoxError::AgeIdentityParseFailed {
-                        details: "Post-quantum key prefix found but no key line".to_string(),
-                    })?;
-
                 let identity =
                     HybridIdentity::from_string(SecretString::new(pq_line.to_string().into()))
                         .map_err(|e| FnoxError::AgeIdentityParseFailed {
