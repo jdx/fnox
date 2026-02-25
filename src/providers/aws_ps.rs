@@ -119,12 +119,17 @@ where
 
 pub struct AwsParameterStoreProvider {
     region: String,
+    profile: Option<String>,
     prefix: Option<String>,
 }
 
 impl AwsParameterStoreProvider {
-    pub fn new(region: String, prefix: Option<String>) -> Self {
-        Self { region, prefix }
+    pub fn new(region: String, profile: Option<String>, prefix: Option<String>) -> Self {
+        Self {
+            region,
+            profile,
+            prefix,
+        }
     }
 
     pub fn get_parameter_name(&self, key: &str) -> String {
@@ -136,12 +141,14 @@ impl AwsParameterStoreProvider {
 
     /// Create an AWS SSM client
     async fn create_client(&self) -> Result<Client> {
-        // Load AWS config with the specified region
-        let config = aws_config::defaults(BehaviorVersion::latest())
-            .region(aws_sdk_ssm::config::Region::new(self.region.clone()))
-            .load()
-            .await;
+        let mut builder = aws_config::defaults(BehaviorVersion::latest())
+            .region(aws_sdk_ssm::config::Region::new(self.region.clone()));
 
+        if let Some(profile) = &self.profile {
+            builder = builder.profile_name(profile.clone());
+        }
+
+        let config = builder.load().await;
         Ok(Client::new(&config))
     }
 
