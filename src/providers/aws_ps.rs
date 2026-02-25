@@ -145,7 +145,7 @@ impl AwsParameterStoreProvider {
             .region(aws_sdk_ssm::config::Region::new(self.region.clone()));
 
         if let Some(profile) = &self.profile {
-            builder = builder.profile_name(profile.clone());
+            builder = builder.profile_name(profile);
         }
 
         let config = builder.load().await;
