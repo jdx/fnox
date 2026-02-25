@@ -147,12 +147,17 @@ fn extract_name_from_arn(arn_or_name: &str) -> String {
 
 pub struct AwsSecretsManagerProvider {
     region: String,
+    profile: Option<String>,
     prefix: Option<String>,
 }
 
 impl AwsSecretsManagerProvider {
-    pub fn new(region: String, prefix: Option<String>) -> Self {
-        Self { region, prefix }
+    pub fn new(region: String, profile: Option<String>, prefix: Option<String>) -> Self {
+        Self {
+            region,
+            profile,
+            prefix,
+        }
     }
 
     pub fn get_secret_name(&self, key: &str) -> String {
@@ -164,14 +169,15 @@ impl AwsSecretsManagerProvider {
 
     /// Create an AWS Secrets Manager client
     async fn create_client(&self) -> Result<Client> {
-        // Load AWS config with the specified region
-        let config = aws_config::defaults(BehaviorVersion::latest())
-            .region(aws_sdk_secretsmanager::config::Region::new(
-                self.region.clone(),
-            ))
-            .load()
-            .await;
+        let mut builder = aws_config::defaults(BehaviorVersion::latest()).region(
+            aws_sdk_secretsmanager::config::Region::new(self.region.clone()),
+        );
 
+        if let Some(profile) = &self.profile {
+            builder = builder.profile_name(profile);
+        }
+
+        let config = builder.load().await;
         Ok(Client::new(&config))
     }
 

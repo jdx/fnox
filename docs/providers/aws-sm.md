@@ -128,8 +128,19 @@ If running on EC2, ECS, Lambda, or other AWS services:
 
 ```toml
 [providers]
-aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp/" }  # prefix is optional
+aws = { type = "aws-sm", region = "us-east-1" }  # minimal config
+
+# With optional fields:
+aws = { type = "aws-sm", region = "us-east-1", profile = "my-aws-profile", prefix = "myapp/" }
 ```
+
+| Field     | Required | Description                                                                                       |
+| --------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `region`  | Yes      | AWS region (e.g. `us-east-1`)                                                                     |
+| `profile` | No       | AWS CLI profile name from `~/.aws/config`. Falls back to the default credential chain if omitted. |
+| `prefix`  | No       | Prepended to all secret names                                                                     |
+
+The `profile` field is useful when you have multiple AWS accounts or roles configured and want to pin a provider to a specific one without relying on `AWS_PROFILE` in the environment.
 
 ## Creating Secrets
 
@@ -236,9 +247,9 @@ aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp-staging/" }
 [profiles.staging.secrets]
 DATABASE_URL = { provider = "aws", value = "database-url" }  # → myapp-staging/database-url
 
-# Production: AWS Secrets Manager (us-west-2)
+# Production: AWS Secrets Manager (us-west-2) using a dedicated AWS profile
 [profiles.production.providers]
-aws = { type = "aws-sm", region = "us-west-2", prefix = "myapp-prod/" }
+aws = { type = "aws-sm", region = "us-west-2", profile = "prod-account", prefix = "myapp-prod/" }
 
 [profiles.production.secrets]
 DATABASE_URL = { provider = "aws", value = "database-url" }  # → myapp-prod/database-url

@@ -16,6 +16,12 @@ placeholder = "us-east-1"
 label = "AWS Region:"
 wizard = true
 
+[fields.profile]
+type = "optional"
+placeholder = "my-aws-profile"
+label = "AWS profile (optional):"
+wizard = true
+
 [fields.prefix]
 type = "optional"
 placeholder = "fnox/"

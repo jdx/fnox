@@ -73,6 +73,7 @@ impl AddCommand {
             },
             ProviderType::Aws => crate::config::ProviderConfig::AwsSecretsManager {
                 region: StringOrSecretRef::from("us-east-1"),
+                profile: OptionStringOrSecretRef::none(),
                 prefix: OptionStringOrSecretRef::none(),
             },
             ProviderType::Vault => crate::config::ProviderConfig::HashiCorpVault {
@@ -91,6 +92,7 @@ impl AddCommand {
             },
             ProviderType::AwsParameterStore => crate::config::ProviderConfig::AwsParameterStore {
                 region: StringOrSecretRef::from("us-east-1"),
+                profile: OptionStringOrSecretRef::none(),
                 prefix: OptionStringOrSecretRef::literal("/myapp/prod/"),
             },
             ProviderType::AzureKms => crate::config::ProviderConfig::AzureKms {
