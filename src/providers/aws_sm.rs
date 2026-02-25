@@ -174,7 +174,7 @@ impl AwsSecretsManagerProvider {
         );
 
         if let Some(profile) = &self.profile {
-            builder = builder.profile_name(profile.clone());
+            builder = builder.profile_name(profile);
         }
 
         let config = builder.load().await;
