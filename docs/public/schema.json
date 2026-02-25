@@ -348,6 +348,9 @@
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
+            "profile": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "region": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
@@ -437,6 +440,9 @@
           "type": "object",
           "properties": {
             "prefix": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "profile": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "region": {

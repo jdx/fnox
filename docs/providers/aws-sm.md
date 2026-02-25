@@ -134,11 +134,11 @@ aws = { type = "aws-sm", region = "us-east-1" }  # minimal config
 aws = { type = "aws-sm", region = "us-east-1", profile = "my-aws-profile", prefix = "myapp/" }
 ```
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `region` | Yes | AWS region (e.g. `us-east-1`) |
-| `profile` | No | AWS CLI profile name from `~/.aws/config`. Falls back to the default credential chain if omitted. |
-| `prefix` | No | Prepended to all secret names |
+| Field     | Required | Description                                                                                       |
+| --------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `region`  | Yes      | AWS region (e.g. `us-east-1`)                                                                     |
+| `profile` | No       | AWS CLI profile name from `~/.aws/config`. Falls back to the default credential chain if omitted. |
+| `prefix`  | No       | Prepended to all secret names                                                                     |
 
 The `profile` field is useful when you have multiple AWS accounts or roles configured and want to pin a provider to a specific one without relying on `AWS_PROFILE` in the environment.
 
