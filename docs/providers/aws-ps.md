@@ -124,8 +124,19 @@ If running on EC2, ECS, Lambda, or other AWS services:
 
 ```toml
 [providers]
-ps = { type = "aws-ps", region = "us-east-1", prefix = "/myapp/prod/" }  # prefix is optional
+ps = { type = "aws-ps", region = "us-east-1" }  # minimal config
+
+# With optional fields:
+ps = { type = "aws-ps", region = "us-east-1", profile = "my-aws-profile", prefix = "/myapp/prod/" }
 ```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `region` | Yes | AWS region (e.g. `us-east-1`) |
+| `profile` | No | AWS CLI profile name from `~/.aws/config`. Falls back to the default credential chain if omitted. |
+| `prefix` | No | Prepended to all parameter names |
+
+The `profile` field is useful when you have multiple AWS accounts or roles configured and want to pin a provider to a specific one without relying on `AWS_PROFILE` in the environment.
 
 ## Creating Parameters
 
@@ -273,9 +284,9 @@ ps = { type = "aws-ps", region = "us-east-1", prefix = "/myapp/staging/" }
 [profiles.staging.secrets]
 DATABASE_URL = { provider = "ps", value = "database/url" }
 
-# Production: AWS Parameter Store
+# Production: AWS Parameter Store using a dedicated AWS profile
 [profiles.production.providers]
-ps = { type = "aws-ps", region = "us-east-1", prefix = "/myapp/prod/" }
+ps = { type = "aws-ps", region = "us-east-1", profile = "prod-account", prefix = "/myapp/prod/" }
 
 [profiles.production.secrets]
 DATABASE_URL = { provider = "ps", value = "database/url" }
