@@ -222,15 +222,16 @@ impl crate::providers::Provider for ProtonPassProvider {
 
         // Handle id: references using flag-based CLI args (pass:// URIs don't support item IDs)
         if let Some(id_ref) = value.strip_prefix("id:") {
-            let vault = self.vault.as_ref().ok_or_else(|| {
-                FnoxError::ProviderInvalidResponse {
+            let vault = self
+                .vault
+                .as_ref()
+                .ok_or_else(|| FnoxError::ProviderInvalidResponse {
                     provider: "Proton Pass".to_string(),
                     details: format!("Unknown vault for id-based reference: '{}'", value),
                     hint: "Specify a vault in the provider config when using id: references"
                         .to_string(),
                     url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
-                }
-            })?;
+                })?;
             let (item_id, field) = match id_ref.split_once('/') {
                 Some((id, f)) => (id, f),
                 None => (id_ref, "password"),

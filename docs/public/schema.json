@@ -124,6 +124,26 @@
         {
           "type": "object",
           "properties": {
+            "database": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "keyfile": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "password": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "keepass"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "database"]
+        },
+        {
+          "type": "object",
+          "properties": {
             "gpg_opts": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -155,26 +175,6 @@
         {
           "type": "object",
           "properties": {
-            "database": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
-            "keyfile": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "password": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "type": {
-              "type": "string",
-              "const": "keepass"
-            }
-          },
-          "additionalProperties": false,
-          "required": ["type", "database"]
-        },
-        {
-          "type": "object",
-          "properties": {
             "key_file": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -191,6 +191,26 @@
           },
           "additionalProperties": false,
           "required": ["type", "recipients"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "account": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "token": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "1password"
+            },
+            "vault": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -214,6 +234,20 @@
           },
           "additionalProperties": false,
           "required": ["type", "base_url", "password_list_id"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "proton-pass"
+            },
+            "vault": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -268,22 +302,19 @@
         {
           "type": "object",
           "properties": {
-            "account": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
+            "key_id": {
+              "$ref": "#/$defs/StringOrSecretRef"
             },
-            "token": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
+            "region": {
+              "$ref": "#/$defs/StringOrSecretRef"
             },
             "type": {
               "type": "string",
-              "const": "1password"
-            },
-            "vault": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
+              "const": "aws-kms"
             }
           },
           "additionalProperties": false,
-          "required": ["type"]
+          "required": ["type", "key_id", "region"]
         },
         {
           "type": "object",
@@ -301,23 +332,6 @@
           },
           "additionalProperties": false,
           "required": ["type", "vault_url", "key_name"]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "key_id": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
-            "region": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
-            "type": {
-              "type": "string",
-              "const": "aws-kms"
-            }
-          },
-          "additionalProperties": false,
-          "required": ["type", "key_id", "region"]
         },
         {
           "type": "object",
@@ -356,7 +370,7 @@
             },
             "type": {
               "type": "string",
-              "const": "aws-sm"
+              "const": "aws-ps"
             }
           },
           "additionalProperties": false,
@@ -368,16 +382,19 @@
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
+            "profile": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "region": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
             "type": {
               "type": "string",
-              "const": "azure-sm"
-            },
-            "vault_url": {
-              "$ref": "#/$defs/StringOrSecretRef"
+              "const": "aws-sm"
             }
           },
           "additionalProperties": false,
-          "required": ["type", "vault_url"]
+          "required": ["type", "region"]
         },
         {
           "type": "object",
@@ -405,23 +422,6 @@
         {
           "type": "object",
           "properties": {
-            "prefix": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "project": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
-            "type": {
-              "type": "string",
-              "const": "gcp-sm"
-            }
-          },
-          "additionalProperties": false,
-          "required": ["type", "project"]
-        },
-        {
-          "type": "object",
-          "properties": {
             "profile": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -442,19 +442,33 @@
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
-            "profile": {
+            "type": {
+              "type": "string",
+              "const": "azure-sm"
+            },
+            "vault_url": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "vault_url"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
-            "region": {
+            "project": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
             "type": {
               "type": "string",
-              "const": "aws-ps"
+              "const": "gcp-sm"
             }
           },
           "additionalProperties": false,
-          "required": ["type", "region"]
+          "required": ["type", "project"]
         },
         {
           "type": "object",
