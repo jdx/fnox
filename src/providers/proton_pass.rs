@@ -5,7 +5,20 @@ use std::process::Command;
 use std::sync::LazyLock;
 
 pub fn env_dependencies() -> &'static [&'static str] {
-    &[]
+    &[
+        "PROTON_PASS_PASSWORD",
+        "FNOX_PROTON_PASS_PASSWORD",
+        "PROTON_PASS_TOTP",
+        "FNOX_PROTON_PASS_TOTP",
+        "PROTON_PASS_EXTRA_PASSWORD",
+        "FNOX_PROTON_PASS_EXTRA_PASSWORD",
+        "PROTON_PASS_PASSWORD_FILE",
+        "FNOX_PROTON_PASS_PASSWORD_FILE",
+        "PROTON_PASS_TOTP_FILE",
+        "FNOX_PROTON_PASS_TOTP_FILE",
+        "PROTON_PASS_EXTRA_PASSWORD_FILE",
+        "FNOX_PROTON_PASS_EXTRA_PASSWORD_FILE",
+    ]
 }
 
 pub struct ProtonPassProvider {
@@ -67,8 +80,8 @@ impl ProtonPassProvider {
 
         let parts: Vec<&str> = value.split('/').collect();
         match parts.len() {
-            // Single part: item name only, requires vault config
-            1 => {
+            // item or item/field, requires vault config
+            1 | 2 => {
                 let vault = self.vault.as_ref().ok_or_else(|| {
                     FnoxError::ProviderInvalidResponse {
                         provider: "Proton Pass".to_string(),
@@ -77,19 +90,12 @@ impl ProtonPassProvider {
                         url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
                     }
                 })?;
-                Ok(format!("pass://{}/{}/password", vault, parts[0]))
-            }
-            // Two parts: item/field, requires vault config
-            2 => {
-                let vault = self.vault.as_ref().ok_or_else(|| {
-                    FnoxError::ProviderInvalidResponse {
-                        provider: "Proton Pass".to_string(),
-                        details: format!("Unknown vault for secret: '{}'", value),
-                        hint: "Specify a vault in the provider config or use a full 'pass://' reference".to_string(),
-                        url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
-                    }
-                })?;
-                Ok(format!("pass://{}/{}/{}", vault, parts[0], parts[1]))
+                let field = if parts.len() == 1 {
+                    "password"
+                } else {
+                    parts[1]
+                };
+                Ok(format!("pass://{}/{}/{}", vault, parts[0], field))
             }
             // Three parts: vault/item/field
             3 => Ok(format!("pass://{}/{}/{}", parts[0], parts[1], parts[2])),
@@ -114,23 +120,21 @@ impl ProtonPassProvider {
         cmd.args(args);
 
         // Pass through Proton Pass environment variables for non-interactive auth
-        if let Some(password) = &*PROTON_PASS_PASSWORD {
-            cmd.env("PROTON_PASS_PASSWORD", password);
-        }
-        if let Some(password_file) = &*PROTON_PASS_PASSWORD_FILE {
-            cmd.env("PROTON_PASS_PASSWORD_FILE", password_file);
-        }
-        if let Some(totp) = &*PROTON_PASS_TOTP {
-            cmd.env("PROTON_PASS_TOTP", totp);
-        }
-        if let Some(totp_file) = &*PROTON_PASS_TOTP_FILE {
-            cmd.env("PROTON_PASS_TOTP_FILE", totp_file);
-        }
-        if let Some(extra_password) = &*PROTON_PASS_EXTRA_PASSWORD {
-            cmd.env("PROTON_PASS_EXTRA_PASSWORD", extra_password);
-        }
-        if let Some(extra_password_file) = &*PROTON_PASS_EXTRA_PASSWORD_FILE {
-            cmd.env("PROTON_PASS_EXTRA_PASSWORD_FILE", extra_password_file);
+        let env_vars_to_pass = [
+            ("PROTON_PASS_PASSWORD", &*PROTON_PASS_PASSWORD),
+            ("PROTON_PASS_PASSWORD_FILE", &*PROTON_PASS_PASSWORD_FILE),
+            ("PROTON_PASS_TOTP", &*PROTON_PASS_TOTP),
+            ("PROTON_PASS_TOTP_FILE", &*PROTON_PASS_TOTP_FILE),
+            ("PROTON_PASS_EXTRA_PASSWORD", &*PROTON_PASS_EXTRA_PASSWORD),
+            (
+                "PROTON_PASS_EXTRA_PASSWORD_FILE",
+                &*PROTON_PASS_EXTRA_PASSWORD_FILE,
+            ),
+        ];
+        for (name, value) in env_vars_to_pass {
+            if let Some(v) = value {
+                cmd.env(name, v);
+            }
         }
 
         let output = cmd.output().map_err(|e| {
