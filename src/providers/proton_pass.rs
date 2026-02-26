@@ -4,6 +4,10 @@ use async_trait::async_trait;
 use std::process::Command;
 use std::sync::LazyLock;
 
+pub fn env_dependencies() -> &'static [&'static str] {
+    &[]
+}
+
 pub struct ProtonPassProvider {
     vault: Option<String>,
 }
@@ -149,6 +153,8 @@ impl ProtonPassProvider {
             if stderr_lower.contains("not logged in")
                 || stderr_lower.contains("session expired")
                 || stderr_lower.contains("login required")
+                || stderr_lower.contains("could not get local key from keyring")
+                || stderr_lower.contains("failed to get encryption key")
             {
                 return Err(FnoxError::ProviderAuthFailed {
                     provider: "Proton Pass".to_string(),
