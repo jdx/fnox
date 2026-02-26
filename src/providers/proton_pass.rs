@@ -164,6 +164,16 @@ impl ProtonPassProvider {
                 });
             }
 
+            // Check for field not found (e.g., requesting "password" on an alias item)
+            if stderr_lower.contains("field does not exist") {
+                return Err(FnoxError::ProviderSecretNotFound {
+                    provider: "Proton Pass".to_string(),
+                    secret: secret_ref.unwrap_or("<unknown>").to_string(),
+                    hint: "This item may not have the requested field. Try specifying a different field with 'item/field' syntax".to_string(),
+                    url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
+                });
+            }
+
             // Check for not found errors
             if stderr_lower.contains("not found") || stderr_lower.contains("does not exist") {
                 return Err(FnoxError::ProviderSecretNotFound {
