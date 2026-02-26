@@ -22,10 +22,19 @@ impl ProtonPassProvider {
     /// Reference formats:
     /// - `item` -> `pass://vault/item/password` (requires vault config)
     /// - `item/field` -> `pass://vault/item/field` (requires vault config)
+    /// - `id:ITEM_ID` -> `pass://vault/ITEM_ID/password` (requires vault config)
+    /// - `id:ITEM_ID/field` -> `pass://vault/ITEM_ID/field` (requires vault config)
     /// - `vault/item/field` -> `pass://vault/item/field`
     /// - `pass://vault/item/field` -> passthrough
     ///
-    /// Note: Names containing `/` must use full `pass://` format
+    /// Common fields: `password`, `username`, `email`, `totp`, `url`, `notes`
+    /// Field availability depends on the item type.
+    ///
+    /// Limitation: Alias items are not supported. As of pass-cli v1.5.2, the CLI
+    /// does not expose alias email addresses as accessible fields.
+    ///
+    /// Note: Item or vault names containing `/` must use the full `pass://` format.
+    /// Use `id:ITEM_ID` to disambiguate items with duplicate names within a vault.
     ///
     /// The Proton Pass CLI uses SHARE_ID internally, but vault names can be
     /// used directly and are resolved by the CLI.
@@ -209,6 +218,43 @@ impl crate::providers::Provider for ProtonPassProvider {
     async fn get_secret(&self, value: &str) -> Result<String> {
         tracing::debug!("Getting secret '{}' from Proton Pass", value);
 
+        let value = value.trim();
+
+        // Handle id: references using flag-based CLI args (pass:// URIs don't support item IDs)
+        if let Some(id_ref) = value.strip_prefix("id:") {
+            let vault = self.vault.as_ref().ok_or_else(|| {
+                FnoxError::ProviderInvalidResponse {
+                    provider: "Proton Pass".to_string(),
+                    details: format!("Unknown vault for id-based reference: '{}'", value),
+                    hint: "Specify a vault in the provider config when using id: references"
+                        .to_string(),
+                    url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
+                }
+            })?;
+            let (item_id, field) = match id_ref.split_once('/') {
+                Some((id, f)) => (id, f),
+                None => (id_ref, "password"),
+            };
+            tracing::debug!(
+                "Reading Proton Pass secret by ID: {} field: {}",
+                item_id,
+                field
+            );
+            return self.execute_pass_cli_command(
+                &[
+                    "item",
+                    "view",
+                    "--vault-name",
+                    vault,
+                    "--item-id",
+                    item_id,
+                    "--field",
+                    field,
+                ],
+                Some(value),
+            );
+        }
+
         let reference = self.value_to_reference(value)?;
         tracing::debug!("Reading Proton Pass secret: {}", reference);
 
@@ -351,4 +397,7 @@ mod tests {
         let result = provider.value_to_reference("pass://vault/item");
         assert!(result.is_err());
     }
+
+    // id: references are handled in get_secret, not value_to_reference.
+    // They use flag-based CLI args since pass:// URIs don't support item IDs.
 }
