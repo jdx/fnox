@@ -8,28 +8,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, RwLock};
 
-#[cfg(not(test))]
-type RegistryKey = PathBuf;
-#[cfg(test)]
-type RegistryKey = (std::thread::ThreadId, PathBuf);
-
-fn canonical_path(path: &Path) -> PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
-}
-
-#[cfg(not(test))]
-fn registry_key(path: &Path) -> RegistryKey {
-    canonical_path(path)
-}
-
-#[cfg(test)]
-fn registry_key(path: &Path) -> RegistryKey {
-    // In tests, namespace by thread to avoid parallel-test interference.
-    (std::thread::current().id(), canonical_path(path))
-}
-
 /// Global registry mapping canonical paths to their source content.
-static SOURCES: LazyLock<RwLock<HashMap<RegistryKey, Arc<String>>>> =
+static SOURCES: LazyLock<RwLock<HashMap<PathBuf, Arc<String>>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
 /// Register a config file's source content for later error reporting.
@@ -37,9 +17,9 @@ static SOURCES: LazyLock<RwLock<HashMap<RegistryKey, Arc<String>>>> =
 /// The path is canonicalized to ensure consistent lookups regardless of
 /// how the path was originally specified.
 pub fn register(path: &Path, content: String) {
-    let key = registry_key(path);
+    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     if let Ok(mut sources) = SOURCES.write() {
-        sources.insert(key, Arc::new(content));
+        sources.insert(canonical, Arc::new(content));
     }
 }
 
@@ -48,9 +28,9 @@ pub fn register(path: &Path, content: String) {
 /// Returns None if the path was never registered or if the lock cannot be acquired.
 /// Returns Arc<NamedSource<...>> to keep the error type size small (Arc is pointer-sized).
 pub fn get_named_source(path: &Path) -> Option<Arc<NamedSource<Arc<String>>>> {
-    let key = registry_key(path);
+    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     let sources = SOURCES.read().ok()?;
-    sources.get(&key).map(|content| {
+    sources.get(&canonical).map(|content| {
         Arc::new(NamedSource::new(
             path.display().to_string(),
             Arc::clone(content),
@@ -63,18 +43,9 @@ pub fn get_named_source(path: &Path) -> Option<Arc<NamedSource<Arc<String>>>> {
 /// Useful when you need the content without wrapping it in NamedSource.
 #[cfg(test)]
 pub fn get_content(path: &Path) -> Option<Arc<String>> {
-    let key = registry_key(path);
+    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     let sources = SOURCES.read().ok()?;
-    sources.get(&key).cloned()
-}
-
-/// Clear all registered sources in the current test thread.
-#[cfg(test)]
-pub fn clear() {
-    if let Ok(mut sources) = SOURCES.write() {
-        let current = std::thread::current().id();
-        sources.retain(|(thread_id, _), _| *thread_id != current);
-    }
+    sources.get(&canonical).cloned()
 }
 
 #[cfg(test)]
@@ -85,8 +56,6 @@ mod tests {
 
     #[test]
     fn test_register_and_get() {
-        clear();
-
         let mut temp = NamedTempFile::new().unwrap();
         writeln!(temp, "test content").unwrap();
         let path = temp.path();
@@ -102,8 +71,7 @@ mod tests {
 
     #[test]
     fn test_missing_path() {
-        clear();
-
+        // Avoid clearing global state here because tests run in parallel.
         let path = Path::new("/nonexistent/path/to/file.toml");
         assert!(get_named_source(path).is_none());
         assert!(get_content(path).is_none());
