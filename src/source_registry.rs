@@ -48,14 +48,6 @@ pub fn get_content(path: &Path) -> Option<Arc<String>> {
     sources.get(&canonical).cloned()
 }
 
-/// Clear all registered sources. Primarily useful for testing.
-#[cfg(test)]
-pub fn clear() {
-    if let Ok(mut sources) = SOURCES.write() {
-        sources.clear();
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -64,8 +56,6 @@ mod tests {
 
     #[test]
     fn test_register_and_get() {
-        clear();
-
         let mut temp = NamedTempFile::new().unwrap();
         writeln!(temp, "test content").unwrap();
         let path = temp.path();
@@ -81,8 +71,7 @@ mod tests {
 
     #[test]
     fn test_missing_path() {
-        clear();
-
+        // Avoid clearing global state here because tests run in parallel.
         let path = Path::new("/nonexistent/path/to/file.toml");
         assert!(get_named_source(path).is_none());
         assert!(get_content(path).is_none());
