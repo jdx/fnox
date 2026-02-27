@@ -249,7 +249,7 @@
       },
       "get": {
         "full_cmd": ["get"],
-        "usage": "get <KEY>",
+        "usage": "get [--base64-decode] <KEY>",
         "subcommands": {},
         "args": [
           {
@@ -262,7 +262,18 @@
             "hide": false
           }
         ],
-        "flags": [],
+        "flags": [
+          {
+            "name": "base64-decode",
+            "usage": "--base64-decode",
+            "help": "Base64 decode the secret",
+            "help_first_line": "Base64 decode the secret",
+            "short": [],
+            "long": ["base64-decode"],
+            "hide": false,
+            "global": false
+          }
+        ],
         "mounts": [],
         "hide": false,
         "help": "Get a secret value",
@@ -942,6 +953,16 @@
               "double_dash": "Optional",
               "hide": false
             }
+          },
+          {
+            "name": "base64-encode",
+            "usage": "--base64-encode",
+            "help": "Base64 encode the secret",
+            "help_first_line": "Base64 encode the secret",
+            "short": [],
+            "long": ["base64-encode"],
+            "hide": false,
+            "global": false
           },
           {
             "name": "default",

@@ -156,6 +156,10 @@ pub enum FnoxError {
         suggestion: Option<String>,
     },
 
+    #[error("Failed to decode secret: {details}")]
+    #[diagnostic(code(fnox::secret::decode_failed))]
+    SecretDecodeFailed { details: String },
+
     // ========================================================================
     // Provider Errors
     // ========================================================================

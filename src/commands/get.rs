@@ -9,6 +9,10 @@ use clap::Args;
 pub struct GetCommand {
     /// Secret key to retrieve
     pub key: String,
+
+    /// Base64 decode the secret
+    #[arg(long)]
+    pub base64_decode: bool,
 }
 
 impl GetCommand {
@@ -40,6 +44,23 @@ impl GetCommand {
         // Resolve the secret using centralized resolver
         match resolve_secret(&config, &profile, &self.key, secret_config).await {
             Ok(Some(value)) => {
+                // Check if this secret should be base64 decoded
+                let value = if self.base64_decode {
+                    let decoded_bytes =
+                        data_encoding::BASE64
+                            .decode(value.as_bytes())
+                            .map_err(|e| FnoxError::SecretDecodeFailed {
+                                details: format!("Failed to base64 decode secret: {}", e),
+                            })?;
+                    str::from_utf8(&decoded_bytes)
+                        .map_err(|e| FnoxError::SecretDecodeFailed {
+                            details: format!("decoded secret is not valid UTF-8: {}", e),
+                        })?
+                        .to_string()
+                } else {
+                    value
+                };
+
                 // Check if this secret should be written to a file
                 if secret_config.as_file {
                     let file_path = create_persistent_secret_file("fnox-", &self.key, &value)?;

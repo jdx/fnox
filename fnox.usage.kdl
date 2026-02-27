@@ -56,6 +56,7 @@ cmd export help="Export secrets in various formats" {
     }
 }
 cmd get help="Get a secret value" {
+    flag --base64-decode help="Base64 decode the secret"
     arg <KEY> help="Secret key to retrieve"
 }
 cmd hook-env hide=#true help="Internal command used by shell hooks to load secrets" {
@@ -154,6 +155,7 @@ cmd set help="Set a secret value" {
     flag "-p --provider" help="Provider to fetch from" {
         arg <PROVIDER>
     }
+    flag --base64-encode help="Base64 encode the secret"
     flag --default help="Default value to use if secret is not found" {
         arg <DEFAULT>
     }

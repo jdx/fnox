@@ -43,6 +43,10 @@ Show what would be done without making changes
 
 Provider to fetch from
 
+### `--base64-encode`
+
+Base64 encode the secret
+
 ### `--default <DEFAULT>`
 
 Default value to use if secret is not found
