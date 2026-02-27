@@ -6,7 +6,7 @@ Format: `<type>(<scope>): <description>` (lowercase, imperative mood)
 
 **Types:** `feat`, `fix`, `refactor`, `docs`, `style`, `perf`, `test`, `chore`, `security`
 
-**Scopes:** command names (`get`, `set`, `exec`, `list`, `provider`), provider names (`age`, `1password`, `bitwarden`, `bitwarden-sm`, `aws-kms`, `aws-sm`, `aws-ps`, `keychain`, `keepass`, `infisical`, `passwordstate`, `pass`), subsystems (`config`, `encryption`, `env`, `deps`)
+**Scopes:** command names (`get`, `set`, `exec`, `list`, `provider`), provider names (`age`, `1password`, `bitwarden`, `bitwarden-sm`, `aws-kms`, `aws-sm`, `aws-ps`, `keychain`, `keepass`, `infisical`, `passwordstate`, `pass`, `proton-pass`), subsystems (`config`, `encryption`, `env`, `deps`)
 
 Examples: `fix(aws-sm): handle pagination for large secret lists`, `feat(exec): add --no-inherit flag`
 
@@ -94,6 +94,7 @@ All providers follow the same pattern: config in `fnox.toml` stores references/n
 | Infisical           | `infisical`      | Infisical                 | `infisical` CLI          |
 | Passwordstate       | `passwordstate`  | Passwordstate server      | `reqwest` HTTP           |
 | password-store      | `password-store` | GPG files                 | `pass` CLI               |
+| Proton Pass         | `proton-pass`    | Proton Pass vault         | `pass-cli` CLI           |
 
 **Common provider config fields:** `type` (required), `prefix` (optional namespace), `region` (AWS providers). Most providers support `value` as item name, `item/field` for specific fields.
 
