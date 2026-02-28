@@ -1010,6 +1010,113 @@
         "hidden_aliases": [],
         "examples": []
       },
+      "sync": {
+        "full_cmd": ["sync"],
+        "usage": "sync [FLAGS] [KEYS]…",
+        "subcommands": {},
+        "args": [
+          {
+            "name": "KEYS",
+            "usage": "[KEYS]…",
+            "help": "Only sync these specific secret keys",
+            "help_first_line": "Only sync these specific secret keys",
+            "required": false,
+            "double_dash": "Optional",
+            "var": true,
+            "hide": false
+          }
+        ],
+        "flags": [
+          {
+            "name": "force",
+            "usage": "-f --force",
+            "help": "Skip confirmation prompt",
+            "help_first_line": "Skip confirmation prompt",
+            "short": ["f"],
+            "long": ["force"],
+            "hide": false,
+            "global": false
+          },
+          {
+            "name": "global",
+            "usage": "-g --global",
+            "help": "Write to global config (~/.config/fnox/config.toml)",
+            "help_first_line": "Write to global config (~/.config/fnox/config.toml)",
+            "short": ["g"],
+            "long": ["global"],
+            "hide": false,
+            "global": false
+          },
+          {
+            "name": "dry-run",
+            "usage": "-n --dry-run",
+            "help": "Show what would be done without making changes",
+            "help_first_line": "Show what would be done without making changes",
+            "short": ["n"],
+            "long": ["dry-run"],
+            "hide": false,
+            "global": false
+          },
+          {
+            "name": "provider",
+            "usage": "-p --provider <PROVIDER>",
+            "help": "Target encryption provider (defaults to default_provider)",
+            "help_first_line": "Target encryption provider (defaults to default_provider)",
+            "short": ["p"],
+            "long": ["provider"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "PROVIDER",
+              "usage": "<PROVIDER>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            }
+          },
+          {
+            "name": "source",
+            "usage": "-s --source <SOURCE>",
+            "help": "Only sync secrets from this source provider",
+            "help_first_line": "Only sync secrets from this source provider",
+            "short": ["s"],
+            "long": ["source"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "SOURCE",
+              "usage": "<SOURCE>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            }
+          },
+          {
+            "name": "filter",
+            "usage": "--filter <FILTER>",
+            "help": "Only sync matching secrets (regex pattern)",
+            "help_first_line": "Only sync matching secrets (regex pattern)",
+            "short": [],
+            "long": ["filter"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "FILTER",
+              "usage": "<FILTER>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            }
+          }
+        ],
+        "mounts": [],
+        "hide": false,
+        "help": "Sync secrets from remote providers to a local encryption provider",
+        "name": "sync",
+        "aliases": [],
+        "hidden_aliases": [],
+        "examples": []
+      },
       "tui": {
         "full_cmd": ["tui"],
         "usage": "tui",

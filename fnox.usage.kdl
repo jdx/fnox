@@ -167,6 +167,21 @@ cmd set help="Set a secret value" {
     arg <KEY> help="Secret key (environment variable name)"
     arg "[VALUE]" help="Secret value to store" help_long="Secret value to store.\n\nIf omitted: reads from stdin when piped (`echo \"x\" | fnox set KEY`), or prompts interactively with hidden input.\n\nPassing secrets as arguments exposes them in shell history and `ps` output. For sensitive values, prefer stdin or the interactive prompt." required=#false
 }
+cmd sync help="Sync secrets from remote providers to a local encryption provider" {
+    flag "-f --force" help="Skip confirmation prompt"
+    flag "-g --global" help="Write to global config (~/.config/fnox/config.toml)"
+    flag "-n --dry-run" help="Show what would be done without making changes"
+    flag "-p --provider" help="Target encryption provider (defaults to default_provider)" {
+        arg <PROVIDER>
+    }
+    flag "-s --source" help="Only sync secrets from this source provider" {
+        arg <SOURCE>
+    }
+    flag --filter help="Only sync matching secrets (regex pattern)" {
+        arg <FILTER>
+    }
+    arg "[KEYS]…" help="Only sync these specific secret keys" required=#false var=#true
+}
 cmd tui help="Interactive TUI dashboard for managing secrets"
 cmd usage hide=#true help="Generate usage specification"
 cmd version help="Show version information" {

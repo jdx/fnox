@@ -454,9 +454,8 @@ pub enum FnoxError {
 
     #[error("Invalid regex filter pattern: {pattern}: {details}")]
     #[diagnostic(
-        code(fnox::import::invalid_regex),
-        help("Ensure the filter is a valid regular expression"),
-        url("https://fnox.jdx.dev/cli/import")
+        code(fnox::filter::invalid_regex),
+        help("Ensure the filter is a valid regular expression")
     )]
     InvalidRegexFilter { pattern: String, details: String },
 
@@ -507,6 +506,31 @@ pub enum FnoxError {
         url("https://fnox.jdx.dev/cli/import")
     )]
     ImportProviderUnsupported { provider: String, help: String },
+
+    // ========================================================================
+    // Sync Errors
+    // ========================================================================
+    #[error("Provider '{provider}' cannot be used as a sync target")]
+    #[diagnostic(
+        code(fnox::sync::target_unsupported),
+        help(
+            "The target provider must support encryption (e.g., 'age', 'aws-kms'). Remote storage providers cannot be used as sync targets."
+        ),
+        url("https://fnox.jdx.dev/cli/sync")
+    )]
+    SyncTargetProviderUnsupported { provider: String },
+
+    #[error("Failed to encrypt secret '{key}' with provider '{provider}': {details}")]
+    #[diagnostic(
+        code(fnox::sync::encryption_failed),
+        help("Check the provider configuration and ensure the encryption key is available"),
+        url("https://fnox.jdx.dev/cli/sync")
+    )]
+    SyncEncryptionFailed {
+        key: String,
+        provider: String,
+        details: String,
+    },
 
     #[error("Failed to create directory: {}", path.display())]
     #[diagnostic(
