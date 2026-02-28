@@ -360,3 +360,23 @@ EOF
 	# Cleanup
 	delete_test_vault_secret "$secret_name"
 }
+
+@test "Vault provider fails with semantic error when address and VAULT_ADDR are missing" {
+	# Create config without address
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF
+root = true
+[providers.vault]
+type = "vault"
+
+[secrets]
+MY_SECRET = { provider = "vault", value = "foo" }
+EOF
+
+	# Ensure VAULT_ADDR and FNOX_VAULT_ADDR are not set
+	unset VAULT_ADDR
+	unset FNOX_VAULT_ADDR
+
+	run "$FNOX_BIN" get MY_SECRET
+	assert_failure
+	assert_output --partial "Configuration error: HashiCorp Vault provider address is not configured"
+}
