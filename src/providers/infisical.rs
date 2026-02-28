@@ -463,14 +463,12 @@ fn map_batch_error(e: &FnoxError, secret_name: &str) -> FnoxError {
             hint: hint.clone(),
             url: url.clone(),
         },
-        FnoxError::ProviderSecretNotFound { hint, url, .. } => {
-            FnoxError::ProviderSecretNotFound {
-                provider: PROVIDER_NAME.to_string(),
-                secret: secret_name.to_string(),
-                hint: hint.clone(),
-                url: url.clone(),
-            }
-        }
+        FnoxError::ProviderSecretNotFound { hint, url, .. } => FnoxError::ProviderSecretNotFound {
+            provider: PROVIDER_NAME.to_string(),
+            secret: secret_name.to_string(),
+            hint: hint.clone(),
+            url: url.clone(),
+        },
         FnoxError::ProviderCliNotFound {
             cli,
             install_hint,
