@@ -185,7 +185,7 @@ impl crate::providers::Provider for HashiCorpVaultProvider {
         if let Some(addr) = address {
             tracing::debug!("Testing connection to Vault at {}", addr);
         } else {
-            tracing::debug!("Testing connection to Vault (using environment VAULT_ADDR)");
+            tracing::debug!("Testing connection to Vault (address not specified in config or environment)");
         }
 
         // Try to get Vault status
