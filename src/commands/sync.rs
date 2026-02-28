@@ -109,9 +109,10 @@ impl SyncCommand {
 
             // Apply --source filter
             if let Some(ref source) = self.source
-                && source_provider != source {
-                    continue;
-                }
+                && source_provider != source
+            {
+                continue;
+            }
 
             // Apply positional KEYS filter
             if !self.keys.is_empty() && !self.keys.iter().any(|k| k == key) {
@@ -120,9 +121,10 @@ impl SyncCommand {
 
             // Apply --filter regex
             if let Some(ref regex) = filter_regex
-                && !regex.is_match(key) {
-                    continue;
-                }
+                && !regex.is_match(key)
+            {
+                continue;
+            }
 
             secrets_to_sync.insert(key.clone(), secret_config.clone());
         }
