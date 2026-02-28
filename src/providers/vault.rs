@@ -209,7 +209,12 @@ impl crate::providers::Provider for HashiCorpVaultProvider {
 }
 
 pub fn env_dependencies() -> &'static [&'static str] {
-    &["VAULT_TOKEN", "FNOX_VAULT_TOKEN", "VAULT_ADDR", "FNOX_VAULT_ADDR"]
+    &[
+        "VAULT_TOKEN",
+        "FNOX_VAULT_TOKEN",
+        "VAULT_ADDR",
+        "FNOX_VAULT_ADDR",
+    ]
 }
 
 fn vault_token() -> Option<String> {
