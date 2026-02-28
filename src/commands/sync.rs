@@ -95,6 +95,7 @@ impl SyncCommand {
             None
         };
 
+        let keys_filter: std::collections::HashSet<_> = self.keys.iter().collect();
         let mut secrets_to_sync = IndexMap::new();
         for (key, secret_config) in &all_secrets {
             // Must have a provider configured (skip env-var-only and default-only secrets)
@@ -115,7 +116,7 @@ impl SyncCommand {
             }
 
             // Apply positional KEYS filter
-            if !self.keys.is_empty() && !self.keys.iter().any(|k| k == key) {
+            if !keys_filter.is_empty() && !keys_filter.contains(key) {
                 continue;
             }
 

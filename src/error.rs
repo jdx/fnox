@@ -454,9 +454,8 @@ pub enum FnoxError {
 
     #[error("Invalid regex filter pattern: {pattern}: {details}")]
     #[diagnostic(
-        code(fnox::import::invalid_regex),
-        help("Ensure the filter is a valid regular expression"),
-        url("https://fnox.jdx.dev/cli/import")
+        code(fnox::filter::invalid_regex),
+        help("Ensure the filter is a valid regular expression")
     )]
     InvalidRegexFilter { pattern: String, details: String },
 
