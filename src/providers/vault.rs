@@ -66,14 +66,14 @@ impl HashiCorpVaultProvider {
         }
 
         // Set VAULT_TOKEN from provider config or environment
-        let token = self.get_token().ok_or_else(|| {
-            FnoxError::ProviderAuthFailed {
+        let token = self
+            .get_token()
+            .ok_or_else(|| FnoxError::ProviderAuthFailed {
                 provider: "HashiCorp Vault".to_string(),
                 details: "VAULT_TOKEN not set".to_string(),
                 hint: "Set VAULT_TOKEN in provider config or environment".to_string(),
                 url: "https://fnox.jdx.dev/providers/vault".to_string(),
-            }
-        })?;
+            })?;
 
         tracing::debug!(
             "Setting VAULT_TOKEN environment variable (token length: {})",
