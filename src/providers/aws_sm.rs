@@ -292,17 +292,20 @@ impl crate::providers::Provider for AwsSecretsManagerProvider {
         };
 
         for chunk in secrets.chunks(BATCH_SIZE) {
-            // Build mapping from secret ID to original key
-            // This allows exact matching without false positives
-            let mut secret_id_to_key: HashMap<String, String> = HashMap::new();
-            let secret_ids: Vec<String> = chunk
-                .iter()
-                .map(|(key, value)| {
-                    let secret_id = self.get_secret_name(value);
-                    secret_id_to_key.insert(secret_id.clone(), key.clone());
-                    secret_id
-                })
-                .collect();
+            // Build mapping from secret ID to original keys (multiple keys can share same secret)
+            let mut secret_id_to_keys: HashMap<String, Vec<String>> = HashMap::new();
+            let mut secret_ids: Vec<String> = Vec::new();
+            for (key, value) in chunk {
+                let secret_id = self.get_secret_name(value);
+                secret_id_to_keys
+                    .entry(secret_id.clone())
+                    .or_default()
+                    .push(key.clone());
+                // Only add unique secret IDs to the request
+                if !secret_ids.contains(&secret_id) {
+                    secret_ids.push(secret_id);
+                }
+            }
 
             tracing::debug!(
                 "Fetching batch of {} secrets from AWS Secrets Manager",
@@ -332,23 +335,26 @@ impl crate::providers::Provider for AwsSecretsManagerProvider {
                             continue;
                         };
 
-                        // Find the matching key using exact name match
-                        if let Some(key) = secret_id_to_key.get(&secret_name) {
-                            if let Some(secret_string) = secret.secret_string() {
-                                results.insert(key.clone(), Ok(secret_string.to_string()));
-                            } else {
-                                results.insert(
-                                    key.clone(),
-                                    Err(FnoxError::ProviderInvalidResponse {
-                                        provider: "AWS Secrets Manager".to_string(),
-                                        details: format!(
-                                            "Secret '{}' has no string value",
-                                            secret_name
-                                        ),
-                                        hint: "Binary secrets are not supported".to_string(),
-                                        url: "https://fnox.jdx.dev/providers/aws-sm".to_string(),
-                                    }),
-                                );
+                        // Find all matching keys using exact name match
+                        if let Some(keys) = secret_id_to_keys.get(&secret_name) {
+                            for key in keys {
+                                if let Some(secret_string) = secret.secret_string() {
+                                    results.insert(key.clone(), Ok(secret_string.to_string()));
+                                } else {
+                                    results.insert(
+                                        key.clone(),
+                                        Err(FnoxError::ProviderInvalidResponse {
+                                            provider: "AWS Secrets Manager".to_string(),
+                                            details: format!(
+                                                "Secret '{}' has no string value",
+                                                secret_name
+                                            ),
+                                            hint: "Binary secrets are not supported".to_string(),
+                                            url: "https://fnox.jdx.dev/providers/aws-sm"
+                                                .to_string(),
+                                        }),
+                                    );
+                                }
                             }
                         } else {
                             tracing::warn!(
@@ -362,52 +368,60 @@ impl crate::providers::Provider for AwsSecretsManagerProvider {
                     for error in response.errors() {
                         if let Some(error_secret_id) = error.secret_id() {
                             // Try exact match first, then check if it's an ARN
-                            let lookup_name = if secret_id_to_key.contains_key(error_secret_id) {
+                            let lookup_name = if secret_id_to_keys.contains_key(error_secret_id) {
                                 error_secret_id.to_string()
                             } else {
                                 // Might be an ARN in the error response
                                 extract_name_from_arn(error_secret_id)
                             };
 
-                            if let Some(key) = secret_id_to_key.get(&lookup_name) {
+                            if let Some(keys) = secret_id_to_keys.get(&lookup_name) {
                                 let error_msg =
                                     error.message().unwrap_or("Unknown error").to_string();
+                                for key in keys {
+                                    results.insert(
+                                        key.clone(),
+                                        Err(FnoxError::ProviderApiError {
+                                            provider: "AWS Secrets Manager".to_string(),
+                                            details: format!(
+                                                "Failed to get '{}': {}",
+                                                lookup_name, error_msg
+                                            ),
+                                            hint:
+                                                "Check that the secret exists and you have access"
+                                                    .to_string(),
+                                            url: "https://fnox.jdx.dev/providers/aws-sm"
+                                                .to_string(),
+                                        }),
+                                    );
+                                }
+                            }
+                        }
+                    }
+
+                    // Check for any secrets that weren't in response (neither success nor error)
+                    for (secret_id, keys) in &secret_id_to_keys {
+                        for key in keys {
+                            if !results.contains_key(key) {
                                 results.insert(
                                     key.clone(),
-                                    Err(FnoxError::ProviderApiError {
+                                    Err(FnoxError::ProviderSecretNotFound {
                                         provider: "AWS Secrets Manager".to_string(),
-                                        details: format!(
-                                            "Failed to get '{}': {}",
-                                            lookup_name, error_msg
-                                        ),
-                                        hint: "Check that the secret exists and you have access"
-                                            .to_string(),
+                                        secret: secret_id.clone(),
+                                        hint: "Check that the secret exists".to_string(),
                                         url: "https://fnox.jdx.dev/providers/aws-sm".to_string(),
                                     }),
                                 );
                             }
                         }
                     }
-
-                    // Check for any secrets that weren't in response (neither success nor error)
-                    for (secret_id, key) in &secret_id_to_key {
-                        if !results.contains_key(key) {
-                            results.insert(
-                                key.clone(),
-                                Err(FnoxError::ProviderSecretNotFound {
-                                    provider: "AWS Secrets Manager".to_string(),
-                                    secret: secret_id.clone(),
-                                    hint: "Check that the secret exists".to_string(),
-                                    url: "https://fnox.jdx.dev/providers/aws-sm".to_string(),
-                                }),
-                            );
-                        }
-                    }
                 }
                 Err(e) => {
                     // Batch call failed entirely, return errors for all secrets in this chunk
-                    for (secret_id, key) in &secret_id_to_key {
-                        results.insert(key.clone(), Err(aws_error_to_fnox(&e, secret_id)));
+                    for (secret_id, keys) in &secret_id_to_keys {
+                        for key in keys {
+                            results.insert(key.clone(), Err(aws_error_to_fnox(&e, secret_id)));
+                        }
                     }
                 }
             }
