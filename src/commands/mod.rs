@@ -26,6 +26,7 @@ pub mod remove;
 pub mod scan;
 pub mod schema;
 pub mod set;
+pub mod sync;
 pub mod tui;
 pub mod usage;
 pub mod version;
@@ -136,6 +137,9 @@ pub enum Commands {
     /// Set a secret value
     Set(set::SetCommand),
 
+    /// Sync secrets from remote providers to a local encryption provider
+    Sync(sync::SyncCommand),
+
     /// Interactive TUI dashboard for managing secrets
     Tui(tui::TuiCommand),
 
@@ -183,6 +187,7 @@ impl Commands {
             Commands::Remove(cmd) => cmd.run(cli).await,
             Commands::Exec(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Set(cmd) => cmd.run(cli, self.load_config(cli)?).await,
+            Commands::Sync(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Scan(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Tui(cmd) => cmd.run(cli, self.load_config(cli)?).await,
         }
