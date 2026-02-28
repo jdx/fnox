@@ -452,77 +452,123 @@ fn infisical_api_url() -> Option<String> {
 // Cache login token to avoid repeated login calls
 static CACHED_LOGIN_TOKEN: LazyLock<Mutex<Option<String>>> = LazyLock::new(|| Mutex::new(None));
 
-/// Map a batch-level error to a per-secret error, preserving the structured variant.
-fn map_batch_error(e: &FnoxError, secret_name: &str) -> FnoxError {
-    match e {
+fn clone_provider_error(error: &FnoxError) -> Option<FnoxError> {
+    Some(match error {
         FnoxError::ProviderAuthFailed {
-            details, hint, url, ..
+            provider,
+            details,
+            hint,
+            url,
         } => FnoxError::ProviderAuthFailed {
-            provider: PROVIDER_NAME.to_string(),
+            provider: provider.clone(),
             details: details.clone(),
             hint: hint.clone(),
             url: url.clone(),
         },
-        FnoxError::ProviderSecretNotFound { hint, url, .. } => FnoxError::ProviderSecretNotFound {
-            provider: PROVIDER_NAME.to_string(),
-            secret: secret_name.to_string(),
-            hint: hint.clone(),
-            url: url.clone(),
-        },
         FnoxError::ProviderCliNotFound {
+            provider,
             cli,
             install_hint,
             url,
-            ..
         } => FnoxError::ProviderCliNotFound {
-            provider: PROVIDER_NAME.to_string(),
+            provider: provider.clone(),
             cli: cli.clone(),
             install_hint: install_hint.clone(),
             url: url.clone(),
         },
         FnoxError::ProviderInvalidResponse {
-            details, hint, url, ..
+            provider,
+            details,
+            hint,
+            url,
         } => FnoxError::ProviderInvalidResponse {
-            provider: PROVIDER_NAME.to_string(),
+            provider: provider.clone(),
             details: details.clone(),
             hint: hint.clone(),
             url: url.clone(),
         },
         FnoxError::ProviderApiError {
-            details, hint, url, ..
+            provider,
+            details,
+            hint,
+            url,
         } => FnoxError::ProviderApiError {
-            provider: PROVIDER_NAME.to_string(),
+            provider: provider.clone(),
             details: details.clone(),
             hint: hint.clone(),
             url: url.clone(),
         },
         FnoxError::ProviderCliFailed {
-            details, hint, url, ..
+            provider,
+            details,
+            hint,
+            url,
         } => FnoxError::ProviderCliFailed {
-            provider: PROVIDER_NAME.to_string(),
+            provider: provider.clone(),
             details: details.clone(),
             hint: hint.clone(),
             url: url.clone(),
         },
-        _ => FnoxError::ProviderCliFailed {
-            provider: PROVIDER_NAME.to_string(),
-            details: e.to_string(),
-            hint: "Check your Infisical configuration".to_string(),
-            url: PROVIDER_URL.to_string(),
-        },
+        _ => return None,
+    })
+}
+
+/// Map a batch-level error to a per-secret error, preserving structured variants.
+fn map_batch_error(e: &FnoxError, secret_name: &str) -> FnoxError {
+    if let FnoxError::ProviderSecretNotFound {
+        provider,
+        hint,
+        url,
+        ..
+    } = e
+    {
+        return FnoxError::ProviderSecretNotFound {
+            provider: provider.clone(),
+            secret: secret_name.to_string(),
+            hint: hint.clone(),
+            url: url.clone(),
+        };
     }
+
+    clone_provider_error(e).unwrap_or_else(|| FnoxError::ProviderCliFailed {
+        provider: PROVIDER_NAME.to_string(),
+        details: e.to_string(),
+        hint: "Check your Infisical configuration".to_string(),
+        url: PROVIDER_URL.to_string(),
+    })
+}
+
+const AUTH_ERROR_PATTERNS: &[&str] = &[
+    "unauthorized",
+    "token expired",
+    "invalid token",
+    "authentication failed",
+    "forbidden",
+];
+
+const SECRET_NOT_FOUND_PATTERNS: &[&str] = &[
+    "secret not found",
+    "secret does not exist",
+    "key not found",
+    "missing secret",
+];
+
+const RESOURCE_NOT_FOUND_PATTERNS: &[&str] = &[
+    "project not found",
+    "environment not found",
+    "workspace not found",
+    "folder not found",
+];
+
+fn contains_any(haystack: &str, patterns: &[&str]) -> bool {
+    patterns.iter().any(|pattern| haystack.contains(pattern))
 }
 
 /// Classify CLI stderr output into the appropriate FnoxError variant.
 fn classify_cli_error(stderr: &str, secret_ref: Option<&str>) -> FnoxError {
     let stderr_lower = stderr.to_lowercase();
 
-    if stderr_lower.contains("unauthorized")
-        || stderr_lower.contains("token expired")
-        || stderr_lower.contains("invalid token")
-        || stderr_lower.contains("authentication failed")
-        || stderr_lower.contains("forbidden")
-    {
+    if contains_any(&stderr_lower, AUTH_ERROR_PATTERNS) {
         return FnoxError::ProviderAuthFailed {
             provider: PROVIDER_NAME.to_string(),
             details: stderr.to_string(),
@@ -531,13 +577,29 @@ fn classify_cli_error(stderr: &str, secret_ref: Option<&str>) -> FnoxError {
         };
     }
 
-    if stderr_lower.contains("not found") || stderr_lower.contains("does not exist") {
-        return FnoxError::ProviderSecretNotFound {
+    if contains_any(&stderr_lower, RESOURCE_NOT_FOUND_PATTERNS) {
+        return FnoxError::ProviderApiError {
             provider: PROVIDER_NAME.to_string(),
-            secret: secret_ref.unwrap_or("<unknown>").to_string(),
-            hint: "Check that the secret exists in Infisical".to_string(),
+            details: stderr.to_string(),
+            hint: "Check project/environment/path settings in your Infisical provider config"
+                .to_string(),
             url: PROVIDER_URL.to_string(),
         };
+    }
+
+    if let Some(secret_name) = secret_ref {
+        let is_secret_lookup_error = contains_any(&stderr_lower, SECRET_NOT_FOUND_PATTERNS)
+            || (stderr_lower.contains("not found") && stderr_lower.contains("secret"))
+            || (stderr_lower.contains("does not exist") && stderr_lower.contains("secret"));
+
+        if is_secret_lookup_error {
+            return FnoxError::ProviderSecretNotFound {
+                provider: PROVIDER_NAME.to_string(),
+                secret: secret_name.to_string(),
+                hint: "Check that the secret exists in Infisical".to_string(),
+                url: PROVIDER_URL.to_string(),
+            };
+        }
     }
 
     FnoxError::ProviderCliFailed {
@@ -587,7 +649,7 @@ mod tests {
 
     #[test]
     fn classify_cli_error_does_not_exist() {
-        let err = classify_cli_error("The resource does not exist", Some("DB_PASS"));
+        let err = classify_cli_error("requested secret does not exist", Some("DB_PASS"));
         match err {
             FnoxError::ProviderSecretNotFound { secret, .. } => {
                 assert_eq!(secret, "DB_PASS");
@@ -599,12 +661,21 @@ mod tests {
     #[test]
     fn classify_cli_error_not_found_without_ref() {
         let err = classify_cli_error("not found", None);
-        match err {
-            FnoxError::ProviderSecretNotFound { secret, .. } => {
-                assert_eq!(secret, "<unknown>");
-            }
-            other => panic!("Expected ProviderSecretNotFound, got {:?}", other),
-        }
+        assert!(
+            matches!(err, FnoxError::ProviderCliFailed { .. }),
+            "Expected ProviderCliFailed, got {:?}",
+            err
+        );
+    }
+
+    #[test]
+    fn classify_cli_error_project_not_found_maps_to_api_error() {
+        let err = classify_cli_error("project not found", Some("SECRET"));
+        assert!(
+            matches!(err, FnoxError::ProviderApiError { .. }),
+            "Expected ProviderApiError, got {:?}",
+            err
+        );
     }
 
     #[test]
