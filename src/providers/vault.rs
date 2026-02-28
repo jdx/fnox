@@ -48,12 +48,9 @@ impl HashiCorpVaultProvider {
 
         // Set VAULT_ADDR from provider config or environment
         let address = self.get_address().ok_or_else(|| {
-            FnoxError::ProviderAuthFailed {
-                provider: "HashiCorp Vault".to_string(),
-                details: "VAULT_ADDR not set".to_string(),
-                hint: "Set VAULT_ADDR in provider config or environment (e.g., export VAULT_ADDR=http://localhost:8200)".to_string(),
-                url: "https://fnox.jdx.dev/providers/vault".to_string(),
-            }
+            FnoxError::Config(
+                "HashiCorp Vault provider address is not configured. Please set it in your provider configuration or via the VAULT_ADDR environment variable.".to_string(),
+            )
         })?;
 
         tracing::debug!("Setting VAULT_ADDR to '{}'", address);
