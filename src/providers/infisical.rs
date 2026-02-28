@@ -5,6 +5,9 @@ use std::collections::HashMap;
 use std::process::Command;
 use std::sync::{LazyLock, Mutex};
 
+const PROVIDER_NAME: &str = "Infisical";
+const PROVIDER_URL: &str = "https://fnox.jdx.dev/providers/infisical";
+
 pub struct InfisicalProvider {
     project_id: Option<String>,
     environment: Option<String>,
@@ -34,19 +37,19 @@ impl InfisicalProvider {
 
         // Check if we have client credentials to obtain a token
         let client_id = infisical_client_id().ok_or_else(|| FnoxError::ProviderAuthFailed {
-            provider: "Infisical".to_string(),
+            provider: PROVIDER_NAME.to_string(),
             details: "Authentication not found".to_string(),
             hint: "Set INFISICAL_TOKEN, or both INFISICAL_CLIENT_ID and INFISICAL_CLIENT_SECRET"
                 .to_string(),
-            url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+            url: PROVIDER_URL.to_string(),
         })?;
 
         let client_secret =
             infisical_client_secret().ok_or_else(|| FnoxError::ProviderAuthFailed {
-                provider: "Infisical".to_string(),
+                provider: PROVIDER_NAME.to_string(),
                 details: "Client secret not found".to_string(),
                 hint: "Set INFISICAL_CLIENT_SECRET or FNOX_INFISICAL_CLIENT_SECRET".to_string(),
-                url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+                url: PROVIDER_URL.to_string(),
             })?;
 
         // Acquire lock for the entire check-and-login operation to prevent race condition
@@ -93,17 +96,17 @@ impl InfisicalProvider {
         let output = cmd.output().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 FnoxError::ProviderCliNotFound {
-                    provider: "Infisical".to_string(),
+                    provider: PROVIDER_NAME.to_string(),
                     cli: "infisical".to_string(),
                     install_hint: "brew install infisical/get-cli/infisical".to_string(),
-                    url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+                    url: PROVIDER_URL.to_string(),
                 }
             } else {
                 FnoxError::ProviderCliFailed {
-                    provider: "Infisical".to_string(),
+                    provider: PROVIDER_NAME.to_string(),
                     details: e.to_string(),
                     hint: "Check that the Infisical CLI is installed and accessible".to_string(),
-                    url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+                    url: PROVIDER_URL.to_string(),
                 }
             }
         })?;
@@ -111,19 +114,19 @@ impl InfisicalProvider {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(FnoxError::ProviderAuthFailed {
-                provider: "Infisical".to_string(),
+                provider: PROVIDER_NAME.to_string(),
                 details: stderr.trim().to_string(),
                 hint: "Check your client ID and client secret".to_string(),
-                url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+                url: PROVIDER_URL.to_string(),
             });
         }
 
         let token = String::from_utf8(output.stdout)
             .map_err(|e| FnoxError::ProviderInvalidResponse {
-                provider: "Infisical".to_string(),
+                provider: PROVIDER_NAME.to_string(),
                 details: format!("Invalid UTF-8 in command output: {}", e),
                 hint: "This is an unexpected error".to_string(),
-                url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+                url: PROVIDER_URL.to_string(),
             })?
             .trim()
             .to_string();
@@ -166,17 +169,17 @@ impl InfisicalProvider {
         let output = cmd.output().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 FnoxError::ProviderCliNotFound {
-                    provider: "Infisical".to_string(),
+                    provider: PROVIDER_NAME.to_string(),
                     cli: "infisical".to_string(),
                     install_hint: "brew install infisical/get-cli/infisical".to_string(),
-                    url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+                    url: PROVIDER_URL.to_string(),
                 }
             } else {
                 FnoxError::ProviderCliFailed {
-                    provider: "Infisical".to_string(),
+                    provider: PROVIDER_NAME.to_string(),
                     details: e.to_string(),
                     hint: "Check that the Infisical CLI is installed and accessible".to_string(),
-                    url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+                    url: PROVIDER_URL.to_string(),
                 }
             }
         })?;
@@ -188,10 +191,10 @@ impl InfisicalProvider {
 
         let stdout =
             String::from_utf8(output.stdout).map_err(|e| FnoxError::ProviderInvalidResponse {
-                provider: "Infisical".to_string(),
+                provider: PROVIDER_NAME.to_string(),
                 details: format!("Invalid UTF-8 in command output: {}", e),
                 hint: "The secret value contains invalid UTF-8 characters".to_string(),
-                url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+                url: PROVIDER_URL.to_string(),
             })?;
 
         Ok(stdout.trim().to_string())
@@ -243,20 +246,20 @@ impl crate::providers::Provider for InfisicalProvider {
         let json_array =
             serde_json::from_str::<Vec<serde_json::Value>>(&json_output).map_err(|e| {
                 FnoxError::ProviderInvalidResponse {
-                    provider: "Infisical".to_string(),
+                    provider: PROVIDER_NAME.to_string(),
                     details: format!("Failed to parse response for '{}': {}", value, e),
                     hint: "The Infisical CLI returned an unexpected response format".to_string(),
-                    url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+                    url: PROVIDER_URL.to_string(),
                 }
             })?;
 
         // Extract the secret value from the first (and only) object
         if json_array.is_empty() {
             return Err(FnoxError::ProviderSecretNotFound {
-                provider: "Infisical".to_string(),
+                provider: PROVIDER_NAME.to_string(),
                 secret: value.to_string(),
                 hint: "Check that the secret exists in Infisical".to_string(),
-                url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+                url: PROVIDER_URL.to_string(),
             });
         }
 
@@ -264,23 +267,23 @@ impl crate::providers::Provider for InfisicalProvider {
             .get("secretValue")
             .and_then(|v| v.as_str())
             .ok_or_else(|| FnoxError::ProviderInvalidResponse {
-                provider: "Infisical".to_string(),
+                provider: PROVIDER_NAME.to_string(),
                 details: format!(
                     "Invalid response format for '{}' - missing secretValue field",
                     value
                 ),
                 hint: "The Infisical CLI returned an unexpected response format".to_string(),
-                url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+                url: PROVIDER_URL.to_string(),
             })?;
 
         // The Infisical CLI returns "*not found*" as a placeholder when a secret doesn't exist
         // Treat this as an error rather than returning the literal placeholder string
         if secret_value == "*not found*" {
             return Err(FnoxError::ProviderSecretNotFound {
-                provider: "Infisical".to_string(),
+                provider: PROVIDER_NAME.to_string(),
                 secret: value.to_string(),
                 hint: "Check that the secret exists in Infisical".to_string(),
-                url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+                url: PROVIDER_URL.to_string(),
             });
         }
 
@@ -360,11 +363,11 @@ impl crate::providers::Provider for InfisicalProvider {
                             .map(|(key, secret_name)| {
                                 let result = value_map.get(secret_name).cloned().ok_or_else(|| {
                                     FnoxError::ProviderSecretNotFound {
-                                        provider: "Infisical".to_string(),
+                                        provider: PROVIDER_NAME.to_string(),
                                         secret: secret_name.clone(),
                                         hint: "Check that the secret exists in Infisical"
                                             .to_string(),
-                                        url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+                                        url: PROVIDER_URL.to_string(),
                                     }
                                 });
                                 (key.clone(), result)
@@ -377,10 +380,10 @@ impl crate::providers::Provider for InfisicalProvider {
                             .iter()
                             .map(|(key, _)| {
                                 (key.clone(), Err(FnoxError::ProviderInvalidResponse {
-                                    provider: "Infisical".to_string(),
+                                    provider: PROVIDER_NAME.to_string(),
                                     details: format!("Failed to parse batch response: {}", e),
                                     hint: "The Infisical CLI returned an unexpected response format".to_string(),
-                                    url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+                                    url: PROVIDER_URL.to_string(),
                                 }))
                             })
                             .collect()
@@ -455,24 +458,26 @@ fn map_batch_error(e: &FnoxError, secret_name: &str) -> FnoxError {
         FnoxError::ProviderAuthFailed {
             details, hint, url, ..
         } => FnoxError::ProviderAuthFailed {
-            provider: "Infisical".to_string(),
+            provider: PROVIDER_NAME.to_string(),
             details: details.clone(),
             hint: hint.clone(),
             url: url.clone(),
         },
-        FnoxError::ProviderSecretNotFound { hint, url, .. } => FnoxError::ProviderSecretNotFound {
-            provider: "Infisical".to_string(),
-            secret: secret_name.to_string(),
-            hint: hint.clone(),
-            url: url.clone(),
-        },
+        FnoxError::ProviderSecretNotFound { hint, url, .. } => {
+            FnoxError::ProviderSecretNotFound {
+                provider: PROVIDER_NAME.to_string(),
+                secret: secret_name.to_string(),
+                hint: hint.clone(),
+                url: url.clone(),
+            }
+        }
         FnoxError::ProviderCliNotFound {
             cli,
             install_hint,
             url,
             ..
         } => FnoxError::ProviderCliNotFound {
-            provider: "Infisical".to_string(),
+            provider: PROVIDER_NAME.to_string(),
             cli: cli.clone(),
             install_hint: install_hint.clone(),
             url: url.clone(),
@@ -480,7 +485,7 @@ fn map_batch_error(e: &FnoxError, secret_name: &str) -> FnoxError {
         FnoxError::ProviderInvalidResponse {
             details, hint, url, ..
         } => FnoxError::ProviderInvalidResponse {
-            provider: "Infisical".to_string(),
+            provider: PROVIDER_NAME.to_string(),
             details: details.clone(),
             hint: hint.clone(),
             url: url.clone(),
@@ -488,7 +493,7 @@ fn map_batch_error(e: &FnoxError, secret_name: &str) -> FnoxError {
         FnoxError::ProviderApiError {
             details, hint, url, ..
         } => FnoxError::ProviderApiError {
-            provider: "Infisical".to_string(),
+            provider: PROVIDER_NAME.to_string(),
             details: details.clone(),
             hint: hint.clone(),
             url: url.clone(),
@@ -496,16 +501,16 @@ fn map_batch_error(e: &FnoxError, secret_name: &str) -> FnoxError {
         FnoxError::ProviderCliFailed {
             details, hint, url, ..
         } => FnoxError::ProviderCliFailed {
-            provider: "Infisical".to_string(),
+            provider: PROVIDER_NAME.to_string(),
             details: details.clone(),
             hint: hint.clone(),
             url: url.clone(),
         },
         _ => FnoxError::ProviderCliFailed {
-            provider: "Infisical".to_string(),
+            provider: PROVIDER_NAME.to_string(),
             details: e.to_string(),
             hint: "Check your Infisical configuration".to_string(),
-            url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+            url: PROVIDER_URL.to_string(),
         },
     }
 }
@@ -521,27 +526,27 @@ fn classify_cli_error(stderr: &str, secret_ref: Option<&str>) -> FnoxError {
         || stderr_lower.contains("forbidden")
     {
         return FnoxError::ProviderAuthFailed {
-            provider: "Infisical".to_string(),
+            provider: PROVIDER_NAME.to_string(),
             details: stderr.to_string(),
             hint: "Run 'infisical login' or check your INFISICAL_TOKEN".to_string(),
-            url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+            url: PROVIDER_URL.to_string(),
         };
     }
 
     if stderr_lower.contains("not found") || stderr_lower.contains("does not exist") {
         return FnoxError::ProviderSecretNotFound {
-            provider: "Infisical".to_string(),
+            provider: PROVIDER_NAME.to_string(),
             secret: secret_ref.unwrap_or("<unknown>").to_string(),
             hint: "Check that the secret exists in Infisical".to_string(),
-            url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+            url: PROVIDER_URL.to_string(),
         };
     }
 
     FnoxError::ProviderCliFailed {
-        provider: "Infisical".to_string(),
+        provider: PROVIDER_NAME.to_string(),
         details: stderr.to_string(),
         hint: "Check your Infisical configuration and authentication".to_string(),
-        url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+        url: PROVIDER_URL.to_string(),
     }
 }
 
@@ -617,10 +622,10 @@ mod tests {
     #[test]
     fn map_batch_error_preserves_auth_failed() {
         let error = FnoxError::ProviderAuthFailed {
-            provider: "Infisical".to_string(),
+            provider: PROVIDER_NAME.to_string(),
             details: "unauthorized".to_string(),
             hint: "login".to_string(),
-            url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+            url: PROVIDER_URL.to_string(),
         };
 
         let result = map_batch_error(&error, "secret1");
@@ -634,10 +639,10 @@ mod tests {
     #[test]
     fn map_batch_error_preserves_cli_not_found() {
         let error = FnoxError::ProviderCliNotFound {
-            provider: "Infisical".to_string(),
+            provider: PROVIDER_NAME.to_string(),
             cli: "infisical".to_string(),
             install_hint: "brew install".to_string(),
-            url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+            url: PROVIDER_URL.to_string(),
         };
 
         let result = map_batch_error(&error, "secret1");
@@ -651,10 +656,10 @@ mod tests {
     #[test]
     fn map_batch_error_preserves_secret_not_found_with_per_secret_name() {
         let error = FnoxError::ProviderSecretNotFound {
-            provider: "Infisical".to_string(),
+            provider: PROVIDER_NAME.to_string(),
             secret: "original".to_string(),
             hint: "check".to_string(),
-            url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+            url: PROVIDER_URL.to_string(),
         };
 
         let result = map_batch_error(&error, "secret_a");
@@ -669,10 +674,10 @@ mod tests {
     #[test]
     fn map_batch_error_clones_cli_failed_without_double_wrapping() {
         let error = FnoxError::ProviderCliFailed {
-            provider: "Infisical".to_string(),
+            provider: PROVIDER_NAME.to_string(),
             details: "some error".to_string(),
             hint: "original hint".to_string(),
-            url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+            url: PROVIDER_URL.to_string(),
         };
 
         let result = map_batch_error(&error, "secret1");

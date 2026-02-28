@@ -10,7 +10,7 @@ use demand::Confirm;
 use std::process::Command;
 
 /// Returns true if all preconditions are met for attempting an auth prompt.
-/// Pure function — no side effects, fully testable.
+/// Pure function - no side effects, fully testable.
 fn should_attempt_auth_prompt(
     is_auth_error: bool,
     prompt_auth_enabled: bool,
@@ -24,6 +24,66 @@ fn should_attempt_auth_prompt(
 /// Returns `Ok(true)` if the auth command was run successfully,
 /// `Ok(false)` if the user declined or no auth command is available,
 /// `Err` if the auth command failed.
+pub fn prompt_and_run_auth(
+    config: &Config,
+    provider_config: &ProviderConfig,
+    provider_name: &str,
+    error: &FnoxError,
+) -> Result<bool> {
+    let auth_command = match provider_config.default_auth_command() {
+        Some(cmd) => cmd,
+        None => return Ok(false),
+    };
+
+    if !should_attempt_auth_prompt(
+        error.is_auth_error(),
+        config.should_prompt_auth(),
+        true, // has_auth_command: pre-checked above for early return; helper retains the param for full truth-table testability
+    ) {
+        return Ok(false);
+    }
+
+    // Show the error and prompt
+    eprintln!(
+        "Authentication failed for provider '{}': {}",
+        provider_name, error
+    );
+
+    let user_confirmed = Confirm::new(format!("Run `{}` to authenticate?", auth_command))
+        .affirmative("Yes")
+        .negative("No")
+        .run()
+        .map_err(|e| FnoxError::Provider(format!("Failed to show prompt: {}", e)))?;
+
+    if !user_confirmed {
+        return Ok(false);
+    }
+
+    // Run the auth command
+    eprintln!("Running: {}", auth_command);
+
+    let status = if cfg!(target_os = "windows") {
+        Command::new("cmd").args(["/C", auth_command]).status()
+    } else {
+        Command::new("sh").args(["-c", auth_command]).status()
+    };
+
+    match status {
+        Ok(exit_status) if exit_status.success() => {
+            eprintln!("Authentication successful, retrying...");
+            Ok(true)
+        }
+        Ok(exit_status) => Err(FnoxError::Provider(format!(
+            "Auth command failed with exit code: {}",
+            exit_status.code().unwrap_or(-1)
+        ))),
+        Err(e) => Err(FnoxError::Provider(format!(
+            "Failed to run auth command: {}",
+            e
+        ))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -87,65 +147,5 @@ mod tests {
         };
         let result = prompt_and_run_auth(&config, &provider_config, "test", &error);
         assert_eq!(result.unwrap(), false);
-    }
-}
-
-pub fn prompt_and_run_auth(
-    config: &Config,
-    provider_config: &ProviderConfig,
-    provider_name: &str,
-    error: &FnoxError,
-) -> Result<bool> {
-    let auth_command = match provider_config.default_auth_command() {
-        Some(cmd) => cmd,
-        None => return Ok(false),
-    };
-
-    if !should_attempt_auth_prompt(
-        error.is_auth_error(),
-        config.should_prompt_auth(),
-        true, // has_auth_command: pre-checked above for early return; helper retains the param for full truth-table testability
-    ) {
-        return Ok(false);
-    }
-
-    // Show the error and prompt
-    eprintln!(
-        "Authentication failed for provider '{}': {}",
-        provider_name, error
-    );
-
-    let user_confirmed = Confirm::new(format!("Run `{}` to authenticate?", auth_command))
-        .affirmative("Yes")
-        .negative("No")
-        .run()
-        .map_err(|e| FnoxError::Provider(format!("Failed to show prompt: {}", e)))?;
-
-    if !user_confirmed {
-        return Ok(false);
-    }
-
-    // Run the auth command
-    eprintln!("Running: {}", auth_command);
-
-    let status = if cfg!(target_os = "windows") {
-        Command::new("cmd").args(["/C", auth_command]).status()
-    } else {
-        Command::new("sh").args(["-c", auth_command]).status()
-    };
-
-    match status {
-        Ok(exit_status) if exit_status.success() => {
-            eprintln!("Authentication successful, retrying...");
-            Ok(true)
-        }
-        Ok(exit_status) => Err(FnoxError::Provider(format!(
-            "Auth command failed with exit code: {}",
-            exit_status.code().unwrap_or(-1)
-        ))),
-        Err(e) => Err(FnoxError::Provider(format!(
-            "Failed to run auth command: {}",
-            e
-        ))),
     }
 }
