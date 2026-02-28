@@ -138,11 +138,7 @@ impl InfisicalProvider {
 
     /// Execute infisical CLI command.
     /// `secret_ref` is used for better error messages when a specific secret is being fetched.
-    fn execute_infisical_command(
-        &self,
-        args: &[&str],
-        secret_ref: Option<&str>,
-    ) -> Result<String> {
+    fn execute_infisical_command(&self, args: &[&str], secret_ref: Option<&str>) -> Result<String> {
         tracing::debug!("Executing infisical command with args: {:?}", args);
 
         let token = self.get_auth_token()?;
@@ -395,9 +391,7 @@ impl crate::providers::Provider for InfisicalProvider {
                 // Preserve the structured error variant for each secret
                 secrets
                     .iter()
-                    .map(|(key, secret_name)| {
-                        (key.clone(), Err(map_batch_error(&e, secret_name)))
-                    })
+                    .map(|(key, secret_name)| (key.clone(), Err(map_batch_error(&e, secret_name))))
                     .collect()
             }
         }
@@ -466,14 +460,12 @@ fn map_batch_error(e: &FnoxError, secret_name: &str) -> FnoxError {
             hint: hint.clone(),
             url: url.clone(),
         },
-        FnoxError::ProviderSecretNotFound { hint, url, .. } => {
-            FnoxError::ProviderSecretNotFound {
-                provider: "Infisical".to_string(),
-                secret: secret_name.to_string(),
-                hint: hint.clone(),
-                url: url.clone(),
-            }
-        }
+        FnoxError::ProviderSecretNotFound { hint, url, .. } => FnoxError::ProviderSecretNotFound {
+            provider: "Infisical".to_string(),
+            secret: secret_name.to_string(),
+            hint: hint.clone(),
+            url: url.clone(),
+        },
         FnoxError::ProviderCliNotFound {
             cli,
             install_hint,
