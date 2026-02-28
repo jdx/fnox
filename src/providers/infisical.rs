@@ -136,8 +136,13 @@ impl InfisicalProvider {
         Ok(token)
     }
 
-    /// Execute infisical CLI command
-    fn execute_infisical_command(&self, args: &[&str]) -> Result<String> {
+    /// Execute infisical CLI command.
+    /// `secret_ref` is used for better error messages when a specific secret is being fetched.
+    fn execute_infisical_command(
+        &self,
+        args: &[&str],
+        secret_ref: Option<&str>,
+    ) -> Result<String> {
         tracing::debug!("Executing infisical command with args: {:?}", args);
 
         let token = self.get_auth_token()?;
@@ -182,12 +187,7 @@ impl InfisicalProvider {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(FnoxError::ProviderCliFailed {
-                provider: "Infisical".to_string(),
-                details: stderr.trim().to_string(),
-                hint: "Check your Infisical configuration and authentication".to_string(),
-                url: "https://fnox.jdx.dev/providers/infisical".to_string(),
-            });
+            return Err(classify_cli_error(stderr.trim(), secret_ref));
         }
 
         let stdout =
@@ -240,7 +240,7 @@ impl crate::providers::Provider for InfisicalProvider {
             self.path
         );
 
-        let json_output = self.execute_infisical_command(&args)?;
+        let json_output = self.execute_infisical_command(&args, Some(value))?;
 
         // Parse JSON response - format is an array with one object
         // [{"secretKey": "NAME", "secretValue": "value"}]
@@ -338,7 +338,7 @@ impl crate::providers::Provider for InfisicalProvider {
         }
 
         // Execute command
-        match self.execute_infisical_command(&args) {
+        match self.execute_infisical_command(&args, None) {
             Ok(json_output) => {
                 // Parse JSON response
                 match serde_json::from_str::<Vec<serde_json::Value>>(&json_output) {
@@ -392,20 +392,11 @@ impl crate::providers::Provider for InfisicalProvider {
                 }
             }
             Err(e) => {
-                // CLI error - return same error for all secrets
+                // Preserve the structured error variant for each secret
                 secrets
                     .iter()
-                    .map(|(key, _)| {
-                        (
-                            key.clone(),
-                            Err(FnoxError::ProviderCliFailed {
-                                provider: "Infisical".to_string(),
-                                details: e.to_string(),
-                                hint: "Check your Infisical configuration and authentication"
-                                    .to_string(),
-                                url: "https://fnox.jdx.dev/providers/infisical".to_string(),
-                            }),
-                        )
+                    .map(|(key, secret_name)| {
+                        (key.clone(), Err(map_batch_error(&e, secret_name)))
                     })
                     .collect()
             }
@@ -463,3 +454,242 @@ fn infisical_api_url() -> Option<String> {
 
 // Cache login token to avoid repeated login calls
 static CACHED_LOGIN_TOKEN: LazyLock<Mutex<Option<String>>> = LazyLock::new(|| Mutex::new(None));
+
+/// Map a batch-level error to a per-secret error, preserving the structured variant.
+fn map_batch_error(e: &FnoxError, secret_name: &str) -> FnoxError {
+    match e {
+        FnoxError::ProviderAuthFailed {
+            details, hint, url, ..
+        } => FnoxError::ProviderAuthFailed {
+            provider: "Infisical".to_string(),
+            details: details.clone(),
+            hint: hint.clone(),
+            url: url.clone(),
+        },
+        FnoxError::ProviderSecretNotFound { hint, url, .. } => {
+            FnoxError::ProviderSecretNotFound {
+                provider: "Infisical".to_string(),
+                secret: secret_name.to_string(),
+                hint: hint.clone(),
+                url: url.clone(),
+            }
+        }
+        FnoxError::ProviderCliNotFound {
+            cli,
+            install_hint,
+            url,
+            ..
+        } => FnoxError::ProviderCliNotFound {
+            provider: "Infisical".to_string(),
+            cli: cli.clone(),
+            install_hint: install_hint.clone(),
+            url: url.clone(),
+        },
+        FnoxError::ProviderInvalidResponse {
+            details, hint, url, ..
+        } => FnoxError::ProviderInvalidResponse {
+            provider: "Infisical".to_string(),
+            details: details.clone(),
+            hint: hint.clone(),
+            url: url.clone(),
+        },
+        FnoxError::ProviderApiError {
+            details, hint, url, ..
+        } => FnoxError::ProviderApiError {
+            provider: "Infisical".to_string(),
+            details: details.clone(),
+            hint: hint.clone(),
+            url: url.clone(),
+        },
+        FnoxError::ProviderCliFailed {
+            details, hint, url, ..
+        } => FnoxError::ProviderCliFailed {
+            provider: "Infisical".to_string(),
+            details: details.clone(),
+            hint: hint.clone(),
+            url: url.clone(),
+        },
+        _ => FnoxError::ProviderCliFailed {
+            provider: "Infisical".to_string(),
+            details: e.to_string(),
+            hint: "Check your Infisical configuration".to_string(),
+            url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+        },
+    }
+}
+
+/// Classify CLI stderr output into the appropriate FnoxError variant.
+fn classify_cli_error(stderr: &str, secret_ref: Option<&str>) -> FnoxError {
+    let stderr_lower = stderr.to_lowercase();
+
+    if stderr_lower.contains("unauthorized")
+        || stderr_lower.contains("token expired")
+        || stderr_lower.contains("invalid token")
+        || stderr_lower.contains("authentication failed")
+        || stderr_lower.contains("forbidden")
+    {
+        return FnoxError::ProviderAuthFailed {
+            provider: "Infisical".to_string(),
+            details: stderr.to_string(),
+            hint: "Run 'infisical login' or check your INFISICAL_TOKEN".to_string(),
+            url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+        };
+    }
+
+    if stderr_lower.contains("not found") || stderr_lower.contains("does not exist") {
+        return FnoxError::ProviderSecretNotFound {
+            provider: "Infisical".to_string(),
+            secret: secret_ref.unwrap_or("<unknown>").to_string(),
+            hint: "Check that the secret exists in Infisical".to_string(),
+            url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+        };
+    }
+
+    FnoxError::ProviderCliFailed {
+        provider: "Infisical".to_string(),
+        details: stderr.to_string(),
+        hint: "Check your Infisical configuration and authentication".to_string(),
+        url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn classify_cli_error_unauthorized() {
+        let err = classify_cli_error("Error: Unauthorized access", Some("MY_SECRET"));
+        assert!(
+            matches!(err, FnoxError::ProviderAuthFailed { .. }),
+            "Expected ProviderAuthFailed, got {:?}",
+            err
+        );
+    }
+
+    #[test]
+    fn classify_cli_error_token_expired() {
+        let err = classify_cli_error("token expired, please re-authenticate", None);
+        assert!(matches!(err, FnoxError::ProviderAuthFailed { .. }));
+    }
+
+    #[test]
+    fn classify_cli_error_forbidden() {
+        let err = classify_cli_error("403 Forbidden", Some("SECRET"));
+        assert!(matches!(err, FnoxError::ProviderAuthFailed { .. }));
+    }
+
+    #[test]
+    fn classify_cli_error_not_found() {
+        let err = classify_cli_error("secret not found in project", Some("MY_SECRET"));
+        match err {
+            FnoxError::ProviderSecretNotFound { secret, .. } => {
+                assert_eq!(secret, "MY_SECRET");
+            }
+            other => panic!("Expected ProviderSecretNotFound, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn classify_cli_error_does_not_exist() {
+        let err = classify_cli_error("The resource does not exist", Some("DB_PASS"));
+        match err {
+            FnoxError::ProviderSecretNotFound { secret, .. } => {
+                assert_eq!(secret, "DB_PASS");
+            }
+            other => panic!("Expected ProviderSecretNotFound, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn classify_cli_error_not_found_without_ref() {
+        let err = classify_cli_error("not found", None);
+        match err {
+            FnoxError::ProviderSecretNotFound { secret, .. } => {
+                assert_eq!(secret, "<unknown>");
+            }
+            other => panic!("Expected ProviderSecretNotFound, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn classify_cli_error_generic() {
+        let err = classify_cli_error("some unexpected error", Some("SECRET"));
+        assert!(
+            matches!(err, FnoxError::ProviderCliFailed { .. }),
+            "Expected ProviderCliFailed, got {:?}",
+            err
+        );
+    }
+
+    #[test]
+    fn map_batch_error_preserves_auth_failed() {
+        let error = FnoxError::ProviderAuthFailed {
+            provider: "Infisical".to_string(),
+            details: "unauthorized".to_string(),
+            hint: "login".to_string(),
+            url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+        };
+
+        let result = map_batch_error(&error, "secret1");
+        assert!(
+            matches!(result, FnoxError::ProviderAuthFailed { .. }),
+            "Expected ProviderAuthFailed, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn map_batch_error_preserves_cli_not_found() {
+        let error = FnoxError::ProviderCliNotFound {
+            provider: "Infisical".to_string(),
+            cli: "infisical".to_string(),
+            install_hint: "brew install".to_string(),
+            url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+        };
+
+        let result = map_batch_error(&error, "secret1");
+        assert!(
+            matches!(result, FnoxError::ProviderCliNotFound { .. }),
+            "Expected ProviderCliNotFound, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn map_batch_error_preserves_secret_not_found_with_per_secret_name() {
+        let error = FnoxError::ProviderSecretNotFound {
+            provider: "Infisical".to_string(),
+            secret: "original".to_string(),
+            hint: "check".to_string(),
+            url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+        };
+
+        let result = map_batch_error(&error, "secret_a");
+        match result {
+            FnoxError::ProviderSecretNotFound { secret, .. } => {
+                assert_eq!(secret, "secret_a");
+            }
+            other => panic!("Expected ProviderSecretNotFound, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn map_batch_error_clones_cli_failed_without_double_wrapping() {
+        let error = FnoxError::ProviderCliFailed {
+            provider: "Infisical".to_string(),
+            details: "some error".to_string(),
+            hint: "original hint".to_string(),
+            url: "https://fnox.jdx.dev/providers/infisical".to_string(),
+        };
+
+        let result = map_batch_error(&error, "secret1");
+        match result {
+            FnoxError::ProviderCliFailed { details, hint, .. } => {
+                assert_eq!(details, "some error");
+                assert_eq!(hint, "original hint");
+            }
+            other => panic!("Expected ProviderCliFailed, got {:?}", other),
+        }
+    }
+}

@@ -606,4 +606,62 @@ impl From<miette::ErrReport> for FnoxError {
     }
 }
 
+impl FnoxError {
+    /// Returns true if this error represents a provider authentication failure.
+    pub fn is_auth_error(&self) -> bool {
+        matches!(self, FnoxError::ProviderAuthFailed { .. })
+    }
+}
+
 pub type Result<T> = std::result::Result<T, FnoxError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_auth_error_returns_true_for_provider_auth_failed() {
+        let err = FnoxError::ProviderAuthFailed {
+            provider: "test".to_string(),
+            details: "unauthorized".to_string(),
+            hint: "login".to_string(),
+            url: "https://example.com".to_string(),
+        };
+        assert!(err.is_auth_error());
+    }
+
+    #[test]
+    fn is_auth_error_returns_false_for_other_variants() {
+        let cases: Vec<FnoxError> = vec![
+            FnoxError::ProviderSecretNotFound {
+                provider: "test".to_string(),
+                secret: "MY_SECRET".to_string(),
+                hint: "check".to_string(),
+                url: "https://example.com".to_string(),
+            },
+            FnoxError::ProviderCliFailed {
+                provider: "test".to_string(),
+                details: "exit 1".to_string(),
+                hint: "check".to_string(),
+                url: "https://example.com".to_string(),
+            },
+            FnoxError::ProviderInvalidResponse {
+                provider: "test".to_string(),
+                details: "bad json".to_string(),
+                hint: "check".to_string(),
+                url: "https://example.com".to_string(),
+            },
+            FnoxError::ProviderCliNotFound {
+                provider: "test".to_string(),
+                cli: "op".to_string(),
+                install_hint: "brew install".to_string(),
+                url: "https://example.com".to_string(),
+            },
+            FnoxError::Provider("generic error".to_string()),
+        ];
+
+        for err in cases {
+            assert!(!err.is_auth_error(), "Expected false for {:?}", err);
+        }
+    }
+}
