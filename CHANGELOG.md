@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.14.0](https://github.com/jdx/fnox/compare/v1.13.0..v1.14.0) - 2026-02-28
+
+### 🚀 Features
+
+- **(proton-pass)** add Proton Pass provider by [@TyceHerrman](https://github.com/TyceHerrman) in [#292](https://github.com/jdx/fnox/pull/292)
+- Add AWS Profile support for AWS PS and Secrets Manager in provider config by [@micahvdk](https://github.com/micahvdk) in [#290](https://github.com/jdx/fnox/pull/290)
+- encode decode secrets by [@pitoniak32](https://github.com/pitoniak32) in [#273](https://github.com/jdx/fnox/pull/273)
+
+### 🐛 Bug Fixes
+
+- **(aws-sm)** deduplicate secret IDs in batch requests by [@jdx](https://github.com/jdx) in [#296](https://github.com/jdx/fnox/pull/296)
+
+### 📚 Documentation
+
+- require AI disclosure on GitHub comments by [@jdx](https://github.com/jdx) in [#288](https://github.com/jdx/fnox/pull/288)
+
+### 📦️ Dependency Updates
+
+- update dependency vue to v3.5.29 by [@renovate[bot]](https://github.com/renovate[bot]) in [#294](https://github.com/jdx/fnox/pull/294)
+- update rust crate chrono to v0.4.44 by [@renovate[bot]](https://github.com/renovate[bot]) in [#295](https://github.com/jdx/fnox/pull/295)
+
+### New Contributors
+
+- @pitoniak32 made their first contribution in [#273](https://github.com/jdx/fnox/pull/273)
+- @TyceHerrman made their first contribution in [#292](https://github.com/jdx/fnox/pull/292)
+- @micahvdk made their first contribution in [#290](https://github.com/jdx/fnox/pull/290)
+
 ## [1.13.0](https://github.com/jdx/fnox/compare/v1.12.1..v1.13.0) - 2026-02-21
 
 ### 🚀 Features
