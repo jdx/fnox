@@ -77,7 +77,7 @@ impl AddCommand {
                 prefix: OptionStringOrSecretRef::none(),
             },
             ProviderType::Vault => crate::config::ProviderConfig::HashiCorpVault {
-                address: StringOrSecretRef::from("http://localhost:8200"),
+                address: OptionStringOrSecretRef::literal("http://localhost:8200"),
                 path: OptionStringOrSecretRef::literal("secret"),
                 token: OptionStringOrSecretRef::none(),
                 namespace: OptionStringOrSecretRef::none(),
