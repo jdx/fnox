@@ -32,6 +32,14 @@ impl HashiCorpVaultProvider {
         }
     }
 
+    fn get_address(&self) -> Option<String> {
+        self.address.clone().or_else(vault_address)
+    }
+
+    fn get_token(&self) -> Option<String> {
+        self.token.clone().or_else(vault_token)
+    }
+
     /// Execute vault CLI command with proper authentication
     fn execute_vault_command(&self, args: &[&str]) -> Result<String> {
         tracing::debug!("Executing vault command with args: {:?}", args);
@@ -39,8 +47,7 @@ impl HashiCorpVaultProvider {
         let mut cmd = Command::new("vault");
 
         // Set VAULT_ADDR from provider config or environment
-        let env_address = vault_address();
-        let address = self.address.as_ref().or(env_address.as_ref()).ok_or_else(|| {
+        let address = self.get_address().ok_or_else(|| {
             FnoxError::ProviderAuthFailed {
                 provider: "HashiCorp Vault".to_string(),
                 details: "VAULT_ADDR not set".to_string(),
@@ -59,8 +66,7 @@ impl HashiCorpVaultProvider {
         }
 
         // Set VAULT_TOKEN from provider config or environment
-        let env_token = vault_token();
-        let token = self.token.as_ref().or(env_token.as_ref()).ok_or_else(|| {
+        let token = self.get_token().ok_or_else(|| {
             FnoxError::ProviderAuthFailed {
                 provider: "HashiCorp Vault".to_string(),
                 details: "VAULT_TOKEN not set".to_string(),
@@ -175,8 +181,7 @@ impl crate::providers::Provider for HashiCorpVaultProvider {
     }
 
     async fn test_connection(&self) -> Result<()> {
-        let env_address = vault_address();
-        let address = self.address.as_ref().or(env_address.as_ref());
+        let address = self.get_address();
         if let Some(addr) = address {
             tracing::debug!("Testing connection to Vault at {}", addr);
         } else {
