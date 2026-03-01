@@ -53,7 +53,7 @@ Do not merge top-level secrets into the selected profile
 - [`fnox list [FLAGS]`](/cli/list.md)
 - [`fnox profiles`](/cli/profiles.md)
 - [`fnox provider <SUBCOMMAND>`](/cli/provider.md)
-- [`fnox provider add [-g --global] <PROVIDER> <PROVIDER_TYPE>`](/cli/provider/add.md)
+- [`fnox provider add [-g --global] [--vault <VAULT>] <PROVIDER> <PROVIDER_TYPE>`](/cli/provider/add.md)
 - [`fnox provider list`](/cli/provider/list.md)
 - [`fnox provider remove [-g --global] <PROVIDER>`](/cli/provider/remove.md)
 - [`fnox provider test [-a --all] [PROVIDER]`](/cli/provider/test.md)

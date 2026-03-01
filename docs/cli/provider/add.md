@@ -2,7 +2,7 @@
 
 # `fnox provider add`
 
-- **Usage**: `fnox provider add [-g --global] <PROVIDER> <PROVIDER_TYPE>`
+- **Usage**: `fnox provider add [-g --global] [--vault <VAULT>] <PROVIDER> <PROVIDER_TYPE>`
 - **Aliases**: `a`, `set`
 
 Add a new provider
@@ -28,8 +28,15 @@ Provider type
 - `azure-sm`
 - `gcp`
 - `gcp-kms`
+- `bitwarden`
+- `bitwarden-sm`
 - `infisical`
+- `keepass`
+- `keychain`
+- `password-store`
 - `passwordstate`
+- `plain`
+- `proton-pass`
 - `vault`
 
 ## Flags
@@ -37,3 +44,7 @@ Provider type
 ### `-g --global`
 
 Add to the global config file (~/.config/fnox/config.toml)
+
+### `--vault <VAULT>`
+
+Default Proton Pass vault name (only valid with provider type proton-pass)
