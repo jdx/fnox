@@ -39,14 +39,14 @@ vault|vault|vault"
 		run "$FNOX_BIN" provider add "$provider_name" "$provider_type"
 		assert_success
 		assert_output --partial "Added provider '$provider_name'"
-	done <<< "$providers"
+	done <<<"$providers"
 
 	run cat "$FNOX_CONFIG_FILE"
 	assert_success
 	while IFS='|' read -r provider_name _ expected_type; do
 		assert_output --partial "[providers.$provider_name]"
 		assert_output --partial "type = \"$expected_type\""
-	done <<< "$providers"
+	done <<<"$providers"
 }
 
 @test "fnox provider add creates Proton Pass provider config" {
