@@ -44,6 +44,16 @@ teardown() {
 	assert_output --partial "function __fnox_cd_hook --on-variable PWD"
 }
 
+@test "fnox activate nu generates valid nushell code" {
+	run "$FNOX_BIN" activate nu
+
+	assert_success
+	assert_output --partial '$env.FNOX_SHELL = "nu"'
+	assert_output --partial "def --env --wrapped fnox"
+	assert_output --partial "def --env _fnox_hook"
+	assert_output --partial "hooks.pre_prompt"
+}
+
 @test "fnox activate --no-hook-env skips hook setup" {
 	run "$FNOX_BIN" activate bash --no-hook-env
 
@@ -82,6 +92,26 @@ teardown() {
 	assert_success
 	# Should at least output session vars even with no secrets
 	assert_output --partial '__FNOX_SESSION='
+}
+
+@test "fnox hook-env with nushell outputs JSON format" {
+	cd "$TEST_TEMP_DIR"
+	cat >fnox.toml <<-EOF
+		[providers.plain]
+		type = "plain"
+
+		[secrets.TEST_SECRET]
+		provider = "plain"
+		value = "test-value-123"
+	EOF
+
+	run "$FNOX_BIN" hook-env -s nu
+
+	assert_success
+	assert_output --partial '"set"'
+	assert_output --partial '"TEST_SECRET":"test-value-123"'
+	assert_output --partial '"__FNOX_SESSION"'
+	assert_output --partial '"unset"'
 }
 
 @test "fnox hook-env loads secrets from fnox.toml" {

@@ -53,7 +53,7 @@ fnox get DATABASE_URL
 fnox exec -- npm start
 
 # Enable shell integration (auto-load secrets on cd)
-eval "$(fnox activate bash)"  # or zsh, fish
+eval "$(fnox activate bash)"  # or zsh, fish — see docs for Nushell
 ```
 
 ## How It Works

@@ -37,7 +37,7 @@ impl OutputMode {
 #[derive(Debug, Parser)]
 #[command(about = "Internal command used by shell hooks to load secrets")]
 pub struct HookEnvCommand {
-    /// Shell type (bash, zsh, fish)
+    /// Shell type (bash, zsh, fish, nu)
     #[arg(short = 's', long)]
     pub shell: Option<String>,
 }
@@ -80,8 +80,6 @@ impl HookEnvCommand {
         // Find fnox.toml in current or parent directories
         let config_path = hook_env::find_config();
 
-        let mut output = String::new();
-
         // Load secrets if config exists
         let loaded_data = if config_path.is_some() {
             match load_secrets_from_config().await {
@@ -113,16 +111,6 @@ impl HookEnvCommand {
             display_changes(&added, &removed, output_mode);
         }
 
-        // Generate shell code for environment changes
-        // Set new/updated secrets
-        for (key, value) in &added {
-            output.push_str(&shell.set_env(key, value));
-        }
-        // Remove secrets no longer in config
-        for key in &removed {
-            output.push_str(&shell.unset_env(key));
-        }
-
         // Create new session
         let current_dir = std::env::current_dir().ok();
         let session = HookEnvSession::new(
@@ -134,8 +122,11 @@ impl HookEnvCommand {
 
         // Export session state for next invocation
         let session_encoded = session.encode()?;
-        output.push_str(&shell.set_env("__FNOX_SESSION", &session_encoded));
 
+        // Generate output via the shell's hook_env_output method.
+        // Eval-based shells (bash, zsh, fish) produce shell code;
+        // structured shells (nushell) produce JSON.
+        let output = shell.hook_env_output(&added, &removed, &session_encoded);
         print!("{}", output);
 
         Ok(())
