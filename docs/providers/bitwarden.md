@@ -235,7 +235,10 @@ default_provider = "bitwarden"
 [providers.bitwarden]
 type = "bitwarden"
 backend = "rbw"
+auth_command = "rbw unlock"
 ```
+
+The `auth_command` override ensures fnox prompts with `rbw unlock` instead of the default `bw login` when authentication fails.
 
 NB: you must have set up the `rbw` CLI independently from fnox using `rbw login`.
 

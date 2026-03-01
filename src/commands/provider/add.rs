@@ -135,11 +135,13 @@ impl AddCommand {
                 organization_id: OptionStringOrSecretRef::none(),
                 profile: OptionStringOrSecretRef::none(),
                 backend: None,
+                auth_command: None,
             },
             ProviderType::BitwardenSecretsManager => {
                 crate::config::ProviderConfig::BitwardenSecretsManager {
                     project_id: OptionStringOrSecretRef::none(),
                     profile: OptionStringOrSecretRef::none(),
+                    auth_command: None,
                 }
             }
             ProviderType::Age => crate::config::ProviderConfig::AgeEncryption {
@@ -157,15 +159,18 @@ impl AddCommand {
                 database: StringOrSecretRef::from("~/secrets.kdbx"),
                 keyfile: OptionStringOrSecretRef::none(),
                 password: OptionStringOrSecretRef::none(),
+                auth_command: None,
             },
             ProviderType::Keychain => crate::config::ProviderConfig::Keychain {
                 service: StringOrSecretRef::from("fnox"),
                 prefix: OptionStringOrSecretRef::none(),
+                auth_command: None,
             },
             ProviderType::PasswordStore => crate::config::ProviderConfig::PasswordStore {
                 prefix: OptionStringOrSecretRef::literal("fnox/"),
                 store_dir: OptionStringOrSecretRef::none(),
                 gpg_opts: OptionStringOrSecretRef::none(),
+                auth_command: None,
             },
             ProviderType::Passwordstate => crate::config::ProviderConfig::Passwordstate {
                 base_url: StringOrSecretRef::from("https://passwordstate.example.com"),
@@ -174,7 +179,7 @@ impl AddCommand {
                 verify_ssl: OptionStringOrSecretRef::none(),
                 auth_command: None,
             },
-            ProviderType::Plain => crate::config::ProviderConfig::Plain,
+            ProviderType::Plain => crate::config::ProviderConfig::Plain { auth_command: None },
             ProviderType::ProtonPass => crate::config::ProviderConfig::ProtonPass {
                 vault: self
                     .vault
@@ -182,6 +187,7 @@ impl AddCommand {
                     .map_or_else(OptionStringOrSecretRef::none, |vault| {
                         OptionStringOrSecretRef::literal(vault.clone())
                     }),
+                auth_command: None,
             },
         };
 

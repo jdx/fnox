@@ -117,6 +117,24 @@ type = "PROVIDER_TYPE"
 # ... provider-specific fields ...
 ```
 
+### `auth_command`
+
+Override the authentication command for a specific provider instance. When provider authentication fails in a TTY, fnox prompts to run this command. By default, each provider type has a built-in auth command (e.g., `bw login` for Bitwarden, `op signin` for 1Password).
+
+```toml
+[providers]
+# Use rbw instead of the default bw CLI
+rbw = { type = "bitwarden", backend = "rbw", auth_command = "rbw unlock" }
+
+# Use a custom AWS SSO profile
+aws = { type = "aws-sm", region = "us-east-1", auth_command = "aws sso login --profile myprofile" }
+
+# Disable auth prompting for this provider
+vault = { type = "vault", address = "https://vault.example.com", auth_command = "" }
+```
+
+Setting `auth_command = ""` disables the auth prompt for that provider instance.
+
 ### Common Provider Types
 
 #### Age Encryption
