@@ -80,39 +80,47 @@ impl AddCommand {
                 vault: OptionStringOrSecretRef::literal("default"),
                 account: OptionStringOrSecretRef::none(),
                 token: OptionStringOrSecretRef::none(),
+                auth_command: None,
             },
             ProviderType::Aws => crate::config::ProviderConfig::AwsSecretsManager {
                 region: StringOrSecretRef::from("us-east-1"),
                 profile: OptionStringOrSecretRef::none(),
                 prefix: OptionStringOrSecretRef::none(),
+                auth_command: None,
             },
             ProviderType::Vault => crate::config::ProviderConfig::HashiCorpVault {
                 address: StringOrSecretRef::from("http://localhost:8200"),
                 path: OptionStringOrSecretRef::literal("secret"),
                 token: OptionStringOrSecretRef::none(),
                 namespace: OptionStringOrSecretRef::none(),
+                auth_command: None,
             },
             ProviderType::Gcp => crate::config::ProviderConfig::GoogleSecretManager {
                 project: StringOrSecretRef::from("my-project"),
                 prefix: OptionStringOrSecretRef::none(),
+                auth_command: None,
             },
             ProviderType::AwsKms => crate::config::ProviderConfig::AwsKms {
                 region: StringOrSecretRef::from("us-east-1"),
                 key_id: StringOrSecretRef::from("alias/my-key"),
+                auth_command: None,
             },
             ProviderType::AwsParameterStore => crate::config::ProviderConfig::AwsParameterStore {
                 region: StringOrSecretRef::from("us-east-1"),
                 profile: OptionStringOrSecretRef::none(),
                 prefix: OptionStringOrSecretRef::literal("/myapp/prod/"),
+                auth_command: None,
             },
             ProviderType::AzureKms => crate::config::ProviderConfig::AzureKms {
                 vault_url: StringOrSecretRef::from("https://my-vault.vault.azure.net/"),
                 key_name: StringOrSecretRef::from("my-key"),
+                auth_command: None,
             },
             ProviderType::AzureSecretsManager => {
                 crate::config::ProviderConfig::AzureSecretsManager {
                     vault_url: StringOrSecretRef::from("https://my-vault.vault.azure.net/"),
                     prefix: OptionStringOrSecretRef::none(),
+                    auth_command: None,
                 }
             }
             ProviderType::GcpKms => crate::config::ProviderConfig::GcpKms {
@@ -120,6 +128,7 @@ impl AddCommand {
                 location: StringOrSecretRef::from("global"),
                 keyring: StringOrSecretRef::from("my-keyring"),
                 key: StringOrSecretRef::from("my-key"),
+                auth_command: None,
             },
             ProviderType::Bitwarden => crate::config::ProviderConfig::Bitwarden {
                 collection: OptionStringOrSecretRef::none(),
@@ -136,11 +145,13 @@ impl AddCommand {
             ProviderType::Age => crate::config::ProviderConfig::AgeEncryption {
                 recipients: vec!["age1...".to_string()],
                 key_file: OptionStringOrSecretRef::none(),
+                auth_command: None,
             },
             ProviderType::Infisical => crate::config::ProviderConfig::Infisical {
                 project_id: OptionStringOrSecretRef::literal("your-project-id"),
                 environment: OptionStringOrSecretRef::literal("dev"),
                 path: OptionStringOrSecretRef::literal("/"),
+                auth_command: None,
             },
             ProviderType::KeePass => crate::config::ProviderConfig::KeePass {
                 database: StringOrSecretRef::from("~/secrets.kdbx"),
@@ -161,6 +172,7 @@ impl AddCommand {
                 api_key: OptionStringOrSecretRef::none(),
                 password_list_id: StringOrSecretRef::from("123"),
                 verify_ssl: OptionStringOrSecretRef::none(),
+                auth_command: None,
             },
             ProviderType::Plain => crate::config::ProviderConfig::Plain,
             ProviderType::ProtonPass => crate::config::ProviderConfig::ProtonPass {

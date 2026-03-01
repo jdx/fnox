@@ -192,26 +192,21 @@ fn generate_provider_config(
         let variant = Ident::new(&provider.rust_variant, Span::call_site());
         let serde_rename = &provider.serde_rename;
 
-        // Generate ProviderConfig variant
+        // Generate ProviderConfig variant (always struct, includes auth_command)
         let config_fields = generate_config_variant_fields(provider);
         let resolved_fields = generate_resolved_variant_fields(provider);
 
-        if config_fields.is_empty() {
-            // Unit variant (like Plain)
-            config_variants.push(quote! {
-                #[serde(rename = #serde_rename)]
-                #[strum(serialize = #serde_rename)]
-                #variant
-            });
+        config_variants.push(quote! {
+            #[serde(rename = #serde_rename)]
+            #[strum(serialize = #serde_rename)]
+            #variant { #(#config_fields),* }
+        });
+
+        if resolved_fields.is_empty() {
             resolved_variants.push(quote! {
                 #variant
             });
         } else {
-            config_variants.push(quote! {
-                #[serde(rename = #serde_rename)]
-                #[strum(serialize = #serde_rename)]
-                #variant { #(#config_fields),* }
-            });
             resolved_variants.push(quote! {
                 #variant { #(#resolved_fields),* }
             });
@@ -287,6 +282,12 @@ fn generate_config_variant_fields(provider: &ProviderToml) -> Vec<TokenStream> {
         }
     }
 
+    // Every variant gets an optional auth_command override
+    fields.push(quote! {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        auth_command: Option<String>
+    });
+
     fields
 }
 
@@ -333,12 +334,12 @@ fn generate_provider_methods(
         let try_resolved_body = generate_try_to_resolved_body(provider);
         if provider.fields.is_empty() {
             try_to_resolved_arms.push(quote! {
-                Self::#variant => Ok(ResolvedProviderConfig::#variant)
+                Self::#variant { .. } => Ok(ResolvedProviderConfig::#variant)
             });
         } else {
             let field_patterns = generate_field_patterns(provider);
             try_to_resolved_arms.push(quote! {
-                Self::#variant { #(#field_patterns),* } => {
+                Self::#variant { #(#field_patterns),* , .. } => {
                     #try_resolved_body
                 }
             });
@@ -350,27 +351,18 @@ fn generate_provider_methods(
             #serde_rename => { #from_wizard_body }
         });
 
-        // auth_command arm
-        let auth_cmd = if let Some(ref cmd) = provider.auth_command {
+        // auth_command arm - check instance override first, then static default
+        let static_default = if let Some(ref cmd) = provider.auth_command {
             quote! { Some(#cmd) }
         } else {
             quote! { None }
         };
-        if provider.fields.is_empty() {
-            auth_command_arms.push(quote! {
-                Self::#variant => #auth_cmd
-            });
-            env_deps_arms.push(quote! {
-                Self::#variant => #module::env_dependencies()
-            });
-        } else {
-            auth_command_arms.push(quote! {
-                Self::#variant { .. } => #auth_cmd
-            });
-            env_deps_arms.push(quote! {
-                Self::#variant { .. } => #module::env_dependencies()
-            });
-        }
+        auth_command_arms.push(quote! {
+            Self::#variant { auth_command, .. } => auth_command.as_deref().or(#static_default)
+        });
+        env_deps_arms.push(quote! {
+            Self::#variant { .. } => #module::env_dependencies()
+        });
     }
 
     // Note: Use super::super:: because this is included inside mod generated { mod providers_methods { ... } }
@@ -476,9 +468,9 @@ fn generate_provider_methods(
                 }
             }
 
-            /// Get the default auth command for this provider type.
-            /// Returns None if no auth command is configured for this provider.
-            pub fn default_auth_command(&self) -> Option<&'static str> {
+            /// Get the auth command for this provider.
+            /// Returns the instance-level override if set, otherwise the static default.
+            pub fn default_auth_command(&self) -> Option<&str> {
                 match self {
                     #(#auth_command_arms),*
                 }
@@ -554,7 +546,7 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
     let variant = Ident::new(&provider.rust_variant, Span::call_site());
 
     if provider.fields.is_empty() {
-        return quote! { Ok(ProviderConfig::#variant) };
+        return quote! { Ok(ProviderConfig::#variant { auth_command: None }) };
     }
 
     // Special handling for age provider
@@ -569,6 +561,7 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
                         .ok_or_else(|| FnoxError::Config("recipient is required".to_string()))?,
                 ],
                 key_file: OptionStringOrSecretRef::none(),
+                auth_command: None,
             })
         };
     }
@@ -580,6 +573,7 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
                 database: get_required("database")?,
                 keyfile: get_optional("keyfile"),
                 password: OptionStringOrSecretRef::none(),
+                auth_command: None,
             })
         };
     }
@@ -591,6 +585,7 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
                 prefix: get_optional("prefix"),
                 store_dir: get_optional("store_dir"),
                 gpg_opts: OptionStringOrSecretRef::none(),
+                auth_command: None,
             })
         };
     }
@@ -603,6 +598,7 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
                 organization_id: get_optional("organization_id"),
                 profile: get_optional("profile"),
                 backend: None,
+                auth_command: None,
             })
         };
     }
@@ -628,7 +624,8 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
 
     quote! {
         Ok(ProviderConfig::#variant {
-            #(#field_inits),*
+            #(#field_inits,)*
+            auth_command: None,
         })
     }
 }
@@ -702,13 +699,13 @@ fn generate_provider_resolver(
 
         if provider.fields.is_empty() {
             arms.push(quote! {
-                ProviderConfig::#variant => Ok(ResolvedProviderConfig::#variant)
+                ProviderConfig::#variant { .. } => Ok(ResolvedProviderConfig::#variant)
             });
         } else {
             let field_patterns = generate_field_patterns(provider);
             let resolved_fields = generate_resolver_fields(provider);
             arms.push(quote! {
-                ProviderConfig::#variant { #(#field_patterns),* } => {
+                ProviderConfig::#variant { #(#field_patterns),* , .. } => {
                     Ok(ResolvedProviderConfig::#variant {
                         #(#resolved_fields),*
                     })

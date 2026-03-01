@@ -83,6 +83,7 @@ mod tests {
             vault: OptionStringOrSecretRef::literal("default"),
             account: OptionStringOrSecretRef::none(),
             token: OptionStringOrSecretRef::none(),
+            auth_command: None,
         }
     }
 
