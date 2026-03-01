@@ -335,7 +335,7 @@ EOF
 
 	assert_failure
 	assert_output --partial "1.2.3.4:5678"
-	refute_output --partial "missing field \`address\`"
+	refute_output --partial 'missing field `address`'
 }
 
 @test "Vault provider with description field" {
