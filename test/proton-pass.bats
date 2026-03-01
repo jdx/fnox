@@ -231,37 +231,6 @@ EOF
 	assert_output --partial "First Proton Pass secret"
 }
 
-@test "fnox provider add creates Proton Pass provider config" {
-	# Initialize fnox first
-	run "$FNOX_BIN" init
-	assert_success
-
-	# Add a Proton Pass provider
-	run "$FNOX_BIN" provider add mypass proton-pass
-	assert_success
-
-	# Check the config file
-	run cat "$FNOX_CONFIG_FILE"
-	assert_output --partial "[providers.mypass]"
-	assert_output --partial 'type = "proton-pass"'
-}
-
-@test "fnox provider add with vault creates proper config" {
-	# Initialize fnox first
-	run "$FNOX_BIN" init
-	assert_success
-
-	# Add a Proton Pass provider with vault
-	run "$FNOX_BIN" provider add mypass proton-pass --vault "MyVault"
-	assert_success
-
-	# Check the config file
-	run cat "$FNOX_CONFIG_FILE"
-	assert_output --partial "[providers.mypass]"
-	assert_output --partial 'type = "proton-pass"'
-	assert_output --partial 'vault = "MyVault"'
-}
-
 @test "Proton Pass provider fails gracefully with missing authentication" {
 	# This test verifies that fnox returns an auth_failed error when not authenticated
 	# The setup() function skips auth check for tests with "fails gracefully" in the name

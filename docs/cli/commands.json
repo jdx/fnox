@@ -573,7 +573,7 @@
         "subcommands": {
           "add": {
             "full_cmd": ["provider", "add"],
-            "usage": "provider add [-g --global] <PROVIDER> <PROVIDER_TYPE>",
+            "usage": "provider add [-g --global] [--vault <VAULT>] <PROVIDER> <PROVIDER_TYPE>",
             "subcommands": {},
             "args": [
               {
@@ -604,8 +604,15 @@
                     "azure-sm",
                     "gcp",
                     "gcp-kms",
+                    "bitwarden",
+                    "bitwarden-sm",
                     "infisical",
+                    "keepass",
+                    "keychain",
+                    "password-store",
                     "passwordstate",
+                    "plain",
+                    "proton-pass",
                     "vault"
                   ]
                 }
@@ -621,6 +628,23 @@
                 "long": ["global"],
                 "hide": false,
                 "global": false
+              },
+              {
+                "name": "vault",
+                "usage": "--vault <VAULT>",
+                "help": "Default Proton Pass vault name (only valid with provider type proton-pass)",
+                "help_first_line": "Default Proton Pass vault name (only valid with provider type proton-pass)",
+                "short": [],
+                "long": ["vault"],
+                "hide": false,
+                "global": false,
+                "arg": {
+                  "name": "VAULT",
+                  "usage": "<VAULT>",
+                  "required": true,
+                  "double_dash": "Optional",
+                  "hide": false
+                }
               }
             ],
             "mounts": [],

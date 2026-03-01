@@ -19,6 +19,10 @@ pub struct AddCommand {
     /// Add to the global config file (~/.config/fnox/config.toml)
     #[arg(short = 'g', long)]
     pub global: bool,
+
+    /// Default Proton Pass vault name (only valid with provider type proton-pass)
+    #[arg(long)]
+    pub vault: Option<String>,
 }
 
 impl AddCommand {
@@ -28,6 +32,12 @@ impl AddCommand {
             self.provider,
             self.provider_type
         );
+
+        if self.vault.is_some() && self.provider_type != ProviderType::ProtonPass {
+            return Err(FnoxError::Config(
+                "--vault is only supported for provider type 'proton-pass'".to_string(),
+            ));
+        }
 
         // Determine the target config file
         let target_path = if self.global {
@@ -111,6 +121,18 @@ impl AddCommand {
                 keyring: StringOrSecretRef::from("my-keyring"),
                 key: StringOrSecretRef::from("my-key"),
             },
+            ProviderType::Bitwarden => crate::config::ProviderConfig::Bitwarden {
+                collection: OptionStringOrSecretRef::none(),
+                organization_id: OptionStringOrSecretRef::none(),
+                profile: OptionStringOrSecretRef::none(),
+                backend: None,
+            },
+            ProviderType::BitwardenSecretsManager => {
+                crate::config::ProviderConfig::BitwardenSecretsManager {
+                    project_id: OptionStringOrSecretRef::none(),
+                    profile: OptionStringOrSecretRef::none(),
+                }
+            }
             ProviderType::Age => crate::config::ProviderConfig::AgeEncryption {
                 recipients: vec!["age1...".to_string()],
                 key_file: OptionStringOrSecretRef::none(),
@@ -120,11 +142,34 @@ impl AddCommand {
                 environment: OptionStringOrSecretRef::literal("dev"),
                 path: OptionStringOrSecretRef::literal("/"),
             },
+            ProviderType::KeePass => crate::config::ProviderConfig::KeePass {
+                database: StringOrSecretRef::from("~/secrets.kdbx"),
+                keyfile: OptionStringOrSecretRef::none(),
+                password: OptionStringOrSecretRef::none(),
+            },
+            ProviderType::Keychain => crate::config::ProviderConfig::Keychain {
+                service: StringOrSecretRef::from("fnox"),
+                prefix: OptionStringOrSecretRef::none(),
+            },
+            ProviderType::PasswordStore => crate::config::ProviderConfig::PasswordStore {
+                prefix: OptionStringOrSecretRef::literal("fnox/"),
+                store_dir: OptionStringOrSecretRef::none(),
+                gpg_opts: OptionStringOrSecretRef::none(),
+            },
             ProviderType::Passwordstate => crate::config::ProviderConfig::Passwordstate {
                 base_url: StringOrSecretRef::from("https://passwordstate.example.com"),
                 api_key: OptionStringOrSecretRef::none(),
                 password_list_id: StringOrSecretRef::from("123"),
                 verify_ssl: OptionStringOrSecretRef::none(),
+            },
+            ProviderType::Plain => crate::config::ProviderConfig::Plain,
+            ProviderType::ProtonPass => crate::config::ProviderConfig::ProtonPass {
+                vault: self
+                    .vault
+                    .as_ref()
+                    .map_or_else(OptionStringOrSecretRef::none, |vault| {
+                        OptionStringOrSecretRef::literal(vault.clone())
+                    }),
             },
         };
 
