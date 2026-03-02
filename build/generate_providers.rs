@@ -358,10 +358,11 @@ fn generate_provider_methods(
             quote! { None }
         };
         auth_command_arms.push(quote! {
-            Self::#variant { auth_command, .. } => auth_command.as_ref().map_or(
-                #static_default,
-                |s| if s.is_empty() { None } else { Some(s.as_str()) },
-            )
+            Self::#variant { auth_command, .. } => match auth_command.as_deref() {
+                Some("") => None,
+                Some(cmd) => Some(cmd),
+                None => #static_default,
+            }
         });
         env_deps_arms.push(quote! {
             Self::#variant { .. } => #module::env_dependencies()
