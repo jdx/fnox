@@ -588,6 +588,17 @@
             }
           ]
         },
+        "sync": {
+          "description": "Cached sync data (provider + encrypted value from `fnox sync`)",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SyncConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "value": {
           "description": "Value for the provider (secret name, encrypted blob, etc.)",
           "anyOf": [
@@ -619,6 +630,19 @@
           "required": ["secret"]
         }
       ]
+    },
+    "SyncConfig": {
+      "description": "Cached sync data for a secret (provider + encrypted value)",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": ["provider", "value"]
     },
     "string": {
       "type": "string"
