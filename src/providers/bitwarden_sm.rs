@@ -2,7 +2,7 @@ use crate::env;
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::process::Command;
+use tokio::process::Command;
 
 const URL: &str = "https://fnox.jdx.dev/providers/bitwarden-sm";
 
@@ -44,7 +44,7 @@ impl BitwardenSecretsManagerProvider {
         })
     }
 
-    fn execute_bws_command(&self, args: &[&str]) -> Result<String> {
+    async fn execute_bws_command(&self, args: &[&str]) -> Result<String> {
         tracing::debug!("Executing bws command with args: {:?}", args);
 
         let token = Self::get_access_token()?;
@@ -59,7 +59,7 @@ impl BitwardenSecretsManagerProvider {
 
         cmd.args(args);
 
-        let output = cmd.output().map_err(|e| {
+        let output = cmd.output().await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 FnoxError::ProviderCliNotFound {
                     provider: "Bitwarden Secrets Manager".to_string(),
@@ -128,10 +128,11 @@ impl BitwardenSecretsManagerProvider {
             })
     }
 
-    fn list_secrets(&self) -> Result<Vec<serde_json::Value>> {
+    async fn list_secrets(&self) -> Result<Vec<serde_json::Value>> {
         let project_id = self.resolve_project_id()?;
-        let json_output =
-            self.execute_bws_command(&["secret", "list", &project_id, "--output", "json"])?;
+        let json_output = self
+            .execute_bws_command(&["secret", "list", &project_id, "--output", "json"])
+            .await?;
 
         serde_json::from_str(&json_output).map_err(|e| FnoxError::ProviderInvalidResponse {
             provider: "Bitwarden Secrets Manager".to_string(),
@@ -178,7 +179,7 @@ impl crate::providers::Provider for BitwardenSecretsManagerProvider {
 
     async fn get_secret(&self, value: &str) -> Result<String> {
         tracing::debug!("Getting secret '{}' from Bitwarden Secrets Manager", value);
-        let secrets = self.list_secrets()?;
+        let secrets = self.list_secrets().await?;
         Self::resolve_reference(&secrets, value)
     }
 
@@ -196,7 +197,7 @@ impl crate::providers::Provider for BitwardenSecretsManagerProvider {
         );
 
         // Single list call for all secrets
-        let all_secrets = match self.list_secrets() {
+        let all_secrets = match self.list_secrets().await {
             Ok(s) => s,
             Err(e) => {
                 // Return the same error for all secrets
@@ -229,7 +230,7 @@ impl crate::providers::Provider for BitwardenSecretsManagerProvider {
     }
 
     async fn put_secret(&self, key: &str, value: &str) -> Result<String> {
-        let secrets = self.list_secrets()?;
+        let secrets = self.list_secrets().await?;
 
         if let Some(existing) = secrets.iter().find(|s| s["key"].as_str() == Some(key)) {
             // Update existing secret by its UUID
@@ -242,7 +243,8 @@ impl crate::providers::Provider for BitwardenSecretsManagerProvider {
                     url: URL.to_string(),
                 })?;
             tracing::debug!("Editing existing BSM secret '{}' ({})", key, id);
-            self.execute_bws_command(&["secret", "edit", id, "--value", value])?;
+            self.execute_bws_command(&["secret", "edit", id, "--value", value])
+                .await?;
         } else {
             let project_id = self.resolve_project_id()?;
             tracing::debug!(
@@ -250,7 +252,8 @@ impl crate::providers::Provider for BitwardenSecretsManagerProvider {
                 key,
                 project_id
             );
-            self.execute_bws_command(&["secret", "create", key, value, &project_id])?;
+            self.execute_bws_command(&["secret", "create", key, value, &project_id])
+                .await?;
         }
 
         // Return the key name to store in config
@@ -259,7 +262,7 @@ impl crate::providers::Provider for BitwardenSecretsManagerProvider {
 
     async fn test_connection(&self) -> Result<()> {
         tracing::debug!("Testing connection to Bitwarden Secrets Manager");
-        self.list_secrets()?;
+        self.list_secrets().await?;
         Ok(())
     }
 }

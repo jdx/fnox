@@ -3,9 +3,10 @@ use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
 use regex::Regex;
 use std::collections::HashMap;
-use std::io::Write;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::LazyLock;
+use tokio::io::AsyncWriteExt;
+use tokio::process::Command;
 
 /// Precompiled regex to remove leading error prefixes from stderr output of `op`.
 /// [ERROR] YYYY/MM/DD HH:MM:SS message
@@ -77,7 +78,7 @@ impl OnePasswordProvider {
     }
 
     /// Execute op CLI command with proper authentication
-    fn execute_op_command(&self, args: &[&str]) -> Result<String> {
+    async fn execute_op_command(&self, args: &[&str]) -> Result<String> {
         tracing::debug!("Executing op command with args: {:?}", args);
 
         let mut cmd = Command::new("op");
@@ -95,7 +96,7 @@ impl OnePasswordProvider {
             cmd.arg("--account").arg(account);
         }
 
-        let output = cmd.output().map_err(|e| {
+        let output = cmd.output().await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 FnoxError::ProviderCliNotFound {
                     provider: "1Password".to_string(),
@@ -155,7 +156,7 @@ impl OnePasswordProvider {
     }
 
     /// Execute op inject command with stdin/stdout
-    fn execute_op_inject(&self, input: &str) -> Result<String> {
+    async fn execute_op_inject(&self, input: &str) -> Result<String> {
         tracing::debug!("Executing op inject");
 
         let mut cmd = Command::new("op");
@@ -199,6 +200,7 @@ impl OnePasswordProvider {
         if let Some(mut stdin) = child.stdin.take() {
             stdin
                 .write_all(input.as_bytes())
+                .await
                 .map_err(|e| FnoxError::ProviderCliFailed {
                     provider: "1Password".to_string(),
                     details: format!("Failed to write to stdin: {}", e),
@@ -209,6 +211,7 @@ impl OnePasswordProvider {
 
         let output = child
             .wait_with_output()
+            .await
             .map_err(|e| FnoxError::ProviderCliFailed {
                 provider: "1Password".to_string(),
                 details: format!("Failed to wait for command: {}", e),
@@ -267,7 +270,7 @@ impl crate::providers::Provider for OnePasswordProvider {
         tracing::debug!("Reading 1Password secret: {}", reference);
 
         // Use 'op read' to fetch the secret
-        self.execute_op_command(&["read", &reference])
+        self.execute_op_command(&["read", &reference]).await
     }
 
     async fn get_secrets_batch(
@@ -316,7 +319,7 @@ impl crate::providers::Provider for OnePasswordProvider {
         tracing::debug!("Injecting secrets with input:\n{}", input);
 
         // Execute op inject with stdin
-        match self.execute_op_inject(&input) {
+        match self.execute_op_inject(&input).await {
             Ok(output) => {
                 // Parse output handling multi-line secrets
                 // Format: KEY1=value1\nKEY2=value2_line1\nvalue2_line2\nKEY3=value3
@@ -392,7 +395,7 @@ impl crate::providers::Provider for OnePasswordProvider {
         tracing::debug!("Testing connection to 1Password");
 
         // Try to get the current user as a basic connectivity test
-        let output = self.execute_op_command(&["whoami"])?;
+        let output = self.execute_op_command(&["whoami"]).await?;
 
         tracing::debug!("1Password whoami output: {}", output);
 

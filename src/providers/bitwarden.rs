@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::process::Command;
+use tokio::process::Command;
 
 pub struct BitwardenProvider {
     collection: Option<String>,
@@ -44,14 +44,22 @@ impl BitwardenProvider {
         }
     }
 
-    fn build_command(&self, kind: Option<&str>, item_name: &str) -> Result<Command> {
+    fn build_command(
+        &self,
+        kind: Option<&str>,
+        item_name: &str,
+    ) -> Result<tokio::process::Command> {
         match &self.backend {
             BitwardenBackend::Bw => self.build_bw_command(kind, item_name),
             BitwardenBackend::Rbw => self.build_rbw_command(kind, item_name),
         }
     }
 
-    fn build_bw_command(&self, kind: Option<&str>, item_name: &str) -> Result<Command> {
+    fn build_bw_command(
+        &self,
+        kind: Option<&str>,
+        item_name: &str,
+    ) -> Result<tokio::process::Command> {
         // Build the bw get command
         // bw get <type> <name> [--output json]
         // where type can be: item, username, password, uri, totp, notes, exposed, attachment
@@ -139,7 +147,11 @@ impl BitwardenProvider {
         Ok(cmd)
     }
 
-    fn build_rbw_command(&self, kind: Option<&str>, item_name: &str) -> Result<Command> {
+    fn build_rbw_command(
+        &self,
+        kind: Option<&str>,
+        item_name: &str,
+    ) -> Result<tokio::process::Command> {
         let mut cmd = Command::new("rbw");
 
         match kind {
@@ -173,7 +185,7 @@ impl BitwardenProvider {
         Ok(cmd)
     }
 
-    fn execute_command(&self, cmd: &mut Command) -> Result<String> {
+    async fn execute_command(&self, cmd: &mut Command) -> Result<String> {
         // Close stdin to prevent bw from prompting for passwords interactively
         // This is especially important in CI environments where there's no TTY
         cmd.stdin(std::process::Stdio::null());
@@ -186,7 +198,7 @@ impl BitwardenProvider {
             BitwardenBackend::Bw => "bw",
             BitwardenBackend::Rbw => "rbw",
         };
-        let output = cmd.output().map_err(|e| {
+        let output = cmd.output().await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 FnoxError::ProviderCliNotFound {
                     provider: "Bitwarden".to_string(),
@@ -276,7 +288,7 @@ impl crate::providers::Provider for BitwardenProvider {
         );
 
         let mut cmd = self.build_command(Some(field_name), item_name)?;
-        self.execute_command(&mut cmd)
+        self.execute_command(&mut cmd).await
     }
 }
 
