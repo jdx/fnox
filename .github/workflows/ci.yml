@@ -149,6 +149,7 @@ jobs:
           TRANCHE: ${{ matrix.tranche }}
           TRANCHE_COUNT: 2
           KEEPASS_PASSWORD: fnox-test-password
+          BATS_FILTER_TAGS: ${{ (github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release-plz')) && '!expensive' || '' }}
         with:
           timeout_minutes: 10
           max_attempts: 3

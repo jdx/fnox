@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# bats file_tags=expensive
 #
 # AWS Secrets Manager Provider Tests
 #

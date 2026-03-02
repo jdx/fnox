@@ -32,11 +32,15 @@ run = "cargo test"
 [tasks."test:bats"]
 description = "Run bats tests only"
 run = '''
+filter_tags=""
+if [ -n "$BATS_FILTER_TAGS" ]; then
+  filter_tags="--filter-tags $BATS_FILTER_TAGS"
+fi
 if [ -n "$TRANCHE" ] && [ -n "$TRANCHE_COUNT" ]; then
   tests=$(ls -1 test/*.bats | sort | awk -v t=$TRANCHE -v n=$TRANCHE_COUNT 'NR % n == t')
-  fnox exec -- bats --jobs 16 $tests
+  fnox exec -- bats --jobs 16 $filter_tags $tests
 else
-  fnox exec -- bats --jobs 16 {{arg(name='test', var=true, default='test')}}
+  fnox exec -- bats --jobs 16 $filter_tags {{arg(name='test', var=true, default='test')}}
 fi
 '''
 
