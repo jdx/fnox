@@ -1,7 +1,7 @@
 use crate::error::{FnoxError, Result};
 use crate::providers::ProviderCapability;
 use async_trait::async_trait;
-use std::process::Command;
+use tokio::process::Command;
 
 /// Provider that integrates with password-store (pass) CLI tool
 pub struct PasswordStoreProvider {
@@ -32,7 +32,7 @@ impl PasswordStoreProvider {
     }
 
     /// Configure environment variables for pass command
-    fn configure_command_env(&self, cmd: &mut Command) {
+    fn configure_command_env(&self, cmd: &mut tokio::process::Command) {
         // Set custom PASSWORD_STORE_DIR if configured
         let env_store_dir = password_store_dir();
         let store_dir = self.store_dir.as_deref().or(env_store_dir.as_deref());
@@ -49,7 +49,7 @@ impl PasswordStoreProvider {
     }
 
     /// Execute pass CLI command
-    fn execute_pass_command(&self, args: &[&str]) -> Result<String> {
+    async fn execute_pass_command(&self, args: &[&str]) -> Result<String> {
         tracing::debug!("Executing pass command with args: {args:?}");
 
         let mut cmd = Command::new("pass");
@@ -60,7 +60,7 @@ impl PasswordStoreProvider {
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
 
-        let output = cmd.output().map_err(|e| {
+        let output = cmd.output().await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 FnoxError::ProviderCliNotFound {
                     provider: "password-store".to_string(),
@@ -129,7 +129,7 @@ impl crate::providers::Provider for PasswordStoreProvider {
         tracing::debug!("Getting secret '{secret_path}' from password-store");
 
         // Use `pass show` to retrieve the secret
-        self.execute_pass_command(&["show", &secret_path])
+        self.execute_pass_command(&["show", &secret_path]).await
     }
 
     async fn put_secret(&self, key: &str, value: &str) -> Result<String> {
@@ -170,10 +170,11 @@ impl crate::providers::Provider for PasswordStoreProvider {
 
         // Write value to stdin
         if let Some(mut stdin) = child.stdin.take() {
-            use std::io::Write;
+            use tokio::io::AsyncWriteExt;
 
             stdin
                 .write_all(value.as_bytes())
+                .await
                 .map_err(|e| FnoxError::ProviderCliFailed {
                     provider: "password-store".to_string(),
                     details: format!("Failed to write to stdin: {}", e),
@@ -185,6 +186,7 @@ impl crate::providers::Provider for PasswordStoreProvider {
 
         let output = child
             .wait_with_output()
+            .await
             .map_err(|e| FnoxError::ProviderCliFailed {
                 provider: "password-store".to_string(),
                 details: format!("Failed to wait for command: {}", e),
@@ -219,7 +221,7 @@ impl crate::providers::Provider for PasswordStoreProvider {
         tracing::debug!("Testing connection to password-store");
 
         // Try to list passwords to verify pass is working
-        self.execute_pass_command(&["ls"])?;
+        self.execute_pass_command(&["ls"]).await?;
 
         tracing::debug!("password-store connection test successful");
         Ok(())

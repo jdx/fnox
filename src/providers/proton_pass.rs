@@ -1,8 +1,8 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
-use std::process::Command;
 use std::sync::LazyLock;
+use tokio::process::Command;
 
 pub fn env_dependencies() -> &'static [&'static str] {
     &[
@@ -113,7 +113,11 @@ impl ProtonPassProvider {
     ///
     /// The `secret_ref` parameter is used to provide better error messages for
     /// "not found" errors. Pass `None` for commands that don't reference a secret.
-    fn execute_pass_cli_command(&self, args: &[&str], secret_ref: Option<&str>) -> Result<String> {
+    async fn execute_pass_cli_command(
+        &self,
+        args: &[&str],
+        secret_ref: Option<&str>,
+    ) -> Result<String> {
         tracing::debug!("Executing pass-cli command with args: {:?}", args);
 
         let mut cmd = Command::new("pass-cli");
@@ -137,7 +141,7 @@ impl ProtonPassProvider {
             }
         }
 
-        let output = cmd.output().map_err(|e| {
+        let output = cmd.output().await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 FnoxError::ProviderCliNotFound {
                     provider: "Proton Pass".to_string(),
@@ -245,19 +249,21 @@ impl crate::providers::Provider for ProtonPassProvider {
                 item_id,
                 field
             );
-            return self.execute_pass_cli_command(
-                &[
-                    "item",
-                    "view",
-                    "--vault-name",
-                    vault,
-                    "--item-id",
-                    item_id,
-                    "--field",
-                    field,
-                ],
-                Some(value),
-            );
+            return self
+                .execute_pass_cli_command(
+                    &[
+                        "item",
+                        "view",
+                        "--vault-name",
+                        vault,
+                        "--item-id",
+                        item_id,
+                        "--field",
+                        field,
+                    ],
+                    Some(value),
+                )
+                .await;
         }
 
         let reference = self.value_to_reference(value)?;
@@ -265,13 +271,14 @@ impl crate::providers::Provider for ProtonPassProvider {
 
         // Use 'pass-cli item view' to fetch the secret
         self.execute_pass_cli_command(&["item", "view", &reference], Some(&reference))
+            .await
     }
 
     async fn test_connection(&self) -> Result<()> {
         tracing::debug!("Testing connection to Proton Pass");
 
         // Use 'pass-cli test' for connection testing
-        let output = self.execute_pass_cli_command(&["test"], None)?;
+        let output = self.execute_pass_cli_command(&["test"], None).await?;
 
         tracing::debug!("Proton Pass test output: {}", output);
 

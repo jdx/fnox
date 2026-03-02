@@ -1,7 +1,7 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
-use std::process::Command;
+use tokio::process::Command;
 
 pub struct HashiCorpVaultProvider {
     address: Option<String>,
@@ -41,7 +41,7 @@ impl HashiCorpVaultProvider {
     }
 
     /// Execute vault CLI command with proper authentication
-    fn execute_vault_command(&self, args: &[&str]) -> Result<String> {
+    async fn execute_vault_command(&self, args: &[&str]) -> Result<String> {
         tracing::debug!("Executing vault command with args: {:?}", args);
 
         let mut cmd = Command::new("vault");
@@ -80,7 +80,7 @@ impl HashiCorpVaultProvider {
 
         cmd.args(args);
 
-        let output = cmd.output().map_err(|e| {
+        let output = cmd.output().await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 FnoxError::ProviderCliNotFound {
                     provider: "HashiCorp Vault".to_string(),
@@ -174,7 +174,7 @@ impl crate::providers::Provider for HashiCorpVaultProvider {
         let field_arg = format!("-field={}", field_name);
         let args = vec!["kv", "get", &field_arg, &secret_path];
 
-        self.execute_vault_command(&args)
+        self.execute_vault_command(&args).await
     }
 
     async fn test_connection(&self) -> Result<()> {
@@ -189,7 +189,7 @@ impl crate::providers::Provider for HashiCorpVaultProvider {
 
         // Try to get Vault status
         let args = vec!["status"];
-        self.execute_vault_command(&args)?;
+        self.execute_vault_command(&args).await?;
 
         Ok(())
     }
@@ -203,7 +203,7 @@ impl crate::providers::Provider for HashiCorpVaultProvider {
         let value_arg = format!("value={}", value);
         let args = vec!["kv", "put", &secret_path, &value_arg];
 
-        self.execute_vault_command(&args)?;
+        self.execute_vault_command(&args).await?;
 
         tracing::debug!("Successfully wrote secret '{}' to Vault", secret_path);
 

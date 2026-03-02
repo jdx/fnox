@@ -2,8 +2,8 @@ use crate::env;
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::process::Command;
 use std::sync::{LazyLock, Mutex};
+use tokio::process::Command;
 
 const PROVIDER_NAME: &str = "Infisical";
 const PROVIDER_URL: &str = "https://fnox.jdx.dev/providers/infisical";
@@ -65,7 +65,7 @@ impl InfisicalProvider {
         tracing::debug!("Logging in with Universal Auth credentials");
 
         // Login with client credentials to get a token
-        let mut cmd = Command::new("infisical");
+        let mut cmd = std::process::Command::new("infisical");
         cmd.args([
             "login",
             "--method",
@@ -141,7 +141,11 @@ impl InfisicalProvider {
 
     /// Execute infisical CLI command.
     /// `secret_ref` is used for better error messages when a specific secret is being fetched.
-    fn execute_infisical_command(&self, args: &[&str], secret_ref: Option<&str>) -> Result<String> {
+    async fn execute_infisical_command(
+        &self,
+        args: &[&str],
+        secret_ref: Option<&str>,
+    ) -> Result<String> {
         tracing::debug!("Executing infisical command with args: {:?}", args);
 
         let token = self.get_auth_token()?;
@@ -166,7 +170,7 @@ impl InfisicalProvider {
 
         cmd.stdin(std::process::Stdio::null());
 
-        let output = cmd.output().map_err(|e| {
+        let output = cmd.output().await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 FnoxError::ProviderCliNotFound {
                     provider: PROVIDER_NAME.to_string(),
@@ -239,7 +243,7 @@ impl crate::providers::Provider for InfisicalProvider {
             self.path
         );
 
-        let json_output = self.execute_infisical_command(&args, Some(value))?;
+        let json_output = self.execute_infisical_command(&args, Some(value)).await?;
 
         // Parse JSON response - format is an array with one object
         // [{"secretKey": "NAME", "secretValue": "value"}]
@@ -337,7 +341,7 @@ impl crate::providers::Provider for InfisicalProvider {
         }
 
         // Execute command
-        match self.execute_infisical_command(&args, None) {
+        match self.execute_infisical_command(&args, None).await {
             Ok(json_output) => {
                 // Parse JSON response
                 match serde_json::from_str::<Vec<serde_json::Value>>(&json_output) {
