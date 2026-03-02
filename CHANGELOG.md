@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.15.1](https://github.com/jdx/fnox/compare/v1.15.0..v1.15.1) - 2026-03-02
+
+### ⚡ Performance
+
+- **(aws-sm)** skip expensive tests on non-release PRs by [@jdx](https://github.com/jdx) in [#310](https://github.com/jdx/fnox/pull/310)
+- **(provider)** use async tokio::process::Command for CLI-based providers by [@jdx](https://github.com/jdx) in [#308](https://github.com/jdx/fnox/pull/308)
+
+### 📦️ Dependency Updates
+
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#306](https://github.com/jdx/fnox/pull/306)
+
 ## [1.15.0](https://github.com/jdx/fnox/compare/v1.14.0..v1.15.0) - 2026-03-02
 
 ### 🚀 Features
