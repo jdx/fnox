@@ -237,21 +237,27 @@ async fn try_resolve_from_provider(
     profile: &str,
     secret_config: &SecretConfig,
 ) -> Result<Option<String>> {
-    // Only try provider if we have a value to pass to it
-    let Some(provider_value) = secret_config.value() else {
-        return Ok(None);
-    };
-
-    // Determine which provider to use
-    let provider_name = if let Some(provider_name) = secret_config.provider() {
-        // Explicit provider specified
-        provider_name.to_string()
-    } else if let Some(default_provider) = config.get_default_provider(profile)? {
-        // Use default provider
-        default_provider
+    // If a sync cache exists, resolve from the sync provider/value instead
+    let (provider_name, provider_value) = if let Some(ref sync) = secret_config.sync {
+        (sync.provider.clone(), sync.value.clone())
     } else {
-        // No provider configured, can't resolve
-        return Ok(None);
+        // Only try provider if we have a value to pass to it
+        let Some(pv) = secret_config.value() else {
+            return Ok(None);
+        };
+
+        // Determine which provider to use
+        let pn = if let Some(provider_name) = secret_config.provider() {
+            // Explicit provider specified
+            provider_name.to_string()
+        } else if let Some(default_provider) = config.get_default_provider(profile)? {
+            // Use default provider
+            default_provider
+        } else {
+            // No provider configured, can't resolve
+            return Ok(None);
+        };
+        (pn, pv.to_string())
     };
 
     // Get the provider config
@@ -266,7 +272,7 @@ async fn try_resolve_from_provider(
         profile,
         &provider_name,
         provider_config,
-        provider_value,
+        &provider_value,
     )
     .await
 }
@@ -371,6 +377,12 @@ pub async fn resolve_secrets_batch(
     let providers = config.get_providers(profile);
 
     for (key, secret_config) in secrets {
+        // If a sync cache exists, use the sync provider/value
+        if let Some(ref sync) = secret_config.sync {
+            secret_provider.insert(key.clone(), (sync.provider.clone(), sync.value.clone()));
+            continue;
+        }
+
         if let Some(provider_value) = secret_config.value() {
             let provider_name = if let Some(provider_name) = secret_config.provider() {
                 provider_name.to_string()
