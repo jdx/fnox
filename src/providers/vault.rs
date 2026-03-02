@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use std::process::Command;
 
 pub struct HashiCorpVaultProvider {
-    address: String,
+    address: Option<String>,
     path: Option<String>,
     token: Option<String>,
     namespace: Option<String>,
@@ -12,7 +12,7 @@ pub struct HashiCorpVaultProvider {
 
 impl HashiCorpVaultProvider {
     pub fn new(
-        address: String,
+        address: Option<String>,
         path: Option<String>,
         token: Option<String>,
         namespace: Option<String>,
@@ -32,14 +32,29 @@ impl HashiCorpVaultProvider {
         }
     }
 
+    fn get_address(&self) -> Option<String> {
+        self.address.clone().or_else(vault_address)
+    }
+
+    fn get_token(&self) -> Option<String> {
+        self.token.clone().or_else(vault_token)
+    }
+
     /// Execute vault CLI command with proper authentication
     fn execute_vault_command(&self, args: &[&str]) -> Result<String> {
         tracing::debug!("Executing vault command with args: {:?}", args);
 
         let mut cmd = Command::new("vault");
 
-        // Set VAULT_ADDR from provider config
-        cmd.env("VAULT_ADDR", &self.address);
+        // Set VAULT_ADDR from provider config or environment
+        let address = self.get_address().ok_or_else(|| {
+            FnoxError::Config(
+                "HashiCorp Vault provider address is not configured. Please set it in your provider configuration or via the VAULT_ADDR environment variable.".to_string(),
+            )
+        })?;
+
+        tracing::debug!("Setting VAULT_ADDR to '{}'", address);
+        cmd.env("VAULT_ADDR", address);
 
         // Set VAULT_NAMESPACE if provided
         if let Some(namespace) = &self.namespace {
@@ -48,15 +63,14 @@ impl HashiCorpVaultProvider {
         }
 
         // Set VAULT_TOKEN from provider config or environment
-        let env_token = vault_token();
-        let token = self.token.as_ref().or(env_token.as_ref()).ok_or_else(|| {
-            FnoxError::ProviderAuthFailed {
+        let token = self
+            .get_token()
+            .ok_or_else(|| FnoxError::ProviderAuthFailed {
                 provider: "HashiCorp Vault".to_string(),
                 details: "VAULT_TOKEN not set".to_string(),
                 hint: "Set VAULT_TOKEN in provider config or environment".to_string(),
                 url: "https://fnox.jdx.dev/providers/vault".to_string(),
-            }
-        })?;
+            })?;
 
         tracing::debug!(
             "Setting VAULT_TOKEN environment variable (token length: {})",
@@ -164,7 +178,14 @@ impl crate::providers::Provider for HashiCorpVaultProvider {
     }
 
     async fn test_connection(&self) -> Result<()> {
-        tracing::debug!("Testing connection to Vault at {}", self.address);
+        let address = self.get_address();
+        if let Some(addr) = address {
+            tracing::debug!("Testing connection to Vault at {}", addr);
+        } else {
+            tracing::debug!(
+                "Testing connection to Vault (address not specified in config or environment)"
+            );
+        }
 
         // Try to get Vault status
         let args = vec!["status"];
@@ -192,11 +213,22 @@ impl crate::providers::Provider for HashiCorpVaultProvider {
 }
 
 pub fn env_dependencies() -> &'static [&'static str] {
-    &["VAULT_TOKEN", "FNOX_VAULT_TOKEN"]
+    &[
+        "VAULT_TOKEN",
+        "FNOX_VAULT_TOKEN",
+        "VAULT_ADDR",
+        "FNOX_VAULT_ADDR",
+    ]
 }
 
 fn vault_token() -> Option<String> {
     env::var("FNOX_VAULT_TOKEN")
         .or_else(|_| env::var("VAULT_TOKEN"))
+        .ok()
+}
+
+fn vault_address() -> Option<String> {
+    env::var("FNOX_VAULT_ADDR")
+        .or_else(|_| env::var("VAULT_ADDR"))
         .ok()
 }

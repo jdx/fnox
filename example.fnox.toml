@@ -37,8 +37,8 @@ prefix = "myapp/"
 
 [providers.vault_dev]
 type = "vault"
-address = "http://localhost:8200"
 path = "secret/myapp"
+# address = "http://localhost:8200" # Optional, falls back to FNOX_VAULT_ADDR or VAULT_ADDR
 
 # Default profile secrets (top level)
 # Used when --profile is not specified or FNOX_PROFILE is not set

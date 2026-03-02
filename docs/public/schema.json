@@ -400,7 +400,7 @@
           "type": "object",
           "properties": {
             "address": {
-              "$ref": "#/$defs/StringOrSecretRef"
+              "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "namespace": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -417,7 +417,7 @@
             }
           },
           "additionalProperties": false,
-          "required": ["type", "address"]
+          "required": ["type"]
         },
         {
           "type": "object",

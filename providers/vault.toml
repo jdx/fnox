@@ -12,7 +12,7 @@ Set: export VAULT_ADDR=http://localhost:8200
 Set: export VAULT_TOKEN=<token>"""
 
 [fields.address]
-type = "required"
+type = "optional"
 placeholder = "http://localhost:8200"
 label = "Vault address:"
 wizard = true

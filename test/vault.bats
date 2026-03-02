@@ -306,6 +306,38 @@ EOF
 	assert_success
 }
 
+@test "Vault provider uses VAULT_ADDR from environment if address is missing" {
+	# Create config without address
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF
+root = true
+[providers.vault]
+type = "vault"
+path = "secret/test"
+
+[secrets]
+MY_SECRET = { provider = "vault", value = "foo" }
+EOF
+
+	# Set VAULT_ADDR to a dummy value
+	VAULT_ADDR_BACKUP="$VAULT_ADDR"
+	export VAULT_ADDR="http://1.2.3.4:5678"
+
+	# Run fnox get. It should fail with a connection error to 1.2.3.4:5678,
+	# proving it used the environment variable instead of failing with a TOML error.
+	run "$FNOX_BIN" get MY_SECRET
+
+	# Restore VAULT_ADDR
+	if [ -n "$VAULT_ADDR_BACKUP" ]; then
+		export VAULT_ADDR="$VAULT_ADDR_BACKUP"
+	else
+		unset VAULT_ADDR
+	fi
+
+	assert_failure
+	assert_output --partial "1.2.3.4:5678"
+	refute_output --partial 'missing field `address`'
+}
+
 @test "Vault provider with description field" {
 	create_vault_config
 
@@ -327,4 +359,24 @@ EOF
 
 	# Cleanup
 	delete_test_vault_secret "$secret_name"
+}
+
+@test "Vault provider fails with semantic error when address and VAULT_ADDR are missing" {
+	# Create config without address
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF
+root = true
+[providers.vault]
+type = "vault"
+
+[secrets]
+MY_SECRET = { provider = "vault", value = "foo" }
+EOF
+
+	# Ensure VAULT_ADDR and FNOX_VAULT_ADDR are not set
+	unset VAULT_ADDR
+	unset FNOX_VAULT_ADDR
+
+	run "$FNOX_BIN" get MY_SECRET
+	assert_failure
+	assert_output --partial "Configuration error: HashiCorp Vault provider address is not configured"
 }

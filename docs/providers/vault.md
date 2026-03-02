@@ -24,8 +24,12 @@ sudo apt update && sudo apt install vault
 
 ```toml
 [providers]
-vault = { type = "vault", address = "https://vault.example.com:8200", path = "secret/myapp" }  # token optional, can use VAULT_TOKEN env var
+vault = { type = "vault", path = "secret/myapp" } # address and token are optional
 ```
+
+- **address**: (Optional) The Vault server address. Falls back to `FNOX_VAULT_ADDR` or `VAULT_ADDR`.
+- **path**: (Required) The base path for secrets in Vault (e.g., `secret/myapp`).
+- **token**: (Optional) Vault token. Falls back to `FNOX_VAULT_TOKEN` or `VAULT_TOKEN`.
 
 ## Setup
 
