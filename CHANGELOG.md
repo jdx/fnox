@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.15.0](https://github.com/jdx/fnox/compare/v1.14.0..v1.15.0) - 2026-03-02
+
+### 🚀 Features
+
+- **(provider)** allow auth_command override per-provider in config by [@jdx](https://github.com/jdx) in [#305](https://github.com/jdx/fnox/pull/305)
+- **(vault)** make address field optional and fallback to VAULT_ADDR by [@chermed](https://github.com/chermed) in [#301](https://github.com/jdx/fnox/pull/301)
+- add `fnox sync` command by [@jdx](https://github.com/jdx) in [#298](https://github.com/jdx/fnox/pull/298)
+- nushell integration by [@tiptenbrink](https://github.com/tiptenbrink) in [#304](https://github.com/jdx/fnox/pull/304)
+
+### 🐛 Bug Fixes
+
+- **(provider)** only trigger auth prompt for ProviderAuthFailed errors by [@TyceHerrman](https://github.com/TyceHerrman) in [#297](https://github.com/jdx/fnox/pull/297)
+- **(provider)** add missing provider add types and proton-pass vault by [@TyceHerrman](https://github.com/TyceHerrman) in [#302](https://github.com/jdx/fnox/pull/302)
+
+### New Contributors
+
+- @chermed made their first contribution in [#301](https://github.com/jdx/fnox/pull/301)
+- @tiptenbrink made their first contribution in [#304](https://github.com/jdx/fnox/pull/304)
+
 ## [1.14.0](https://github.com/jdx/fnox/compare/v1.13.0..v1.14.0) - 2026-02-28
 
 ### 🚀 Features
