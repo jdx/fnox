@@ -1366,9 +1366,10 @@ mod tests {
 
         // Add a provider and secret to the prod profile
         let mut prod_profile = ProfileConfig::new();
-        prod_profile
-            .providers
-            .insert("plain".to_string(), ProviderConfig::Plain);
+        prod_profile.providers.insert(
+            "plain".to_string(),
+            ProviderConfig::Plain { auth_command: None },
+        );
         let mut secret = SecretConfig::new();
         secret.set_value(Some("test-value".to_string()));
         prod_profile

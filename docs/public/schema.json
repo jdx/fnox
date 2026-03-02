@@ -124,6 +124,9 @@
         {
           "type": "object",
           "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "database": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
@@ -144,6 +147,9 @@
         {
           "type": "object",
           "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "gpg_opts": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -164,6 +170,9 @@
         {
           "type": "object",
           "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "type": {
               "type": "string",
               "const": "plain"
@@ -175,6 +184,9 @@
         {
           "type": "object",
           "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "key_file": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -198,6 +210,9 @@
             "account": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "token": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -217,6 +232,9 @@
           "properties": {
             "api_key": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "auth_command": {
+              "type": ["string", "null"]
             },
             "base_url": {
               "$ref": "#/$defs/StringOrSecretRef"
@@ -238,6 +256,9 @@
         {
           "type": "object",
           "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "type": {
               "type": "string",
               "const": "proton-pass"
@@ -252,6 +273,9 @@
         {
           "type": "object",
           "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "backend": {
               "anyOf": [
                 {
@@ -282,6 +306,9 @@
         {
           "type": "object",
           "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "environment": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -302,6 +329,9 @@
         {
           "type": "object",
           "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "key_id": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
@@ -319,6 +349,9 @@
         {
           "type": "object",
           "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "key_name": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
@@ -336,6 +369,9 @@
         {
           "type": "object",
           "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "key": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
@@ -359,6 +395,9 @@
         {
           "type": "object",
           "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -379,6 +418,9 @@
         {
           "type": "object",
           "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -402,6 +444,9 @@
             "address": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "namespace": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -422,6 +467,9 @@
         {
           "type": "object",
           "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "profile": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -439,6 +487,9 @@
         {
           "type": "object",
           "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -456,6 +507,9 @@
         {
           "type": "object",
           "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -473,6 +527,9 @@
         {
           "type": "object",
           "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
