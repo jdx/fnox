@@ -181,6 +181,54 @@ EOF
 	assert_output --partial "Sync cancelled"
 }
 
+@test "fnox sync preserves original provider in config" {
+	setup_sync_env
+
+	# Sync from source-age to age
+	assert_fnox_success sync -p age --force
+
+	# Verify original provider is preserved in the config
+	run grep 'provider = "source-age"' fnox.toml
+	assert_success
+
+	# Verify sync field is present
+	run grep 'sync = {' fnox.toml
+	assert_success
+}
+
+@test "fnox sync writes sync field structure" {
+	setup_sync_env
+
+	# Sync from source-age to age
+	assert_fnox_success sync -p age --force
+
+	# Verify the TOML contains sync = { provider = "age", value = "..." }
+	run grep 'sync = { provider = "age", value = "' fnox.toml
+	assert_success
+}
+
+@test "fnox sync re-running refreshes values" {
+	setup_sync_env
+
+	# First sync
+	assert_fnox_success sync -p age --force
+
+	# Verify initial value
+	assert_fnox_success get MY_SECRET --age-key-file key.txt
+	assert_output "remote-secret-value"
+
+	# Update the source secret
+	run "$FNOX_BIN" set MY_SECRET "updated-remote-value" --provider source-age
+	assert_success
+
+	# Re-sync
+	assert_fnox_success sync -p age --force
+
+	# Verify updated value
+	assert_fnox_success get MY_SECRET --age-key-file key.txt
+	assert_output "updated-remote-value"
+}
+
 @test "fnox sync with no eligible secrets shows message" {
 	if ! command -v age-keygen >/dev/null 2>&1; then
 		skip "age-keygen not installed"

@@ -1,5 +1,5 @@
 use crate::commands::Cli;
-use crate::config::Config;
+use crate::config::{Config, SyncConfig};
 use crate::error::{FnoxError, Result};
 use crate::secret_resolver::resolve_secrets_batch;
 use clap::Args;
@@ -184,8 +184,14 @@ impl SyncCommand {
             }
         }
 
-        // Resolve plaintext values from source providers
-        let resolved = resolve_secrets_batch(&merged_config, &profile, &secrets_to_sync).await?;
+        // Resolve plaintext values from source providers (strip sync cache so we
+        // re-fetch from the original provider rather than the cached sync value)
+        let mut secrets_for_resolve = secrets_to_sync.clone();
+        for secret_config in secrets_for_resolve.values_mut() {
+            secret_config.sync = None;
+        }
+        let resolved =
+            resolve_secrets_batch(&merged_config, &profile, &secrets_for_resolve).await?;
 
         // Encrypt each value and build updated secret configs
         let mut synced_secrets = IndexMap::new();
@@ -206,13 +212,6 @@ impl SyncCommand {
             cli.config.clone()
         };
 
-        // Load existing target config to preserve metadata
-        let mut existing_config = if target_path.exists() {
-            Some(Config::load(&target_path)?)
-        } else {
-            None
-        };
-
         for (key, plaintext) in &resolved {
             let Some(plaintext) = plaintext else {
                 tracing::warn!("Skipping '{}': could not resolve value", key);
@@ -220,17 +219,15 @@ impl SyncCommand {
                 continue;
             };
 
-            // Start from existing config if key already exists, to preserve metadata
-            let mut secret_config = existing_config
-                .as_mut()
-                .and_then(|c| c.get_secrets_mut(&profile).shift_remove(key))
-                .unwrap_or_else(|| secrets_to_sync[key].clone());
+            let mut secret_config = secrets_to_sync[key].clone();
 
             // Encrypt with target provider
             match target_provider.encrypt(plaintext).await {
                 Ok(encrypted) => {
-                    secret_config.set_provider(Some(target_provider_name.clone()));
-                    secret_config.set_value(Some(encrypted));
+                    secret_config.sync = Some(SyncConfig {
+                        provider: target_provider_name.clone(),
+                        value: encrypted,
+                    });
                     synced_secrets.insert(key.clone(), secret_config);
                     synced_count += 1;
                 }

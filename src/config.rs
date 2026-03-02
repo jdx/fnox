@@ -84,6 +84,13 @@ pub struct Config {
     pub default_provider_source: Option<PathBuf>,
 }
 
+/// Cached sync data for a secret (provider + encrypted value)
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SyncConfig {
+    pub provider: String,
+    pub value: String,
+}
+
 /// Configuration for a single secret
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -115,6 +122,10 @@ pub struct SecretConfig {
     /// When set, the secret value is parsed as JSON and the specified path is extracted.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub json_path: Option<String>,
+
+    /// Cached sync data (provider + encrypted value from `fnox sync`)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sync: Option<SyncConfig>,
 
     /// Path to the config file where this secret was defined (not serialized)
     #[serde(skip)]
@@ -1198,6 +1209,7 @@ impl SecretConfig {
             value: None,
             as_file: false,
             json_path: None,
+            sync: None,
             source_path: None,
         }
     }
@@ -1231,6 +1243,13 @@ impl SecretConfig {
         }
         if self.as_file {
             inline.insert("as_file", toml_edit::Value::from(true));
+        }
+        if let Some(ref sync) = self.sync {
+            let mut sync_table = toml_edit::InlineTable::new();
+            sync_table.insert("provider", toml_edit::Value::from(sync.provider.as_str()));
+            sync_table.insert("value", toml_edit::Value::from(sync.value.as_str()));
+            sync_table.fmt();
+            inline.insert("sync", toml_edit::Value::InlineTable(sync_table));
         }
 
         inline.fmt();
