@@ -21,7 +21,7 @@ flag --no-color help="Disable colored output" global=#true
 flag --no-defaults help="Do not merge top-level secrets into the selected profile" global=#true
 cmd activate help="Output shell activation code to enable automatic secret loading" {
     flag --no-hook-env help="Don't automatically invoke hook-env (for testing)"
-    arg "[SHELL]" help="Shell to generate activation code for (bash, zsh, fish)" required=#false
+    arg "[SHELL]" help="Shell to generate activation code for (bash, zsh, fish, nu)" required=#false
 }
 cmd check help="Check if all required secrets are defined and configured" {
     alias c
@@ -60,7 +60,7 @@ cmd get help="Get a secret value" {
     arg <KEY> help="Secret key to retrieve"
 }
 cmd hook-env hide=#true help="Internal command used by shell hooks to load secrets" {
-    flag "-s --shell" help="Shell type (bash, zsh, fish)" {
+    flag "-s --shell" help="Shell type (bash, zsh, fish, nu)" {
         arg <SHELL>
     }
 }

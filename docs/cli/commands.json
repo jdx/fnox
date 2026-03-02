@@ -13,8 +13,8 @@
           {
             "name": "SHELL",
             "usage": "[SHELL]",
-            "help": "Shell to generate activation code for (bash, zsh, fish)",
-            "help_first_line": "Shell to generate activation code for (bash, zsh, fish)",
+            "help": "Shell to generate activation code for (bash, zsh, fish, nu)",
+            "help_first_line": "Shell to generate activation code for (bash, zsh, fish, nu)",
             "required": false,
             "double_dash": "Optional",
             "hide": false
@@ -291,8 +291,8 @@
           {
             "name": "shell",
             "usage": "-s --shell <SHELL>",
-            "help": "Shell type (bash, zsh, fish)",
-            "help_first_line": "Shell type (bash, zsh, fish)",
+            "help": "Shell type (bash, zsh, fish, nu)",
+            "help_first_line": "Shell type (bash, zsh, fish, nu)",
             "short": ["s"],
             "long": ["shell"],
             "hide": false,

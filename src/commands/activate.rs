@@ -5,7 +5,7 @@ use clap::Parser;
 #[derive(Debug, Parser)]
 #[command(about = "Output shell activation code to enable automatic secret loading")]
 pub struct ActivateCommand {
-    /// Shell to generate activation code for (bash, zsh, fish)
+    /// Shell to generate activation code for (bash, zsh, fish, nu)
     #[arg(value_name = "SHELL")]
     pub shell: Option<String>,
 

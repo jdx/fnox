@@ -10,7 +10,7 @@ Output shell activation code to enable automatic secret loading
 
 ### `[SHELL]`
 
-Shell to generate activation code for (bash, zsh, fish)
+Shell to generate activation code for (bash, zsh, fish, nu)
 
 ## Flags
 

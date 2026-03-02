@@ -23,6 +23,14 @@ eval "$(fnox activate zsh)"
 fnox activate fish | source
 ```
 
+```nu [Nushell]
+# Requires Nushell 0.96+
+# Add to the end of your Nushell configuration
+# (find it by running `$nu.config-path` in Nushell):
+mkdir ($nu.data-dir | path join "vendor/autoload")
+fnox activate nu | save -f ($nu.data-dir | path join "vendor/autoload/fnox.nu")
+```
+
 :::
 
 ## How It Works

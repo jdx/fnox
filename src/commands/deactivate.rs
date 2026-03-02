@@ -29,28 +29,13 @@ impl DeactivateCommand {
 
         let shell = shell::get_shell(None)?;
 
-        // First, restore the original environment (unset all loaded secrets)
-        let output = clear_old_env(&*shell);
+        // Generate deactivation output via the shell's trait method.
+        // Eval-based shells produce shell code; structured shells (nushell)
+        // produce JSON that the wrapper function interprets.
+        let secret_keys: Vec<String> = PREV_SESSION.secret_hashes.keys().cloned().collect();
+        let output = shell.deactivate_output(&secret_keys);
         print!("{}", output);
-
-        // Then output shell-specific deactivation commands
-        let deactivate_output = shell.deactivate();
-        print!("{}", deactivate_output);
 
         Ok(())
     }
-}
-
-/// Generate shell commands to restore the environment to its original state
-fn clear_old_env(shell: &dyn shell::Shell) -> String {
-    // Get the previous session state (if any)
-    let prev_session = &*PREV_SESSION;
-
-    // Unset all loaded secrets from the previous session
-    let mut output = String::new();
-    for key in prev_session.secret_hashes.keys() {
-        output.push_str(&shell.unset_env(key));
-    }
-
-    output
 }
