@@ -63,8 +63,7 @@ impl ExecCommand {
             .filter(|(k, _)| !lease_keys.contains(k))
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
-        let resolved_secrets =
-            resolve_secrets_batch(&config, &profile, &non_lease_secrets).await?;
+        let resolved_secrets = resolve_secrets_batch(&config, &profile, &non_lease_secrets).await?;
 
         // Keep temp files alive for the duration of the command
         let mut _temp_files: Vec<NamedTempFile> = Vec::new();

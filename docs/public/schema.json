@@ -36,6 +36,13 @@
         "type": "string"
       }
     },
+    "leases": {
+      "description": "Lease backend configurations (for default profile)",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/LeaseBackendConfig"
+      }
+    },
     "profiles": {
       "description": "Named profiles",
       "type": "object",
@@ -76,6 +83,34 @@
       "type": "string",
       "enum": ["error", "warn", "ignore"]
     },
+    "LeaseBackendConfig": {
+      "description": "Configuration for a lease backend (manually defined, no codegen)",
+      "oneOf": [
+        {
+          "description": "AWS STS AssumeRole",
+          "type": "object",
+          "properties": {
+            "endpoint": {
+              "type": ["string", "null"]
+            },
+            "profile": {
+              "type": ["string", "null"]
+            },
+            "region": {
+              "type": "string"
+            },
+            "role_arn": {
+              "type": ["string", "null"]
+            },
+            "type": {
+              "type": "string",
+              "const": "aws-sts"
+            }
+          },
+          "required": ["type", "region"]
+        }
+      ]
+    },
     "OptionStringOrSecretRef": {
       "description": "An optional value that can be a literal string, a secret reference, or absent.\n\nIn TOML, this deserializes from:\n- Field absent: `None`\n- `field = \"literal-value\"`: `Some(Literal(\"literal-value\"))`\n- `field = { secret = \"SECRET_NAME\" }`: `Some(SecretRef { secret: \"SECRET_NAME\" })`",
       "anyOf": [
@@ -101,6 +136,13 @@
               "type": "null"
             }
           ]
+        },
+        "leases": {
+          "description": "Lease backend configurations for this profile",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/LeaseBackendConfig"
+          }
         },
         "providers": {
           "description": "Provider configurations for this profile",
@@ -421,29 +463,6 @@
             "auth_command": {
               "type": ["string", "null"]
             },
-            "profile": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "region": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
-            "role_arn": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "type": {
-              "type": "string",
-              "const": "aws-sts"
-            }
-          },
-          "additionalProperties": false,
-          "required": ["type", "region"]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "auth_command": {
-              "type": ["string", "null"]
-            },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -601,8 +620,8 @@
           "type": ["string", "null"]
         },
         "lease": {
-          "description": "Use credential leasing for this secret (experimental)",
-          "type": ["boolean", "null"]
+          "description": "Lease backend name for credential leasing (experimental)",
+          "type": ["string", "null"]
         },
         "lease_duration": {
           "description": "Duration for credential leases (e.g., \"15m\", \"1h\")",
