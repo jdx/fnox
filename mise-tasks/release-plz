@@ -12,6 +12,7 @@ if [ -z "$released_versions" ] || ! echo "$released_versions" | grep -q "^v$cur_
     # Only create and push the tag - let the release workflow handle creating the release
     git tag "v$cur_version"
     git push --tags
+    cargo publish -p fnox
   fi
   exit 0
 fi
