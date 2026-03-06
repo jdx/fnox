@@ -421,6 +421,29 @@
             "auth_command": {
               "type": ["string", "null"]
             },
+            "profile": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "region": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "role_arn": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "aws-sts"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "region"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -575,6 +598,14 @@
         },
         "json_path": {
           "description": "JSON path to extract from the secret value (supports dot notation: \"nested.key\")\nWhen set, the secret value is parsed as JSON and the specified path is extracted.",
+          "type": ["string", "null"]
+        },
+        "lease": {
+          "description": "Use credential leasing for this secret (experimental)",
+          "type": ["boolean", "null"]
+        },
+        "lease_duration": {
+          "description": "Duration for credential leases (e.g., \"15m\", \"1h\")",
           "type": ["string", "null"]
         },
         "provider": {

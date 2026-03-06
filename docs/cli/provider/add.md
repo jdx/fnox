@@ -24,6 +24,7 @@ Provider type
 - `aws`
 - `aws-kms`
 - `aws-ps`
+- `aws-sts`
 - `azure-kms`
 - `azure-sm`
 - `gcp`

@@ -487,6 +487,177 @@
         "hidden_aliases": [],
         "examples": []
       },
+      "lease": {
+        "full_cmd": ["lease"],
+        "usage": "lease <SUBCOMMAND>",
+        "subcommands": {
+          "cleanup": {
+            "full_cmd": ["lease", "cleanup"],
+            "usage": "lease cleanup",
+            "subcommands": {},
+            "args": [],
+            "flags": [],
+            "mounts": [],
+            "hide": false,
+            "help": "Revoke all expired leases that need manual cleanup",
+            "name": "cleanup",
+            "aliases": [],
+            "hidden_aliases": [],
+            "examples": []
+          },
+          "create": {
+            "full_cmd": ["lease", "create"],
+            "usage": "lease create [FLAGS] <SECRET_NAME>",
+            "subcommands": {},
+            "args": [
+              {
+                "name": "SECRET_NAME",
+                "usage": "<SECRET_NAME>",
+                "help": "Secret name to lease credentials for",
+                "help_first_line": "Secret name to lease credentials for",
+                "required": true,
+                "double_dash": "Optional",
+                "hide": false
+              }
+            ],
+            "flags": [
+              {
+                "name": "duration",
+                "usage": "-d --duration <DURATION>",
+                "help": "Lease duration (e.g., \"15m\", \"1h\", \"2h30m\")",
+                "help_first_line": "Lease duration (e.g., \"15m\", \"1h\", \"2h30m\")",
+                "short": ["d"],
+                "long": ["duration"],
+                "hide": false,
+                "global": false,
+                "arg": {
+                  "name": "DURATION",
+                  "usage": "<DURATION>",
+                  "required": true,
+                  "double_dash": "Optional",
+                  "hide": false
+                },
+                "default": ["15m"]
+              },
+              {
+                "name": "format",
+                "usage": "-f --format <FORMAT>",
+                "help": "Output format",
+                "help_first_line": "Output format",
+                "short": ["f"],
+                "long": ["format"],
+                "hide": false,
+                "global": false,
+                "arg": {
+                  "name": "FORMAT",
+                  "usage": "<FORMAT>",
+                  "required": true,
+                  "double_dash": "Optional",
+                  "hide": false,
+                  "choices": {
+                    "choices": ["shell", "json", "env"]
+                  }
+                },
+                "default": ["shell"]
+              },
+              {
+                "name": "label",
+                "usage": "-l --label <LABEL>",
+                "help": "Label for the lease (e.g., session purpose)",
+                "help_first_line": "Label for the lease (e.g., session purpose)",
+                "short": ["l"],
+                "long": ["label"],
+                "hide": false,
+                "global": false,
+                "arg": {
+                  "name": "LABEL",
+                  "usage": "<LABEL>",
+                  "required": true,
+                  "double_dash": "Optional",
+                  "hide": false
+                },
+                "default": ["fnox-lease"]
+              }
+            ],
+            "mounts": [],
+            "hide": false,
+            "help": "Create a short-lived credential lease from a secret",
+            "name": "create",
+            "aliases": [],
+            "hidden_aliases": [],
+            "examples": []
+          },
+          "list": {
+            "full_cmd": ["lease", "list"],
+            "usage": "lease list [--active] [--expired]",
+            "subcommands": {},
+            "args": [],
+            "flags": [
+              {
+                "name": "active",
+                "usage": "--active",
+                "help": "Show only active (non-expired, non-revoked) leases",
+                "help_first_line": "Show only active (non-expired, non-revoked) leases",
+                "short": [],
+                "long": ["active"],
+                "hide": false,
+                "global": false
+              },
+              {
+                "name": "expired",
+                "usage": "--expired",
+                "help": "Show only expired leases",
+                "help_first_line": "Show only expired leases",
+                "short": [],
+                "long": ["expired"],
+                "hide": false,
+                "global": false
+              }
+            ],
+            "mounts": [],
+            "hide": false,
+            "help": "List tracked leases",
+            "name": "list",
+            "aliases": [],
+            "hidden_aliases": [],
+            "examples": []
+          },
+          "revoke": {
+            "full_cmd": ["lease", "revoke"],
+            "usage": "lease revoke <LEASE_ID>",
+            "subcommands": {},
+            "args": [
+              {
+                "name": "LEASE_ID",
+                "usage": "<LEASE_ID>",
+                "help": "Lease ID to revoke",
+                "help_first_line": "Lease ID to revoke",
+                "required": true,
+                "double_dash": "Optional",
+                "hide": false
+              }
+            ],
+            "flags": [],
+            "mounts": [],
+            "hide": false,
+            "help": "Revoke a lease by ID",
+            "name": "revoke",
+            "aliases": [],
+            "hidden_aliases": [],
+            "examples": []
+          }
+        },
+        "args": [],
+        "flags": [],
+        "mounts": [],
+        "hide": false,
+        "subcommand_required": true,
+        "help": "Manage ephemeral credential leases (experimental)",
+        "name": "lease",
+        "aliases": [],
+        "hidden_aliases": [],
+        "examples": []
+      },
       "list": {
         "full_cmd": ["list"],
         "usage": "list [FLAGS]",
@@ -600,6 +771,7 @@
                     "aws",
                     "aws-kms",
                     "aws-ps",
+                    "aws-sts",
                     "azure-kms",
                     "azure-sm",
                     "gcp",

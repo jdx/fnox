@@ -91,6 +91,30 @@ cmd init help="Initialize a new fnox configuration file" {
     flag --force help="Overwrite existing configuration file"
     flag --skip-wizard help="Skip the interactive wizard and create a minimal config"
 }
+cmd lease subcommand_required=#true help="Manage ephemeral credential leases (experimental)" {
+    cmd cleanup help="Revoke all expired leases that need manual cleanup"
+    cmd create help="Create a short-lived credential lease from a secret" {
+        flag "-d --duration" help="Lease duration (e.g., \"15m\", \"1h\", \"2h30m\")" default="15m" {
+            arg <DURATION>
+        }
+        flag "-f --format" help="Output format" default=shell {
+            arg <FORMAT> {
+                choices shell json env
+            }
+        }
+        flag "-l --label" help="Label for the lease (e.g., session purpose)" default=fnox-lease {
+            arg <LABEL>
+        }
+        arg <SECRET_NAME> help="Secret name to lease credentials for"
+    }
+    cmd list help="List tracked leases" {
+        flag --active help="Show only active (non-expired, non-revoked) leases"
+        flag --expired help="Show only expired leases"
+    }
+    cmd revoke help="Revoke a lease by ID" {
+        arg <LEASE_ID> help="Lease ID to revoke"
+    }
+}
 cmd list help="List all secrets" {
     alias ls secrets
     flag "-f --full" help="Show full provider keys without truncation"
@@ -111,7 +135,7 @@ cmd provider help="Manage providers (defaults to list)" {
         }
         arg <PROVIDER> help="Provider name"
         arg <PROVIDER_TYPE> help="Provider type" {
-            choices "1password" age aws aws-kms aws-ps azure-kms azure-sm gcp gcp-kms bitwarden bitwarden-sm infisical keepass keychain password-store passwordstate plain proton-pass vault
+            choices "1password" age aws aws-kms aws-ps aws-sts azure-kms azure-sm gcp gcp-kms bitwarden bitwarden-sm infisical keepass keychain password-store passwordstate plain proton-pass vault
         }
     }
     cmd list help="List available providers" {
