@@ -111,6 +111,12 @@ impl AddCommand {
                 prefix: OptionStringOrSecretRef::literal("/myapp/prod/"),
                 auth_command: None,
             },
+            ProviderType::AwsSts => crate::config::ProviderConfig::AwsSts {
+                region: StringOrSecretRef::from("us-east-1"),
+                profile: OptionStringOrSecretRef::none(),
+                role_arn: OptionStringOrSecretRef::literal("arn:aws:iam::123456789012:role/MyRole"),
+                auth_command: None,
+            },
             ProviderType::AzureKms => crate::config::ProviderConfig::AzureKms {
                 vault_url: StringOrSecretRef::from("https://my-vault.vault.azure.net/"),
                 key_name: StringOrSecretRef::from("my-key"),

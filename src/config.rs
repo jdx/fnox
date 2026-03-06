@@ -127,6 +127,14 @@ pub struct SecretConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sync: Option<SyncConfig>,
 
+    /// Use credential leasing for this secret (experimental)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lease: Option<bool>,
+
+    /// Duration for credential leases (e.g., "15m", "1h")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lease_duration: Option<String>,
+
     /// Path to the config file where this secret was defined (not serialized)
     #[serde(skip)]
     pub source_path: Option<PathBuf>,
@@ -1210,6 +1218,8 @@ impl SecretConfig {
             as_file: false,
             json_path: None,
             sync: None,
+            lease: None,
+            lease_duration: None,
             source_path: None,
         }
     }

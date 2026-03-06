@@ -44,6 +44,13 @@ pub static FNOX_PROFILE: LazyLock<Option<String>> = LazyLock::new(|| {
 // Age encryption key configuration
 pub static FNOX_AGE_KEY: LazyLock<Option<String>> = LazyLock::new(|| var("FNOX_AGE_KEY").ok());
 
+// Experimental features flag
+pub static FNOX_EXPERIMENTAL: LazyLock<Option<bool>> = LazyLock::new(|| {
+    var("FNOX_EXPERIMENTAL")
+        .ok()
+        .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
+});
+
 // Auth prompt configuration (defaults to true if not set)
 pub static FNOX_PROMPT_AUTH: LazyLock<Option<bool>> = LazyLock::new(|| {
     var("FNOX_PROMPT_AUTH")

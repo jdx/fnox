@@ -68,6 +68,7 @@ aws-config = { version = "1", features = ["sso", "credentials-process", "credent
 aws-sdk-kms = { version = "1" }
 aws-sdk-secretsmanager = { version = "1" }
 aws-sdk-ssm = { version = "1" }
+aws-sdk-sts = { version = "1" }
 azure_core = { version = "0.30" }
 azure_identity = { version = "0.30" }
 azure_security_keyvault_keys = { version = "0.9" }

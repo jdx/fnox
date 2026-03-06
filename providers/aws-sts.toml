@@ -1,0 +1,30 @@
+# AWS STS AssumeRole provider - ephemeral credential leasing
+display_name = "AWS STS (AssumeRole)"
+serde_rename = "aws-sts"
+rust_variant = "AwsSts"
+category = "CloudSecretsManager"
+description = "AWS STS AssumeRole for short-lived credentials"
+default_name = "sts"
+auth_command = "aws sso login"
+setup_instructions = """
+Creates short-lived AWS credentials via STS AssumeRole.
+Requires an IAM role ARN and valid AWS credentials for the source identity.
+Supports credential leasing for AI tool sessions."""
+
+[fields.region]
+type = "required"
+placeholder = "us-east-1"
+label = "AWS Region:"
+wizard = true
+
+[fields.profile]
+type = "optional"
+placeholder = "my-aws-profile"
+label = "AWS profile (optional):"
+wizard = true
+
+[fields.role_arn]
+type = "optional"
+placeholder = "arn:aws:iam::123456789012:role/AIToolRole"
+label = "Default IAM Role ARN (optional):"
+wizard = true

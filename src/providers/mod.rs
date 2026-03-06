@@ -1,12 +1,14 @@
 use crate::error::Result;
 use async_trait::async_trait;
 use std::collections::HashMap;
+use std::time::Duration;
 
 // Provider implementation modules
 pub mod age;
 pub mod aws_kms;
 pub mod aws_ps;
 pub mod aws_sm;
+pub mod aws_sts;
 pub mod azure_kms;
 pub mod azure_sm;
 pub mod bitwarden;
@@ -39,6 +41,53 @@ pub enum ProviderCapability {
     RemoteStorage,
     /// Provider fetches values from a remote source (like 1Password, read-only)
     RemoteRead,
+    /// Provider can vend short-lived credential leases (experimental)
+    Leasing,
+}
+
+/// A credential lease with metadata for tracking and revocation
+#[derive(Debug, Clone)]
+pub struct Lease {
+    /// The credentials (provider-specific format, e.g. AWS_ACCESS_KEY_ID -> value)
+    pub credentials: HashMap<String, String>,
+    /// When this lease expires (None = no automatic expiry)
+    pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Lease ID for tracking/revocation
+    pub lease_id: String,
+    /// Human-readable description
+    pub description: String,
+}
+
+/// A field that the lease provider needs to prompt for when master credentials aren't available
+#[derive(Debug, Clone)]
+pub struct CredentialPrompt {
+    /// Environment variable or field name (e.g., "AWS_ACCESS_KEY_ID")
+    pub name: String,
+    /// Human-readable label for the prompt (e.g., "AWS Access Key ID")
+    pub label: String,
+    /// Whether to mask input (for secret values)
+    pub secret: bool,
+}
+
+/// Provider capability for vending short-lived credentials (experimental)
+#[async_trait]
+pub trait LeaseProvider: Provider {
+    /// Create a short-lived credential from the master credential
+    async fn create_lease(&self, value: &str, duration: Duration, label: &str) -> Result<Lease>;
+
+    /// Revoke a previously issued lease (for cleanup)
+    async fn revoke_lease(&self, _lease_id: &str) -> Result<()> {
+        // Default: no-op (for providers with native TTL)
+        Ok(())
+    }
+
+    /// Maximum allowed lease duration
+    fn max_lease_duration(&self) -> Duration;
+
+    /// Fields to prompt for when master credentials aren't available
+    fn credential_prompts(&self) -> Vec<CredentialPrompt> {
+        vec![] // Default: no prompting, just fail
+    }
 }
 
 /// Category for grouping providers in the wizard
@@ -133,9 +182,9 @@ mod generated {
     pub(super) mod providers_instantiate {
         // Need to import provider modules for instantiation
         use super::super::{
-            age, aws_kms, aws_ps, aws_sm, azure_kms, azure_sm, bitwarden, bitwarden_sm, gcp_kms,
-            gcp_sm, infisical, keepass, keychain, onepassword, password_store, passwordstate,
-            plain, proton_pass, vault,
+            age, aws_kms, aws_ps, aws_sm, aws_sts, azure_kms, azure_sm, bitwarden, bitwarden_sm,
+            gcp_kms, gcp_sm, infisical, keepass, keychain, onepassword, password_store,
+            passwordstate, plain, proton_pass, vault,
         };
         include!(concat!(
             env!("OUT_DIR"),
@@ -224,6 +273,12 @@ pub trait Provider: Send + Sync {
     async fn test_connection(&self) -> Result<()> {
         // Default implementation does a basic check
         Ok(())
+    }
+
+    /// Downcast to LeaseProvider if this provider supports leasing.
+    /// Override this in providers that implement LeaseProvider.
+    fn as_lease_provider(&self) -> Option<&dyn LeaseProvider> {
+        None
     }
 }
 

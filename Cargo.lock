@@ -2047,6 +2047,7 @@ dependencies = [
  "aws-sdk-kms",
  "aws-sdk-secretsmanager",
  "aws-sdk-ssm",
+ "aws-sdk-sts",
  "azure_core",
  "azure_identity",
  "azure_security_keyvault_keys",

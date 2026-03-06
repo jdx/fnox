@@ -19,6 +19,7 @@ pub mod get;
 pub mod hook_env;
 pub mod import;
 pub mod init;
+pub mod lease;
 pub mod list;
 pub mod profiles;
 pub mod provider;
@@ -115,6 +116,9 @@ pub enum Commands {
     /// Initialize a new fnox configuration file
     Init(init::InitCommand),
 
+    /// Manage ephemeral credential leases (experimental)
+    Lease(lease::LeaseCommand),
+
     /// List all secrets
     List(list::ListCommand),
 
@@ -181,6 +185,7 @@ impl Commands {
             Commands::Export(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Get(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Import(cmd) => cmd.run(cli, self.load_config(cli)?).await,
+            Commands::Lease(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::List(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Profiles(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Provider(cmd) => cmd.run(cli, self.load_config(cli)?).await,

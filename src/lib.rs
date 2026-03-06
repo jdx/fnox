@@ -6,6 +6,7 @@ pub mod config;
 pub mod env;
 pub mod error;
 pub mod hook_env;
+pub mod lease;
 pub mod providers;
 pub mod secret_resolver;
 pub mod settings;

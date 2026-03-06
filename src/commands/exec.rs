@@ -1,7 +1,11 @@
 use crate::error::{FnoxError, Result};
+use crate::lease::{self, LeaseLedger, LeaseRecord};
+use crate::providers::{ProviderCapability, get_provider_resolved};
 use crate::secret_resolver::resolve_secrets_batch;
+use crate::settings::Settings;
 use crate::temp_file_secrets::create_ephemeral_secret_file;
 use crate::{commands::Cli, config::Config};
+use chrono::Utc;
 use clap::{Args, ValueHint};
 use std::process::Command;
 use tempfile::NamedTempFile;
@@ -31,7 +35,30 @@ impl ExecCommand {
             cmd.args(&self.command[1..]);
         }
 
-        // Resolve secrets using batch resolution for better performance
+        // Handle lease-enabled secrets first (experimental)
+        let mut lease_keys: Vec<String> = Vec::new();
+        for (key, secret_config) in &profile_secrets {
+            if secret_config.lease == Some(true) {
+                if let Err(e) = Settings::ensure_experimental("lease in exec") {
+                    tracing::warn!("Skipping lease for '{}': {}", key, e);
+                    continue;
+                }
+                lease_keys.push(key.clone());
+            }
+        }
+
+        // Resolve leased secrets
+        for key in &lease_keys {
+            let secret_config = &profile_secrets[key];
+            if let Some(creds) = resolve_lease_secret(&config, &profile, key, secret_config).await?
+            {
+                for (cred_key, cred_value) in creds {
+                    cmd.env(cred_key, cred_value);
+                }
+            }
+        }
+
+        // Resolve remaining (non-leased) secrets using batch resolution
         let resolved_secrets = resolve_secrets_batch(&config, &profile, &profile_secrets).await?;
 
         // Keep temp files alive for the duration of the command
@@ -39,6 +66,10 @@ impl ExecCommand {
 
         // Add resolved secrets as environment variables
         for (key, value) in resolved_secrets {
+            // Skip secrets that were resolved via leasing
+            if lease_keys.contains(&key) {
+                continue;
+            }
             if let Some(value) = value {
                 // Check if this secret should be written to a file
                 if let Some(secret_config) = profile_secrets.get(&key) {
@@ -87,4 +118,90 @@ impl ExecCommand {
         // Temp files are automatically deleted when _temp_files goes out of scope
         Ok(())
     }
+}
+
+/// Resolve a secret via credential leasing instead of direct retrieval
+async fn resolve_lease_secret(
+    config: &Config,
+    profile: &str,
+    key: &str,
+    secret_config: &crate::config::SecretConfig,
+) -> Result<Option<std::collections::HashMap<String, String>>> {
+    let provider_name = secret_config
+        .provider()
+        .map(|s| s.to_string())
+        .or_else(|| config.get_default_provider(profile).ok().flatten())
+        .ok_or_else(|| {
+            FnoxError::Config(format!(
+                "Secret '{}' has no provider configured for leasing",
+                key
+            ))
+        })?;
+
+    let providers = config.get_providers(profile);
+    let provider_config =
+        providers
+            .get(&provider_name)
+            .ok_or_else(|| FnoxError::ProviderNotConfigured {
+                provider: provider_name.clone(),
+                profile: profile.to_string(),
+                config_path: None,
+                suggestion: None,
+            })?;
+
+    let provider = get_provider_resolved(config, profile, &provider_name, provider_config).await?;
+    if !provider
+        .capabilities()
+        .contains(&ProviderCapability::Leasing)
+    {
+        tracing::warn!(
+            "Provider '{}' for secret '{}' does not support leasing, falling back to regular resolution",
+            provider_name,
+            key
+        );
+        return Ok(None);
+    }
+
+    let lease_provider = provider.as_ref().as_lease_provider().ok_or_else(|| {
+        FnoxError::Provider(format!(
+            "Provider '{}' advertises leasing but does not implement LeaseProvider",
+            provider_name
+        ))
+    })?;
+
+    let duration_str = secret_config.lease_duration.as_deref().unwrap_or("15m");
+    let duration = lease::parse_duration(duration_str)?;
+
+    let value = secret_config.value().ok_or_else(|| {
+        FnoxError::Config(format!(
+            "Secret '{}' has no value configured for leasing",
+            key
+        ))
+    })?;
+
+    let result = lease_provider
+        .create_lease(value, duration, &format!("fnox-exec-{}", key))
+        .await?;
+
+    // Record in ledger
+    let mut ledger = LeaseLedger::load()?;
+    ledger.add(LeaseRecord {
+        lease_id: result.lease_id.clone(),
+        provider_name,
+        secret_name: key.to_string(),
+        label: format!("fnox-exec-{}", key),
+        created_at: Utc::now(),
+        expires_at: result.expires_at,
+        revoked: false,
+    });
+    ledger.save()?;
+
+    tracing::debug!(
+        "Created lease '{}' for secret '{}' (expires {:?})",
+        result.lease_id,
+        key,
+        result.expires_at
+    );
+
+    Ok(Some(result.credentials))
 }

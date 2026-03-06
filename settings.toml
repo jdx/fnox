@@ -122,6 +122,19 @@ examples = [
 ]
 since = "1.1.0"
 
+[experimental]
+type = "bool"
+default = "false"
+sources.env = ["FNOX_EXPERIMENTAL"]
+docs = """
+Enable experimental fnox features which are incomplete or unstable.
+Breaking changes to experimental features may occur in any release.
+
+Currently experimental features:
+- `fnox lease` - Ephemeral credential leasing for AI tool sessions
+"""
+since = "1.16.0"
+
 [if_missing_default]
 type = "option<string>"
 default = "None"
