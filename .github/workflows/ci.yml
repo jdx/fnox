@@ -114,9 +114,11 @@ jobs:
             localstack/localstack:latest
           # Wait for services to be ready
           sleep 5
-          echo "VAULT_ADDR=http://localhost:8200" >> "$GITHUB_ENV"
-          echo "VAULT_TOKEN=fnox-test-token" >> "$GITHUB_ENV"
-          echo "LOCALSTACK_ENDPOINT=http://localhost:4566" >> "$GITHUB_ENV"
+          {
+            echo "VAULT_ADDR=http://localhost:8200"
+            echo "VAULT_TOKEN=fnox-test-token"
+            echo "LOCALSTACK_ENDPOINT=http://localhost:4566"
+          } >> "$GITHUB_ENV"
       - name: Setup Bitwarden for tests
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |

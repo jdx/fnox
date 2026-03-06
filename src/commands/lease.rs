@@ -301,10 +301,27 @@ impl LeaseCleanupCommand {
         let mut cleaned = 0;
 
         for record in &expired {
-            if let Some(backend_config) = leases.get(&record.backend_name)
-                && let Ok(backend) = backend_config.create_backend()
-                && let Err(e) = backend.revoke_lease(&record.lease_id).await
-            {
+            let Some(backend_config) = leases.get(&record.backend_name) else {
+                tracing::warn!(
+                    "Lease backend '{}' not found for lease '{}', skipping",
+                    record.backend_name,
+                    record.lease_id
+                );
+                continue;
+            };
+            let backend = match backend_config.create_backend() {
+                Ok(b) => b,
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to create backend '{}' for lease '{}': {}",
+                        record.backend_name,
+                        record.lease_id,
+                        e
+                    );
+                    continue;
+                }
+            };
+            if let Err(e) = backend.revoke_lease(&record.lease_id).await {
                 tracing::warn!("Failed to revoke lease '{}': {}", record.lease_id, e);
                 continue;
             }
