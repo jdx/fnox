@@ -40,4 +40,4 @@ Only sync matching secrets (regex pattern)
 
 ### `--local-file`
 
-Write sync overrides to fnox.local.toml in config directory
+Write sync overrides to fnox.local.toml next to the config file
