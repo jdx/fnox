@@ -149,6 +149,14 @@ async fn resolve_lease_secret(
         .unwrap_or(lease::DEFAULT_LEASE_DURATION);
     let duration = lease::parse_duration(duration_str)?;
 
+    let max_duration = backend.max_lease_duration();
+    if duration > max_duration {
+        return Err(FnoxError::Config(format!(
+            "Lease duration '{}' for secret '{}' exceeds maximum {:?} for backend '{}'",
+            duration_str, key, max_duration, backend_name
+        )));
+    }
+
     let value = secret_config.value().ok_or_else(|| {
         FnoxError::Config(format!(
             "Secret '{}' has no value configured for leasing",
