@@ -194,7 +194,11 @@ impl LeaseCreateCommand {
             }
             OutputFormat::Env => {
                 for (key, value) in &result.credentials {
-                    println!("export {}={}", key, shlex::try_quote(value).unwrap_or_default());
+                    println!(
+                        "export {}={}",
+                        key,
+                        shlex::try_quote(value).unwrap_or_default()
+                    );
                 }
             }
         }
@@ -353,4 +357,3 @@ fn format_expiry(expires_at: Option<chrono::DateTime<chrono::Utc>>) -> String {
         None => "never".to_string(),
     }
 }
-
