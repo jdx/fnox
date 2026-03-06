@@ -183,6 +183,7 @@ cmd sync help="Sync secrets from remote providers to a local encryption provider
     flag --filter help="Only sync matching secrets (regex pattern)" {
         arg <FILTER>
     }
+    flag --local-file help="Write sync overrides to fnox.local.toml in config directory"
     arg "[KEYS]…" help="Only sync these specific secret keys" required=#false var=#true
 }
 cmd tui help="Interactive TUI dashboard for managing secrets"

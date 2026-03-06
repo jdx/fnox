@@ -7,6 +7,7 @@ use console;
 use indexmap::IndexMap;
 use regex::Regex;
 use std::io;
+use std::path::PathBuf;
 
 /// Sync secrets from remote providers to a local encryption provider
 #[derive(Args)]
@@ -37,6 +38,10 @@ pub struct SyncCommand {
     /// Only sync matching secrets (regex pattern)
     #[arg(long)]
     filter: Option<String>,
+
+    /// Write sync overrides to fnox.local.toml next to the config file
+    #[arg(long, conflicts_with = "global")]
+    local_file: bool,
 }
 
 impl SyncCommand {
@@ -140,10 +145,16 @@ impl SyncCommand {
             let dry_run_label = console::style("[dry-run]").yellow().bold();
             let styled_profile = console::style(&profile).magenta();
             let styled_provider = console::style(&target_provider_name).green();
-            let global_suffix = if self.global { " (global)" } else { "" };
+            let destination_suffix = if self.local_file {
+                " (local-file)"
+            } else if self.global {
+                " (global)"
+            } else {
+                ""
+            };
 
             println!(
-                "{dry_run_label} Would sync {} secrets in profile {styled_profile} to provider {styled_provider}{global_suffix}:",
+                "{dry_run_label} Would sync {} secrets in profile {styled_profile} to provider {styled_provider}{destination_suffix}:",
                 secrets_to_sync.len()
             );
             for (key, secret_config) in &secrets_to_sync {
@@ -199,18 +210,28 @@ impl SyncCommand {
         let mut skipped_count = 0;
 
         // Determine target config file path
-        let target_path = if self.global {
-            let global_path = Config::global_config_path();
-            if let Some(parent) = global_path.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| FnoxError::CreateDirFailed {
-                    path: parent.to_path_buf(),
-                    source: e,
-                })?;
-            }
-            global_path
+        let target_path = if self.local_file {
+            let config_dir = cli
+                .config
+                .parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("."));
+            config_dir.join("fnox.local.toml")
+        } else if self.global {
+            Config::global_config_path()
         } else {
             cli.config.clone()
         };
+
+        if let Some(parent) = target_path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            std::fs::create_dir_all(parent).map_err(|e| FnoxError::CreateDirFailed {
+                path: parent.to_path_buf(),
+                source: e,
+            })?;
+        }
 
         for (key, plaintext) in &resolved {
             let Some(plaintext) = plaintext else {
@@ -249,10 +270,16 @@ impl SyncCommand {
         // Save to config
         Config::save_secrets_to_source(&synced_secrets, &profile, &target_path)?;
 
-        let global_suffix = if self.global { " (global)" } else { "" };
+        let destination_suffix = if self.local_file {
+            " (local-file)"
+        } else if self.global {
+            " (global)"
+        } else {
+            ""
+        };
         println!(
             "Synced {} secrets to provider '{}'{}",
-            synced_count, target_provider_name, global_suffix
+            synced_count, target_provider_name, destination_suffix
         );
         if skipped_count > 0 {
             println!("Skipped {} secrets (could not resolve)", skipped_count);
