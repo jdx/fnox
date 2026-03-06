@@ -1,6 +1,5 @@
 use crate::error::{FnoxError, Result};
 use crate::lease::{self, LeaseLedger, LeaseRecord};
-use crate::providers::{ProviderCapability, get_provider_resolved};
 use crate::secret_resolver::resolve_secrets_batch;
 use crate::settings::Settings;
 use crate::temp_file_secrets::create_ephemeral_secret_file;
@@ -38,7 +37,7 @@ impl ExecCommand {
         // Handle lease-enabled secrets first (experimental)
         let mut lease_keys: Vec<String> = Vec::new();
         for (key, secret_config) in &profile_secrets {
-            if secret_config.lease == Some(true) {
+            if secret_config.lease.is_some() {
                 if let Err(e) = Settings::ensure_experimental("lease in exec") {
                     tracing::warn!("Skipping lease for '{}': {}", key, e);
                     continue;
@@ -127,47 +126,20 @@ async fn resolve_lease_secret(
     key: &str,
     secret_config: &crate::config::SecretConfig,
 ) -> Result<Option<std::collections::HashMap<String, String>>> {
-    let provider_name = secret_config
-        .provider()
-        .map(|s| s.to_string())
-        .or_else(|| config.get_default_provider(profile).ok().flatten())
-        .ok_or_else(|| {
-            FnoxError::Config(format!(
-                "Secret '{}' has no provider configured for leasing",
-                key
-            ))
-        })?;
+    let backend_name = match secret_config.lease.as_deref() {
+        Some(name) => name,
+        None => return Ok(None),
+    };
 
-    let providers = config.get_providers(profile);
-    let provider_config =
-        providers
-            .get(&provider_name)
-            .ok_or_else(|| FnoxError::ProviderNotConfigured {
-                provider: provider_name.clone(),
-                profile: profile.to_string(),
-                config_path: None,
-                suggestion: None,
-            })?;
-
-    let provider = get_provider_resolved(config, profile, &provider_name, provider_config).await?;
-    if !provider
-        .capabilities()
-        .contains(&ProviderCapability::Leasing)
-    {
-        tracing::warn!(
-            "Provider '{}' for secret '{}' does not support leasing, falling back to regular resolution",
-            provider_name,
-            key
-        );
-        return Ok(None);
-    }
-
-    let lease_provider = provider.as_ref().as_lease_provider().ok_or_else(|| {
-        FnoxError::Provider(format!(
-            "Provider '{}' advertises leasing but does not implement LeaseProvider",
-            provider_name
+    let leases = config.get_leases(profile);
+    let backend_config = leases.get(backend_name).ok_or_else(|| {
+        FnoxError::Config(format!(
+            "Lease backend '{}' for secret '{}' not found. Define it in [leases.{}] in fnox.toml.",
+            backend_name, key, backend_name
         ))
     })?;
+
+    let backend = backend_config.create_backend()?;
 
     let duration_str = secret_config.lease_duration.as_deref().unwrap_or("15m");
     let duration = lease::parse_duration(duration_str)?;
@@ -179,7 +151,7 @@ async fn resolve_lease_secret(
         ))
     })?;
 
-    let result = lease_provider
+    let result = backend
         .create_lease(value, duration, &format!("fnox-exec-{}", key))
         .await?;
 
@@ -187,7 +159,7 @@ async fn resolve_lease_secret(
     let mut ledger = LeaseLedger::load()?;
     ledger.add(LeaseRecord {
         lease_id: result.lease_id.clone(),
-        provider_name,
+        backend_name: backend_name.to_string(),
         secret_name: key.to_string(),
         label: format!("fnox-exec-{}", key),
         created_at: Utc::now(),

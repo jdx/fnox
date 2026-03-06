@@ -43,6 +43,10 @@ pub struct Config {
     #[serde(default, skip_serializing_if = "is_false")]
     pub root: bool,
 
+    /// Lease backend configurations (for default profile)
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub leases: IndexMap<String, crate::lease_backends::LeaseBackendConfig>,
+
     /// Provider configurations (for default profile)
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub providers: IndexMap<String, ProviderConfig>,
@@ -127,9 +131,9 @@ pub struct SecretConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sync: Option<SyncConfig>,
 
-    /// Use credential leasing for this secret (experimental)
+    /// Lease backend name for credential leasing (experimental)
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub lease: Option<bool>,
+    pub lease: Option<String>,
 
     /// Duration for credential leases (e.g., "15m", "1h")
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -144,6 +148,10 @@ pub struct SecretConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProfileConfig {
+    /// Lease backend configurations for this profile
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub leases: IndexMap<String, crate::lease_backends::LeaseBackendConfig>,
+
     /// Provider configurations for this profile
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub providers: IndexMap<String, ProviderConfig>,
@@ -399,6 +407,11 @@ impl Config {
             merged.default_provider_source = overlay.default_provider_source;
         }
 
+        // Merge lease backends (overlay takes precedence)
+        for (name, lease) in overlay.leases {
+            merged.leases.insert(name, lease);
+        }
+
         // Merge providers (overlay takes precedence)
         for (name, provider) in overlay.providers {
             merged.providers.insert(name, provider);
@@ -423,6 +436,9 @@ impl Config {
         for (name, profile) in overlay.profiles {
             if let Some(existing_profile) = merged.profiles.get_mut(&name) {
                 // Merge existing profile
+                for (lease_name, lease) in profile.leases {
+                    existing_profile.leases.insert(lease_name, lease);
+                }
                 for (provider_name, provider) in profile.providers {
                     existing_profile.providers.insert(provider_name, provider);
                 }
@@ -755,6 +771,7 @@ impl Config {
         Self {
             import: Vec::new(),
             root: false,
+            leases: IndexMap::new(),
             providers: IndexMap::new(),
             default_provider: None,
             secrets: IndexMap::new(),
@@ -842,6 +859,22 @@ impl Config {
         } else {
             self.get_profile_secrets_mut(profile)
         }
+    }
+
+    /// Get effective lease backends for a profile
+    pub fn get_leases(
+        &self,
+        profile: &str,
+    ) -> IndexMap<String, crate::lease_backends::LeaseBackendConfig> {
+        let mut leases = self.leases.clone();
+
+        if profile != "default"
+            && let Some(profile_config) = self.profiles.get(profile)
+        {
+            leases.extend(profile_config.leases.clone());
+        }
+
+        leases
     }
 
     /// Get effective providers for a profile
@@ -1304,6 +1337,7 @@ impl ProfileConfig {
     /// Create a new profile config
     pub fn new() -> Self {
         Self {
+            leases: IndexMap::new(),
             providers: IndexMap::new(),
             default_provider: None,
             secrets: IndexMap::new(),
@@ -1315,7 +1349,10 @@ impl ProfileConfig {
 
     /// Check if the profile is effectively empty (no serializable content)
     pub fn is_empty(&self) -> bool {
-        self.providers.is_empty() && self.secrets.is_empty() && self.default_provider().is_none()
+        self.leases.is_empty()
+            && self.providers.is_empty()
+            && self.secrets.is_empty()
+            && self.default_provider().is_none()
     }
 
     /// Get the default provider name, if set.

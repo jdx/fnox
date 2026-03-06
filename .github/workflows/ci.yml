@@ -107,10 +107,16 @@ jobs:
             hashicorp/vault:latest
           # Start Infisical (self-hosted with PostgreSQL and Redis)
           docker compose -f test/docker-compose.infisical-ci.yml up -d
+          # Start LocalStack for AWS STS lease tests
+          docker run -d --name localstack \
+            -p 4566:4566 \
+            -e SERVICES=sts,iam \
+            localstack/localstack:latest
           # Wait for services to be ready
           sleep 5
           echo "VAULT_ADDR=http://localhost:8200" >> "$GITHUB_ENV"
           echo "VAULT_TOKEN=fnox-test-token" >> "$GITHUB_ENV"
+          echo "LOCALSTACK_ENDPOINT=http://localhost:4566" >> "$GITHUB_ENV"
       - name: Setup Bitwarden for tests
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |

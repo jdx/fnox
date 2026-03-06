@@ -9,7 +9,7 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LeaseRecord {
     pub lease_id: String,
-    pub provider_name: String,
+    pub backend_name: String,
     pub secret_name: String,
     pub label: String,
     pub created_at: DateTime<Utc>,

@@ -8,6 +8,7 @@ mod env;
 mod error;
 mod hook_env;
 mod lease;
+mod lease_backends;
 mod providers;
 mod secret_resolver;
 mod settings;

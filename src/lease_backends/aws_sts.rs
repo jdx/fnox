@@ -1,29 +1,32 @@
 use crate::error::{FnoxError, Result};
-use crate::providers::{CredentialPrompt, Lease, LeaseProvider, ProviderCapability};
+use crate::lease_backends::{CredentialPrompt, Lease, LeaseBackend};
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
 use aws_sdk_sts::Client;
 use std::collections::HashMap;
 use std::time::Duration;
 
-pub fn env_dependencies() -> &'static [&'static str] {
-    &[]
-}
-
 const URL: &str = "https://fnox.jdx.dev/providers/aws-sts";
 
-pub struct AwsStsProvider {
+pub struct AwsStsBackend {
     region: String,
     profile: Option<String>,
     role_arn: Option<String>,
+    endpoint: Option<String>,
 }
 
-impl AwsStsProvider {
-    pub fn new(region: String, profile: Option<String>, role_arn: Option<String>) -> Self {
+impl AwsStsBackend {
+    pub fn new(
+        region: String,
+        profile: Option<String>,
+        role_arn: Option<String>,
+        endpoint: Option<String>,
+    ) -> Self {
         Self {
             region,
             profile,
             role_arn,
+            endpoint,
         }
     }
 
@@ -36,7 +39,13 @@ impl AwsStsProvider {
         }
 
         let config = builder.load().await;
-        Ok(Client::new(&config))
+
+        let mut sts_config_builder = aws_sdk_sts::config::Builder::from(&config);
+        if let Some(endpoint) = &self.endpoint {
+            sts_config_builder = sts_config_builder.endpoint_url(endpoint);
+        }
+
+        Ok(Client::from_conf(sts_config_builder.build()))
     }
 
     fn resolve_role_arn(&self, value: &str) -> String {
@@ -52,49 +61,7 @@ impl AwsStsProvider {
 }
 
 #[async_trait]
-impl crate::providers::Provider for AwsStsProvider {
-    fn capabilities(&self) -> Vec<ProviderCapability> {
-        vec![ProviderCapability::Leasing]
-    }
-
-    async fn get_secret(&self, value: &str) -> Result<String> {
-        // STS provider doesn't store secrets - it creates leases.
-        // get_secret creates a short-lived credential with default duration.
-        let lease = self
-            .create_lease(value, Duration::from_secs(900), "fnox-get")
-            .await?;
-        // Return the session token as the "secret" for backward compatibility
-        lease
-            .credentials
-            .get("AWS_SESSION_TOKEN")
-            .cloned()
-            .ok_or_else(|| {
-                FnoxError::Provider("AWS STS AssumeRole did not return a session token".to_string())
-            })
-    }
-
-    async fn test_connection(&self) -> Result<()> {
-        let client = self.create_client().await?;
-        client
-            .get_caller_identity()
-            .send()
-            .await
-            .map_err(|e| FnoxError::ProviderApiError {
-                provider: "AWS STS".to_string(),
-                details: e.to_string(),
-                hint: "Check AWS credentials and permissions".to_string(),
-                url: URL.to_string(),
-            })?;
-        Ok(())
-    }
-
-    fn as_lease_provider(&self) -> Option<&dyn LeaseProvider> {
-        Some(self)
-    }
-}
-
-#[async_trait]
-impl LeaseProvider for AwsStsProvider {
+impl LeaseBackend for AwsStsBackend {
     async fn create_lease(&self, value: &str, duration: Duration, label: &str) -> Result<Lease> {
         let client = self.create_client().await?;
         let role_arn = self.resolve_role_arn(value);

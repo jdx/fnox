@@ -2,7 +2,6 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
 use crate::lease::{self, LeaseLedger, LeaseRecord};
-use crate::providers::{LeaseProvider, get_provider_resolved};
 use crate::settings::Settings;
 use chrono::Utc;
 use clap::{Args, Subcommand, ValueEnum};
@@ -102,57 +101,30 @@ impl LeaseCreateCommand {
                     suggestion: None,
                 })?;
 
-        // Resolve the provider
-        let provider_name = secret_config
-            .provider()
-            .map(|s| s.to_string())
-            .or_else(|| config.get_default_provider(&profile).ok().flatten())
-            .ok_or_else(|| {
-                FnoxError::Config(format!(
-                    "Secret '{}' has no provider configured",
-                    self.secret_name
-                ))
-            })?;
+        // Resolve the lease backend
+        let backend_name = secret_config.lease.as_deref().ok_or_else(|| {
+            FnoxError::Config(format!(
+                "Secret '{}' has no lease backend configured. Set `lease = \"<backend_name>\"` in the secret config.",
+                self.secret_name
+            ))
+        })?;
 
-        let providers = config.get_providers(&profile);
-        let provider_config =
-            providers
-                .get(&provider_name)
-                .ok_or_else(|| FnoxError::ProviderNotConfigured {
-                    provider: provider_name.clone(),
-                    profile: profile.clone(),
-                    config_path: None,
-                    suggestion: None,
-                })?;
+        let leases = config.get_leases(&profile);
+        let backend_config = leases.get(backend_name).ok_or_else(|| {
+            FnoxError::Config(format!(
+                "Lease backend '{}' not found. Define it in [leases.{}] in fnox.toml.",
+                backend_name, backend_name
+            ))
+        })?;
 
-        // Check if provider supports leasing
-        let provider =
-            get_provider_resolved(&config, &profile, &provider_name, provider_config).await?;
-        if !provider
-            .capabilities()
-            .contains(&crate::providers::ProviderCapability::Leasing)
-        {
-            return Err(FnoxError::Provider(format!(
-                "Provider '{}' does not support credential leasing",
-                provider_name
-            )));
-        }
-
-        // Downcast to LeaseProvider
-        let lease_provider: &dyn LeaseProvider =
-            provider.as_ref().as_lease_provider().ok_or_else(|| {
-                FnoxError::Provider(format!(
-                    "Provider '{}' advertises leasing but does not implement LeaseProvider",
-                    provider_name
-                ))
-            })?;
+        let backend = backend_config.create_backend()?;
 
         // Check duration against max
-        let max_duration = lease_provider.max_lease_duration();
+        let max_duration = backend.max_lease_duration();
         if duration > max_duration {
             return Err(FnoxError::Config(format!(
-                "Requested duration {:?} exceeds maximum {:?} for provider '{}'",
-                duration, max_duration, provider_name
+                "Requested duration {:?} exceeds maximum {:?} for lease backend '{}'",
+                duration, max_duration, backend_name
             )));
         }
 
@@ -164,15 +136,13 @@ impl LeaseCreateCommand {
         })?;
 
         // Create the lease
-        let result = lease_provider
-            .create_lease(value, duration, &self.label)
-            .await?;
+        let result = backend.create_lease(value, duration, &self.label).await?;
 
         // Record in ledger
         let mut ledger = LeaseLedger::load()?;
         ledger.add(LeaseRecord {
             lease_id: result.lease_id.clone(),
-            provider_name: provider_name.clone(),
+            backend_name: backend_name.to_string(),
             secret_name: self.secret_name.clone(),
             label: self.label.clone(),
             created_at: Utc::now(),
@@ -252,7 +222,7 @@ impl LeaseListCommand {
 
         println!(
             "{:<20} {:<15} {:<20} {:<15} {:<8}",
-            "LEASE ID", "PROVIDER", "SECRET", "EXPIRES", "STATUS"
+            "LEASE ID", "BACKEND", "SECRET", "EXPIRES", "STATUS"
         );
         for record in records {
             let status = if record.revoked {
@@ -273,7 +243,7 @@ impl LeaseListCommand {
             };
             println!(
                 "{:<20} {:<15} {:<20} {:<15} {:<8}",
-                id_short, record.provider_name, record.secret_name, expires, status
+                id_short, record.backend_name, record.secret_name, expires, status
             );
         }
 
@@ -294,16 +264,14 @@ impl LeaseRevokeCommand {
             return Ok(());
         }
 
-        let provider_name = record.provider_name.clone();
+        let backend_name = record.backend_name.clone();
         let profile = Config::get_profile(cli.profile.as_deref());
-        let providers = config.get_providers(&profile);
+        let leases = config.get_leases(&profile);
 
-        if let Some(provider_config) = providers.get(&provider_name) {
-            let provider =
-                get_provider_resolved(&config, &profile, &provider_name, provider_config).await?;
-            if let Some(lease_provider) = provider.as_ref().as_lease_provider() {
-                lease_provider.revoke_lease(&self.lease_id).await?;
-            }
+        if let Some(backend_config) = leases.get(&backend_name)
+            && let Ok(backend) = backend_config.create_backend()
+        {
+            backend.revoke_lease(&self.lease_id).await?;
         }
 
         ledger.mark_revoked(&self.lease_id);
@@ -329,25 +297,16 @@ impl LeaseCleanupCommand {
         }
 
         let profile = Config::get_profile(cli.profile.as_deref());
-        let providers = config.get_providers(&profile);
+        let leases = config.get_leases(&profile);
         let mut cleaned = 0;
 
         for record in &expired {
-            if let Some(provider_config) = providers.get(&record.provider_name) {
-                let provider = get_provider_resolved(
-                    &config,
-                    &profile,
-                    &record.provider_name,
-                    provider_config,
-                )
-                .await;
-                if let Ok(provider) = provider
-                    && let Some(lease_provider) = provider.as_ref().as_lease_provider()
-                    && let Err(e) = lease_provider.revoke_lease(&record.lease_id).await
-                {
-                    tracing::warn!("Failed to revoke lease '{}': {}", record.lease_id, e);
-                    continue;
-                }
+            if let Some(backend_config) = leases.get(&record.backend_name)
+                && let Ok(backend) = backend_config.create_backend()
+                && let Err(e) = backend.revoke_lease(&record.lease_id).await
+            {
+                tracing::warn!("Failed to revoke lease '{}': {}", record.lease_id, e);
+                continue;
             }
             ledger.mark_revoked(&record.lease_id);
             cleaned += 1;
