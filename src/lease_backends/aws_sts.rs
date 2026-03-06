@@ -1,5 +1,5 @@
 use crate::error::{FnoxError, Result};
-use crate::lease_backends::{CredentialPrompt, Lease, LeaseBackend};
+use crate::lease_backends::{Lease, LeaseBackend};
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
 use aws_sdk_sts::Client;
@@ -127,7 +127,6 @@ impl LeaseBackend for AwsStsBackend {
             credentials: creds,
             expires_at,
             lease_id,
-            description: format!("AWS STS AssumeRole: {}", role_arn),
         })
     }
 
@@ -139,21 +138,6 @@ impl LeaseBackend for AwsStsBackend {
     fn max_lease_duration(&self) -> Duration {
         // AWS STS default max is 12 hours (can be configured per-role up to 12h)
         Duration::from_secs(12 * 3600)
-    }
-
-    fn credential_prompts(&self) -> Vec<CredentialPrompt> {
-        vec![
-            CredentialPrompt {
-                name: "AWS_ACCESS_KEY_ID".to_string(),
-                label: "AWS Access Key ID".to_string(),
-                secret: false,
-            },
-            CredentialPrompt {
-                name: "AWS_SECRET_ACCESS_KEY".to_string(),
-                label: "AWS Secret Access Key".to_string(),
-                secret: true,
-            },
-        ]
     }
 }
 

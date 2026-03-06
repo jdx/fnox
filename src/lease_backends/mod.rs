@@ -16,19 +16,6 @@ pub struct Lease {
     pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
     /// Lease ID for tracking/revocation
     pub lease_id: String,
-    /// Human-readable description
-    pub description: String,
-}
-
-/// A field that the lease backend needs to prompt for when master credentials aren't available
-#[derive(Debug, Clone)]
-pub struct CredentialPrompt {
-    /// Environment variable or field name (e.g., "AWS_ACCESS_KEY_ID")
-    pub name: String,
-    /// Human-readable label for the prompt (e.g., "AWS Access Key ID")
-    pub label: String,
-    /// Whether to mask input (for secret values)
-    pub secret: bool,
 }
 
 /// Lease backend capability for vending short-lived credentials (experimental)
@@ -46,10 +33,6 @@ pub trait LeaseBackend: Send + Sync {
     /// Maximum allowed lease duration
     fn max_lease_duration(&self) -> Duration;
 
-    /// Fields to prompt for when master credentials aren't available
-    fn credential_prompts(&self) -> Vec<CredentialPrompt> {
-        vec![] // Default: no prompting, just fail
-    }
 }
 
 /// Configuration for a lease backend (manually defined, no codegen)
