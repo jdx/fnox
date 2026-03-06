@@ -194,7 +194,7 @@ impl LeaseCreateCommand {
             }
             OutputFormat::Env => {
                 for (key, value) in &result.credentials {
-                    println!("export {}={}", key, shell_escape(value));
+                    println!("export {}={}", key, shlex::try_quote(value).unwrap_or_default());
                 }
             }
         }
@@ -354,10 +354,3 @@ fn format_expiry(expires_at: Option<chrono::DateTime<chrono::Utc>>) -> String {
     }
 }
 
-fn shell_escape(s: &str) -> String {
-    if s.contains('\'') {
-        format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
-    } else {
-        format!("'{}'", s)
-    }
-}

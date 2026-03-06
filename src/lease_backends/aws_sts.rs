@@ -147,7 +147,7 @@ fn sanitize_session_name(name: &str) -> String {
     let sanitized: String = name
         .chars()
         .map(|c| {
-            if c.is_alphanumeric() || "+=,.@-_".contains(c) {
+            if c.is_ascii_alphanumeric() || "+=,.@-_".contains(c) {
                 c
             } else {
                 '-'
@@ -155,6 +155,7 @@ fn sanitize_session_name(name: &str) -> String {
         })
         .collect();
 
+    // Safe to use byte indexing since all chars are ASCII after sanitization
     if sanitized.len() > 64 {
         sanitized[..64].to_string()
     } else if sanitized.len() < 2 {
