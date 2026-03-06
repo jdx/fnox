@@ -32,7 +32,6 @@ pub trait LeaseBackend: Send + Sync {
 
     /// Maximum allowed lease duration
     fn max_lease_duration(&self) -> Duration;
-
 }
 
 /// Configuration for a lease backend (manually defined, no codegen)
