@@ -38,7 +38,7 @@ pub struct LeaseCreateCommand {
     pub secret_name: String,
 
     /// Lease duration (e.g., "15m", "1h", "2h30m")
-    #[arg(short, long, default_value = "15m")]
+    #[arg(short, long, default_value = crate::lease::DEFAULT_LEASE_DURATION)]
     pub duration: String,
 
     /// Output format

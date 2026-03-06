@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+/// Default lease duration when none is specified
+pub const DEFAULT_LEASE_DURATION: &str = "15m";
+
 /// A record of an issued lease, stored in the lease ledger
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LeaseRecord {

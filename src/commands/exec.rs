@@ -58,17 +58,19 @@ impl ExecCommand {
         }
 
         // Resolve remaining (non-leased) secrets using batch resolution
-        let resolved_secrets = resolve_secrets_batch(&config, &profile, &profile_secrets).await?;
+        let non_lease_secrets: indexmap::IndexMap<_, _> = profile_secrets
+            .iter()
+            .filter(|(k, _)| !lease_keys.contains(k))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        let resolved_secrets =
+            resolve_secrets_batch(&config, &profile, &non_lease_secrets).await?;
 
         // Keep temp files alive for the duration of the command
         let mut _temp_files: Vec<NamedTempFile> = Vec::new();
 
         // Add resolved secrets as environment variables
         for (key, value) in resolved_secrets {
-            // Skip secrets that were resolved via leasing
-            if lease_keys.contains(&key) {
-                continue;
-            }
             if let Some(value) = value {
                 // Check if this secret should be written to a file
                 if let Some(secret_config) = profile_secrets.get(&key) {
@@ -141,7 +143,10 @@ async fn resolve_lease_secret(
 
     let backend = backend_config.create_backend()?;
 
-    let duration_str = secret_config.lease_duration.as_deref().unwrap_or("15m");
+    let duration_str = secret_config
+        .lease_duration
+        .as_deref()
+        .unwrap_or(lease::DEFAULT_LEASE_DURATION);
     let duration = lease::parse_duration(duration_str)?;
 
     let value = secret_config.value().ok_or_else(|| {
