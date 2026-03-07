@@ -108,7 +108,6 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::AwsSts { profile, .. } => {
                 // AWS SDK supports many auth methods; check the most common ones
                 let has_env = std::env::var("AWS_ACCESS_KEY_ID").is_ok()
-                    || std::env::var("AWS_SESSION_TOKEN").is_ok()
                     || std::env::var("AWS_PROFILE").is_ok();
                 let has_profile = profile.is_some();
                 let has_sso = std::env::var("AWS_SSO_SESSION").is_ok();
