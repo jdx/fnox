@@ -3,8 +3,8 @@ use crate::env;
 use crate::error::{FnoxError, Result};
 use crate::providers::{self, ProviderCapability};
 use chrono::{DateTime, Utc};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -24,7 +24,7 @@ pub struct LeaseRecord {
     pub expires_at: Option<DateTime<Utc>>,
     pub revoked: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cached_credentials: Option<HashMap<String, String>>,
+    pub cached_credentials: Option<IndexMap<String, String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub encryption_provider: Option<String>,
     /// Hash of the backend config at lease creation time, used to invalidate
@@ -317,9 +317,9 @@ pub async fn find_encryption_provider(config: &Config, profile: &str) -> Encrypt
 /// Encrypt credential values using an encryption provider
 pub async fn encrypt_credentials(
     provider: &dyn providers::Provider,
-    credentials: &HashMap<String, String>,
-) -> Result<HashMap<String, String>> {
-    let mut encrypted = HashMap::new();
+    credentials: &IndexMap<String, String>,
+) -> Result<IndexMap<String, String>> {
+    let mut encrypted = IndexMap::new();
     for (key, value) in credentials {
         let enc = provider.encrypt(value).await?;
         encrypted.insert(key.clone(), enc);
@@ -330,9 +330,9 @@ pub async fn encrypt_credentials(
 /// Decrypt cached credential values using an encryption provider
 pub async fn decrypt_credentials(
     provider: &dyn providers::Provider,
-    cached: &HashMap<String, String>,
-) -> Result<HashMap<String, String>> {
-    let mut decrypted = HashMap::new();
+    cached: &IndexMap<String, String>,
+) -> Result<IndexMap<String, String>> {
+    let mut decrypted = IndexMap::new();
     for (key, value) in cached {
         let dec = provider.get_secret(value).await?;
         decrypted.insert(key.clone(), dec);

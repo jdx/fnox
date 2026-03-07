@@ -81,6 +81,12 @@ With `env = false`, the master credentials are never injected into subprocess en
 
 The HMAC response is never stored on disk. It exists only in process memory after a YubiKey tap.
 
+## Important Notes
+
+::: warning Renaming providers invalidates cached credentials
+The provider name is used in key derivation (HKDF context). Renaming a provider (e.g., from `secure` to `my_yubikey`) will change the derived encryption key, making all previously encrypted secrets and cached lease credentials undecryptable. If you need to rename, re-encrypt all secrets after renaming.
+:::
+
 ## Requirements
 
 - A YubiKey with HMAC-SHA1 challenge-response configured on slot 1 or 2

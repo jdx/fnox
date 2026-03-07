@@ -2,7 +2,7 @@ use crate::env;
 use crate::error::{FnoxError, Result};
 use crate::lease_backends::{Lease, LeaseBackend};
 use async_trait::async_trait;
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::time::Duration;
 
 const URL: &str = "https://fnox.jdx.dev/leases/vault";
@@ -12,7 +12,7 @@ pub struct VaultBackend {
     token: String,
     secret_path: String,
     namespace: Option<String>,
-    env_map: HashMap<String, String>,
+    env_map: IndexMap<String, String>,
     method: String,
 }
 
@@ -22,7 +22,7 @@ impl VaultBackend {
         token: Option<String>,
         secret_path: String,
         namespace: Option<String>,
-        env_map: HashMap<String, String>,
+        env_map: IndexMap<String, String>,
         method: String,
     ) -> Result<Self> {
         let address = address
@@ -138,11 +138,26 @@ impl LeaseBackend for VaultBackend {
                 url: URL.to_string(),
             })?;
 
-        let mut credentials = HashMap::new();
+        let mut credentials = IndexMap::new();
         for (vault_key, env_var) in &self.env_map {
             if let Some(value) = data.get(vault_key).and_then(|v| v.as_str()) {
                 credentials.insert(env_var.clone(), value.to_string());
+            } else {
+                tracing::warn!(
+                    "Vault response missing key '{}' (from env_map); '{}' will not be set",
+                    vault_key,
+                    env_var
+                );
             }
+        }
+        if credentials.is_empty() && !self.env_map.is_empty() {
+            return Err(FnoxError::ProviderInvalidResponse {
+                provider: "Vault".to_string(),
+                details: "No configured env_map keys found in Vault response data".to_string(),
+                hint: "Check that env_map keys match the fields returned by the secret engine"
+                    .to_string(),
+                url: URL.to_string(),
+            });
         }
 
         let lease_id = resp["lease_id"]

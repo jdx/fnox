@@ -2,7 +2,7 @@ use crate::error::{FnoxError, Result};
 use crate::lease_backends::{Lease, LeaseBackend};
 use async_trait::async_trait;
 use azure_core::credentials::TokenCredential;
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -83,7 +83,7 @@ impl LeaseBackend for AzureTokenBackend {
                     None
                 });
 
-        let mut credentials = HashMap::new();
+        let mut credentials = IndexMap::new();
         credentials.insert(
             self.env_var.clone(),
             token_response.token.secret().to_string(),

@@ -80,6 +80,12 @@ region = "us-east-1"
 
 The HMAC response is never stored on disk. It exists only in process memory after a key touch.
 
+## Important Notes
+
+::: warning Renaming providers invalidates cached credentials
+The provider name is used in key derivation (HKDF context). Renaming a provider (e.g., from `secure` to `my_fido2`) will change the derived encryption key, making all previously encrypted secrets and cached lease credentials undecryptable. If you need to rename, re-encrypt all secrets after renaming.
+:::
+
 ## Requirements
 
 - A FIDO2-compatible security key with hmac-secret extension support

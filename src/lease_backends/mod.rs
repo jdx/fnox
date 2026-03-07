@@ -1,8 +1,8 @@
 use crate::error::Result;
 use async_trait::async_trait;
+use indexmap::IndexMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::time::Duration;
 
 pub mod aws_sts;
@@ -15,7 +15,7 @@ pub mod vault;
 #[derive(Debug, Clone)]
 pub struct Lease {
     /// The credentials (provider-specific format, e.g. AWS_ACCESS_KEY_ID -> value)
-    pub credentials: HashMap<String, String>,
+    pub credentials: IndexMap<String, String>,
     /// When this lease expires (None = no automatic expiry)
     pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
     /// Lease ID for tracking/revocation
@@ -82,7 +82,7 @@ pub enum LeaseBackendConfig {
         secret_path: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         namespace: Option<String>,
-        env_map: HashMap<String, String>,
+        env_map: IndexMap<String, String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         duration: Option<String>,
         /// HTTP method: "get" (default) or "post" (required for pki/issue and some engines)

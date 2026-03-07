@@ -3,7 +3,7 @@ use crate::lease_backends::{Lease, LeaseBackend};
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
 use aws_sdk_sts::Client;
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::time::Duration;
 
 const URL: &str = "https://fnox.jdx.dev/leases/aws-sts";
@@ -107,7 +107,7 @@ impl LeaseBackend for AwsStsBackend {
             })
         };
 
-        let mut creds = HashMap::new();
+        let mut creds = IndexMap::new();
         creds.insert("AWS_ACCESS_KEY_ID".to_string(), access_key);
         creds.insert("AWS_SECRET_ACCESS_KEY".to_string(), secret_key);
         creds.insert("AWS_SESSION_TOKEN".to_string(), session_token);

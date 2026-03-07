@@ -1,7 +1,7 @@
 use crate::error::{FnoxError, Result};
 use crate::lease_backends::{Lease, LeaseBackend};
 use async_trait::async_trait;
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::time::Duration;
 
 const URL: &str = "https://fnox.jdx.dev/leases/gcp-iam";
@@ -125,7 +125,7 @@ impl LeaseBackend for GcpIamBackend {
                 .map(|dt| dt.with_timezone(&chrono::Utc))
         });
 
-        let mut credentials = HashMap::new();
+        let mut credentials = IndexMap::new();
         credentials.insert("CLOUDSDK_AUTH_ACCESS_TOKEN".to_string(), access_token);
 
         let lease_id = format!(

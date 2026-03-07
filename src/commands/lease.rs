@@ -338,7 +338,12 @@ impl LeaseRevokeCommand {
         if let Some(backend_config) = leases.get(&backend_name) {
             match backend_config.create_backend() {
                 Ok(backend) => {
-                    backend.revoke_lease(&self.lease_id).await?;
+                    if let Err(e) = backend.revoke_lease(&self.lease_id).await {
+                        tracing::warn!("Backend revocation failed for '{}': {}", self.lease_id, e);
+                        eprintln!(
+                            "Warning: backend revocation failed; only the local ledger entry will be revoked."
+                        );
+                    }
                 }
                 Err(e) => {
                     tracing::warn!(

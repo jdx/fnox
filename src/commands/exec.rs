@@ -7,7 +7,8 @@ use crate::temp_file_secrets::create_ephemeral_secret_file;
 use crate::{commands::Cli, config::Config};
 use chrono::Utc;
 use clap::{Args, ValueHint};
-use std::collections::{HashMap, HashSet};
+use indexmap::IndexMap;
+use std::collections::HashSet;
 use std::process::Command;
 use tempfile::NamedTempFile;
 
@@ -182,7 +183,7 @@ async fn resolve_lease(
     profile: &str,
     project_dir: &std::path::Path,
     ledger: &mut LeaseLedger,
-) -> Result<HashMap<String, String>> {
+) -> Result<IndexMap<String, String>> {
     // Check for a reusable cached lease (config_hash ensures stale creds
     // are not returned after backend config changes like role ARN rotation)
     let config_hash = lease_config.config_hash();

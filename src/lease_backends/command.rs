@@ -1,7 +1,7 @@
 use crate::error::{FnoxError, Result};
 use crate::lease_backends::{Lease, LeaseBackend};
 use async_trait::async_trait;
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::time::Duration;
 use tokio::process::Command;
 
@@ -74,7 +74,7 @@ impl LeaseBackend for CommandBackend {
             }
         })?;
 
-        let mut credentials = HashMap::new();
+        let mut credentials = IndexMap::new();
         for (key, value) in creds_obj {
             if let Some(v) = value.as_str() {
                 credentials.insert(key.clone(), v.to_string());
