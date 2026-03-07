@@ -8,7 +8,6 @@
 setup() {
 	load 'test_helper/common_setup'
 	_common_setup
-	export FNOX_EXPERIMENTAL=true
 }
 
 teardown() {

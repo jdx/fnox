@@ -2,10 +2,6 @@
 
 Credential leases let you vend short-lived credentials from cloud providers like AWS, GCP, Azure, and HashiCorp Vault. Instead of storing long-lived access keys, fnox creates temporary credentials that expire automatically.
 
-::: warning Experimental
-Leases are an experimental feature. Enable them with `FNOX_EXPERIMENTAL=true`.
-:::
-
 ## Why Leases?
 
 Long-lived credentials are a security risk. If they leak, an attacker has access until someone rotates them. Leases flip this model: credentials are created on demand, last minutes to hours, and expire on their own.

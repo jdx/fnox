@@ -17,7 +17,6 @@
 setup() {
 	load 'test_helper/common_setup'
 	_common_setup
-	export FNOX_EXPERIMENTAL=true
 
 	# Determine if we're in CI with secrets access (not a forked PR)
 	local in_ci_with_secrets=false

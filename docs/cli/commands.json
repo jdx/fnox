@@ -661,7 +661,7 @@
         "mounts": [],
         "hide": false,
         "subcommand_required": true,
-        "help": "Manage ephemeral credential leases (experimental)",
+        "help": "Manage ephemeral credential leases",
         "name": "lease",
         "aliases": [],
         "hidden_aliases": [],

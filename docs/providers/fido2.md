@@ -2,10 +2,6 @@
 
 The `fido2` provider uses the FIDO2 hmac-secret extension to derive an AES-256-GCM encryption key from a hardware security key. Secrets are encrypted symmetrically — decryption requires the same physical FIDO2 key.
 
-::: warning Experimental
-This provider is experimental. Enable it with `FNOX_EXPERIMENTAL=true`.
-:::
-
 ## Why?
 
 The `fido2` provider ties encryption to a physical hardware device using the CTAP2 hmac-secret extension. Any FIDO2-compatible security key that supports hmac-secret can be used (YubiKey 5, SoloKeys, Nitrokey, etc.).

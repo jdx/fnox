@@ -2,12 +2,11 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
 use crate::lease::{self, LeaseLedger, LeaseRecord, TempEnvGuard};
-use crate::settings::Settings;
 use chrono::Utc;
 use clap::{Args, Subcommand, ValueEnum};
 
 #[derive(Debug, Args)]
-#[command(about = "Manage ephemeral credential leases (experimental)")]
+#[command(about = "Manage ephemeral credential leases")]
 pub struct LeaseCommand {
     #[command(subcommand)]
     pub subcommand: LeaseSubcommand,
@@ -76,8 +75,6 @@ pub struct LeaseCleanupCommand;
 
 impl LeaseCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
-        Settings::ensure_experimental("fnox lease")?;
-
         match &self.subcommand {
             LeaseSubcommand::Create(cmd) => cmd.run(cli, config).await,
             LeaseSubcommand::List(cmd) => cmd.run(cli, &config).await,

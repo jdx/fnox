@@ -209,17 +209,6 @@ impl Settings {
         serde_json::from_value(val).unwrap_or_else(|_| defaults.clone())
     }
 
-    /// Check that experimental features are enabled, returning a helpful error if not.
-    pub fn ensure_experimental(feature: &str) -> Result<()> {
-        let settings = Self::try_get()?;
-        if !settings.experimental {
-            return Err(miette::miette!(
-                "{feature} is experimental. Enable it with `FNOX_EXPERIMENTAL=true` or add `settings.experimental = true` to fnox.toml"
-            ));
-        }
-        Ok(())
-    }
-
     #[cfg(test)]
     pub fn reset_for_tests() {
         GLOBAL_SETTINGS.store(Arc::new(GeneratedSettings::default()));
@@ -238,7 +227,6 @@ mod tests {
         assert_eq!(settings.profile, "default");
         assert_eq!(settings.age_key_file, None);
         assert_eq!(settings.no_defaults, false);
-        assert_eq!(settings.experimental, false);
     }
 
     #[test]
@@ -250,7 +238,6 @@ mod tests {
             shell_integration_output: "normal".to_string(),
             if_missing: None,
             if_missing_default: None,
-            experimental: false,
             http_timeout: "30s".to_string(),
         };
 
@@ -284,7 +271,6 @@ mod tests {
             shell_integration_output: "normal".to_string(),
             if_missing: None,
             if_missing_default: None,
-            experimental: false,
             http_timeout: "30s".to_string(),
         };
 

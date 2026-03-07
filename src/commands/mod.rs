@@ -116,7 +116,7 @@ pub enum Commands {
     /// Initialize a new fnox configuration file
     Init(init::InitCommand),
 
-    /// Manage ephemeral credential leases (experimental)
+    /// Manage ephemeral credential leases
     Lease(lease::LeaseCommand),
 
     /// List all secrets

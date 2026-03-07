@@ -82,7 +82,6 @@ EOF
 
 @test "fnox lease create outputs credentials in json format" {
 	create_sts_config
-	export FNOX_EXPERIMENTAL=true
 
 	run "$FNOX_BIN" lease create test_sts --duration 15m --format json
 	assert_success
@@ -94,7 +93,6 @@ EOF
 
 @test "fnox lease create outputs credentials in env format" {
 	create_sts_config
-	export FNOX_EXPERIMENTAL=true
 
 	run "$FNOX_BIN" lease create test_sts --duration 15m --format env
 	assert_success
@@ -105,7 +103,6 @@ EOF
 
 @test "fnox lease create outputs credentials in shell format" {
 	create_sts_config
-	export FNOX_EXPERIMENTAL=true
 
 	run "$FNOX_BIN" lease create test_sts --duration 15m --format shell
 	assert_success
@@ -115,7 +112,6 @@ EOF
 
 @test "fnox lease list shows created lease" {
 	create_sts_config
-	export FNOX_EXPERIMENTAL=true
 
 	# Create a lease first
 	run "$FNOX_BIN" lease create test_sts --duration 15m --format json --label test-list
@@ -131,7 +127,6 @@ EOF
 
 @test "fnox lease revoke marks lease as revoked" {
 	create_sts_config
-	export FNOX_EXPERIMENTAL=true
 
 	# Create a lease and extract the lease_id
 	run "$FNOX_BIN" lease create test_sts --duration 15m --format json --label test-revoke
@@ -152,7 +147,6 @@ EOF
 
 @test "fnox lease cleanup handles expired leases" {
 	create_sts_config
-	export FNOX_EXPERIMENTAL=true
 
 	# With no expired leases, cleanup should report nothing
 	run "$FNOX_BIN" lease cleanup
@@ -164,7 +158,6 @@ EOF
 	cat >"$FNOX_CONFIG_FILE" <<EOF
 root = true
 EOF
-	export FNOX_EXPERIMENTAL=true
 
 	run "$FNOX_BIN" lease create nonexistent --duration 15m
 	assert_failure

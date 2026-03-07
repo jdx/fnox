@@ -4,7 +4,7 @@
 
 - **Usage**: `fnox lease <SUBCOMMAND>`
 
-Manage ephemeral credential leases (experimental)
+Manage ephemeral credential leases
 
 ## Subcommands
 

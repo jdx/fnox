@@ -22,7 +22,7 @@ pub struct Lease {
     pub lease_id: String,
 }
 
-/// Lease backend capability for vending short-lived credentials (experimental)
+/// Lease backend capability for vending short-lived credentials
 #[async_trait]
 pub trait LeaseBackend: Send + Sync {
     /// Create a short-lived credential

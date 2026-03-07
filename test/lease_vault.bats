@@ -18,7 +18,6 @@
 setup() {
 	load 'test_helper/common_setup'
 	_common_setup
-	export FNOX_EXPERIMENTAL=true
 
 	if ! command -v vault >/dev/null 2>&1; then
 		skip "Vault CLI not installed. Install with: mise install vault"

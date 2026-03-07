@@ -2,10 +2,6 @@
 
 The `yubikey` provider uses YubiKey HMAC-SHA1 challenge-response to derive an AES-256-GCM encryption key. Secrets are encrypted symmetrically — decryption requires the same physical YubiKey.
 
-::: warning Experimental
-This provider is experimental. Enable it with `FNOX_EXPERIMENTAL=true`.
-:::
-
 ## Why?
 
 Regular age encryption protects secrets at rest, but anyone with access to the key file can decrypt them. The `yubikey` provider ties encryption to a physical hardware device. No YubiKey = no decryption.

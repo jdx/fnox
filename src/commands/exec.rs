@@ -2,7 +2,6 @@ use crate::error::{FnoxError, Result};
 use crate::lease::{self, LeaseLedger, LeaseRecord};
 use crate::lease_backends::LeaseBackendConfig;
 use crate::secret_resolver::resolve_secrets_batch;
-use crate::settings::Settings;
 use crate::temp_file_secrets::create_ephemeral_secret_file;
 use crate::{commands::Cli, config::Config};
 use chrono::Utc;
@@ -47,14 +46,13 @@ impl ExecCommand {
         // don't overwrite short-lived lease credentials with long-lived master ones
         let mut lease_keys: HashSet<String> = HashSet::new();
 
-        // Resolve leases if configured and experimental mode is enabled.
+        // Resolve leases if configured.
         // Temporarily set resolved secrets as process env vars so lease backend
         // SDKs (AWS, GCP, Azure) can find master credentials during lease creation.
         // The TempEnvGuard ensures cleanup on all exit paths (including errors).
         let leases = config.get_leases(&profile);
         let mut _temp_env_guard = lease::TempEnvGuard::default();
         if !leases.is_empty() {
-            Settings::ensure_experimental("lease in exec")?;
             for (key, value) in &resolved_secrets {
                 if let Some(value) = value {
                     // TODO: unsafe set_var on a multi-threaded Tokio runtime is technically
