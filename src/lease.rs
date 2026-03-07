@@ -59,6 +59,22 @@ impl LeaseLedger {
         }
         let content = toml_edit::ser::to_string_pretty(self)
             .map_err(|e| FnoxError::ConfigSerializeError { source: e })?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            std::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(&path)
+                .and_then(|mut f| std::io::Write::write_all(&mut f, content.as_bytes()))
+                .map_err(|e| FnoxError::ConfigWriteFailed {
+                    path: path.clone(),
+                    source: e,
+                })?;
+        }
+        #[cfg(not(unix))]
         fs::write(&path, content).map_err(|e| FnoxError::ConfigWriteFailed {
             path: path.clone(),
             source: e,
