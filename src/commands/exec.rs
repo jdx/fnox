@@ -181,8 +181,10 @@ async fn resolve_lease(
     config: &Config,
     profile: &str,
 ) -> Result<HashMap<String, String>> {
+    // Load ledger once as mutable to avoid race window with concurrent invocations
+    let mut ledger = LeaseLedger::load()?;
+
     // Check for a reusable cached lease
-    let ledger = LeaseLedger::load()?;
     if let Some(cached_lease) = ledger.find_reusable(name) {
         if let Some(ref cached_creds) = cached_lease.cached_credentials {
             // If encrypted, decrypt
@@ -260,10 +262,10 @@ async fn resolve_lease(
                     }
                     Err(e) => {
                         tracing::warn!(
-                            "Failed to encrypt credentials for caching: {}, storing plaintext",
+                            "Failed to encrypt credentials for caching: {}, skipping cache",
                             e
                         );
-                        (Some(result.credentials.clone()), None)
+                        (None, None)
                     }
                 }
             }
@@ -277,7 +279,6 @@ async fn resolve_lease(
         };
 
     // Record in ledger
-    let mut ledger = LeaseLedger::load()?;
     ledger.add(LeaseRecord {
         lease_id: result.lease_id.clone(),
         backend_name: name.to_string(),
