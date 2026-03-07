@@ -119,11 +119,12 @@ impl LeaseBackend for CommandBackend {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            tracing::warn!(
-                "Command revoke_command failed for lease '{}': {}",
-                lease_id,
-                stderr.trim()
-            );
+            return Err(FnoxError::ProviderCliFailed {
+                provider: "Command".to_string(),
+                details: stderr.trim().to_string(),
+                hint: format!("revoke_command exited with {}", output.status),
+                url: URL.to_string(),
+            });
         }
 
         Ok(())

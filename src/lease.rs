@@ -108,8 +108,13 @@ impl LeaseLedger {
         let mut compacted = self.clone();
         compacted.leases.retain(|r| {
             if r.revoked {
-                // Keep revoked records only if they expired recently (for audit visibility)
-                return r.expires_at.is_none_or(|exp| exp > cutoff);
+                // Keep revoked records for audit visibility only if they have
+                // an expiry within the window. Revoked records with no expiry
+                // (e.g., command backend) use created_at + 24h as the cutoff.
+                return match r.expires_at {
+                    Some(exp) => exp > cutoff,
+                    None => r.created_at > cutoff,
+                };
             }
             // Keep non-revoked records unless they expired more than 24h ago
             r.expires_at.is_none_or(|exp| exp > cutoff)

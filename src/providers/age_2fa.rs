@@ -2,6 +2,7 @@ use crate::env;
 use crate::error::{FnoxError, Result};
 use age::secrecy::{ExposeSecret, SecretString};
 use async_trait::async_trait;
+use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -46,10 +47,10 @@ impl std::str::FromStr for AuthMethod {
     }
 }
 
-/// Cached decrypted identity for the current process.
+/// Cached decrypted identities for the current process, keyed by provider name.
 /// After a successful 2FA, the identity is cached so subsequent decryptions
 /// in the same process don't prompt again.
-static CACHED_IDENTITY: OnceLock<String> = OnceLock::new();
+static CACHED_IDENTITIES: OnceLock<std::sync::Mutex<HashMap<String, String>>> = OnceLock::new();
 
 impl Age2faProvider {
     /// Used by generated code — panics on invalid auth method since config
@@ -94,7 +95,10 @@ impl Age2faProvider {
 
     /// Get the decrypted age identity content, prompting for 2FA if needed
     fn get_identity_content(&self) -> Result<String> {
-        if let Some(cached) = CACHED_IDENTITY.get() {
+        let cache = CACHED_IDENTITIES.get_or_init(|| std::sync::Mutex::new(HashMap::new()));
+        if let Ok(guard) = cache.lock()
+            && let Some(cached) = guard.get(&self.provider_name)
+        {
             return Ok(cached.clone());
         }
 
@@ -136,7 +140,9 @@ impl Age2faProvider {
                 details: format!("Decrypted identity is not valid UTF-8: {}", e),
             })?;
 
-        let _ = CACHED_IDENTITY.set(identity_content.clone());
+        if let Ok(mut guard) = cache.lock() {
+            guard.insert(self.provider_name.clone(), identity_content.clone());
+        }
         Ok(identity_content)
     }
 
