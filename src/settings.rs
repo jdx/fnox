@@ -251,6 +251,7 @@ mod tests {
             if_missing: None,
             if_missing_default: None,
             experimental: false,
+            http_timeout: "30s".to_string(),
         };
 
         let mut env = SourceMap::new();
@@ -284,6 +285,7 @@ mod tests {
             if_missing: None,
             if_missing_default: None,
             experimental: false,
+            http_timeout: "30s".to_string(),
         };
 
         let mut env = SourceMap::new();
