@@ -90,6 +90,10 @@
           "description": "AWS STS AssumeRole",
           "type": "object",
           "properties": {
+            "duration": {
+              "description": "Lease duration (e.g., \"15m\", \"1h\")",
+              "type": ["string", "null"]
+            },
             "endpoint": {
               "type": ["string", "null"]
             },
@@ -100,14 +104,14 @@
               "type": "string"
             },
             "role_arn": {
-              "type": ["string", "null"]
+              "type": "string"
             },
             "type": {
               "type": "string",
               "const": "aws-sts"
             }
           },
-          "required": ["type", "region"]
+          "required": ["type", "region", "role_arn"]
         }
       ]
     },
@@ -617,14 +621,6 @@
         },
         "json_path": {
           "description": "JSON path to extract from the secret value (supports dot notation: \"nested.key\")\nWhen set, the secret value is parsed as JSON and the specified path is extracted.",
-          "type": ["string", "null"]
-        },
-        "lease": {
-          "description": "Lease backend name for credential leasing (experimental)",
-          "type": ["string", "null"]
-        },
-        "lease_duration": {
-          "description": "Duration for credential leases (e.g., \"15m\", \"1h\")",
           "type": ["string", "null"]
         },
         "provider": {

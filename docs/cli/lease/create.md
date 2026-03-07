@@ -2,23 +2,21 @@
 
 # `fnox lease create`
 
-- **Usage**: `fnox lease create [FLAGS] <SECRET_NAME>`
+- **Usage**: `fnox lease create [FLAGS] <BACKEND_NAME>`
 
-Create a short-lived credential lease from a secret
+Create a short-lived credential lease from a configured backend
 
 ## Arguments
 
-### `<SECRET_NAME>`
+### `<BACKEND_NAME>`
 
-Secret name to lease credentials for
+Lease backend name (from `[leases.<name>]` config)
 
 ## Flags
 
 ### `-d --duration <DURATION>`
 
-Lease duration (e.g., "15m", "1h", "2h30m")
-
-**Default:** `15m`
+Lease duration (e.g., "15m", "1h", "2h30m"); overrides config duration
 
 ### `-f --format <FORMAT>`
 

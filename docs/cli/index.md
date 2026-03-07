@@ -52,7 +52,7 @@ Do not merge top-level secrets into the selected profile
 - [`fnox init [FLAGS]`](/cli/init.md)
 - [`fnox lease <SUBCOMMAND>`](/cli/lease.md)
 - [`fnox lease cleanup`](/cli/lease/cleanup.md)
-- [`fnox lease create [FLAGS] <SECRET_NAME>`](/cli/lease/create.md)
+- [`fnox lease create [FLAGS] <BACKEND_NAME>`](/cli/lease/create.md)
 - [`fnox lease list [--active] [--expired]`](/cli/lease/list.md)
 - [`fnox lease revoke <LEASE_ID>`](/cli/lease/revoke.md)
 - [`fnox list [FLAGS]`](/cli/list.md)
