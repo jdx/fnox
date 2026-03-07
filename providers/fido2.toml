@@ -7,7 +7,6 @@ struct_name = "Fido2Provider"
 category = "Local"
 description = "Hardware-backed encryption using FIDO2 hmac-secret extension"
 default_name = "fido2"
-fallible_new = true
 setup_instructions = """
 FIDO2 provider uses the hmac-secret extension to derive an encryption key.
 Secrets are encrypted with AES-256-GCM — decryption requires the same FIDO2 key.

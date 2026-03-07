@@ -19,12 +19,12 @@ impl InfisicalProvider {
         project_id: Option<String>,
         environment: Option<String>,
         path: Option<String>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        Ok(Self {
             project_id,
             environment,
             path,
-        }
+        })
     }
 
     /// Get authentication token - either from environment or by logging in with client credentials

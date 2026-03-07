@@ -7,7 +7,6 @@ struct_name = "YubikeyProvider"
 category = "Local"
 description = "Hardware-backed encryption using YubiKey HMAC-SHA1 challenge-response"
 default_name = "yubikey"
-fallible_new = true
 setup_instructions = """
 YubiKey provider uses HMAC-SHA1 challenge-response to derive an encryption key.
 Secrets are encrypted with AES-256-GCM — decryption requires the same YubiKey.

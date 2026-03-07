@@ -152,12 +152,12 @@ pub struct AwsSecretsManagerProvider {
 }
 
 impl AwsSecretsManagerProvider {
-    pub fn new(region: String, profile: Option<String>, prefix: Option<String>) -> Self {
-        Self {
+    pub fn new(region: String, profile: Option<String>, prefix: Option<String>) -> Result<Self> {
+        Ok(Self {
             region,
             profile,
             prefix,
-        }
+        })
     }
 
     pub fn get_secret_name(&self, key: &str) -> String {

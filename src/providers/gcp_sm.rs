@@ -14,8 +14,8 @@ pub struct GoogleSecretManagerProvider {
 }
 
 impl GoogleSecretManagerProvider {
-    pub fn new(project: String, prefix: Option<String>) -> Self {
-        Self { project, prefix }
+    pub fn new(project: String, prefix: Option<String>) -> Result<Self> {
+        Ok(Self { project, prefix })
     }
 
     /// Build the full secret name with optional prefix

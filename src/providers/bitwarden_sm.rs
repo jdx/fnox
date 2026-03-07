@@ -16,11 +16,11 @@ pub struct BitwardenSecretsManagerProvider {
 }
 
 impl BitwardenSecretsManagerProvider {
-    pub fn new(project_id: Option<String>, profile: Option<String>) -> Self {
-        Self {
+    pub fn new(project_id: Option<String>, profile: Option<String>) -> Result<Self> {
+        Ok(Self {
             project_id,
             profile,
-        }
+        })
     }
 
     fn resolve_project_id(&self) -> Result<String> {

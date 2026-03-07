@@ -12,8 +12,8 @@ pub struct KeychainProvider {
 }
 
 impl KeychainProvider {
-    pub fn new(service: String, prefix: Option<String>) -> Self {
-        Self { service, prefix }
+    pub fn new(service: String, prefix: Option<String>) -> Result<Self> {
+        Ok(Self { service, prefix })
     }
 
     /// Build the full key name with optional prefix
@@ -180,7 +180,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_keychain_set_and_get() {
-        let provider = KeychainProvider::new("fnox-unit-test".to_string(), None);
+        let provider = KeychainProvider::new("fnox-unit-test".to_string(), None).unwrap();
 
         // Set a secret
         let result = provider.put_secret("test_key", "test_value").await;

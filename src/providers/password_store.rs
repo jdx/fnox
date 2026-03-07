@@ -15,12 +15,12 @@ impl PasswordStoreProvider {
         prefix: Option<String>,
         store_dir: Option<String>,
         gpg_opts: Option<String>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        Ok(Self {
             prefix,
             store_dir,
             gpg_opts,
-        }
+        })
     }
 
     /// Build the full secret path with optional prefix

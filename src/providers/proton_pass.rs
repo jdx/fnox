@@ -26,8 +26,8 @@ pub struct ProtonPassProvider {
 }
 
 impl ProtonPassProvider {
-    pub fn new(vault: Option<String>) -> Self {
-        Self { vault }
+    pub fn new(vault: Option<String>) -> Result<Self> {
+        Ok(Self { vault })
     }
 
     /// Convert a value to a pass:// reference
@@ -331,7 +331,7 @@ mod tests {
 
     #[test]
     fn test_value_to_reference_passthrough() {
-        let provider = ProtonPassProvider::new(Some("vault".to_string()));
+        let provider = ProtonPassProvider::new(Some("vault".to_string())).unwrap();
         let result = provider
             .value_to_reference("pass://MyVault/item/password")
             .unwrap();
@@ -340,28 +340,28 @@ mod tests {
 
     #[test]
     fn test_value_to_reference_single_part_with_vault() {
-        let provider = ProtonPassProvider::new(Some("TestVault".to_string()));
+        let provider = ProtonPassProvider::new(Some("TestVault".to_string())).unwrap();
         let result = provider.value_to_reference("my-item").unwrap();
         assert_eq!(result, "pass://TestVault/my-item/password");
     }
 
     #[test]
     fn test_value_to_reference_single_part_without_vault() {
-        let provider = ProtonPassProvider::new(None);
+        let provider = ProtonPassProvider::new(None).unwrap();
         let result = provider.value_to_reference("my-item");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_value_to_reference_two_parts_with_vault() {
-        let provider = ProtonPassProvider::new(Some("TestVault".to_string()));
+        let provider = ProtonPassProvider::new(Some("TestVault".to_string())).unwrap();
         let result = provider.value_to_reference("my-item/username").unwrap();
         assert_eq!(result, "pass://TestVault/my-item/username");
     }
 
     #[test]
     fn test_value_to_reference_three_parts() {
-        let provider = ProtonPassProvider::new(None);
+        let provider = ProtonPassProvider::new(None).unwrap();
         let result = provider
             .value_to_reference("OtherVault/item/field")
             .unwrap();
@@ -370,42 +370,42 @@ mod tests {
 
     #[test]
     fn test_value_to_reference_too_many_parts() {
-        let provider = ProtonPassProvider::new(Some("vault".to_string()));
+        let provider = ProtonPassProvider::new(Some("vault".to_string())).unwrap();
         let result = provider.value_to_reference("a/b/c/d");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_value_to_reference_empty() {
-        let provider = ProtonPassProvider::new(Some("vault".to_string()));
+        let provider = ProtonPassProvider::new(Some("vault".to_string())).unwrap();
         let result = provider.value_to_reference("");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_value_to_reference_whitespace_only() {
-        let provider = ProtonPassProvider::new(Some("vault".to_string()));
+        let provider = ProtonPassProvider::new(Some("vault".to_string())).unwrap();
         let result = provider.value_to_reference("   ");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_value_to_reference_invalid_pass_uri_too_few_parts() {
-        let provider = ProtonPassProvider::new(None);
+        let provider = ProtonPassProvider::new(None).unwrap();
         let result = provider.value_to_reference("pass://vault");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_value_to_reference_invalid_pass_uri_empty_parts() {
-        let provider = ProtonPassProvider::new(None);
+        let provider = ProtonPassProvider::new(None).unwrap();
         let result = provider.value_to_reference("pass://vault//field");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_value_to_reference_invalid_pass_uri_vault_item_only() {
-        let provider = ProtonPassProvider::new(None);
+        let provider = ProtonPassProvider::new(None).unwrap();
         let result = provider.value_to_reference("pass://vault/item");
         assert!(result.is_err());
     }

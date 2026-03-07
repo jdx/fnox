@@ -15,8 +15,8 @@ pub struct AzureSecretsManagerProvider {
 }
 
 impl AzureSecretsManagerProvider {
-    pub fn new(vault_url: String, prefix: Option<String>) -> Self {
-        Self { vault_url, prefix }
+    pub fn new(vault_url: String, prefix: Option<String>) -> Result<Self> {
+        Ok(Self { vault_url, prefix })
     }
 
     pub fn get_secret_name(&self, key: &str) -> String {

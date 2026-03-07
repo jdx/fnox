@@ -27,8 +27,6 @@ struct ProviderTomlRaw {
     fields: IndexMap<String, FieldDef>,
     #[serde(default)]
     wizard_fields: IndexMap<String, WizardFieldDef>,
-    #[serde(default)]
-    fallible_new: bool,
 }
 
 /// Provider config with derived fields filled in
@@ -46,7 +44,6 @@ struct ProviderToml {
     auth_command: Option<String>,
     fields: IndexMap<String, FieldDef>,
     wizard_fields: IndexMap<String, WizardFieldDef>,
-    fallible_new: bool,
 }
 
 impl ProviderTomlRaw {
@@ -81,7 +78,6 @@ impl ProviderTomlRaw {
             auth_command: self.auth_command,
             fields: self.fields,
             wizard_fields: self.wizard_fields,
-            fallible_new: self.fallible_new,
         }
     }
 }
@@ -649,35 +645,19 @@ fn generate_provider_instantiate(
         let struct_name = Ident::new(&provider.struct_name, Span::call_site());
 
         if provider.fields.is_empty() {
-            if provider.fallible_new {
-                arms.push(quote! {
-                    ResolvedProviderConfig::#variant => {
-                        Ok(Box::new(#module::#struct_name::new()?))
-                    }
-                });
-            } else {
-                arms.push(quote! {
-                    ResolvedProviderConfig::#variant => {
-                        Ok(Box::new(#module::#struct_name::new()))
-                    }
-                });
-            }
+            arms.push(quote! {
+                ResolvedProviderConfig::#variant => {
+                    Ok(Box::new(#module::#struct_name::new()?))
+                }
+            });
         } else {
             let field_patterns = generate_field_patterns(provider);
             let new_args = generate_new_args(provider);
-            if provider.fallible_new {
-                arms.push(quote! {
-                    ResolvedProviderConfig::#variant { #(#field_patterns),* } => {
-                        Ok(Box::new(#module::#struct_name::new(#(#new_args),*)?))
-                    }
-                });
-            } else {
-                arms.push(quote! {
-                    ResolvedProviderConfig::#variant { #(#field_patterns),* } => {
-                        Ok(Box::new(#module::#struct_name::new(#(#new_args),*)))
-                    }
-                });
-            }
+            arms.push(quote! {
+                ResolvedProviderConfig::#variant { #(#field_patterns),* } => {
+                    Ok(Box::new(#module::#struct_name::new(#(#new_args),*)?))
+                }
+            });
         }
     }
 

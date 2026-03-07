@@ -124,8 +124,8 @@ pub struct AwsKmsProvider {
 }
 
 impl AwsKmsProvider {
-    pub fn new(key_id: String, region: String) -> Self {
-        Self { key_id, region }
+    pub fn new(key_id: String, region: String) -> Result<Self> {
+        Ok(Self { key_id, region })
     }
 
     /// Create an AWS KMS client
