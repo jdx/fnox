@@ -147,6 +147,11 @@ impl ExecCommand {
             }
         }
 
+        // Drop the temp env guard BEFORE spawning the child process.
+        // This removes temporary secrets (including env=false master credentials)
+        // from the parent process environment so the child doesn't inherit them.
+        drop(_temp_env_guard);
+
         let status = cmd
             .status()
             .map_err(|e| FnoxError::CommandExecutionFailed {
