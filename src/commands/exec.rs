@@ -46,6 +46,7 @@ impl ExecCommand {
         // don't overwrite short-lived lease credentials with long-lived master ones
         let mut lease_keys: HashSet<String> = HashSet::new();
 
+        // Resolve leases if configured and experimental mode is enabled.
         // Temporarily set resolved secrets as process env vars so lease backend
         // SDKs (AWS, GCP, Azure) can find master credentials during lease creation.
         // These are cleaned up after lease resolution; only the subprocess gets the
@@ -53,6 +54,7 @@ impl ExecCommand {
         let leases = config.get_leases(&profile);
         let mut temp_env_keys: Vec<String> = Vec::new();
         if !leases.is_empty() {
+            Settings::ensure_experimental("lease in exec")?;
             for (key, value) in &resolved_secrets {
                 if let Some(value) = value
                     && std::env::var(key).is_err()
@@ -63,10 +65,6 @@ impl ExecCommand {
                     temp_env_keys.push(key.clone());
                 }
             }
-        }
-
-        if !leases.is_empty() {
-            Settings::ensure_experimental("lease in exec")?;
             {
                 let project_dir = lease::project_dir_from_config(&cli.config);
                 // Load ledger once to avoid TOCTTOU race with concurrent invocations
