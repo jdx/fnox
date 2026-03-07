@@ -215,22 +215,28 @@ This approach stores master credentials encrypted on disk with a second factor (
 
 The master credentials are stored using the [`age-2fa` provider](/providers/age-2fa), which encrypts the age private key with a passphrase derived from your 2FA device. Without the TOTP code or YubiKey tap, decryption is impossible.
 
+::: tip Use fnox.local.toml
+The `age-2fa` provider config contains your public key and is safe to commit, but you probably don't want to commit your personal provider setup to a shared repo. Put the provider and secret definitions in `fnox.local.toml` (which is gitignored) and keep only the lease backend config in `fnox.toml`.
+:::
+
 ### Setup
 
 ```toml
-# fnox.toml
+# fnox.local.toml (gitignored — personal provider + secrets)
 
 [providers.secure]
 type = "age-2fa"
 recipients = ["age1..."]  # auto-populated by `fnox provider add`
 auth = "totp"             # or "yubikey"
 
-# Master credentials: encrypted with 2FA, NOT injected into env vars
 [secrets]
 AWS_ACCESS_KEY_ID = { provider = "secure", env = false }
 AWS_SECRET_ACCESS_KEY = { provider = "secure", env = false }
+```
 
-# Lease: uses the master credentials to get short-lived ones
+```toml
+# fnox.toml (committed — shared lease backend config)
+
 [leases.aws]
 type = "aws-sts"
 region = "us-east-1"

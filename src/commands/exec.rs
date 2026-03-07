@@ -46,9 +46,25 @@ impl ExecCommand {
         // don't overwrite short-lived lease credentials with long-lived master ones
         let mut lease_keys: HashSet<String> = HashSet::new();
 
-        // Handle lease backends (experimental) — set AFTER resolving secrets but
-        // BEFORE injecting them, so lease creds take priority
+        // Temporarily set resolved secrets as process env vars so lease backend
+        // SDKs (AWS, GCP, Azure) can find master credentials during lease creation.
+        // These are cleaned up after lease resolution; only the subprocess gets the
+        // final set of env vars via cmd.env().
         let leases = config.get_leases(&profile);
+        let mut temp_env_keys: Vec<String> = Vec::new();
+        if !leases.is_empty() {
+            for (key, value) in &resolved_secrets {
+                if let Some(value) = value
+                    && std::env::var(key).is_err()
+                {
+                    // SAFETY: We only set env vars that don't already exist, and
+                    // no spawned tasks are reading env vars at this point.
+                    unsafe { std::env::set_var(key, value) };
+                    temp_env_keys.push(key.clone());
+                }
+            }
+        }
+
         if !leases.is_empty() {
             if let Err(e) = Settings::ensure_experimental("lease in exec") {
                 tracing::warn!("Skipping leases: {}", e);
@@ -91,6 +107,12 @@ impl ExecCommand {
                     }
                 }
             }
+        }
+
+        // Clean up temporary env vars set for lease backend SDKs
+        for key in &temp_env_keys {
+            // SAFETY: Lease resolution is complete; no concurrent readers.
+            unsafe { std::env::remove_var(key) };
         }
 
         // Add resolved secrets as environment variables
