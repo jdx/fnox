@@ -39,7 +39,7 @@ crossterm = { version = "0.29", features = ["event-stream"] }
 data-encoding = "2"
 demand = "1"
 dirs = "6"
-fs2 = "0.4"
+fslock = "0.2"
 futures = "0.3"
 gcp_auth = { version = "0.12" }
 google-cloud-kms = { version = "0.6" }
@@ -81,6 +81,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 urlencoding = "2.1"
 usage-lib = { version = "2", features = ["clap"] }
 walkdir = "2"
+xx = { version = "2", features = ["fslock"] }
 which = "7"
 yubico_manager = "0.9"
 

@@ -42,7 +42,7 @@ pub struct LeaseLedger {
 
 /// RAII guard for the ledger file lock. The lock is released when dropped.
 pub struct LedgerLockGuard {
-    _file: std::fs::File,
+    _lock: fslock::LockFile,
 }
 
 /// Determine the project directory for scoping the lease ledger.
@@ -85,37 +85,14 @@ impl LeaseLedger {
             .join(format!("{hash}.toml"))
     }
 
-    /// Path to the lock file for a given project directory
-    fn lock_path(project_dir: &Path) -> PathBuf {
-        let hash = hash_project_dir(project_dir);
-        env::FNOX_CONFIG_DIR
-            .join("leases")
-            .join(format!("{hash}.lock"))
-    }
-
     /// Acquire an exclusive file lock for the ledger.
     /// Returns a guard that releases the lock on drop.
     pub fn lock(project_dir: &Path) -> Result<LedgerLockGuard> {
-        let lock_path = Self::lock_path(project_dir);
-        if let Some(parent) = lock_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| FnoxError::CreateDirFailed {
-                path: parent.to_path_buf(),
-                source: e,
-            })?;
-        }
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(false)
-            .open(&lock_path)
-            .map_err(|e| FnoxError::ConfigWriteFailed {
-                path: lock_path.clone(),
-                source: e,
-            })?;
-        use fs2::FileExt;
-        file.lock_exclusive()
+        let ledger_path = Self::ledger_path(project_dir);
+        let lock = xx::fslock::FSLock::new(&ledger_path)
+            .lock()
             .map_err(|e| FnoxError::Config(format!("Failed to acquire ledger lock: {e}")))?;
-        Ok(LedgerLockGuard { _file: file })
+        Ok(LedgerLockGuard { _lock: lock })
     }
 
     /// Load the lease ledger from disk, creating an empty one if it doesn't exist.
