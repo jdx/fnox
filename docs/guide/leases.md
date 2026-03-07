@@ -209,6 +209,67 @@ Run 'fnox lease create aws' to set up credentials interactively.
 
 The subprocess still runs — just without the lease credentials. This means other secrets and leases that _are_ available will still be injected.
 
+## Approach 3: 2FA-Protected Master Credentials
+
+This approach stores master credentials encrypted on disk with a second factor (TOTP or YubiKey) required for decryption. It combines the convenience of Approach 1 (no manual paste step each session) with stronger security than a simple encryption key.
+
+The master credentials are stored using the [`age-2fa` provider](/providers/age-2fa), which encrypts the age private key with a passphrase derived from your 2FA device. Without the TOTP code or YubiKey tap, decryption is impossible.
+
+### Setup
+
+```toml
+# fnox.toml
+
+[providers.secure]
+type = "age-2fa"
+recipients = ["age1..."]  # auto-populated by `fnox provider add`
+auth = "totp"             # or "yubikey"
+
+# Master credentials: encrypted with 2FA, NOT injected into env vars
+[secrets]
+AWS_ACCESS_KEY_ID = { provider = "secure", env = false }
+AWS_SECRET_ACCESS_KEY = { provider = "secure", env = false }
+
+# Lease: uses the master credentials to get short-lived ones
+[leases.aws]
+type = "aws-sts"
+region = "us-east-1"
+role_arn = "arn:aws:iam::123456789012:role/dev-role"
+duration = "1h"
+```
+
+Key points:
+
+- `env = false` prevents the master credentials from leaking into subprocess environment variables
+- The master credentials are only used internally by the lease backend
+- Only the short-lived assumed-role credentials are injected into the subprocess
+
+### Initial setup
+
+```bash
+# 1. Create the 2FA-protected provider
+fnox provider add --type age-2fa --name secure
+# → Generates keypair, shows TOTP secret for your authenticator app
+# → Prompts for verification code to confirm setup
+
+# 2. Store your master credentials
+fnox set AWS_ACCESS_KEY_ID "AKIA..." --provider secure
+fnox set AWS_SECRET_ACCESS_KEY "wJalr..." --provider secure
+```
+
+### Daily workflow
+
+```bash
+$ fnox exec -- aws s3 ls
+TOTP code: 123456
+# → Decrypts master creds (one prompt per session)
+# → Calls sts:AssumeRole
+# → Injects short-lived creds into subprocess
+# → Caches lease for reuse
+```
+
+The TOTP prompt only appears once per `fnox exec` invocation, even when multiple secrets use the same provider. After the lease is cached, subsequent `fnox exec` calls reuse it without prompting until it's close to expiring.
+
 ## Supported Backends
 
 | Backend                              | Type          | Max Duration | Revocation              |

@@ -8,7 +8,7 @@ use crate::temp_file_secrets::create_ephemeral_secret_file;
 use crate::{commands::Cli, config::Config};
 use chrono::Utc;
 use clap::{Args, ValueHint};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::process::Command;
 use tempfile::NamedTempFile;
 
@@ -37,19 +37,31 @@ impl ExecCommand {
             cmd.args(&self.command[1..]);
         }
 
-        // Handle lease backends (experimental)
+        // Resolve secrets using batch resolution first
+        let resolved_secrets = resolve_secrets_batch(&config, &profile, &profile_secrets).await?;
+
+        // Keep temp files alive for the duration of the command
+        let mut _temp_files: Vec<NamedTempFile> = Vec::new();
+
+        // Track which env var keys are set by lease backends so regular secrets
+        // don't overwrite short-lived lease credentials with long-lived master ones
+        let mut lease_keys: HashSet<String> = HashSet::new();
+
+        // Handle lease backends (experimental) — set AFTER resolving secrets but
+        // BEFORE injecting them, so lease creds take priority
         let leases = config.get_leases(&profile);
         if !leases.is_empty() {
             if let Err(e) = Settings::ensure_experimental("lease in exec") {
                 tracing::warn!("Skipping leases: {}", e);
             } else {
                 let project_dir = lease::project_dir_from_config(&cli.config);
+                // Load ledger once to avoid TOCTTOU race with concurrent invocations
+                let mut ledger = LeaseLedger::load(&project_dir)?;
                 for (name, lease_config) in &leases {
                     // Check prerequisites before attempting to create/use a lease
                     if let Some(missing) = lease_config.check_prerequisites() {
                         // Check if there's a cached lease we can still use
                         let config_hash = lease_config.config_hash();
-                        let ledger = LeaseLedger::load(&project_dir)?;
                         if let Some(cached) = ledger.find_reusable(name, &config_hash)
                             && cached.cached_credentials.is_some()
                         {
@@ -62,24 +74,39 @@ impl ExecCommand {
                             continue;
                         }
                     }
-                    let creds =
-                        resolve_lease(name, lease_config, &config, &profile, &project_dir).await?;
+                    let creds = resolve_lease(
+                        name,
+                        lease_config,
+                        &config,
+                        &profile,
+                        &project_dir,
+                        &mut ledger,
+                    )
+                    .await?;
                     for (cred_key, cred_value) in creds {
+                        lease_keys.insert(cred_key.clone());
                         cmd.env(cred_key, cred_value);
                     }
                 }
             }
         }
 
-        // Resolve secrets using batch resolution
-        let resolved_secrets = resolve_secrets_batch(&config, &profile, &profile_secrets).await?;
-
-        // Keep temp files alive for the duration of the command
-        let mut _temp_files: Vec<NamedTempFile> = Vec::new();
-
         // Add resolved secrets as environment variables
         for (key, value) in resolved_secrets {
             if let Some(value) = value {
+                // Skip secrets with env = false (only accessible via `fnox get`)
+                if let Some(secret_config) = profile_secrets.get(&key) {
+                    if !secret_config.env {
+                        continue;
+                    }
+                }
+                // Skip secrets whose keys were already set by lease backends —
+                // lease credentials (short-lived) must not be overwritten by
+                // regular secrets (which may be long-lived master credentials)
+                if lease_keys.contains(&key) {
+                    tracing::debug!("Skipping secret '{}': already set by lease backend", key);
+                    continue;
+                }
                 // Check if this secret should be written to a file
                 if let Some(secret_config) = profile_secrets.get(&key) {
                     if secret_config.as_file {
@@ -193,17 +220,16 @@ async fn decrypt_credentials(
     Ok(decrypted)
 }
 
-/// Resolve a lease backend into credentials, reusing cached credentials when available
+/// Resolve a lease backend into credentials, reusing cached credentials when available.
+/// Takes a mutable reference to the ledger to avoid double-load TOCTTOU races.
 async fn resolve_lease(
     name: &str,
     lease_config: &LeaseBackendConfig,
     config: &Config,
     profile: &str,
     project_dir: &std::path::Path,
+    ledger: &mut LeaseLedger,
 ) -> Result<HashMap<String, String>> {
-    // Load ledger once as mutable to avoid race window with concurrent invocations
-    let mut ledger = LeaseLedger::load(project_dir)?;
-
     // Check for a reusable cached lease (config_hash ensures stale creds
     // are not returned after backend config changes like role ARN rotation)
     let config_hash = lease_config.config_hash();
@@ -283,11 +309,13 @@ async fn resolve_lease(
                         (Some(encrypted), Some(enc_name))
                     }
                     Err(e) => {
+                        // Encryption provider is configured but failed — do NOT fall back
+                        // to plaintext, as that would silently degrade the user's security.
                         tracing::warn!(
-                            "Failed to encrypt credentials for caching: {}, storing plaintext",
+                            "Failed to encrypt credentials for caching: {}, skipping cache",
                             e
                         );
-                        (Some(result.credentials.clone()), None)
+                        (None, None)
                     }
                 }
             }

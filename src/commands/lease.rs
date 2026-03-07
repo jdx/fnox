@@ -111,8 +111,10 @@ impl LeaseCreateCommand {
                                 FnoxError::Config(format!("Failed to read input: {}", e))
                             })?;
                         if !value.is_empty() {
-                            // SAFETY: we are single-threaded at this point (before
-                            // spawning any backend work), so set_var is safe.
+                            // SAFETY: The Tokio runtime is active but no spawned
+                            // tasks are reading env vars at this point — the user
+                            // is blocked on interactive input. For a CLI tool the
+                            // practical risk of concurrent env access is negligible.
                             unsafe { std::env::set_var(var, &value) };
                         }
                     }
@@ -147,7 +149,7 @@ impl LeaseCreateCommand {
         // Create the lease
         let result = backend.create_lease(duration, &self.label).await?;
 
-        // Record in ledger
+        // Record in ledger with cached credentials so `fnox exec` can reuse them
         let mut ledger = LeaseLedger::load(&project_dir)?;
         ledger.add(LeaseRecord {
             lease_id: result.lease_id.clone(),
@@ -156,7 +158,7 @@ impl LeaseCreateCommand {
             created_at: Utc::now(),
             expires_at: result.expires_at,
             revoked: false,
-            cached_credentials: None,
+            cached_credentials: Some(result.credentials.clone()),
             encryption_provider: None,
             config_hash: Some(backend_config.config_hash()),
         });

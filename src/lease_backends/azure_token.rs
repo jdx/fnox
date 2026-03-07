@@ -74,7 +74,11 @@ impl LeaseBackend for AzureTokenBackend {
                 })?;
 
         let expires_at =
-            chrono::DateTime::from_timestamp(token_response.expires_on.unix_timestamp(), 0);
+            chrono::DateTime::from_timestamp(token_response.expires_on.unix_timestamp(), 0)
+                .or_else(|| {
+                    tracing::warn!("Azure token returned an out-of-range expiration timestamp");
+                    None
+                });
 
         let mut credentials = HashMap::new();
         credentials.insert(

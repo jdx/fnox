@@ -58,7 +58,7 @@ impl VaultBackend {
 
 #[async_trait]
 impl LeaseBackend for VaultBackend {
-    async fn create_lease(&self, _duration: Duration, _label: &str) -> Result<Lease> {
+    async fn create_lease(&self, duration: Duration, _label: &str) -> Result<Lease> {
         let url = format!(
             "{}/v1/{}",
             self.address.trim_end_matches('/'),
@@ -66,7 +66,10 @@ impl LeaseBackend for VaultBackend {
         );
 
         let client = reqwest::Client::new();
-        let mut request = client.get(&url).header("X-Vault-Token", &self.token);
+        let mut request = client
+            .get(&url)
+            .header("X-Vault-Token", &self.token)
+            .query(&[("ttl", format!("{}s", duration.as_secs()))]);
 
         if let Some(ns) = &self.namespace {
             request = request.header("X-Vault-Namespace", ns);

@@ -119,6 +119,11 @@ pub struct SecretConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     value: Option<SpannedValue<String>>,
 
+    /// Whether to inject this secret into env vars (default: true)
+    /// When false, the secret is only accessible via `fnox get`
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub env: bool,
+
     /// Write secret to a temporary file and set env var to the file path instead of the secret value
     #[serde(default, skip_serializing_if = "is_false")]
     pub as_file: bool,
@@ -1240,6 +1245,7 @@ impl SecretConfig {
             default: None,
             provider: None,
             value: None,
+            env: true,
             as_file: false,
             json_path: None,
             sync: None,
@@ -1273,6 +1279,9 @@ impl SecretConfig {
                 IfMissing::Ignore => "ignore",
             };
             inline.insert("if_missing", toml_edit::Value::from(if_missing_str));
+        }
+        if !self.env {
+            inline.insert("env", toml_edit::Value::from(false));
         }
         if self.as_file {
             inline.insert("as_file", toml_edit::Value::from(true));
@@ -1375,6 +1384,14 @@ impl Default for ProfileConfig {
 
 fn is_false(value: &bool) -> bool {
     !value
+}
+
+fn is_true(value: &bool) -> bool {
+    *value
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[cfg(test)]

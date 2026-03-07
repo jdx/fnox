@@ -98,7 +98,13 @@ impl LeaseBackend for AwsStsBackend {
 
         let expires_at = {
             let epoch_secs = expiration.secs();
-            chrono::DateTime::from_timestamp(epoch_secs, 0)
+            chrono::DateTime::from_timestamp(epoch_secs, 0).or_else(|| {
+                tracing::warn!(
+                    "AWS STS returned an out-of-range expiration timestamp: {}",
+                    epoch_secs
+                );
+                None
+            })
         };
 
         let mut creds = HashMap::new();

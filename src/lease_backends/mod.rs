@@ -113,7 +113,7 @@ impl LeaseBackendConfig {
                 let has_profile = profile.is_some();
                 let has_sso = std::env::var("AWS_SSO_SESSION").is_ok();
                 let has_creds_file = dirs::home_dir()
-                    .map(|h| h.join(".aws/credentials").exists())
+                    .map(|h| h.join(".aws/credentials").exists() || h.join(".aws/config").exists())
                     .unwrap_or(false);
                 if has_env || has_profile || has_sso || has_creds_file {
                     None
@@ -160,14 +160,9 @@ impl LeaseBackendConfig {
                 if has_sp {
                     return None;
                 }
-                // Check for az CLI
-                let has_az = std::process::Command::new("az")
-                    .arg("account")
-                    .arg("show")
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .status()
-                    .is_ok_and(|s| s.success());
+                // Check for az CLI — use which to avoid blocking subprocess on the
+                // Tokio runtime thread (check_prerequisites is called from async contexts)
+                let has_az = which::which("az").is_ok();
                 if has_az {
                     None
                 } else {
