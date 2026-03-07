@@ -48,6 +48,14 @@ impl VaultBackend {
                 url: URL.to_string(),
             })?;
 
+        if env_map.is_empty() {
+            return Err(FnoxError::Config(
+                "Vault backend: 'env_map' must contain at least one entry \
+                 mapping a Vault response key to an environment variable name."
+                    .to_string(),
+            ));
+        }
+
         Ok(Self {
             address,
             token,
