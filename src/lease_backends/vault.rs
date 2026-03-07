@@ -13,6 +13,7 @@ pub struct VaultBackend {
     secret_path: String,
     namespace: Option<String>,
     env_map: HashMap<String, String>,
+    method: String,
 }
 
 impl VaultBackend {
@@ -22,6 +23,7 @@ impl VaultBackend {
         secret_path: String,
         namespace: Option<String>,
         env_map: HashMap<String, String>,
+        method: String,
     ) -> Result<Self> {
         let address = address
             .or_else(|| {
@@ -52,6 +54,7 @@ impl VaultBackend {
             secret_path,
             namespace,
             env_map,
+            method,
         })
     }
 }
@@ -66,10 +69,20 @@ impl LeaseBackend for VaultBackend {
         );
 
         let client = reqwest::Client::new();
-        let mut request = client
-            .get(&url)
-            .header("X-Vault-Token", &self.token)
-            .query(&[("ttl", format!("{}s", duration.as_secs()))]);
+        let ttl_value = format!("{}s", duration.as_secs());
+        let mut request = if self.method.eq_ignore_ascii_case("post")
+            || self.method.eq_ignore_ascii_case("put")
+        {
+            client
+                .post(&url)
+                .header("X-Vault-Token", &self.token)
+                .json(&serde_json::json!({ "ttl": ttl_value }))
+        } else {
+            client
+                .get(&url)
+                .header("X-Vault-Token", &self.token)
+                .query(&[("ttl", &ttl_value)])
+        };
 
         if let Some(ns) = &self.namespace {
             request = request.header("X-Vault-Namespace", ns);
@@ -145,6 +158,23 @@ impl LeaseBackend for VaultBackend {
             });
 
         let lease_duration = resp["lease_duration"].as_i64();
+
+        // Warn if Vault returned a different TTL than requested — many engines
+        // (database, pki, rabbitmq) silently ignore the ?ttl query parameter
+        // and use the role's configured default TTL instead.
+        if let Some(actual_secs) = lease_duration {
+            let requested_secs = duration.as_secs() as i64;
+            let diff = (actual_secs - requested_secs).abs();
+            if diff > 30 {
+                tracing::warn!(
+                    "Vault returned lease_duration={}s but {}s was requested; \
+                     the Vault role may override the requested TTL",
+                    actual_secs,
+                    requested_secs
+                );
+            }
+        }
+
         let expires_at =
             lease_duration.map(|secs| chrono::Utc::now() + chrono::Duration::seconds(secs));
 

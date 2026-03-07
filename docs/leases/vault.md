@@ -23,6 +23,7 @@ password = "DB_PASSWORD"
 | `token`       | No       | Vault auth token (falls back to `VAULT_TOKEN`)             |
 | `namespace`   | No       | Vault namespace (for Vault Enterprise / HCP Vault)         |
 | `duration`    | No       | Requested lease TTL (e.g., `"1h"`, `"30m"`)                |
+| `method`      | No       | HTTP method: `"get"` (default) or `"post"` (for pki/issue) |
 
 ## Prerequisites
 
@@ -85,10 +86,13 @@ fnox exec -- psql -h db.example.com -U "$DB_USER" mydb
 
 ### PKI certificates
 
+PKI and some other engines require POST requests. Set `method = "post"`:
+
 ```toml
 [leases.vault-pki]
 type = "vault"
 secret_path = "pki/issue/my-role"
+method = "post"
 duration = "24h"
 
 [leases.vault-pki.env_map]
@@ -130,6 +134,11 @@ secret_path = "database/creds/app-role"
 username = "DB_USER"
 password = "DB_PASSWORD"
 ```
+
+## Notes
+
+- **TTL is advisory.** The `duration` field is sent to Vault as a TTL hint, but many engines (database, pki, rabbitmq) ignore it and use the role's configured default TTL instead. fnox warns if the actual `lease_duration` returned by Vault differs significantly from the requested value.
+- **GET vs POST.** Most Vault dynamic secret engines use GET (e.g., `aws/creds`, `database/creds`). Some engines like `pki/issue` require POST — set `method = "post"` for those.
 
 ## See Also
 

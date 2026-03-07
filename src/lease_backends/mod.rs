@@ -42,6 +42,10 @@ fn default_gcp_scopes() -> Vec<String> {
     vec!["https://www.googleapis.com/auth/cloud-platform".to_string()]
 }
 
+fn default_vault_method() -> String {
+    "get".to_string()
+}
+
 fn default_azure_env_var() -> String {
     "AZURE_ACCESS_TOKEN".to_string()
 }
@@ -81,6 +85,9 @@ pub enum LeaseBackendConfig {
         env_map: HashMap<String, String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         duration: Option<String>,
+        /// HTTP method: "get" (default) or "post" (required for pki/issue and some engines)
+        #[serde(default = "default_vault_method")]
+        method: String,
     },
     /// Azure Token Acquisition
     AzureToken {
@@ -107,7 +114,8 @@ impl LeaseBackendConfig {
         match self {
             LeaseBackendConfig::AwsSts { profile, .. } => {
                 // AWS SDK supports many auth methods; check the most common ones
-                let has_env = std::env::var("AWS_ACCESS_KEY_ID").is_ok()
+                let has_env = (std::env::var("AWS_ACCESS_KEY_ID").is_ok()
+                    && std::env::var("AWS_SECRET_ACCESS_KEY").is_ok())
                     || std::env::var("AWS_PROFILE").is_ok();
                 let has_profile = profile.is_some();
                 let has_sso = std::env::var("AWS_SSO_SESSION").is_ok();
@@ -240,6 +248,7 @@ impl LeaseBackendConfig {
                 secret_path,
                 namespace,
                 env_map,
+                method,
                 ..
             } => Ok(Box::new(vault::VaultBackend::new(
                 address.clone(),
@@ -247,6 +256,7 @@ impl LeaseBackendConfig {
                 secret_path.clone(),
                 namespace.clone(),
                 env_map.clone(),
+                method.clone(),
             )?)),
             LeaseBackendConfig::AzureToken { scope, env_var, .. } => Ok(Box::new(
                 azure_token::AzureTokenBackend::new(scope.clone(), env_var.clone()),

@@ -154,22 +154,35 @@ impl LeaseCreateCommand {
         let result = backend.create_lease(duration, &self.label).await?;
 
         // Cache credentials, encrypting if an encryption provider is configured
-        let (cached_credentials, encryption_provider) =
-            match lease::find_encryption_provider(&config, &profile).await {
-                Some((enc_name, provider)) => {
-                    match lease::encrypt_credentials(provider.as_ref(), &result.credentials).await {
-                        Ok(encrypted) => (Some(encrypted), Some(enc_name)),
-                        Err(e) => {
-                            tracing::warn!(
-                                "Failed to encrypt credentials for caching: {}, skipping cache",
-                                e
-                            );
-                            (None, None)
-                        }
+        let (cached_credentials, encryption_provider) = match lease::find_encryption_provider(
+            &config, &profile,
+        )
+        .await
+        {
+            lease::EncryptionProviderResult::Available(enc_name, provider) => {
+                match lease::encrypt_credentials(provider.as_ref(), &result.credentials).await {
+                    Ok(encrypted) => (Some(encrypted), Some(enc_name)),
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to encrypt credentials for caching: {}, skipping cache",
+                            e
+                        );
+                        (None, None)
                     }
                 }
-                None => (Some(result.credentials.clone()), None),
-            };
+            }
+            lease::EncryptionProviderResult::Unavailable(enc_name, e) => {
+                tracing::warn!(
+                    "Encryption provider '{}' configured but unavailable: {}, skipping credential cache",
+                    enc_name,
+                    e
+                );
+                (None, None)
+            }
+            lease::EncryptionProviderResult::NotConfigured => {
+                (Some(result.credentials.clone()), None)
+            }
+        };
 
         let mut ledger = LeaseLedger::load(&project_dir)?;
         ledger.add(LeaseRecord {

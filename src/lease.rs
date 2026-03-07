@@ -271,18 +271,28 @@ pub fn parse_duration(s: &str) -> Result<std::time::Duration> {
     Ok(std::time::Duration::from_secs(total_secs))
 }
 
+/// Result of searching for an encryption provider
+pub enum EncryptionProviderResult {
+    /// No encryption-capable default_provider is configured
+    NotConfigured,
+    /// An encryption provider was found and instantiated
+    Available(String, Box<dyn providers::Provider>),
+    /// An encryption provider is configured but failed to instantiate
+    Unavailable(String, FnoxError),
+}
+
 /// Find an encryption provider if one is configured (default_provider with Encryption capability)
-pub async fn find_encryption_provider(
-    config: &Config,
-    profile: &str,
-) -> Option<(String, Box<dyn providers::Provider>)> {
+pub async fn find_encryption_provider(config: &Config, profile: &str) -> EncryptionProviderResult {
     let provider_name = match config.get_default_provider(profile) {
         Ok(Some(name)) => name,
-        _ => return None,
+        _ => return EncryptionProviderResult::NotConfigured,
     };
 
     let providers_map = config.get_providers(profile);
-    let provider_config = providers_map.get(&provider_name)?;
+    let provider_config = match providers_map.get(&provider_name) {
+        Some(c) => c,
+        None => return EncryptionProviderResult::NotConfigured,
+    };
 
     let provider =
         match providers::get_provider_resolved(config, profile, &provider_name, provider_config)
@@ -290,12 +300,7 @@ pub async fn find_encryption_provider(
         {
             Ok(p) => p,
             Err(e) => {
-                tracing::debug!(
-                    "Could not instantiate encryption provider '{}': {}",
-                    provider_name,
-                    e
-                );
-                return None;
+                return EncryptionProviderResult::Unavailable(provider_name, e);
             }
         };
 
@@ -303,9 +308,9 @@ pub async fn find_encryption_provider(
         .capabilities()
         .contains(&ProviderCapability::Encryption)
     {
-        Some((provider_name, provider))
+        EncryptionProviderResult::Available(provider_name, provider)
     } else {
-        None
+        EncryptionProviderResult::NotConfigured
     }
 }
 

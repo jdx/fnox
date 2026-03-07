@@ -192,7 +192,9 @@ async fn resolve_lease(
         // If encrypted, decrypt
         if let Some(ref enc_provider_name) = cached_lease.encryption_provider {
             match lease::find_encryption_provider(config, profile).await {
-                Some((found_name, provider)) if found_name == *enc_provider_name => {
+                lease::EncryptionProviderResult::Available(found_name, provider)
+                    if found_name == *enc_provider_name =>
+                {
                     match lease::decrypt_credentials(provider.as_ref(), cached_creds).await {
                         Ok(decrypted) => {
                             tracing::debug!(
@@ -250,36 +252,50 @@ async fn resolve_lease(
     let result = backend.create_lease(duration, &label).await?;
 
     // Try to cache credentials (optionally encrypted)
-    let (cached_credentials, encryption_provider) =
-        match lease::find_encryption_provider(config, profile).await {
-            Some((enc_name, provider)) => {
-                match lease::encrypt_credentials(provider.as_ref(), &result.credentials).await {
-                    Ok(encrypted) => {
-                        tracing::debug!(
-                            "Caching encrypted credentials for lease '{}'",
-                            result.lease_id
-                        );
-                        (Some(encrypted), Some(enc_name))
-                    }
-                    Err(e) => {
-                        // Encryption provider is configured but failed — do NOT fall back
-                        // to plaintext, as that would silently degrade the user's security.
-                        tracing::warn!(
-                            "Failed to encrypt credentials for caching: {}, skipping cache",
-                            e
-                        );
-                        (None, None)
-                    }
+    let (cached_credentials, encryption_provider) = match lease::find_encryption_provider(
+        config, profile,
+    )
+    .await
+    {
+        lease::EncryptionProviderResult::Available(enc_name, provider) => {
+            match lease::encrypt_credentials(provider.as_ref(), &result.credentials).await {
+                Ok(encrypted) => {
+                    tracing::debug!(
+                        "Caching encrypted credentials for lease '{}'",
+                        result.lease_id
+                    );
+                    (Some(encrypted), Some(enc_name))
+                }
+                Err(e) => {
+                    // Encryption provider is configured but failed — do NOT fall back
+                    // to plaintext, as that would silently degrade the user's security.
+                    tracing::warn!(
+                        "Failed to encrypt credentials for caching: {}, skipping cache",
+                        e
+                    );
+                    (None, None)
                 }
             }
-            None => {
-                tracing::debug!(
-                    "No encryption provider, caching plaintext credentials for lease '{}'",
-                    result.lease_id
-                );
-                (Some(result.credentials.clone()), None)
-            }
-        };
+        }
+        lease::EncryptionProviderResult::Unavailable(enc_name, e) => {
+            // Encryption provider is configured but couldn't be instantiated
+            // (e.g., YubiKey unplugged). Skip caching rather than silently
+            // downgrading to plaintext.
+            tracing::warn!(
+                "Encryption provider '{}' configured but unavailable: {}, skipping credential cache",
+                enc_name,
+                e
+            );
+            (None, None)
+        }
+        lease::EncryptionProviderResult::NotConfigured => {
+            tracing::debug!(
+                "No encryption provider, caching plaintext credentials for lease '{}'",
+                result.lease_id
+            );
+            (Some(result.credentials.clone()), None)
+        }
+    };
 
     // Record in ledger
     ledger.add(LeaseRecord {
