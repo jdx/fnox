@@ -2,7 +2,7 @@
 
 # `fnox provider add`
 
-- **Usage**: `fnox provider add [FLAGS] <PROVIDER> <PROVIDER_TYPE>`
+- **Usage**: `fnox provider add [-g --global] [--vault <VAULT>] <PROVIDER> <PROVIDER_TYPE>`
 - **Aliases**: `a`, `set`
 
 Add a new provider
@@ -21,7 +21,6 @@ Provider type
 
 - `1password`
 - `age`
-- `age-2fa`
 - `aws`
 - `aws-kms`
 - `aws-ps`
@@ -39,23 +38,13 @@ Provider type
 - `plain`
 - `proton-pass`
 - `vault`
+- `yubikey`
 
 ## Flags
 
 ### `-g --global`
 
 Add to the global config file (~/.config/fnox/config.toml)
-
-### `--auth <AUTH>`
-
-Auth method for age-2fa provider (totp or yubikey)
-
-**Choices:**
-
-- `totp`
-- `yubikey`
-
-**Default:** `totp`
 
 ### `--vault <VAULT>`
 

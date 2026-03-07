@@ -20,10 +20,6 @@ pub struct AddCommand {
     #[arg(short = 'g', long)]
     pub global: bool,
 
-    /// Auth method for age-2fa provider (totp or yubikey)
-    #[arg(value_enum, long, default_value = "totp")]
-    pub auth: crate::providers::age_2fa::AuthMethod,
-
     /// Default Proton Pass vault name (only valid with provider type proton-pass)
     #[arg(long)]
     pub vault: Option<String>,
@@ -153,13 +149,12 @@ impl AddCommand {
                 key_file: OptionStringOrSecretRef::none(),
                 auth_command: None,
             },
-            ProviderType::Age2fa => {
-                let auth_str = self.auth.to_string();
-                let recipients =
-                    crate::providers::age_2fa::setup::setup_age_2fa(&self.provider, &auth_str)?;
-                crate::config::ProviderConfig::Age2fa {
-                    recipients,
-                    auth: StringOrSecretRef::from(auth_str.as_str()),
+            ProviderType::Yubikey => {
+                let (challenge_hex, slot_str) =
+                    crate::providers::yubikey::setup::setup_yubikey(&self.provider)?;
+                crate::config::ProviderConfig::Yubikey {
+                    challenge: StringOrSecretRef::from(challenge_hex.as_str()),
+                    slot: StringOrSecretRef::from(slot_str.as_str()),
                     auth_command: None,
                 }
             }

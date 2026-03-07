@@ -570,17 +570,6 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
         };
     }
 
-    // Special handling for age-2fa provider
-    if provider.serde_rename == "age-2fa" {
-        return quote! {
-            Ok(ProviderConfig::Age2fa {
-                recipients: vec![],
-                auth: get_required("auth")?,
-                auth_command: None,
-            })
-        };
-    }
-
     // Special handling for keepass provider
     if provider.serde_rename == "keepass" {
         return quote! {

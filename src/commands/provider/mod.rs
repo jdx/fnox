@@ -25,10 +25,6 @@ pub enum ProviderType {
     /// Age encryption
     #[value(name = "age")]
     Age,
-    /// Age encryption with 2FA (TOTP or YubiKey)
-    #[value(name = "age-2fa")]
-    #[strum(serialize = "age-2fa")]
-    Age2fa,
     /// AWS Secrets Manager
     #[value(name = "aws")]
     Aws,
@@ -89,6 +85,9 @@ pub enum ProviderType {
     /// HashiCorp Vault
     #[value(name = "vault")]
     Vault,
+    /// YubiKey HMAC-SHA1 hardware-backed encryption
+    #[value(name = "yubikey")]
+    Yubikey,
 }
 
 #[derive(Debug, Args)]

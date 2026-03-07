@@ -4,7 +4,6 @@ use std::collections::HashMap;
 
 // Provider implementation modules
 pub mod age;
-pub mod age_2fa;
 pub mod aws_kms;
 pub mod aws_ps;
 pub mod aws_sm;
@@ -14,6 +13,7 @@ pub mod bitwarden;
 pub mod bitwarden_sm;
 pub mod gcp_kms;
 pub mod gcp_sm;
+pub mod hw_encrypt;
 pub mod infisical;
 pub mod keepass;
 pub mod keychain;
@@ -26,6 +26,7 @@ pub mod resolved;
 pub mod resolver;
 pub mod secret_ref;
 pub mod vault;
+pub mod yubikey;
 
 pub use bitwarden::BitwardenBackend;
 pub use resolver::resolve_provider_config;
@@ -134,9 +135,9 @@ mod generated {
     pub(super) mod providers_instantiate {
         // Need to import provider modules for instantiation
         use super::super::{
-            age, age_2fa, aws_kms, aws_ps, aws_sm, azure_kms, azure_sm, bitwarden, bitwarden_sm,
-            gcp_kms, gcp_sm, infisical, keepass, keychain, onepassword, password_store,
-            passwordstate, plain, proton_pass, vault,
+            age, aws_kms, aws_ps, aws_sm, azure_kms, azure_sm, bitwarden, bitwarden_sm, gcp_kms,
+            gcp_sm, infisical, keepass, keychain, onepassword, password_store, passwordstate,
+            plain, proton_pass, vault, yubikey,
         };
         include!(concat!(
             env!("OUT_DIR"),
@@ -279,13 +280,13 @@ pub async fn get_provider_resolved(
     provider_config: &ProviderConfig,
 ) -> Result<Box<dyn Provider>> {
     let resolved = resolve_provider_config(config, profile, provider_name, provider_config).await?;
-    // Age2fa needs the provider name to find its key files on disk
-    if let ResolvedProviderConfig::Age2fa { recipients, auth } = &resolved {
-        return Ok(Box::new(age_2fa::Age2faProvider::with_name(
+    // Yubikey needs the provider name for per-provider secret caching
+    if let ResolvedProviderConfig::Yubikey { challenge, slot } = &resolved {
+        return Ok(Box::new(yubikey::YubikeyProvider::with_name(
             provider_name.to_string(),
-            recipients.clone(),
-            auth.clone(),
-        )?));
+            challenge.clone(),
+            slot.clone(),
+        )));
     }
     get_provider_from_resolved(&resolved)
 }

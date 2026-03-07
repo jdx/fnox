@@ -79,7 +79,7 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: "Age Encryption", link: "/providers/age" },
-              { text: "Age + 2FA", link: "/providers/age-2fa" },
+              { text: "YubiKey", link: "/providers/yubikey" },
               { text: "AWS KMS", link: "/providers/aws-kms" },
               { text: "Azure Key Vault Keys", link: "/providers/azure-kms" },
               { text: "Google Cloud KMS", link: "/providers/gcp-kms" },

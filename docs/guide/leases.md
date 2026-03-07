@@ -209,14 +209,14 @@ Run 'fnox lease create aws' to set up credentials interactively.
 
 The subprocess still runs — just without the lease credentials. This means other secrets and leases that _are_ available will still be injected.
 
-## Approach 3: 2FA-Protected Master Credentials
+## Approach 3: Hardware-Protected Master Credentials
 
-This approach stores master credentials encrypted on disk with a second factor (TOTP or YubiKey) required for decryption. It combines the convenience of Approach 1 (no manual paste step each session) with stronger security than a simple encryption key.
+This approach stores master credentials encrypted on disk with a hardware device (YubiKey) required for decryption. It combines the convenience of Approach 1 (no manual paste step each session) with stronger security than a simple encryption key.
 
-The master credentials are stored using the [`age-2fa` provider](/providers/age-2fa), which encrypts the age private key with a passphrase derived from your 2FA device. Without the TOTP code or YubiKey tap, decryption is impossible.
+The master credentials are stored using the [`yubikey` provider](/providers/yubikey), which derives an AES-256-GCM encryption key from a YubiKey HMAC-SHA1 challenge-response. Without the physical YubiKey, decryption is impossible.
 
 ::: tip Use fnox.local.toml
-The `age-2fa` provider config contains your public key and is safe to commit, but you probably don't want to commit your personal provider setup to a shared repo. Put the provider and secret definitions in `fnox.local.toml` (which is gitignored) and keep only the lease backend config in `fnox.toml`.
+Put the provider and secret definitions in `fnox.local.toml` (which is gitignored) and keep only the lease backend config in `fnox.toml`. The config is fully portable — move `fnox.local.toml` to any machine with the same YubiKey and it works.
 :::
 
 ### Setup
@@ -225,9 +225,9 @@ The `age-2fa` provider config contains your public key and is safe to commit, bu
 # fnox.local.toml (gitignored — personal provider + secrets)
 
 [providers.secure]
-type = "age-2fa"
-recipients = ["age1..."]  # auto-populated by `fnox provider add`
-auth = "totp"             # or "yubikey"
+type = "yubikey"
+challenge = "a1b2c3..."  # auto-populated by `fnox provider add`
+slot = "2"
 
 [secrets]
 AWS_ACCESS_KEY_ID = { provider = "secure", env = false }
@@ -253,12 +253,11 @@ Key points:
 ### Initial setup
 
 ```bash
-# 1. Create the 2FA-protected provider
-fnox provider add --type age-2fa --name secure
-# → Generates keypair, shows TOTP secret for your authenticator app
-# → Prompts for verification code to confirm setup
+# 1. Create the hardware-backed provider
+fnox provider add secure yubikey
+# → Generates random challenge, verifies YubiKey works
 
-# 2. Store your master credentials
+# 2. Store your master credentials (requires YubiKey tap)
 fnox set AWS_ACCESS_KEY_ID "AKIA..." --provider secure
 fnox set AWS_SECRET_ACCESS_KEY "wJalr..." --provider secure
 ```
@@ -267,14 +266,15 @@ fnox set AWS_SECRET_ACCESS_KEY "wJalr..." --provider secure
 
 ```bash
 $ fnox exec -- aws s3 ls
-TOTP code: 123456
-# → Decrypts master creds (one prompt per session)
+Tap your YubiKey...
+# → Derives encryption key from YubiKey (one tap per session)
+# → Decrypts master creds
 # → Calls sts:AssumeRole
 # → Injects short-lived creds into subprocess
 # → Caches lease for reuse
 ```
 
-The TOTP prompt only appears once per `fnox exec` invocation, even when multiple secrets use the same provider. After the lease is cached, subsequent `fnox exec` calls reuse it without prompting until it's close to expiring.
+The YubiKey tap only happens once per `fnox exec` invocation, even when multiple secrets use the same provider. After the lease is cached, subsequent `fnox exec` calls reuse it without prompting until it's close to expiring.
 
 ## Supported Backends
 
