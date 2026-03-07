@@ -34,7 +34,7 @@ pub enum OutputFormat {
 
 #[derive(Debug, Args)]
 pub struct LeaseCreateCommand {
-    /// Lease backend name (from [leases.<name>] config)
+    /// Lease backend name (from `[leases.<name>]` config)
     pub backend_name: String,
 
     /// Lease duration (e.g., "15m", "1h", "2h30m"); overrides config duration
