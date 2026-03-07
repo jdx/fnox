@@ -59,7 +59,7 @@ impl LeaseBackend for AwsStsBackend {
             .assume_role()
             .role_arn(role_arn)
             .role_session_name(sanitize_session_name(label))
-            .duration_seconds(duration.as_secs() as i32)
+            .duration_seconds(i32::try_from(duration.as_secs()).unwrap_or(i32::MAX))
             .send()
             .await
             .map_err(|e| {

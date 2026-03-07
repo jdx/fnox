@@ -3,8 +3,6 @@ use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
 pub mod aws_sts;
@@ -158,9 +156,8 @@ impl LeaseBackendConfig {
     /// Used to detect config changes and invalidate cached lease credentials.
     pub fn config_hash(&self) -> String {
         let serialized = serde_json::to_string(self).unwrap_or_default();
-        let mut hasher = DefaultHasher::new();
-        serialized.hash(&mut hasher);
-        format!("{:016x}", hasher.finish())
+        let hash = blake3::hash(serialized.as_bytes());
+        hash.to_hex()[..16].to_string()
     }
 
     /// Get the configured duration string, if any

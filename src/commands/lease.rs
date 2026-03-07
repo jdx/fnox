@@ -187,7 +187,11 @@ impl LeaseCreateCommand {
                     println!(
                         "export {}={}",
                         key,
-                        shlex::try_quote(value).unwrap_or_default()
+                        shlex::try_quote(value).map_err(|_| {
+                            FnoxError::Config(format!(
+                                "Credential value for '{key}' contains characters that cannot be shell-quoted"
+                            ))
+                        })?
                     );
                 }
             }

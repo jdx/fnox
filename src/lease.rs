@@ -3,9 +3,7 @@ use crate::error::{FnoxError, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::collections::hash_map::DefaultHasher;
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
 /// Default lease duration when none is specified
@@ -60,11 +58,12 @@ pub fn project_dir_from_config(config_path: &Path) -> PathBuf {
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
 }
 
-/// Hash a project directory path to produce a unique ledger filename
+/// Hash a project directory path to produce a unique ledger filename.
+/// Uses blake3 for stability across Rust toolchain upgrades (DefaultHasher
+/// is explicitly not guaranteed to be stable across releases).
 fn hash_project_dir(project_dir: &Path) -> String {
-    let mut hasher = DefaultHasher::new();
-    project_dir.hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
+    let hash = blake3::hash(project_dir.to_string_lossy().as_bytes());
+    hash.to_hex()[..16].to_string()
 }
 
 impl LeaseLedger {
