@@ -10,7 +10,7 @@ Create a short-lived credential lease from a secret
 
 ### `<BACKEND_NAME>`
 
-Lease backend name (from [leases.&lt;name&gt;] config)
+Lease backend name (from `[leases.<name>]` config)
 
 ## Flags
 

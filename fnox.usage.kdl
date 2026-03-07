@@ -106,7 +106,7 @@ cmd lease subcommand_required=#true help="Manage ephemeral credential leases" {
         flag "-l --label" help="Label for the lease (e.g., session purpose)" default=fnox-lease {
             arg <LABEL>
         }
-        arg <BACKEND_NAME> help="Lease backend name (from [leases.<name>] config)"
+        arg <BACKEND_NAME> help="Lease backend name (from `[leases.<name>]` config)"
     }
     cmd list help="List tracked leases" {
         flag --active help="Show only active (non-expired, non-revoked) leases"

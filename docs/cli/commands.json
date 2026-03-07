@@ -513,8 +513,8 @@
               {
                 "name": "BACKEND_NAME",
                 "usage": "<BACKEND_NAME>",
-                "help": "Lease backend name (from [leases.<name>] config)",
-                "help_first_line": "Lease backend name (from [leases.<name>] config)",
+                "help": "Lease backend name (from `[leases.<name>]` config)",
+                "help_first_line": "Lease backend name (from `[leases.<name>]` config)",
                 "required": true,
                 "double_dash": "Optional",
                 "hide": false
