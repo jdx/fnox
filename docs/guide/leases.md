@@ -13,8 +13,8 @@ Long-lived credentials are a security risk. If they leak, an attacker has access
 fnox supports three approaches depending on your security requirements:
 
 1. **Stored master credentials** — keep the long-lived credentials in a provider (keychain, 1Password, etc.) and let fnox handle lease creation automatically
-2. **Prompt-based** — never store master credentials on the machine; paste them in when needed
-3. **Hardware-protected** — store master credentials encrypted on disk, requiring a physical security key (YubiKey or FIDO2) to decrypt
+2. **Hardware-protected** — store master credentials encrypted on disk, requiring a physical security key (YubiKey or FIDO2) to decrypt
+3. **Prompt-based** — never store master credentials on the machine; paste them in when needed
 
 ## Approach 1: Stored Master Credentials
 
@@ -142,73 +142,7 @@ type = "azure-token"
 scope = "https://management.azure.com/.default"
 ```
 
-## Approach 2: Prompt-Based (No Stored Credentials)
-
-This approach is ideal for remote machines, shared servers, or environments where you don't want master credentials persisted to disk at all. Instead of storing credentials in a provider, you paste them in when `fnox lease create` prompts you.
-
-This is useful when:
-
-- You're working on a remote server over SSH
-- You keep master credentials in a password manager (1Password, Bitwarden, etc.) on your local machine
-- Security policy prohibits storing long-lived credentials on the server
-- You want to explicitly control when credentials are provisioned
-
-### Setup
-
-Configure only the lease backend — no secrets or providers needed:
-
-```toml
-# fnox.toml
-
-[leases.aws]
-type = "aws-sts"
-region = "us-east-1"
-role_arn = "arn:aws:iam::123456789012:role/dev-role"
-duration = "1h"
-```
-
-### Daily workflow
-
-When you start your session, create a lease interactively with `--interactive`:
-
-```bash
-$ fnox lease create aws -i
-AWS_ACCESS_KEY_ID (AWS access key): AKIA...
-AWS_SECRET_ACCESS_KEY (AWS secret key): wJalr...
-AWS_SESSION_TOKEN (AWS session token (optional)):
-
-Lease created (expires in 1h0m)
-
-AWS_ACCESS_KEY_ID         ASIA...F3YQ
-AWS_SECRET_ACCESS_KEY     wJal...EKEY
-AWS_SESSION_TOKEN         FwoG...==
-Expires                   2024-01-15T10:00:00+00:00
-```
-
-The credentials you paste are used once to call `sts:AssumeRole`, then discarded. Only the short-lived assumed-role credentials are cached in the lease ledger.
-
-Now `fnox exec` uses the cached lease without prompting:
-
-```bash
-# Uses the cached lease (no prompting, no stored master creds)
-fnox exec -- aws s3 ls
-fnox exec -- terraform plan
-```
-
-When the lease expires, run `fnox lease create aws` again and paste fresh credentials from your password manager.
-
-### What `fnox exec` does when credentials are missing
-
-If you run `fnox exec` without having created a lease and without stored master credentials, it skips the lease gracefully:
-
-```
-Skipping lease 'aws': AWS credentials not found. Run 'aws sso login' or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY.
-Run 'fnox lease create aws' to set up credentials interactively.
-```
-
-The subprocess still runs — just without the lease credentials. This means other secrets and leases that _are_ available will still be injected.
-
-## Approach 3: Hardware-Protected Master Credentials
+## Approach 2: Hardware-Protected Master Credentials
 
 This approach stores master credentials encrypted on disk with a hardware security key required for decryption. It combines the convenience of Approach 1 (no manual paste step each session) with stronger security — decryption is physically impossible without the key.
 
@@ -289,6 +223,72 @@ Tap your YubiKey...
 ```
 
 The hardware key tap only happens once per `fnox exec` invocation, even when multiple secrets use the same provider. After the lease is cached, subsequent `fnox exec` calls reuse it without prompting until it's close to expiring.
+
+## Approach 3: Prompt-Based (No Stored Credentials)
+
+This approach is ideal for remote machines, shared servers, or environments where you don't want master credentials persisted to disk at all. Instead of storing credentials in a provider, you paste them in when `fnox lease create` prompts you.
+
+This is useful when:
+
+- You're working on a remote server over SSH
+- You keep master credentials in a password manager (1Password, Bitwarden, etc.) on your local machine
+- Security policy prohibits storing long-lived credentials on the server
+- You want to explicitly control when credentials are provisioned
+
+### Setup
+
+Configure only the lease backend — no secrets or providers needed:
+
+```toml
+# fnox.toml
+
+[leases.aws]
+type = "aws-sts"
+region = "us-east-1"
+role_arn = "arn:aws:iam::123456789012:role/dev-role"
+duration = "1h"
+```
+
+### Daily workflow
+
+When you start your session, create a lease interactively with `--interactive`:
+
+```bash
+$ fnox lease create aws -i
+AWS_ACCESS_KEY_ID (AWS access key): AKIA...
+AWS_SECRET_ACCESS_KEY (AWS secret key): wJalr...
+AWS_SESSION_TOKEN (AWS session token (optional)):
+
+Lease created (expires in 1h0m)
+
+AWS_ACCESS_KEY_ID         ASIA...F3YQ
+AWS_SECRET_ACCESS_KEY     wJal...EKEY
+AWS_SESSION_TOKEN         FwoG...==
+Expires                   2024-01-15T10:00:00+00:00
+```
+
+The credentials you paste are used once to call `sts:AssumeRole`, then discarded. Only the short-lived assumed-role credentials are cached in the lease ledger.
+
+Now `fnox exec` uses the cached lease without prompting:
+
+```bash
+# Uses the cached lease (no prompting, no stored master creds)
+fnox exec -- aws s3 ls
+fnox exec -- terraform plan
+```
+
+When the lease expires, run `fnox lease create aws -i` again and paste fresh credentials from your password manager.
+
+### What `fnox exec` does when credentials are missing
+
+If you run `fnox exec` without having created a lease and without stored master credentials, it skips the lease gracefully:
+
+```
+Skipping lease 'aws': AWS credentials not found. Run 'aws sso login' or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY.
+Run 'fnox lease create aws -i' to set up credentials interactively.
+```
+
+The subprocess still runs — just without the lease credentials. This means other secrets and leases that _are_ available will still be injected.
 
 ## Supported Backends
 
