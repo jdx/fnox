@@ -2,8 +2,11 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
 use crate::lease::{self, LeaseLedger, LeaseRecord, TempEnvGuard};
+use crate::secret_resolver::resolve_secrets_batch;
+use crate::temp_file_secrets::create_ephemeral_secret_file;
 use chrono::Utc;
 use clap::{Args, Subcommand, ValueEnum};
+use tempfile::NamedTempFile;
 
 #[derive(Debug, Args)]
 #[command(about = "Manage ephemeral credential leases")]
@@ -97,8 +100,32 @@ impl LeaseCreateCommand {
             ))
         })?;
 
-        // Check prerequisites and prompt for missing env vars if --interactive
+        // Resolve secrets from fnox providers so master credentials (stored in
+        // 1Password, keychain, age, etc.) are available as env vars before
+        // checking prerequisites or creating the lease backend.
+        let profile_secrets = config.get_secrets(&profile)?;
+        let resolved_secrets = resolve_secrets_batch(&config, &profile, &profile_secrets).await?;
         let mut _temp_env_guard = TempEnvGuard::default();
+        let mut _temp_files: Vec<NamedTempFile> = Vec::new();
+        for (key, value) in &resolved_secrets {
+            if let Some(value) = value {
+                let env_value = if profile_secrets.get(key).is_some_and(|sc| sc.as_file) {
+                    let temp_file = create_ephemeral_secret_file(key, value)?;
+                    let path = temp_file.path().to_string_lossy().to_string();
+                    _temp_files.push(temp_file);
+                    path
+                } else {
+                    value.clone()
+                };
+                // TODO: unsafe set_var on a multi-threaded Tokio runtime is technically
+                // UB. Refactor to pass credentials explicitly to lease backend SDKs
+                // instead of mutating the process environment.
+                unsafe { std::env::set_var(key, &env_value) };
+                _temp_env_guard.keys.push(key.clone());
+            }
+        }
+
+        // Check prerequisites and prompt for missing env vars if --interactive
         if let Some(missing) = backend_config.check_prerequisites() {
             let required_vars = backend_config.required_env_vars();
             if self.interactive && !required_vars.is_empty() {

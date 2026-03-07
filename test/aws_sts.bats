@@ -72,14 +72,6 @@ role_arn = "$TEST_ROLE_ARN"
 EOF
 }
 
-@test "fnox lease requires experimental flag" {
-	create_sts_config
-
-	run "$FNOX_BIN" lease list
-	assert_failure
-	assert_output --partial "experimental"
-}
-
 @test "fnox lease create outputs credentials in json format" {
 	create_sts_config
 

@@ -40,8 +40,6 @@ setup() {
 }
 
 teardown() {
-	# Clean up test secret
-	vault kv delete secret/fnox-lease-test >/dev/null 2>&1 || true
 	_common_teardown
 }
 

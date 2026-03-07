@@ -249,14 +249,17 @@ async fn resolve_lease(
     }
 
     // No reusable cache — create fresh lease.
-    // If prerequisites were already known to be missing, fail now with a clear
-    // message instead of letting the SDK produce a confusing auth error.
+    // If prerequisites were already known to be missing, warn and skip (consistent
+    // with the skip behavior in the caller when no cache exists at all).
     if let Some(missing) = prereq_missing {
-        return Err(FnoxError::Config(format!(
-            "Cached lease for '{}' could not be used and prerequisites are missing: {}\n\
+        tracing::warn!(
+            "Skipping lease '{}': cached lease unusable and prerequisites missing: {}\n\
              Run 'fnox lease create -i {}' to set up credentials interactively.",
-            name, missing, name
-        )));
+            name,
+            missing,
+            name
+        );
+        return Ok(IndexMap::new());
     }
     let backend = lease_config.create_backend()?;
 
