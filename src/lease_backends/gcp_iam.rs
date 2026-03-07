@@ -22,7 +22,10 @@ impl GcpIamBackend {
 
 #[async_trait]
 impl LeaseBackend for GcpIamBackend {
-    async fn create_lease(&self, duration: Duration, _label: &str) -> Result<Lease> {
+    async fn create_lease(&self, duration: Duration, label: &str) -> Result<Lease> {
+        // GCP's generateAccessToken API does not accept a label/session name,
+        // so we log it for debugging. The label is still recorded in the ledger.
+        tracing::debug!("Creating GCP IAM lease with label '{}'", label);
         let auth_manager =
             gcp_auth::provider()
                 .await

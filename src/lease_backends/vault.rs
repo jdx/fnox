@@ -184,12 +184,12 @@ impl LeaseBackend for VaultBackend {
         if !response.status().is_success() {
             let status = response.status();
             let body_text = response.text().await.unwrap_or_default();
-            tracing::warn!(
-                "Failed to revoke Vault lease '{}': HTTP {} {}",
-                lease_id,
-                status,
-                body_text
-            );
+            return Err(FnoxError::ProviderApiError {
+                provider: "Vault".to_string(),
+                details: format!("HTTP {}: {}", status, body_text),
+                hint: "Failed to revoke Vault lease — check token permissions".to_string(),
+                url: URL.to_string(),
+            });
         }
 
         Ok(())

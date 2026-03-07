@@ -162,6 +162,8 @@ impl LeaseBackendConfig {
                 }
                 let has_az = which::which("az").is_ok();
                 if has_az {
+                    // az CLI is installed but we can't verify login state without
+                    // running a subprocess; hint the user to check if auth fails later
                     None
                 } else {
                     Some("Azure credentials not found. Run 'az login' or set AZURE_CLIENT_ID/AZURE_CLIENT_SECRET/AZURE_TENANT_ID.".to_string())
