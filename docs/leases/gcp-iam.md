@@ -11,11 +11,12 @@ service_account_email = "my-sa@my-project.iam.gserviceaccount.com"
 duration = "1h"
 ```
 
-| Field                   | Required | Description                                                                   |
-| ----------------------- | -------- | ----------------------------------------------------------------------------- |
-| `service_account_email` | Yes      | Service account to impersonate                                                |
-| `scopes`                | No       | OAuth2 scopes (default: `["https://www.googleapis.com/auth/cloud-platform"]`) |
-| `duration`              | No       | Lease duration (e.g., `"1h"`, `"30m"`)                                        |
+| Field                   | Required | Description                                                                     |
+| ----------------------- | -------- | ------------------------------------------------------------------------------- |
+| `service_account_email` | Yes      | Service account to impersonate                                                  |
+| `scopes`                | No       | OAuth2 scopes (default: `["https://www.googleapis.com/auth/cloud-platform"]`)   |
+| `env_var`               | No       | Environment variable name for the token (default: `CLOUDSDK_AUTH_ACCESS_TOKEN`) |
+| `duration`              | No       | Lease duration (e.g., `"1h"`, `"30m"`)                                          |
 
 ## Prerequisites
 
@@ -37,7 +38,12 @@ GCP credentials not found. Run 'gcloud auth application-default login' or set GO
 | ---------------------------- | ------------------- |
 | `CLOUDSDK_AUTH_ACCESS_TOKEN` | OAuth2 access token |
 
-This token is accepted by `gcloud`, client libraries, and any tool that reads the standard GCP auth environment.
+The default `CLOUDSDK_AUTH_ACCESS_TOKEN` is read by the `gcloud` CLI. GCP client libraries (Python, Java, Go, Node.js) typically read `GOOGLE_OAUTH_ACCESS_TOKEN` instead. Set `env_var` to match your target tool:
+
+```toml
+# For GCP SDKs (not gcloud CLI):
+env_var = "GOOGLE_OAUTH_ACCESS_TOKEN"
+```
 
 ## Limits
 

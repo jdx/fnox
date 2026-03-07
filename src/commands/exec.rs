@@ -59,8 +59,9 @@ impl ExecCommand {
                 if let Some(value) = value
                     && std::env::var(key).is_err()
                 {
-                    // SAFETY: We only set env vars that don't already exist, and
-                    // no spawned tasks are reading env vars at this point.
+                    // TODO: unsafe set_var on a multi-threaded Tokio runtime is technically
+                    // UB. Refactor to pass credentials explicitly to lease backend SDKs
+                    // instead of mutating the process environment.
                     unsafe { std::env::set_var(key, value) };
                     _temp_env_guard.keys.push(key.clone());
                 }

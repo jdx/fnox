@@ -42,6 +42,13 @@ impl Fido2Provider {
                 provider_name, e
             ))
         })?;
+        if salt_bytes.len() != 32 {
+            return Err(FnoxError::Config(format!(
+                "fido2 provider '{}': salt must be exactly 32 bytes (got {})",
+                provider_name,
+                salt_bytes.len()
+            )));
+        }
         Ok(Self {
             credential_id: credential_id_bytes,
             salt: salt_bytes,

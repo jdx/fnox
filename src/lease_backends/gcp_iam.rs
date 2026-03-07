@@ -9,13 +9,15 @@ const URL: &str = "https://fnox.jdx.dev/leases/gcp-iam";
 pub struct GcpIamBackend {
     service_account_email: String,
     scopes: Vec<String>,
+    env_var: String,
 }
 
 impl GcpIamBackend {
-    pub fn new(service_account_email: String, scopes: Vec<String>) -> Self {
+    pub fn new(service_account_email: String, scopes: Vec<String>, env_var: String) -> Self {
         Self {
             service_account_email,
             scopes,
+            env_var,
         }
     }
 }
@@ -126,7 +128,7 @@ impl LeaseBackend for GcpIamBackend {
         });
 
         let mut credentials = IndexMap::new();
-        credentials.insert("CLOUDSDK_AUTH_ACCESS_TOKEN".to_string(), access_token);
+        credentials.insert(self.env_var.clone(), access_token);
 
         let lease_id = format!(
             "gcp-iam-{}-{}",

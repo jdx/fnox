@@ -42,6 +42,10 @@ fn default_gcp_scopes() -> Vec<String> {
     vec!["https://www.googleapis.com/auth/cloud-platform".to_string()]
 }
 
+fn default_gcp_env_var() -> String {
+    "CLOUDSDK_AUTH_ACCESS_TOKEN".to_string()
+}
+
 fn default_vault_method() -> String {
     "get".to_string()
 }
@@ -70,6 +74,8 @@ pub enum LeaseBackendConfig {
         service_account_email: String,
         #[serde(default = "default_gcp_scopes")]
         scopes: Vec<String>,
+        #[serde(default = "default_gcp_env_var")]
+        env_var: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         duration: Option<String>,
     },
@@ -237,10 +243,12 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::GcpIam {
                 service_account_email,
                 scopes,
+                env_var,
                 ..
             } => Ok(Box::new(gcp_iam::GcpIamBackend::new(
                 service_account_email.clone(),
                 scopes.clone(),
+                env_var.clone(),
             ))),
             LeaseBackendConfig::Vault {
                 address,

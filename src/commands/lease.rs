@@ -115,10 +115,8 @@ impl LeaseCreateCommand {
                                 FnoxError::Config(format!("Failed to read input: {}", e))
                             })?;
                         if !value.is_empty() {
-                            // SAFETY: The Tokio runtime is active but no spawned
-                            // tasks are reading env vars at this point — the user
-                            // is blocked on interactive input. For a CLI tool the
-                            // practical risk of concurrent env access is negligible.
+                            // TODO: unsafe set_var on a multi-threaded Tokio runtime is
+                            // technically UB. Refactor to pass credentials explicitly.
                             unsafe { std::env::set_var(var, &value) };
                         }
                     }
