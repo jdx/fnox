@@ -213,7 +213,7 @@ The subprocess still runs — just without the lease credentials. This means oth
 
 This approach stores master credentials encrypted on disk with a hardware device (YubiKey) required for decryption. It combines the convenience of Approach 1 (no manual paste step each session) with stronger security than a simple encryption key.
 
-The master credentials are stored using the [`yubikey` provider](/providers/yubikey), which derives an AES-256-GCM encryption key from a YubiKey HMAC-SHA1 challenge-response. Without the physical YubiKey, decryption is impossible.
+The master credentials are stored using the [`yubikey` provider](/providers/yubikey) or [`fido2` provider](/providers/fido2), which derive an AES-256-GCM encryption key from a hardware device. Without the physical key, decryption is impossible.
 
 ::: tip Use fnox.local.toml
 Put the provider and secret definitions in `fnox.local.toml` (which is gitignored) and keep only the lease backend config in `fnox.toml`. The config is fully portable — move `fnox.local.toml` to any machine with the same YubiKey and it works.

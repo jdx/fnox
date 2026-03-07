@@ -149,6 +149,16 @@ impl AddCommand {
                 key_file: OptionStringOrSecretRef::none(),
                 auth_command: None,
             },
+            ProviderType::Fido2 => {
+                let (credential_id_hex, salt_hex, rp_id) =
+                    crate::providers::fido2::setup::setup_fido2(&self.provider)?;
+                crate::config::ProviderConfig::Fido2 {
+                    credential_id: StringOrSecretRef::from(credential_id_hex.as_str()),
+                    salt: StringOrSecretRef::from(salt_hex.as_str()),
+                    rp_id: StringOrSecretRef::from(rp_id.as_str()),
+                    auth_command: None,
+                }
+            }
             ProviderType::Yubikey => {
                 let (challenge_hex, slot_str) =
                     crate::providers::yubikey::setup::setup_yubikey(&self.provider)?;

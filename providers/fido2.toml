@@ -1,0 +1,31 @@
+# FIDO2 hmac-secret hardware-backed encryption
+display_name = "FIDO2"
+serde_rename = "fido2"
+rust_variant = "Fido2"
+module = "fido2"
+struct_name = "Fido2Provider"
+category = "Local"
+description = "Hardware-backed encryption using FIDO2 hmac-secret extension"
+default_name = "fido2"
+setup_instructions = """
+FIDO2 provider uses the hmac-secret extension to derive an encryption key.
+Secrets are encrypted with AES-256-GCM — decryption requires the same FIDO2 key.
+Run: fnox provider add --type fido2"""
+
+[fields.credential_id]
+type = "required"
+placeholder = ""
+label = "Credential ID (hex, auto-generated during setup):"
+wizard = false
+
+[fields.salt]
+type = "required"
+placeholder = ""
+label = "Salt (hex, auto-generated during setup):"
+wizard = false
+
+[fields.rp_id]
+type = "required"
+placeholder = ""
+label = "Relying Party ID:"
+wizard = false

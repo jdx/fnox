@@ -11,6 +11,7 @@ pub mod azure_kms;
 pub mod azure_sm;
 pub mod bitwarden;
 pub mod bitwarden_sm;
+pub mod fido2;
 pub mod gcp_kms;
 pub mod gcp_sm;
 pub mod hw_encrypt;
@@ -135,9 +136,9 @@ mod generated {
     pub(super) mod providers_instantiate {
         // Need to import provider modules for instantiation
         use super::super::{
-            age, aws_kms, aws_ps, aws_sm, azure_kms, azure_sm, bitwarden, bitwarden_sm, gcp_kms,
-            gcp_sm, infisical, keepass, keychain, onepassword, password_store, passwordstate,
-            plain, proton_pass, vault, yubikey,
+            age, aws_kms, aws_ps, aws_sm, azure_kms, azure_sm, bitwarden, bitwarden_sm, fido2,
+            gcp_kms, gcp_sm, infisical, keepass, keychain, onepassword, password_store,
+            passwordstate, plain, proton_pass, vault, yubikey,
         };
         include!(concat!(
             env!("OUT_DIR"),
@@ -280,13 +281,28 @@ pub async fn get_provider_resolved(
     provider_config: &ProviderConfig,
 ) -> Result<Box<dyn Provider>> {
     let resolved = resolve_provider_config(config, profile, provider_name, provider_config).await?;
-    // Yubikey needs the provider name for per-provider secret caching
-    if let ResolvedProviderConfig::Yubikey { challenge, slot } = &resolved {
-        return Ok(Box::new(yubikey::YubikeyProvider::with_name(
-            provider_name.to_string(),
-            challenge.clone(),
-            slot.clone(),
-        )));
+    // Hardware providers need the provider name for per-provider secret caching
+    match &resolved {
+        ResolvedProviderConfig::Yubikey { challenge, slot } => {
+            return Ok(Box::new(yubikey::YubikeyProvider::with_name(
+                provider_name.to_string(),
+                challenge.clone(),
+                slot.clone(),
+            )));
+        }
+        ResolvedProviderConfig::Fido2 {
+            credential_id,
+            salt,
+            rp_id,
+        } => {
+            return Ok(Box::new(fido2::Fido2Provider::with_name(
+                provider_name.to_string(),
+                credential_id.clone(),
+                salt.clone(),
+                rp_id.clone(),
+            )));
+        }
+        _ => {}
     }
     get_provider_from_resolved(&resolved)
 }

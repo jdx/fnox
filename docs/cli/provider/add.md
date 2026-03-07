@@ -28,6 +28,7 @@ Provider type
 - `azure-sm`
 - `gcp`
 - `gcp-kms`
+- `fido2`
 - `bitwarden`
 - `bitwarden-sm`
 - `infisical`
