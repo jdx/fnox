@@ -113,7 +113,16 @@ jobs:
             -e SERVICES=sts,iam \
             localstack/localstack:latest
           # Wait for services to be ready
-          sleep 5
+          # Poll LocalStack health endpoint (can take 10-30s on cold runners)
+          for _i in $(seq 1 30); do
+            curl -sf http://localhost:4566/_localstack/health && break
+            sleep 2
+          done
+          # Wait for Vault to be ready
+          for _i in $(seq 1 15); do
+            curl -sf http://localhost:8200/v1/sys/health && break
+            sleep 1
+          done
           {
             echo "VAULT_ADDR=http://localhost:8200"
             echo "VAULT_TOKEN=fnox-test-token"
