@@ -49,10 +49,9 @@ impl ExecCommand {
         // Resolve leases if configured and experimental mode is enabled.
         // Temporarily set resolved secrets as process env vars so lease backend
         // SDKs (AWS, GCP, Azure) can find master credentials during lease creation.
-        // These are cleaned up after lease resolution; only the subprocess gets the
-        // final set of env vars via cmd.env().
+        // The TempEnvGuard ensures cleanup on all exit paths (including errors).
         let leases = config.get_leases(&profile);
-        let mut temp_env_keys: Vec<String> = Vec::new();
+        let mut _temp_env_guard = TempEnvGuard::default();
         if !leases.is_empty() {
             Settings::ensure_experimental("lease in exec")?;
             for (key, value) in &resolved_secrets {
@@ -62,54 +61,46 @@ impl ExecCommand {
                     // SAFETY: We only set env vars that don't already exist, and
                     // no spawned tasks are reading env vars at this point.
                     unsafe { std::env::set_var(key, value) };
-                    temp_env_keys.push(key.clone());
+                    _temp_env_guard.keys.push(key.clone());
                 }
             }
-            {
-                let project_dir = lease::project_dir_from_config(&cli.config);
-                // Load ledger once to avoid TOCTTOU race with concurrent invocations
-                let mut ledger = LeaseLedger::load(&project_dir)?;
-                for (name, lease_config) in &leases {
-                    // Check prerequisites before attempting to create/use a lease
-                    if let Some(missing) = lease_config.check_prerequisites() {
-                        // Check if there's a cached lease we can still use
-                        let config_hash = lease_config.config_hash();
-                        if let Some(cached) = ledger.find_reusable(name, &config_hash)
-                            && cached.cached_credentials.is_some()
-                        {
-                            // Fall through to resolve_lease which will use the cache
-                        } else {
-                            eprintln!(
-                                "Skipping lease '{}': {}\nRun 'fnox lease create {}' to set up credentials interactively.",
-                                name, missing, name
-                            );
-                            continue;
-                        }
-                    }
-                    // Intentionally hard-fail: if prerequisites pass but lease
-                    // creation fails (network, permissions, etc.), abort rather
-                    // than silently running the subprocess without expected creds.
-                    let creds = resolve_lease(
-                        name,
-                        lease_config,
-                        &config,
-                        &profile,
-                        &project_dir,
-                        &mut ledger,
-                    )
-                    .await?;
-                    for (cred_key, cred_value) in creds {
-                        lease_keys.insert(cred_key.clone());
-                        cmd.env(cred_key, cred_value);
+            let project_dir = lease::project_dir_from_config(&cli.config);
+            // Load ledger once to avoid TOCTTOU race with concurrent invocations
+            let mut ledger = LeaseLedger::load(&project_dir)?;
+            for (name, lease_config) in &leases {
+                // Check prerequisites before attempting to create/use a lease
+                if let Some(missing) = lease_config.check_prerequisites() {
+                    // Check if there's a cached lease we can still use
+                    let config_hash = lease_config.config_hash();
+                    if let Some(cached) = ledger.find_reusable(name, &config_hash)
+                        && cached.cached_credentials.is_some()
+                    {
+                        // Fall through to resolve_lease which will use the cache
+                    } else {
+                        eprintln!(
+                            "Skipping lease '{}': {}\nRun 'fnox lease create {}' to set up credentials interactively.",
+                            name, missing, name
+                        );
+                        continue;
                     }
                 }
+                // Intentionally hard-fail: if prerequisites pass but lease
+                // creation fails (network, permissions, etc.), abort rather
+                // than silently running the subprocess without expected creds.
+                let creds = resolve_lease(
+                    name,
+                    lease_config,
+                    &config,
+                    &profile,
+                    &project_dir,
+                    &mut ledger,
+                )
+                .await?;
+                for (cred_key, cred_value) in creds {
+                    lease_keys.insert(cred_key.clone());
+                    cmd.env(cred_key, cred_value);
+                }
             }
-        }
-
-        // Clean up temporary env vars set for lease backend SDKs
-        for key in &temp_env_keys {
-            // SAFETY: Lease resolution is complete; no concurrent readers.
-            unsafe { std::env::remove_var(key) };
         }
 
         // Add resolved secrets as environment variables
@@ -307,4 +298,21 @@ async fn resolve_lease(
     );
 
     Ok(result.credentials)
+}
+
+/// RAII guard that removes temporary process env vars on drop.
+/// Ensures cleanup on all exit paths, including early returns from `?`.
+#[derive(Default)]
+struct TempEnvGuard {
+    keys: Vec<String>,
+}
+
+impl Drop for TempEnvGuard {
+    fn drop(&mut self) {
+        for key in &self.keys {
+            // SAFETY: This runs during drop after all lease resolution is complete.
+            // No concurrent readers of these env vars exist at this point.
+            unsafe { std::env::remove_var(key) };
+        }
+    }
 }
