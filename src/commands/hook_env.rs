@@ -242,11 +242,10 @@ async fn load_secrets_from_config() -> Result<LoadedSecrets> {
     for (key, value_opt) in resolved {
         if let Some(value) = value_opt {
             // Skip secrets with env = false (only accessible via `fnox get`)
-            if let Some(secret_config) = profile_secrets.get(&key) {
-                if !secret_config.env {
+            if let Some(secret_config) = profile_secrets.get(&key)
+                && !secret_config.env {
                     continue;
                 }
-            }
             // Check if this secret should be file-based
             if let Some(secret_config) = profile_secrets.get(&key) {
                 if secret_config.as_file {

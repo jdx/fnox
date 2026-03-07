@@ -743,7 +743,7 @@
         "subcommands": {
           "add": {
             "full_cmd": ["provider", "add"],
-            "usage": "provider add [-g --global] [--vault <VAULT>] <PROVIDER> <PROVIDER_TYPE>",
+            "usage": "provider add [FLAGS] <PROVIDER> <PROVIDER_TYPE>",
             "subcommands": {},
             "args": [
               {
@@ -767,6 +767,7 @@
                   "choices": [
                     "1password",
                     "age",
+                    "age-2fa",
                     "aws",
                     "aws-kms",
                     "aws-ps",
@@ -798,6 +799,27 @@
                 "long": ["global"],
                 "hide": false,
                 "global": false
+              },
+              {
+                "name": "auth",
+                "usage": "--auth <AUTH>",
+                "help": "Auth method for age-2fa provider (totp or yubikey)",
+                "help_first_line": "Auth method for age-2fa provider (totp or yubikey)",
+                "short": [],
+                "long": ["auth"],
+                "hide": false,
+                "global": false,
+                "arg": {
+                  "name": "AUTH",
+                  "usage": "<AUTH>",
+                  "required": true,
+                  "double_dash": "Optional",
+                  "hide": false,
+                  "choices": {
+                    "choices": ["totp", "yubikey"]
+                  }
+                },
+                "default": ["totp"]
               },
               {
                 "name": "vault",
