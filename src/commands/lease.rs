@@ -76,7 +76,7 @@ impl LeaseCommand {
 
         match &self.subcommand {
             LeaseSubcommand::Create(cmd) => cmd.run(cli, config).await,
-            LeaseSubcommand::List(cmd) => cmd.run().await,
+            LeaseSubcommand::List(cmd) => cmd.run(cli).await,
             LeaseSubcommand::Revoke(cmd) => cmd.run(cli, config).await,
             LeaseSubcommand::Cleanup(cmd) => cmd.run(cli, config).await,
         }
@@ -86,6 +86,7 @@ impl LeaseCommand {
 impl LeaseCreateCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
         let profile = Config::get_profile(cli.profile.as_deref());
+        let project_dir = lease::project_dir_from_config(&cli.config);
         let leases = config.get_leases(&profile);
 
         let backend_config = leases.get(&self.backend_name).ok_or_else(|| {
@@ -117,7 +118,7 @@ impl LeaseCreateCommand {
         let result = backend.create_lease(duration, &self.label).await?;
 
         // Record in ledger
-        let mut ledger = LeaseLedger::load()?;
+        let mut ledger = LeaseLedger::load(&project_dir)?;
         ledger.add(LeaseRecord {
             lease_id: result.lease_id.clone(),
             backend_name: self.backend_name.clone(),
@@ -128,7 +129,7 @@ impl LeaseCreateCommand {
             cached_credentials: None,
             encryption_provider: None,
         });
-        ledger.save()?;
+        ledger.save(&project_dir)?;
 
         // Output in requested format
         match self.format {
@@ -187,8 +188,9 @@ impl LeaseCreateCommand {
 }
 
 impl LeaseListCommand {
-    pub async fn run(&self) -> Result<()> {
-        let ledger = LeaseLedger::load()?;
+    pub async fn run(&self, cli: &Cli) -> Result<()> {
+        let project_dir = lease::project_dir_from_config(&cli.config);
+        let ledger = LeaseLedger::load(&project_dir)?;
 
         let records: Vec<&LeaseRecord> = if self.active {
             ledger.active_leases()
@@ -236,7 +238,8 @@ impl LeaseListCommand {
 
 impl LeaseRevokeCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
-        let mut ledger = LeaseLedger::load()?;
+        let project_dir = lease::project_dir_from_config(&cli.config);
+        let mut ledger = LeaseLedger::load(&project_dir)?;
 
         let record = ledger
             .find(&self.lease_id)
@@ -258,7 +261,7 @@ impl LeaseRevokeCommand {
         }
 
         ledger.mark_revoked(&self.lease_id);
-        ledger.save()?;
+        ledger.save(&project_dir)?;
         println!("Lease '{}' revoked.", self.lease_id);
 
         Ok(())
@@ -267,7 +270,8 @@ impl LeaseRevokeCommand {
 
 impl LeaseCleanupCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
-        let mut ledger = LeaseLedger::load()?;
+        let project_dir = lease::project_dir_from_config(&cli.config);
+        let mut ledger = LeaseLedger::load(&project_dir)?;
         let expired: Vec<LeaseRecord> = ledger
             .expired_leases()
             .iter()
@@ -312,7 +316,7 @@ impl LeaseCleanupCommand {
             cleaned += 1;
         }
 
-        ledger.save()?;
+        ledger.save(&project_dir)?;
         println!("Cleaned up {} expired lease(s).", cleaned);
 
         Ok(())

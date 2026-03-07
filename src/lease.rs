@@ -3,8 +3,10 @@ use crate::error::{FnoxError, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::fs;
-use std::path::PathBuf;
+use std::hash::{Hash, Hasher};
+use std::path::{Path, PathBuf};
 
 /// Default lease duration when none is specified
 pub const DEFAULT_LEASE_DURATION: &str = "15m";
@@ -34,15 +36,39 @@ pub struct LeaseLedger {
     pub leases: Vec<LeaseRecord>,
 }
 
+/// Determine the project directory from a config file path.
+/// Uses the parent of the config file, falling back to the current directory.
+pub fn project_dir_from_config(config_path: &Path) -> PathBuf {
+    // If the config path has a parent that's a real directory, use it
+    if let Some(parent) = config_path.parent() {
+        if parent.is_absolute() {
+            return parent.to_path_buf();
+        }
+    }
+    // Fall back to current working directory
+    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+}
+
+/// Hash a project directory path to produce a unique ledger filename
+fn hash_project_dir(project_dir: &Path) -> String {
+    let mut hasher = DefaultHasher::new();
+    project_dir.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
 impl LeaseLedger {
-    /// Path to the lease ledger file
-    fn ledger_path() -> PathBuf {
-        env::FNOX_CONFIG_DIR.join("leases.toml")
+    /// Path to the lease ledger file, scoped to a project directory
+    fn ledger_path(project_dir: &Path) -> PathBuf {
+        let hash = hash_project_dir(project_dir);
+        env::FNOX_CONFIG_DIR
+            .join("leases")
+            .join(format!("{hash}.toml"))
     }
 
-    /// Load the lease ledger from disk, creating an empty one if it doesn't exist
-    pub fn load() -> Result<Self> {
-        let path = Self::ledger_path();
+    /// Load the lease ledger from disk, creating an empty one if it doesn't exist.
+    /// The ledger is scoped to the project directory (parent of the config file).
+    pub fn load(project_dir: &Path) -> Result<Self> {
+        let path = Self::ledger_path(project_dir);
         if !path.exists() {
             return Ok(Self::default());
         }
@@ -56,9 +82,9 @@ impl LeaseLedger {
     }
 
     /// Save the lease ledger to disk
-    pub fn save(&self) -> Result<()> {
-        let path = Self::ledger_path();
-        // Ensure config directory exists
+    pub fn save(&self, project_dir: &Path) -> Result<()> {
+        let path = Self::ledger_path(project_dir);
+        // Ensure leases directory exists
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|e| FnoxError::CreateDirFailed {
                 path: parent.to_path_buf(),

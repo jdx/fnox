@@ -43,8 +43,10 @@ impl ExecCommand {
             if let Err(e) = Settings::ensure_experimental("lease in exec") {
                 tracing::warn!("Skipping leases: {}", e);
             } else {
+                let project_dir = lease::project_dir_from_config(&cli.config);
                 for (name, lease_config) in &leases {
-                    let creds = resolve_lease(name, lease_config, &config, &profile).await?;
+                    let creds =
+                        resolve_lease(name, lease_config, &config, &profile, &project_dir).await?;
                     for (cred_key, cred_value) in creds {
                         cmd.env(cred_key, cred_value);
                     }
@@ -180,9 +182,10 @@ async fn resolve_lease(
     lease_config: &LeaseBackendConfig,
     config: &Config,
     profile: &str,
+    project_dir: &std::path::Path,
 ) -> Result<HashMap<String, String>> {
     // Load ledger once as mutable to avoid race window with concurrent invocations
-    let mut ledger = LeaseLedger::load()?;
+    let mut ledger = LeaseLedger::load(project_dir)?;
 
     // Check for a reusable cached lease
     if let Some(cached_lease) = ledger.find_reusable(name) {
@@ -289,7 +292,7 @@ async fn resolve_lease(
         cached_credentials,
         encryption_provider,
     });
-    ledger.save()?;
+    ledger.save(project_dir)?;
 
     tracing::debug!(
         "Created lease '{}' for backend '{}' (expires {:?})",
