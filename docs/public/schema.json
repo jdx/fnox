@@ -111,6 +111,103 @@
             }
           },
           "required": ["type", "region", "role_arn"]
+        },
+        {
+          "description": "GCP Service Account Impersonation",
+          "type": "object",
+          "properties": {
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "service_account_email": {
+              "type": "string"
+            },
+            "scopes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": ["https://www.googleapis.com/auth/cloud-platform"]
+            },
+            "type": {
+              "type": "string",
+              "const": "gcp-iam"
+            }
+          },
+          "required": ["type", "service_account_email"]
+        },
+        {
+          "description": "HashiCorp Vault Dynamic Secrets",
+          "type": "object",
+          "properties": {
+            "address": {
+              "type": ["string", "null"]
+            },
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "env_map": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "namespace": {
+              "type": ["string", "null"]
+            },
+            "secret_path": {
+              "type": "string"
+            },
+            "token": {
+              "type": ["string", "null"]
+            },
+            "type": {
+              "type": "string",
+              "const": "vault"
+            }
+          },
+          "required": ["type", "secret_path", "env_map"]
+        },
+        {
+          "description": "Azure Token Acquisition",
+          "type": "object",
+          "properties": {
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "env_var": {
+              "type": "string",
+              "default": "AZURE_ACCESS_TOKEN"
+            },
+            "scope": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "azure-token"
+            }
+          },
+          "required": ["type", "scope"]
+        },
+        {
+          "description": "Generic Command Backend",
+          "type": "object",
+          "properties": {
+            "create_command": {
+              "type": "string"
+            },
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "revoke_command": {
+              "type": ["string", "null"]
+            },
+            "type": {
+              "type": "string",
+              "const": "command"
+            }
+          },
+          "required": ["type", "create_command"]
         }
       ]
     },

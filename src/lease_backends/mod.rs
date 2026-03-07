@@ -6,6 +6,10 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 pub mod aws_sts;
+pub mod azure_token;
+pub mod command;
+pub mod gcp_iam;
+pub mod vault;
 
 /// A credential lease with metadata for tracking and revocation
 #[derive(Debug, Clone)]
@@ -34,6 +38,14 @@ pub trait LeaseBackend: Send + Sync {
     fn max_lease_duration(&self) -> Duration;
 }
 
+fn default_gcp_scopes() -> Vec<String> {
+    vec!["https://www.googleapis.com/auth/cloud-platform".to_string()]
+}
+
+fn default_azure_env_var() -> String {
+    "AZURE_ACCESS_TOKEN".to_string()
+}
+
 /// Configuration for a lease backend (manually defined, no codegen)
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "kebab-case")]
@@ -46,6 +58,43 @@ pub enum LeaseBackendConfig {
         role_arn: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         endpoint: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        duration: Option<String>,
+    },
+    /// GCP Service Account Impersonation
+    GcpIam {
+        service_account_email: String,
+        #[serde(default = "default_gcp_scopes")]
+        scopes: Vec<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        duration: Option<String>,
+    },
+    /// HashiCorp Vault Dynamic Secrets
+    Vault {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        address: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        token: Option<String>,
+        secret_path: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        namespace: Option<String>,
+        env_map: HashMap<String, String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        duration: Option<String>,
+    },
+    /// Azure Token Acquisition
+    AzureToken {
+        scope: String,
+        #[serde(default = "default_azure_env_var")]
+        env_var: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        duration: Option<String>,
+    },
+    /// Generic Command Backend
+    Command {
+        create_command: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        revoke_command: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         duration: Option<String>,
     },
@@ -67,13 +116,50 @@ impl LeaseBackendConfig {
                 role_arn.clone(),
                 endpoint.clone(),
             ))),
+            LeaseBackendConfig::GcpIam {
+                service_account_email,
+                scopes,
+                ..
+            } => Ok(Box::new(gcp_iam::GcpIamBackend::new(
+                service_account_email.clone(),
+                scopes.clone(),
+            ))),
+            LeaseBackendConfig::Vault {
+                address,
+                token,
+                secret_path,
+                namespace,
+                env_map,
+                ..
+            } => Ok(Box::new(vault::VaultBackend::new(
+                address.clone(),
+                token.clone(),
+                secret_path.clone(),
+                namespace.clone(),
+                env_map.clone(),
+            )?)),
+            LeaseBackendConfig::AzureToken { scope, env_var, .. } => Ok(Box::new(
+                azure_token::AzureTokenBackend::new(scope.clone(), env_var.clone()),
+            )),
+            LeaseBackendConfig::Command {
+                create_command,
+                revoke_command,
+                ..
+            } => Ok(Box::new(command::CommandBackend::new(
+                create_command.clone(),
+                revoke_command.clone(),
+            ))),
         }
     }
 
     /// Get the configured duration string, if any
     pub fn duration(&self) -> Option<&str> {
         match self {
-            LeaseBackendConfig::AwsSts { duration, .. } => duration.as_deref(),
+            LeaseBackendConfig::AwsSts { duration, .. }
+            | LeaseBackendConfig::GcpIam { duration, .. }
+            | LeaseBackendConfig::Vault { duration, .. }
+            | LeaseBackendConfig::AzureToken { duration, .. }
+            | LeaseBackendConfig::Command { duration, .. } => duration.as_deref(),
         }
     }
 }
