@@ -378,29 +378,33 @@ impl LeaseCleanupCommand {
         let mut cleaned = 0;
 
         for record in &expired {
-            let Some(backend_config) = leases.get(&record.backend_name) else {
-                tracing::warn!(
-                    "Lease backend '{}' not found for lease '{}', skipping",
+            // Try to revoke via the backend if available (best-effort)
+            if let Some(backend_config) = leases.get(&record.backend_name) {
+                match backend_config.create_backend() {
+                    Ok(backend) => {
+                        if let Err(e) = backend.revoke_lease(&record.lease_id).await {
+                            tracing::warn!("Failed to revoke lease '{}': {}", record.lease_id, e);
+                            continue;
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to create backend '{}' for lease '{}': {}",
+                            record.backend_name,
+                            record.lease_id,
+                            e
+                        );
+                        continue;
+                    }
+                }
+            } else {
+                // Backend not in current profile config — skip remote revocation
+                // but still mark as revoked locally to clean up the ledger
+                tracing::debug!(
+                    "Lease backend '{}' not found for lease '{}', marking revoked locally",
                     record.backend_name,
                     record.lease_id
                 );
-                continue;
-            };
-            let backend = match backend_config.create_backend() {
-                Ok(b) => b,
-                Err(e) => {
-                    tracing::warn!(
-                        "Failed to create backend '{}' for lease '{}': {}",
-                        record.backend_name,
-                        record.lease_id,
-                        e
-                    );
-                    continue;
-                }
-            };
-            if let Err(e) = backend.revoke_lease(&record.lease_id).await {
-                tracing::warn!("Failed to revoke lease '{}': {}", record.lease_id, e);
-                continue;
             }
             ledger.mark_revoked(&record.lease_id);
             cleaned += 1;

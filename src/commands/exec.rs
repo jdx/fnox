@@ -66,9 +66,8 @@ impl ExecCommand {
         }
 
         if !leases.is_empty() {
-            if let Err(e) = Settings::ensure_experimental("lease in exec") {
-                tracing::warn!("Skipping leases: {}", e);
-            } else {
+            Settings::ensure_experimental("lease in exec")?;
+            {
                 let project_dir = lease::project_dir_from_config(&cli.config);
                 // Load ledger once to avoid TOCTTOU race with concurrent invocations
                 let mut ledger = LeaseLedger::load(&project_dir)?;
