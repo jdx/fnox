@@ -52,7 +52,7 @@ impl ExecCommand {
         // SDKs (AWS, GCP, Azure) can find master credentials during lease creation.
         // The TempEnvGuard ensures cleanup on all exit paths (including errors).
         let leases = config.get_leases(&profile);
-        let mut _temp_env_guard = TempEnvGuard::default();
+        let mut _temp_env_guard = lease::TempEnvGuard::default();
         if !leases.is_empty() {
             Settings::ensure_experimental("lease in exec")?;
             for (key, value) in &resolved_secrets {
@@ -266,50 +266,8 @@ async fn resolve_lease(
     let result = backend.create_lease(duration, &label).await?;
 
     // Try to cache credentials (optionally encrypted)
-    let (cached_credentials, encryption_provider) = match lease::find_encryption_provider(
-        config, profile,
-    )
-    .await
-    {
-        lease::EncryptionProviderResult::Available(enc_name, provider) => {
-            match lease::encrypt_credentials(provider.as_ref(), &result.credentials).await {
-                Ok(encrypted) => {
-                    tracing::debug!(
-                        "Caching encrypted credentials for lease '{}'",
-                        result.lease_id
-                    );
-                    (Some(encrypted), Some(enc_name))
-                }
-                Err(e) => {
-                    // Encryption provider is configured but failed — do NOT fall back
-                    // to plaintext, as that would silently degrade the user's security.
-                    tracing::warn!(
-                        "Failed to encrypt credentials for caching: {}, skipping cache",
-                        e
-                    );
-                    (None, None)
-                }
-            }
-        }
-        lease::EncryptionProviderResult::Unavailable(enc_name, e) => {
-            // Encryption provider is configured but couldn't be instantiated
-            // (e.g., YubiKey unplugged). Skip caching rather than silently
-            // downgrading to plaintext.
-            tracing::warn!(
-                "Encryption provider '{}' configured but unavailable: {}, skipping credential cache",
-                enc_name,
-                e
-            );
-            (None, None)
-        }
-        lease::EncryptionProviderResult::NotConfigured => {
-            tracing::debug!(
-                "No encryption provider, caching plaintext credentials for lease '{}'",
-                result.lease_id
-            );
-            (Some(result.credentials.clone()), None)
-        }
-    };
+    let (cached_credentials, encryption_provider) =
+        lease::cache_credentials(config, profile, &result.credentials, &result.lease_id).await;
 
     // Record in ledger
     ledger.add(LeaseRecord {
@@ -333,21 +291,4 @@ async fn resolve_lease(
     );
 
     Ok(result.credentials)
-}
-
-/// RAII guard that removes temporary process env vars on drop.
-/// Ensures cleanup on all exit paths, including early returns from `?`.
-#[derive(Default)]
-struct TempEnvGuard {
-    keys: Vec<String>,
-}
-
-impl Drop for TempEnvGuard {
-    fn drop(&mut self) {
-        for key in &self.keys {
-            // SAFETY: This runs during drop after all lease resolution is complete.
-            // No concurrent readers of these env vars exist at this point.
-            unsafe { std::env::remove_var(key) };
-        }
-    }
 }

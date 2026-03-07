@@ -225,6 +225,23 @@ impl LeaseRecord {
     }
 }
 
+/// RAII guard that removes temporary process env vars on drop.
+/// Ensures cleanup on all exit paths, including early returns from `?`.
+#[derive(Default)]
+pub struct TempEnvGuard {
+    pub keys: Vec<String>,
+}
+
+impl Drop for TempEnvGuard {
+    fn drop(&mut self) {
+        for key in &self.keys {
+            // TODO: unsafe remove_var on a multi-threaded Tokio runtime is
+            // technically UB. Refactor to pass credentials explicitly.
+            unsafe { std::env::remove_var(key) };
+        }
+    }
+}
+
 /// Parse a human-readable duration string (e.g., "15m", "1h", "2h30m")
 pub fn parse_duration(s: &str) -> Result<std::time::Duration> {
     let s = s.trim();
@@ -338,6 +355,49 @@ pub async fn decrypt_credentials(
         decrypted.insert(key.clone(), dec);
     }
     Ok(decrypted)
+}
+
+/// Determine how to cache credentials: encrypt if a provider is available,
+/// skip caching if the provider is configured but unavailable, or store
+/// plaintext if no encryption provider is configured.
+pub async fn cache_credentials(
+    config: &Config,
+    profile: &str,
+    credentials: &IndexMap<String, String>,
+    lease_id: &str,
+) -> (Option<IndexMap<String, String>>, Option<String>) {
+    match find_encryption_provider(config, profile).await {
+        EncryptionProviderResult::Available(enc_name, provider) => {
+            match encrypt_credentials(provider.as_ref(), credentials).await {
+                Ok(encrypted) => {
+                    tracing::debug!("Caching encrypted credentials for lease '{}'", lease_id);
+                    (Some(encrypted), Some(enc_name))
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to encrypt credentials for caching: {}, skipping cache",
+                        e
+                    );
+                    (None, None)
+                }
+            }
+        }
+        EncryptionProviderResult::Unavailable(enc_name, e) => {
+            tracing::warn!(
+                "Encryption provider '{}' configured but unavailable: {}, skipping credential cache",
+                enc_name,
+                e
+            );
+            (None, None)
+        }
+        EncryptionProviderResult::NotConfigured => {
+            tracing::debug!(
+                "No encryption provider, caching plaintext credentials for lease '{}'",
+                lease_id
+            );
+            (Some(credentials.clone()), None)
+        }
+    }
 }
 
 #[cfg(test)]

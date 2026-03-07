@@ -1,7 +1,7 @@
 use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
-use crate::lease::{self, LeaseLedger, LeaseRecord};
+use crate::lease::{self, LeaseLedger, LeaseRecord, TempEnvGuard};
 use crate::settings::Settings;
 use chrono::Utc;
 use clap::{Args, Subcommand, ValueEnum};
@@ -100,7 +100,8 @@ impl LeaseCreateCommand {
             ))
         })?;
 
-        // Check prerequisites and prompt for missing env vars if --prompt
+        // Check prerequisites and prompt for missing env vars if --interactive
+        let mut _temp_env_guard = TempEnvGuard::default();
         if let Some(missing) = backend_config.check_prerequisites() {
             let required_vars = backend_config.required_env_vars();
             if self.interactive && !required_vars.is_empty() {
@@ -118,6 +119,7 @@ impl LeaseCreateCommand {
                             // TODO: unsafe set_var on a multi-threaded Tokio runtime is
                             // technically UB. Refactor to pass credentials explicitly.
                             unsafe { std::env::set_var(var, &value) };
+                            _temp_env_guard.keys.push(var.to_string());
                         }
                     }
                 }
@@ -152,35 +154,9 @@ impl LeaseCreateCommand {
         let result = backend.create_lease(duration, &self.label).await?;
 
         // Cache credentials, encrypting if an encryption provider is configured
-        let (cached_credentials, encryption_provider) = match lease::find_encryption_provider(
-            &config, &profile,
-        )
-        .await
-        {
-            lease::EncryptionProviderResult::Available(enc_name, provider) => {
-                match lease::encrypt_credentials(provider.as_ref(), &result.credentials).await {
-                    Ok(encrypted) => (Some(encrypted), Some(enc_name)),
-                    Err(e) => {
-                        tracing::warn!(
-                            "Failed to encrypt credentials for caching: {}, skipping cache",
-                            e
-                        );
-                        (None, None)
-                    }
-                }
-            }
-            lease::EncryptionProviderResult::Unavailable(enc_name, e) => {
-                tracing::warn!(
-                    "Encryption provider '{}' configured but unavailable: {}, skipping credential cache",
-                    enc_name,
-                    e
-                );
-                (None, None)
-            }
-            lease::EncryptionProviderResult::NotConfigured => {
-                (Some(result.credentials.clone()), None)
-            }
-        };
+        let (cached_credentials, encryption_provider) =
+            lease::cache_credentials(&config, &profile, &result.credentials, &result.lease_id)
+                .await;
 
         let mut ledger = LeaseLedger::load(&project_dir)?;
         ledger.add(LeaseRecord {
