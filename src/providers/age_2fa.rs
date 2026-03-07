@@ -3,7 +3,7 @@ use crate::error::{FnoxError, Result};
 use age::secrecy::{ExposeSecret, SecretString};
 use async_trait::async_trait;
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 pub fn env_dependencies() -> &'static [&'static str] {
@@ -31,8 +31,10 @@ pub enum AuthMethod {
     Yubikey,
 }
 
-impl AuthMethod {
-    pub fn from_str(s: &str) -> Result<Self> {
+impl std::str::FromStr for AuthMethod {
+    type Err = FnoxError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "totp" => Ok(Self::Totp),
             "yubikey" => Ok(Self::Yubikey),
@@ -54,7 +56,7 @@ impl Age2faProvider {
         let provider_name = "age-2fa".to_string();
         Self {
             recipients,
-            auth_method: AuthMethod::from_str(&auth).unwrap_or(AuthMethod::Totp),
+            auth_method: auth.parse().unwrap_or(AuthMethod::Totp),
             provider_name,
         }
     }
@@ -370,7 +372,7 @@ pub mod setup {
     /// Generate a new age-2fa provider, creating encrypted identity and 2FA config.
     /// Returns the recipients (public keys) to store in fnox.toml.
     pub fn setup_age_2fa(provider_name: &str, auth_method: &str) -> Result<Vec<String>> {
-        let method = AuthMethod::from_str(auth_method)?;
+        let method: AuthMethod = auth_method.parse()?;
         let twofa_dir = env::FNOX_CONFIG_DIR.join("2fa");
         std::fs::create_dir_all(&twofa_dir)
             .map_err(|e| FnoxError::Config(format!("Failed to create 2FA directory: {}", e)))?;
@@ -412,7 +414,7 @@ pub mod setup {
         *hash.as_bytes()
     }
 
-    fn setup_totp(provider_name: &str, twofa_dir: &PathBuf) -> Result<String> {
+    fn setup_totp(provider_name: &str, twofa_dir: &Path) -> Result<String> {
         use totp_rs::TOTP;
 
         let secret = totp_rs::Secret::generate_secret();
@@ -481,7 +483,7 @@ pub mod setup {
         Age2faProvider::derive_passphrase_from_totp_secret(&secret_bytes, &salt)
     }
 
-    fn setup_yubikey(provider_name: &str, twofa_dir: &PathBuf) -> Result<String> {
+    fn setup_yubikey(provider_name: &str, twofa_dir: &Path) -> Result<String> {
         eprintln!("\nPlug in your YubiKey and tap it when prompted...");
 
         let challenge = generate_random_salt();

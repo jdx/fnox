@@ -73,6 +73,9 @@ impl ExecCommand {
                             continue;
                         }
                     }
+                    // Intentionally hard-fail: if prerequisites pass but lease
+                    // creation fails (network, permissions, etc.), abort rather
+                    // than silently running the subprocess without expected creds.
                     let creds = resolve_lease(
                         name,
                         lease_config,
