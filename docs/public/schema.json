@@ -389,6 +389,9 @@
             "credential_id": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
+            "pin": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "rp_id": {
               "$ref": "#/$defs/StringOrSecretRef"
             },

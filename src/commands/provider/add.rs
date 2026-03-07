@@ -157,7 +157,7 @@ impl AddCommand {
                     salt: StringOrSecretRef::from(salt_hex.as_str()),
                     rp_id: StringOrSecretRef::from(rp_id.as_str()),
                     pin: pin
-                        .map(|p| OptionStringOrSecretRef::literal(p))
+                        .map(OptionStringOrSecretRef::literal)
                         .unwrap_or_default(),
                     auth_command: None,
                 }

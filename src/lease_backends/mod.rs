@@ -300,12 +300,11 @@ impl LeaseBackendConfig {
     pub fn config_hash(&self) -> String {
         let mut serialized = serde_json::to_value(self).unwrap_or_default();
         // Strip non-security-relevant fields that shouldn't invalidate cache
-        if let Some(obj) = serialized.as_object_mut() {
-            if let Some(inner) = obj.values_mut().next().and_then(|v| v.as_object_mut()) {
+        if let Some(obj) = serialized.as_object_mut()
+            && let Some(inner) = obj.values_mut().next().and_then(|v| v.as_object_mut()) {
                 inner.remove("duration");
                 inner.remove("timeout");
             }
-        }
         let json = serde_json::to_string(&serialized).unwrap_or_default();
         let hash = blake3::hash(json.as_bytes());
         hash.to_hex()[..16].to_string()
