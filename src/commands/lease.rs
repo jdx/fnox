@@ -125,6 +125,8 @@ impl LeaseCreateCommand {
             created_at: Utc::now(),
             expires_at: result.expires_at,
             revoked: false,
+            cached_credentials: None,
+            encryption_provider: None,
         });
         ledger.save()?;
 

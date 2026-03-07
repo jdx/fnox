@@ -2,11 +2,15 @@ use crate::env;
 use crate::error::{FnoxError, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
 /// Default lease duration when none is specified
 pub const DEFAULT_LEASE_DURATION: &str = "15m";
+
+/// Buffer in seconds before expiry when a cached lease is no longer considered reusable
+pub const LEASE_REUSE_BUFFER_SECS: i64 = 300;
 
 /// A record of an issued lease, stored in the lease ledger
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -17,6 +21,10 @@ pub struct LeaseRecord {
     pub created_at: DateTime<Utc>,
     pub expires_at: Option<DateTime<Utc>>,
     pub revoked: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_credentials: Option<HashMap<String, String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encryption_provider: Option<String>,
 }
 
 /// The lease ledger, tracking all issued leases
@@ -119,6 +127,32 @@ impl LeaseLedger {
     /// Find a lease by ID
     pub fn find(&self, lease_id: &str) -> Option<&LeaseRecord> {
         self.leases.iter().find(|r| r.lease_id == lease_id)
+    }
+
+    /// Find a reusable cached lease for the given backend name.
+    /// Returns the lease with the latest expiry that is still valid (with buffer).
+    pub fn find_reusable(&self, backend_name: &str) -> Option<&LeaseRecord> {
+        self.leases
+            .iter()
+            .filter(|r| r.backend_name == backend_name && r.is_reusable())
+            .max_by_key(|r| r.expires_at)
+    }
+}
+
+impl LeaseRecord {
+    /// Check if this lease can be reused: not revoked, has cached credentials,
+    /// and expires_at minus buffer is still in the future.
+    pub fn is_reusable(&self) -> bool {
+        if self.revoked || self.cached_credentials.is_none() {
+            return false;
+        }
+        match self.expires_at {
+            Some(exp) => {
+                let buffer = chrono::Duration::seconds(LEASE_REUSE_BUFFER_SECS);
+                exp - buffer > Utc::now()
+            }
+            None => true, // No expiry means it's always valid
+        }
     }
 }
 

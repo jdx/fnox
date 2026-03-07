@@ -1,12 +1,14 @@
 use crate::error::{FnoxError, Result};
 use crate::lease::{self, LeaseLedger, LeaseRecord};
 use crate::lease_backends::LeaseBackendConfig;
+use crate::providers::{self, ProviderCapability};
 use crate::secret_resolver::resolve_secrets_batch;
 use crate::settings::Settings;
 use crate::temp_file_secrets::create_ephemeral_secret_file;
 use crate::{commands::Cli, config::Config};
 use chrono::Utc;
 use clap::{Args, ValueHint};
+use std::collections::HashMap;
 use std::process::Command;
 use tempfile::NamedTempFile;
 
@@ -42,7 +44,7 @@ impl ExecCommand {
                 tracing::warn!("Skipping leases: {}", e);
             } else {
                 for (name, lease_config) in &leases {
-                    let creds = resolve_lease(name, lease_config).await?;
+                    let creds = resolve_lease(name, lease_config, &config, &profile).await?;
                     for (cred_key, cred_value) in creds {
                         cmd.env(cred_key, cred_value);
                     }
@@ -108,11 +110,124 @@ impl ExecCommand {
     }
 }
 
-/// Resolve a lease backend into credentials
+/// Find an encryption provider if one is configured (default_provider with Encryption capability)
+async fn find_encryption_provider(
+    config: &Config,
+    profile: &str,
+) -> Option<(String, Box<dyn providers::Provider>)> {
+    let provider_name = match config.get_default_provider(profile) {
+        Ok(Some(name)) => name,
+        _ => return None,
+    };
+
+    let providers_map = config.get_providers(profile);
+    let provider_config = providers_map.get(&provider_name)?;
+
+    let provider =
+        match providers::get_provider_resolved(config, profile, &provider_name, provider_config)
+            .await
+        {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::debug!(
+                    "Could not instantiate encryption provider '{}': {}",
+                    provider_name,
+                    e
+                );
+                return None;
+            }
+        };
+
+    if provider
+        .capabilities()
+        .contains(&ProviderCapability::Encryption)
+    {
+        Some((provider_name, provider))
+    } else {
+        None
+    }
+}
+
+/// Encrypt credential values using an encryption provider
+async fn encrypt_credentials(
+    provider: &dyn providers::Provider,
+    credentials: &HashMap<String, String>,
+) -> Result<HashMap<String, String>> {
+    let mut encrypted = HashMap::new();
+    for (key, value) in credentials {
+        let enc = provider.encrypt(value).await?;
+        encrypted.insert(key.clone(), enc);
+    }
+    Ok(encrypted)
+}
+
+/// Decrypt cached credential values using an encryption provider
+async fn decrypt_credentials(
+    provider: &dyn providers::Provider,
+    cached: &HashMap<String, String>,
+) -> Result<HashMap<String, String>> {
+    let mut decrypted = HashMap::new();
+    for (key, value) in cached {
+        let dec = provider.get_secret(value).await?;
+        decrypted.insert(key.clone(), dec);
+    }
+    Ok(decrypted)
+}
+
+/// Resolve a lease backend into credentials, reusing cached credentials when available
 async fn resolve_lease(
     name: &str,
     lease_config: &LeaseBackendConfig,
-) -> Result<std::collections::HashMap<String, String>> {
+    config: &Config,
+    profile: &str,
+) -> Result<HashMap<String, String>> {
+    // Check for a reusable cached lease
+    let ledger = LeaseLedger::load()?;
+    if let Some(cached_lease) = ledger.find_reusable(name) {
+        if let Some(ref cached_creds) = cached_lease.cached_credentials {
+            // If encrypted, decrypt
+            if let Some(ref enc_provider_name) = cached_lease.encryption_provider {
+                match find_encryption_provider(config, profile).await {
+                    Some((found_name, provider)) if found_name == *enc_provider_name => {
+                        match decrypt_credentials(provider.as_ref(), cached_creds).await {
+                            Ok(decrypted) => {
+                                tracing::debug!(
+                                    "Reusing cached encrypted lease '{}' for backend '{}'",
+                                    cached_lease.lease_id,
+                                    name
+                                );
+                                return Ok(decrypted);
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Failed to decrypt cached lease '{}': {}, creating fresh lease",
+                                    cached_lease.lease_id,
+                                    e
+                                );
+                            }
+                        }
+                    }
+                    _ => {
+                        tracing::warn!(
+                            "Encryption provider '{}' not available for cached lease '{}', creating fresh lease",
+                            enc_provider_name,
+                            cached_lease.lease_id
+                        );
+                    }
+                }
+            } else {
+                // Plaintext cached credentials
+                tracing::debug!(
+                    "Reusing cached plaintext lease '{}' for backend '{}'",
+                    cached_lease.lease_id,
+                    name
+                );
+                return Ok(cached_creds.clone());
+            }
+        }
+    }
+
+    // No reusable cache — create fresh lease
     let backend = lease_config.create_backend()?;
 
     let duration_str = lease_config
@@ -131,6 +246,36 @@ async fn resolve_lease(
     let label = format!("fnox-exec-{}", name);
     let result = backend.create_lease(duration, &label).await?;
 
+    // Try to cache credentials (optionally encrypted)
+    let (cached_credentials, encryption_provider) =
+        match find_encryption_provider(config, profile).await {
+            Some((enc_name, provider)) => {
+                match encrypt_credentials(provider.as_ref(), &result.credentials).await {
+                    Ok(encrypted) => {
+                        tracing::debug!(
+                            "Caching encrypted credentials for lease '{}'",
+                            result.lease_id
+                        );
+                        (Some(encrypted), Some(enc_name))
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to encrypt credentials for caching: {}, storing plaintext",
+                            e
+                        );
+                        (Some(result.credentials.clone()), None)
+                    }
+                }
+            }
+            None => {
+                tracing::debug!(
+                    "No encryption provider, caching plaintext credentials for lease '{}'",
+                    result.lease_id
+                );
+                (Some(result.credentials.clone()), None)
+            }
+        };
+
     // Record in ledger
     let mut ledger = LeaseLedger::load()?;
     ledger.add(LeaseRecord {
@@ -140,6 +285,8 @@ async fn resolve_lease(
         created_at: Utc::now(),
         expires_at: result.expires_at,
         revoked: false,
+        cached_credentials,
+        encryption_provider,
     });
     ledger.save()?;
 
