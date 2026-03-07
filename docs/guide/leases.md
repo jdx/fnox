@@ -292,13 +292,13 @@ The subprocess still runs — just without the lease credentials. This means oth
 
 ## Supported Backends
 
-| Backend                              | Type          | Max Duration | Revocation              |
-| ------------------------------------ | ------------- | ------------ | ----------------------- |
-| [AWS STS](/cli/lease/create)         | `aws-sts`     | 12 hours     | No-op (native TTL)      |
-| [GCP IAM](/cli/lease/create)         | `gcp-iam`     | 1 hour       | No-op (native TTL)      |
-| [Azure Token](/cli/lease/create)     | `azure-token` | ~1 hour      | No-op (native TTL)      |
-| [HashiCorp Vault](/cli/lease/create) | `vault`       | 24 hours     | Vault lease revocation  |
-| [Custom Command](/cli/lease/create)  | `command`     | 24 hours     | Optional revoke command |
+| Backend                            | Type          | Max Duration | Revocation              |
+| ---------------------------------- | ------------- | ------------ | ----------------------- |
+| [AWS STS](/leases/aws-sts)         | `aws-sts`     | 12 hours     | No-op (native TTL)      |
+| [GCP IAM](/leases/gcp-iam)         | `gcp-iam`     | 1 hour       | No-op (native TTL)      |
+| [Azure Token](/leases/azure-token) | `azure-token` | ~1 hour      | No-op (native TTL)      |
+| [HashiCorp Vault](/leases/vault)   | `vault`       | 24 hours     | Vault lease revocation  |
+| [Custom Command](/leases/command)  | `command`     | 24 hours     | Optional revoke command |
 
 ## Managing Leases
 
@@ -315,33 +315,6 @@ fnox lease revoke <lease-id>
 # Clean up all expired leases
 fnox lease cleanup
 ```
-
-## Custom Command Backend
-
-For systems not natively supported, use the `command` backend to run any script that outputs JSON credentials:
-
-```toml
-[leases.custom]
-type = "command"
-create_command = "./scripts/get-creds.sh"
-revoke_command = "./scripts/revoke-creds.sh"  # optional
-duration = "1h"
-```
-
-Your script receives `FNOX_LEASE_DURATION` (in seconds) and `FNOX_LEASE_LABEL` as environment variables, and must output JSON on stdout:
-
-```json
-{
-  "credentials": {
-    "MY_TOKEN": "tok-abc123",
-    "MY_SECRET": "sec-xyz789"
-  },
-  "expires_at": "2024-01-15T10:00:00Z",
-  "lease_id": "my-custom-lease-1"
-}
-```
-
-The revoke script receives `FNOX_LEASE_ID` as an environment variable.
 
 ## How Caching Works
 

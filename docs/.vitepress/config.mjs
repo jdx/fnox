@@ -65,6 +65,17 @@ export default defineConfig({
         ],
       },
       {
+        text: "Lease Backends",
+        collapsed: true,
+        items: [
+          { text: "AWS STS", link: "/leases/aws-sts" },
+          { text: "GCP IAM", link: "/leases/gcp-iam" },
+          { text: "Azure Token", link: "/leases/azure-token" },
+          { text: "HashiCorp Vault", link: "/leases/vault" },
+          { text: "Custom Command", link: "/leases/command" },
+        ],
+      },
+      {
         text: "Examples",
         items: [
           { text: "Real-World Setup", link: "/guide/real-world-example" },
