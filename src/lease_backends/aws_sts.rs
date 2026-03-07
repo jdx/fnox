@@ -106,11 +106,13 @@ impl LeaseBackend for AwsStsBackend {
         creds.insert("AWS_SECRET_ACCESS_KEY".to_string(), secret_key);
         creds.insert("AWS_SESSION_TOKEN".to_string(), session_token);
 
-        // Generate a unique lease ID from the assumed role info
-        let lease_id = result
+        // Generate a unique lease ID: combine assumed role info with timestamp
+        // to avoid collisions when the same role is assumed multiple times
+        let role_id = result
             .assumed_role_user()
             .map(|u| u.assumed_role_id().to_string())
-            .unwrap_or_else(|| format!("sts-{}", chrono::Utc::now().timestamp()));
+            .unwrap_or_else(|| "sts".to_string());
+        let lease_id = format!("{}-{}", role_id, chrono::Utc::now().timestamp_millis());
 
         Ok(Lease {
             credentials: creds,
