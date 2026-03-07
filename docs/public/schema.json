@@ -119,15 +119,15 @@
             "duration": {
               "type": ["string", "null"]
             },
-            "service_account_email": {
-              "type": "string"
-            },
             "scopes": {
               "type": "array",
+              "default": ["https://www.googleapis.com/auth/cloud-platform"],
               "items": {
                 "type": "string"
-              },
-              "default": ["https://www.googleapis.com/auth/cloud-platform"]
+              }
+            },
+            "service_account_email": {
+              "type": "string"
             },
             "type": {
               "type": "string",
