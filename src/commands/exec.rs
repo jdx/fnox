@@ -262,10 +262,10 @@ async fn resolve_lease(
                     }
                     Err(e) => {
                         tracing::warn!(
-                            "Failed to encrypt credentials for caching: {}, skipping cache",
+                            "Failed to encrypt credentials for caching: {}, storing plaintext",
                             e
                         );
-                        (None, None)
+                        (Some(result.credentials.clone()), None)
                     }
                 }
             }
