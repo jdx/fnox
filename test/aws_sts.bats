@@ -69,9 +69,6 @@ type = "aws-sts"
 region = "us-east-1"
 endpoint = "$LOCALSTACK_ENDPOINT"
 role_arn = "$TEST_ROLE_ARN"
-
-[secrets]
-AWS_CREDS = { lease = "test_sts", value = "$TEST_ROLE_ARN" }
 EOF
 }
 
@@ -87,7 +84,7 @@ EOF
 	create_sts_config
 	export FNOX_EXPERIMENTAL=true
 
-	run "$FNOX_BIN" lease create AWS_CREDS --duration 15m --format json
+	run "$FNOX_BIN" lease create test_sts --duration 15m --format json
 	assert_success
 	assert_output --partial "AWS_ACCESS_KEY_ID"
 	assert_output --partial "AWS_SECRET_ACCESS_KEY"
@@ -99,7 +96,7 @@ EOF
 	create_sts_config
 	export FNOX_EXPERIMENTAL=true
 
-	run "$FNOX_BIN" lease create AWS_CREDS --duration 15m --format env
+	run "$FNOX_BIN" lease create test_sts --duration 15m --format env
 	assert_success
 	assert_output --partial "export AWS_ACCESS_KEY_ID="
 	assert_output --partial "export AWS_SECRET_ACCESS_KEY="
@@ -110,7 +107,7 @@ EOF
 	create_sts_config
 	export FNOX_EXPERIMENTAL=true
 
-	run "$FNOX_BIN" lease create AWS_CREDS --duration 15m --format shell
+	run "$FNOX_BIN" lease create test_sts --duration 15m --format shell
 	assert_success
 	assert_output --partial "Lease created"
 	assert_output --partial "AWS_ACCESS_KEY_ID"
@@ -121,7 +118,7 @@ EOF
 	export FNOX_EXPERIMENTAL=true
 
 	# Create a lease first
-	run "$FNOX_BIN" lease create AWS_CREDS --duration 15m --format json --label test-list
+	run "$FNOX_BIN" lease create test_sts --duration 15m --format json --label test-list
 	assert_success
 
 	# List should show the lease
@@ -129,7 +126,6 @@ EOF
 	assert_success
 	assert_output --partial "BACKEND"
 	assert_output --partial "test_sts"
-	assert_output --partial "AWS_CREDS"
 	assert_output --partial "active"
 }
 
@@ -138,7 +134,7 @@ EOF
 	export FNOX_EXPERIMENTAL=true
 
 	# Create a lease and extract the lease_id
-	run "$FNOX_BIN" lease create AWS_CREDS --duration 15m --format json --label test-revoke
+	run "$FNOX_BIN" lease create test_sts --duration 15m --format json --label test-revoke
 	assert_success
 	local lease_id
 	lease_id=$(echo "$output" | python3 -c "import sys, json; print(json.load(sys.stdin)['lease_id'])")
@@ -167,21 +163,10 @@ EOF
 @test "fnox lease create fails with missing lease backend" {
 	cat >"$FNOX_CONFIG_FILE" <<EOF
 root = true
-
-[secrets]
-MY_SECRET = { lease = "nonexistent", value = "some-value" }
 EOF
 	export FNOX_EXPERIMENTAL=true
 
-	run "$FNOX_BIN" lease create MY_SECRET --duration 15m
+	run "$FNOX_BIN" lease create nonexistent --duration 15m
 	assert_failure
 	assert_output --partial "not found"
-}
-
-@test "fnox lease create fails with missing secret" {
-	create_sts_config
-	export FNOX_EXPERIMENTAL=true
-
-	run "$FNOX_BIN" lease create NONEXISTENT_SECRET --duration 15m
-	assert_failure
 }

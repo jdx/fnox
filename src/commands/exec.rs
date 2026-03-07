@@ -1,5 +1,6 @@
 use crate::error::{FnoxError, Result};
 use crate::lease::{self, LeaseLedger, LeaseRecord};
+use crate::lease_backends::LeaseBackendConfig;
 use crate::secret_resolver::resolve_secrets_batch;
 use crate::settings::Settings;
 use crate::temp_file_secrets::create_ephemeral_secret_file;
@@ -34,36 +35,23 @@ impl ExecCommand {
             cmd.args(&self.command[1..]);
         }
 
-        // Handle lease-enabled secrets first (experimental)
-        let mut lease_keys: Vec<String> = Vec::new();
-        for (key, secret_config) in &profile_secrets {
-            if secret_config.lease.is_some() {
-                if let Err(e) = Settings::ensure_experimental("lease in exec") {
-                    tracing::warn!("Skipping lease for '{}': {}", key, e);
-                    continue;
-                }
-                lease_keys.push(key.clone());
-            }
-        }
-
-        // Resolve leased secrets
-        for key in &lease_keys {
-            let secret_config = &profile_secrets[key];
-            if let Some(creds) = resolve_lease_secret(&config, &profile, key, secret_config).await?
-            {
-                for (cred_key, cred_value) in creds {
-                    cmd.env(cred_key, cred_value);
+        // Handle lease backends (experimental)
+        let leases = config.get_leases(&profile);
+        if !leases.is_empty() {
+            if let Err(e) = Settings::ensure_experimental("lease in exec") {
+                tracing::warn!("Skipping leases: {}", e);
+            } else {
+                for (name, lease_config) in &leases {
+                    let creds = resolve_lease(name, lease_config).await?;
+                    for (cred_key, cred_value) in creds {
+                        cmd.env(cred_key, cred_value);
+                    }
                 }
             }
         }
 
-        // Resolve remaining (non-leased) secrets using batch resolution
-        let non_lease_secrets: indexmap::IndexMap<_, _> = profile_secrets
-            .iter()
-            .filter(|(k, _)| !lease_keys.contains(k))
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-        let resolved_secrets = resolve_secrets_batch(&config, &profile, &non_lease_secrets).await?;
+        // Resolve secrets using batch resolution
+        let resolved_secrets = resolve_secrets_batch(&config, &profile, &profile_secrets).await?;
 
         // Keep temp files alive for the duration of the command
         let mut _temp_files: Vec<NamedTempFile> = Vec::new();
@@ -120,60 +108,35 @@ impl ExecCommand {
     }
 }
 
-/// Resolve a secret via credential leasing instead of direct retrieval
-async fn resolve_lease_secret(
-    config: &Config,
-    profile: &str,
-    key: &str,
-    secret_config: &crate::config::SecretConfig,
-) -> Result<Option<std::collections::HashMap<String, String>>> {
-    let backend_name = match secret_config.lease.as_deref() {
-        Some(name) => name,
-        None => return Ok(None),
-    };
+/// Resolve a lease backend into credentials
+async fn resolve_lease(
+    name: &str,
+    lease_config: &LeaseBackendConfig,
+) -> Result<std::collections::HashMap<String, String>> {
+    let backend = lease_config.create_backend()?;
 
-    let leases = config.get_leases(profile);
-    let backend_config = leases.get(backend_name).ok_or_else(|| {
-        FnoxError::Config(format!(
-            "Lease backend '{}' for secret '{}' not found. Define it in [leases.{}] in fnox.toml.",
-            backend_name, key, backend_name
-        ))
-    })?;
-
-    let backend = backend_config.create_backend()?;
-
-    let duration_str = secret_config
-        .lease_duration
-        .as_deref()
+    let duration_str = lease_config
+        .duration()
         .unwrap_or(lease::DEFAULT_LEASE_DURATION);
     let duration = lease::parse_duration(duration_str)?;
 
     let max_duration = backend.max_lease_duration();
     if duration > max_duration {
         return Err(FnoxError::Config(format!(
-            "Lease duration '{}' for secret '{}' exceeds maximum {:?} for backend '{}'",
-            duration_str, key, max_duration, backend_name
+            "Lease duration '{}' for '{}' exceeds maximum {:?}",
+            duration_str, name, max_duration
         )));
     }
 
-    let value = secret_config.value().ok_or_else(|| {
-        FnoxError::Config(format!(
-            "Secret '{}' has no value configured for leasing",
-            key
-        ))
-    })?;
-
-    let result = backend
-        .create_lease(value, duration, &format!("fnox-exec-{}", key))
-        .await?;
+    let label = format!("fnox-exec-{}", name);
+    let result = backend.create_lease(duration, &label).await?;
 
     // Record in ledger
     let mut ledger = LeaseLedger::load()?;
     ledger.add(LeaseRecord {
         lease_id: result.lease_id.clone(),
-        backend_name: backend_name.to_string(),
-        secret_name: key.to_string(),
-        label: format!("fnox-exec-{}", key),
+        backend_name: name.to_string(),
+        label: label.clone(),
         created_at: Utc::now(),
         expires_at: result.expires_at,
         revoked: false,
@@ -181,11 +144,11 @@ async fn resolve_lease_secret(
     ledger.save()?;
 
     tracing::debug!(
-        "Created lease '{}' for secret '{}' (expires {:?})",
+        "Created lease '{}' for backend '{}' (expires {:?})",
         result.lease_id,
-        key,
+        name,
         result.expires_at
     );
 
-    Ok(Some(result.credentials))
+    Ok(result.credentials)
 }

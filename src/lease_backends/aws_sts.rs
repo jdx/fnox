@@ -11,7 +11,7 @@ const URL: &str = "https://fnox.jdx.dev/providers/aws-sts";
 pub struct AwsStsBackend {
     region: String,
     profile: Option<String>,
-    role_arn: Option<String>,
+    role_arn: String,
     endpoint: Option<String>,
 }
 
@@ -19,7 +19,7 @@ impl AwsStsBackend {
     pub fn new(
         region: String,
         profile: Option<String>,
-        role_arn: Option<String>,
+        role_arn: String,
         endpoint: Option<String>,
     ) -> Self {
         Self {
@@ -47,28 +47,17 @@ impl AwsStsBackend {
 
         Ok(Client::from_conf(sts_config_builder.build()))
     }
-
-    fn resolve_role_arn(&self, value: &str) -> String {
-        // If value looks like an ARN, use it directly; otherwise use default role_arn
-        if value.starts_with("arn:") {
-            value.to_string()
-        } else if let Some(ref default_arn) = self.role_arn {
-            default_arn.clone()
-        } else {
-            value.to_string()
-        }
-    }
 }
 
 #[async_trait]
 impl LeaseBackend for AwsStsBackend {
-    async fn create_lease(&self, value: &str, duration: Duration, label: &str) -> Result<Lease> {
+    async fn create_lease(&self, duration: Duration, label: &str) -> Result<Lease> {
         let client = self.create_client().await?;
-        let role_arn = self.resolve_role_arn(value);
+        let role_arn = &self.role_arn;
 
         let result = client
             .assume_role()
-            .role_arn(&role_arn)
+            .role_arn(role_arn)
             .role_session_name(sanitize_session_name(label))
             .duration_seconds(duration.as_secs() as i32)
             .send()

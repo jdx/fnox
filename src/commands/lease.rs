@@ -34,12 +34,12 @@ pub enum OutputFormat {
 
 #[derive(Debug, Args)]
 pub struct LeaseCreateCommand {
-    /// Secret name to lease credentials for
-    pub secret_name: String,
+    /// Lease backend name (from [leases.<name>] config)
+    pub backend_name: String,
 
-    /// Lease duration (e.g., "15m", "1h", "2h30m")
-    #[arg(short, long, default_value = crate::lease::DEFAULT_LEASE_DURATION)]
-    pub duration: String,
+    /// Lease duration (e.g., "15m", "1h", "2h30m"); overrides config duration
+    #[arg(short, long)]
+    pub duration: Option<String>,
 
     /// Output format
     #[arg(short, long, default_value = "shell")]
@@ -85,37 +85,22 @@ impl LeaseCommand {
 
 impl LeaseCreateCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
-        let duration = lease::parse_duration(&self.duration)?;
-
         let profile = Config::get_profile(cli.profile.as_deref());
-        let secrets = config.get_secrets(&profile)?;
-
-        // Find the secret config
-        let secret_config =
-            secrets
-                .get(&self.secret_name)
-                .ok_or_else(|| FnoxError::SecretNotFound {
-                    key: self.secret_name.clone(),
-                    profile: profile.clone(),
-                    config_path: None,
-                    suggestion: None,
-                })?;
-
-        // Resolve the lease backend
-        let backend_name = secret_config.lease.as_deref().ok_or_else(|| {
-            FnoxError::Config(format!(
-                "Secret '{}' has no lease backend configured. Set `lease = \"<backend_name>\"` in the secret config.",
-                self.secret_name
-            ))
-        })?;
-
         let leases = config.get_leases(&profile);
-        let backend_config = leases.get(backend_name).ok_or_else(|| {
+
+        let backend_config = leases.get(&self.backend_name).ok_or_else(|| {
             FnoxError::Config(format!(
                 "Lease backend '{}' not found. Define it in [leases.{}] in fnox.toml.",
-                backend_name, backend_name
+                self.backend_name, self.backend_name
             ))
         })?;
+
+        let duration_str = self
+            .duration
+            .as_deref()
+            .or(backend_config.duration())
+            .unwrap_or(lease::DEFAULT_LEASE_DURATION);
+        let duration = lease::parse_duration(duration_str)?;
 
         let backend = backend_config.create_backend()?;
 
@@ -124,26 +109,18 @@ impl LeaseCreateCommand {
         if duration > max_duration {
             return Err(FnoxError::Config(format!(
                 "Requested duration {:?} exceeds maximum {:?} for lease backend '{}'",
-                duration, max_duration, backend_name
+                duration, max_duration, self.backend_name
             )));
         }
 
-        let value = secret_config.value().ok_or_else(|| {
-            FnoxError::Config(format!(
-                "Secret '{}' has no value configured",
-                self.secret_name
-            ))
-        })?;
-
         // Create the lease
-        let result = backend.create_lease(value, duration, &self.label).await?;
+        let result = backend.create_lease(duration, &self.label).await?;
 
         // Record in ledger
         let mut ledger = LeaseLedger::load()?;
         ledger.add(LeaseRecord {
             lease_id: result.lease_id.clone(),
-            backend_name: backend_name.to_string(),
-            secret_name: self.secret_name.clone(),
+            backend_name: self.backend_name.clone(),
             label: self.label.clone(),
             created_at: Utc::now(),
             expires_at: result.expires_at,
@@ -225,8 +202,8 @@ impl LeaseListCommand {
         }
 
         println!(
-            "{:<20} {:<15} {:<20} {:<15} {:<8}",
-            "LEASE ID", "BACKEND", "SECRET", "EXPIRES", "STATUS"
+            "{:<20} {:<15} {:<15} {:<8}",
+            "LEASE ID", "BACKEND", "EXPIRES", "STATUS"
         );
         for record in records {
             let status = if record.revoked {
@@ -246,8 +223,8 @@ impl LeaseListCommand {
                 record.lease_id.clone()
             };
             println!(
-                "{:<20} {:<15} {:<20} {:<15} {:<8}",
-                id_short, record.backend_name, record.secret_name, expires, status
+                "{:<20} {:<15} {:<15} {:<8}",
+                id_short, record.backend_name, expires, status
             );
         }
 

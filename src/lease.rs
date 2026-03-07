@@ -13,7 +13,6 @@ pub const DEFAULT_LEASE_DURATION: &str = "15m";
 pub struct LeaseRecord {
     pub lease_id: String,
     pub backend_name: String,
-    pub secret_name: String,
     pub label: String,
     pub created_at: DateTime<Utc>,
     pub expires_at: Option<DateTime<Utc>>,

@@ -21,8 +21,8 @@ pub struct Lease {
 /// Lease backend capability for vending short-lived credentials (experimental)
 #[async_trait]
 pub trait LeaseBackend: Send + Sync {
-    /// Create a short-lived credential from the master credential
-    async fn create_lease(&self, value: &str, duration: Duration, label: &str) -> Result<Lease>;
+    /// Create a short-lived credential
+    async fn create_lease(&self, duration: Duration, label: &str) -> Result<Lease>;
 
     /// Revoke a previously issued lease (for cleanup)
     async fn revoke_lease(&self, _lease_id: &str) -> Result<()> {
@@ -43,10 +43,11 @@ pub enum LeaseBackendConfig {
         region: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         profile: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        role_arn: Option<String>,
+        role_arn: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         endpoint: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        duration: Option<String>,
     },
 }
 
@@ -59,12 +60,20 @@ impl LeaseBackendConfig {
                 profile,
                 role_arn,
                 endpoint,
+                ..
             } => Ok(Box::new(aws_sts::AwsStsBackend::new(
                 region.clone(),
                 profile.clone(),
                 role_arn.clone(),
                 endpoint.clone(),
             ))),
+        }
+    }
+
+    /// Get the configured duration string, if any
+    pub fn duration(&self) -> Option<&str> {
+        match self {
+            LeaseBackendConfig::AwsSts { duration, .. } => duration.as_deref(),
         }
     }
 }
