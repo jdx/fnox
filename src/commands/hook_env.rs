@@ -240,13 +240,14 @@ async fn load_secrets_from_config() -> Result<LoadedSecrets> {
     let mut temp_files = HashMap::new();
 
     for (key, value_opt) in resolved {
+        // Skip secrets with env = false regardless of resolution result —
+        // they must never appear in shell integration output.
+        if let Some(secret_config) = profile_secrets.get(&key)
+            && !secret_config.env
+        {
+            continue;
+        }
         if let Some(value) = value_opt {
-            // Skip secrets with env = false (only accessible via `fnox get`)
-            if let Some(secret_config) = profile_secrets.get(&key)
-                && !secret_config.env
-            {
-                continue;
-            }
             // Check if this secret should be file-based
             if let Some(secret_config) = profile_secrets.get(&key) {
                 if secret_config.as_file {

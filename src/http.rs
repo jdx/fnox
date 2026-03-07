@@ -8,5 +8,10 @@ pub fn http_client() -> reqwest::Client {
     reqwest::Client::builder()
         .timeout(timeout)
         .build()
-        .unwrap_or_default()
+        .unwrap_or_else(|e| {
+            tracing::warn!(
+                "Failed to build HTTP client with timeout: {e}; using default (no timeout)"
+            );
+            reqwest::Client::new()
+        })
 }

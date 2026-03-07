@@ -106,21 +106,26 @@ impl LeaseLedger {
                 source: e,
             })?;
         }
-        // Compact: drop entries that are revoked or expired more than 24h ago
+        // Compact: drop entries that are revoked or expired more than 24h ago.
+        // For records with no expiry (e.g., command backend with no expires_at),
+        // use created_at + 24h as a staleness bound to prevent unbounded growth.
         let cutoff = Utc::now() - chrono::Duration::hours(24);
         let mut compacted = self.clone();
         compacted.leases.retain(|r| {
             if r.revoked {
                 // Keep revoked records for audit visibility only if they have
                 // an expiry within the window. Revoked records with no expiry
-                // (e.g., command backend) use created_at + 24h as the cutoff.
+                // use created_at + 24h as the cutoff.
                 return match r.expires_at {
                     Some(exp) => exp > cutoff,
                     None => r.created_at > cutoff,
                 };
             }
-            // Keep non-revoked records unless they expired more than 24h ago
-            r.expires_at.is_none_or(|exp| exp > cutoff)
+            match r.expires_at {
+                Some(exp) => exp > cutoff,
+                // No expiry: prune if created more than 24h ago
+                None => r.created_at > cutoff,
+            }
         });
         let content = toml_edit::ser::to_string_pretty(&compacted)
             .map_err(|e| FnoxError::ConfigSerializeError { source: e })?;

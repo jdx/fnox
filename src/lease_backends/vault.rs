@@ -240,10 +240,21 @@ impl LeaseBackend for VaultBackend {
         if !response.status().is_success() {
             let status = response.status();
             let body_text = response.text().await.unwrap_or_default();
+            if status.as_u16() == 403 || status.as_u16() == 401 {
+                return Err(FnoxError::ProviderAuthFailed {
+                    provider: "Vault".to_string(),
+                    details: body_text,
+                    hint: "Vault token needs 'update' permission on 'sys/leases/revoke'. \
+                           Add `path \"sys/leases/revoke\" { capabilities = [\"update\"] }` \
+                           to your Vault policy."
+                        .to_string(),
+                    url: URL.to_string(),
+                });
+            }
             return Err(FnoxError::ProviderApiError {
                 provider: "Vault".to_string(),
                 details: format!("HTTP {}: {}", status, body_text),
-                hint: "Failed to revoke Vault lease — check token permissions".to_string(),
+                hint: "Failed to revoke Vault lease".to_string(),
                 url: URL.to_string(),
             });
         }

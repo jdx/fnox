@@ -126,9 +126,16 @@ impl LeaseBackend for GcpIamBackend {
             .to_string();
 
         let expire_time = resp["expireTime"].as_str().and_then(|s| {
-            chrono::DateTime::parse_from_rfc3339(s)
-                .ok()
-                .map(|dt| dt.with_timezone(&chrono::Utc))
+            match chrono::DateTime::parse_from_rfc3339(s) {
+                Ok(dt) => Some(dt.with_timezone(&chrono::Utc)),
+                Err(e) => {
+                    tracing::warn!(
+                        "GCP IAM: could not parse expireTime {:?}: {}; lease treated as non-expiring",
+                        s, e
+                    );
+                    None
+                }
+            }
         });
 
         let mut credentials = IndexMap::new();
