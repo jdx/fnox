@@ -5,10 +5,7 @@
   "properties": {
     "age_key_file": {
       "description": "Age encryption key file path (optional, can also be set via env var or CLI flag)",
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": ["string", "null"]
     },
     "default_provider": {
       "description": "Default provider name for default profile",
@@ -55,10 +52,7 @@
     },
     "prompt_auth": {
       "description": "Whether to prompt for authentication when provider auth fails (default: true in TTY)",
-      "type": [
-        "boolean",
-        "null"
-      ]
+      "type": ["boolean", "null"]
     },
     "providers": {
       "description": "Provider configurations (for default profile)",
@@ -83,18 +77,11 @@
   "$defs": {
     "BitwardenBackend": {
       "type": "string",
-      "enum": [
-        "bw",
-        "rbw"
-      ]
+      "enum": ["bw", "rbw"]
     },
     "IfMissing": {
       "type": "string",
-      "enum": [
-        "error",
-        "warn",
-        "ignore"
-      ]
+      "enum": ["error", "warn", "ignore"]
     },
     "LeaseBackendConfig": {
       "description": "Configuration for a lease backend (manually defined, no codegen)",
@@ -104,22 +91,13 @@
           "type": "object",
           "properties": {
             "duration": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "endpoint": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "profile": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "region": {
               "type": "string"
@@ -132,27 +110,18 @@
               "const": "aws-sts"
             }
           },
-          "required": [
-            "type",
-            "region",
-            "role_arn"
-          ]
+          "required": ["type", "region", "role_arn"]
         },
         {
           "description": "GCP Service Account Impersonation",
           "type": "object",
           "properties": {
             "duration": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "scopes": {
               "type": "array",
-              "default": [
-                "https://www.googleapis.com/auth/cloud-platform"
-              ],
+              "default": ["https://www.googleapis.com/auth/cloud-platform"],
               "items": {
                 "type": "string"
               }
@@ -165,26 +134,17 @@
               "const": "gcp-iam"
             }
           },
-          "required": [
-            "type",
-            "service_account_email"
-          ]
+          "required": ["type", "service_account_email"]
         },
         {
           "description": "HashiCorp Vault Dynamic Secrets",
           "type": "object",
           "properties": {
             "address": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "duration": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "env_map": {
               "type": "object",
@@ -193,40 +153,27 @@
               }
             },
             "namespace": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "secret_path": {
               "type": "string"
             },
             "token": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "type": {
               "type": "string",
               "const": "vault"
             }
           },
-          "required": [
-            "type",
-            "secret_path",
-            "env_map"
-          ]
+          "required": ["type", "secret_path", "env_map"]
         },
         {
           "description": "Azure Token Acquisition",
           "type": "object",
           "properties": {
             "duration": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "env_var": {
               "type": "string",
@@ -240,10 +187,7 @@
               "const": "azure-token"
             }
           },
-          "required": [
-            "type",
-            "scope"
-          ]
+          "required": ["type", "scope"]
         },
         {
           "description": "Generic Command Backend",
@@ -253,26 +197,17 @@
               "type": "string"
             },
             "duration": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "revoke_command": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "type": {
               "type": "string",
               "const": "command"
             }
           },
-          "required": [
-            "type",
-            "create_command"
-          ]
+          "required": ["type", "create_command"]
         }
       ]
     },
@@ -332,144 +267,7 @@
           "type": "object",
           "properties": {
             "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "type": {
-              "type": "string",
-              "const": "plain"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "type"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "key_file": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "recipients": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "type": {
-              "type": "string",
-              "const": "age"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "recipients"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "challenge": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
-            "slot": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
-            "type": {
-              "type": "string",
-              "const": "yubikey"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "challenge",
-            "slot"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "gpg_opts": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "prefix": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "store_dir": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "type": {
-              "type": "string",
-              "const": "password-store"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "type"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "credential_id": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
-            "rp_id": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
-            "salt": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
-            "type": {
-              "type": "string",
-              "const": "fido2"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "credential_id",
-            "salt",
-            "rp_id"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "database": {
               "$ref": "#/$defs/StringOrSecretRef"
@@ -486,10 +284,110 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type",
-            "database"
-          ]
+          "required": ["type", "database"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "challenge": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "slot": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "yubikey"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "challenge", "slot"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "gpg_opts": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "prefix": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "store_dir": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "password-store"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "type": {
+              "type": "string",
+              "const": "plain"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "key_file": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "recipients": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "age"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "recipients"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "credential_id": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "rp_id": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "salt": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "fido2"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "credential_id", "salt", "rp_id"]
         },
         {
           "type": "object",
@@ -498,10 +396,7 @@
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "token": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -515,18 +410,39 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "api_key": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "base_url": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "password_list_id": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "passwordstate"
+            },
+            "verify_ssl": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "base_url", "password_list_id"]
         },
         {
           "type": "object",
           "properties": {
             "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "type": {
               "type": "string",
@@ -537,46 +453,13 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
           "properties": {
             "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "environment": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "path": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "project_id": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "type": {
-              "type": "string",
-              "const": "infisical"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "type"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "backend": {
               "anyOf": [
@@ -603,51 +486,76 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
           "properties": {
-            "api_key": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "environment": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
-            "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
+            "path": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
             },
-            "base_url": {
+            "project_id": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "infisical"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "key_id": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
-            "password_list_id": {
+            "region": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
             "type": {
               "type": "string",
-              "const": "passwordstate"
-            },
-            "verify_ssl": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
+              "const": "aws-kms"
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type",
-            "base_url",
-            "password_list_id"
-          ]
+          "required": ["type", "key_id", "region"]
         },
         {
           "type": "object",
           "properties": {
             "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
+            },
+            "key_name": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "azure-kms"
+            },
+            "vault_url": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "vault_url", "key_name"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
             },
             "key": {
               "$ref": "#/$defs/StringOrSecretRef"
@@ -667,76 +575,13 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type",
-            "project",
-            "location",
-            "keyring",
-            "key"
-          ]
+          "required": ["type", "project", "location", "keyring", "key"]
         },
         {
           "type": "object",
           "properties": {
             "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "key_name": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
-            "type": {
-              "type": "string",
-              "const": "azure-kms"
-            },
-            "vault_url": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "vault_url",
-            "key_name"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "key_id": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
-            "region": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
-            "type": {
-              "type": "string",
-              "const": "aws-kms"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "key_id",
-            "region"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -753,101 +598,13 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type",
-            "region"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "address": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "namespace": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "path": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "token": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "type": {
-              "type": "string",
-              "const": "vault"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+          "required": ["type", "region"]
         },
         {
           "type": "object",
           "properties": {
             "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "profile": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "project_id": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "type": {
-              "type": "string",
-              "const": "bitwarden-sm"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "type"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "prefix": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "type": {
-              "type": "string",
-              "const": "azure-sm"
-            },
-            "vault_url": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "vault_url"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -864,19 +621,79 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type",
-            "region"
-          ]
+          "required": ["type", "region"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "address": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "namespace": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "path": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "token": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "vault"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
         },
         {
           "type": "object",
           "properties": {
             "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
+            },
+            "profile": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "project_id": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "bitwarden-sm"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "prefix": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "azure-sm"
+            },
+            "vault_url": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "vault_url"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
             },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -890,19 +707,13 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type",
-            "project"
-          ]
+          "required": ["type", "project"]
         },
         {
           "type": "object",
           "properties": {
             "auth_command": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -916,10 +727,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type",
-            "service"
-          ]
+          "required": ["type", "service"]
         }
       ]
     },
@@ -933,17 +741,11 @@
         },
         "default": {
           "description": "Default value to use if provider fails or secret is not found",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "description": {
           "description": "Description of the secret",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "env": {
           "description": "Whether to inject this secret into env vars (default: true)\nWhen false, the secret is only accessible via `fnox get`",
@@ -962,10 +764,7 @@
         },
         "json_path": {
           "description": "JSON path to extract from the secret value (supports dot notation: \"nested.key\")\nWhen set, the secret value is parsed as JSON and the specified path is extracted.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "provider": {
           "description": "Provider to fetch from (age, aws-kms, 1password, aws, etc.)",
@@ -1017,9 +816,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "secret"
-          ]
+          "required": ["secret"]
         }
       ]
     },
@@ -1034,10 +831,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "provider",
-        "value"
-      ]
+      "required": ["provider", "value"]
     },
     "string": {
       "type": "string"
