@@ -6,7 +6,7 @@ use aws_sdk_sts::Client;
 use std::collections::HashMap;
 use std::time::Duration;
 
-const URL: &str = "https://fnox.jdx.dev/providers/aws-sts";
+const URL: &str = "https://fnox.jdx.dev/leases/aws-sts";
 
 pub struct AwsStsBackend {
     region: String,

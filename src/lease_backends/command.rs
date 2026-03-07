@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tokio::process::Command;
 
-const URL: &str = "https://fnox.jdx.dev/lease-backends/command";
+const URL: &str = "https://fnox.jdx.dev/leases/command";
 
 pub struct CommandBackend {
     create_command: String,

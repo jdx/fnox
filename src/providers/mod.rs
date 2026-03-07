@@ -288,7 +288,7 @@ pub async fn get_provider_resolved(
                 provider_name.to_string(),
                 challenge.clone(),
                 slot.clone(),
-            )));
+            )?));
         }
         ResolvedProviderConfig::Fido2 {
             credential_id,
@@ -300,7 +300,7 @@ pub async fn get_provider_resolved(
                 credential_id.clone(),
                 salt.clone(),
                 rp_id.clone(),
-            )));
+            )?));
         }
         _ => {}
     }

@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::time::Duration;
 
-const URL: &str = "https://fnox.jdx.dev/lease-backends/gcp-iam";
+const URL: &str = "https://fnox.jdx.dev/leases/gcp-iam";
 
 pub struct GcpIamBackend {
     service_account_email: String,

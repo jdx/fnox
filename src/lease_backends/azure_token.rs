@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-const URL: &str = "https://fnox.jdx.dev/lease-backends/azure-token";
+const URL: &str = "https://fnox.jdx.dev/leases/azure-token";
 
 pub struct AzureTokenBackend {
     scope: String,

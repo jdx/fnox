@@ -20,7 +20,7 @@ pub struct Fido2Provider {
 }
 
 impl Fido2Provider {
-    pub fn new(credential_id: String, salt: String, rp_id: String) -> Self {
+    pub fn new(credential_id: String, salt: String, rp_id: String) -> Result<Self> {
         Self::with_name("fido2".to_string(), credential_id, salt, rp_id)
     }
 
@@ -29,15 +29,25 @@ impl Fido2Provider {
         credential_id: String,
         salt: String,
         rp_id: String,
-    ) -> Self {
-        let credential_id_bytes = hex::decode(&credential_id).unwrap_or_default();
-        let salt_bytes = hex::decode(&salt).unwrap_or_default();
-        Self {
+    ) -> Result<Self> {
+        let credential_id_bytes = hex::decode(&credential_id).map_err(|e| {
+            FnoxError::Config(format!(
+                "fido2 provider '{}': invalid hex in credential_id: {}",
+                provider_name, e
+            ))
+        })?;
+        let salt_bytes = hex::decode(&salt).map_err(|e| {
+            FnoxError::Config(format!(
+                "fido2 provider '{}': invalid hex in salt: {}",
+                provider_name, e
+            ))
+        })?;
+        Ok(Self {
             credential_id: credential_id_bytes,
             salt: salt_bytes,
             rp_id,
             provider_name,
-        }
+        })
     }
 
     fn get_hmac_secret(&self) -> Result<Vec<u8>> {

@@ -20,18 +20,28 @@ pub struct YubikeyProvider {
 }
 
 impl YubikeyProvider {
-    pub fn new(challenge: String, slot: String) -> Self {
+    pub fn new(challenge: String, slot: String) -> Result<Self> {
         Self::with_name("yubikey".to_string(), challenge, slot)
     }
 
-    pub fn with_name(provider_name: String, challenge: String, slot: String) -> Self {
-        let challenge_bytes = hex::decode(&challenge).unwrap_or_default();
-        let slot_num: u8 = slot.parse().unwrap_or(2);
-        Self {
+    pub fn with_name(provider_name: String, challenge: String, slot: String) -> Result<Self> {
+        let challenge_bytes = hex::decode(&challenge).map_err(|e| {
+            FnoxError::Config(format!(
+                "yubikey provider '{}': invalid hex in challenge: {}",
+                provider_name, e
+            ))
+        })?;
+        let slot_num: u8 = slot.parse().map_err(|e| {
+            FnoxError::Config(format!(
+                "yubikey provider '{}': invalid slot number: {}",
+                provider_name, e
+            ))
+        })?;
+        Ok(Self {
             challenge: challenge_bytes,
             slot: slot_num,
             provider_name,
-        }
+        })
     }
 
     fn get_hmac_secret(&self) -> Result<Vec<u8>> {

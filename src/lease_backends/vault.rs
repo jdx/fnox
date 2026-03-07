@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::time::Duration;
 
-const URL: &str = "https://fnox.jdx.dev/lease-backends/vault";
+const URL: &str = "https://fnox.jdx.dev/leases/vault";
 
 pub struct VaultBackend {
     address: String,
