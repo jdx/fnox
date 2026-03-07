@@ -52,16 +52,19 @@ impl std::str::FromStr for AuthMethod {
 static CACHED_IDENTITY: OnceLock<String> = OnceLock::new();
 
 impl Age2faProvider {
+    /// Used by generated code — panics on invalid auth method since config
+    /// validation should have caught this before reaching here.
     pub fn new(recipients: Vec<String>, auth: String) -> Self {
         Self::with_name("age-2fa".to_string(), recipients, auth)
+            .expect("invalid age-2fa auth method in provider config")
     }
 
-    pub fn with_name(provider_name: String, recipients: Vec<String>, auth: String) -> Self {
-        Self {
+    pub fn with_name(provider_name: String, recipients: Vec<String>, auth: String) -> Result<Self> {
+        Ok(Self {
             recipients,
-            auth_method: auth.parse().unwrap_or(AuthMethod::Totp),
+            auth_method: auth.parse()?,
             provider_name,
-        }
+        })
     }
 
     fn twofa_dir(&self) -> PathBuf {

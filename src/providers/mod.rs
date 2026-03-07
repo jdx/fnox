@@ -285,7 +285,7 @@ pub async fn get_provider_resolved(
             provider_name.to_string(),
             recipients.clone(),
             auth.clone(),
-        )));
+        )?));
     }
     get_provider_from_resolved(&resolved)
 }
