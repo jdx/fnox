@@ -78,7 +78,7 @@ impl ExecCommand {
                         // Fall through to resolve_lease which will use the cache
                     } else {
                         eprintln!(
-                            "Skipping lease '{}': {}\nRun 'fnox lease create {}' to set up credentials interactively.",
+                            "Skipping lease '{}': {}\nRun 'fnox lease create -i {}' to set up credentials interactively.",
                             name, missing, name
                         );
                         continue;
