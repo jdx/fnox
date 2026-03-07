@@ -140,8 +140,17 @@ impl LeaseCreateCommand {
                 );
                 println!();
                 for (key, value) in &result.credentials {
-                    let display = if value.len() > 12 {
-                        format!("{}...{}", &value[..4], &value[value.len() - 4..])
+                    let display = if value.chars().count() > 12 {
+                        let prefix: String = value.chars().take(4).collect();
+                        let suffix: String = value
+                            .chars()
+                            .rev()
+                            .take(4)
+                            .collect::<Vec<_>>()
+                            .into_iter()
+                            .rev()
+                            .collect();
+                        format!("{prefix}...{suffix}")
                     } else {
                         "****".to_string()
                     };
@@ -327,7 +336,9 @@ fn format_expiry(expires_at: Option<chrono::DateTime<chrono::Utc>>) -> String {
     match expires_at {
         Some(exp) => {
             let remaining = exp - Utc::now();
-            if remaining.num_hours() > 0 {
+            if remaining.num_seconds() <= 0 {
+                "expired".to_string()
+            } else if remaining.num_hours() > 0 {
                 format!(
                     "in {}h{}m",
                     remaining.num_hours(),
