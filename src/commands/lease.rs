@@ -384,7 +384,7 @@ impl LeaseCleanupCommand {
                     Ok(backend) => {
                         if let Err(e) = backend.revoke_lease(&record.lease_id).await {
                             tracing::warn!("Failed to revoke lease '{}': {}", record.lease_id, e);
-                            continue;
+                            // Still mark revoked locally — the credential has expired anyway
                         }
                     }
                     Err(e) => {
@@ -394,7 +394,7 @@ impl LeaseCleanupCommand {
                             record.lease_id,
                             e
                         );
-                        continue;
+                        // Fall through to mark_revoked — don't leave stale entries
                     }
                 }
             } else {
