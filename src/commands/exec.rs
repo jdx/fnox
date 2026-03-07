@@ -96,9 +96,10 @@ impl ExecCommand {
             if let Some(value) = value {
                 // Skip secrets with env = false (only accessible via `fnox get`)
                 if let Some(secret_config) = profile_secrets.get(&key)
-                    && !secret_config.env {
-                        continue;
-                    }
+                    && !secret_config.env
+                {
+                    continue;
+                }
                 // Skip secrets whose keys were already set by lease backends —
                 // lease credentials (short-lived) must not be overwritten by
                 // regular secrets (which may be long-lived master credentials)
