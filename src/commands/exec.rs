@@ -187,8 +187,10 @@ async fn resolve_lease(
     // Load ledger once as mutable to avoid race window with concurrent invocations
     let mut ledger = LeaseLedger::load(project_dir)?;
 
-    // Check for a reusable cached lease
-    if let Some(cached_lease) = ledger.find_reusable(name)
+    // Check for a reusable cached lease (config_hash ensures stale creds
+    // are not returned after backend config changes like role ARN rotation)
+    let config_hash = lease_config.config_hash();
+    if let Some(cached_lease) = ledger.find_reusable(name, &config_hash)
         && let Some(ref cached_creds) = cached_lease.cached_credentials
     {
         // If encrypted, decrypt
@@ -291,6 +293,7 @@ async fn resolve_lease(
         revoked: false,
         cached_credentials,
         encryption_provider,
+        config_hash: Some(config_hash),
     });
     ledger.save(project_dir)?;
 

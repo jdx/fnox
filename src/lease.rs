@@ -27,6 +27,10 @@ pub struct LeaseRecord {
     pub cached_credentials: Option<HashMap<String, String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub encryption_provider: Option<String>,
+    /// Hash of the backend config at lease creation time, used to invalidate
+    /// cached credentials when the config changes (e.g., role ARN rotation).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config_hash: Option<String>,
 }
 
 /// The lease ledger, tracking all issued leases
@@ -37,16 +41,23 @@ pub struct LeaseLedger {
 }
 
 /// Determine the project directory from a config file path.
-/// Uses the parent of the config file, falling back to the current directory.
+/// Resolves relative paths against the current directory so that running
+/// `fnox exec` from different subdirectories of the same project produces
+/// the same ledger file (scoped to where the config actually lives).
 pub fn project_dir_from_config(config_path: &Path) -> PathBuf {
-    // If the config path has a parent that's a real directory, use it
-    if let Some(parent) = config_path.parent()
-        && parent.is_absolute()
-    {
-        return parent.to_path_buf();
-    }
-    // Fall back to current working directory
-    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+    // Resolve relative paths against current directory first
+    let resolved = if config_path.is_relative() {
+        std::env::current_dir()
+            .map(|cwd| cwd.join(config_path))
+            .unwrap_or_else(|_| config_path.to_path_buf())
+    } else {
+        config_path.to_path_buf()
+    };
+    // Use the parent directory of the resolved config path
+    resolved
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
 }
 
 /// Hash a project directory path to produce a unique ledger filename
@@ -81,7 +92,7 @@ impl LeaseLedger {
         Ok(ledger)
     }
 
-    /// Save the lease ledger to disk
+    /// Save the lease ledger to disk, pruning stale entries first
     pub fn save(&self, project_dir: &Path) -> Result<()> {
         let path = Self::ledger_path(project_dir);
         // Ensure leases directory exists
@@ -91,7 +102,18 @@ impl LeaseLedger {
                 source: e,
             })?;
         }
-        let content = toml_edit::ser::to_string_pretty(self)
+        // Compact: drop entries that are revoked or expired more than 24h ago
+        let cutoff = Utc::now() - chrono::Duration::hours(24);
+        let mut compacted = self.clone();
+        compacted.leases.retain(|r| {
+            if r.revoked {
+                // Keep revoked records only if they expired recently (for audit visibility)
+                return r.expires_at.is_none_or(|exp| exp > cutoff);
+            }
+            // Keep non-revoked records unless they expired more than 24h ago
+            r.expires_at.is_none_or(|exp| exp > cutoff)
+        });
+        let content = toml_edit::ser::to_string_pretty(&compacted)
             .map_err(|e| FnoxError::ConfigSerializeError { source: e })?;
         #[cfg(unix)]
         {
@@ -157,13 +179,19 @@ impl LeaseLedger {
         self.leases.iter().find(|r| r.lease_id == lease_id)
     }
 
-    /// Find a reusable cached lease for the given backend name.
+    /// Find a reusable cached lease for the given backend name and config hash.
     /// Returns the lease with the latest expiry that is still valid (with buffer).
     /// Never-expiring leases (expires_at: None) are ranked highest.
-    pub fn find_reusable(&self, backend_name: &str) -> Option<&LeaseRecord> {
+    /// Leases with a mismatched config_hash are skipped to prevent returning
+    /// stale credentials after backend config changes (e.g., role ARN rotation).
+    pub fn find_reusable(&self, backend_name: &str, config_hash: &str) -> Option<&LeaseRecord> {
         self.leases
             .iter()
-            .filter(|r| r.backend_name == backend_name && r.is_reusable())
+            .filter(|r| {
+                r.backend_name == backend_name
+                    && r.is_reusable()
+                    && r.config_hash.as_deref() == Some(config_hash)
+            })
             .max_by_key(|r| match r.expires_at {
                 None => DateTime::<Utc>::MAX_UTC,
                 Some(exp) => exp,

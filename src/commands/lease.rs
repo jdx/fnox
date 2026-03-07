@@ -128,6 +128,7 @@ impl LeaseCreateCommand {
             revoked: false,
             cached_credentials: None,
             encryption_provider: None,
+            config_hash: Some(backend_config.config_hash()),
         });
         ledger.save(&project_dir)?;
 
@@ -230,8 +231,9 @@ impl LeaseListCommand {
                 .expires_at
                 .map(|exp: chrono::DateTime<chrono::Utc>| exp.format("%Y-%m-%d %H:%M").to_string())
                 .unwrap_or_else(|| "never".to_string());
-            let id_short = if record.lease_id.len() > 18 {
-                format!("{}...", &record.lease_id[..15])
+            let id_short = if record.lease_id.chars().count() > 18 {
+                let truncated: String = record.lease_id.chars().take(15).collect();
+                format!("{truncated}...")
             } else {
                 record.lease_id.clone()
             };
@@ -263,10 +265,32 @@ impl LeaseRevokeCommand {
         let profile = Config::get_profile(cli.profile.as_deref());
         let leases = config.get_leases(&profile);
 
-        if let Some(backend_config) = leases.get(&backend_name)
-            && let Ok(backend) = backend_config.create_backend()
-        {
-            backend.revoke_lease(&self.lease_id).await?;
+        if let Some(backend_config) = leases.get(&backend_name) {
+            match backend_config.create_backend() {
+                Ok(backend) => {
+                    backend.revoke_lease(&self.lease_id).await?;
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to create backend '{}' for revocation: {}",
+                        backend_name,
+                        e
+                    );
+                    eprintln!(
+                        "Warning: could not initialize backend '{}'; only the local ledger entry was revoked.",
+                        backend_name
+                    );
+                }
+            }
+        } else {
+            tracing::warn!(
+                "Lease backend '{}' not found in config; backend revocation skipped",
+                backend_name
+            );
+            eprintln!(
+                "Warning: backend '{}' not found in config; only the local ledger entry was revoked.",
+                backend_name
+            );
         }
 
         ledger.mark_revoked(&self.lease_id);
