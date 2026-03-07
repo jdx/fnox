@@ -4,13 +4,13 @@
 
 - **Usage**: `fnox lease create [FLAGS] <BACKEND_NAME>`
 
-Create a short-lived credential lease from a configured backend
+Create a short-lived credential lease from a secret
 
 ## Arguments
 
 ### `<BACKEND_NAME>`
 
-Lease backend name (from `[leases.<name>]` config)
+Lease backend name (from [leases.<name>] config)
 
 ## Flags
 

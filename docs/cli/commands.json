@@ -533,7 +533,7 @@
                 "arg": {
                   "name": "DURATION",
                   "usage": "<DURATION>",
-                  "required": false,
+                  "required": true,
                   "double_dash": "Optional",
                   "hide": false
                 }
