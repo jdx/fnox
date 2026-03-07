@@ -181,7 +181,9 @@ impl LeaseBackend for VaultBackend {
                 )
             });
 
-        let lease_duration = resp["lease_duration"].as_i64();
+        // Vault KV v2 returns lease_duration=0 (static secrets have no lease).
+        // Treat 0 as "no expiry" so the lease stays active until explicitly revoked.
+        let lease_duration = resp["lease_duration"].as_i64().filter(|&secs| secs > 0);
 
         // Warn if Vault returned a different TTL than requested — many engines
         // (database, pki, rabbitmq) silently ignore the ?ttl query parameter
