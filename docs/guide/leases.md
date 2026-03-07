@@ -19,18 +19,25 @@ fnox supports two approaches depending on your security requirements:
 
 This is the simplest setup. You store the long-lived credentials (e.g., an AWS IAM user's access key) in a fnox provider, and fnox uses them to create short-lived leases automatically via `fnox exec`.
 
-### Example: AWS STS with Keychain
+Any provider works here. Choose based on your security requirements:
+
+- **1Password / Bitwarden** — requires authentication (password, biometric, or service account token) to access secrets. Best when you want a gate on every session.
+- **OS Keychain** — unlocked at login on most systems. Convenient but offers no additional prompt after login on Linux. macOS may prompt for Touch ID/password on first access.
+- **Age / KMS** — encrypted in git. Good for CI and shared team setups.
+
+### Example: AWS STS with 1Password
 
 ```toml
 # fnox.toml
 
-[providers.keychain]
-type = "keychain"
+[providers.op]
+type = "1password"
+vault = "Development"
 
-# Long-lived IAM credentials stored in OS keychain
+# Long-lived IAM credentials stored in 1Password
 [secrets]
-AWS_ACCESS_KEY_ID = { provider = "keychain" }
-AWS_SECRET_ACCESS_KEY = { provider = "keychain" }
+AWS_ACCESS_KEY_ID = { provider = "op", value = "AWS IAM/access key" }
+AWS_SECRET_ACCESS_KEY = { provider = "op", value = "AWS IAM/secret key" }
 
 # Lease: use those credentials to assume a role and get temp creds
 [leases.aws]
@@ -41,30 +48,44 @@ duration = "1h"
 ```
 
 ```bash
-# One-time setup: store your IAM credentials
-fnox set AWS_ACCESS_KEY_ID "AKIA..."
-fnox set AWS_SECRET_ACCESS_KEY "wJalr..."
-
-# Now fnox exec automatically:
-# 1. Loads AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY from keychain
+# fnox exec automatically:
+# 1. Retrieves AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY from 1Password
+#    (prompts to authenticate if needed)
 # 2. Calls sts:AssumeRole to get temporary credentials
 # 3. Injects AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN
 #    (the short-lived ones) into your subprocess
 fnox exec -- aws s3 ls
 ```
 
-The temporary credentials are cached in the lease ledger and reused until they're close to expiring (within 5 minutes of expiry). When they expire, fnox automatically creates a new lease.
-
-### Example: GCP with Keychain
+You can also use `keychain` if you prefer convenience over per-session authentication:
 
 ```toml
-# fnox.toml
-
 [providers.keychain]
 type = "keychain"
 
 [secrets]
-GCP_SERVICE_ACCOUNT_KEY = { provider = "keychain" }
+AWS_ACCESS_KEY_ID = { provider = "keychain" }
+AWS_SECRET_ACCESS_KEY = { provider = "keychain" }
+```
+
+```bash
+fnox set AWS_ACCESS_KEY_ID "AKIA..."
+fnox set AWS_SECRET_ACCESS_KEY "wJalr..."
+```
+
+The temporary credentials are cached in the lease ledger and reused until they're close to expiring (within 5 minutes of expiry). When they expire, fnox automatically creates a new lease.
+
+### Example: GCP IAM
+
+```toml
+# fnox.toml
+
+[providers.op]
+type = "1password"
+vault = "Development"
+
+[secrets]
+GOOGLE_APPLICATION_CREDENTIALS = { provider = "op", value = "GCP Service Account/key file", as_file = true }
 
 [leases.gcp]
 type = "gcp-iam"
@@ -73,10 +94,7 @@ duration = "1h"
 ```
 
 ```bash
-# Store the service account key JSON
-fnox set GCP_SERVICE_ACCOUNT_KEY "$(cat sa-key.json)"
-
-# fnox exec creates a short-lived OAuth2 token
+# fnox exec writes the key file to a temp path, creates a short-lived OAuth2 token
 fnox exec -- gcloud storage ls
 ```
 
@@ -85,11 +103,12 @@ fnox exec -- gcloud storage ls
 ```toml
 # fnox.toml
 
-[providers.keychain]
-type = "keychain"
+[providers.op]
+type = "1password"
+vault = "Infrastructure"
 
 [secrets]
-VAULT_TOKEN = { provider = "keychain" }
+VAULT_TOKEN = { provider = "op", value = "Vault/token" }
 
 [leases.vault-aws]
 type = "vault"
@@ -108,13 +127,14 @@ security_token = "AWS_SESSION_TOKEN"
 ```toml
 # fnox.toml
 
-[providers.keychain]
-type = "keychain"
+[providers.op]
+type = "1password"
+vault = "Development"
 
 [secrets]
-AZURE_CLIENT_ID = { provider = "keychain" }
-AZURE_CLIENT_SECRET = { provider = "keychain" }
-AZURE_TENANT_ID = { provider = "keychain" }
+AZURE_CLIENT_ID = { provider = "op", value = "Azure SP/client id" }
+AZURE_CLIENT_SECRET = { provider = "op", value = "Azure SP/client secret" }
+AZURE_TENANT_ID = { provider = "op", value = "Azure SP/tenant id" }
 
 [leases.azure]
 type = "azure-token"
