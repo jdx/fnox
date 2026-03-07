@@ -16,6 +16,7 @@ pub struct Fido2Provider {
     credential_id: Vec<u8>,
     salt: Vec<u8>,
     rp_id: String,
+    pin: Option<String>,
     provider_name: String,
 }
 
@@ -25,6 +26,7 @@ impl Fido2Provider {
         credential_id: String,
         salt: String,
         rp_id: String,
+        pin: Option<String>,
     ) -> Result<Self> {
         let credential_id_bytes = hex::decode(&credential_id).map_err(|e| {
             FnoxError::Config(format!(
@@ -49,6 +51,7 @@ impl Fido2Provider {
             credential_id: credential_id_bytes,
             salt: salt_bytes,
             rp_id,
+            pin,
             provider_name,
         })
     }
@@ -73,10 +76,14 @@ impl Fido2Provider {
 
         let ext = ctap_hid_fido2::fidokey::AssertionExtension::HmacSecret(Some(salt32));
 
-        let args = ctap_hid_fido2::fidokey::GetAssertionArgsBuilder::new(&self.rp_id, &challenge)
-            .credential_id(&self.credential_id)
-            .extensions(&[ext])
-            .build();
+        let mut builder =
+            ctap_hid_fido2::fidokey::GetAssertionArgsBuilder::new(&self.rp_id, &challenge)
+                .credential_id(&self.credential_id)
+                .extensions(&[ext]);
+        if let Some(ref pin) = self.pin {
+            builder = builder.pin(pin);
+        }
+        let args = builder.build();
 
         let assertions = device
             .get_assertion_with_args(&args)
@@ -133,7 +140,8 @@ impl crate::providers::Provider for Fido2Provider {
 pub mod setup {
     use crate::error::{FnoxError, Result};
 
-    pub fn setup_fido2(provider_name: &str) -> Result<(String, String, String)> {
+    /// Returns (credential_id_hex, salt_hex, rp_id, pin_or_none)
+    pub fn setup_fido2(provider_name: &str) -> Result<(String, String, String, Option<String>)> {
         let rp_id = format!("fnox.{}", provider_name);
 
         eprintln!("\nTouch your FIDO2 key when prompted...");
@@ -151,6 +159,7 @@ pub mod setup {
         } else {
             Some(&pin_input)
         };
+        let pin_to_store = pin.map(|s| s.to_string());
 
         let challenge = ctap_hid_fido2::verifier::create_challenge();
 
@@ -229,6 +238,6 @@ pub mod setup {
             provider_name
         );
 
-        Ok((credential_id_hex, salt_hex, rp_id))
+        Ok((credential_id_hex, salt_hex, rp_id, pin_to_store))
     }
 }

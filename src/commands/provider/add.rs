@@ -150,12 +150,15 @@ impl AddCommand {
                 auth_command: None,
             },
             ProviderType::Fido2 => {
-                let (credential_id_hex, salt_hex, rp_id) =
+                let (credential_id_hex, salt_hex, rp_id, pin) =
                     crate::providers::fido2::setup::setup_fido2(&self.provider)?;
                 crate::config::ProviderConfig::Fido2 {
                     credential_id: StringOrSecretRef::from(credential_id_hex.as_str()),
                     salt: StringOrSecretRef::from(salt_hex.as_str()),
                     rp_id: StringOrSecretRef::from(rp_id.as_str()),
+                    pin: pin
+                        .map(|p| OptionStringOrSecretRef::literal(p))
+                        .unwrap_or_default(),
                     auth_command: None,
                 }
             }

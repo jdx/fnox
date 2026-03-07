@@ -292,11 +292,22 @@ impl LeaseBackendConfig {
         }
     }
 
-    /// Compute a stable hash of the backend configuration.
+    /// Compute a stable hash of security-relevant backend configuration.
     /// Used to detect config changes and invalidate cached lease credentials.
+    /// Excludes `duration` and `timeout` since changing these doesn't invalidate
+    /// existing cached credentials (e.g., switching from "1h" to "2h" shouldn't
+    /// force a fresh lease when cached credentials are still valid).
     pub fn config_hash(&self) -> String {
-        let serialized = serde_json::to_string(self).unwrap_or_default();
-        let hash = blake3::hash(serialized.as_bytes());
+        let mut serialized = serde_json::to_value(self).unwrap_or_default();
+        // Strip non-security-relevant fields that shouldn't invalidate cache
+        if let Some(obj) = serialized.as_object_mut() {
+            if let Some(inner) = obj.values_mut().next().and_then(|v| v.as_object_mut()) {
+                inner.remove("duration");
+                inner.remove("timeout");
+            }
+        }
+        let json = serde_json::to_string(&serialized).unwrap_or_default();
+        let hash = blake3::hash(json.as_bytes());
         hash.to_hex()[..16].to_string()
     }
 

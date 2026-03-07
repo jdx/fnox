@@ -137,7 +137,7 @@ EOF
 	run "$FNOX_BIN" lease create test_sts --duration 15m --format json --label test-revoke
 	assert_success
 	local lease_id
-	lease_id=$(echo "$output" | python3 -c "import sys, json; print(json.load(sys.stdin)['lease_id'])")
+	lease_id=$(echo "$output" | grep -o '"lease_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"lease_id"[[:space:]]*:[[:space:]]*"//;s/"$//')
 
 	# Revoke it
 	run "$FNOX_BIN" lease revoke "$lease_id"

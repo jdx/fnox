@@ -30,3 +30,9 @@ type = "required"
 placeholder = ""
 label = "Relying Party ID:"
 wizard = false
+
+[fields.pin]
+type = "optional"
+placeholder = ""
+label = "FIDO2 PIN (if required by your key):"
+wizard = false

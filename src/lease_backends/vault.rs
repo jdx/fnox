@@ -128,15 +128,24 @@ impl LeaseBackend for VaultBackend {
                     url: URL.to_string(),
                 })?;
 
-        let data = resp["data"]
-            .as_object()
-            .ok_or_else(|| FnoxError::ProviderInvalidResponse {
-                provider: "Vault".to_string(),
-                details: "Response missing 'data' field".to_string(),
-                hint: "Check that the secret_path is a valid dynamic secret engine path"
-                    .to_string(),
-                url: URL.to_string(),
-            })?;
+        let outer_data =
+            resp["data"]
+                .as_object()
+                .ok_or_else(|| FnoxError::ProviderInvalidResponse {
+                    provider: "Vault".to_string(),
+                    details: "Response missing 'data' field".to_string(),
+                    hint: "Check that the secret_path is a valid dynamic secret engine path"
+                        .to_string(),
+                    url: URL.to_string(),
+                })?;
+
+        // KV v2 wraps the actual data in data.data; other engines put fields
+        // directly in data.  Detect KV v2 by checking for a nested "data" object.
+        let data = if let Some(inner) = outer_data.get("data").and_then(|v| v.as_object()) {
+            inner
+        } else {
+            outer_data
+        };
 
         let mut credentials = IndexMap::new();
         for (vault_key, env_var) in &self.env_map {

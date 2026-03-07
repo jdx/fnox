@@ -188,7 +188,7 @@ EOF
 
 	# Extract lease_id
 	local lease_id
-	lease_id=$(echo "$output" | python3 -c "import sys, json; print(json.load(sys.stdin)['lease_id'])")
+	lease_id=$(echo "$output" | grep -o '"lease_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"lease_id"[[:space:]]*:[[:space:]]*"//;s/"$//')
 
 	# Revoke it
 	run "$FNOX_BIN" lease revoke "$lease_id"
@@ -209,7 +209,7 @@ EOF
 	assert_success
 
 	local lease_id
-	lease_id=$(echo "$output" | python3 -c "import sys, json; print(json.load(sys.stdin)['lease_id'])")
+	lease_id=$(echo "$output" | grep -o '"lease_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"lease_id"[[:space:]]*:[[:space:]]*"//;s/"$//')
 
 	run "$FNOX_BIN" lease revoke "$lease_id"
 	assert_success
