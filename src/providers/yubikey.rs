@@ -43,9 +43,14 @@ impl YubikeyProvider {
 
     fn get_hmac_secret(&self) -> Result<Vec<u8>> {
         let cache = CACHED_SECRETS.get_or_init(|| std::sync::Mutex::new(HashMap::new()));
-        if let Ok(guard) = cache.lock()
-            && let Some(cached) = guard.get(&self.provider_name)
-        {
+        // Hold the mutex for the entire operation to prevent concurrent HID access.
+        // USB HID devices don't support concurrent access — two callers hitting
+        // the device simultaneously would cause a device-busy error.
+        let mut guard = cache
+            .lock()
+            .map_err(|_| FnoxError::Provider("YubiKey cache lock poisoned".to_string()))?;
+
+        if let Some(cached) = guard.get(&self.provider_name) {
             return Ok(cached.clone());
         }
 
@@ -80,10 +85,7 @@ impl YubikeyProvider {
             })?;
 
         let secret = hmac_result.to_vec();
-
-        if let Ok(mut guard) = cache.lock() {
-            guard.insert(self.provider_name.clone(), secret.clone());
-        }
+        guard.insert(self.provider_name.clone(), secret.clone());
 
         Ok(secret)
     }

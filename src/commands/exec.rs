@@ -65,7 +65,7 @@ impl ExecCommand {
                 }
             }
             let project_dir = lease::project_dir_from_config(&config, &cli.config);
-            // Load ledger once to avoid TOCTTOU race with concurrent invocations
+            let _ledger_lock = LeaseLedger::lock(&project_dir)?;
             let mut ledger = LeaseLedger::load(&project_dir)?;
             for (name, lease_config) in &leases {
                 // Check prerequisites before attempting to create/use a lease
@@ -107,12 +107,11 @@ impl ExecCommand {
 
         // Add resolved secrets as environment variables
         for (key, value) in resolved_secrets {
-            // Skip secrets whose keys were already set by lease backends —
-            // lease credentials (short-lived) must not be overwritten by
-            // regular secrets (which may be long-lived master credentials).
-            // This check MUST come before the env=false check, because a
-            // master credential (env=false) may share the same key name as
-            // a lease-provided temporary credential (e.g., AWS_ACCESS_KEY_ID).
+            // Skip secrets whose keys were already set by lease backends.
+            // This MUST come before env=false: if a master credential has
+            // env=false and the lease backend produced a short-lived credential
+            // under the same key (e.g., AWS_ACCESS_KEY_ID), calling env_remove
+            // here would strip the lease credential that cmd.env() already set.
             if lease_keys.contains(&key) {
                 tracing::debug!("Skipping secret '{}': already set by lease backend", key);
                 continue;
