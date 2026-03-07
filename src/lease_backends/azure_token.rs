@@ -18,41 +18,41 @@ impl AzureTokenBackend {
         Self { scope, env_var }
     }
 
-    /// Build a credential, preferring ClientSecretCredential (from env vars) over
-    /// DeveloperToolsCredential (az CLI). This allows the backend to work in CI
-    /// environments where `az` CLI is not installed but service principal env vars
-    /// (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID) are available.
     fn build_credential(&self) -> Result<Arc<dyn TokenCredential>> {
-        // Try ClientSecretCredential from env vars first
-        if let (Ok(tenant_id), Ok(client_id), Ok(client_secret)) = (
-            std::env::var("AZURE_TENANT_ID"),
-            std::env::var("AZURE_CLIENT_ID"),
-            std::env::var("AZURE_CLIENT_SECRET"),
-        ) {
-            let cred = azure_identity::ClientSecretCredential::new(
-                &tenant_id,
-                client_id,
-                client_secret.into(),
-                None,
-            )
-            .map_err(|e: azure_core::Error| FnoxError::ProviderAuthFailed {
+        let tenant_id =
+            std::env::var("AZURE_TENANT_ID").map_err(|_| FnoxError::ProviderAuthFailed {
                 provider: "Azure Token".to_string(),
-                details: e.to_string(),
-                hint: "Check AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET".to_string(),
+                details: "AZURE_TENANT_ID not set".to_string(),
+                hint: "Set AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, and AZURE_TENANT_ID".to_string(),
                 url: URL.to_string(),
             })?;
-            return Ok(cred);
-        }
-
-        // Fall back to DeveloperToolsCredential (az CLI)
-        let cred = azure_identity::DeveloperToolsCredential::new(None).map_err(
-            |e: azure_core::Error| FnoxError::ProviderAuthFailed {
+        let client_id =
+            std::env::var("AZURE_CLIENT_ID").map_err(|_| FnoxError::ProviderAuthFailed {
                 provider: "Azure Token".to_string(),
-                details: e.to_string(),
-                hint: "Run 'az login' or set AZURE_CLIENT_ID/SECRET/TENANT_ID".to_string(),
+                details: "AZURE_CLIENT_ID not set".to_string(),
+                hint: "Set AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, and AZURE_TENANT_ID".to_string(),
                 url: URL.to_string(),
-            },
-        )?;
+            })?;
+        let client_secret =
+            std::env::var("AZURE_CLIENT_SECRET").map_err(|_| FnoxError::ProviderAuthFailed {
+                provider: "Azure Token".to_string(),
+                details: "AZURE_CLIENT_SECRET not set".to_string(),
+                hint: "Set AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, and AZURE_TENANT_ID".to_string(),
+                url: URL.to_string(),
+            })?;
+
+        let cred = azure_identity::ClientSecretCredential::new(
+            &tenant_id,
+            client_id,
+            client_secret.into(),
+            None,
+        )
+        .map_err(|e: azure_core::Error| FnoxError::ProviderAuthFailed {
+            provider: "Azure Token".to_string(),
+            details: e.to_string(),
+            hint: "Check AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET".to_string(),
+            url: URL.to_string(),
+        })?;
         Ok(cred)
     }
 }
