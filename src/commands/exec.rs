@@ -189,47 +189,48 @@ async fn resolve_lease(
 
     // Check for a reusable cached lease
     if let Some(cached_lease) = ledger.find_reusable(name)
-        && let Some(ref cached_creds) = cached_lease.cached_credentials {
-            // If encrypted, decrypt
-            if let Some(ref enc_provider_name) = cached_lease.encryption_provider {
-                match find_encryption_provider(config, profile).await {
-                    Some((found_name, provider)) if found_name == *enc_provider_name => {
-                        match decrypt_credentials(provider.as_ref(), cached_creds).await {
-                            Ok(decrypted) => {
-                                tracing::debug!(
-                                    "Reusing cached encrypted lease '{}' for backend '{}'",
-                                    cached_lease.lease_id,
-                                    name
-                                );
-                                return Ok(decrypted);
-                            }
-                            Err(e) => {
-                                tracing::warn!(
-                                    "Failed to decrypt cached lease '{}': {}, creating fresh lease",
-                                    cached_lease.lease_id,
-                                    e
-                                );
-                            }
+        && let Some(ref cached_creds) = cached_lease.cached_credentials
+    {
+        // If encrypted, decrypt
+        if let Some(ref enc_provider_name) = cached_lease.encryption_provider {
+            match find_encryption_provider(config, profile).await {
+                Some((found_name, provider)) if found_name == *enc_provider_name => {
+                    match decrypt_credentials(provider.as_ref(), cached_creds).await {
+                        Ok(decrypted) => {
+                            tracing::debug!(
+                                "Reusing cached encrypted lease '{}' for backend '{}'",
+                                cached_lease.lease_id,
+                                name
+                            );
+                            return Ok(decrypted);
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to decrypt cached lease '{}': {}, creating fresh lease",
+                                cached_lease.lease_id,
+                                e
+                            );
                         }
                     }
-                    _ => {
-                        tracing::warn!(
-                            "Encryption provider '{}' not available for cached lease '{}', creating fresh lease",
-                            enc_provider_name,
-                            cached_lease.lease_id
-                        );
-                    }
                 }
-            } else {
-                // Plaintext cached credentials
-                tracing::debug!(
-                    "Reusing cached plaintext lease '{}' for backend '{}'",
-                    cached_lease.lease_id,
-                    name
-                );
-                return Ok(cached_creds.clone());
+                _ => {
+                    tracing::warn!(
+                        "Encryption provider '{}' not available for cached lease '{}', creating fresh lease",
+                        enc_provider_name,
+                        cached_lease.lease_id
+                    );
+                }
             }
+        } else {
+            // Plaintext cached credentials
+            tracing::debug!(
+                "Reusing cached plaintext lease '{}' for backend '{}'",
+                cached_lease.lease_id,
+                name
+            );
+            return Ok(cached_creds.clone());
         }
+    }
 
     // No reusable cache — create fresh lease
     let backend = lease_config.create_backend()?;

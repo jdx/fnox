@@ -41,9 +41,10 @@ pub struct LeaseLedger {
 pub fn project_dir_from_config(config_path: &Path) -> PathBuf {
     // If the config path has a parent that's a real directory, use it
     if let Some(parent) = config_path.parent()
-        && parent.is_absolute() {
-            return parent.to_path_buf();
-        }
+        && parent.is_absolute()
+    {
+        return parent.to_path_buf();
+    }
     // Fall back to current working directory
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
@@ -158,11 +159,15 @@ impl LeaseLedger {
 
     /// Find a reusable cached lease for the given backend name.
     /// Returns the lease with the latest expiry that is still valid (with buffer).
+    /// Never-expiring leases (expires_at: None) are ranked highest.
     pub fn find_reusable(&self, backend_name: &str) -> Option<&LeaseRecord> {
         self.leases
             .iter()
             .filter(|r| r.backend_name == backend_name && r.is_reusable())
-            .max_by_key(|r| r.expires_at)
+            .max_by_key(|r| match r.expires_at {
+                None => DateTime::<Utc>::MAX_UTC,
+                Some(exp) => exp,
+            })
     }
 }
 
