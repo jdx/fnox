@@ -70,7 +70,8 @@ impl ExecCommand {
             let mut ledger = LeaseLedger::load(&project_dir)?;
             for (name, lease_config) in &leases {
                 // Check prerequisites before attempting to create/use a lease
-                if let Some(missing) = lease_config.check_prerequisites() {
+                let prereq_missing = lease_config.check_prerequisites();
+                if let Some(ref missing) = prereq_missing {
                     // Check if there's a cached lease we can still use
                     let config_hash = lease_config.config_hash();
                     if let Some(cached) = ledger.find_reusable(name, &config_hash)
@@ -95,6 +96,7 @@ impl ExecCommand {
                     &profile,
                     &project_dir,
                     &mut ledger,
+                    prereq_missing.as_deref(),
                 )
                 .await?;
                 for (cred_key, cred_value) in creds {
@@ -183,6 +185,7 @@ async fn resolve_lease(
     profile: &str,
     project_dir: &std::path::Path,
     ledger: &mut LeaseLedger,
+    prereq_missing: Option<&str>,
 ) -> Result<IndexMap<String, String>> {
     // Check for a reusable cached lease (config_hash ensures stale creds
     // are not returned after backend config changes like role ARN rotation)
@@ -233,7 +236,16 @@ async fn resolve_lease(
         }
     }
 
-    // No reusable cache — create fresh lease
+    // No reusable cache — create fresh lease.
+    // If prerequisites were already known to be missing, fail now with a clear
+    // message instead of letting the SDK produce a confusing auth error.
+    if let Some(missing) = prereq_missing {
+        return Err(FnoxError::Config(format!(
+            "Cached lease for '{}' could not be used and prerequisites are missing: {}\n\
+             Run 'fnox lease create -i {}' to set up credentials interactively.",
+            name, missing, name
+        )));
+    }
     let backend = lease_config.create_backend()?;
 
     let duration_str = lease_config
