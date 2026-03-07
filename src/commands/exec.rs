@@ -110,6 +110,16 @@ impl ExecCommand {
         // Add resolved secrets as environment variables
         for (key, value) in resolved_secrets {
             if let Some(value) = value {
+                // Skip secrets whose keys were already set by lease backends —
+                // lease credentials (short-lived) must not be overwritten by
+                // regular secrets (which may be long-lived master credentials).
+                // This check MUST come before the env=false check, because a
+                // master credential (env=false) may share the same key name as
+                // a lease-provided temporary credential (e.g., AWS_ACCESS_KEY_ID).
+                if lease_keys.contains(&key) {
+                    tracing::debug!("Skipping secret '{}': already set by lease backend", key);
+                    continue;
+                }
                 // Skip secrets with env = false (only accessible via `fnox get`)
                 if let Some(secret_config) = profile_secrets.get(&key)
                     && !secret_config.env
@@ -117,13 +127,6 @@ impl ExecCommand {
                     // Explicitly remove from child environment — the secret may have
                     // been inherited from the parent process before fnox exec ran.
                     cmd.env_remove(&key);
-                    continue;
-                }
-                // Skip secrets whose keys were already set by lease backends —
-                // lease credentials (short-lived) must not be overwritten by
-                // regular secrets (which may be long-lived master credentials)
-                if lease_keys.contains(&key) {
-                    tracing::debug!("Skipping secret '{}': already set by lease backend", key);
                     continue;
                 }
                 // Check if this secret should be written to a file
