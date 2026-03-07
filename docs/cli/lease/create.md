@@ -30,12 +30,12 @@ Output format
 
 **Default:** `shell`
 
+### `-i --interactive`
+
+Prompt interactively for missing credentials
+
 ### `-l --label <LABEL>`
 
 Label for the lease (e.g., session purpose)
 
 **Default:** `fnox-lease`
-
-### `-i --interactive`
-
-Prompt interactively for missing credentials

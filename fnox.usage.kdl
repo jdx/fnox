@@ -102,10 +102,10 @@ cmd lease subcommand_required=#true help="Manage ephemeral credential leases (ex
                 choices shell json env
             }
         }
+        flag "-i --interactive" help="Prompt interactively for missing credentials"
         flag "-l --label" help="Label for the lease (e.g., session purpose)" default=fnox-lease {
             arg <LABEL>
         }
-        flag "-i --interactive" help="Prompt interactively for missing credentials"
         arg <BACKEND_NAME> help="Lease backend name (from [leases.<name>] config)"
     }
     cmd list help="List tracked leases" {
