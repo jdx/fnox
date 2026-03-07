@@ -91,7 +91,7 @@ cmd init help="Initialize a new fnox configuration file" {
     flag --force help="Overwrite existing configuration file"
     flag --skip-wizard help="Skip the interactive wizard and create a minimal config"
 }
-cmd lease subcommand_required=#true help="Manage ephemeral credential leases (experimental)" {
+cmd lease subcommand_required=#true help="Manage ephemeral credential leases" {
     cmd cleanup help="Revoke all expired leases that need manual cleanup"
     cmd create help="Create a short-lived credential lease from a secret" {
         flag "-d --duration" help="Lease duration (e.g., \"15m\", \"1h\", \"2h30m\"); overrides config duration" {
