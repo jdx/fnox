@@ -45,13 +45,13 @@ pub struct LeaseCreateCommand {
     #[arg(short, long, default_value = "shell")]
     pub format: OutputFormat,
 
-    /// Label for the lease (e.g., session purpose)
-    #[arg(short, long, default_value = "fnox-lease")]
-    pub label: String,
-
     /// Prompt interactively for missing credentials
     #[arg(short, long)]
     pub interactive: bool,
+
+    /// Label for the lease (e.g., session purpose)
+    #[arg(short, long, default_value = "fnox-lease")]
+    pub label: String,
 }
 
 #[derive(Debug, Args)]

@@ -20,11 +20,7 @@ pub struct Fido2Provider {
 }
 
 impl Fido2Provider {
-    pub fn new(credential_id: String, salt: String, rp_id: String) -> Result<Self> {
-        Self::with_name("fido2".to_string(), credential_id, salt, rp_id)
-    }
-
-    pub fn with_name(
+    pub fn new(
         provider_name: String,
         credential_id: String,
         salt: String,
@@ -72,10 +68,8 @@ impl Fido2Provider {
 
         let challenge = ctap_hid_fido2::verifier::create_challenge();
 
-        // Build a 32-byte salt from our stored salt bytes
         let mut salt32 = [0u8; 32];
-        let copy_len = self.salt.len().min(32);
-        salt32[..copy_len].copy_from_slice(&self.salt[..copy_len]);
+        salt32.copy_from_slice(&self.salt);
 
         let ext = ctap_hid_fido2::fidokey::AssertionExtension::HmacSecret(Some(salt32));
 
@@ -192,23 +186,14 @@ pub mod setup {
         let credential_id = attestation.credential_descriptor.id.clone();
         let credential_id_hex = hex::encode(&credential_id);
 
-        // Generate a random salt (32 bytes)
-        let salt = {
-            let random_identity = age::x25519::Identity::generate();
-            let hash = blake3::hash(
-                age::secrecy::ExposeSecret::expose_secret(&random_identity.to_string()).as_bytes(),
-            );
-            hash.as_bytes()[..32].to_vec()
-        };
-        let salt_hex = hex::encode(&salt);
+        // Generate a random 32-byte salt
+        let salt: [u8; 32] = rand::random();
+        let salt_hex = hex::encode(salt);
 
         // Verify the credential works by doing a test assertion
         eprintln!("Touch your FIDO2 key again to verify...");
 
-        let mut salt32 = [0u8; 32];
-        salt32.copy_from_slice(&salt);
-
-        let assert_ext = ctap_hid_fido2::fidokey::AssertionExtension::HmacSecret(Some(salt32));
+        let assert_ext = ctap_hid_fido2::fidokey::AssertionExtension::HmacSecret(Some(salt));
 
         let challenge2 = ctap_hid_fido2::verifier::create_challenge();
         let mut builder2 =

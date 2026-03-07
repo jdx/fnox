@@ -4,6 +4,7 @@ serde_rename = "yubikey"
 rust_variant = "Yubikey"
 module = "yubikey"
 struct_name = "YubikeyProvider"
+pass_provider_name = true
 category = "Local"
 description = "Hardware-backed encryption using YubiKey HMAC-SHA1 challenge-response"
 default_name = "yubikey"

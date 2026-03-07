@@ -200,7 +200,10 @@ fn resolve_secret_ref<'a>(
                     .await?;
 
                     // Create the provider and get the secret
-                    let provider = super::get_provider_from_resolved(&resolved_provider)?;
+                    let provider = super::get_provider_from_resolved(
+                        secret_provider_name,
+                        &resolved_provider,
+                    )?;
                     return provider.get_secret(provider_value).await;
                 } else {
                     // Find similar provider names for suggestion

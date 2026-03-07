@@ -20,11 +20,7 @@ pub struct YubikeyProvider {
 }
 
 impl YubikeyProvider {
-    pub fn new(challenge: String, slot: String) -> Result<Self> {
-        Self::with_name("yubikey".to_string(), challenge, slot)
-    }
-
-    pub fn with_name(provider_name: String, challenge: String, slot: String) -> Result<Self> {
+    pub fn new(provider_name: String, challenge: String, slot: String) -> Result<Self> {
         let challenge_bytes = hex::decode(&challenge).map_err(|e| {
             FnoxError::Config(format!(
                 "yubikey provider '{}': invalid hex in challenge: {}",
@@ -136,15 +132,9 @@ pub mod setup {
             return Err(FnoxError::Config("Slot must be 1 or 2".to_string()));
         }
 
-        // Generate a random challenge
-        let challenge = {
-            let random_identity = age::x25519::Identity::generate();
-            let hash = blake3::hash(
-                age::secrecy::ExposeSecret::expose_secret(&random_identity.to_string()).as_bytes(),
-            );
-            hash.as_bytes()[..32].to_vec()
-        };
-        let challenge_hex = hex::encode(&challenge);
+        // Generate a random 32-byte challenge
+        let challenge: [u8; 32] = rand::random();
+        let challenge_hex = hex::encode(challenge);
 
         eprintln!("Tap your YubiKey now...");
 

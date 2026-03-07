@@ -4,6 +4,7 @@ serde_rename = "fido2"
 rust_variant = "Fido2"
 module = "fido2"
 struct_name = "Fido2Provider"
+pass_provider_name = true
 category = "Local"
 description = "Hardware-backed encryption using FIDO2 hmac-secret extension"
 default_name = "fido2"

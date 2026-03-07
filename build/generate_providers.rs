@@ -23,6 +23,10 @@ struct ProviderTomlRaw {
     setup_instructions: String,
     #[serde(default)]
     auth_command: Option<String>,
+    /// When true, the provider's `new()` constructor receives `provider_name: String`
+    /// as its first argument, enabling per-instance caching and HKDF context scoping.
+    #[serde(default)]
+    pass_provider_name: bool,
     #[serde(default)]
     fields: IndexMap<String, FieldDef>,
     #[serde(default)]
@@ -42,6 +46,7 @@ struct ProviderToml {
     default_name: String,
     setup_instructions: String,
     auth_command: Option<String>,
+    pass_provider_name: bool,
     fields: IndexMap<String, FieldDef>,
     wizard_fields: IndexMap<String, WizardFieldDef>,
 }
@@ -76,6 +81,7 @@ impl ProviderTomlRaw {
             default_name: self.default_name,
             setup_instructions: self.setup_instructions,
             auth_command: self.auth_command,
+            pass_provider_name: self.pass_provider_name,
             fields: self.fields,
             wizard_fields: self.wizard_fields,
         }
@@ -644,10 +650,17 @@ fn generate_provider_instantiate(
         let module = Ident::new(&provider.module, Span::call_site());
         let struct_name = Ident::new(&provider.struct_name, Span::call_site());
 
+        // Prepend provider_name.to_string() if the provider needs it
+        let name_arg: Vec<TokenStream> = if provider.pass_provider_name {
+            vec![quote! { provider_name.to_string() }]
+        } else {
+            vec![]
+        };
+
         if provider.fields.is_empty() {
             arms.push(quote! {
                 ResolvedProviderConfig::#variant => {
-                    Ok(Box::new(#module::#struct_name::new()?))
+                    Ok(Box::new(#module::#struct_name::new(#(#name_arg),*)?))
                 }
             });
         } else {
@@ -655,7 +668,7 @@ fn generate_provider_instantiate(
             let new_args = generate_new_args(provider);
             arms.push(quote! {
                 ResolvedProviderConfig::#variant { #(#field_patterns),* } => {
-                    Ok(Box::new(#module::#struct_name::new(#(#new_args),*)?))
+                    Ok(Box::new(#module::#struct_name::new(#(#name_arg,)* #(#new_args),*)?))
                 }
             });
         }
@@ -668,7 +681,7 @@ fn generate_provider_instantiate(
         use super::providers_config::ResolvedProviderConfig;
 
         /// Create a provider from a resolved provider configuration.
-        pub fn get_provider_from_resolved(config: &ResolvedProviderConfig) -> Result<Box<dyn Provider>> {
+        pub fn get_provider_from_resolved(provider_name: &str, config: &ResolvedProviderConfig) -> Result<Box<dyn Provider>> {
             match config {
                 #(#arms),*
             }

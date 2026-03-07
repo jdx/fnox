@@ -5,7 +5,7 @@
 //! `base64(nonce || ciphertext || tag)`.
 
 use crate::error::{FnoxError, Result};
-use aes_gcm::aead::{Aead, KeyInit};
+use aes_gcm::aead::{Aead, AeadCore, KeyInit, OsRng};
 use aes_gcm::{Aes256Gcm, Nonce};
 use hkdf::Hkdf;
 use sha2::Sha256;
@@ -27,27 +27,16 @@ pub fn encrypt(hw_secret: &[u8], context: &[u8], plaintext: &str) -> Result<Stri
     let cipher = Aes256Gcm::new_from_slice(&key_bytes)
         .map_err(|e| FnoxError::Provider(format!("Failed to create AES-256-GCM cipher: {}", e)))?;
 
-    // Generate a random 96-bit nonce
-    let nonce_bytes: [u8; 12] = {
-        // Use blake3 hash of random age identity as entropy source
-        // (avoids pulling in another RNG crate)
-        let random_identity = age::x25519::Identity::generate();
-        let hash = blake3::hash(
-            age::secrecy::ExposeSecret::expose_secret(&random_identity.to_string()).as_bytes(),
-        );
-        let mut n = [0u8; 12];
-        n.copy_from_slice(&hash.as_bytes()[..12]);
-        n
-    };
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    // Generate a random 96-bit nonce using the OS CSPRNG
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
 
     let ciphertext = cipher
-        .encrypt(nonce, plaintext.as_bytes())
+        .encrypt(&nonce, plaintext.as_bytes())
         .map_err(|e| FnoxError::Provider(format!("AES-256-GCM encryption failed: {}", e)))?;
 
     // Prepend nonce to ciphertext
     let mut output = Vec::with_capacity(12 + ciphertext.len());
-    output.extend_from_slice(&nonce_bytes);
+    output.extend_from_slice(&nonce);
     output.extend_from_slice(&ciphertext);
 
     use base64::Engine;

@@ -42,6 +42,10 @@ impl LeaseBackend for GcpIamBackend {
             }
                 })?;
 
+        // The caller's ADC token always uses cloud-platform scope because it needs
+        // iam.serviceAccounts.getAccessToken permission to call the IAM Credentials API.
+        // This is distinct from self.scopes, which controls what the *impersonated*
+        // service account's token can access via generateAccessToken.
         let token = auth_manager
             .token(&["https://www.googleapis.com/auth/cloud-platform"])
             .await

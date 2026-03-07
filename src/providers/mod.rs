@@ -281,28 +281,5 @@ pub async fn get_provider_resolved(
     provider_config: &ProviderConfig,
 ) -> Result<Box<dyn Provider>> {
     let resolved = resolve_provider_config(config, profile, provider_name, provider_config).await?;
-    // Hardware providers need the provider name for per-provider secret caching
-    match &resolved {
-        ResolvedProviderConfig::Yubikey { challenge, slot } => {
-            return Ok(Box::new(yubikey::YubikeyProvider::with_name(
-                provider_name.to_string(),
-                challenge.clone(),
-                slot.clone(),
-            )?));
-        }
-        ResolvedProviderConfig::Fido2 {
-            credential_id,
-            salt,
-            rp_id,
-        } => {
-            return Ok(Box::new(fido2::Fido2Provider::with_name(
-                provider_name.to_string(),
-                credential_id.clone(),
-                salt.clone(),
-                rp_id.clone(),
-            )?));
-        }
-        _ => {}
-    }
-    get_provider_from_resolved(&resolved)
+    get_provider_from_resolved(provider_name, &resolved)
 }

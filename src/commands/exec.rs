@@ -59,28 +59,10 @@ impl ExecCommand {
                 if let Some(value) = value
                     && std::env::var(key).is_err()
                 {
-                    // For as_file secrets (e.g. GOOGLE_APPLICATION_CREDENTIALS),
-                    // write to a temp file and set the env var to the file path.
-                    // Lease backend SDKs expect file paths, not raw content.
-                    let env_value = if let Some(secret_config) = profile_secrets.get(key)
-                        && secret_config.as_file
-                    {
-                        let temp_file = create_ephemeral_secret_file(key, value)?;
-                        let file_path = temp_file.path().to_string_lossy().to_string();
-                        tracing::debug!(
-                            "Created temporary file for as_file secret '{}' at '{}'",
-                            key,
-                            file_path
-                        );
-                        _temp_files.push(temp_file);
-                        file_path
-                    } else {
-                        value.clone()
-                    };
                     // TODO: unsafe set_var on a multi-threaded Tokio runtime is technically
                     // UB. Refactor to pass credentials explicitly to lease backend SDKs
                     // instead of mutating the process environment.
-                    unsafe { std::env::set_var(key, &env_value) };
+                    unsafe { std::env::set_var(key, value) };
                     _temp_env_guard.keys.push(key.clone());
                 }
             }
