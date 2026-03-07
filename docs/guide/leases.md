@@ -10,10 +10,11 @@ Leases are an experimental feature. Enable them with `FNOX_EXPERIMENTAL=true`.
 
 Long-lived credentials are a security risk. If they leak, an attacker has access until someone rotates them. Leases flip this model: credentials are created on demand, last minutes to hours, and expire on their own.
 
-fnox supports two approaches depending on your security requirements:
+fnox supports three approaches depending on your security requirements:
 
 1. **Stored master credentials** — keep the long-lived credentials in a provider (keychain, 1Password, etc.) and let fnox handle lease creation automatically
 2. **Prompt-based** — never store master credentials on the machine; paste them in when needed
+3. **Hardware-protected** — store master credentials encrypted on disk, requiring a physical security key (YubiKey or FIDO2) to decrypt
 
 ## Approach 1: Stored Master Credentials
 
@@ -172,8 +173,6 @@ When you start your session, create a lease interactively:
 
 ```bash
 $ fnox lease create aws
-AWS credentials not found. Run 'aws sso login' or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY.
-
 AWS_ACCESS_KEY_ID (AWS access key): AKIA...
 AWS_SECRET_ACCESS_KEY (AWS secret key): wJalr...
 AWS_SESSION_TOKEN (AWS session token (optional)):
@@ -211,15 +210,20 @@ The subprocess still runs — just without the lease credentials. This means oth
 
 ## Approach 3: Hardware-Protected Master Credentials
 
-This approach stores master credentials encrypted on disk with a hardware device (YubiKey) required for decryption. It combines the convenience of Approach 1 (no manual paste step each session) with stronger security than a simple encryption key.
+This approach stores master credentials encrypted on disk with a hardware security key required for decryption. It combines the convenience of Approach 1 (no manual paste step each session) with stronger security — decryption is physically impossible without the key.
 
-The master credentials are stored using the [`yubikey` provider](/providers/yubikey) or [`fido2` provider](/providers/fido2), which derive an AES-256-GCM encryption key from a hardware device. Without the physical key, decryption is impossible.
+fnox supports two hardware provider types:
+
+- **[`yubikey`](/providers/yubikey)** — uses YubiKey HMAC-SHA1 challenge-response. Simple setup, works with any YubiKey that has HMAC-SHA1 configured on a slot.
+- **[`fido2`](/providers/fido2)** — uses the FIDO2 hmac-secret extension. Works with any FIDO2-compatible key (YubiKey 5, SoloKeys, Nitrokey, etc.).
+
+Both derive an AES-256-GCM encryption key from the hardware device via HKDF-SHA256. The config is fully portable — move `fnox.local.toml` to any machine with the same key and it works.
 
 ::: tip Use fnox.local.toml
-Put the provider and secret definitions in `fnox.local.toml` (which is gitignored) and keep only the lease backend config in `fnox.toml`. The config is fully portable — move `fnox.local.toml` to any machine with the same YubiKey and it works.
+Put the provider and secret definitions in `fnox.local.toml` (which is gitignored) and keep only the lease backend config in `fnox.toml`.
 :::
 
-### Setup
+### Setup (YubiKey example)
 
 ```toml
 # fnox.local.toml (gitignored — personal provider + secrets)
@@ -244,20 +248,30 @@ role_arn = "arn:aws:iam::123456789012:role/dev-role"
 duration = "1h"
 ```
 
+For FIDO2, replace the provider section with:
+
+```toml
+[providers.secure]
+type = "fido2"
+credential_id = "a1b2c3..."  # auto-populated by `fnox provider add`
+salt = "d4e5f6..."
+rp_id = "fnox.secure"
+```
+
 Key points:
 
 - `env = false` prevents the master credentials from leaking into subprocess environment variables
-- The master credentials are only used internally by the lease backend
+- The master credentials are only used internally by the lease backend to create short-lived credentials
 - Only the short-lived assumed-role credentials are injected into the subprocess
 
 ### Initial setup
 
 ```bash
-# 1. Create the hardware-backed provider
-fnox provider add secure yubikey
-# → Generates random challenge, verifies YubiKey works
+# 1. Create the hardware-backed provider (choose one)
+fnox provider add secure yubikey    # YubiKey HMAC-SHA1
+fnox provider add secure fido2      # Any FIDO2 key
 
-# 2. Store your master credentials (requires YubiKey tap)
+# 2. Store your master credentials (requires key tap)
 fnox set AWS_ACCESS_KEY_ID "AKIA..." --provider secure
 fnox set AWS_SECRET_ACCESS_KEY "wJalr..." --provider secure
 ```
@@ -267,14 +281,14 @@ fnox set AWS_SECRET_ACCESS_KEY "wJalr..." --provider secure
 ```bash
 $ fnox exec -- aws s3 ls
 Tap your YubiKey...
-# → Derives encryption key from YubiKey (one tap per session)
+# → Derives encryption key from hardware device (one tap per session)
 # → Decrypts master creds
 # → Calls sts:AssumeRole
 # → Injects short-lived creds into subprocess
 # → Caches lease for reuse
 ```
 
-The YubiKey tap only happens once per `fnox exec` invocation, even when multiple secrets use the same provider. After the lease is cached, subsequent `fnox exec` calls reuse it without prompting until it's close to expiring.
+The hardware key tap only happens once per `fnox exec` invocation, even when multiple secrets use the same provider. After the lease is cached, subsequent `fnox exec` calls reuse it without prompting until it's close to expiring.
 
 ## Supported Backends
 
