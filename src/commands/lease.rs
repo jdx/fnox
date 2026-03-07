@@ -48,6 +48,10 @@ pub struct LeaseCreateCommand {
     /// Label for the lease (e.g., session purpose)
     #[arg(short, long, default_value = "fnox-lease")]
     pub label: String,
+
+    /// Prompt interactively for missing credentials
+    #[arg(short, long)]
+    pub interactive: bool,
 }
 
 #[derive(Debug, Args)]
@@ -96,10 +100,10 @@ impl LeaseCreateCommand {
             ))
         })?;
 
-        // Check prerequisites and prompt for missing env vars if interactive
+        // Check prerequisites and prompt for missing env vars if --prompt
         if let Some(missing) = backend_config.check_prerequisites() {
             let required_vars = backend_config.required_env_vars();
-            if !required_vars.is_empty() && atty::is(atty::Stream::Stdin) {
+            if self.interactive && !required_vars.is_empty() {
                 eprintln!("{}", missing);
                 eprintln!();
                 for (var, description) in &required_vars {

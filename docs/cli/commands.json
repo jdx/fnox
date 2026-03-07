@@ -576,6 +576,16 @@
                   "hide": false
                 },
                 "default": ["fnox-lease"]
+              },
+              {
+                "name": "interactive",
+                "usage": "-i --interactive",
+                "help": "Prompt interactively for missing credentials",
+                "help_first_line": "Prompt interactively for missing credentials",
+                "short": ["i"],
+                "long": ["interactive"],
+                "hide": false,
+                "global": false
               }
             ],
             "mounts": [],

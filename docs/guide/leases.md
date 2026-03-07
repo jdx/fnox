@@ -169,10 +169,10 @@ duration = "1h"
 
 ### Daily workflow
 
-When you start your session, create a lease interactively:
+When you start your session, create a lease interactively with `--interactive`:
 
 ```bash
-$ fnox lease create aws
+$ fnox lease create aws -i
 AWS_ACCESS_KEY_ID (AWS access key): AKIA...
 AWS_SECRET_ACCESS_KEY (AWS secret key): wJalr...
 AWS_SESSION_TOKEN (AWS session token (optional)):
