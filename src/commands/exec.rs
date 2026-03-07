@@ -45,6 +45,23 @@ impl ExecCommand {
             } else {
                 let project_dir = lease::project_dir_from_config(&cli.config);
                 for (name, lease_config) in &leases {
+                    // Check prerequisites before attempting to create/use a lease
+                    if let Some(missing) = lease_config.check_prerequisites() {
+                        // Check if there's a cached lease we can still use
+                        let config_hash = lease_config.config_hash();
+                        let ledger = LeaseLedger::load(&project_dir)?;
+                        if let Some(cached) = ledger.find_reusable(name, &config_hash)
+                            && cached.cached_credentials.is_some()
+                        {
+                            // Fall through to resolve_lease which will use the cache
+                        } else {
+                            eprintln!(
+                                "Skipping lease '{}': {}\nRun 'fnox lease create {}' to set up credentials interactively.",
+                                name, missing, name
+                            );
+                            continue;
+                        }
+                    }
                     let creds =
                         resolve_lease(name, lease_config, &config, &profile, &project_dir).await?;
                     for (cred_key, cred_value) in creds {

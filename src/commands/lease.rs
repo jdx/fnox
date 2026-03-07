@@ -96,6 +96,36 @@ impl LeaseCreateCommand {
             ))
         })?;
 
+        // Check prerequisites and prompt for missing env vars if interactive
+        if let Some(missing) = backend_config.check_prerequisites() {
+            let required_vars = backend_config.required_env_vars();
+            if !required_vars.is_empty() && atty::is(atty::Stream::Stdin) {
+                eprintln!("{}", missing);
+                eprintln!();
+                for (var, description) in &required_vars {
+                    if std::env::var(var).is_err() {
+                        let value = demand::Input::new(format!("{var} ({description})"))
+                            .placeholder("paste value here")
+                            .run()
+                            .map_err(|e| {
+                                FnoxError::Config(format!("Failed to read input: {}", e))
+                            })?;
+                        if !value.is_empty() {
+                            // SAFETY: we are single-threaded at this point (before
+                            // spawning any backend work), so set_var is safe.
+                            unsafe { std::env::set_var(var, &value) };
+                        }
+                    }
+                }
+                // Re-check after prompting
+                if let Some(still_missing) = backend_config.check_prerequisites() {
+                    return Err(FnoxError::Config(still_missing));
+                }
+            } else {
+                return Err(FnoxError::Config(missing));
+            }
+        }
+
         let duration_str = self
             .duration
             .as_deref()
