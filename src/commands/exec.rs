@@ -114,6 +114,9 @@ impl ExecCommand {
                 if let Some(secret_config) = profile_secrets.get(&key)
                     && !secret_config.env
                 {
+                    // Explicitly remove from child environment — the secret may have
+                    // been inherited from the parent process before fnox exec ran.
+                    cmd.env_remove(&key);
                     continue;
                 }
                 // Skip secrets whose keys were already set by lease backends —

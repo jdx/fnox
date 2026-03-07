@@ -12,6 +12,7 @@ pub fn env_dependencies() -> &'static [&'static str] {
 /// Cached FIDO2 hmac-secret responses keyed by provider name.
 static CACHED_SECRETS: OnceLock<std::sync::Mutex<HashMap<String, Vec<u8>>>> = OnceLock::new();
 
+#[derive(Clone)]
 pub struct Fido2Provider {
     credential_id: Vec<u8>,
     salt: Vec<u8>,
@@ -126,12 +127,18 @@ impl crate::providers::Provider for Fido2Provider {
     }
 
     async fn encrypt(&self, plaintext: &str) -> Result<String> {
-        let secret = self.get_hmac_secret()?;
+        let provider = self.clone();
+        let secret = tokio::task::spawn_blocking(move || provider.get_hmac_secret())
+            .await
+            .map_err(|e| FnoxError::Provider(format!("FIDO2 task failed: {e}")))??;
         hw_encrypt::encrypt(&secret, &self.hkdf_context(), plaintext)
     }
 
     async fn get_secret(&self, value: &str) -> Result<String> {
-        let secret = self.get_hmac_secret()?;
+        let provider = self.clone();
+        let secret = tokio::task::spawn_blocking(move || provider.get_hmac_secret())
+            .await
+            .map_err(|e| FnoxError::Provider(format!("FIDO2 task failed: {e}")))??;
         hw_encrypt::decrypt(&secret, &self.hkdf_context(), value)
     }
 }
