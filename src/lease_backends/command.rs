@@ -142,7 +142,7 @@ impl LeaseBackend for CommandBackend {
         let lease_id = parsed["lease_id"]
             .as_str()
             .map(|s| s.to_string())
-            .unwrap_or_else(|| format!("cmd-{}", chrono::Utc::now().timestamp_millis()));
+            .unwrap_or_else(|| super::generate_lease_id("cmd"));
 
         Ok(Lease {
             credentials,

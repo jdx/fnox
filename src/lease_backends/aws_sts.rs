@@ -118,7 +118,7 @@ impl LeaseBackend for AwsStsBackend {
             .assumed_role_user()
             .map(|u| u.assumed_role_id().to_string())
             .unwrap_or_else(|| "sts".to_string());
-        let lease_id = format!("{}-{}", role_id, chrono::Utc::now().timestamp_millis());
+        let lease_id = super::generate_lease_id(&role_id);
 
         Ok(Lease {
             credentials: creds,

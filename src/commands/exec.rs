@@ -240,17 +240,17 @@ async fn resolve_lease(
     }
 
     // No reusable cache — create fresh lease.
-    // If prerequisites were already known to be missing, warn and skip (consistent
-    // with the skip behavior in the caller when no cache exists at all).
+    // If prerequisites are missing, we cannot create a fresh lease. The caller
+    // only reaches here with prereq_missing=Some when it found a cached lease
+    // that couldn't be decrypted (e.g., encryption provider unavailable).
+    // Hard-fail so the subprocess doesn't run without expected credentials.
     if let Some(missing) = prereq_missing {
-        tracing::warn!(
-            "Skipping lease '{}': cached lease unusable and prerequisites missing: {}\n\
+        return Err(FnoxError::Config(format!(
+            "Lease '{}': cached credentials could not be decrypted and \
+             prerequisites are missing: {}\n\
              Run 'fnox lease create -i {}' to set up credentials interactively.",
-            name,
-            missing,
-            name
-        );
-        return Ok(IndexMap::new());
+            name, missing, name
+        )));
     }
     let backend = lease_config.create_backend()?;
 

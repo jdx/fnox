@@ -89,7 +89,7 @@ impl LeaseBackend for AzureTokenBackend {
             token_response.token.secret().to_string(),
         );
 
-        let lease_id = format!("azure-token-{}", chrono::Utc::now().timestamp_millis());
+        let lease_id = super::generate_lease_id("azure-token");
 
         Ok(Lease {
             credentials,

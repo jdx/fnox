@@ -181,13 +181,7 @@ impl LeaseBackend for VaultBackend {
             .as_str()
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string())
-            .unwrap_or_else(|| {
-                format!(
-                    "vault-{}-{}",
-                    self.secret_path,
-                    chrono::Utc::now().timestamp_millis()
-                )
-            });
+            .unwrap_or_else(|| super::generate_lease_id(&format!("vault-{}", self.secret_path)));
 
         // Vault KV v2 returns lease_duration=0 (static secrets have no lease).
         // Treat 0 as "no expiry" so the lease stays active until explicitly revoked.

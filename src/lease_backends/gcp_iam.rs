@@ -141,11 +141,7 @@ impl LeaseBackend for GcpIamBackend {
         let mut credentials = IndexMap::new();
         credentials.insert(self.env_var.clone(), access_token);
 
-        let lease_id = format!(
-            "gcp-iam-{}-{}",
-            self.service_account_email,
-            chrono::Utc::now().timestamp_millis()
-        );
+        let lease_id = super::generate_lease_id(&format!("gcp-iam-{}", self.service_account_email));
 
         Ok(Lease {
             credentials,

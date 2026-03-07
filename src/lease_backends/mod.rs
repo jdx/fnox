@@ -58,6 +58,14 @@ fn default_azure_env_var() -> String {
     "AZURE_ACCESS_TOKEN".to_string()
 }
 
+/// Generate a unique lease ID with a prefix.
+/// Appends a random suffix to avoid collisions between concurrent invocations.
+pub fn generate_lease_id(prefix: &str) -> String {
+    use rand::Rng;
+    let suffix: u64 = rand::thread_rng().r#gen();
+    format!("{prefix}-{suffix:016x}")
+}
+
 /// Configuration for a lease backend (manually defined, no codegen)
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "kebab-case")]

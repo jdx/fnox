@@ -87,9 +87,15 @@ impl LeaseLedger {
 
     /// Acquire an exclusive file lock for the ledger.
     /// Returns a guard that releases the lock on drop.
+    ///
+    /// Locks a separate `.lock` sentinel file rather than the data file itself,
+    /// because `save()` uses atomic rename which replaces the data file's inode.
+    /// Locking the data file directly would break mutual exclusion: after rename,
+    /// new processes would lock the new inode while the old process holds the old one.
     pub fn lock(project_dir: &Path) -> Result<LedgerLockGuard> {
         let ledger_path = Self::ledger_path(project_dir);
-        let lock = xx::fslock::FSLock::new(&ledger_path)
+        let lock_path = ledger_path.with_extension("lock");
+        let lock = xx::fslock::FSLock::new(&lock_path)
             .lock()
             .map_err(|e| FnoxError::Config(format!("Failed to acquire ledger lock: {e}")))?;
         Ok(LedgerLockGuard { _lock: lock })
