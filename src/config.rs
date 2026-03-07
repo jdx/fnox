@@ -86,6 +86,11 @@ pub struct Config {
     /// Track which config file the default_provider came from (not serialized)
     #[serde(skip)]
     pub default_provider_source: Option<PathBuf>,
+
+    /// The project root directory — the nearest directory to cwd that contains
+    /// a config file. Used for scoping the lease ledger per-project.
+    #[serde(skip)]
+    pub project_dir: Option<PathBuf>,
 }
 
 /// Cached sync data for a secret (provider + encrypted value)
@@ -262,7 +267,12 @@ impl Config {
                     help: "Run 'fnox init' to create a configuration file".to_string(),
                 })
             }
-            Ok((config, _)) => Ok(config),
+            Ok((mut config, _)) => {
+                // Find the nearest directory to cwd that contains a config file.
+                // This is the project root used for scoping the lease ledger.
+                config.project_dir = Self::find_project_dir(&current_dir);
+                Ok(config)
+            }
             Err(e) => Err(e),
         }
     }
@@ -324,6 +334,23 @@ impl Config {
         }
 
         Ok((config, found))
+    }
+
+    /// Find the nearest directory to `start` that contains a config file.
+    /// Walks upward from `start` and returns the first match.
+    fn find_project_dir(start: &Path) -> Option<PathBuf> {
+        let profile = crate::settings::Settings::get().profile.clone();
+        let filenames = all_config_filenames(Some(&profile));
+        let mut dir = Some(start);
+        while let Some(d) = dir {
+            for filename in &filenames {
+                if d.join(filename).exists() {
+                    return Some(d.to_path_buf());
+                }
+            }
+            dir = d.parent();
+        }
+        None
     }
 
     /// Get the path to the global config file
@@ -779,6 +806,7 @@ impl Config {
             provider_sources: HashMap::new(),
             secret_sources: HashMap::new(),
             default_provider_source: None,
+            project_dir: None,
         }
     }
 

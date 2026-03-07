@@ -64,7 +64,7 @@ impl ExecCommand {
                     _temp_env_guard.keys.push(key.clone());
                 }
             }
-            let project_dir = lease::project_dir_from_config(&cli.config);
+            let project_dir = lease::project_dir_from_config(&config, &cli.config);
             // Load ledger once to avoid TOCTTOU race with concurrent invocations
             let mut ledger = LeaseLedger::load(&project_dir)?;
             for (name, lease_config) in &leases {

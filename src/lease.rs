@@ -40,12 +40,16 @@ pub struct LeaseLedger {
     pub leases: Vec<LeaseRecord>,
 }
 
-/// Determine the project directory from a config file path.
-/// Resolves relative paths against the current directory so that running
-/// `fnox exec` from different subdirectories of the same project produces
-/// the same ledger file (scoped to where the config actually lives).
-pub fn project_dir_from_config(config_path: &Path) -> PathBuf {
-    // Resolve relative paths against current directory first
+/// Determine the project directory for scoping the lease ledger.
+///
+/// Uses `Config::project_dir` (the nearest directory to cwd containing a config
+/// file, set during recursive loading) when available. Falls back to resolving
+/// `config_path` against cwd for non-recursive loads (explicit `--config` flag).
+pub fn project_dir_from_config(config: &crate::config::Config, config_path: &Path) -> PathBuf {
+    if let Some(ref dir) = config.project_dir {
+        return dir.clone();
+    }
+    // Fallback for explicit --config paths
     let resolved = if config_path.is_relative() {
         std::env::current_dir()
             .map(|cwd| cwd.join(config_path))
@@ -53,7 +57,6 @@ pub fn project_dir_from_config(config_path: &Path) -> PathBuf {
     } else {
         config_path.to_path_buf()
     };
-    // Use the parent directory of the resolved config path
     resolved
         .parent()
         .map(|p| p.to_path_buf())

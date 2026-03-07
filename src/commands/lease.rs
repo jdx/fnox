@@ -80,7 +80,7 @@ impl LeaseCommand {
 
         match &self.subcommand {
             LeaseSubcommand::Create(cmd) => cmd.run(cli, config).await,
-            LeaseSubcommand::List(cmd) => cmd.run(cli).await,
+            LeaseSubcommand::List(cmd) => cmd.run(cli, &config).await,
             LeaseSubcommand::Revoke(cmd) => cmd.run(cli, config).await,
             LeaseSubcommand::Cleanup(cmd) => cmd.run(cli, config).await,
         }
@@ -90,7 +90,7 @@ impl LeaseCommand {
 impl LeaseCreateCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
         let profile = Config::get_profile(cli.profile.as_deref());
-        let project_dir = lease::project_dir_from_config(&cli.config);
+        let project_dir = lease::project_dir_from_config(&config, &cli.config);
         let leases = config.get_leases(&profile);
 
         let backend_config = leases.get(&self.backend_name).ok_or_else(|| {
@@ -255,8 +255,8 @@ impl LeaseCreateCommand {
 }
 
 impl LeaseListCommand {
-    pub async fn run(&self, cli: &Cli) -> Result<()> {
-        let project_dir = lease::project_dir_from_config(&cli.config);
+    pub async fn run(&self, cli: &Cli, config: &Config) -> Result<()> {
+        let project_dir = lease::project_dir_from_config(config, &cli.config);
         let ledger = LeaseLedger::load(&project_dir)?;
 
         let records: Vec<&LeaseRecord> = if self.active {
@@ -306,7 +306,7 @@ impl LeaseListCommand {
 
 impl LeaseRevokeCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
-        let project_dir = lease::project_dir_from_config(&cli.config);
+        let project_dir = lease::project_dir_from_config(&config, &cli.config);
         let mut ledger = LeaseLedger::load(&project_dir)?;
 
         let record = ledger
@@ -360,7 +360,7 @@ impl LeaseRevokeCommand {
 
 impl LeaseCleanupCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
-        let project_dir = lease::project_dir_from_config(&cli.config);
+        let project_dir = lease::project_dir_from_config(&config, &cli.config);
         let mut ledger = LeaseLedger::load(&project_dir)?;
         let expired: Vec<LeaseRecord> = ledger
             .expired_leases()
