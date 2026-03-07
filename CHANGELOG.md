@@ -1,6 +1,23 @@
 # Changelog
 
+## [1.16.0](https://github.com/jdx/fnox/compare/v1.15.1..v1.16.0) - 2026-03-07
+
+### 🛡️ Security
+
+- **(lease)** ephemeral credential leasing by [@jdx](https://github.com/jdx) in [#318](https://github.com/jdx/fnox/pull/318)
+
+### 📦️ Dependency Updates
+
+- update jdx/mise-action digest to e79ddf6 by [@renovate[bot]](https://github.com/renovate[bot]) in [#312](https://github.com/jdx/fnox/pull/312)
+- publish to crates.io on release by [@jdx](https://github.com/jdx) in [#315](https://github.com/jdx/fnox/pull/315)
+- add libudev-dev to release-plz CI workflow by [@jdx](https://github.com/jdx) in [#322](https://github.com/jdx/fnox/pull/322)
+- update aws-sdk-rust monorepo to v1.8.15 by [@renovate[bot]](https://github.com/renovate[bot]) in [#313](https://github.com/jdx/fnox/pull/313)
+
 ## [1.15.1](https://github.com/jdx/fnox/compare/v1.15.0..v1.15.1) - 2026-03-02
+
+### 🐛 Bug Fixes
+
+- **(sync)** use sync cache field instead of overwriting provider/value by [@jdx](https://github.com/jdx) in [#309](https://github.com/jdx/fnox/pull/309)
 
 ### ⚡ Performance
 
