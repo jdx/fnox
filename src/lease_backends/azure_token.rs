@@ -56,7 +56,13 @@ impl AzureTokenBackend {
 
 #[async_trait]
 impl LeaseBackend for AzureTokenBackend {
-    async fn create_lease(&self, _duration: Duration, _label: &str) -> Result<Lease> {
+    async fn create_lease(&self, duration: Duration, _label: &str) -> Result<Lease> {
+        if duration < Duration::from_secs(3600) {
+            tracing::warn!(
+                "Azure controls token lifetime (~1h); requested duration {}m will be ignored",
+                duration.as_secs() / 60
+            );
+        }
         let credential = self.build_credential()?;
 
         let token_response =
