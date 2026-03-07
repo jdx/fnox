@@ -2,8 +2,8 @@ use crate::error::{FnoxError, Result};
 use crate::lease_backends::{Lease, LeaseBackend};
 use async_trait::async_trait;
 use azure_core::credentials::TokenCredential;
-use azure_identity::DeveloperToolsCredential;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 const URL: &str = "https://fnox.jdx.dev/lease-backends/azure-token";
@@ -17,19 +17,50 @@ impl AzureTokenBackend {
     pub fn new(scope: String, env_var: String) -> Self {
         Self { scope, env_var }
     }
+
+    /// Build a credential, preferring ClientSecretCredential (from env vars) over
+    /// DeveloperToolsCredential (az CLI). This allows the backend to work in CI
+    /// environments where `az` CLI is not installed but service principal env vars
+    /// (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID) are available.
+    fn build_credential(&self) -> Result<Arc<dyn TokenCredential>> {
+        // Try ClientSecretCredential from env vars first
+        if let (Ok(tenant_id), Ok(client_id), Ok(client_secret)) = (
+            std::env::var("AZURE_TENANT_ID"),
+            std::env::var("AZURE_CLIENT_ID"),
+            std::env::var("AZURE_CLIENT_SECRET"),
+        ) {
+            let cred = azure_identity::ClientSecretCredential::new(
+                &tenant_id,
+                client_id,
+                client_secret.into(),
+                None,
+            )
+            .map_err(|e: azure_core::Error| FnoxError::ProviderAuthFailed {
+                provider: "Azure Token".to_string(),
+                details: e.to_string(),
+                hint: "Check AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET".to_string(),
+                url: URL.to_string(),
+            })?;
+            return Ok(cred);
+        }
+
+        // Fall back to DeveloperToolsCredential (az CLI)
+        let cred = azure_identity::DeveloperToolsCredential::new(None).map_err(
+            |e: azure_core::Error| FnoxError::ProviderAuthFailed {
+                provider: "Azure Token".to_string(),
+                details: e.to_string(),
+                hint: "Run 'az login' or set AZURE_CLIENT_ID/SECRET/TENANT_ID".to_string(),
+                url: URL.to_string(),
+            },
+        )?;
+        Ok(cred)
+    }
 }
 
 #[async_trait]
 impl LeaseBackend for AzureTokenBackend {
     async fn create_lease(&self, _duration: Duration, _label: &str) -> Result<Lease> {
-        let credential = DeveloperToolsCredential::new(None).map_err(|e: azure_core::Error| {
-            FnoxError::ProviderAuthFailed {
-                provider: "Azure Token".to_string(),
-                details: e.to_string(),
-                hint: "Run 'az login' to authenticate with Azure".to_string(),
-                url: URL.to_string(),
-            }
-        })?;
+        let credential = self.build_credential()?;
 
         let token_response =
             credential

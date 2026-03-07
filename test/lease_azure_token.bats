@@ -5,8 +5,12 @@
 # These tests verify the Azure token acquisition lease backend.
 #
 # Prerequisites:
-#   1. Azure credentials configured (az login, or AZURE_CLIENT_ID/SECRET/TENANT_ID)
+#   1. Azure credentials configured (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID)
+#      or az CLI logged in
 #   2. Run tests: mise run test:bats -- test/lease_azure_token.bats
+#
+# In CI, Azure credentials are decrypted by fnox exec from the project's fnox.toml.
+# The backend uses ClientSecretCredential when env vars are set (no az CLI needed).
 #
 # Note: Tests will automatically skip if Azure credentials are not available.
 
@@ -15,24 +19,27 @@ setup() {
 	_common_setup
 	export FNOX_EXPERIMENTAL=true
 
-	# Check if Azure credentials are available via env vars
-	if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_CLIENT_SECRET" ] || [ -z "$AZURE_TENANT_ID" ]; then
-		# Check if az CLI is logged in as fallback
-		if ! command -v az >/dev/null 2>&1; then
-			skip "Azure CLI not installed and AZURE_CLIENT_ID/SECRET/TENANT_ID not set."
-		fi
-		if ! az account show >/dev/null 2>&1; then
-			skip "Azure credentials not available. Run 'az login' or set AZURE_CLIENT_ID/SECRET/TENANT_ID."
+	# Determine if we're in CI with secrets access (not a forked PR)
+	local in_ci_with_secrets=false
+	if [ "${CI:-}" = "true" ] || [ -n "${GITHUB_ACTIONS:-}" ]; then
+		if [ -f ~/.config/fnox/age.txt ] || [ -n "${FNOX_AGE_KEY:-}" ]; then
+			in_ci_with_secrets=true
 		fi
 	fi
 
-	# Authenticate Azure CLI with service principal if env vars are set
-	if [ -n "$AZURE_CLIENT_ID" ] && [ -n "$AZURE_CLIENT_SECRET" ] && [ -n "$AZURE_TENANT_ID" ]; then
-		az login --service-principal \
-			-u "$AZURE_CLIENT_ID" \
-			-p "$AZURE_CLIENT_SECRET" \
-			--tenant "$AZURE_TENANT_ID" >/dev/null 2>&1 ||
-			skip "Failed to authenticate Azure CLI with service principal"
+	# Check if Azure credentials are available (env vars or az CLI)
+	if [ -n "${AZURE_CLIENT_ID:-}" ] && [ -n "${AZURE_CLIENT_SECRET:-}" ] && [ -n "${AZURE_TENANT_ID:-}" ]; then
+		# Service principal env vars are set — backend will use ClientSecretCredential
+		true
+	elif command -v az >/dev/null 2>&1 && az account show >/dev/null 2>&1; then
+		# az CLI is logged in — backend will use DeveloperToolsCredential
+		true
+	else
+		if [ "$in_ci_with_secrets" = "true" ]; then
+			echo "# ERROR: In CI with secrets access, but Azure credentials are not available!" >&3
+			return 1
+		fi
+		skip "Azure credentials not available. Run 'az login' or set AZURE_CLIENT_ID/SECRET/TENANT_ID."
 	fi
 }
 

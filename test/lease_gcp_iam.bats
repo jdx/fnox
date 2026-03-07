@@ -5,34 +5,56 @@
 # These tests verify the GCP IAM service account impersonation lease backend.
 #
 # Prerequisites:
-#   1. GCP credentials configured (GOOGLE_APPLICATION_CREDENTIALS or gcloud auth)
-#   2. A service account email to impersonate
-#   3. IAM permission: iam.serviceAccounts.getAccessToken on the target SA
-#   4. Set GCP_LEASE_TEST_SA=sa@project.iam.gserviceaccount.com
-#   5. Run tests: mise run test:bats -- test/lease_gcp_iam.bats
+#   1. GCP credentials configured (GOOGLE_APPLICATION_CREDENTIALS or GCP_SERVICE_ACCOUNT_KEY)
+#   2. The service account must have iam.serviceAccounts.getAccessToken on itself
+#   3. Run tests: mise run test:bats -- test/lease_gcp_iam.bats
 #
-# Note: Tests will automatically skip if GCP credentials or
-#       GCP_LEASE_TEST_SA are not available.
+# In CI, GCP_SERVICE_ACCOUNT_KEY is decrypted by fnox exec and the service
+# account email is extracted from the JSON key file automatically.
+#
+# Note: Tests will automatically skip if GCP credentials are not available.
 
 setup() {
 	load 'test_helper/common_setup'
 	_common_setup
 	export FNOX_EXPERIMENTAL=true
 
-	if [ -z "$GCP_LEASE_TEST_SA" ]; then
-		skip "GCP_LEASE_TEST_SA not set. Set to a service account email to impersonate."
+	# Determine if we're in CI with secrets access (not a forked PR)
+	local in_ci_with_secrets=false
+	if [ "${CI:-}" = "true" ] || [ -n "${GITHUB_ACTIONS:-}" ]; then
+		if [ -f ~/.config/fnox/age.txt ] || [ -n "${FNOX_AGE_KEY:-}" ]; then
+			in_ci_with_secrets=true
+		fi
 	fi
 
 	# Check if GCP credentials are available
 	if [ -z "$GCP_SERVICE_ACCOUNT_KEY" ] && [ -z "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
-		skip "GCP credentials not available. Set GOOGLE_APPLICATION_CREDENTIALS or GCP_SERVICE_ACCOUNT_KEY."
+		if [ "$in_ci_with_secrets" = "true" ]; then
+			echo "# ERROR: In CI with secrets access, but GCP credentials are not available!" >&3
+			return 1
+		fi
+		skip "GCP credentials not available. Set GCP_SERVICE_ACCOUNT_KEY or GOOGLE_APPLICATION_CREDENTIALS."
 	fi
 
 	# If GCP_SERVICE_ACCOUNT_KEY is set, create a temp credentials file
+	# and extract the service account email for impersonation
 	if [ -n "$GCP_SERVICE_ACCOUNT_KEY" ]; then
 		export GOOGLE_APPLICATION_CREDENTIALS="${TEST_TEMP_DIR}/gcp-creds.json"
 		echo "$GCP_SERVICE_ACCOUNT_KEY" >"$GOOGLE_APPLICATION_CREDENTIALS"
+
+		# Extract service account email from the key file
+		GCP_LEASE_TEST_SA=$(python3 -c "import sys, json; print(json.load(open('$GOOGLE_APPLICATION_CREDENTIALS'))['client_email'])" 2>/dev/null) || true
 	fi
+
+	if [ -z "$GCP_LEASE_TEST_SA" ]; then
+		if [ "$in_ci_with_secrets" = "true" ]; then
+			echo "# ERROR: Could not determine service account email for lease impersonation!" >&3
+			return 1
+		fi
+		skip "GCP_LEASE_TEST_SA not set and could not be extracted from credentials."
+	fi
+
+	export GCP_LEASE_TEST_SA
 }
 
 teardown() {
