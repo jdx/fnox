@@ -56,9 +56,7 @@ impl ExecCommand {
         if !leases.is_empty() {
             Settings::ensure_experimental("lease in exec")?;
             for (key, value) in &resolved_secrets {
-                if let Some(value) = value
-                    && std::env::var(key).is_err()
-                {
+                if let Some(value) = value {
                     // TODO: unsafe set_var on a multi-threaded Tokio runtime is technically
                     // UB. Refactor to pass credentials explicitly to lease backend SDKs
                     // instead of mutating the process environment.
