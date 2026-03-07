@@ -59,11 +59,29 @@ impl Fido2Provider {
 
     fn get_hmac_secret(&self) -> Result<Vec<u8>> {
         let cache = CACHED_SECRETS.get_or_init(|| std::sync::Mutex::new(HashMap::new()));
-        if let Ok(guard) = cache.lock()
-            && let Some(cached) = guard.get(&self.provider_name)
-        {
+        // Hold the mutex for the entire operation to prevent concurrent HID access.
+        // USB HID devices don't support concurrent access — two callers hitting
+        // the device simultaneously would cause a device-busy error.
+        let mut guard = cache
+            .lock()
+            .map_err(|_| FnoxError::Provider("FIDO2 cache lock poisoned".to_string()))?;
+
+        if let Some(cached) = guard.get(&self.provider_name) {
             return Ok(cached.clone());
         }
+
+        // Resolve PIN: use config value, or prompt interactively
+        let pin = if self.pin.is_some() {
+            self.pin.clone()
+        } else if atty::is(atty::Stream::Stderr) {
+            let input = demand::Input::new("FIDO2 PIN (leave empty if not required)")
+                .placeholder("")
+                .run()
+                .map_err(|e| FnoxError::Provider(format!("Failed to read PIN: {e}")))?;
+            if input.is_empty() { None } else { Some(input) }
+        } else {
+            None
+        };
 
         eprintln!("Touch your FIDO2 key...");
 
@@ -81,7 +99,7 @@ impl Fido2Provider {
             ctap_hid_fido2::fidokey::GetAssertionArgsBuilder::new(&self.rp_id, &challenge)
                 .credential_id(&self.credential_id)
                 .extensions(&[ext]);
-        if let Some(ref pin) = self.pin {
+        if let Some(ref pin) = pin {
             builder = builder.pin(pin);
         }
         let args = builder.build();
@@ -108,9 +126,7 @@ impl Fido2Provider {
                 FnoxError::Provider("FIDO2: hmac-secret not returned by authenticator".to_string())
             })?;
 
-        if let Ok(mut guard) = cache.lock() {
-            guard.insert(self.provider_name.clone(), hmac_secret.clone());
-        }
+        guard.insert(self.provider_name.clone(), hmac_secret.clone());
 
         Ok(hmac_secret)
     }

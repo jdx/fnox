@@ -40,6 +40,11 @@ pub struct LeaseLedger {
     pub leases: Vec<LeaseRecord>,
 }
 
+/// RAII guard for the ledger file lock. The lock is released when dropped.
+pub struct LedgerLockGuard {
+    _file: std::fs::File,
+}
+
 /// Determine the project directory for scoping the lease ledger.
 ///
 /// Uses `Config::project_dir` (the nearest directory to cwd containing a config
@@ -80,8 +85,42 @@ impl LeaseLedger {
             .join(format!("{hash}.toml"))
     }
 
+    /// Path to the lock file for a given project directory
+    fn lock_path(project_dir: &Path) -> PathBuf {
+        let hash = hash_project_dir(project_dir);
+        env::FNOX_CONFIG_DIR
+            .join("leases")
+            .join(format!("{hash}.lock"))
+    }
+
+    /// Acquire an exclusive file lock for the ledger.
+    /// Returns a guard that releases the lock on drop.
+    pub fn lock(project_dir: &Path) -> Result<LedgerLockGuard> {
+        let lock_path = Self::lock_path(project_dir);
+        if let Some(parent) = lock_path.parent() {
+            fs::create_dir_all(parent).map_err(|e| FnoxError::CreateDirFailed {
+                path: parent.to_path_buf(),
+                source: e,
+            })?;
+        }
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(false)
+            .open(&lock_path)
+            .map_err(|e| FnoxError::ConfigWriteFailed {
+                path: lock_path.clone(),
+                source: e,
+            })?;
+        use fs2::FileExt;
+        file.lock_exclusive()
+            .map_err(|e| FnoxError::Config(format!("Failed to acquire ledger lock: {e}")))?;
+        Ok(LedgerLockGuard { _file: file })
+    }
+
     /// Load the lease ledger from disk, creating an empty one if it doesn't exist.
     /// The ledger is scoped to the project directory (parent of the config file).
+    /// Caller should hold a `LedgerLockGuard` when performing load → mutate → save.
     pub fn load(project_dir: &Path) -> Result<Self> {
         let path = Self::ledger_path(project_dir);
         if !path.exists() {
@@ -129,6 +168,9 @@ impl LeaseLedger {
         });
         let content = toml_edit::ser::to_string_pretty(&compacted)
             .map_err(|e| FnoxError::ConfigSerializeError { source: e })?;
+        // Atomic write: write to a temp file then rename, so readers never see
+        // a partially-written or truncated ledger (crash safety).
+        let tmp_path = path.with_extension("toml.tmp");
         #[cfg(unix)]
         {
             use std::os::unix::fs::OpenOptionsExt;
@@ -137,15 +179,19 @@ impl LeaseLedger {
                 .write(true)
                 .truncate(true)
                 .mode(0o600)
-                .open(&path)
+                .open(&tmp_path)
                 .and_then(|mut f| std::io::Write::write_all(&mut f, content.as_bytes()))
                 .map_err(|e| FnoxError::ConfigWriteFailed {
-                    path: path.clone(),
+                    path: tmp_path.clone(),
                     source: e,
                 })?;
         }
         #[cfg(not(unix))]
-        fs::write(&path, content).map_err(|e| FnoxError::ConfigWriteFailed {
+        fs::write(&tmp_path, &content).map_err(|e| FnoxError::ConfigWriteFailed {
+            path: tmp_path.clone(),
+            source: e,
+        })?;
+        fs::rename(&tmp_path, &path).map_err(|e| FnoxError::ConfigWriteFailed {
             path: path.clone(),
             source: e,
         })?;

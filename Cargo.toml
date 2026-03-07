@@ -39,6 +39,7 @@ crossterm = { version = "0.29", features = ["event-stream"] }
 data-encoding = "2"
 demand = "1"
 dirs = "6"
+fs2 = "0.4"
 futures = "0.3"
 gcp_auth = { version = "0.12" }
 google-cloud-kms = { version = "0.6" }

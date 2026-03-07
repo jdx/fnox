@@ -158,6 +158,7 @@ impl LeaseCreateCommand {
             lease::cache_credentials(&config, &profile, &result.credentials, &result.lease_id)
                 .await;
 
+        let _ledger_lock = LeaseLedger::lock(&project_dir)?;
         let mut ledger = LeaseLedger::load(&project_dir)?;
         ledger.add(LeaseRecord {
             lease_id: result.lease_id.clone(),
@@ -294,6 +295,7 @@ impl LeaseListCommand {
 impl LeaseRevokeCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
         let project_dir = lease::project_dir_from_config(&config, &cli.config);
+        let _ledger_lock = LeaseLedger::lock(&project_dir)?;
         let mut ledger = LeaseLedger::load(&project_dir)?;
 
         let record = ledger
@@ -353,6 +355,7 @@ impl LeaseRevokeCommand {
 impl LeaseCleanupCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
         let project_dir = lease::project_dir_from_config(&config, &cli.config);
+        let _ledger_lock = LeaseLedger::lock(&project_dir)?;
         let mut ledger = LeaseLedger::load(&project_dir)?;
         let expired: Vec<LeaseRecord> = ledger
             .expired_leases()
@@ -421,8 +424,10 @@ fn format_expiry(expires_at: Option<chrono::DateTime<chrono::Utc>>) -> String {
                     remaining.num_hours(),
                     remaining.num_minutes() % 60
                 )
-            } else {
+            } else if remaining.num_minutes() > 0 {
                 format!("in {}m", remaining.num_minutes())
+            } else {
+                format!("in {}s", remaining.num_seconds())
             }
         }
         None => "never".to_string(),
