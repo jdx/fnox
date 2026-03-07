@@ -119,6 +119,10 @@
             "duration": {
               "type": ["string", "null"]
             },
+            "env_var": {
+              "type": "string",
+              "default": "CLOUDSDK_AUTH_ACCESS_TOKEN"
+            },
             "scopes": {
               "type": "array",
               "default": ["https://www.googleapis.com/auth/cloud-platform"],
@@ -206,6 +210,11 @@
             },
             "revoke_command": {
               "type": ["string", "null"]
+            },
+            "timeout": {
+              "description": "Timeout for command execution (e.g., \"30s\", \"2m\"; default: \"30s\")",
+              "type": "string",
+              "default": "30s"
             },
             "type": {
               "type": "string",
