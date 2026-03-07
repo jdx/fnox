@@ -78,7 +78,20 @@ impl LeaseBackend for CommandBackend {
         for (key, value) in creds_obj {
             if let Some(v) = value.as_str() {
                 credentials.insert(key.clone(), v.to_string());
+            } else {
+                tracing::warn!(
+                    "Command backend: credential '{}' is not a string, skipping",
+                    key
+                );
             }
+        }
+        if credentials.is_empty() {
+            return Err(FnoxError::ProviderInvalidResponse {
+                provider: "Command".to_string(),
+                details: "Command returned an empty 'credentials' object".to_string(),
+                hint: "Ensure the command outputs at least one string credential".to_string(),
+                url: URL.to_string(),
+            });
         }
 
         let expires_at = parsed["expires_at"].as_str().and_then(|s| {
