@@ -68,7 +68,7 @@ impl LeaseBackend for GcpIamBackend {
             "lifetime": lifetime,
         });
 
-        let client = reqwest::Client::new();
+        let client = crate::http::http_client();
         let response = client
             .post(&url)
             .bearer_auth(bearer)

@@ -7,6 +7,7 @@ mod config;
 mod env;
 mod error;
 mod hook_env;
+mod http;
 mod lease;
 mod lease_backends;
 mod providers;

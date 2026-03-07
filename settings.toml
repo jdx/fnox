@@ -135,6 +135,24 @@ Currently experimental features:
 """
 since = "1.16.0"
 
+[http_timeout]
+type = "string"
+default = "\"30s\""
+sources.env = ["FNOX_HTTP_TIMEOUT"]
+docs = """
+HTTP request timeout in seconds for lease backend API calls (Vault, GCP IAM, etc.).
+
+Prevents fnox exec from hanging indefinitely on slow or unreachable servers.
+Set to "0" to disable the timeout (not recommended).
+
+Priority: Environment > Default
+"""
+examples = [
+  "FNOX_HTTP_TIMEOUT=60s fnox exec -- ./my-app",
+  "FNOX_HTTP_TIMEOUT=10s fnox lease create my-lease --duration 1h",
+]
+since = "1.16.0"
+
 [if_missing_default]
 type = "option<string>"
 default = "None"

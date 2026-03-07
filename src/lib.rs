@@ -6,6 +6,7 @@ pub mod config;
 pub mod env;
 pub mod error;
 pub mod hook_env;
+pub mod http;
 pub mod lease;
 pub mod lease_backends;
 pub mod providers;

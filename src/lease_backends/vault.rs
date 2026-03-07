@@ -68,7 +68,7 @@ impl LeaseBackend for VaultBackend {
             self.secret_path
         );
 
-        let client = reqwest::Client::new();
+        let client = crate::http::http_client();
         let ttl_value = format!("{}s", duration.as_secs());
         let mut request = if self.method.eq_ignore_ascii_case("post")
             || self.method.eq_ignore_ascii_case("put")
@@ -215,7 +215,7 @@ impl LeaseBackend for VaultBackend {
             self.address.trim_end_matches('/')
         );
 
-        let client = reqwest::Client::new();
+        let client = crate::http::http_client();
         let mut request = client
             .put(&url)
             .header("X-Vault-Token", &self.token)
