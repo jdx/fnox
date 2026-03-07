@@ -158,15 +158,9 @@ impl LeaseBackendConfig {
                     && std::env::var("AZURE_CLIENT_SECRET").is_ok()
                     && std::env::var("AZURE_TENANT_ID").is_ok();
                 if has_sp {
-                    return None;
-                }
-                // Check for az CLI — use which to avoid blocking subprocess on the
-                // Tokio runtime thread (check_prerequisites is called from async contexts)
-                let has_az = which::which("az").is_ok();
-                if has_az {
                     None
                 } else {
-                    Some("Azure credentials not found. Run 'az login' or set AZURE_CLIENT_ID/AZURE_CLIENT_SECRET/AZURE_TENANT_ID.".to_string())
+                    Some("Azure credentials not found. Set AZURE_CLIENT_ID/AZURE_CLIENT_SECRET/AZURE_TENANT_ID or run 'az login'.".to_string())
                 }
             }
             LeaseBackendConfig::Command { .. } => {
