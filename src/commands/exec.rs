@@ -1,10 +1,9 @@
 use crate::error::{FnoxError, Result};
-use crate::lease::{self, LeaseLedger, LeaseRecord};
+use crate::lease::{self, LeaseLedger};
 use crate::lease_backends::LeaseBackendConfig;
 use crate::secret_resolver::resolve_secrets_batch;
 use crate::temp_file_secrets::create_ephemeral_secret_file;
 use crate::{commands::Cli, config::Config};
-use chrono::Utc;
 use clap::{Args, ValueHint};
 use indexmap::IndexMap;
 use std::collections::HashSet;
@@ -74,7 +73,7 @@ impl ExecCommand {
                 }
             }
             let project_dir = lease::project_dir_from_config(&config, &cli.config);
-            let _ledger_lock = LeaseLedger::lock(&project_dir)?;
+            let ledger_lock = LeaseLedger::lock(&project_dir)?;
             let mut ledger = LeaseLedger::load(&project_dir)?;
             for (name, lease_config) in &leases {
                 // Check prerequisites before attempting to create/use a lease
@@ -87,9 +86,11 @@ impl ExecCommand {
                     {
                         // Fall through to resolve_lease which will use the cache
                     } else {
-                        eprintln!(
+                        tracing::warn!(
                             "Skipping lease '{}': {}\nRun 'fnox lease create -i {}' to set up credentials interactively.",
-                            name, missing, name
+                            name,
+                            missing,
+                            name
                         );
                         continue;
                     }
@@ -112,6 +113,11 @@ impl ExecCommand {
                     cmd.env(cred_key, cred_value);
                 }
             }
+            // Release the ledger lock before spawning the subprocess.
+            // The lock is only needed for the load → mutate → save cycle above;
+            // holding it for the subprocess lifetime would serialize all concurrent
+            // fnox exec invocations in the same project directory.
+            drop(ledger_lock);
         }
 
         // Add resolved secrets as environment variables
@@ -277,25 +283,18 @@ async fn resolve_lease(
     }
 
     let label = format!("fnox-exec-{}", name);
-    let result = backend.create_lease(duration, &label).await?;
-
-    // Try to cache credentials (optionally encrypted)
-    let (cached_credentials, encryption_provider) =
-        lease::cache_credentials(config, profile, &result.credentials, &result.lease_id).await;
-
-    // Record in ledger
-    ledger.add(LeaseRecord {
-        lease_id: result.lease_id.clone(),
-        backend_name: name.to_string(),
-        label: label.clone(),
-        created_at: Utc::now(),
-        expires_at: result.expires_at,
-        revoked: false,
-        cached_credentials,
-        encryption_provider,
-        config_hash: Some(config_hash),
-    });
-    ledger.save(project_dir)?;
+    let result = lease::create_and_record_lease(
+        backend.as_ref(),
+        name,
+        &label,
+        duration,
+        config_hash,
+        config,
+        profile,
+        ledger,
+        project_dir,
+    )
+    .await?;
 
     tracing::debug!(
         "Created lease '{}' for backend '{}' (expires {:?})",

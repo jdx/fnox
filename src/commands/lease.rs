@@ -174,28 +174,21 @@ impl LeaseCreateCommand {
             )));
         }
 
-        // Create the lease
-        let result = backend.create_lease(duration, &self.label).await?;
-
-        // Cache credentials, encrypting if an encryption provider is configured
-        let (cached_credentials, encryption_provider) =
-            lease::cache_credentials(&config, &profile, &result.credentials, &result.lease_id)
-                .await;
-
+        // Create the lease, cache credentials, and record in ledger
         let _ledger_lock = LeaseLedger::lock(&project_dir)?;
         let mut ledger = LeaseLedger::load(&project_dir)?;
-        ledger.add(LeaseRecord {
-            lease_id: result.lease_id.clone(),
-            backend_name: self.backend_name.clone(),
-            label: self.label.clone(),
-            created_at: Utc::now(),
-            expires_at: result.expires_at,
-            revoked: false,
-            cached_credentials,
-            encryption_provider,
-            config_hash: Some(backend_config.config_hash()),
-        });
-        ledger.save(&project_dir)?;
+        let result = lease::create_and_record_lease(
+            backend.as_ref(),
+            &self.backend_name,
+            &self.label,
+            duration,
+            backend_config.config_hash(),
+            &config,
+            &profile,
+            &mut ledger,
+            &project_dir,
+        )
+        .await?;
 
         // Output in requested format
         match self.format {

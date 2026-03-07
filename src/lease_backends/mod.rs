@@ -298,14 +298,16 @@ impl LeaseBackendConfig {
     /// existing cached credentials (e.g., switching from "1h" to "2h" shouldn't
     /// force a fresh lease when cached credentials are still valid).
     pub fn config_hash(&self) -> String {
-        let mut serialized = serde_json::to_value(self).unwrap_or_default();
+        let mut serialized =
+            serde_json::to_value(self).expect("LeaseBackendConfig serialization should never fail");
         // Strip non-security-relevant fields that shouldn't invalidate cache.
         // With #[serde(tag = "type")] the JSON is flat: {"type":"aws-sts","duration":"1h",...}
         if let Some(obj) = serialized.as_object_mut() {
             obj.remove("duration");
             obj.remove("timeout");
         }
-        let json = serde_json::to_string(&serialized).unwrap_or_default();
+        let json = serde_json::to_string(&serialized)
+            .expect("LeaseBackendConfig serialization should never fail");
         let hash = blake3::hash(json.as_bytes());
         hash.to_hex()[..16].to_string()
     }

@@ -359,6 +359,48 @@ pub async fn find_encryption_provider(config: &Config, profile: &str) -> Encrypt
     }
 }
 
+/// Create a lease, cache credentials, and record it in the ledger.
+/// Shared between `fnox exec` and `fnox lease create` to avoid duplication.
+pub async fn create_and_record_lease(
+    backend: &dyn crate::lease_backends::LeaseBackend,
+    backend_name: &str,
+    label: &str,
+    duration: std::time::Duration,
+    config_hash: String,
+    config: &Config,
+    profile: &str,
+    ledger: &mut LeaseLedger,
+    project_dir: &Path,
+) -> Result<crate::lease_backends::Lease> {
+    let result = backend.create_lease(duration, label).await?;
+
+    let (cached_credentials, encryption_provider) =
+        cache_credentials(config, profile, &result.credentials, &result.lease_id).await;
+
+    ledger.add(LeaseRecord {
+        lease_id: result.lease_id.clone(),
+        backend_name: backend_name.to_string(),
+        label: label.to_string(),
+        created_at: Utc::now(),
+        expires_at: result.expires_at,
+        revoked: false,
+        cached_credentials,
+        encryption_provider,
+        config_hash: Some(config_hash),
+    });
+    if let Err(save_err) = ledger.save(project_dir) {
+        tracing::warn!(
+            "Lease '{}' created for backend '{}' but ledger save failed: {}. \
+             This lease is untracked and must be revoked manually.",
+            result.lease_id,
+            backend_name,
+            save_err
+        );
+    }
+
+    Ok(result)
+}
+
 /// Encrypt credential values using an encryption provider
 pub async fn encrypt_credentials(
     provider: &dyn providers::Provider,
