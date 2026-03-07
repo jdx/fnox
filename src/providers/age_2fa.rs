@@ -53,7 +53,10 @@ static CACHED_IDENTITY: OnceLock<String> = OnceLock::new();
 
 impl Age2faProvider {
     pub fn new(recipients: Vec<String>, auth: String) -> Self {
-        let provider_name = "age-2fa".to_string();
+        Self::with_name("age-2fa".to_string(), recipients, auth)
+    }
+
+    pub fn with_name(provider_name: String, recipients: Vec<String>, auth: String) -> Self {
         Self {
             recipients,
             auth_method: auth.parse().unwrap_or(AuthMethod::Totp),

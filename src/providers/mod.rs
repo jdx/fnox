@@ -279,5 +279,13 @@ pub async fn get_provider_resolved(
     provider_config: &ProviderConfig,
 ) -> Result<Box<dyn Provider>> {
     let resolved = resolve_provider_config(config, profile, provider_name, provider_config).await?;
+    // Age2fa needs the provider name to find its key files on disk
+    if let ResolvedProviderConfig::Age2fa { recipients, auth } = &resolved {
+        return Ok(Box::new(age_2fa::Age2faProvider::with_name(
+            provider_name.to_string(),
+            recipients.clone(),
+            auth.clone(),
+        )));
+    }
     get_provider_from_resolved(&resolved)
 }
