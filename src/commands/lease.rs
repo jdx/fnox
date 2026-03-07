@@ -149,7 +149,24 @@ impl LeaseCreateCommand {
         // Create the lease
         let result = backend.create_lease(duration, &self.label).await?;
 
-        // Record in ledger with cached credentials so `fnox exec` can reuse them
+        // Cache credentials, encrypting if an encryption provider is configured
+        let (cached_credentials, encryption_provider) =
+            match lease::find_encryption_provider(&config, &profile).await {
+                Some((enc_name, provider)) => {
+                    match lease::encrypt_credentials(provider.as_ref(), &result.credentials).await {
+                        Ok(encrypted) => (Some(encrypted), Some(enc_name)),
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to encrypt credentials for caching: {}, skipping cache",
+                                e
+                            );
+                            (None, None)
+                        }
+                    }
+                }
+                None => (Some(result.credentials.clone()), None),
+            };
+
         let mut ledger = LeaseLedger::load(&project_dir)?;
         ledger.add(LeaseRecord {
             lease_id: result.lease_id.clone(),
@@ -158,8 +175,8 @@ impl LeaseCreateCommand {
             created_at: Utc::now(),
             expires_at: result.expires_at,
             revoked: false,
-            cached_credentials: Some(result.credentials.clone()),
-            encryption_provider: None,
+            cached_credentials,
+            encryption_provider,
             config_hash: Some(backend_config.config_hash()),
         });
         ledger.save(&project_dir)?;

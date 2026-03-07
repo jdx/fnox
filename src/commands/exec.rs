@@ -1,7 +1,6 @@
 use crate::error::{FnoxError, Result};
 use crate::lease::{self, LeaseLedger, LeaseRecord};
 use crate::lease_backends::LeaseBackendConfig;
-use crate::providers::{self, ProviderCapability};
 use crate::secret_resolver::resolve_secrets_batch;
 use crate::settings::Settings;
 use crate::temp_file_secrets::create_ephemeral_secret_file;
@@ -156,70 +155,6 @@ impl ExecCommand {
     }
 }
 
-/// Find an encryption provider if one is configured (default_provider with Encryption capability)
-async fn find_encryption_provider(
-    config: &Config,
-    profile: &str,
-) -> Option<(String, Box<dyn providers::Provider>)> {
-    let provider_name = match config.get_default_provider(profile) {
-        Ok(Some(name)) => name,
-        _ => return None,
-    };
-
-    let providers_map = config.get_providers(profile);
-    let provider_config = providers_map.get(&provider_name)?;
-
-    let provider =
-        match providers::get_provider_resolved(config, profile, &provider_name, provider_config)
-            .await
-        {
-            Ok(p) => p,
-            Err(e) => {
-                tracing::debug!(
-                    "Could not instantiate encryption provider '{}': {}",
-                    provider_name,
-                    e
-                );
-                return None;
-            }
-        };
-
-    if provider
-        .capabilities()
-        .contains(&ProviderCapability::Encryption)
-    {
-        Some((provider_name, provider))
-    } else {
-        None
-    }
-}
-
-/// Encrypt credential values using an encryption provider
-async fn encrypt_credentials(
-    provider: &dyn providers::Provider,
-    credentials: &HashMap<String, String>,
-) -> Result<HashMap<String, String>> {
-    let mut encrypted = HashMap::new();
-    for (key, value) in credentials {
-        let enc = provider.encrypt(value).await?;
-        encrypted.insert(key.clone(), enc);
-    }
-    Ok(encrypted)
-}
-
-/// Decrypt cached credential values using an encryption provider
-async fn decrypt_credentials(
-    provider: &dyn providers::Provider,
-    cached: &HashMap<String, String>,
-) -> Result<HashMap<String, String>> {
-    let mut decrypted = HashMap::new();
-    for (key, value) in cached {
-        let dec = provider.get_secret(value).await?;
-        decrypted.insert(key.clone(), dec);
-    }
-    Ok(decrypted)
-}
-
 /// Resolve a lease backend into credentials, reusing cached credentials when available.
 /// Takes a mutable reference to the ledger to avoid double-load TOCTTOU races.
 async fn resolve_lease(
@@ -238,9 +173,9 @@ async fn resolve_lease(
     {
         // If encrypted, decrypt
         if let Some(ref enc_provider_name) = cached_lease.encryption_provider {
-            match find_encryption_provider(config, profile).await {
+            match lease::find_encryption_provider(config, profile).await {
                 Some((found_name, provider)) if found_name == *enc_provider_name => {
-                    match decrypt_credentials(provider.as_ref(), cached_creds).await {
+                    match lease::decrypt_credentials(provider.as_ref(), cached_creds).await {
                         Ok(decrypted) => {
                             tracing::debug!(
                                 "Reusing cached encrypted lease '{}' for backend '{}'",
@@ -298,9 +233,9 @@ async fn resolve_lease(
 
     // Try to cache credentials (optionally encrypted)
     let (cached_credentials, encryption_provider) =
-        match find_encryption_provider(config, profile).await {
+        match lease::find_encryption_provider(config, profile).await {
             Some((enc_name, provider)) => {
-                match encrypt_credentials(provider.as_ref(), &result.credentials).await {
+                match lease::encrypt_credentials(provider.as_ref(), &result.credentials).await {
                     Ok(encrypted) => {
                         tracing::debug!(
                             "Caching encrypted credentials for lease '{}'",
