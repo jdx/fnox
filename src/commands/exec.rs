@@ -188,8 +188,8 @@ async fn resolve_lease(
     let mut ledger = LeaseLedger::load(project_dir)?;
 
     // Check for a reusable cached lease
-    if let Some(cached_lease) = ledger.find_reusable(name) {
-        if let Some(ref cached_creds) = cached_lease.cached_credentials {
+    if let Some(cached_lease) = ledger.find_reusable(name)
+        && let Some(ref cached_creds) = cached_lease.cached_credentials {
             // If encrypted, decrypt
             if let Some(ref enc_provider_name) = cached_lease.encryption_provider {
                 match find_encryption_provider(config, profile).await {
@@ -230,7 +230,6 @@ async fn resolve_lease(
                 return Ok(cached_creds.clone());
             }
         }
-    }
 
     // No reusable cache — create fresh lease
     let backend = lease_config.create_backend()?;

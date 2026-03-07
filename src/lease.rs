@@ -40,11 +40,10 @@ pub struct LeaseLedger {
 /// Uses the parent of the config file, falling back to the current directory.
 pub fn project_dir_from_config(config_path: &Path) -> PathBuf {
     // If the config path has a parent that's a real directory, use it
-    if let Some(parent) = config_path.parent() {
-        if parent.is_absolute() {
+    if let Some(parent) = config_path.parent()
+        && parent.is_absolute() {
             return parent.to_path_buf();
         }
-    }
     // Fall back to current working directory
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
