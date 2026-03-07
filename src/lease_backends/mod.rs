@@ -42,6 +42,10 @@ fn default_gcp_scopes() -> Vec<String> {
     vec!["https://www.googleapis.com/auth/cloud-platform".to_string()]
 }
 
+fn default_command_timeout() -> String {
+    "30s".to_string()
+}
+
 fn default_gcp_env_var() -> String {
     "CLOUDSDK_AUTH_ACCESS_TOKEN".to_string()
 }
@@ -110,6 +114,9 @@ pub enum LeaseBackendConfig {
         revoke_command: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         duration: Option<String>,
+        /// Timeout for command execution (e.g., "30s", "2m"; default: "30s")
+        #[serde(default = "default_command_timeout")]
+        timeout: String,
     },
 }
 
@@ -272,11 +279,16 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::Command {
                 create_command,
                 revoke_command,
+                timeout,
                 ..
-            } => Ok(Box::new(command::CommandBackend::new(
-                create_command.clone(),
-                revoke_command.clone(),
-            ))),
+            } => {
+                let timeout = crate::lease::parse_duration(timeout)?;
+                Ok(Box::new(command::CommandBackend::new(
+                    create_command.clone(),
+                    revoke_command.clone(),
+                    timeout,
+                )))
+            }
         }
     }
 

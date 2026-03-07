@@ -12,11 +12,12 @@ revoke_command = "./scripts/revoke-creds.sh"  # optional
 duration = "1h"
 ```
 
-| Field            | Required | Description                            |
-| ---------------- | -------- | -------------------------------------- |
-| `create_command` | Yes      | Shell command to create credentials    |
-| `revoke_command` | No       | Shell command to revoke credentials    |
-| `duration`       | No       | Lease duration (e.g., `"1h"`, `"30m"`) |
+| Field            | Required | Description                                  |
+| ---------------- | -------- | -------------------------------------------- |
+| `create_command` | Yes      | Shell command to create credentials          |
+| `revoke_command` | No       | Shell command to revoke credentials          |
+| `duration`       | No       | Lease duration (e.g., `"1h"`, `"30m"`)       |
+| `timeout`        | No       | Command execution timeout (default: `"30s"`) |
 
 ## Prerequisites
 

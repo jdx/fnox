@@ -10,31 +10,45 @@ const URL: &str = "https://fnox.jdx.dev/leases/command";
 pub struct CommandBackend {
     create_command: String,
     revoke_command: Option<String>,
+    timeout: Duration,
 }
 
 impl CommandBackend {
-    pub fn new(create_command: String, revoke_command: Option<String>) -> Self {
+    pub fn new(create_command: String, revoke_command: Option<String>, timeout: Duration) -> Self {
         Self {
             create_command,
             revoke_command,
+            timeout,
         }
     }
-}
 
-#[async_trait]
-impl LeaseBackend for CommandBackend {
-    async fn create_lease(&self, duration: Duration, label: &str) -> Result<Lease> {
-        let output = Command::new("sh")
-            .arg("-c")
-            .arg(&self.create_command)
-            .env("FNOX_LEASE_DURATION", duration.as_secs().to_string())
-            .env("FNOX_LEASE_LABEL", label)
-            .output()
+    async fn run_command(
+        &self,
+        cmd_str: &str,
+        envs: &[(&str, String)],
+        action: &str,
+    ) -> Result<std::process::Output> {
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c").arg(cmd_str);
+        for (k, v) in envs {
+            cmd.env(k, v);
+        }
+
+        let output = tokio::time::timeout(self.timeout, cmd.output())
             .await
+            .map_err(|_| FnoxError::ProviderCliFailed {
+                provider: "Command".to_string(),
+                details: format!("{} timed out after {}s", action, self.timeout.as_secs()),
+                hint: format!(
+                    "Check that '{}' completes in time, or increase the timeout",
+                    cmd_str
+                ),
+                url: URL.to_string(),
+            })?
             .map_err(|e| FnoxError::ProviderCliFailed {
                 provider: "Command".to_string(),
                 details: e.to_string(),
-                hint: format!("Failed to execute create_command: {}", self.create_command),
+                hint: format!("Failed to execute {}: {}", action, cmd_str),
                 url: URL.to_string(),
             })?;
 
@@ -43,10 +57,28 @@ impl LeaseBackend for CommandBackend {
             return Err(FnoxError::ProviderCliFailed {
                 provider: "Command".to_string(),
                 details: stderr.trim().to_string(),
-                hint: format!("create_command exited with {}", output.status),
+                hint: format!("{} exited with {}", action, output.status),
                 url: URL.to_string(),
             });
         }
+
+        Ok(output)
+    }
+}
+
+#[async_trait]
+impl LeaseBackend for CommandBackend {
+    async fn create_lease(&self, duration: Duration, label: &str) -> Result<Lease> {
+        let output = self
+            .run_command(
+                &self.create_command,
+                &[
+                    ("FNOX_LEASE_DURATION", duration.as_secs().to_string()),
+                    ("FNOX_LEASE_LABEL", label.to_string()),
+                ],
+                "create_command",
+            )
+            .await?;
 
         let stdout =
             String::from_utf8(output.stdout).map_err(|e| FnoxError::ProviderInvalidResponse {
@@ -117,28 +149,12 @@ impl LeaseBackend for CommandBackend {
             return Ok(());
         };
 
-        let output = Command::new("sh")
-            .arg("-c")
-            .arg(revoke_cmd)
-            .env("FNOX_LEASE_ID", lease_id)
-            .output()
-            .await
-            .map_err(|e| FnoxError::ProviderCliFailed {
-                provider: "Command".to_string(),
-                details: e.to_string(),
-                hint: format!("Failed to execute revoke_command: {}", revoke_cmd),
-                url: URL.to_string(),
-            })?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(FnoxError::ProviderCliFailed {
-                provider: "Command".to_string(),
-                details: stderr.trim().to_string(),
-                hint: format!("revoke_command exited with {}", output.status),
-                url: URL.to_string(),
-            });
-        }
+        self.run_command(
+            revoke_cmd,
+            &[("FNOX_LEASE_ID", lease_id.to_string())],
+            "revoke_command",
+        )
+        .await?;
 
         Ok(())
     }
