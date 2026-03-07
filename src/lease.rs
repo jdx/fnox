@@ -227,7 +227,7 @@ impl LeaseLedger {
             .filter(|r| {
                 r.backend_name == backend_name
                     && r.is_reusable()
-                    && r.config_hash.as_deref() == Some(config_hash)
+                    && r.config_hash.as_deref().is_none_or(|h| h == config_hash)
             })
             .max_by_key(|r| match r.expires_at {
                 None => DateTime::<Utc>::MAX_UTC,
@@ -361,6 +361,7 @@ pub async fn find_encryption_provider(config: &Config, profile: &str) -> Encrypt
 
 /// Create a lease, cache credentials, and record it in the ledger.
 /// Shared between `fnox exec` and `fnox lease create` to avoid duplication.
+#[allow(clippy::too_many_arguments)]
 pub async fn create_and_record_lease(
     backend: &dyn crate::lease_backends::LeaseBackend,
     backend_name: &str,
@@ -399,6 +400,36 @@ pub async fn create_and_record_lease(
     }
 
     Ok(result)
+}
+
+/// Set resolved secrets as process env vars so lease backend SDKs can find
+/// master credentials during lease creation. Returns temp files that must be
+/// kept alive for the duration of the operation (for `as_file` secrets).
+///
+/// # Safety
+/// Uses `unsafe { std::env::set_var }` which is technically UB on a
+/// multi-threaded Tokio runtime. TODO: refactor to pass credentials explicitly.
+pub fn set_secrets_as_env(
+    resolved_secrets: &IndexMap<String, Option<String>>,
+    profile_secrets: &IndexMap<String, crate::config::SecretConfig>,
+    guard: &mut TempEnvGuard,
+) -> Result<Vec<tempfile::NamedTempFile>> {
+    let mut temp_files = Vec::new();
+    for (key, value) in resolved_secrets {
+        if let Some(value) = value {
+            let env_value = if profile_secrets.get(key).is_some_and(|sc| sc.as_file) {
+                let temp_file = crate::temp_file_secrets::create_ephemeral_secret_file(key, value)?;
+                let path = temp_file.path().to_string_lossy().to_string();
+                temp_files.push(temp_file);
+                path
+            } else {
+                value.clone()
+            };
+            unsafe { std::env::set_var(key, &env_value) };
+            guard.keys.push(key.clone());
+        }
+    }
+    Ok(temp_files)
 }
 
 /// Encrypt credential values using an encryption provider

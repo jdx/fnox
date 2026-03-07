@@ -119,12 +119,13 @@ impl InitCommand {
         let provider_config =
             ProviderConfig::from_wizard_fields(provider_info.provider_type, &fields)?;
 
-        // Test the connection using the Provider trait
-        self.test_provider_connection(provider_info.default_name, &provider_config)
-            .await;
-
-        // Get provider name
+        // Get provider name before testing, since some providers (FIDO2, YubiKey)
+        // use the provider name as HKDF context for key derivation.
         let provider_name = self.get_provider_name(provider_info.default_name)?;
+
+        // Test the connection using the Provider trait
+        self.test_provider_connection(&provider_name, &provider_config)
+            .await;
 
         // Create config with provider
         let mut config = Config::new();

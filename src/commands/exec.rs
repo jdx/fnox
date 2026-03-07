@@ -52,26 +52,11 @@ impl ExecCommand {
         let leases = config.get_leases(&profile);
         let mut _temp_env_guard = lease::TempEnvGuard::default();
         if !leases.is_empty() {
-            for (key, value) in &resolved_secrets {
-                if let Some(value) = value {
-                    // For as_file secrets (e.g., GOOGLE_APPLICATION_CREDENTIALS),
-                    // write the content to a temp file and set the env var to the
-                    // file path. SDKs expect a path, not raw content.
-                    let env_value = if profile_secrets.get(key).is_some_and(|sc| sc.as_file) {
-                        let temp_file = create_ephemeral_secret_file(key, value)?;
-                        let path = temp_file.path().to_string_lossy().to_string();
-                        _temp_files.push(temp_file);
-                        path
-                    } else {
-                        value.clone()
-                    };
-                    // TODO: unsafe set_var on a multi-threaded Tokio runtime is technically
-                    // UB. Refactor to pass credentials explicitly to lease backend SDKs
-                    // instead of mutating the process environment.
-                    unsafe { std::env::set_var(key, &env_value) };
-                    _temp_env_guard.keys.push(key.clone());
-                }
-            }
+            _temp_files.extend(lease::set_secrets_as_env(
+                &resolved_secrets,
+                &profile_secrets,
+                &mut _temp_env_guard,
+            )?);
             let project_dir = lease::project_dir_from_config(&config, &cli.config);
             let ledger_lock = LeaseLedger::lock(&project_dir)?;
             let mut ledger = LeaseLedger::load(&project_dir)?;
