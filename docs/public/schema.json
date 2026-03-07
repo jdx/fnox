@@ -152,6 +152,11 @@
                 "type": "string"
               }
             },
+            "method": {
+              "description": "HTTP method: \"get\" (default) or \"post\" (required for pki/issue and some engines)",
+              "type": "string",
+              "default": "get"
+            },
             "namespace": {
               "type": ["string", "null"]
             },
