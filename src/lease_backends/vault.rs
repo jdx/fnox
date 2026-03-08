@@ -15,6 +15,40 @@ pub const CONSUMED_ENV_VARS: &[&str] = &[
     "FNOX_VAULT_TOKEN",
 ];
 
+pub fn check_prerequisites(address: &Option<String>, token: &Option<String>) -> Option<String> {
+    let has_addr = address.is_some()
+        || std::env::var("VAULT_ADDR").is_ok()
+        || std::env::var("FNOX_VAULT_ADDR").is_ok();
+    let has_token = token.is_some()
+        || std::env::var("VAULT_TOKEN").is_ok()
+        || std::env::var("FNOX_VAULT_TOKEN").is_ok();
+    match (has_addr, has_token) {
+        (false, false) => {
+            Some("Vault address and token not found. Set VAULT_ADDR and VAULT_TOKEN.".to_string())
+        }
+        (false, true) => Some("Vault address not found. Set VAULT_ADDR.".to_string()),
+        (true, false) => Some("Vault token not found. Set VAULT_TOKEN.".to_string()),
+        (true, true) => None,
+    }
+}
+
+pub fn required_env_vars(
+    address: &Option<String>,
+    token: &Option<String>,
+) -> Vec<(&'static str, &'static str)> {
+    let mut vars = vec![];
+    if address.is_none() {
+        vars.push((
+            "VAULT_ADDR",
+            "Vault server address (e.g., http://localhost:8200)",
+        ));
+    }
+    if token.is_none() {
+        vars.push(("VAULT_TOKEN", "Vault authentication token"));
+    }
+    vars
+}
+
 pub struct VaultBackend {
     address: String,
     token: String,

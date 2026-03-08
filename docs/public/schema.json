@@ -79,6 +79,61 @@
       "type": "string",
       "enum": ["bw", "rbw"]
     },
+    "CloudflarePermissionGroup": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": ["string", "null"]
+        }
+      },
+      "required": ["id"]
+    },
+    "CloudflarePolicy": {
+      "description": "A Cloudflare API token permission policy.\nMaps to the Cloudflare API's `policies` array in POST /user/tokens.",
+      "type": "object",
+      "properties": {
+        "effect": {
+          "$ref": "#/$defs/CloudflarePolicyEffect",
+          "default": "allow"
+        },
+        "permission_groups": {
+          "description": "Permission group IDs (UUIDs from Cloudflare's permission groups API)",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CloudflarePermissionGroup"
+          }
+        },
+        "resources": {
+          "description": "Resource scope, e.g. {\"com.cloudflare.api.account.*\": \"*\"}",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["permission_groups", "resources"]
+    },
+    "CloudflarePolicyEffect": {
+      "type": "string",
+      "enum": ["allow", "deny"]
+    },
+    "CloudflareTokenType": {
+      "oneOf": [
+        {
+          "description": "User-owned token (POST /user/tokens)",
+          "type": "string",
+          "const": "user"
+        },
+        {
+          "description": "Account-owned token (POST /accounts/{account_id}/tokens)",
+          "type": "string",
+          "const": "account"
+        }
+      ]
+    },
     "IfMissing": {
       "type": "string",
       "enum": ["error", "warn", "ignore"]
@@ -197,6 +252,38 @@
             }
           },
           "required": ["type", "scope"]
+        },
+        {
+          "description": "Cloudflare API Token",
+          "type": "object",
+          "properties": {
+            "account_id": {
+              "type": ["string", "null"]
+            },
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "env_var": {
+              "type": "string",
+              "default": "CLOUDFLARE_API_TOKEN"
+            },
+            "policies": {
+              "type": ["array", "null"],
+              "items": {
+                "$ref": "#/$defs/CloudflarePolicy"
+              }
+            },
+            "token_type": {
+              "description": "Token type: \"user\" (default) or \"account\"",
+              "$ref": "#/$defs/CloudflareTokenType",
+              "default": "user"
+            },
+            "type": {
+              "type": "string",
+              "const": "cloudflare"
+            }
+          },
+          "required": ["type"]
         },
         {
           "description": "Generic Command Backend",

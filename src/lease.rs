@@ -77,10 +77,11 @@ fn hash_project_dir(project_dir: &Path) -> String {
 }
 
 impl LeaseLedger {
-    /// Path to the lease ledger file, scoped to a project directory
+    /// Path to the lease ledger file, scoped to a project directory.
+    /// Uses `~/.local/state/fnox/leases/` (XDG state dir).
     fn ledger_path(project_dir: &Path) -> PathBuf {
         let hash = hash_project_dir(project_dir);
-        env::FNOX_CONFIG_DIR
+        env::FNOX_STATE_DIR
             .join("leases")
             .join(format!("{hash}.toml"))
     }

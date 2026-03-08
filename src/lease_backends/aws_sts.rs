@@ -26,6 +26,32 @@ pub const CONSUMED_ENV_VARS: &[&str] = &[
     "AWS_SHARED_CREDENTIALS_FILE",
 ];
 
+/// Check if AWS credentials are available.
+pub fn check_prerequisites(profile: &Option<String>) -> Option<String> {
+    let has_env = (std::env::var("AWS_ACCESS_KEY_ID").is_ok()
+        && std::env::var("AWS_SECRET_ACCESS_KEY").is_ok())
+        || std::env::var("AWS_PROFILE").is_ok();
+    let has_profile = profile.is_some();
+    let has_sso = std::env::var("AWS_SSO_SESSION").is_ok();
+    let has_creds_file = dirs::home_dir()
+        .map(|h| h.join(".aws/credentials").exists() || h.join(".aws/config").exists())
+        .unwrap_or(false);
+    if has_env || has_profile || has_sso || has_creds_file {
+        None
+    } else {
+        Some("AWS credentials not found. Run 'aws sso login' or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY.".to_string())
+    }
+}
+
+/// Env vars for interactive prompting.
+pub fn required_env_vars() -> Vec<(&'static str, &'static str)> {
+    vec![
+        ("AWS_ACCESS_KEY_ID", "AWS access key"),
+        ("AWS_SECRET_ACCESS_KEY", "AWS secret key"),
+        ("AWS_SESSION_TOKEN", "AWS session token (optional)"),
+    ]
+}
+
 pub struct AwsStsBackend {
     region: String,
     profile: Option<String>,

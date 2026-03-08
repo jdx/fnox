@@ -7,6 +7,7 @@ use std::time::Duration;
 
 pub mod aws_sts;
 pub mod azure_token;
+pub mod cloudflare;
 pub mod command;
 pub mod gcp_iam;
 pub mod vault;
@@ -56,6 +57,10 @@ fn default_vault_method() -> String {
 
 fn default_azure_env_var() -> String {
     "AZURE_ACCESS_TOKEN".to_string()
+}
+
+fn default_cloudflare_env_var() -> String {
+    "CLOUDFLARE_API_TOKEN".to_string()
 }
 
 /// Generate a unique lease ID with a prefix.
@@ -115,6 +120,20 @@ pub enum LeaseBackendConfig {
         #[serde(skip_serializing_if = "Option::is_none")]
         duration: Option<String>,
     },
+    /// Cloudflare API Token
+    Cloudflare {
+        /// Token type: "user" (default) or "account"
+        #[serde(default)]
+        token_type: cloudflare::CloudflareTokenType,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        account_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        policies: Option<Vec<cloudflare::CloudflarePolicy>>,
+        #[serde(default = "default_cloudflare_env_var")]
+        env_var: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        duration: Option<String>,
+    },
     /// Generic Command Backend
     Command {
         create_command: String,
@@ -133,74 +152,14 @@ impl LeaseBackendConfig {
     /// Returns a human-readable message describing what's missing, or None if ready.
     pub fn check_prerequisites(&self) -> Option<String> {
         match self {
-            LeaseBackendConfig::AwsSts { profile, .. } => {
-                // AWS SDK supports many auth methods; check the most common ones
-                let has_env = (std::env::var("AWS_ACCESS_KEY_ID").is_ok()
-                    && std::env::var("AWS_SECRET_ACCESS_KEY").is_ok())
-                    || std::env::var("AWS_PROFILE").is_ok();
-                let has_profile = profile.is_some();
-                let has_sso = std::env::var("AWS_SSO_SESSION").is_ok();
-                let has_creds_file = dirs::home_dir()
-                    .map(|h| h.join(".aws/credentials").exists() || h.join(".aws/config").exists())
-                    .unwrap_or(false);
-                if has_env || has_profile || has_sso || has_creds_file {
-                    None
-                } else {
-                    Some("AWS credentials not found. Run 'aws sso login' or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY.".to_string())
-                }
-            }
-            LeaseBackendConfig::GcpIam { .. } => {
-                let has_env = std::env::var("GOOGLE_APPLICATION_CREDENTIALS").is_ok()
-                    || std::env::var("GCP_SERVICE_ACCOUNT_KEY").is_ok();
-                let has_adc = dirs::config_dir()
-                    .map(|c| {
-                        c.join("gcloud/application_default_credentials.json")
-                            .exists()
-                    })
-                    .unwrap_or(false);
-                if has_env || has_adc {
-                    None
-                } else {
-                    Some("GCP credentials not found. Run 'gcloud auth application-default login' or set GOOGLE_APPLICATION_CREDENTIALS.".to_string())
-                }
-            }
+            LeaseBackendConfig::AwsSts { profile, .. } => aws_sts::check_prerequisites(profile),
+            LeaseBackendConfig::GcpIam { .. } => gcp_iam::check_prerequisites(),
             LeaseBackendConfig::Vault { address, token, .. } => {
-                let has_addr = address.is_some()
-                    || std::env::var("VAULT_ADDR").is_ok()
-                    || std::env::var("FNOX_VAULT_ADDR").is_ok();
-                let has_token = token.is_some()
-                    || std::env::var("VAULT_TOKEN").is_ok()
-                    || std::env::var("FNOX_VAULT_TOKEN").is_ok();
-                match (has_addr, has_token) {
-                    (false, false) => Some(
-                        "Vault address and token not found. Set VAULT_ADDR and VAULT_TOKEN."
-                            .to_string(),
-                    ),
-                    (false, true) => Some("Vault address not found. Set VAULT_ADDR.".to_string()),
-                    (true, false) => Some("Vault token not found. Set VAULT_TOKEN.".to_string()),
-                    (true, true) => None,
-                }
+                vault::check_prerequisites(address, token)
             }
-            LeaseBackendConfig::AzureToken { .. } => {
-                let has_sp = std::env::var("AZURE_CLIENT_ID").is_ok()
-                    && std::env::var("AZURE_CLIENT_SECRET").is_ok()
-                    && std::env::var("AZURE_TENANT_ID").is_ok();
-                if has_sp {
-                    return None;
-                }
-                let has_az = which::which("az").is_ok();
-                if has_az {
-                    // az CLI is installed but we can't verify login state without
-                    // running a subprocess; hint the user to check if auth fails later
-                    None
-                } else {
-                    Some("Azure credentials not found. Run 'az login' or set AZURE_CLIENT_ID/AZURE_CLIENT_SECRET/AZURE_TENANT_ID.".to_string())
-                }
-            }
-            LeaseBackendConfig::Command { .. } => {
-                // Can't easily validate command availability without running it
-                None
-            }
+            LeaseBackendConfig::AzureToken { .. } => azure_token::check_prerequisites(),
+            LeaseBackendConfig::Cloudflare { .. } => cloudflare::check_prerequisites(),
+            LeaseBackendConfig::Command { .. } => command::check_prerequisites(),
         }
     }
 
@@ -209,34 +168,14 @@ impl LeaseBackendConfig {
     /// interactively for missing credentials.
     pub fn required_env_vars(&self) -> Vec<(&'static str, &'static str)> {
         match self {
-            LeaseBackendConfig::AwsSts { .. } => vec![
-                ("AWS_ACCESS_KEY_ID", "AWS access key"),
-                ("AWS_SECRET_ACCESS_KEY", "AWS secret key"),
-                ("AWS_SESSION_TOKEN", "AWS session token (optional)"),
-            ],
-            LeaseBackendConfig::GcpIam { .. } => vec![(
-                "GOOGLE_APPLICATION_CREDENTIALS",
-                "path to service account JSON key file",
-            )],
+            LeaseBackendConfig::AwsSts { .. } => aws_sts::required_env_vars(),
+            LeaseBackendConfig::GcpIam { .. } => gcp_iam::required_env_vars(),
             LeaseBackendConfig::Vault { address, token, .. } => {
-                let mut vars = vec![];
-                if address.is_none() {
-                    vars.push((
-                        "VAULT_ADDR",
-                        "Vault server address (e.g., http://localhost:8200)",
-                    ));
-                }
-                if token.is_none() {
-                    vars.push(("VAULT_TOKEN", "Vault authentication token"));
-                }
-                vars
+                vault::required_env_vars(address, token)
             }
-            LeaseBackendConfig::AzureToken { .. } => vec![
-                ("AZURE_CLIENT_ID", "Azure application (client) ID"),
-                ("AZURE_CLIENT_SECRET", "Azure client secret"),
-                ("AZURE_TENANT_ID", "Azure tenant (directory) ID"),
-            ],
-            LeaseBackendConfig::Command { .. } => vec![],
+            LeaseBackendConfig::AzureToken { .. } => azure_token::required_env_vars(),
+            LeaseBackendConfig::Cloudflare { .. } => cloudflare::required_env_vars(),
+            LeaseBackendConfig::Command { .. } => command::required_env_vars(),
         }
     }
 
@@ -248,6 +187,7 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::Vault { env_map, .. } => env_map.values().any(|v| v == key),
             LeaseBackendConfig::AzureToken { env_var, .. } => env_var == key,
             LeaseBackendConfig::Command { .. } => false,
+            LeaseBackendConfig::Cloudflare { .. } => false,
         }
     }
 
@@ -262,6 +202,7 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::Vault { .. } => vault::CONSUMED_ENV_VARS,
             LeaseBackendConfig::AzureToken { .. } => azure_token::CONSUMED_ENV_VARS,
             LeaseBackendConfig::Command { .. } => command::CONSUMED_ENV_VARS,
+            LeaseBackendConfig::Cloudflare { .. } => cloudflare::CONSUMED_ENV_VARS,
         }
     }
 
@@ -309,6 +250,18 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::AzureToken { scope, env_var, .. } => Ok(Box::new(
                 azure_token::AzureTokenBackend::new(scope.clone(), env_var.clone()),
             )),
+            LeaseBackendConfig::Cloudflare {
+                token_type,
+                account_id,
+                policies,
+                env_var,
+                ..
+            } => Ok(Box::new(cloudflare::CloudflareBackend::new(
+                token_type.clone(),
+                account_id.clone(),
+                policies.clone(),
+                env_var.clone(),
+            )?)),
             LeaseBackendConfig::Command {
                 create_command,
                 revoke_command,
@@ -352,6 +305,7 @@ impl LeaseBackendConfig {
             | LeaseBackendConfig::GcpIam { duration, .. }
             | LeaseBackendConfig::Vault { duration, .. }
             | LeaseBackendConfig::AzureToken { duration, .. }
+            | LeaseBackendConfig::Cloudflare { duration, .. }
             | LeaseBackendConfig::Command { duration, .. } => duration.as_deref(),
         }
     }

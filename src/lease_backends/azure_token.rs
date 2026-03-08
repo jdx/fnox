@@ -12,6 +12,29 @@ const URL: &str = "https://fnox.jdx.dev/leases/azure-token";
 pub const CONSUMED_ENV_VARS: &[&str] =
     &["AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET", "AZURE_TENANT_ID"];
 
+pub fn check_prerequisites() -> Option<String> {
+    let has_sp = std::env::var("AZURE_CLIENT_ID").is_ok()
+        && std::env::var("AZURE_CLIENT_SECRET").is_ok()
+        && std::env::var("AZURE_TENANT_ID").is_ok();
+    if has_sp {
+        return None;
+    }
+    let has_az = which::which("az").is_ok();
+    if has_az {
+        None
+    } else {
+        Some("Azure credentials not found. Run 'az login' or set AZURE_CLIENT_ID/AZURE_CLIENT_SECRET/AZURE_TENANT_ID.".to_string())
+    }
+}
+
+pub fn required_env_vars() -> Vec<(&'static str, &'static str)> {
+    vec![
+        ("AZURE_CLIENT_ID", "Azure application (client) ID"),
+        ("AZURE_CLIENT_SECRET", "Azure client secret"),
+        ("AZURE_TENANT_ID", "Azure tenant (directory) ID"),
+    ]
+}
+
 pub struct AzureTokenBackend {
     scope: String,
     env_var: String,
