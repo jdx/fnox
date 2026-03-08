@@ -332,7 +332,7 @@ async fn try_get_secret(
 
     if crate::env::is_non_interactive() && provider.requires_interactive_auth() {
         return Err(FnoxError::Provider(format!(
-            "Provider '{}' requires interactive authentication (e.g. physical key touch) and cannot be used in the TUI. Use 'fnox exec' instead.",
+            "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
             provider_name
         )));
     }
@@ -757,7 +757,7 @@ async fn try_get_secrets_batch(
 
     if crate::env::is_non_interactive() && provider.requires_interactive_auth() {
         return Err(FnoxError::Provider(format!(
-            "Provider '{}' requires interactive authentication (e.g. physical key touch) and cannot be used in the TUI. Use 'fnox exec' instead.",
+            "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
             provider_name
         )));
     }
