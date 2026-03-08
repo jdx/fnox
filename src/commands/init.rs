@@ -9,13 +9,13 @@ use std::collections::HashMap;
 #[derive(Debug, Args)]
 #[command(visible_alias = "i")]
 pub struct InitCommand {
-    /// Initialize the global config file (~/.config/fnox/config.toml)
-    #[arg(short = 'g', long)]
-    global: bool,
-
     /// Overwrite existing configuration file
     #[arg(short, long)]
     force: bool,
+
+    /// Initialize the global config file (~/.config/fnox/config.toml)
+    #[arg(short = 'g', long)]
+    global: bool,
 
     /// Skip the interactive wizard and create a minimal config
     #[arg(long)]
