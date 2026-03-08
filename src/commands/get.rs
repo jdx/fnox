@@ -30,11 +30,12 @@ impl GetCommand {
             // Respect as_file from the profile secret config when present
             if let Ok(profile_secrets) = config.get_secrets(&profile)
                 && let Some(sc) = profile_secrets.get(&self.key)
-                    && sc.as_file {
-                        let file_path = create_persistent_secret_file("fnox-", &self.key, &value)?;
-                        println!("{}", file_path);
-                        return Ok(());
-                    }
+                && sc.as_file
+            {
+                let file_path = create_persistent_secret_file("fnox-", &self.key, &value)?;
+                println!("{}", file_path);
+                return Ok(());
+            }
             println!("{}", value);
             return Ok(());
         }
