@@ -98,18 +98,8 @@ impl GetCommand {
     ) -> Result<Option<String>> {
         let leases = config.get_leases(profile);
 
-        // Set master secrets as env vars first so lease backend prerequisite
-        // checks (e.g. Vault reading VAULT_ADDR from env) can find them.
-        let profile_secrets = config.get_secrets(profile)?;
-        let resolved_secrets =
-            crate::secret_resolver::resolve_secrets_batch(config, profile, &profile_secrets)
-                .await?;
-        let mut temp_env_guard = lease::TempEnvGuard::default();
-        let _temp_files =
-            lease::set_secrets_as_env(&resolved_secrets, &profile_secrets, &mut temp_env_guard)?;
-
-        // Find which lease backend (if any) produces this key — uses config
-        // directly, no need to instantiate the backend.
+        // Fast path: check if any lease backend produces this key (pure config
+        // lookup — no network calls or backend instantiation needed).
         let matching_lease = leases
             .iter()
             .find(|(_, lease_config)| lease_config.produced_env_vars().contains(&self.key));
@@ -117,6 +107,17 @@ impl GetCommand {
         let Some((name, lease_config)) = matching_lease else {
             return Ok(None);
         };
+
+        // Only resolve master secrets when we know a lease backend needs them
+        // (e.g. VAULT_ADDR from a provider). Deferring avoids spurious failures
+        // from unrelated secrets and unnecessary work for non-lease keys.
+        let profile_secrets = config.get_secrets(profile)?;
+        let resolved_secrets =
+            crate::secret_resolver::resolve_secrets_batch(config, profile, &profile_secrets)
+                .await?;
+        let mut temp_env_guard = lease::TempEnvGuard::default();
+        let _temp_files =
+            lease::set_secrets_as_env(&resolved_secrets, &profile_secrets, &mut temp_env_guard)?;
 
         let project_dir = lease::project_dir_from_config(config, &cli.config);
         let _ledger_lock = LeaseLedger::lock(&project_dir)?;
