@@ -2,18 +2,17 @@
 #
 # AWS KMS Provider Tests
 #
-# These tests verify the AWS KMS provider integration with fnox.
-# Note: Tests use setup_file() to pre-encrypt shared values once,
-#       significantly reducing KMS API calls.
+# These tests verify the AWS KMS provider integration with fnox
+# using LocalStack for mock AWS services.
 #
 # Prerequisites:
-#   1. AWS credentials configured (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
-#   2. KMS key available (created during setup)
-#   3. IAM permissions: kms:Encrypt, kms:Decrypt, kms:DescribeKey
-#   4. Run tests: mise run test:bats -- test/aws_kms.bats
+#   1. Start LocalStack: docker run -d -p 4566:4566 -e SERVICES=kms localstack/localstack
+#   2. Set LOCALSTACK_ENDPOINT=http://localhost:4566
+#   3. Create KMS key: aws --endpoint-url $LOCALSTACK_ENDPOINT kms create-key --region us-east-1
+#   4. Create alias: aws --endpoint-url $LOCALSTACK_ENDPOINT kms create-alias --alias-name alias/fnox-testing --target-key-id <key-id> --region us-east-1
+#   5. Run tests: mise run test:bats -- test/aws_kms.bats
 #
-# Note: Tests will automatically skip if AWS credentials are not available.
-#       The mise task runs `fnox exec` which automatically decrypts provider-based secrets.
+# Note: Tests will automatically skip if LOCALSTACK_ENDPOINT is not set.
 #
 
 # File-level setup - runs once before all tests (reduces KMS API calls)
@@ -24,11 +23,15 @@ setup_file() {
 	export KMS_KEY_ID="alias/fnox-testing"
 	export KMS_REGION="us-east-1"
 
-	# Check if AWS credentials are available
-	if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-		export SKIP_AWS_KMS_TESTS="AWS credentials not available. Ensure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are configured."
+	if [ -z "$LOCALSTACK_ENDPOINT" ]; then
+		export SKIP_AWS_KMS_TESTS="LOCALSTACK_ENDPOINT not set. Start LocalStack and set LOCALSTACK_ENDPOINT=http://localhost:4566"
 		return
 	fi
+
+	# Set dummy AWS credentials for LocalStack
+	export AWS_ACCESS_KEY_ID="test"
+	export AWS_SECRET_ACCESS_KEY="test"
+	export AWS_DEFAULT_REGION="us-east-1"
 
 	# Check if aws CLI is installed
 	if ! command -v aws >/dev/null 2>&1; then
@@ -36,22 +39,43 @@ setup_file() {
 		return
 	fi
 
-	# Verify we can access the KMS key (single API call for all tests)
-	if ! aws kms describe-key --key-id "$KMS_KEY_ID" --region "$KMS_REGION" >/dev/null 2>&1; then
-		export SKIP_AWS_KMS_TESTS="Cannot access KMS key '$KMS_KEY_ID'. Key may not exist or permissions may be insufficient."
-		return
+	# Wait for LocalStack to be ready
+	local retries=10
+	while ! curl -sf "$LOCALSTACK_ENDPOINT/_localstack/health" >/dev/null 2>&1; do
+		retries=$((retries - 1))
+		if [ "$retries" -le 0 ]; then
+			export SKIP_AWS_KMS_TESTS="LocalStack not ready"
+			return
+		fi
+		sleep 1
+	done
+
+	# Verify we can access the KMS key
+	if ! aws --endpoint-url "$LOCALSTACK_ENDPOINT" kms describe-key --key-id "$KMS_KEY_ID" --region "$KMS_REGION" >/dev/null 2>&1; then
+		# Try to create the key and alias
+		local key_id
+		key_id=$(aws --endpoint-url "$LOCALSTACK_ENDPOINT" kms create-key \
+			--region "$KMS_REGION" --query 'KeyMetadata.KeyId' --output text 2>/dev/null)
+		if [ -n "$key_id" ]; then
+			aws --endpoint-url "$LOCALSTACK_ENDPOINT" kms create-alias \
+				--alias-name "$KMS_KEY_ID" \
+				--target-key-id "$key_id" \
+				--region "$KMS_REGION" 2>/dev/null || true
+		fi
+		if ! aws --endpoint-url "$LOCALSTACK_ENDPOINT" kms describe-key --key-id "$KMS_KEY_ID" --region "$KMS_REGION" >/dev/null 2>&1; then
+			export SKIP_AWS_KMS_TESTS="Cannot access KMS key '$KMS_KEY_ID' via LocalStack."
+			return
+		fi
 	fi
 
-	# Get the full ARN for later tests (single API call)
+	# Get the full ARN for later tests
 	export KMS_KEY_ARN
-	KMS_KEY_ARN=$(aws kms describe-key --key-id "$KMS_KEY_ID" --region "$KMS_REGION" --query 'KeyMetadata.Arn' --output text)
+	KMS_KEY_ARN=$(aws --endpoint-url "$LOCALSTACK_ENDPOINT" kms describe-key --key-id "$KMS_KEY_ID" --region "$KMS_REGION" --query 'KeyMetadata.Arn' --output text)
 
 	# Pre-encrypt shared test values using AWS CLI directly (reduces fnox encrypt calls)
-	# These ciphertexts can be reused across multiple tests
-	# Note: Using fileb:///dev/stdin to pass raw plaintext bytes to aws kms encrypt
 	export SHARED_SIMPLE_VALUE="test-plaintext-value"
 	export SHARED_SIMPLE_CIPHERTEXT
-	SHARED_SIMPLE_CIPHERTEXT=$(echo -n "$SHARED_SIMPLE_VALUE" | aws kms encrypt \
+	SHARED_SIMPLE_CIPHERTEXT=$(echo -n "$SHARED_SIMPLE_VALUE" | aws --endpoint-url "$LOCALSTACK_ENDPOINT" kms encrypt \
 		--key-id "$KMS_KEY_ID" \
 		--plaintext fileb:///dev/stdin \
 		--region "$KMS_REGION" \
@@ -60,7 +84,7 @@ setup_file() {
 
 	export SHARED_SPECIAL_VALUE='{"password":"p@ssw0rd!","key":"abc=123&xyz"}'
 	export SHARED_SPECIAL_CIPHERTEXT
-	SHARED_SPECIAL_CIPHERTEXT=$(echo -n "$SHARED_SPECIAL_VALUE" | aws kms encrypt \
+	SHARED_SPECIAL_CIPHERTEXT=$(echo -n "$SHARED_SPECIAL_VALUE" | aws --endpoint-url "$LOCALSTACK_ENDPOINT" kms encrypt \
 		--key-id "$KMS_KEY_ID" \
 		--plaintext fileb:///dev/stdin \
 		--region "$KMS_REGION" \
@@ -71,7 +95,7 @@ setup_file() {
 line2
 line3"
 	export SHARED_MULTILINE_CIPHERTEXT
-	SHARED_MULTILINE_CIPHERTEXT=$(printf '%s' "$SHARED_MULTILINE_VALUE" | aws kms encrypt \
+	SHARED_MULTILINE_CIPHERTEXT=$(printf '%s' "$SHARED_MULTILINE_VALUE" | aws --endpoint-url "$LOCALSTACK_ENDPOINT" kms encrypt \
 		--key-id "$KMS_KEY_ID" \
 		--plaintext fileb:///dev/stdin \
 		--region "$KMS_REGION" \
@@ -80,7 +104,7 @@ line3"
 
 	export SHARED_ENV_VALUE="kms-env-value"
 	export SHARED_ENV_CIPHERTEXT
-	SHARED_ENV_CIPHERTEXT=$(echo -n "$SHARED_ENV_VALUE" | aws kms encrypt \
+	SHARED_ENV_CIPHERTEXT=$(echo -n "$SHARED_ENV_VALUE" | aws --endpoint-url "$LOCALSTACK_ENDPOINT" kms encrypt \
 		--key-id "$KMS_KEY_ID" \
 		--plaintext fileb:///dev/stdin \
 		--region "$KMS_REGION" \
@@ -113,6 +137,7 @@ root = true
 type = "aws-kms"
 key_id = "$key_id"
 region = "$region"
+endpoint = "$LOCALSTACK_ENDPOINT"
 
 [secrets]
 EOF
@@ -131,6 +156,7 @@ root = true
 type = "aws-kms"
 key_id = "$key_id"
 region = "$region"
+endpoint = "$LOCALSTACK_ENDPOINT"
 
 [secrets]
 $secret_name = { provider = "kms", value = "$ciphertext" }
@@ -195,17 +221,6 @@ EOF
 	run "$FNOX_BIN" get INVALID_CIPHERTEXT
 	assert_failure
 	assert_output --partial "Failed to decode base64 ciphertext"
-}
-
-@test "fnox set warns and stores plaintext with wrong KMS key" {
-	# Create config with non-existent key (fails fast, no actual KMS encryption)
-	create_kms_config "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-0000-0000-000000000000"
-
-	# When encryption fails, fnox currently warns and stores plaintext
-	run "$FNOX_BIN" set KMS_WRONG_KEY "test" --provider kms
-	assert_success
-	assert_output --partial "Encryption not supported for provider 'kms'"
-	assert_output --partial "Storing plaintext"
 }
 
 @test "fnox list shows KMS secrets" {

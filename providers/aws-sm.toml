@@ -27,3 +27,8 @@ type = "optional"
 placeholder = "fnox/"
 label = "Secret name prefix (optional):"
 wizard = true
+
+[fields.endpoint]
+type = "optional"
+placeholder = "http://localhost:4566"
+label = "Custom endpoint URL (optional):"

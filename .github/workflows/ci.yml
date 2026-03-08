@@ -110,10 +110,10 @@ jobs:
             hashicorp/vault:latest
           # Start Infisical (self-hosted with PostgreSQL and Redis)
           docker compose -f test/docker-compose.infisical-ci.yml up -d
-          # Start LocalStack for AWS STS lease tests
+          # Start LocalStack for AWS tests (STS leases, KMS, Secrets Manager, Parameter Store)
           docker run -d --name localstack \
             -p 4566:4566 \
-            -e SERVICES=sts,iam \
+            -e SERVICES=sts,iam,kms,secretsmanager,ssm \
             localstack/localstack:latest
           # Wait for services to be ready
           # Poll LocalStack health endpoint (can take 10-30s on cold runners)
@@ -126,10 +126,29 @@ jobs:
             curl -sf http://localhost:8200/v1/sys/health && break
             sleep 1
           done
+          # Setup LocalStack resources for AWS provider tests
+          export AWS_ACCESS_KEY_ID=test
+          export AWS_SECRET_ACCESS_KEY=test
+          export AWS_DEFAULT_REGION=us-east-1
+          # Create KMS key for tests
+          LOCALSTACK_KMS_KEY_ID=$(aws --endpoint-url http://localhost:4566 kms create-key \
+            --region us-east-1 --query 'KeyMetadata.KeyId' --output text)
+          aws --endpoint-url http://localhost:4566 kms create-alias \
+            --alias-name alias/fnox-testing \
+            --target-key-id "$LOCALSTACK_KMS_KEY_ID" \
+            --region us-east-1
+          # Create shared test secret in Secrets Manager
+          aws --endpoint-url http://localhost:4566 secretsmanager create-secret \
+            --name "fnox/test-secret" \
+            --secret-string "This is a test secret in AWS Secrets Manager!" \
+            --region us-east-1
           {
             echo "VAULT_ADDR=http://localhost:8200"
             echo "VAULT_TOKEN=fnox-test-token"
             echo "LOCALSTACK_ENDPOINT=http://localhost:4566"
+            echo "AWS_ACCESS_KEY_ID=test"
+            echo "AWS_SECRET_ACCESS_KEY=test"
+            echo "AWS_DEFAULT_REGION=us-east-1"
           } >> "$GITHUB_ENV"
       - name: Setup Bitwarden for tests
         if: ${{ matrix.os == 'ubuntu-latest' }}

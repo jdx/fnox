@@ -121,14 +121,21 @@ pub struct AwsParameterStoreProvider {
     region: String,
     profile: Option<String>,
     prefix: Option<String>,
+    endpoint: Option<String>,
 }
 
 impl AwsParameterStoreProvider {
-    pub fn new(region: String, profile: Option<String>, prefix: Option<String>) -> Result<Self> {
+    pub fn new(
+        region: String,
+        profile: Option<String>,
+        prefix: Option<String>,
+        endpoint: Option<String>,
+    ) -> Result<Self> {
         Ok(Self {
             region,
             profile,
             prefix,
+            endpoint,
         })
     }
 
@@ -149,7 +156,13 @@ impl AwsParameterStoreProvider {
         }
 
         let config = builder.load().await;
-        Ok(Client::new(&config))
+
+        let mut ssm_config_builder = aws_sdk_ssm::config::Builder::from(&config);
+        if let Some(endpoint) = &self.endpoint {
+            ssm_config_builder = ssm_config_builder.endpoint_url(endpoint);
+        }
+
+        Ok(Client::from_conf(ssm_config_builder.build()))
     }
 
     /// Get a parameter value from AWS Systems Manager Parameter Store

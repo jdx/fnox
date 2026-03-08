@@ -149,14 +149,21 @@ pub struct AwsSecretsManagerProvider {
     region: String,
     profile: Option<String>,
     prefix: Option<String>,
+    endpoint: Option<String>,
 }
 
 impl AwsSecretsManagerProvider {
-    pub fn new(region: String, profile: Option<String>, prefix: Option<String>) -> Result<Self> {
+    pub fn new(
+        region: String,
+        profile: Option<String>,
+        prefix: Option<String>,
+        endpoint: Option<String>,
+    ) -> Result<Self> {
         Ok(Self {
             region,
             profile,
             prefix,
+            endpoint,
         })
     }
 
@@ -178,7 +185,13 @@ impl AwsSecretsManagerProvider {
         }
 
         let config = builder.load().await;
-        Ok(Client::new(&config))
+
+        let mut sm_config_builder = aws_sdk_secretsmanager::config::Builder::from(&config);
+        if let Some(endpoint) = &self.endpoint {
+            sm_config_builder = sm_config_builder.endpoint_url(endpoint);
+        }
+
+        Ok(Client::from_conf(sm_config_builder.build()))
     }
 
     /// Get a secret value from AWS Secrets Manager

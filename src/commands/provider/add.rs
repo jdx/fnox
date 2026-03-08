@@ -86,6 +86,7 @@ impl AddCommand {
                 region: StringOrSecretRef::from("us-east-1"),
                 profile: OptionStringOrSecretRef::none(),
                 prefix: OptionStringOrSecretRef::none(),
+                endpoint: OptionStringOrSecretRef::none(),
                 auth_command: None,
             },
             ProviderType::Vault => crate::config::ProviderConfig::HashiCorpVault {
@@ -103,12 +104,14 @@ impl AddCommand {
             ProviderType::AwsKms => crate::config::ProviderConfig::AwsKms {
                 region: StringOrSecretRef::from("us-east-1"),
                 key_id: StringOrSecretRef::from("alias/my-key"),
+                endpoint: OptionStringOrSecretRef::none(),
                 auth_command: None,
             },
             ProviderType::AwsParameterStore => crate::config::ProviderConfig::AwsParameterStore {
                 region: StringOrSecretRef::from("us-east-1"),
                 profile: OptionStringOrSecretRef::none(),
                 prefix: OptionStringOrSecretRef::literal("/myapp/prod/"),
+                endpoint: OptionStringOrSecretRef::none(),
                 auth_command: None,
             },
             ProviderType::AzureKms => crate::config::ProviderConfig::AzureKms {
