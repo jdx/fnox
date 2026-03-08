@@ -29,6 +29,22 @@ pub fn all_config_filenames(profile: Option<&str>) -> Vec<String> {
     files
 }
 
+/// Find the lowest-priority existing config file in `dir`.
+///
+/// Searches all config filenames in load order (lowest priority first) and
+/// returns the first one that exists on disk. Falls back to `fnox.toml` if
+/// no config files exist yet.
+pub fn find_local_config(dir: &Path, profile: Option<&str>) -> PathBuf {
+    let filenames = all_config_filenames(profile);
+    for name in &filenames {
+        let path = dir.join(name);
+        if path.exists() {
+            return path;
+        }
+    }
+    dir.join("fnox.toml")
+}
+
 // Re-export ProviderConfig from providers module
 pub use crate::providers::ProviderConfig;
 
@@ -1575,5 +1591,54 @@ mod tests {
 
         let secrets = config.get_secrets("prod").unwrap();
         assert!(secrets.is_empty());
+    }
+
+    #[test]
+    fn test_find_local_config_no_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = super::find_local_config(dir.path(), None);
+        assert_eq!(result, dir.path().join("fnox.toml"));
+    }
+
+    #[test]
+    fn test_find_local_config_only_fnox_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
+        let result = super::find_local_config(dir.path(), None);
+        assert_eq!(result, dir.path().join("fnox.toml"));
+    }
+
+    #[test]
+    fn test_find_local_config_only_local_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("fnox.local.toml"), "").unwrap();
+        let result = super::find_local_config(dir.path(), None);
+        assert_eq!(result, dir.path().join("fnox.local.toml"));
+    }
+
+    #[test]
+    fn test_find_local_config_both_exist() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
+        std::fs::write(dir.path().join("fnox.local.toml"), "").unwrap();
+        let result = super::find_local_config(dir.path(), None);
+        // Should pick fnox.toml (lowest priority)
+        assert_eq!(result, dir.path().join("fnox.toml"));
+    }
+
+    #[test]
+    fn test_find_local_config_only_dotfile() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(".fnox.toml"), "").unwrap();
+        let result = super::find_local_config(dir.path(), None);
+        assert_eq!(result, dir.path().join(".fnox.toml"));
+    }
+
+    #[test]
+    fn test_find_local_config_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("fnox.staging.toml"), "").unwrap();
+        let result = super::find_local_config(dir.path(), Some("staging"));
+        assert_eq!(result, dir.path().join("fnox.staging.toml"));
     }
 }

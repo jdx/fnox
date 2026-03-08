@@ -1,5 +1,5 @@
 use crate::commands::Cli;
-use crate::config::{Config, IfMissing};
+use crate::config::{self, Config, IfMissing};
 use crate::error::{FnoxError, Result};
 use clap::Args;
 use std::io::{self, Read};
@@ -258,11 +258,11 @@ impl SetCommand {
             }
             global_path
         } else {
-            // Save to current directory's config
+            // Save to the lowest-priority existing config file in the current directory
             let current_dir = std::env::current_dir().map_err(|e| {
                 FnoxError::Config(format!("Failed to get current directory: {}", e))
             })?;
-            current_dir.join(&cli.config)
+            config::find_local_config(&current_dir, Some(&profile))
         };
 
         if self.dry_run {
