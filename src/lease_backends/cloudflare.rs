@@ -141,6 +141,72 @@ impl CloudflareBackend {
         Ok(result)
     }
 
+    /// Make a GET request to the Cloudflare API, checking the HTTP status code
+    /// and returning a proper auth error for 401/403 responses.
+    async fn cf_api_call(
+        client: &reqwest::Client,
+        token: &str,
+        url: &str,
+        action: &str,
+    ) -> Result<serde_json::Value> {
+        let response = client
+            .get(url)
+            .bearer_auth(token)
+            .send()
+            .await
+            .map_err(|e| FnoxError::ProviderApiError {
+                provider: "Cloudflare".to_string(),
+                details: e.to_string(),
+                hint: format!("Failed to {action}"),
+                url: URL.to_string(),
+            })?;
+
+        let status = response.status();
+        let body: serde_json::Value =
+            response
+                .json()
+                .await
+                .map_err(|e| FnoxError::ProviderInvalidResponse {
+                    provider: "Cloudflare".to_string(),
+                    details: e.to_string(),
+                    hint: format!("Unexpected response while trying to {action}"),
+                    url: URL.to_string(),
+                })?;
+
+        if !status.is_success() {
+            let errors = body["errors"]
+                .as_array()
+                .and_then(|arr| {
+                    let msgs: Vec<_> = arr.iter().filter_map(|e| e["message"].as_str()).collect();
+                    if msgs.is_empty() {
+                        None
+                    } else {
+                        Some(msgs.join("; "))
+                    }
+                })
+                .unwrap_or_else(|| format!("HTTP {status}"));
+
+            if status.as_u16() == 401 || status.as_u16() == 403 {
+                return Err(FnoxError::ProviderAuthFailed {
+                    provider: "Cloudflare".to_string(),
+                    details: errors,
+                    hint:
+                        "Check that your parent API token is valid and has sufficient permissions"
+                            .to_string(),
+                    url: URL.to_string(),
+                });
+            }
+            return Err(FnoxError::ProviderApiError {
+                provider: "Cloudflare".to_string(),
+                details: errors,
+                hint: format!("Failed to {action}"),
+                url: URL.to_string(),
+            });
+        }
+
+        Ok(body)
+    }
+
     /// Fetch the parent token's policies from the Cloudflare API.
     /// Always uses the /user/tokens endpoint for verify and details — the
     /// /accounts/{id}/tokens/verify endpoint does not exist.
@@ -149,25 +215,13 @@ impl CloudflareBackend {
         let client = crate::http::http_client();
 
         // Step 1: verify token to get its ID
-        let verify_resp: serde_json::Value = client
-            .get(format!("{user_tokens_path}/verify"))
-            .bearer_auth(parent_token)
-            .send()
-            .await
-            .map_err(|e| FnoxError::ProviderApiError {
-                provider: "Cloudflare".to_string(),
-                details: e.to_string(),
-                hint: "Failed to verify parent token".to_string(),
-                url: URL.to_string(),
-            })?
-            .json()
-            .await
-            .map_err(|e| FnoxError::ProviderInvalidResponse {
-                provider: "Cloudflare".to_string(),
-                details: e.to_string(),
-                hint: "Unexpected response from Cloudflare verify endpoint".to_string(),
-                url: URL.to_string(),
-            })?;
+        let verify_resp = Self::cf_api_call(
+            &client,
+            parent_token,
+            &format!("{user_tokens_path}/verify"),
+            "verify parent token",
+        )
+        .await?;
 
         let token_id = verify_resp["result"]["id"].as_str().ok_or_else(|| {
             FnoxError::ProviderInvalidResponse {
@@ -179,25 +233,13 @@ impl CloudflareBackend {
         })?;
 
         // Step 2: fetch full token details including policies
-        let details_resp: serde_json::Value = client
-            .get(format!("{user_tokens_path}/{token_id}"))
-            .bearer_auth(parent_token)
-            .send()
-            .await
-            .map_err(|e| FnoxError::ProviderApiError {
-                provider: "Cloudflare".to_string(),
-                details: e.to_string(),
-                hint: "Failed to fetch parent token details".to_string(),
-                url: URL.to_string(),
-            })?
-            .json()
-            .await
-            .map_err(|e| FnoxError::ProviderInvalidResponse {
-                provider: "Cloudflare".to_string(),
-                details: e.to_string(),
-                hint: "Unexpected response from Cloudflare token details endpoint".to_string(),
-                url: URL.to_string(),
-            })?;
+        let details_resp = Self::cf_api_call(
+            &client,
+            parent_token,
+            &format!("{user_tokens_path}/{token_id}"),
+            "fetch parent token details",
+        )
+        .await?;
 
         let policies = details_resp["result"]["policies"]
             .as_array()
