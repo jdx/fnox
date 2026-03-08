@@ -236,7 +236,7 @@ impl LeaseBackend for CloudflareBackend {
         let policies = if let Some(ref configured) = self.policies {
             Self::build_api_policies(configured, &self.account_id)?
         } else {
-            tracing::info!("No policies configured; inheriting from parent token");
+            tracing::debug!("No policies configured; inheriting from parent token");
             Self::fetch_parent_policies(&tokens_path, &parent_token).await?
         };
 
