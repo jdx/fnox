@@ -1,3 +1,4 @@
+use crate::config::SecretConfig;
 use crate::error::{FnoxError, Result};
 use crate::lease::{self, LeaseLedger};
 use crate::secret_resolver::resolve_secret;
@@ -5,6 +6,7 @@ use crate::suggest::{find_similar, format_suggestions};
 use crate::temp_file_secrets::create_persistent_secret_file;
 use crate::{commands::Cli, config::Config};
 use clap::Args;
+use indexmap::IndexMap;
 
 #[derive(Debug, Args)]
 pub struct GetCommand {
@@ -25,10 +27,11 @@ impl GetCommand {
         config.validate()?;
 
         // Check if the requested key is produced by a lease backend
-        if let Some(value) = self.resolve_from_lease(cli, &config, &profile).await? {
+        if let Some((value, profile_secrets)) =
+            self.resolve_from_lease(cli, &config, &profile).await?
+        {
             let value = self.maybe_base64_decode(value)?;
             // Respect as_file from the profile secret config when present
-            let profile_secrets = config.get_secrets(&profile).unwrap_or_default();
             if let Some(sc) = profile_secrets.get(&self.key)
                 && sc.as_file
             {
@@ -98,13 +101,14 @@ impl GetCommand {
     }
 
     /// Check if the requested key is produced by a lease backend.
-    /// If so, resolve the lease and return the credential value.
+    /// If so, resolve the lease and return the credential value alongside
+    /// the profile secrets map (to avoid a redundant `get_secrets` call).
     async fn resolve_from_lease(
         &self,
         cli: &Cli,
         config: &Config,
         profile: &str,
-    ) -> Result<Option<String>> {
+    ) -> Result<Option<(String, IndexMap<String, SecretConfig>)>> {
         let leases = config.get_leases(profile);
 
         // Fast path: check if any lease backend produces this key (pure config
@@ -157,7 +161,7 @@ impl GetCommand {
         .await?;
 
         match creds.get(&self.key) {
-            Some(value) => Ok(Some(value.clone())),
+            Some(value) => Ok(Some((value.clone(), all_secrets))),
             None => Err(FnoxError::Config(format!(
                 "Lease '{}' claims to produce '{}' but returned credentials did not contain it",
                 name, self.key,
