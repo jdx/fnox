@@ -568,7 +568,7 @@ pub async fn resolve_lease(
 
     if let Some(missing) = prereq_missing {
         return Err(FnoxError::Config(format!(
-            "Lease '{}': cached credentials could not be decrypted and \
+            "Lease '{}': no usable cached credentials and \
              prerequisites are missing: {}\n\
              Run 'fnox lease create -i {}' to set up credentials interactively.",
             name, missing, name

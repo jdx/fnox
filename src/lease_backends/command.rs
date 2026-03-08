@@ -7,7 +7,10 @@ use tokio::process::Command;
 
 const URL: &str = "https://fnox.jdx.dev/leases/command";
 
-/// All env var names the Command backend may consume at runtime.
+/// Command backends can consume arbitrary env vars (determined at runtime),
+/// but `fnox get` never routes through a Command backend because
+/// `produces_env_var` always returns `false` for this variant.
+/// This constant is intentionally empty and unused by the current routing logic.
 pub const CONSUMED_ENV_VARS: &[&str] = &[];
 
 pub fn check_prerequisites() -> Option<String> {

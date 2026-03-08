@@ -28,8 +28,8 @@ impl GetCommand {
         if let Some(value) = self.resolve_from_lease(cli, &config, &profile).await? {
             let value = self.maybe_base64_decode(value)?;
             // Respect as_file from the profile secret config when present
-            if let Ok(profile_secrets) = config.get_secrets(&profile)
-                && let Some(sc) = profile_secrets.get(&self.key)
+            let profile_secrets = config.get_secrets(&profile).unwrap_or_default();
+            if let Some(sc) = profile_secrets.get(&self.key)
                 && sc.as_file
             {
                 let file_path = create_persistent_secret_file("fnox-", &self.key, &value)?;
@@ -143,19 +143,6 @@ impl GetCommand {
             lease::set_secrets_as_env(&resolved_secrets, &needed_secrets, &mut temp_env_guard)?;
 
         let prereq_missing = lease_config.check_prerequisites();
-        if let Some(ref missing) = prereq_missing {
-            let config_hash = lease_config.config_hash();
-            if ledger
-                .find_reusable(name, &config_hash)
-                .and_then(|c| c.cached_credentials.as_ref())
-                .is_none()
-            {
-                return Err(FnoxError::Config(format!(
-                    "Lease '{}': {}\nRun 'fnox lease create -i {}' to set up credentials interactively.",
-                    name, missing, name
-                )));
-            }
-        }
 
         let creds = lease::resolve_lease(
             name,
