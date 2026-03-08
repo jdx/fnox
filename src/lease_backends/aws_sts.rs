@@ -136,14 +136,6 @@ impl LeaseBackend for AwsStsBackend {
         // AWS STS default max is 12 hours (can be configured per-role up to 12h)
         Duration::from_secs(12 * 3600)
     }
-
-    fn produced_env_vars(&self) -> Vec<String> {
-        vec![
-            "AWS_ACCESS_KEY_ID".to_string(),
-            "AWS_SECRET_ACCESS_KEY".to_string(),
-            "AWS_SESSION_TOKEN".to_string(),
-        ]
-    }
 }
 
 /// Sanitize a string for use as an AWS STS role session name.

@@ -89,6 +89,7 @@ impl ExecCommand {
                     &project_dir,
                     &mut ledger,
                     prereq_missing.as_deref(),
+                    "exec",
                 )
                 .await?;
                 for (cred_key, cred_value) in creds {

@@ -169,9 +169,4 @@ impl LeaseBackend for CommandBackend {
     fn max_lease_duration(&self) -> Duration {
         Duration::from_secs(24 * 3600)
     }
-
-    fn produced_env_vars(&self) -> Vec<String> {
-        // Command backend output keys are dynamic, not known statically
-        vec![]
-    }
 }

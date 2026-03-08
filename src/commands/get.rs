@@ -26,6 +26,7 @@ impl GetCommand {
 
         // Check if the requested key is produced by a lease backend
         if let Some(value) = self.resolve_from_lease(cli, &config, &profile).await? {
+            let value = self.maybe_base64_decode(value)?;
             println!("{}", value);
             return Ok(());
         }
@@ -51,22 +52,7 @@ impl GetCommand {
         // Resolve the secret using centralized resolver
         match resolve_secret(&config, &profile, &self.key, secret_config).await {
             Ok(Some(value)) => {
-                // Check if this secret should be base64 decoded
-                let value = if self.base64_decode {
-                    let decoded_bytes =
-                        data_encoding::BASE64
-                            .decode(value.as_bytes())
-                            .map_err(|e| FnoxError::SecretDecodeFailed {
-                                details: format!("Failed to base64 decode secret: {}", e),
-                            })?;
-                    str::from_utf8(&decoded_bytes)
-                        .map_err(|e| FnoxError::SecretDecodeFailed {
-                            details: format!("decoded secret is not valid UTF-8: {}", e),
-                        })?
-                        .to_string()
-                } else {
-                    value
-                };
+                let value = self.maybe_base64_decode(value)?;
 
                 // Check if this secret should be written to a file
                 if secret_config.as_file {
@@ -85,6 +71,23 @@ impl GetCommand {
         }
     }
 
+    fn maybe_base64_decode(&self, value: String) -> Result<String> {
+        if self.base64_decode {
+            let decoded_bytes = data_encoding::BASE64
+                .decode(value.as_bytes())
+                .map_err(|e| FnoxError::SecretDecodeFailed {
+                    details: format!("Failed to base64 decode secret: {}", e),
+                })?;
+            Ok(str::from_utf8(&decoded_bytes)
+                .map_err(|e| FnoxError::SecretDecodeFailed {
+                    details: format!("decoded secret is not valid UTF-8: {}", e),
+                })?
+                .to_string())
+        } else {
+            Ok(value)
+        }
+    }
+
     /// Check if the requested key is produced by a lease backend.
     /// If so, resolve the lease and return the credential value.
     async fn resolve_from_lease(
@@ -95,20 +98,8 @@ impl GetCommand {
     ) -> Result<Option<String>> {
         let leases = config.get_leases(profile);
 
-        // Find which lease backend (if any) produces this key
-        let matching_lease = leases.iter().find(|(_, lease_config)| {
-            let backend = match lease_config.create_backend() {
-                Ok(b) => b,
-                Err(_) => return false,
-            };
-            backend.produced_env_vars().contains(&self.key)
-        });
-
-        let Some((name, lease_config)) = matching_lease else {
-            return Ok(None);
-        };
-
-        // Set master secrets as env vars so the lease backend SDK can find them
+        // Set master secrets as env vars first so lease backend prerequisite
+        // checks (e.g. Vault reading VAULT_ADDR from env) can find them.
         let profile_secrets = config.get_secrets(profile)?;
         let resolved_secrets =
             crate::secret_resolver::resolve_secrets_batch(config, profile, &profile_secrets)
@@ -116,6 +107,16 @@ impl GetCommand {
         let mut temp_env_guard = lease::TempEnvGuard::default();
         let _temp_files =
             lease::set_secrets_as_env(&resolved_secrets, &profile_secrets, &mut temp_env_guard)?;
+
+        // Find which lease backend (if any) produces this key — uses config
+        // directly, no need to instantiate the backend.
+        let matching_lease = leases
+            .iter()
+            .find(|(_, lease_config)| lease_config.produced_env_vars().contains(&self.key));
+
+        let Some((name, lease_config)) = matching_lease else {
+            return Ok(None);
+        };
 
         let project_dir = lease::project_dir_from_config(config, &cli.config);
         let _ledger_lock = LeaseLedger::lock(&project_dir)?;
@@ -144,6 +145,7 @@ impl GetCommand {
             &project_dir,
             &mut ledger,
             prereq_missing.as_deref(),
+            "get",
         )
         .await?;
 

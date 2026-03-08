@@ -36,9 +36,6 @@ pub trait LeaseBackend: Send + Sync {
 
     /// Maximum allowed lease duration
     fn max_lease_duration(&self) -> Duration;
-
-    /// Environment variable keys this backend produces
-    fn produced_env_vars(&self) -> Vec<String>;
 }
 
 fn default_gcp_scopes() -> Vec<String> {
@@ -239,6 +236,25 @@ impl LeaseBackendConfig {
                 ("AZURE_CLIENT_SECRET", "Azure client secret"),
                 ("AZURE_TENANT_ID", "Azure tenant (directory) ID"),
             ],
+            LeaseBackendConfig::Command { .. } => vec![],
+        }
+    }
+
+    /// Environment variable keys this backend produces.
+    ///
+    /// Used by `fnox get` to match a requested key to a lease backend without
+    /// instantiating the backend. Backends with dynamic keys (like `command`)
+    /// return an empty vector — `fnox get` cannot resolve their credentials.
+    pub fn produced_env_vars(&self) -> Vec<String> {
+        match self {
+            LeaseBackendConfig::AwsSts { .. } => vec![
+                "AWS_ACCESS_KEY_ID".to_string(),
+                "AWS_SECRET_ACCESS_KEY".to_string(),
+                "AWS_SESSION_TOKEN".to_string(),
+            ],
+            LeaseBackendConfig::GcpIam { env_var, .. } => vec![env_var.clone()],
+            LeaseBackendConfig::Vault { env_map, .. } => env_map.values().cloned().collect(),
+            LeaseBackendConfig::AzureToken { env_var, .. } => vec![env_var.clone()],
             LeaseBackendConfig::Command { .. } => vec![],
         }
     }

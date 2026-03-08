@@ -517,6 +517,7 @@ pub async fn resolve_lease(
     project_dir: &Path,
     ledger: &mut LeaseLedger,
     prereq_missing: Option<&str>,
+    label_prefix: &str,
 ) -> Result<IndexMap<String, String>> {
     let config_hash = lease_config.config_hash();
     if let Some(cached_lease) = ledger.find_reusable(name, &config_hash)
@@ -584,7 +585,7 @@ pub async fn resolve_lease(
         )));
     }
 
-    let label = format!("fnox-{}", name);
+    let label = format!("fnox-{}-{}", label_prefix, name);
     let result = create_and_record_lease(
         backend.as_ref(),
         name,
