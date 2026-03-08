@@ -187,7 +187,7 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::Vault { env_map, .. } => env_map.values().any(|v| v == key),
             LeaseBackendConfig::AzureToken { env_var, .. } => env_var == key,
             LeaseBackendConfig::Command { .. } => false,
-            LeaseBackendConfig::Cloudflare { .. } => false,
+            LeaseBackendConfig::Cloudflare { env_var, .. } => env_var == key,
         }
     }
 
