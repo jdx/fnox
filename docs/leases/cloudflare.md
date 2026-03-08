@@ -1,6 +1,8 @@
 # Cloudflare
 
-The `cloudflare` lease backend creates short-lived, scoped Cloudflare API tokens using the [Cloudflare API Tokens API](https://developers.cloudflare.com/api/resources/user/subresources/tokens/methods/create/). A parent token with the **API Tokens: Edit** permission creates child tokens that are scoped to only the permissions you specify and automatically expire.
+The `cloudflare` lease backend creates short-lived, scoped Cloudflare API tokens using the [Cloudflare API Tokens API](https://developers.cloudflare.com/api/resources/user/subresources/tokens/methods/create/). A parent token with the **API Tokens: Edit** permission creates child tokens that automatically expire.
+
+By default, the child token inherits the same policies (permissions and resource scopes) as the parent token. You can override this by specifying explicit `policies` in the configuration.
 
 ## Configuration
 
@@ -22,7 +24,7 @@ name = "Zone Read"
 | Field        | Required | Description                                                                          |
 | ------------ | -------- | ------------------------------------------------------------------------------------ |
 | `account_id` | No       | Cloudflare account ID. Substituted into `{account_id}` placeholders in resource keys |
-| `policies`   | No       | Array of permission policies (see below); required for lease creation                |
+| `policies`   | No       | Array of permission policies (see below); omit to inherit from parent token          |
 | `env_var`    | No       | Environment variable name for the token (default: `"CLOUDFLARE_API_TOKEN"`)          |
 | `duration`   | No       | Token lifetime (e.g., `"1h"`, `"30m"`, default: backend max of 24h)                  |
 
@@ -68,6 +70,16 @@ The env var name is configurable via the `env_var` field.
 - **Revocation:** Supported — fnox deletes the token via `DELETE /user/tokens/{id}`
 
 ## Examples
+
+### Minimal (inherit parent policies)
+
+```toml
+[leases.cf]
+type = "cloudflare"
+duration = "1h"
+```
+
+The child token gets the same permissions as the parent. This is the simplest setup — just ensure the parent token has the **API Tokens: Edit** permission plus whatever permissions your workflow needs.
 
 ### With stored credentials
 

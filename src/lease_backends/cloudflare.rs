@@ -12,7 +12,7 @@ const TOKEN_NAME_PREFIX: &str = "fnox-lease-";
 
 pub struct CloudflareBackend {
     account_id: Option<String>,
-    policies: Vec<CloudflarePolicy>,
+    policies: Option<Vec<CloudflarePolicy>>,
     env_var: String,
 }
 
@@ -46,7 +46,7 @@ pub struct CloudflarePermissionGroup {
 impl CloudflareBackend {
     pub fn new(
         account_id: Option<String>,
-        policies: Vec<CloudflarePolicy>,
+        policies: Option<Vec<CloudflarePolicy>>,
         env_var: String,
     ) -> Self {
         Self {
@@ -69,13 +69,16 @@ impl CloudflareBackend {
 
     /// Build the policies array for the Cloudflare API request, substituting
     /// the account ID into resource keys that contain the `{account_id}` placeholder.
-    fn build_api_policies(&self) -> Vec<serde_json::Value> {
-        self.policies
+    fn build_api_policies(
+        policies: &[CloudflarePolicy],
+        account_id: &Option<String>,
+    ) -> Vec<serde_json::Value> {
+        policies
             .iter()
             .map(|p| {
                 let mut resources = serde_json::Map::new();
                 for (key, value) in &p.resources {
-                    let resolved_key = if let Some(account_id) = &self.account_id {
+                    let resolved_key = if let Some(account_id) = account_id {
                         key.replace("{account_id}", account_id)
                     } else {
                         key.clone()
@@ -90,17 +93,92 @@ impl CloudflareBackend {
             })
             .collect()
     }
+
+    /// Fetch the parent token's policies from the Cloudflare API.
+    /// Uses GET /user/tokens/verify to get the token ID, then
+    /// GET /user/tokens/{id} to retrieve its full policy configuration.
+    async fn fetch_parent_policies(parent_token: &str) -> Result<Vec<serde_json::Value>> {
+        let client = crate::http::http_client();
+
+        // Step 1: verify token to get its ID
+        let verify_resp: serde_json::Value = client
+            .get(format!("{API_BASE}/user/tokens/verify"))
+            .bearer_auth(parent_token)
+            .send()
+            .await
+            .map_err(|e| FnoxError::ProviderApiError {
+                provider: "Cloudflare".to_string(),
+                details: e.to_string(),
+                hint: "Failed to verify parent token".to_string(),
+                url: URL.to_string(),
+            })?
+            .json()
+            .await
+            .map_err(|e| FnoxError::ProviderInvalidResponse {
+                provider: "Cloudflare".to_string(),
+                details: e.to_string(),
+                hint: "Unexpected response from Cloudflare verify endpoint".to_string(),
+                url: URL.to_string(),
+            })?;
+
+        let token_id = verify_resp["result"]["id"].as_str().ok_or_else(|| {
+            FnoxError::ProviderInvalidResponse {
+                provider: "Cloudflare".to_string(),
+                details: "Verify response missing 'result.id'".to_string(),
+                hint: "Check that the parent token is valid".to_string(),
+                url: URL.to_string(),
+            }
+        })?;
+
+        // Step 2: fetch full token details including policies
+        let details_resp: serde_json::Value = client
+            .get(format!("{API_BASE}/user/tokens/{token_id}"))
+            .bearer_auth(parent_token)
+            .send()
+            .await
+            .map_err(|e| FnoxError::ProviderApiError {
+                provider: "Cloudflare".to_string(),
+                details: e.to_string(),
+                hint: "Failed to fetch parent token details".to_string(),
+                url: URL.to_string(),
+            })?
+            .json()
+            .await
+            .map_err(|e| FnoxError::ProviderInvalidResponse {
+                provider: "Cloudflare".to_string(),
+                details: e.to_string(),
+                hint: "Unexpected response from Cloudflare token details endpoint".to_string(),
+                url: URL.to_string(),
+            })?;
+
+        let policies = details_resp["result"]["policies"]
+            .as_array()
+            .ok_or_else(|| FnoxError::ProviderInvalidResponse {
+                provider: "Cloudflare".to_string(),
+                details: "Token details response missing 'result.policies'".to_string(),
+                hint: "Check that the parent token is valid and accessible".to_string(),
+                url: URL.to_string(),
+            })?;
+
+        // Strip the policy `id` field — Cloudflare assigns new IDs to the child token
+        let cleaned: Vec<serde_json::Value> = policies
+            .iter()
+            .map(|p| {
+                let mut policy = p.clone();
+                if let Some(obj) = policy.as_object_mut() {
+                    obj.remove("id");
+                }
+                policy
+            })
+            .collect();
+
+        Ok(cleaned)
+    }
 }
 
 #[async_trait]
 impl LeaseBackend for CloudflareBackend {
     async fn create_lease(&self, duration: Duration, label: &str) -> Result<Lease> {
-        if self.policies.is_empty() {
-            return Err(FnoxError::Config(
-                "Cloudflare backend requires at least one policy with permission_groups and resources.".to_string(),
-            ));
-        }
-
         let parent_token = Self::get_api_token()?;
 
         let now = chrono::Utc::now();
@@ -113,7 +191,14 @@ impl LeaseBackend for CloudflareBackend {
         } else {
             raw_name
         };
-        let policies = self.build_api_policies();
+
+        // Use configured policies, or inherit from the parent token
+        let policies = if let Some(ref configured) = self.policies {
+            Self::build_api_policies(configured, &self.account_id)
+        } else {
+            tracing::info!("No policies configured; inheriting from parent token");
+            Self::fetch_parent_policies(&parent_token).await?
+        };
 
         let body = serde_json::json!({
             "name": name,

@@ -124,8 +124,8 @@ pub enum LeaseBackendConfig {
     Cloudflare {
         #[serde(skip_serializing_if = "Option::is_none")]
         account_id: Option<String>,
-        #[serde(default)]
-        policies: Vec<cloudflare::CloudflarePolicy>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        policies: Option<Vec<cloudflare::CloudflarePolicy>>,
         #[serde(default = "default_cloudflare_env_var")]
         env_var: String,
         #[serde(skip_serializing_if = "Option::is_none")]
