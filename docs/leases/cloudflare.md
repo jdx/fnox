@@ -22,7 +22,7 @@ name = "Zone Read"
 | Field        | Required | Description                                                                          |
 | ------------ | -------- | ------------------------------------------------------------------------------------ |
 | `account_id` | No       | Cloudflare account ID. Substituted into `{account_id}` placeholders in resource keys |
-| `policies`   | Yes      | Array of permission policies (see below)                                             |
+| `policies`   | No       | Array of permission policies (see below); required for lease creation                |
 | `env_var`    | No       | Environment variable name for the token (default: `"CLOUDFLARE_API_TOKEN"`)          |
 | `duration`   | No       | Token lifetime (e.g., `"1h"`, `"30m"`, default: backend max of 24h)                  |
 
