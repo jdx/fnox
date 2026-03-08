@@ -42,6 +42,16 @@ pub static FNOX_CONFIG_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     })
 });
 
+pub static FNOX_STATE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
+    var_path("FNOX_STATE_DIR").unwrap_or_else(|| {
+        #[cfg(unix)]
+        let default = HOME_DIR.join(".local").join("state").join("fnox");
+        #[cfg(windows)]
+        let default = HOME_DIR.join("AppData").join("Local").join("fnox");
+        default
+    })
+});
+
 // Profile configuration
 pub static FNOX_PROFILE: LazyLock<Option<String>> = LazyLock::new(|| {
     var("FNOX_PROFILE").ok().and_then(|profile| {

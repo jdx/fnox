@@ -314,7 +314,7 @@ fnox lease cleanup
 
 ## How Caching Works
 
-fnox caches lease credentials in a per-project ledger file (`~/.config/fnox/leases/<hash>.toml`). Cached leases are reused until:
+fnox caches lease credentials in a per-project ledger file (`~/.local/state/fnox/leases/<hash>.toml`). Cached leases are reused until:
 
 - They're within 5 minutes of expiring
 - The backend configuration changes (e.g., you change the role ARN)

@@ -77,12 +77,43 @@ fn hash_project_dir(project_dir: &Path) -> String {
 }
 
 impl LeaseLedger {
-    /// Path to the lease ledger file, scoped to a project directory
+    /// Path to the lease ledger file, scoped to a project directory.
+    /// Uses `~/.local/state/fnox/leases/` (XDG state dir).
+    /// Automatically migrates from the old `~/.config/fnox/leases/` location.
     fn ledger_path(project_dir: &Path) -> PathBuf {
         let hash = hash_project_dir(project_dir);
-        env::FNOX_CONFIG_DIR
-            .join("leases")
-            .join(format!("{hash}.toml"))
+        let filename = format!("{hash}.toml");
+        let new_path = env::FNOX_STATE_DIR.join("leases").join(&filename);
+
+        // Migrate from old config-based location if the new path doesn't exist yet
+        if !new_path.exists() {
+            let old_path = env::FNOX_CONFIG_DIR.join("leases").join(&filename);
+            if old_path.exists() {
+                if let Some(parent) = new_path.parent() {
+                    if fs::create_dir_all(parent).is_ok() {
+                        if let Err(e) = fs::rename(&old_path, &new_path) {
+                            tracing::warn!(
+                                "Failed to migrate lease ledger from {} to {}: {}",
+                                old_path.display(),
+                                new_path.display(),
+                                e
+                            );
+                            // Fall back to old path if migration fails
+                            return old_path;
+                        }
+                        tracing::debug!("Migrated lease ledger to {}", new_path.display());
+                        // Also migrate the lock file if present
+                        let old_lock = old_path.with_extension("lock");
+                        if old_lock.exists() {
+                            let new_lock = new_path.with_extension("lock");
+                            let _ = fs::rename(&old_lock, &new_lock);
+                        }
+                    }
+                }
+            }
+        }
+
+        new_path
     }
 
     /// Acquire an exclusive file lock for the ledger.
