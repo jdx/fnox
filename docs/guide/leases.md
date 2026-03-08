@@ -294,6 +294,7 @@ The subprocess still runs — just without the lease credentials. This means oth
 | [GCP IAM](/leases/gcp-iam)         | `gcp-iam`     | 1 hour       | No-op (native TTL)      |
 | [Azure Token](/leases/azure-token) | `azure-token` | ~1 hour      | No-op (native TTL)      |
 | [HashiCorp Vault](/leases/vault)   | `vault`       | 24 hours     | Vault lease revocation  |
+| [Cloudflare](/leases/cloudflare)   | `cloudflare`  | 24 hours     | Token deletion          |
 | [Custom Command](/leases/command)  | `command`     | 24 hours     | Optional revoke command |
 
 ## Managing Leases

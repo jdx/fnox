@@ -7,6 +7,7 @@ use std::time::Duration;
 
 pub mod aws_sts;
 pub mod azure_token;
+pub mod cloudflare;
 pub mod command;
 pub mod gcp_iam;
 pub mod vault;
@@ -56,6 +57,10 @@ fn default_vault_method() -> String {
 
 fn default_azure_env_var() -> String {
     "AZURE_ACCESS_TOKEN".to_string()
+}
+
+fn default_cloudflare_env_var() -> String {
+    "CLOUDFLARE_API_TOKEN".to_string()
 }
 
 /// Generate a unique lease ID with a prefix.
@@ -111,6 +116,16 @@ pub enum LeaseBackendConfig {
     AzureToken {
         scope: String,
         #[serde(default = "default_azure_env_var")]
+        env_var: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        duration: Option<String>,
+    },
+    /// Cloudflare API Token
+    Cloudflare {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        account_id: Option<String>,
+        policies: Vec<cloudflare::CloudflarePolicy>,
+        #[serde(default = "default_cloudflare_env_var")]
         env_var: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         duration: Option<String>,
@@ -197,6 +212,15 @@ impl LeaseBackendConfig {
                     Some("Azure credentials not found. Run 'az login' or set AZURE_CLIENT_ID/AZURE_CLIENT_SECRET/AZURE_TENANT_ID.".to_string())
                 }
             }
+            LeaseBackendConfig::Cloudflare { .. } => {
+                let has_token = std::env::var("CLOUDFLARE_API_TOKEN").is_ok()
+                    || std::env::var("CF_API_TOKEN").is_ok();
+                if has_token {
+                    None
+                } else {
+                    Some("Cloudflare API token not found. Set CLOUDFLARE_API_TOKEN with a token that has 'API Tokens: Edit' permission.".to_string())
+                }
+            }
             LeaseBackendConfig::Command { .. } => {
                 // Can't easily validate command availability without running it
                 None
@@ -236,6 +260,10 @@ impl LeaseBackendConfig {
                 ("AZURE_CLIENT_SECRET", "Azure client secret"),
                 ("AZURE_TENANT_ID", "Azure tenant (directory) ID"),
             ],
+            LeaseBackendConfig::Cloudflare { .. } => vec![(
+                "CLOUDFLARE_API_TOKEN",
+                "Cloudflare API token with 'API Tokens: Edit' permission",
+            )],
             LeaseBackendConfig::Command { .. } => vec![],
         }
     }
@@ -284,6 +312,16 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::AzureToken { scope, env_var, .. } => Ok(Box::new(
                 azure_token::AzureTokenBackend::new(scope.clone(), env_var.clone()),
             )),
+            LeaseBackendConfig::Cloudflare {
+                account_id,
+                policies,
+                env_var,
+                ..
+            } => Ok(Box::new(cloudflare::CloudflareBackend::new(
+                account_id.clone(),
+                policies.clone(),
+                env_var.clone(),
+            ))),
             LeaseBackendConfig::Command {
                 create_command,
                 revoke_command,
@@ -327,6 +365,7 @@ impl LeaseBackendConfig {
             | LeaseBackendConfig::GcpIam { duration, .. }
             | LeaseBackendConfig::Vault { duration, .. }
             | LeaseBackendConfig::AzureToken { duration, .. }
+            | LeaseBackendConfig::Cloudflare { duration, .. }
             | LeaseBackendConfig::Command { duration, .. } => duration.as_deref(),
         }
     }
