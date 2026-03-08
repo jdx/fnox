@@ -27,6 +27,16 @@ impl GetCommand {
         // Check if the requested key is produced by a lease backend
         if let Some(value) = self.resolve_from_lease(cli, &config, &profile).await? {
             let value = self.maybe_base64_decode(value)?;
+            // Respect as_file from the profile secret config when present
+            if let Ok(profile_secrets) = config.get_secrets(&profile) {
+                if let Some(sc) = profile_secrets.get(&self.key) {
+                    if sc.as_file {
+                        let file_path = create_persistent_secret_file("fnox-", &self.key, &value)?;
+                        println!("{}", file_path);
+                        return Ok(());
+                    }
+                }
+            }
             println!("{}", value);
             return Ok(());
         }
@@ -117,7 +127,7 @@ impl GetCommand {
         // This avoids unnecessary network calls to unrelated providers while
         // still covering every env var name the backend checks.
         let consumed: std::collections::HashSet<&str> =
-            lease_config.consumed_env_vars().into_iter().collect();
+            lease_config.consumed_env_vars().iter().copied().collect();
         let all_secrets = config.get_secrets(profile)?;
         let needed_secrets: indexmap::IndexMap<_, _> = all_secrets
             .iter()

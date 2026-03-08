@@ -8,6 +8,15 @@ use std::time::Duration;
 
 const URL: &str = "https://fnox.jdx.dev/leases/aws-sts";
 
+/// All env var names the AWS STS backend may consume at runtime.
+pub const CONSUMED_ENV_VARS: &[&str] = &[
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
+    "AWS_PROFILE",
+    "AWS_SSO_SESSION",
+];
+
 pub struct AwsStsBackend {
     region: String,
     profile: Option<String>,

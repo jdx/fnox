@@ -6,6 +6,10 @@ use std::time::Duration;
 
 const URL: &str = "https://fnox.jdx.dev/leases/gcp-iam";
 
+/// All env var names the GCP IAM backend may consume at runtime.
+pub const CONSUMED_ENV_VARS: &[&str] =
+    &["GOOGLE_APPLICATION_CREDENTIALS", "GCP_SERVICE_ACCOUNT_KEY"];
+
 pub struct GcpIamBackend {
     service_account_email: String,
     scopes: Vec<String>,

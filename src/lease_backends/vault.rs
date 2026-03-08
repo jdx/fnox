@@ -7,6 +7,14 @@ use std::time::Duration;
 
 const URL: &str = "https://fnox.jdx.dev/leases/vault";
 
+/// All env var names the Vault backend may consume at runtime.
+pub const CONSUMED_ENV_VARS: &[&str] = &[
+    "VAULT_ADDR",
+    "FNOX_VAULT_ADDR",
+    "VAULT_TOKEN",
+    "FNOX_VAULT_TOKEN",
+];
+
 pub struct VaultBackend {
     address: String,
     token: String,

@@ -267,30 +267,15 @@ impl LeaseBackendConfig {
 
     /// All env var names this backend may consume at runtime, including aliases.
     /// Used by `fnox get` to filter which profile secrets to resolve before
-    /// creating a lease. Includes both canonical names from `required_env_vars()`
-    /// and runtime aliases (e.g. `FNOX_VAULT_TOKEN`, `CF_API_TOKEN`).
-    pub fn consumed_env_vars(&self) -> Vec<&str> {
+    /// creating a lease. Each backend defines its own `CONSUMED_ENV_VARS` constant
+    /// covering both canonical names and runtime aliases.
+    pub fn consumed_env_vars(&self) -> &'static [&'static str] {
         match self {
-            LeaseBackendConfig::AwsSts { .. } => vec![
-                "AWS_ACCESS_KEY_ID",
-                "AWS_SECRET_ACCESS_KEY",
-                "AWS_SESSION_TOKEN",
-                "AWS_PROFILE",
-                "AWS_SSO_SESSION",
-            ],
-            LeaseBackendConfig::GcpIam { .. } => {
-                vec!["GOOGLE_APPLICATION_CREDENTIALS", "GCP_SERVICE_ACCOUNT_KEY"]
-            }
-            LeaseBackendConfig::Vault { .. } => vec![
-                "VAULT_ADDR",
-                "FNOX_VAULT_ADDR",
-                "VAULT_TOKEN",
-                "FNOX_VAULT_TOKEN",
-            ],
-            LeaseBackendConfig::AzureToken { .. } => {
-                vec!["AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET", "AZURE_TENANT_ID"]
-            }
-            LeaseBackendConfig::Command { .. } => vec![],
+            LeaseBackendConfig::AwsSts { .. } => aws_sts::CONSUMED_ENV_VARS,
+            LeaseBackendConfig::GcpIam { .. } => gcp_iam::CONSUMED_ENV_VARS,
+            LeaseBackendConfig::Vault { .. } => vault::CONSUMED_ENV_VARS,
+            LeaseBackendConfig::AzureToken { .. } => azure_token::CONSUMED_ENV_VARS,
+            LeaseBackendConfig::Command { .. } => command::CONSUMED_ENV_VARS,
         }
     }
 

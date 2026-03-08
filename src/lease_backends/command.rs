@@ -7,6 +7,9 @@ use tokio::process::Command;
 
 const URL: &str = "https://fnox.jdx.dev/leases/command";
 
+/// All env var names the Command backend may consume at runtime.
+pub const CONSUMED_ENV_VARS: &[&str] = &[];
+
 pub struct CommandBackend {
     create_command: String,
     revoke_command: Option<String>,
