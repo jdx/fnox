@@ -1,6 +1,20 @@
 # Changelog
 
-## [1.16.0](https://github.com/jdx/fnox/compare/v1.15.1..v1.16.0) - 2026-03-07
+## [1.16.1](https://github.com/jdx/fnox/compare/v1.16.0..v1.16.1) - 2026-03-08
+
+### 🐛 Bug Fixes
+
+- **(set)** error on encryption failure; use LocalStack for AWS tests by [@jdx](https://github.com/jdx) in [#324](https://github.com/jdx/fnox/pull/324)
+
+### 📦️ Dependency Updates
+
+- add Cross.toml to install libudev-dev for linux cross-compilation by [@jdx](https://github.com/jdx) in [#326](https://github.com/jdx/fnox/pull/326)
+
+## [1.16.0](https://github.com/jdx/fnox/compare/v1.15.1..v1.16.0) - 2026-03-08
+
+### 🐛 Bug Fixes
+
+- **(docs)** escape angle brackets in lease create doc by [@jdx](https://github.com/jdx) in [#323](https://github.com/jdx/fnox/pull/323)
 
 ### 🛡️ Security
 
