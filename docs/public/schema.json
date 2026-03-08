@@ -96,8 +96,7 @@
       "type": "object",
       "properties": {
         "effect": {
-          "description": "\"allow\" or \"deny\"",
-          "type": "string",
+          "$ref": "#/$defs/CloudflarePolicyEffect",
           "default": "allow"
         },
         "permission_groups": {
@@ -110,10 +109,16 @@
         "resources": {
           "description": "Resource scope, e.g. {\"com.cloudflare.api.account.*\": \"*\"}",
           "type": "object",
-          "additionalProperties": true
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       },
       "required": ["permission_groups", "resources"]
+    },
+    "CloudflarePolicyEffect": {
+      "type": "string",
+      "enum": ["allow", "deny"]
     },
     "IfMissing": {
       "type": "string",
