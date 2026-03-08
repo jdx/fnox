@@ -746,6 +746,14 @@ async fn try_get_secrets_batch(
     provider_secrets: &[(String, String)],
 ) -> Result<HashMap<String, Result<String>>> {
     let provider = get_provider_resolved(config, profile, provider_name, provider_config).await?;
+
+    if crate::env::is_non_interactive() && provider.requires_interactive_auth() {
+        return Err(FnoxError::Provider(format!(
+            "Provider '{}' requires interactive authentication (e.g. physical key touch) and cannot be used in the TUI. Use 'fnox exec' instead.",
+            provider_name
+        )));
+    }
+
     Ok(provider.get_secrets_batch(provider_secrets).await)
 }
 

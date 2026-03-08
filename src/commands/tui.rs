@@ -28,6 +28,9 @@ impl TuiCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
         let profile = Config::get_profile(cli.profile.as_deref());
 
+        // Mark as non-interactive so providers that need physical interaction are skipped
+        crate::env::set_non_interactive(true);
+
         // Install panic hook to restore terminal on panic
         install_panic_hook();
 

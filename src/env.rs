@@ -1,7 +1,20 @@
 pub use std::env::*;
 use std::ffi::OsStr;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{path::PathBuf, sync::LazyLock};
+
+/// Whether we're running in a non-interactive context (e.g. TUI) where
+/// providers must not prompt or write to stderr.
+static NON_INTERACTIVE: AtomicBool = AtomicBool::new(false);
+
+pub fn set_non_interactive(value: bool) {
+    NON_INTERACTIVE.store(value, Ordering::Relaxed);
+}
+
+pub fn is_non_interactive() -> bool {
+    NON_INTERACTIVE.load(Ordering::Relaxed)
+}
 
 /// Mutex to serialize access to std::env::set_var, which is unsafe in Rust 2024 edition.
 static ENV_MUTEX: Mutex<()> = Mutex::new(());

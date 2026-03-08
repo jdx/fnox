@@ -223,6 +223,12 @@ pub trait Provider: Send + Sync {
         vec![ProviderCapability::RemoteRead]
     }
 
+    /// Whether this provider requires interactive authentication (e.g. physical touch).
+    /// Providers that return true cannot be used in non-interactive contexts like the TUI.
+    fn requires_interactive_auth(&self) -> bool {
+        false
+    }
+
     /// Test if the provider is accessible and properly configured
     async fn test_connection(&self) -> Result<()> {
         // Default implementation does a basic check
