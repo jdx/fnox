@@ -158,24 +158,39 @@ impl ExecCommand {
         // from the parent process environment so the child doesn't inherit them.
         drop(_temp_env_guard);
 
-        let status = cmd
-            .status()
-            .map_err(|e| FnoxError::CommandExecutionFailed {
-                command: self.command.join(" "),
-                source: e,
-            })?;
-
-        if !status.success()
-            && let Some(code) = status.code()
+        // On Unix, replace the fnox process with the child via exec(2).
+        // This avoids an extra process wrapper and ensures signals are
+        // delivered directly to the child. Temp files are intentionally
+        // leaked since our destructors won't run after exec.
+        #[cfg(unix)]
         {
-            return Err(FnoxError::CommandExitFailed {
+            use std::os::unix::process::CommandExt;
+            // Persist temp files so they survive exec (drop would delete them)
+            for tf in _temp_files {
+                tf.into_temp_path().keep().ok();
+            }
+            let err = cmd.exec();
+            return Err(FnoxError::CommandExecutionFailed {
                 command: self.command.join(" "),
-                status: code,
+                source: err,
             });
         }
 
-        // Temp files are automatically deleted when _temp_files goes out of scope
-        Ok(())
+        #[cfg(not(unix))]
+        {
+            let status = cmd
+                .status()
+                .map_err(|e| FnoxError::CommandExecutionFailed {
+                    command: self.command.join(" "),
+                    source: e,
+                })?;
+
+            if !status.success() {
+                std::process::exit(status.code().unwrap_or(1));
+            }
+
+            Ok(())
+        }
     }
 }
 

@@ -432,10 +432,6 @@ pub enum FnoxError {
         source: std::io::Error,
     },
 
-    #[error("Command exited with status {status}: {command}")]
-    #[diagnostic(code(fnox::command::exit_failed))]
-    CommandExitFailed { command: String, status: i32 },
-
     // ========================================================================
     // Import Errors
     // ========================================================================
