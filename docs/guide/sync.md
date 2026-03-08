@@ -138,15 +138,15 @@ git clone https://github.com/myorg/my-api && cd my-api
 # 2. Make sure fnox.local.toml is gitignored
 echo "fnox.local.toml" >> .gitignore
 
-# 3. Set up your age key (one-time)
+# 3. Set up your age key (one-time) — note the public key printed to your terminal
 age-keygen -o ~/.config/fnox/age.txt
 export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)
 
-# 4. Add age provider to your config
-cat >> fnox.toml << 'EOF'
+# 4. Add age provider to your config, replacing the recipient with your public key from step 3
+cat >> fnox.toml << EOF
 [providers.age]
 type = "age"
-recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
+recipients = ["$(grep 'public key:' ~/.config/fnox/age.txt | awk '{print $NF}')"]
 EOF
 
 # 5. Sync all 1Password secrets to local age encryption
