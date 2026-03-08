@@ -61,11 +61,11 @@ export default defineConfig({
             link: "/guide/missing-secrets",
           },
           { text: "Import/Export", link: "/guide/import-export" },
-          { text: "Credential Leases", link: "/guide/leases" },
         ],
       },
       {
-        text: "Lease Backends",
+        text: "Credential Leases",
+        link: "/guide/leases",
         collapsed: true,
         items: [
           { text: "AWS STS", link: "/leases/aws-sts" },
