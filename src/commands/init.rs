@@ -14,7 +14,7 @@ pub struct InitCommand {
     global: bool,
 
     /// Overwrite existing configuration file
-    #[arg(long)]
+    #[arg(short, long)]
     force: bool,
 
     /// Skip the interactive wizard and create a minimal config
