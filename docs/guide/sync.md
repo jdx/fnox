@@ -15,7 +15,7 @@ vault = "Engineering"
 [secrets]
 DATABASE_URL = { provider = "op", value = "Database/url" }
 STRIPE_KEY = { provider = "op", value = "Stripe/secret-key" }
-SENDGRID_KEY = { provider = "op", value = "Stripe/api-key" }
+SENDGRID_KEY = { provider = "op", value = "SendGrid/api-key" }
 ```
 
 This works, but every time you `cd` into the project (with [shell integration](/guide/shell-integration)), fnox calls 1Password to fetch each secret. This is slow and requires network access.
