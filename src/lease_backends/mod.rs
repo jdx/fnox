@@ -249,16 +249,47 @@ impl LeaseBackendConfig {
     /// keys are dynamic (determined at runtime by the command's JSON output).
     /// As a result, `fnox get <key>` cannot resolve credentials from command
     /// lease backends — use `fnox exec` or `fnox lease create` instead.
-    pub fn produced_env_vars(&self) -> Vec<String> {
+    pub fn produced_env_vars(&self) -> Vec<&str> {
         match self {
             LeaseBackendConfig::AwsSts { .. } => vec![
-                "AWS_ACCESS_KEY_ID".to_string(),
-                "AWS_SECRET_ACCESS_KEY".to_string(),
-                "AWS_SESSION_TOKEN".to_string(),
+                "AWS_ACCESS_KEY_ID",
+                "AWS_SECRET_ACCESS_KEY",
+                "AWS_SESSION_TOKEN",
             ],
-            LeaseBackendConfig::GcpIam { env_var, .. } => vec![env_var.clone()],
-            LeaseBackendConfig::Vault { env_map, .. } => env_map.values().cloned().collect(),
-            LeaseBackendConfig::AzureToken { env_var, .. } => vec![env_var.clone()],
+            LeaseBackendConfig::GcpIam { env_var, .. } => vec![env_var.as_str()],
+            LeaseBackendConfig::Vault { env_map, .. } => {
+                env_map.values().map(|s| s.as_str()).collect()
+            }
+            LeaseBackendConfig::AzureToken { env_var, .. } => vec![env_var.as_str()],
+            LeaseBackendConfig::Command { .. } => vec![],
+        }
+    }
+
+    /// All env var names this backend may consume at runtime, including aliases.
+    /// Used by `fnox get` to filter which profile secrets to resolve before
+    /// creating a lease. Includes both canonical names from `required_env_vars()`
+    /// and runtime aliases (e.g. `FNOX_VAULT_TOKEN`, `CF_API_TOKEN`).
+    pub fn consumed_env_vars(&self) -> Vec<&str> {
+        match self {
+            LeaseBackendConfig::AwsSts { .. } => vec![
+                "AWS_ACCESS_KEY_ID",
+                "AWS_SECRET_ACCESS_KEY",
+                "AWS_SESSION_TOKEN",
+                "AWS_PROFILE",
+                "AWS_SSO_SESSION",
+            ],
+            LeaseBackendConfig::GcpIam { .. } => {
+                vec!["GOOGLE_APPLICATION_CREDENTIALS", "GCP_SERVICE_ACCOUNT_KEY"]
+            }
+            LeaseBackendConfig::Vault { .. } => vec![
+                "VAULT_ADDR",
+                "FNOX_VAULT_ADDR",
+                "VAULT_TOKEN",
+                "FNOX_VAULT_TOKEN",
+            ],
+            LeaseBackendConfig::AzureToken { .. } => {
+                vec!["AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET", "AZURE_TENANT_ID"]
+            }
             LeaseBackendConfig::Command { .. } => vec![],
         }
     }

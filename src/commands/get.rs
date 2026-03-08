@@ -102,23 +102,33 @@ impl GetCommand {
         // lookup — no network calls or backend instantiation needed).
         // Use rfind to match exec's last-wins semantics when multiple leases
         // produce the same key.
-        let matching_lease = leases
-            .iter()
-            .rfind(|(_, lease_config)| lease_config.produced_env_vars().contains(&self.key));
+        let matching_lease = leases.iter().rfind(|(_, lease_config)| {
+            lease_config
+                .produced_env_vars()
+                .contains(&self.key.as_str())
+        });
 
         let Some((name, lease_config)) = matching_lease else {
             return Ok(None);
         };
 
-        // Resolve all profile secrets and inject them as env vars so lease
-        // backend SDKs can find credentials under any supported alias (e.g.
-        // FNOX_VAULT_TOKEN vs VAULT_TOKEN, CF_API_TOKEN vs CLOUDFLARE_API_TOKEN).
+        // Only resolve secrets this lease backend may consume at runtime,
+        // including all known aliases (e.g. FNOX_VAULT_TOKEN, CF_API_TOKEN).
+        // This avoids unnecessary network calls to unrelated providers while
+        // still covering every env var name the backend checks.
+        let consumed: std::collections::HashSet<&str> =
+            lease_config.consumed_env_vars().into_iter().collect();
         let all_secrets = config.get_secrets(profile)?;
+        let needed_secrets: indexmap::IndexMap<_, _> = all_secrets
+            .iter()
+            .filter(|(k, _)| consumed.contains(k.as_str()))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
         let resolved_secrets =
-            crate::secret_resolver::resolve_secrets_batch(config, profile, &all_secrets).await?;
+            crate::secret_resolver::resolve_secrets_batch(config, profile, &needed_secrets).await?;
         let mut temp_env_guard = lease::TempEnvGuard::default();
         let _temp_files =
-            lease::set_secrets_as_env(&resolved_secrets, &all_secrets, &mut temp_env_guard)?;
+            lease::set_secrets_as_env(&resolved_secrets, &needed_secrets, &mut temp_env_guard)?;
 
         let project_dir = lease::project_dir_from_config(config, &cli.config);
         let _ledger_lock = LeaseLedger::lock(&project_dir)?;
