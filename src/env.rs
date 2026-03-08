@@ -34,7 +34,7 @@ pub fn set_var<K: AsRef<OsStr>, V: AsRef<OsStr>>(key: K, val: V) {
 pub static HOME_DIR: LazyLock<PathBuf> = LazyLock::new(|| dirs::home_dir().unwrap_or_default());
 pub static FNOX_CONFIG_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     var_path("FNOX_CONFIG_DIR").unwrap_or_else(|| {
-        dirs::config_dir()
+        var_path("XDG_CONFIG_HOME")
             .unwrap_or_else(|| HOME_DIR.join(".config"))
             .join("fnox")
     })
@@ -42,7 +42,7 @@ pub static FNOX_CONFIG_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
 
 pub static FNOX_STATE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     var_path("FNOX_STATE_DIR").unwrap_or_else(|| {
-        dirs::state_dir()
+        var_path("XDG_STATE_HOME")
             .unwrap_or_else(|| HOME_DIR.join(".local").join("state"))
             .join("fnox")
     })
