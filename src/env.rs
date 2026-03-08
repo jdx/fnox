@@ -34,21 +34,17 @@ pub fn set_var<K: AsRef<OsStr>, V: AsRef<OsStr>>(key: K, val: V) {
 pub static HOME_DIR: LazyLock<PathBuf> = LazyLock::new(|| dirs::home_dir().unwrap_or_default());
 pub static FNOX_CONFIG_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     var_path("FNOX_CONFIG_DIR").unwrap_or_else(|| {
-        #[cfg(unix)]
-        let default = HOME_DIR.join(".config").join("fnox");
-        #[cfg(windows)]
-        let default = HOME_DIR.join("AppData").join("Local").join("fnox");
-        default
+        dirs::config_dir()
+            .unwrap_or_else(|| HOME_DIR.join(".config"))
+            .join("fnox")
     })
 });
 
 pub static FNOX_STATE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     var_path("FNOX_STATE_DIR").unwrap_or_else(|| {
-        #[cfg(unix)]
-        let default = HOME_DIR.join(".local").join("state").join("fnox");
-        #[cfg(windows)]
-        let default = HOME_DIR.join("AppData").join("Local").join("fnox");
-        default
+        dirs::state_dir()
+            .unwrap_or_else(|| HOME_DIR.join(".local").join("state"))
+            .join("fnox")
     })
 });
 
