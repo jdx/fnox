@@ -199,17 +199,43 @@ impl CloudflareBackend {
                 url: URL.to_string(),
             })?;
 
-        // Strip the policy `id` field — Cloudflare assigns new IDs to the child token
+        // Clean up inherited policies for use as child token config:
+        // 1. Strip the policy `id` field — Cloudflare assigns new IDs
+        // 2. Remove "API Tokens" permission groups — Cloudflare forbids
+        //    sub-tokens from managing other tokens
         let cleaned: Vec<serde_json::Value> = policies
             .iter()
-            .map(|p| {
+            .filter_map(|p| {
                 let mut policy = p.clone();
-                if let Some(obj) = policy.as_object_mut() {
-                    obj.remove("id");
+                let obj = policy.as_object_mut()?;
+                obj.remove("id");
+
+                // Filter out token-management permission groups
+                if let Some(groups) = obj
+                    .get_mut("permission_groups")
+                    .and_then(|v| v.as_array_mut())
+                {
+                    groups.retain(|g| {
+                        let name = g["name"].as_str().unwrap_or("");
+                        !name.contains("API Tokens")
+                    });
+                    // Drop the entire policy if no permission groups remain
+                    if groups.is_empty() {
+                        return None;
+                    }
                 }
-                policy
+
+                Some(policy)
             })
             .collect();
+
+        if cleaned.is_empty() {
+            return Err(FnoxError::Config(
+                "Parent token only has 'API Tokens' permissions which cannot be inherited. \
+                 Configure explicit policies or use a parent token with additional permissions."
+                    .to_string(),
+            ));
+        }
 
         Ok(cleaned)
     }
