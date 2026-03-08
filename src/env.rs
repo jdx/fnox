@@ -35,7 +35,12 @@ pub static HOME_DIR: LazyLock<PathBuf> = LazyLock::new(|| dirs::home_dir().unwra
 pub static FNOX_CONFIG_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     var_path("FNOX_CONFIG_DIR").unwrap_or_else(|| {
         var_path("XDG_CONFIG_HOME")
-            .unwrap_or_else(|| HOME_DIR.join(".config"))
+            .unwrap_or_else(|| {
+                #[cfg(unix)]
+                return HOME_DIR.join(".config");
+                #[cfg(windows)]
+                return HOME_DIR.join("AppData").join("Local");
+            })
             .join("fnox")
     })
 });
@@ -43,7 +48,12 @@ pub static FNOX_CONFIG_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
 pub static FNOX_STATE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     var_path("FNOX_STATE_DIR").unwrap_or_else(|| {
         var_path("XDG_STATE_HOME")
-            .unwrap_or_else(|| HOME_DIR.join(".local").join("state"))
+            .unwrap_or_else(|| {
+                #[cfg(unix)]
+                return HOME_DIR.join(".local").join("state");
+                #[cfg(windows)]
+                return HOME_DIR.join("AppData").join("Local");
+            })
             .join("fnox")
     })
 });
