@@ -7,6 +7,8 @@ use std::time::Duration;
 
 const URL: &str = "https://fnox.jdx.dev/leases/cloudflare";
 const API_BASE: &str = "https://api.cloudflare.com/client/v4";
+const MAX_TOKEN_NAME_LEN: usize = 100;
+const TOKEN_NAME_PREFIX: &str = "fnox-lease-";
 
 pub struct CloudflareBackend {
     account_id: Option<String>,
@@ -14,17 +16,24 @@ pub struct CloudflareBackend {
     env_var: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum CloudflarePolicyEffect {
+    #[default]
+    Allow,
+    Deny,
+}
+
 /// A Cloudflare API token permission policy.
 /// Maps to the Cloudflare API's `policies` array in POST /user/tokens.
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct CloudflarePolicy {
-    /// "allow" or "deny"
-    #[serde(default = "default_effect")]
-    pub effect: String,
+    #[serde(default)]
+    pub effect: CloudflarePolicyEffect,
     /// Permission group IDs (UUIDs from Cloudflare's permission groups API)
     pub permission_groups: Vec<CloudflarePermissionGroup>,
     /// Resource scope, e.g. {"com.cloudflare.api.account.*": "*"}
-    pub resources: IndexMap<String, serde_json::Value>,
+    pub resources: IndexMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -32,10 +41,6 @@ pub struct CloudflarePermissionGroup {
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-}
-
-fn default_effect() -> String {
-    "allow".to_string()
 }
 
 impl CloudflareBackend {
@@ -75,19 +80,12 @@ impl CloudflareBackend {
                     } else {
                         key.clone()
                     };
-                    resources.insert(resolved_key, value.clone());
+                    resources.insert(resolved_key, serde_json::Value::String(value.clone()));
                 }
                 serde_json::json!({
                     "effect": p.effect,
                     "resources": resources,
-                    "permission_groups": p.permission_groups.iter().map(|pg| {
-                        let mut m = serde_json::Map::new();
-                        m.insert("id".to_string(), serde_json::Value::String(pg.id.clone()));
-                        if let Some(name) = &pg.name {
-                            m.insert("name".to_string(), serde_json::Value::String(name.clone()));
-                        }
-                        serde_json::Value::Object(m)
-                    }).collect::<Vec<_>>(),
+                    "permission_groups": p.permission_groups,
                 })
             })
             .collect()
@@ -97,18 +95,29 @@ impl CloudflareBackend {
 #[async_trait]
 impl LeaseBackend for CloudflareBackend {
     async fn create_lease(&self, duration: Duration, label: &str) -> Result<Lease> {
+        if self.policies.is_empty() {
+            return Err(FnoxError::Config(
+                "Cloudflare backend requires at least one policy with permission_groups and resources.".to_string(),
+            ));
+        }
+
         let parent_token = Self::get_api_token()?;
 
         let now = chrono::Utc::now();
-        let expires_on = now + chrono::Duration::seconds(duration.as_secs() as i64);
+        let expires_on =
+            now + chrono::Duration::seconds(duration.as_secs().min(i64::MAX as u64) as i64);
 
-        let name = format!("fnox-lease-{label}");
+        let raw_name = format!("{TOKEN_NAME_PREFIX}{label}");
+        let name = if raw_name.len() > MAX_TOKEN_NAME_LEN {
+            raw_name[..MAX_TOKEN_NAME_LEN].to_string()
+        } else {
+            raw_name
+        };
         let policies = self.build_api_policies();
 
         let body = serde_json::json!({
             "name": name,
             "policies": policies,
-            "not_before": now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
             "expires_on": expires_on.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         });
 
@@ -141,11 +150,13 @@ impl LeaseBackend for CloudflareBackend {
         if !status.is_success() || !resp["success"].as_bool().unwrap_or(false) {
             let errors = resp["errors"]
                 .as_array()
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|e| e["message"].as_str())
-                        .collect::<Vec<_>>()
-                        .join("; ")
+                .and_then(|arr| {
+                    let msgs: Vec<_> = arr.iter().filter_map(|e| e["message"].as_str()).collect();
+                    if msgs.is_empty() {
+                        None
+                    } else {
+                        Some(msgs.join("; "))
+                    }
                 })
                 .unwrap_or_else(|| format!("HTTP {status}"));
 

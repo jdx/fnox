@@ -263,7 +263,7 @@ impl LeaseBackendConfig {
             ],
             LeaseBackendConfig::Cloudflare { .. } => vec![(
                 "CLOUDFLARE_API_TOKEN",
-                "Cloudflare API token with 'API Tokens: Edit' permission",
+                "Cloudflare API token with 'API Tokens: Edit' permission (or set CF_API_TOKEN)",
             )],
             LeaseBackendConfig::Command { .. } => vec![],
         }
