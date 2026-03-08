@@ -26,7 +26,8 @@ jobs:
           submodules: recursive
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
         with:
-          shared-key: autofix
+          shared-key: debug-ubuntu-latest
+          save-if: false
       - name: Install system dependencies
         run: |
           sudo apt-get update
