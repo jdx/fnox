@@ -258,12 +258,6 @@ pub async fn get_secrets_concurrent(
 }
 
 impl ProviderConfig {
-    /// Whether this provider type requires interactive authentication (e.g. physical key touch).
-    /// This is a static check based on the config variant, usable before provider resolution.
-    pub fn requires_interactive_auth(&self) -> bool {
-        matches!(self.provider_type(), "fido2" | "yubikey")
-    }
-
     /// Get wizard info for providers in a specific category
     pub fn wizard_info_by_category(category: WizardCategory) -> Vec<&'static WizardInfo> {
         ALL_WIZARD_INFO

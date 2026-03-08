@@ -27,6 +27,10 @@ struct ProviderTomlRaw {
     /// as its first argument, enabling per-instance caching and HKDF context scoping.
     #[serde(default)]
     pass_provider_name: bool,
+    /// When true, the provider requires interactive/physical authentication (e.g. hardware key touch).
+    /// Used to skip the provider in non-interactive contexts like the TUI.
+    #[serde(default)]
+    requires_interactive_auth: bool,
     #[serde(default)]
     fields: IndexMap<String, FieldDef>,
     #[serde(default)]
@@ -47,6 +51,7 @@ struct ProviderToml {
     setup_instructions: String,
     auth_command: Option<String>,
     pass_provider_name: bool,
+    requires_interactive_auth: bool,
     fields: IndexMap<String, FieldDef>,
     wizard_fields: IndexMap<String, WizardFieldDef>,
 }
@@ -82,6 +87,7 @@ impl ProviderTomlRaw {
             setup_instructions: self.setup_instructions,
             auth_command: self.auth_command,
             pass_provider_name: self.pass_provider_name,
+            requires_interactive_auth: self.requires_interactive_auth,
             fields: self.fields,
             wizard_fields: self.wizard_fields,
         }
@@ -330,6 +336,7 @@ fn generate_provider_methods(
     let mut from_wizard_fields_arms = Vec::new();
     let mut auth_command_arms = Vec::new();
     let mut env_deps_arms = Vec::new();
+    let mut interactive_auth_arms = Vec::new();
 
     for (_name, provider) in providers {
         let variant = Ident::new(&provider.rust_variant, Span::call_site());
@@ -372,6 +379,10 @@ fn generate_provider_methods(
         });
         env_deps_arms.push(quote! {
             Self::#variant { .. } => #module::env_dependencies()
+        });
+        let interactive = provider.requires_interactive_auth;
+        interactive_auth_arms.push(quote! {
+            Self::#variant { .. } => #interactive
         });
     }
 
@@ -475,6 +486,15 @@ fn generate_provider_methods(
                         "Unknown provider type: {}",
                         provider_type
                     ))),
+                }
+            }
+
+            /// Whether this provider requires interactive/physical authentication
+            /// (e.g. hardware key touch). Used to skip the provider in non-interactive
+            /// contexts like the TUI.
+            pub fn requires_interactive_auth(&self) -> bool {
+                match self {
+                    #(#interactive_auth_arms),*
                 }
             }
 
