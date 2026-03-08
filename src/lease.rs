@@ -509,6 +509,7 @@ pub async fn cache_credentials(
 
 /// Resolve a lease backend into credentials, reusing cached credentials when available.
 /// Shared between `fnox exec` and `fnox get`.
+#[allow(clippy::too_many_arguments)]
 pub async fn resolve_lease(
     name: &str,
     lease_config: &crate::lease_backends::LeaseBackendConfig,

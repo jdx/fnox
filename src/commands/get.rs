@@ -110,25 +110,15 @@ impl GetCommand {
             return Ok(None);
         };
 
-        // Only resolve the secrets the lease backend actually needs (e.g.
-        // CLOUDFLARE_API_TOKEN, VAULT_ADDR) rather than all profile secrets.
-        // This avoids spurious failures from unrelated unreachable secrets.
-        let required: std::collections::HashSet<&str> = lease_config
-            .required_env_vars()
-            .iter()
-            .map(|(k, _)| *k)
-            .collect();
+        // Resolve all profile secrets and inject them as env vars so lease
+        // backend SDKs can find credentials under any supported alias (e.g.
+        // FNOX_VAULT_TOKEN vs VAULT_TOKEN, CF_API_TOKEN vs CLOUDFLARE_API_TOKEN).
         let all_secrets = config.get_secrets(profile)?;
-        let needed_secrets: indexmap::IndexMap<_, _> = all_secrets
-            .iter()
-            .filter(|(k, _)| required.contains(k.as_str()))
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
         let resolved_secrets =
-            crate::secret_resolver::resolve_secrets_batch(config, profile, &needed_secrets).await?;
+            crate::secret_resolver::resolve_secrets_batch(config, profile, &all_secrets).await?;
         let mut temp_env_guard = lease::TempEnvGuard::default();
         let _temp_files =
-            lease::set_secrets_as_env(&resolved_secrets, &needed_secrets, &mut temp_env_guard)?;
+            lease::set_secrets_as_env(&resolved_secrets, &all_secrets, &mut temp_env_guard)?;
 
         let project_dir = lease::project_dir_from_config(config, &cli.config);
         let _ledger_lock = LeaseLedger::lock(&project_dir)?;
