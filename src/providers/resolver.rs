@@ -204,6 +204,14 @@ fn resolve_secret_ref<'a>(
                         secret_provider_name,
                         &resolved_provider,
                     )?;
+
+                    if env::is_non_interactive() && provider.requires_interactive_auth() {
+                        return Err(FnoxError::Provider(format!(
+                            "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
+                            secret_provider_name
+                        )));
+                    }
+
                     return provider.get_secret(provider_value).await;
                 } else {
                     // Find similar provider names for suggestion

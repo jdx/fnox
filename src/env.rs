@@ -9,11 +9,11 @@ use std::{path::PathBuf, sync::LazyLock};
 static NON_INTERACTIVE: AtomicBool = AtomicBool::new(false);
 
 pub fn set_non_interactive(value: bool) {
-    NON_INTERACTIVE.store(value, Ordering::Relaxed);
+    NON_INTERACTIVE.store(value, Ordering::Release);
 }
 
 pub fn is_non_interactive() -> bool {
-    NON_INTERACTIVE.load(Ordering::Relaxed)
+    NON_INTERACTIVE.load(Ordering::Acquire)
 }
 
 /// Mutex to serialize access to std::env::set_var, which is unsafe in Rust 2024 edition.
