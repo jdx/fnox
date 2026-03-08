@@ -123,6 +123,42 @@ EOF
 	diff fnox.toml fnox.toml.orig
 }
 
+@test "fnox sync --local-file writes sync overrides to fnox.local.toml" {
+	setup_sync_env
+
+	cp fnox.toml fnox.toml.orig
+
+	assert_fnox_success sync -p age --local-file --force
+
+	# Sync cache should be written to fnox.local.toml only
+	[ -f fnox.local.toml ]
+	run grep 'sync = { provider = "age", value = "' fnox.local.toml
+	assert_success
+
+	run grep 'sync = {' fnox.toml
+	assert_failure
+	diff fnox.toml fnox.toml.orig
+
+	# Merged loading should still resolve via local override
+	assert_fnox_success get MY_SECRET --age-key-file key.txt
+	assert_output "remote-secret-value"
+}
+
+@test "fnox sync --local-file uses same directory as --config file" {
+	setup_sync_env
+
+	mkdir -p nested
+	mv fnox.toml nested/custom.toml
+
+	run "$FNOX_BIN" --config nested/custom.toml sync -p age --local-file --force
+	assert_success
+
+	[ -f nested/fnox.local.toml ]
+	[ ! -f fnox.local.toml ]
+	run grep 'sync = { provider = "age", value = "' nested/fnox.local.toml
+	assert_success
+}
+
 @test "fnox sync with --source filters by source provider" {
 	setup_sync_env
 
@@ -149,6 +185,13 @@ EOF
 	assert_fnox_success sync MY_SECRET -p age --dry-run
 	assert_output --partial "MY_SECRET"
 	refute_output --partial "ANOTHER_SECRET"
+}
+
+@test "fnox sync --local-file conflicts with --global" {
+	setup_sync_env
+
+	assert_fnox_failure sync -p age --local-file --global --force
+	assert_output --partial "cannot be used with"
 }
 
 @test "fnox sync fails with invalid target provider" {

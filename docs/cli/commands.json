@@ -1313,6 +1313,16 @@
               "double_dash": "Optional",
               "hide": false
             }
+          },
+          {
+            "name": "local-file",
+            "usage": "--local-file",
+            "help": "Write sync overrides to fnox.local.toml next to the config file",
+            "help_first_line": "Write sync overrides to fnox.local.toml next to the config file",
+            "short": [],
+            "long": ["local-file"],
+            "hide": false,
+            "global": false
           }
         ],
         "mounts": [],

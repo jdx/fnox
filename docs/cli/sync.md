@@ -37,3 +37,7 @@ Only sync secrets from this source provider
 ### `--filter <FILTER>`
 
 Only sync matching secrets (regex pattern)
+
+### `--local-file`
+
+Write sync overrides to fnox.local.toml next to the config file
