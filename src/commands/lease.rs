@@ -39,7 +39,7 @@ pub struct LeaseCreateCommand {
     pub backend_name: Option<String>,
 
     /// Create leases for all configured backends
-    #[arg(short, long)]
+    #[arg(short, long, conflicts_with = "backend_name")]
     pub all: bool,
 
     /// Lease duration (e.g., "15m", "1h", "2h30m"); overrides config duration
@@ -124,8 +124,15 @@ impl LeaseCreateCommand {
                         .to_string(),
                 ));
             }
-            self.run_all(cli, &config, &profile, &project_dir, &leases)
-                .await
+            self.run_all(
+                cli,
+                &config,
+                &profile,
+                &project_dir,
+                &leases,
+                &mut _temp_env_guard,
+            )
+            .await
         } else {
             let backend_name = self.backend_name.as_deref().unwrap();
             let backend_config = leases.get(backend_name).ok_or_else(|| {
@@ -140,6 +147,7 @@ impl LeaseCreateCommand {
                 &config,
                 &profile,
                 &project_dir,
+                &mut _temp_env_guard,
             )
             .await
         }
@@ -152,16 +160,23 @@ impl LeaseCreateCommand {
         profile: &str,
         project_dir: &std::path::Path,
         leases: &IndexMap<String, crate::lease_backends::LeaseBackendConfig>,
+        temp_env_guard: &mut TempEnvGuard,
     ) -> Result<()> {
         let mut errors: Vec<String> = Vec::new();
-        let mut created = 0;
 
         for (backend_name, backend_config) in leases {
             match self
-                .create_single(backend_name, backend_config, config, profile, project_dir)
+                .create_single(
+                    backend_name,
+                    backend_config,
+                    config,
+                    profile,
+                    project_dir,
+                    temp_env_guard,
+                )
                 .await
             {
-                Ok(()) => created += 1,
+                Ok(()) => {}
                 Err(e) => {
                     eprintln!(
                         "{} Failed to create lease for '{}': {}",
@@ -174,9 +189,11 @@ impl LeaseCreateCommand {
             }
         }
 
-        if created == 0 && !errors.is_empty() {
+        if !errors.is_empty() {
             return Err(FnoxError::Config(format!(
-                "All lease backends failed:\n{}",
+                "{} of {} lease backends failed:\n{}",
+                errors.len(),
+                leases.len(),
                 errors.join("\n")
             )));
         }
@@ -191,6 +208,7 @@ impl LeaseCreateCommand {
         config: &Config,
         profile: &str,
         project_dir: &std::path::Path,
+        temp_env_guard: &mut TempEnvGuard,
     ) -> Result<()> {
         // Check prerequisites and prompt for missing env vars if --interactive
         if let Some(missing) = backend_config.check_prerequisites() {
@@ -210,6 +228,7 @@ impl LeaseCreateCommand {
                             // TODO: unsafe set_var on a multi-threaded Tokio runtime is
                             // technically UB. Refactor to pass credentials explicitly.
                             unsafe { std::env::set_var(var, &value) };
+                            temp_env_guard.keys.push(var.to_string());
                         }
                     }
                 }
