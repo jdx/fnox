@@ -15,6 +15,8 @@ pub const CONSUMED_ENV_VARS: &[&str] = &[
     "AWS_SESSION_TOKEN",
     "AWS_PROFILE",
     "AWS_SSO_SESSION",
+    "AWS_CONFIG_FILE",
+    "AWS_SHARED_CREDENTIALS_FILE",
 ];
 
 pub struct AwsStsBackend {
