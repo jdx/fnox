@@ -245,3 +245,33 @@ EOF
 	refute_output --partial "NEW_SECRET"
 	assert_output --partial "LOCAL_OVERRIDE"
 }
+
+@test "fnox set --profile staging writes to fnox.staging.toml when it exists alongside fnox.toml" {
+	cat >fnox.toml <<EOF
+[providers.plain]
+type = "plain"
+
+[secrets]
+BASE_SECRET = { default = "base" }
+EOF
+
+	cat >fnox.staging.toml <<EOF
+[secrets]
+STAGING_EXISTING = { default = "staging" }
+EOF
+
+	run "$FNOX_BIN" set --profile staging NEW_STAGING "staging-value"
+	assert_success
+
+	# Secret should be written to fnox.staging.toml (profile-specific)
+	run cat fnox.staging.toml
+	assert_success
+	assert_output --partial "NEW_STAGING"
+	assert_output --partial "STAGING_EXISTING"
+
+	# fnox.toml should NOT have the new secret
+	run cat fnox.toml
+	assert_success
+	refute_output --partial "NEW_STAGING"
+	assert_output --partial "BASE_SECRET"
+}

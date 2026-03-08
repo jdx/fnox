@@ -14,12 +14,18 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use strum::VariantNames;
 
+/// Default config filename, used as the clap default for `--config`.
+pub const DEFAULT_CONFIG_FILENAME: &str = "fnox.toml";
+
 /// Returns all config filenames in load order (first = lowest priority, last = highest priority).
 ///
 /// Order: main configs → profile configs → local configs
 /// Within each group, non-dotfiles come first (lower priority); dotfiles follow (higher priority).
 pub fn all_config_filenames(profile: Option<&str>) -> Vec<String> {
-    let mut files = vec!["fnox.toml".to_string(), ".fnox.toml".to_string()];
+    let mut files = vec![
+        DEFAULT_CONFIG_FILENAME.to_string(),
+        ".fnox.toml".to_string(),
+    ];
     if let Some(p) = profile.filter(|p| *p != "default") {
         files.push(format!("fnox.{p}.toml"));
         files.push(format!(".fnox.{p}.toml"));
@@ -46,15 +52,15 @@ pub fn find_local_config(dir: &Path, profile: Option<&str>) -> PathBuf {
         }
     }
 
-    // Fall back to lowest-priority existing file
-    let filenames = all_config_filenames(profile);
+    // Fall back to lowest-priority existing base file (skip profile files already checked above)
+    let filenames = all_config_filenames(None);
     for name in &filenames {
         let path = dir.join(name);
         if path.exists() {
             return path;
         }
     }
-    dir.join("fnox.toml")
+    dir.join(DEFAULT_CONFIG_FILENAME)
 }
 
 // Re-export ProviderConfig from providers module

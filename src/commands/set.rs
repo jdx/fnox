@@ -263,7 +263,7 @@ impl SetCommand {
             })?;
             // Only use auto-detection when --config is the clap default ("fnox.toml").
             // Any other value means the user explicitly chose a config file.
-            if cli.config == std::path::Path::new("fnox.toml") {
+            if cli.config == std::path::Path::new(config::DEFAULT_CONFIG_FILENAME) {
                 config::find_local_config(&current_dir, Some(&profile))
             } else {
                 current_dir.join(&cli.config)
