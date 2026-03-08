@@ -267,4 +267,8 @@ impl LeaseBackend for VaultBackend {
     fn max_lease_duration(&self) -> Duration {
         Duration::from_secs(24 * 3600)
     }
+
+    fn produced_env_vars(&self) -> Vec<String> {
+        self.env_map.values().cloned().collect()
+    }
 }

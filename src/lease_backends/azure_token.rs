@@ -102,4 +102,8 @@ impl LeaseBackend for AzureTokenBackend {
         // Azure controls token lifetime (~1 hour), not configurable by caller
         Duration::from_secs(3600)
     }
+
+    fn produced_env_vars(&self) -> Vec<String> {
+        vec![self.env_var.clone()]
+    }
 }

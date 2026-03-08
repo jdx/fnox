@@ -1,11 +1,9 @@
 use crate::error::{FnoxError, Result};
 use crate::lease::{self, LeaseLedger};
-use crate::lease_backends::LeaseBackendConfig;
 use crate::secret_resolver::resolve_secrets_batch;
 use crate::temp_file_secrets::create_ephemeral_secret_file;
 use crate::{commands::Cli, config::Config};
 use clap::{Args, ValueHint};
-use indexmap::IndexMap;
 use std::collections::HashSet;
 use std::process::Command;
 use tempfile::NamedTempFile;
@@ -83,7 +81,7 @@ impl ExecCommand {
                 // Intentionally hard-fail: if prerequisites pass but lease
                 // creation fails (network, permissions, etc.), abort rather
                 // than silently running the subprocess without expected creds.
-                let creds = resolve_lease(
+                let creds = lease::resolve_lease(
                     name,
                     lease_config,
                     &config,
@@ -206,116 +204,4 @@ impl ExecCommand {
 
         Ok(())
     }
-}
-
-/// Resolve a lease backend into credentials, reusing cached credentials when available.
-/// Takes a mutable reference to the ledger to avoid double-load TOCTTOU races.
-async fn resolve_lease(
-    name: &str,
-    lease_config: &LeaseBackendConfig,
-    config: &Config,
-    profile: &str,
-    project_dir: &std::path::Path,
-    ledger: &mut LeaseLedger,
-    prereq_missing: Option<&str>,
-) -> Result<IndexMap<String, String>> {
-    // Check for a reusable cached lease (config_hash ensures stale creds
-    // are not returned after backend config changes like role ARN rotation)
-    let config_hash = lease_config.config_hash();
-    if let Some(cached_lease) = ledger.find_reusable(name, &config_hash)
-        && let Some(ref cached_creds) = cached_lease.cached_credentials
-    {
-        // If encrypted, decrypt
-        if let Some(ref enc_provider_name) = cached_lease.encryption_provider {
-            match lease::find_encryption_provider(config, profile).await {
-                lease::EncryptionProviderResult::Available(found_name, provider)
-                    if found_name == *enc_provider_name =>
-                {
-                    match lease::decrypt_credentials(provider.as_ref(), cached_creds).await {
-                        Ok(decrypted) => {
-                            tracing::debug!(
-                                "Reusing cached encrypted lease '{}' for backend '{}'",
-                                cached_lease.lease_id,
-                                name
-                            );
-                            return Ok(decrypted);
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "Failed to decrypt cached lease '{}': {}, creating fresh lease",
-                                cached_lease.lease_id,
-                                e
-                            );
-                        }
-                    }
-                }
-                _ => {
-                    tracing::warn!(
-                        "Encryption provider '{}' not available for cached lease '{}', creating fresh lease",
-                        enc_provider_name,
-                        cached_lease.lease_id
-                    );
-                }
-            }
-        } else {
-            // Plaintext cached credentials
-            tracing::debug!(
-                "Reusing cached plaintext lease '{}' for backend '{}'",
-                cached_lease.lease_id,
-                name
-            );
-            return Ok(cached_creds.clone());
-        }
-    }
-
-    // No reusable cache — create fresh lease.
-    // If prerequisites are missing, we cannot create a fresh lease. The caller
-    // only reaches here with prereq_missing=Some when it found a cached lease
-    // that couldn't be decrypted (e.g., encryption provider unavailable).
-    // Hard-fail so the subprocess doesn't run without expected credentials.
-    if let Some(missing) = prereq_missing {
-        return Err(FnoxError::Config(format!(
-            "Lease '{}': cached credentials could not be decrypted and \
-             prerequisites are missing: {}\n\
-             Run 'fnox lease create -i {}' to set up credentials interactively.",
-            name, missing, name
-        )));
-    }
-    let backend = lease_config.create_backend()?;
-
-    let duration_str = lease_config
-        .duration()
-        .unwrap_or(lease::DEFAULT_LEASE_DURATION);
-    let duration = lease::parse_duration(duration_str)?;
-
-    let max_duration = backend.max_lease_duration();
-    if duration > max_duration {
-        return Err(FnoxError::Config(format!(
-            "Lease duration '{}' for '{}' exceeds maximum {:?}",
-            duration_str, name, max_duration
-        )));
-    }
-
-    let label = format!("fnox-exec-{}", name);
-    let result = lease::create_and_record_lease(
-        backend.as_ref(),
-        name,
-        &label,
-        duration,
-        config_hash,
-        config,
-        profile,
-        ledger,
-        project_dir,
-    )
-    .await?;
-
-    tracing::debug!(
-        "Created lease '{}' for backend '{}' (expires {:?})",
-        result.lease_id,
-        name,
-        result.expires_at
-    );
-
-    Ok(result.credentials)
 }

@@ -1,4 +1,5 @@
 use crate::error::{FnoxError, Result};
+use crate::lease::{self, LeaseLedger};
 use crate::secret_resolver::resolve_secret;
 use crate::suggest::{find_similar, format_suggestions};
 use crate::temp_file_secrets::create_persistent_secret_file;
@@ -22,6 +23,12 @@ impl GetCommand {
 
         // Validate the configuration first
         config.validate()?;
+
+        // Check if the requested key is produced by a lease backend
+        if let Some(value) = self.resolve_from_lease(cli, &config, &profile).await? {
+            println!("{}", value);
+            return Ok(());
+        }
 
         // Get the profile secrets
         let profile_secrets = config.get_secrets(&profile)?;
@@ -76,5 +83,70 @@ impl GetCommand {
             }
             Err(e) => Err(e),
         }
+    }
+
+    /// Check if the requested key is produced by a lease backend.
+    /// If so, resolve the lease and return the credential value.
+    async fn resolve_from_lease(
+        &self,
+        cli: &Cli,
+        config: &Config,
+        profile: &str,
+    ) -> Result<Option<String>> {
+        let leases = config.get_leases(profile);
+
+        // Find which lease backend (if any) produces this key
+        let matching_lease = leases.iter().find(|(_, lease_config)| {
+            let backend = match lease_config.create_backend() {
+                Ok(b) => b,
+                Err(_) => return false,
+            };
+            backend.produced_env_vars().contains(&self.key)
+        });
+
+        let Some((name, lease_config)) = matching_lease else {
+            return Ok(None);
+        };
+
+        // Set master secrets as env vars so the lease backend SDK can find them
+        let profile_secrets = config.get_secrets(profile)?;
+        let resolved_secrets =
+            crate::secret_resolver::resolve_secrets_batch(config, profile, &profile_secrets)
+                .await?;
+        let mut temp_env_guard = lease::TempEnvGuard::default();
+        let _temp_files =
+            lease::set_secrets_as_env(&resolved_secrets, &profile_secrets, &mut temp_env_guard)?;
+
+        let project_dir = lease::project_dir_from_config(config, &cli.config);
+        let _ledger_lock = LeaseLedger::lock(&project_dir)?;
+        let mut ledger = LeaseLedger::load(&project_dir)?;
+
+        let prereq_missing = lease_config.check_prerequisites();
+        if let Some(ref missing) = prereq_missing {
+            let config_hash = lease_config.config_hash();
+            if ledger
+                .find_reusable(name, &config_hash)
+                .and_then(|c| c.cached_credentials.as_ref())
+                .is_none()
+            {
+                return Err(FnoxError::Config(format!(
+                    "Lease '{}': {}\nRun 'fnox lease create -i {}' to set up credentials interactively.",
+                    name, missing, name
+                )));
+            }
+        }
+
+        let creds = lease::resolve_lease(
+            name,
+            lease_config,
+            config,
+            profile,
+            &project_dir,
+            &mut ledger,
+            prereq_missing.as_deref(),
+        )
+        .await?;
+
+        Ok(creds.get(&self.key).cloned())
     }
 }

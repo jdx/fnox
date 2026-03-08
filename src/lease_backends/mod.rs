@@ -36,6 +36,9 @@ pub trait LeaseBackend: Send + Sync {
 
     /// Maximum allowed lease duration
     fn max_lease_duration(&self) -> Duration;
+
+    /// Environment variable keys this backend produces
+    fn produced_env_vars(&self) -> Vec<String>;
 }
 
 fn default_gcp_scopes() -> Vec<String> {

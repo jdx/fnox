@@ -154,4 +154,8 @@ impl LeaseBackend for GcpIamBackend {
         // GCP default max is 1 hour (3600s); can be extended to 12h with org policy
         Duration::from_secs(3600)
     }
+
+    fn produced_env_vars(&self) -> Vec<String> {
+        vec![self.env_var.clone()]
+    }
 }

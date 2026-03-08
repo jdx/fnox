@@ -507,6 +507,107 @@ pub async fn cache_credentials(
     }
 }
 
+/// Resolve a lease backend into credentials, reusing cached credentials when available.
+/// Shared between `fnox exec` and `fnox get`.
+pub async fn resolve_lease(
+    name: &str,
+    lease_config: &crate::lease_backends::LeaseBackendConfig,
+    config: &Config,
+    profile: &str,
+    project_dir: &Path,
+    ledger: &mut LeaseLedger,
+    prereq_missing: Option<&str>,
+) -> Result<IndexMap<String, String>> {
+    let config_hash = lease_config.config_hash();
+    if let Some(cached_lease) = ledger.find_reusable(name, &config_hash)
+        && let Some(ref cached_creds) = cached_lease.cached_credentials
+    {
+        if let Some(ref enc_provider_name) = cached_lease.encryption_provider {
+            match find_encryption_provider(config, profile).await {
+                EncryptionProviderResult::Available(found_name, provider)
+                    if found_name == *enc_provider_name =>
+                {
+                    match decrypt_credentials(provider.as_ref(), cached_creds).await {
+                        Ok(decrypted) => {
+                            tracing::debug!(
+                                "Reusing cached encrypted lease '{}' for backend '{}'",
+                                cached_lease.lease_id,
+                                name
+                            );
+                            return Ok(decrypted);
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to decrypt cached lease '{}': {}, creating fresh lease",
+                                cached_lease.lease_id,
+                                e
+                            );
+                        }
+                    }
+                }
+                _ => {
+                    tracing::warn!(
+                        "Encryption provider '{}' not available for cached lease '{}', creating fresh lease",
+                        enc_provider_name,
+                        cached_lease.lease_id
+                    );
+                }
+            }
+        } else {
+            tracing::debug!(
+                "Reusing cached plaintext lease '{}' for backend '{}'",
+                cached_lease.lease_id,
+                name
+            );
+            return Ok(cached_creds.clone());
+        }
+    }
+
+    if let Some(missing) = prereq_missing {
+        return Err(FnoxError::Config(format!(
+            "Lease '{}': cached credentials could not be decrypted and \
+             prerequisites are missing: {}\n\
+             Run 'fnox lease create -i {}' to set up credentials interactively.",
+            name, missing, name
+        )));
+    }
+    let backend = lease_config.create_backend()?;
+
+    let duration_str = lease_config.duration().unwrap_or(DEFAULT_LEASE_DURATION);
+    let duration = parse_duration(duration_str)?;
+
+    let max_duration = backend.max_lease_duration();
+    if duration > max_duration {
+        return Err(FnoxError::Config(format!(
+            "Lease duration '{}' for '{}' exceeds maximum {:?}",
+            duration_str, name, max_duration
+        )));
+    }
+
+    let label = format!("fnox-{}", name);
+    let result = create_and_record_lease(
+        backend.as_ref(),
+        name,
+        &label,
+        duration,
+        config_hash,
+        config,
+        profile,
+        ledger,
+        project_dir,
+    )
+    .await?;
+
+    tracing::debug!(
+        "Created lease '{}' for backend '{}' (expires {:?})",
+        result.lease_id,
+        name,
+        result.expires_at
+    );
+
+    Ok(result.credentials)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
