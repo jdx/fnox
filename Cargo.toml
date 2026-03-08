@@ -84,6 +84,8 @@ walkdir = "2"
 xx = { version = "2", features = ["fslock"] }
 which = "7"
 yubico_manager = "0.9"
+signal-hook = "0.4.3"
+nix = { version = "0.31.2", features = ["signal", "process"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus = { version = "0.9", features = ["vendored"] }
