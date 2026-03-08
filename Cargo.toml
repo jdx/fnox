@@ -37,7 +37,7 @@ clap = { version = "4", features = ["derive", "env"] }
 console = "0.16"
 crossterm = { version = "0.29", features = ["event-stream"] }
 data-encoding = "2"
-demand = "1"
+demand = "2"
 dirs = "6"
 fslock = "0.2"
 futures = "0.3"
