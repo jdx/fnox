@@ -10,6 +10,23 @@ const API_BASE: &str = "https://api.cloudflare.com/client/v4";
 const MAX_TOKEN_NAME_LEN: usize = 100;
 const TOKEN_NAME_PREFIX: &str = "fnox-lease-";
 
+pub fn check_prerequisites() -> Option<String> {
+    let has_token =
+        std::env::var("CLOUDFLARE_API_TOKEN").is_ok() || std::env::var("CF_API_TOKEN").is_ok();
+    if has_token {
+        None
+    } else {
+        Some("Cloudflare API token not found. Set CLOUDFLARE_API_TOKEN with a token that has 'API Tokens: Edit' permission.".to_string())
+    }
+}
+
+pub fn required_env_vars() -> Vec<(&'static str, &'static str)> {
+    vec![(
+        "CLOUDFLARE_API_TOKEN",
+        "Cloudflare API token with 'API Tokens: Edit' permission (or set CF_API_TOKEN)",
+    )]
+}
+
 pub struct CloudflareBackend {
     token_type: CloudflareTokenType,
     account_id: Option<String>,

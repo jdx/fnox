@@ -6,6 +6,29 @@ use std::time::Duration;
 
 const URL: &str = "https://fnox.jdx.dev/leases/gcp-iam";
 
+pub fn check_prerequisites() -> Option<String> {
+    let has_env = std::env::var("GOOGLE_APPLICATION_CREDENTIALS").is_ok()
+        || std::env::var("GCP_SERVICE_ACCOUNT_KEY").is_ok();
+    let has_adc = dirs::config_dir()
+        .map(|c| {
+            c.join("gcloud/application_default_credentials.json")
+                .exists()
+        })
+        .unwrap_or(false);
+    if has_env || has_adc {
+        None
+    } else {
+        Some("GCP credentials not found. Run 'gcloud auth application-default login' or set GOOGLE_APPLICATION_CREDENTIALS.".to_string())
+    }
+}
+
+pub fn required_env_vars() -> Vec<(&'static str, &'static str)> {
+    vec![(
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "path to service account JSON key file",
+    )]
+}
+
 pub struct GcpIamBackend {
     service_account_email: String,
     scopes: Vec<String>,

@@ -7,6 +7,14 @@ use tokio::process::Command;
 
 const URL: &str = "https://fnox.jdx.dev/leases/command";
 
+pub fn check_prerequisites() -> Option<String> {
+    None
+}
+
+pub fn required_env_vars() -> Vec<(&'static str, &'static str)> {
+    vec![]
+}
+
 pub struct CommandBackend {
     create_command: String,
     revoke_command: Option<String>,
