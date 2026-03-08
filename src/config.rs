@@ -17,7 +17,7 @@ use strum::VariantNames;
 /// Returns all config filenames in load order (first = lowest priority, last = highest priority).
 ///
 /// Order: main configs → profile configs → local configs
-/// Within each group, dotfiles come first (higher priority than non-dotfiles).
+/// Within each group, non-dotfiles come first (lower priority); dotfiles follow (higher priority).
 pub fn all_config_filenames(profile: Option<&str>) -> Vec<String> {
     let mut files = vec!["fnox.toml".to_string(), ".fnox.toml".to_string()];
     if let Some(p) = profile.filter(|p| *p != "default") {
@@ -1640,5 +1640,15 @@ mod tests {
         std::fs::write(dir.path().join("fnox.staging.toml"), "").unwrap();
         let result = super::find_local_config(dir.path(), Some("staging"));
         assert_eq!(result, dir.path().join("fnox.staging.toml"));
+    }
+
+    #[test]
+    fn test_find_local_config_profile_with_base() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
+        std::fs::write(dir.path().join("fnox.staging.toml"), "").unwrap();
+        let result = super::find_local_config(dir.path(), Some("staging"));
+        // fnox.toml is lowest priority and exists
+        assert_eq!(result, dir.path().join("fnox.toml"));
     }
 }

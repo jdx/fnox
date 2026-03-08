@@ -258,11 +258,19 @@ impl SetCommand {
             }
             global_path
         } else {
-            // Save to the lowest-priority existing config file in the current directory
             let current_dir = std::env::current_dir().map_err(|e| {
                 FnoxError::Config(format!("Failed to get current directory: {}", e))
             })?;
-            config::find_local_config(&current_dir, Some(&profile))
+            // If --config was explicitly set to a non-default path, respect it
+            let default_filenames = config::all_config_filenames(Some(&profile));
+            if default_filenames
+                .iter()
+                .any(|f| cli.config == std::path::Path::new(f))
+            {
+                config::find_local_config(&current_dir, Some(&profile))
+            } else {
+                current_dir.join(&cli.config)
+            }
         };
 
         if self.dry_run {
