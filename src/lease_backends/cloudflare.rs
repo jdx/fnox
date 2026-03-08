@@ -67,42 +67,61 @@ impl CloudflareBackend {
             })
     }
 
+    /// Returns the tokens API base path.
+    /// With `account_id`: `/accounts/{id}/tokens` (account-owned tokens).
+    /// Without: `/user/tokens` (user-owned tokens).
+    fn tokens_path(&self) -> String {
+        match &self.account_id {
+            Some(id) => format!("{API_BASE}/accounts/{id}/tokens"),
+            None => format!("{API_BASE}/user/tokens"),
+        }
+    }
+
     /// Build the policies array for the Cloudflare API request, substituting
     /// the account ID into resource keys that contain the `{account_id}` placeholder.
     fn build_api_policies(
         policies: &[CloudflarePolicy],
         account_id: &Option<String>,
-    ) -> Vec<serde_json::Value> {
-        policies
-            .iter()
-            .map(|p| {
-                let mut resources = serde_json::Map::new();
-                for (key, value) in &p.resources {
-                    let resolved_key = if let Some(account_id) = account_id {
-                        key.replace("{account_id}", account_id)
-                    } else {
-                        key.clone()
-                    };
-                    resources.insert(resolved_key, serde_json::Value::String(value.clone()));
+    ) -> Result<Vec<serde_json::Value>> {
+        let mut result = Vec::with_capacity(policies.len());
+        for p in policies {
+            let mut resources = serde_json::Map::new();
+            for (key, value) in &p.resources {
+                if key.contains("{account_id}") && account_id.is_none() {
+                    return Err(FnoxError::Config(
+                        "Resource key contains '{account_id}' placeholder but 'account_id' \
+                         is not set in the Cloudflare backend config."
+                            .to_string(),
+                    ));
                 }
-                serde_json::json!({
-                    "effect": p.effect,
-                    "resources": resources,
-                    "permission_groups": p.permission_groups,
-                })
-            })
-            .collect()
+                let resolved_key = if let Some(account_id) = account_id {
+                    key.replace("{account_id}", account_id)
+                } else {
+                    key.clone()
+                };
+                resources.insert(resolved_key, serde_json::Value::String(value.clone()));
+            }
+            result.push(serde_json::json!({
+                "effect": p.effect,
+                "resources": resources,
+                "permission_groups": p.permission_groups,
+            }));
+        }
+        Ok(result)
     }
 
     /// Fetch the parent token's policies from the Cloudflare API.
-    /// Uses GET /user/tokens/verify to get the token ID, then
-    /// GET /user/tokens/{id} to retrieve its full policy configuration.
-    async fn fetch_parent_policies(parent_token: &str) -> Result<Vec<serde_json::Value>> {
+    /// Uses GET .../tokens/verify to get the token ID, then
+    /// GET .../tokens/{id} to retrieve its full policy configuration.
+    async fn fetch_parent_policies(
+        tokens_path: &str,
+        parent_token: &str,
+    ) -> Result<Vec<serde_json::Value>> {
         let client = crate::http::http_client();
 
         // Step 1: verify token to get its ID
         let verify_resp: serde_json::Value = client
-            .get(format!("{API_BASE}/user/tokens/verify"))
+            .get(format!("{tokens_path}/verify"))
             .bearer_auth(parent_token)
             .send()
             .await
@@ -132,7 +151,7 @@ impl CloudflareBackend {
 
         // Step 2: fetch full token details including policies
         let details_resp: serde_json::Value = client
-            .get(format!("{API_BASE}/user/tokens/{token_id}"))
+            .get(format!("{tokens_path}/{token_id}"))
             .bearer_auth(parent_token)
             .send()
             .await
@@ -180,6 +199,7 @@ impl CloudflareBackend {
 impl LeaseBackend for CloudflareBackend {
     async fn create_lease(&self, duration: Duration, label: &str) -> Result<Lease> {
         let parent_token = Self::get_api_token()?;
+        let tokens_path = self.tokens_path();
 
         let now = chrono::Utc::now();
         let expires_on =
@@ -194,10 +214,10 @@ impl LeaseBackend for CloudflareBackend {
 
         // Use configured policies, or inherit from the parent token
         let policies = if let Some(ref configured) = self.policies {
-            Self::build_api_policies(configured, &self.account_id)
+            Self::build_api_policies(configured, &self.account_id)?
         } else {
             tracing::info!("No policies configured; inheriting from parent token");
-            Self::fetch_parent_policies(&parent_token).await?
+            Self::fetch_parent_policies(&tokens_path, &parent_token).await?
         };
 
         let body = serde_json::json!({
@@ -208,7 +228,7 @@ impl LeaseBackend for CloudflareBackend {
 
         let client = crate::http::http_client();
         let response = client
-            .post(format!("{API_BASE}/user/tokens"))
+            .post(&tokens_path)
             .bearer_auth(&parent_token)
             .json(&body)
             .send()
@@ -297,10 +317,11 @@ impl LeaseBackend for CloudflareBackend {
 
     async fn revoke_lease(&self, lease_id: &str) -> Result<()> {
         let parent_token = Self::get_api_token()?;
+        let tokens_path = self.tokens_path();
 
         let client = crate::http::http_client();
         let response = client
-            .delete(format!("{API_BASE}/user/tokens/{lease_id}"))
+            .delete(format!("{tokens_path}/{lease_id}"))
             .bearer_auth(&parent_token)
             .send()
             .await

@@ -4,6 +4,8 @@ The `cloudflare` lease backend creates short-lived, scoped Cloudflare API tokens
 
 By default, the child token inherits the same policies (permissions and resource scopes) as the parent token. You can override this by specifying explicit `policies` in the configuration.
 
+When `account_id` is set, fnox uses the [account-owned tokens API](https://developers.cloudflare.com/fundamentals/api/get-started/account-owned-tokens/) (`/accounts/{id}/tokens`) instead of the user tokens API. Account tokens are ideal for CI/CD and team workflows since they aren't tied to an individual user.
+
 ## Configuration
 
 ```toml
@@ -21,12 +23,12 @@ id = "c8fed203ed3043cba015a93ad1616f1f"
 name = "Zone Read"
 ```
 
-| Field        | Required | Description                                                                          |
-| ------------ | -------- | ------------------------------------------------------------------------------------ |
-| `account_id` | No       | Cloudflare account ID. Substituted into `{account_id}` placeholders in resource keys |
-| `policies`   | No       | Array of permission policies (see below); omit to inherit from parent token          |
-| `env_var`    | No       | Environment variable name for the token (default: `"CLOUDFLARE_API_TOKEN"`)          |
-| `duration`   | No       | Token lifetime (e.g., `"1h"`, `"30m"`, default: backend max of 24h)                  |
+| Field        | Required | Description                                                                                                                      |
+| ------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `account_id` | No       | Cloudflare account ID. When set, uses account-owned tokens API and substitutes into `{account_id}` placeholders in resource keys |
+| `policies`   | No       | Array of permission policies (see below); omit to inherit from parent token                                                      |
+| `env_var`    | No       | Environment variable name for the token (default: `"CLOUDFLARE_API_TOKEN"`)                                                      |
+| `duration`   | No       | Token lifetime (e.g., `"1h"`, `"30m"`, default: backend max of 24h)                                                              |
 
 ### Policy fields
 
