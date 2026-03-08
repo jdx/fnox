@@ -112,28 +112,6 @@ impl LeaseCreateCommand {
         let profile_secrets = config.get_secrets(&profile)?;
         let resolved_secrets = resolve_secrets_batch(&config, &profile, &profile_secrets).await?;
 
-        // Hard-fail if any secret consumed by this lease backend failed to resolve.
-        // resolve_secrets_batch respects if_missing (default: "warn"), which would
-        // silently swallow auth errors (e.g. FIDO2 PIN failure) and produce a
-        // misleading "token not found" error later in check_prerequisites.
-        let required: std::collections::HashSet<&str> = backend_config
-            .required_env_vars()
-            .iter()
-            .map(|(k, _)| *k)
-            .collect();
-        let failed: Vec<_> = resolved_secrets
-            .iter()
-            .filter(|(k, v)| v.is_none() && required.contains(k.as_str()))
-            .map(|(k, _)| k.as_str())
-            .collect();
-        if !failed.is_empty() {
-            return Err(FnoxError::Config(format!(
-                "Failed to resolve secrets required by lease backend '{}': {}",
-                self.backend_name,
-                failed.join(", "),
-            )));
-        }
-
         let mut _temp_env_guard = TempEnvGuard::default();
         let _temp_files =
             lease::set_secrets_as_env(&resolved_secrets, &profile_secrets, &mut _temp_env_guard)?;
@@ -153,6 +131,7 @@ impl LeaseCreateCommand {
                 &profile,
                 &project_dir,
                 &leases,
+                &resolved_secrets,
                 &mut _temp_env_guard,
             )
             .await
@@ -170,6 +149,7 @@ impl LeaseCreateCommand {
                 &config,
                 &profile,
                 &project_dir,
+                &resolved_secrets,
                 &mut _temp_env_guard,
             )
             .await
@@ -183,6 +163,7 @@ impl LeaseCreateCommand {
         profile: &str,
         project_dir: &std::path::Path,
         leases: &IndexMap<String, crate::lease_backends::LeaseBackendConfig>,
+        resolved_secrets: &indexmap::IndexMap<String, Option<String>>,
         temp_env_guard: &mut TempEnvGuard,
     ) -> Result<()> {
         let mut errors: Vec<String> = Vec::new();
@@ -195,6 +176,7 @@ impl LeaseCreateCommand {
                     config,
                     profile,
                     project_dir,
+                    resolved_secrets,
                     temp_env_guard,
                 )
                 .await
@@ -231,8 +213,31 @@ impl LeaseCreateCommand {
         config: &Config,
         profile: &str,
         project_dir: &std::path::Path,
+        resolved_secrets: &indexmap::IndexMap<String, Option<String>>,
         temp_env_guard: &mut TempEnvGuard,
     ) -> Result<()> {
+        // Hard-fail if any secret required by this lease backend failed to resolve.
+        // resolve_secrets_batch respects if_missing (default: "warn"), which would
+        // silently swallow auth errors (e.g. FIDO2 PIN failure) and produce a
+        // misleading "token not found" error later in check_prerequisites.
+        let required: std::collections::HashSet<&str> = backend_config
+            .required_env_vars()
+            .iter()
+            .map(|(k, _)| *k)
+            .collect();
+        let failed: Vec<_> = resolved_secrets
+            .iter()
+            .filter(|(k, v)| v.is_none() && required.contains(k.as_str()))
+            .map(|(k, _)| k.as_str())
+            .collect();
+        if !failed.is_empty() {
+            return Err(FnoxError::Config(format!(
+                "Failed to resolve secrets required by lease backend '{}': {}",
+                backend_name,
+                failed.join(", "),
+            )));
+        }
+
         // Check prerequisites and prompt for missing env vars if --interactive
         if let Some(missing) = backend_config.check_prerequisites() {
             let required_vars = backend_config.required_env_vars();
