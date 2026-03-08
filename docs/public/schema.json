@@ -120,6 +120,20 @@
       "type": "string",
       "enum": ["allow", "deny"]
     },
+    "CloudflareTokenType": {
+      "oneOf": [
+        {
+          "description": "User-owned token (POST /user/tokens)",
+          "type": "string",
+          "const": "user"
+        },
+        {
+          "description": "Account-owned token (POST /accounts/{account_id}/tokens)",
+          "type": "string",
+          "const": "account"
+        }
+      ]
+    },
     "IfMissing": {
       "type": "string",
       "enum": ["error", "warn", "ignore"]
@@ -254,11 +268,15 @@
               "default": "CLOUDFLARE_API_TOKEN"
             },
             "policies": {
-              "type": "array",
-              "default": [],
+              "type": ["array", "null"],
               "items": {
                 "$ref": "#/$defs/CloudflarePolicy"
               }
+            },
+            "token_type": {
+              "description": "Token type: \"user\" (default) or \"account\"",
+              "$ref": "#/$defs/CloudflareTokenType",
+              "default": "user"
             },
             "type": {
               "type": "string",
