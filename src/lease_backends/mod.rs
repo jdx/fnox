@@ -251,11 +251,7 @@ impl LeaseBackendConfig {
     /// lease backends — use `fnox exec` or `fnox lease create` instead.
     pub fn produced_env_vars(&self) -> Vec<&str> {
         match self {
-            LeaseBackendConfig::AwsSts { .. } => vec![
-                "AWS_ACCESS_KEY_ID",
-                "AWS_SECRET_ACCESS_KEY",
-                "AWS_SESSION_TOKEN",
-            ],
+            LeaseBackendConfig::AwsSts { .. } => aws_sts::PRODUCED_ENV_VARS.to_vec(),
             LeaseBackendConfig::GcpIam { env_var, .. } => vec![env_var.as_str()],
             LeaseBackendConfig::Vault { env_map, .. } => {
                 env_map.values().map(|s| s.as_str()).collect()
