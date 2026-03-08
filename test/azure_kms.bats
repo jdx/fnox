@@ -140,15 +140,13 @@ EOF
 	assert_output --partial "Failed to decode base64 ciphertext"
 }
 
-@test "fnox set warns and stores plaintext with wrong key" {
+@test "fnox set fails with wrong key" {
 	# Create config with non-existent key
 	create_azure_kms_config "https://fnox-testing-kv.vault.azure.net/" "non-existent-key"
 
-	# When encryption fails, fnox currently warns and stores plaintext
+	# Encryption failure should be a hard error
 	run "$FNOX_BIN" set AZURE_KMS_WRONG_KEY "test" --provider azure-kms
-	assert_success
-	assert_output --partial "Encryption not supported for provider 'azure-kms'"
-	assert_output --partial "Storing plaintext"
+	assert_failure
 }
 
 @test "fnox list shows Azure KMS secrets" {
