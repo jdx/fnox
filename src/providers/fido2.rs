@@ -83,8 +83,6 @@ impl Fido2Provider {
             None
         };
 
-        eprintln!("Touch your FIDO2 key...");
-
         let device = ctap_hid_fido2::FidoKeyHidFactory::create(&ctap_hid_fido2::Cfg::init())
             .map_err(|e| FnoxError::Provider(format!("Failed to find FIDO2 device: {:?}", e)))?;
 
