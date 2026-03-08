@@ -100,9 +100,11 @@ impl GetCommand {
 
         // Fast path: check if any lease backend produces this key (pure config
         // lookup — no network calls or backend instantiation needed).
+        // Use rfind to match exec's last-wins semantics when multiple leases
+        // produce the same key.
         let matching_lease = leases
             .iter()
-            .find(|(_, lease_config)| lease_config.produced_env_vars().contains(&self.key));
+            .rfind(|(_, lease_config)| lease_config.produced_env_vars().contains(&self.key));
 
         let Some((name, lease_config)) = matching_lease else {
             return Ok(None);
@@ -159,6 +161,12 @@ impl GetCommand {
         )
         .await?;
 
-        Ok(creds.get(&self.key).cloned())
+        match creds.get(&self.key) {
+            Some(value) => Ok(Some(value.clone())),
+            None => Err(FnoxError::Config(format!(
+                "Lease '{}' claims to produce '{}' but returned credentials did not contain it",
+                name, self.key,
+            ))),
+        }
     }
 }

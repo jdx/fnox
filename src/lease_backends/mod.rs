@@ -243,8 +243,12 @@ impl LeaseBackendConfig {
     /// Environment variable keys this backend produces.
     ///
     /// Used by `fnox get` to match a requested key to a lease backend without
-    /// instantiating the backend. Backends with dynamic keys (like `command`)
-    /// return an empty vector — `fnox get` cannot resolve their credentials.
+    /// instantiating the backend.
+    ///
+    /// **Note:** The `command` backend returns an empty vector because its output
+    /// keys are dynamic (determined at runtime by the command's JSON output).
+    /// As a result, `fnox get <key>` cannot resolve credentials from command
+    /// lease backends — use `fnox exec` or `fnox lease create` instead.
     pub fn produced_env_vars(&self) -> Vec<String> {
         match self {
             LeaseBackendConfig::AwsSts { .. } => vec![
