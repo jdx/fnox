@@ -507,20 +507,30 @@
           },
           "create": {
             "full_cmd": ["lease", "create"],
-            "usage": "lease create [FLAGS] <BACKEND_NAME>",
+            "usage": "lease create [FLAGS] [BACKEND_NAME]",
             "subcommands": {},
             "args": [
               {
                 "name": "BACKEND_NAME",
-                "usage": "<BACKEND_NAME>",
-                "help": "Lease backend name (from `[leases.<name>]` config)",
-                "help_first_line": "Lease backend name (from `[leases.<name>]` config)",
-                "required": true,
+                "usage": "[BACKEND_NAME]",
+                "help": "Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted",
+                "help_first_line": "Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted",
+                "required": false,
                 "double_dash": "Optional",
                 "hide": false
               }
             ],
             "flags": [
+              {
+                "name": "all",
+                "usage": "-a --all",
+                "help": "Create leases for all configured backends",
+                "help_first_line": "Create leases for all configured backends",
+                "short": ["a"],
+                "long": ["all"],
+                "hide": false,
+                "global": false
+              },
               {
                 "name": "duration",
                 "usage": "-d --duration <DURATION>",
@@ -660,7 +670,6 @@
         "flags": [],
         "mounts": [],
         "hide": false,
-        "subcommand_required": true,
         "help": "Manage ephemeral credential leases",
         "name": "lease",
         "aliases": [],

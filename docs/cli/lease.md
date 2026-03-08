@@ -9,6 +9,6 @@ Manage ephemeral credential leases
 ## Subcommands
 
 - [`fnox lease cleanup`](/cli/lease/cleanup.md)
-- [`fnox lease create [FLAGS] <BACKEND_NAME>`](/cli/lease/create.md)
+- [`fnox lease create [FLAGS] [BACKEND_NAME]`](/cli/lease/create.md)
 - [`fnox lease list [--active] [--expired]`](/cli/lease/list.md)
 - [`fnox lease revoke <LEASE_ID>`](/cli/lease/revoke.md)

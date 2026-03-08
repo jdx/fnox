@@ -91,9 +91,10 @@ cmd init help="Initialize a new fnox configuration file" {
     flag --force help="Overwrite existing configuration file"
     flag --skip-wizard help="Skip the interactive wizard and create a minimal config"
 }
-cmd lease subcommand_required=#true help="Manage ephemeral credential leases" {
+cmd lease help="Manage ephemeral credential leases" {
     cmd cleanup help="Revoke all expired leases that need manual cleanup"
     cmd create help="Create a short-lived credential lease from a secret" {
+        flag "-a --all" help="Create leases for all configured backends"
         flag "-d --duration" help="Lease duration (e.g., \"15m\", \"1h\", \"2h30m\"); overrides config duration" {
             arg <DURATION>
         }
@@ -106,7 +107,7 @@ cmd lease subcommand_required=#true help="Manage ephemeral credential leases" {
         flag "-l --label" help="Label for the lease (e.g., session purpose)" default=fnox-lease {
             arg <LABEL>
         }
-        arg <BACKEND_NAME> help="Lease backend name (from `[leases.<name>]` config)"
+        arg "[BACKEND_NAME]" help="Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted" required=#false
     }
     cmd list help="List tracked leases" {
         flag --active help="Show only active (non-expired, non-revoked) leases"
