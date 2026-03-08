@@ -5,12 +5,13 @@ use crate::lease::{self, LeaseLedger, LeaseRecord, TempEnvGuard};
 use crate::secret_resolver::resolve_secrets_batch;
 use chrono::Utc;
 use clap::{Args, Subcommand, ValueEnum};
+use indexmap::IndexMap;
 
 #[derive(Debug, Args)]
 #[command(about = "Manage ephemeral credential leases")]
 pub struct LeaseCommand {
     #[command(subcommand)]
-    pub subcommand: LeaseSubcommand,
+    pub subcommand: Option<LeaseSubcommand>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -34,8 +35,12 @@ pub enum OutputFormat {
 
 #[derive(Debug, Args)]
 pub struct LeaseCreateCommand {
-    /// Lease backend name (from `[leases.<name>]` config)
-    pub backend_name: String,
+    /// Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted.
+    pub backend_name: Option<String>,
+
+    /// Create leases for all configured backends
+    #[arg(short, long)]
+    pub all: bool,
 
     /// Lease duration (e.g., "15m", "1h", "2h30m"); overrides config duration
     #[arg(short, long)]
@@ -77,10 +82,22 @@ pub struct LeaseCleanupCommand;
 impl LeaseCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
         match &self.subcommand {
-            LeaseSubcommand::Create(cmd) => cmd.run(cli, config).await,
-            LeaseSubcommand::List(cmd) => cmd.run(cli, &config).await,
-            LeaseSubcommand::Revoke(cmd) => cmd.run(cli, config).await,
-            LeaseSubcommand::Cleanup(cmd) => cmd.run(cli, config).await,
+            Some(LeaseSubcommand::Create(cmd)) => cmd.run(cli, config).await,
+            Some(LeaseSubcommand::List(cmd)) => cmd.run(cli, &config).await,
+            Some(LeaseSubcommand::Revoke(cmd)) => cmd.run(cli, config).await,
+            Some(LeaseSubcommand::Cleanup(cmd)) => cmd.run(cli, config).await,
+            // `fnox lease` with no subcommand defaults to creating all leases
+            None => {
+                let cmd = LeaseCreateCommand {
+                    backend_name: None,
+                    all: true,
+                    duration: None,
+                    format: OutputFormat::Shell,
+                    interactive: false,
+                    label: "fnox-lease".to_string(),
+                };
+                cmd.run(cli, config).await
+            }
         }
     }
 }
@@ -91,22 +108,90 @@ impl LeaseCreateCommand {
         let project_dir = lease::project_dir_from_config(&config, &cli.config);
         let leases = config.get_leases(&profile);
 
-        let backend_config = leases.get(&self.backend_name).ok_or_else(|| {
-            FnoxError::Config(format!(
-                "Lease backend '{}' not found. Define it in [leases.{}] in fnox.toml.",
-                self.backend_name, self.backend_name
-            ))
-        })?;
-
-        // Resolve secrets from fnox providers so master credentials (stored in
-        // 1Password, keychain, age, etc.) are available as env vars before
-        // checking prerequisites or creating the lease backend.
+        // Resolve secrets once upfront (shared across all backends)
         let profile_secrets = config.get_secrets(&profile)?;
         let resolved_secrets = resolve_secrets_batch(&config, &profile, &profile_secrets).await?;
         let mut _temp_env_guard = TempEnvGuard::default();
         let _temp_files =
             lease::set_secrets_as_env(&resolved_secrets, &profile_secrets, &mut _temp_env_guard)?;
 
+        let create_all = self.all || self.backend_name.is_none();
+
+        if create_all {
+            if leases.is_empty() {
+                return Err(FnoxError::Config(
+                    "No lease backends configured. Define them in [leases.<name>] in fnox.toml."
+                        .to_string(),
+                ));
+            }
+            self.run_all(cli, &config, &profile, &project_dir, &leases)
+                .await
+        } else {
+            let backend_name = self.backend_name.as_deref().unwrap();
+            let backend_config = leases.get(backend_name).ok_or_else(|| {
+                FnoxError::Config(format!(
+                    "Lease backend '{}' not found. Define it in [leases.{}] in fnox.toml.",
+                    backend_name, backend_name
+                ))
+            })?;
+            self.create_single(
+                backend_name,
+                backend_config,
+                &config,
+                &profile,
+                &project_dir,
+            )
+            .await
+        }
+    }
+
+    async fn run_all(
+        &self,
+        _cli: &Cli,
+        config: &Config,
+        profile: &str,
+        project_dir: &std::path::Path,
+        leases: &IndexMap<String, crate::lease_backends::LeaseBackendConfig>,
+    ) -> Result<()> {
+        let mut errors: Vec<String> = Vec::new();
+        let mut created = 0;
+
+        for (backend_name, backend_config) in leases {
+            match self
+                .create_single(backend_name, backend_config, config, profile, project_dir)
+                .await
+            {
+                Ok(()) => created += 1,
+                Err(e) => {
+                    eprintln!(
+                        "{} Failed to create lease for '{}': {}",
+                        console::style("✗").red(),
+                        backend_name,
+                        e
+                    );
+                    errors.push(format!("{}: {}", backend_name, e));
+                }
+            }
+        }
+
+        if created == 0 && !errors.is_empty() {
+            return Err(FnoxError::Config(format!(
+                "All lease backends failed:\n{}",
+                errors.join("\n")
+            )));
+        }
+
+        Ok(())
+    }
+
+    async fn create_single(
+        &self,
+        backend_name: &str,
+        backend_config: &crate::lease_backends::LeaseBackendConfig,
+        config: &Config,
+        profile: &str,
+        project_dir: &std::path::Path,
+    ) -> Result<()> {
         // Check prerequisites and prompt for missing env vars if --interactive
         if let Some(missing) = backend_config.check_prerequisites() {
             let required_vars = backend_config.required_env_vars();
@@ -125,7 +210,6 @@ impl LeaseCreateCommand {
                             // TODO: unsafe set_var on a multi-threaded Tokio runtime is
                             // technically UB. Refactor to pass credentials explicitly.
                             unsafe { std::env::set_var(var, &value) };
-                            _temp_env_guard.keys.push(var.to_string());
                         }
                     }
                 }
@@ -152,23 +236,23 @@ impl LeaseCreateCommand {
         if duration > max_duration {
             return Err(FnoxError::Config(format!(
                 "Requested duration {:?} exceeds maximum {:?} for lease backend '{}'",
-                duration, max_duration, self.backend_name
+                duration, max_duration, backend_name
             )));
         }
 
         // Create the lease, cache credentials, and record in ledger
-        let _ledger_lock = LeaseLedger::lock(&project_dir)?;
-        let mut ledger = LeaseLedger::load(&project_dir)?;
+        let _ledger_lock = LeaseLedger::lock(project_dir)?;
+        let mut ledger = LeaseLedger::load(project_dir)?;
         let result = lease::create_and_record_lease(
             backend.as_ref(),
-            &self.backend_name,
+            backend_name,
             &self.label,
             duration,
             backend_config.config_hash(),
-            &config,
-            &profile,
+            config,
+            profile,
             &mut ledger,
-            &project_dir,
+            project_dir,
         )
         .await?;
 
@@ -176,33 +260,25 @@ impl LeaseCreateCommand {
         match self.format {
             OutputFormat::Shell => {
                 println!(
-                    "Lease created (expires {})",
+                    "{} Lease '{}' created (expires {})",
+                    console::style("✓").green(),
+                    backend_name,
                     format_expiry(result.expires_at)
                 );
-                println!();
                 for (key, value) in &result.credentials {
-                    let display = if value.chars().count() > 12 {
-                        let prefix: String = value.chars().take(4).collect();
-                        let suffix: String = value
-                            .chars()
-                            .rev()
-                            .take(4)
-                            .collect::<Vec<_>>()
-                            .into_iter()
-                            .rev()
-                            .collect();
-                        format!("{prefix}...{suffix}")
-                    } else {
-                        "****".to_string()
-                    };
-                    println!("{:<25} {}", key, display);
+                    let display = mask_credential(value);
+                    println!("  {:<25} {}", key, display);
                 }
                 if let Some(exp) = result.expires_at {
-                    println!("{:<25} {}", "Expires", exp.to_rfc3339());
+                    println!("  {:<25} {}", "Expires", exp.to_rfc3339());
                 }
             }
             OutputFormat::Json => {
                 let mut output = serde_json::Map::new();
+                output.insert(
+                    "backend".to_string(),
+                    serde_json::Value::String(backend_name.to_string()),
+                );
                 for (key, value) in &result.credentials {
                     output.insert(key.clone(), serde_json::Value::String(value.clone()));
                 }
@@ -408,6 +484,23 @@ impl LeaseCleanupCommand {
         println!("Cleaned up {} expired lease(s).", cleaned);
 
         Ok(())
+    }
+}
+
+fn mask_credential(value: &str) -> String {
+    if value.chars().count() > 12 {
+        let prefix: String = value.chars().take(4).collect();
+        let suffix: String = value
+            .chars()
+            .rev()
+            .take(4)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        format!("{prefix}...{suffix}")
+    } else {
+        "****".to_string()
     }
 }
 

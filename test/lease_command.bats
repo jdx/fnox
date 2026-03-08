@@ -139,7 +139,7 @@ EOF
 
 	run "$FNOX_BIN" lease create test_cmd --duration 15m --format shell
 	assert_success
-	assert_output --partial "Lease created"
+	assert_output --partial "created"
 	assert_output --partial "MY_TOKEN"
 }
 
