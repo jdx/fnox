@@ -52,12 +52,22 @@ pub fn find_local_config(dir: &Path, profile: Option<&str>) -> PathBuf {
         }
     }
 
-    // Fall back to lowest-priority existing base file (skip profile files already checked above)
-    let filenames = all_config_filenames(None);
-    for name in &filenames {
+    // Fall back to lowest-priority existing base file.
+    // When a profile is active, exclude local files (fnox.local.toml, .fnox.local.toml)
+    // to avoid silently routing profile-scoped secrets into a gitignored local-override file.
+    let is_profiled = profile.is_some_and(|p| p != "default");
+    for name in &["fnox.toml", ".fnox.toml"] {
         let path = dir.join(name);
         if path.exists() {
             return path;
+        }
+    }
+    if !is_profiled {
+        for name in &["fnox.local.toml", ".fnox.local.toml"] {
+            let path = dir.join(name);
+            if path.exists() {
+                return path;
+            }
         }
     }
     dir.join(DEFAULT_CONFIG_FILENAME)
@@ -1687,5 +1697,24 @@ mod tests {
         std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
         let result = super::find_local_config(dir.path(), Some("staging"));
         assert_eq!(result, dir.path().join("fnox.toml"));
+    }
+
+    #[test]
+    fn test_find_local_config_profile_skips_local_file() {
+        // When a profile is active and only fnox.local.toml exists,
+        // should NOT write there — fall through to creating fnox.toml
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("fnox.local.toml"), "").unwrap();
+        let result = super::find_local_config(dir.path(), Some("staging"));
+        assert_eq!(result, dir.path().join("fnox.toml"));
+    }
+
+    #[test]
+    fn test_find_local_config_no_profile_uses_local_file() {
+        // Without a profile, fnox.local.toml is a valid write target
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("fnox.local.toml"), "").unwrap();
+        let result = super::find_local_config(dir.path(), None);
+        assert_eq!(result, dir.path().join("fnox.local.toml"));
     }
 }
