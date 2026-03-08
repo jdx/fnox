@@ -28,15 +28,13 @@ impl GetCommand {
         if let Some(value) = self.resolve_from_lease(cli, &config, &profile).await? {
             let value = self.maybe_base64_decode(value)?;
             // Respect as_file from the profile secret config when present
-            if let Ok(profile_secrets) = config.get_secrets(&profile) {
-                if let Some(sc) = profile_secrets.get(&self.key) {
-                    if sc.as_file {
+            if let Ok(profile_secrets) = config.get_secrets(&profile)
+                && let Some(sc) = profile_secrets.get(&self.key)
+                    && sc.as_file {
                         let file_path = create_persistent_secret_file("fnox-", &self.key, &value)?;
                         println!("{}", file_path);
                         return Ok(());
                     }
-                }
-            }
             println!("{}", value);
             return Ok(());
         }
