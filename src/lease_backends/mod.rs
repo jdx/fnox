@@ -122,6 +122,9 @@ pub enum LeaseBackendConfig {
     },
     /// Cloudflare API Token
     Cloudflare {
+        /// Token type: "user" (default) or "account"
+        #[serde(default)]
+        token_type: cloudflare::CloudflareTokenType,
         #[serde(skip_serializing_if = "Option::is_none")]
         account_id: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -314,15 +317,17 @@ impl LeaseBackendConfig {
                 azure_token::AzureTokenBackend::new(scope.clone(), env_var.clone()),
             )),
             LeaseBackendConfig::Cloudflare {
+                token_type,
                 account_id,
                 policies,
                 env_var,
                 ..
             } => Ok(Box::new(cloudflare::CloudflareBackend::new(
+                token_type.clone(),
                 account_id.clone(),
                 policies.clone(),
                 env_var.clone(),
-            ))),
+            )?)),
             LeaseBackendConfig::Command {
                 create_command,
                 revoke_command,

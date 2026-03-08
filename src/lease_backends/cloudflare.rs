@@ -11,9 +11,20 @@ const MAX_TOKEN_NAME_LEN: usize = 100;
 const TOKEN_NAME_PREFIX: &str = "fnox-lease-";
 
 pub struct CloudflareBackend {
+    token_type: CloudflareTokenType,
     account_id: Option<String>,
     policies: Option<Vec<CloudflarePolicy>>,
     env_var: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum CloudflareTokenType {
+    /// User-owned token (POST /user/tokens)
+    #[default]
+    User,
+    /// Account-owned token (POST /accounts/{account_id}/tokens)
+    Account,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, Default)]
@@ -45,15 +56,23 @@ pub struct CloudflarePermissionGroup {
 
 impl CloudflareBackend {
     pub fn new(
+        token_type: CloudflareTokenType,
         account_id: Option<String>,
         policies: Option<Vec<CloudflarePolicy>>,
         env_var: String,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        if matches!(token_type, CloudflareTokenType::Account) && account_id.is_none() {
+            return Err(FnoxError::Config(
+                "Cloudflare backend: 'account_id' is required when token_type is 'account'."
+                    .to_string(),
+            ));
+        }
+        Ok(Self {
+            token_type,
             account_id,
             policies,
             env_var,
-        }
+        })
     }
 
     fn get_api_token() -> Result<String> {
@@ -67,13 +86,14 @@ impl CloudflareBackend {
             })
     }
 
-    /// Returns the tokens API base path.
-    /// With `account_id`: `/accounts/{id}/tokens` (account-owned tokens).
-    /// Without: `/user/tokens` (user-owned tokens).
+    /// Returns the tokens API base path based on `token_type`.
     fn tokens_path(&self) -> String {
-        match &self.account_id {
-            Some(id) => format!("{API_BASE}/accounts/{id}/tokens"),
-            None => format!("{API_BASE}/user/tokens"),
+        match self.token_type {
+            CloudflareTokenType::Account => {
+                let id = self.account_id.as_ref().expect("validated in new()");
+                format!("{API_BASE}/accounts/{id}/tokens")
+            }
+            CloudflareTokenType::User => format!("{API_BASE}/user/tokens"),
         }
     }
 
