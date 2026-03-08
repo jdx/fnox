@@ -61,6 +61,7 @@ export default defineConfig({
             link: "/guide/missing-secrets",
           },
           { text: "Import/Export", link: "/guide/import-export" },
+          { text: "Syncing Secrets Locally", link: "/guide/sync" },
           { text: "Credential Leases", link: "/guide/leases" },
         ],
       },
