@@ -240,24 +240,14 @@ impl LeaseBackendConfig {
         }
     }
 
-    /// Environment variable keys this backend produces.
-    ///
-    /// Used by `fnox get` to match a requested key to a lease backend without
-    /// instantiating the backend.
-    ///
-    /// **Note:** The `command` backend returns an empty vector because its output
-    /// keys are dynamic (determined at runtime by the command's JSON output).
-    /// As a result, `fnox get <key>` cannot resolve credentials from command
-    /// lease backends — use `fnox exec` or `fnox lease create` instead.
-    pub fn produced_env_vars(&self) -> Vec<&str> {
+    /// Zero-allocation check whether this backend produces the given env var key.
+    pub fn produces_env_var(&self, key: &str) -> bool {
         match self {
-            LeaseBackendConfig::AwsSts { .. } => aws_sts::PRODUCED_ENV_VARS.to_vec(),
-            LeaseBackendConfig::GcpIam { env_var, .. } => vec![env_var.as_str()],
-            LeaseBackendConfig::Vault { env_map, .. } => {
-                env_map.values().map(|s| s.as_str()).collect()
-            }
-            LeaseBackendConfig::AzureToken { env_var, .. } => vec![env_var.as_str()],
-            LeaseBackendConfig::Command { .. } => vec![],
+            LeaseBackendConfig::AwsSts { .. } => aws_sts::PRODUCED_ENV_VARS.contains(&key),
+            LeaseBackendConfig::GcpIam { env_var, .. } => env_var == key,
+            LeaseBackendConfig::Vault { env_map, .. } => env_map.values().any(|v| v == key),
+            LeaseBackendConfig::AzureToken { env_var, .. } => env_var == key,
+            LeaseBackendConfig::Command { .. } => false,
         }
     }
 

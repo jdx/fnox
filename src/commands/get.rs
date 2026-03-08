@@ -111,11 +111,9 @@ impl GetCommand {
         // lookup — no network calls or backend instantiation needed).
         // Use rfind to match exec's last-wins semantics when multiple leases
         // produce the same key.
-        let matching_lease = leases.iter().rfind(|(_, lease_config)| {
-            lease_config
-                .produced_env_vars()
-                .contains(&self.key.as_str())
-        });
+        let matching_lease = leases
+            .iter()
+            .rfind(|(_, lease_config)| lease_config.produces_env_var(&self.key));
 
         let Some((name, lease_config)) = matching_lease else {
             return Ok(None);
@@ -135,13 +133,14 @@ impl GetCommand {
             .collect();
         let resolved_secrets =
             crate::secret_resolver::resolve_secrets_batch(config, profile, &needed_secrets).await?;
-        let mut temp_env_guard = lease::TempEnvGuard::default();
-        let _temp_files =
-            lease::set_secrets_as_env(&resolved_secrets, &needed_secrets, &mut temp_env_guard)?;
 
         let project_dir = lease::project_dir_from_config(config, &cli.config);
         let _ledger_lock = LeaseLedger::lock(&project_dir)?;
         let mut ledger = LeaseLedger::load(&project_dir)?;
+
+        let mut temp_env_guard = lease::TempEnvGuard::default();
+        let _temp_files =
+            lease::set_secrets_as_env(&resolved_secrets, &needed_secrets, &mut temp_env_guard)?;
 
         let prereq_missing = lease_config.check_prerequisites();
         if let Some(ref missing) = prereq_missing {
