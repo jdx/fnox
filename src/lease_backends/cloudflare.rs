@@ -103,8 +103,19 @@ impl CloudflareBackend {
         policies: &[CloudflarePolicy],
         account_id: &Option<String>,
     ) -> Result<Vec<serde_json::Value>> {
+        if policies.is_empty() {
+            return Err(FnoxError::Config(
+                "Cloudflare backend: 'policies' must contain at least one policy.".to_string(),
+            ));
+        }
         let mut result = Vec::with_capacity(policies.len());
         for p in policies {
+            if p.permission_groups.is_empty() {
+                return Err(FnoxError::Config(
+                    "Cloudflare backend: each policy must have at least one permission group."
+                        .to_string(),
+                ));
+            }
             let mut resources = serde_json::Map::new();
             for (key, value) in &p.resources {
                 if key.contains("{account_id}") && account_id.is_none() {
@@ -131,17 +142,15 @@ impl CloudflareBackend {
     }
 
     /// Fetch the parent token's policies from the Cloudflare API.
-    /// Uses GET .../tokens/verify to get the token ID, then
-    /// GET .../tokens/{id} to retrieve its full policy configuration.
-    async fn fetch_parent_policies(
-        tokens_path: &str,
-        parent_token: &str,
-    ) -> Result<Vec<serde_json::Value>> {
+    /// Always uses the /user/tokens endpoint for verify and details — the
+    /// /accounts/{id}/tokens/verify endpoint does not exist.
+    async fn fetch_parent_policies(parent_token: &str) -> Result<Vec<serde_json::Value>> {
+        let user_tokens_path = format!("{API_BASE}/user/tokens");
         let client = crate::http::http_client();
 
         // Step 1: verify token to get its ID
         let verify_resp: serde_json::Value = client
-            .get(format!("{tokens_path}/verify"))
+            .get(format!("{user_tokens_path}/verify"))
             .bearer_auth(parent_token)
             .send()
             .await
@@ -171,7 +180,7 @@ impl CloudflareBackend {
 
         // Step 2: fetch full token details including policies
         let details_resp: serde_json::Value = client
-            .get(format!("{tokens_path}/{token_id}"))
+            .get(format!("{user_tokens_path}/{token_id}"))
             .bearer_auth(parent_token)
             .send()
             .await
@@ -200,32 +209,43 @@ impl CloudflareBackend {
             })?;
 
         // Clean up inherited policies for use as child token config:
-        // 1. Strip the policy `id` field — Cloudflare assigns new IDs
+        // 1. Only extract fields the create endpoint accepts (effect, resources,
+        //    permission_groups) — drop server-generated fields like id, status,
+        //    created_on, modified_on which would cause validation errors.
         // 2. Remove "API Tokens" permission groups — Cloudflare forbids
-        //    sub-tokens from managing other tokens
+        //    sub-tokens from managing other tokens.
+        // 3. Only keep permission group `id` (strip `name` and other metadata).
         let cleaned: Vec<serde_json::Value> = policies
             .iter()
             .filter_map(|p| {
-                let mut policy = p.clone();
-                let obj = policy.as_object_mut()?;
-                obj.remove("id");
+                let obj = p.as_object()?;
 
-                // Filter out token-management permission groups
-                if let Some(groups) = obj
-                    .get_mut("permission_groups")
-                    .and_then(|v| v.as_array_mut())
-                {
-                    groups.retain(|g| {
+                // Filter out token-management permission groups, keeping only id
+                let groups: Vec<serde_json::Value> = obj
+                    .get("permission_groups")
+                    .and_then(|v| v.as_array())
+                    .into_iter()
+                    .flatten()
+                    .filter(|g| {
                         let name = g["name"].as_str().unwrap_or("");
                         !name.contains("API Tokens")
-                    });
-                    // Drop the entire policy if no permission groups remain
-                    if groups.is_empty() {
-                        return None;
-                    }
+                    })
+                    .filter_map(|g| {
+                        let id = g["id"].as_str()?;
+                        Some(serde_json::json!({ "id": id }))
+                    })
+                    .collect();
+
+                // Drop the entire policy if no permission groups remain
+                if groups.is_empty() {
+                    return None;
                 }
 
-                Some(policy)
+                Some(serde_json::json!({
+                    "effect": obj.get("effect").cloned().unwrap_or(serde_json::json!("allow")),
+                    "resources": obj.get("resources").cloned().unwrap_or(serde_json::json!({})),
+                    "permission_groups": groups,
+                }))
             })
             .collect();
 
@@ -252,8 +272,8 @@ impl LeaseBackend for CloudflareBackend {
             now + chrono::Duration::seconds(duration.as_secs().min(i64::MAX as u64) as i64);
 
         let raw_name = format!("{TOKEN_NAME_PREFIX}{label}");
-        let name = if raw_name.len() > MAX_TOKEN_NAME_LEN {
-            raw_name[..MAX_TOKEN_NAME_LEN].to_string()
+        let name = if raw_name.chars().count() > MAX_TOKEN_NAME_LEN {
+            raw_name.chars().take(MAX_TOKEN_NAME_LEN).collect()
         } else {
             raw_name
         };
@@ -263,7 +283,7 @@ impl LeaseBackend for CloudflareBackend {
             Self::build_api_policies(configured, &self.account_id)?
         } else {
             tracing::debug!("No policies configured; inheriting from parent token");
-            Self::fetch_parent_policies(&tokens_path, &parent_token).await?
+            Self::fetch_parent_policies(&parent_token).await?
         };
 
         let body = serde_json::json!({

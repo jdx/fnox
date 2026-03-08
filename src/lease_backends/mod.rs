@@ -264,10 +264,16 @@ impl LeaseBackendConfig {
                 ("AZURE_CLIENT_SECRET", "Azure client secret"),
                 ("AZURE_TENANT_ID", "Azure tenant (directory) ID"),
             ],
-            LeaseBackendConfig::Cloudflare { .. } => vec![(
-                "CLOUDFLARE_API_TOKEN",
-                "Cloudflare API token with 'API Tokens: Edit' permission (or set CF_API_TOKEN)",
-            )],
+            LeaseBackendConfig::Cloudflare { .. } => vec![
+                (
+                    "CLOUDFLARE_API_TOKEN",
+                    "Cloudflare API token with 'API Tokens: Edit' permission",
+                ),
+                (
+                    "CF_API_TOKEN",
+                    "Cloudflare API token (alternative to CLOUDFLARE_API_TOKEN)",
+                ),
+            ],
             LeaseBackendConfig::Command { .. } => vec![],
         }
     }
