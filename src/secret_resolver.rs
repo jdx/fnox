@@ -328,15 +328,14 @@ async fn try_get_secret(
     provider_config: &ProviderConfig,
     provider_value: &str,
 ) -> Result<String> {
-    let provider = get_provider_resolved(config, profile, provider_name, provider_config).await?;
-
-    if crate::env::is_non_interactive() && provider.requires_interactive_auth() {
+    if crate::env::is_non_interactive() && provider_config.requires_interactive_auth() {
         return Err(FnoxError::Provider(format!(
             "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
             provider_name
         )));
     }
 
+    let provider = get_provider_resolved(config, profile, provider_name, provider_config).await?;
     provider.get_secret(provider_value).await
 }
 
@@ -657,6 +656,16 @@ async fn resolve_provider_batch(
         }
     };
 
+    // Short-circuit for interactive providers in non-interactive mode.
+    // This is checked here (not in try_get_secrets_batch) so the error is always
+    // surfaced to the user regardless of per-secret if_missing policy.
+    if crate::env::is_non_interactive() && provider_config.requires_interactive_auth() {
+        return Err(FnoxError::Provider(format!(
+            "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
+            provider_name
+        )));
+    }
+
     // Try to get secrets with auth retry on failure
     try_batch_with_auth_retry(
         config,
@@ -754,14 +763,6 @@ async fn try_get_secrets_batch(
     provider_secrets: &[(String, String)],
 ) -> Result<HashMap<String, Result<String>>> {
     let provider = get_provider_resolved(config, profile, provider_name, provider_config).await?;
-
-    if crate::env::is_non_interactive() && provider.requires_interactive_auth() {
-        return Err(FnoxError::Provider(format!(
-            "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
-            provider_name
-        )));
-    }
-
     Ok(provider.get_secrets_batch(provider_secrets).await)
 }
 

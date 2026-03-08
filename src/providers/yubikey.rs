@@ -101,10 +101,6 @@ impl crate::providers::Provider for YubikeyProvider {
         vec![crate::providers::ProviderCapability::Encryption]
     }
 
-    fn requires_interactive_auth(&self) -> bool {
-        true
-    }
-
     async fn encrypt(&self, plaintext: &str) -> Result<String> {
         let provider = self.clone();
         let secret = tokio::task::spawn_blocking(move || provider.get_hmac_secret())

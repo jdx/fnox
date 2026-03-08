@@ -189,6 +189,15 @@ fn resolve_secret_ref<'a>(
                 // This secret uses a provider - need to resolve that provider first
                 let providers = config.get_providers(profile);
                 if let Some(secret_provider_config) = providers.get(secret_provider_name) {
+                    if env::is_non_interactive()
+                        && secret_provider_config.requires_interactive_auth()
+                    {
+                        return Err(FnoxError::Provider(format!(
+                            "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
+                            secret_provider_name
+                        )));
+                    }
+
                     // Recursively resolve the provider's config
                     let resolved_provider = resolve_provider_config_with_context(
                         config,
@@ -204,14 +213,6 @@ fn resolve_secret_ref<'a>(
                         secret_provider_name,
                         &resolved_provider,
                     )?;
-
-                    if env::is_non_interactive() && provider.requires_interactive_auth() {
-                        return Err(FnoxError::Provider(format!(
-                            "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
-                            secret_provider_name
-                        )));
-                    }
-
                     return provider.get_secret(provider_value).await;
                 } else {
                     // Find similar provider names for suggestion

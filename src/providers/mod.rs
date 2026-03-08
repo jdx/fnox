@@ -223,12 +223,6 @@ pub trait Provider: Send + Sync {
         vec![ProviderCapability::RemoteRead]
     }
 
-    /// Whether this provider requires interactive authentication (e.g. physical touch).
-    /// Providers that return true cannot be used in non-interactive contexts like the TUI.
-    fn requires_interactive_auth(&self) -> bool {
-        false
-    }
-
     /// Test if the provider is accessible and properly configured
     async fn test_connection(&self) -> Result<()> {
         // Default implementation does a basic check
@@ -264,6 +258,12 @@ pub async fn get_secrets_concurrent(
 }
 
 impl ProviderConfig {
+    /// Whether this provider type requires interactive authentication (e.g. physical key touch).
+    /// This is a static check based on the config variant, usable before provider resolution.
+    pub fn requires_interactive_auth(&self) -> bool {
+        matches!(self.provider_type(), "fido2" | "yubikey")
+    }
+
     /// Get wizard info for providers in a specific category
     pub fn wizard_info_by_category(category: WizardCategory) -> Vec<&'static WizardInfo> {
         ALL_WIZARD_INFO
