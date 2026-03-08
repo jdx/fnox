@@ -208,17 +208,19 @@ impl CloudflareBackend {
     }
 
     /// Fetch the parent token's policies from the Cloudflare API.
-    /// Always uses the /user/tokens endpoint for verify and details — the
-    /// /accounts/{id}/tokens/verify endpoint does not exist.
-    async fn fetch_parent_policies(parent_token: &str) -> Result<Vec<serde_json::Value>> {
-        let user_tokens_path = format!("{API_BASE}/user/tokens");
+    /// Uses the appropriate tokens path based on token type — account-scoped
+    /// tokens must verify via `/accounts/{id}/tokens/verify`, not `/user/tokens/verify`.
+    async fn fetch_parent_policies(
+        tokens_path: &str,
+        parent_token: &str,
+    ) -> Result<Vec<serde_json::Value>> {
         let client = crate::http::http_client();
 
         // Step 1: verify token to get its ID
         let verify_resp = Self::cf_api_call(
             &client,
             parent_token,
-            &format!("{user_tokens_path}/verify"),
+            &format!("{tokens_path}/verify"),
             "verify parent token",
         )
         .await?;
@@ -236,7 +238,7 @@ impl CloudflareBackend {
         let details_resp = Self::cf_api_call(
             &client,
             parent_token,
-            &format!("{user_tokens_path}/{token_id}"),
+            &format!("{tokens_path}/{token_id}"),
             "fetch parent token details",
         )
         .await?;
@@ -325,7 +327,7 @@ impl LeaseBackend for CloudflareBackend {
             Self::build_api_policies(configured, &self.account_id)?
         } else {
             tracing::debug!("No policies configured; inheriting from parent token");
-            Self::fetch_parent_policies(&parent_token).await?
+            Self::fetch_parent_policies(&tokens_path, &parent_token).await?
         };
 
         let body = serde_json::json!({
