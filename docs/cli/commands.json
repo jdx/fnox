@@ -449,22 +449,22 @@
         "args": [],
         "flags": [
           {
+            "name": "force",
+            "usage": "-f --force",
+            "help": "Overwrite existing configuration file",
+            "help_first_line": "Overwrite existing configuration file",
+            "short": ["f"],
+            "long": ["force"],
+            "hide": false,
+            "global": false
+          },
+          {
             "name": "global",
             "usage": "-g --global",
             "help": "Initialize the global config file (~/.config/fnox/config.toml)",
             "help_first_line": "Initialize the global config file (~/.config/fnox/config.toml)",
             "short": ["g"],
             "long": ["global"],
-            "hide": false,
-            "global": false
-          },
-          {
-            "name": "force",
-            "usage": "--force",
-            "help": "Overwrite existing configuration file",
-            "help_first_line": "Overwrite existing configuration file",
-            "short": [],
-            "long": ["force"],
             "hide": false,
             "global": false
           },

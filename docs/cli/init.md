@@ -9,13 +9,13 @@ Initialize a new fnox configuration file
 
 ## Flags
 
+### `-f --force`
+
+Overwrite existing configuration file
+
 ### `-g --global`
 
 Initialize the global config file (~/.config/fnox/config.toml)
-
-### `--force`
-
-Overwrite existing configuration file
 
 ### `--skip-wizard`
 

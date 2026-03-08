@@ -87,8 +87,8 @@ cmd import help="Import secrets from various sources" {
 }
 cmd init help="Initialize a new fnox configuration file" {
     alias i
+    flag "-f --force" help="Overwrite existing configuration file"
     flag "-g --global" help="Initialize the global config file (~/.config/fnox/config.toml)"
-    flag --force help="Overwrite existing configuration file"
     flag --skip-wizard help="Skip the interactive wizard and create a minimal config"
 }
 cmd lease subcommand_required=#true help="Manage ephemeral credential leases" {
