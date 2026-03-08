@@ -261,12 +261,9 @@ impl SetCommand {
             let current_dir = std::env::current_dir().map_err(|e| {
                 FnoxError::Config(format!("Failed to get current directory: {}", e))
             })?;
-            // If --config was explicitly set to a non-default path, respect it
-            let default_filenames = config::all_config_filenames(Some(&profile));
-            if default_filenames
-                .iter()
-                .any(|f| cli.config == std::path::Path::new(f))
-            {
+            // Only use auto-detection when --config is the clap default ("fnox.toml").
+            // Any other value means the user explicitly chose a config file.
+            if cli.config == std::path::Path::new("fnox.toml") {
                 config::find_local_config(&current_dir, Some(&profile))
             } else {
                 current_dir.join(&cli.config)
