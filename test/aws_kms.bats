@@ -229,6 +229,7 @@ EOF
 
 	run "$FNOX_BIN" set KMS_WRONG_KEY "test" --provider kms
 	assert_failure
+	assert_output --partial "AWS KMS"
 }
 
 @test "fnox list shows KMS secrets" {

@@ -147,6 +147,7 @@ EOF
 	# Encryption failure should be a hard error
 	run "$FNOX_BIN" set AZURE_KMS_WRONG_KEY "test" --provider azure-kms
 	assert_failure
+	assert_output --partial "Azure Key Vault"
 }
 
 @test "fnox list shows Azure KMS secrets" {

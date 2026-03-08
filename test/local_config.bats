@@ -188,18 +188,16 @@ EOF
 }
 
 @test "fnox.local.toml can override default_provider" {
-	# Create main config with default provider
+	# Create main config with default provider (use plain to avoid encryption)
 	cat >fnox.toml <<EOF
 root = true
 default_provider = "main_provider"
 
 [providers.main_provider]
-type = "age"
-recipients = ["age1maintest"]
+type = "plain"
 
 [providers.alt_provider]
-type = "age"
-recipients = ["age1alttest"]
+type = "plain"
 EOF
 
 	# Create local config that changes default provider
