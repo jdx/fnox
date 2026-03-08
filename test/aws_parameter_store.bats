@@ -13,12 +13,30 @@
 # Note: Tests will automatically skip if LOCALSTACK_ENDPOINT is not set.
 #
 
+setup_file() {
+	if [ -z "$LOCALSTACK_ENDPOINT" ]; then
+		export SKIP_AWS_PS_TESTS="LOCALSTACK_ENDPOINT not set. Start LocalStack and set LOCALSTACK_ENDPOINT=http://localhost:4566"
+		return
+	fi
+
+	# Wait for LocalStack to be ready
+	local retries=10
+	while ! curl -sf "$LOCALSTACK_ENDPOINT/_localstack/health" >/dev/null 2>&1; do
+		retries=$((retries - 1))
+		if [ "$retries" -le 0 ]; then
+			export SKIP_AWS_PS_TESTS="LocalStack not ready"
+			return
+		fi
+		sleep 1
+	done
+}
+
 setup() {
 	load 'test_helper/common_setup'
 	_common_setup
 
-	if [ -z "$LOCALSTACK_ENDPOINT" ]; then
-		skip "LOCALSTACK_ENDPOINT not set. Start LocalStack and set LOCALSTACK_ENDPOINT=http://localhost:4566"
+	if [ -n "$SKIP_AWS_PS_TESTS" ]; then
+		skip "$SKIP_AWS_PS_TESTS"
 	fi
 
 	# Set dummy AWS credentials for LocalStack

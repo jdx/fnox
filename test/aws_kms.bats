@@ -223,6 +223,17 @@ EOF
 	assert_output --partial "Failed to decode base64 ciphertext"
 }
 
+@test "fnox set warns and stores plaintext with wrong KMS key" {
+	# Create config with non-existent key (fails fast via LocalStack NotFoundException)
+	create_kms_config "alias/nonexistent-key-that-does-not-exist"
+
+	# When encryption fails, fnox currently warns and stores plaintext
+	run "$FNOX_BIN" set KMS_WRONG_KEY "test" --provider kms
+	assert_success
+	assert_output --partial "Encryption not supported for provider 'kms'"
+	assert_output --partial "Storing plaintext"
+}
+
 @test "fnox list shows KMS secrets" {
 	create_kms_config
 

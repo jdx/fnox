@@ -146,9 +146,6 @@ jobs:
             echo "VAULT_ADDR=http://localhost:8200"
             echo "VAULT_TOKEN=fnox-test-token"
             echo "LOCALSTACK_ENDPOINT=http://localhost:4566"
-            echo "AWS_ACCESS_KEY_ID=test"
-            echo "AWS_SECRET_ACCESS_KEY=test"
-            echo "AWS_DEFAULT_REGION=us-east-1"
           } >> "$GITHUB_ENV"
       - name: Setup Bitwarden for tests
         if: ${{ matrix.os == 'ubuntu-latest' }}
