@@ -1,6 +1,6 @@
 # Syncing Secrets Locally
 
-`fnox sync` fetches secrets from remote providers (1Password, AWS Secrets Manager, etc.) and re-encrypts them with a local encryption provider (age, YubiKey via age plugin, AWS KMS, etc.). The encrypted values are stored in your config so that subsequent access is instant and offline — no remote calls needed.
+`fnox sync` fetches secrets from remote providers (1Password, AWS Secrets Manager, etc.) and re-encrypts them with a local encryption provider (age, YubiKey via age plugin, AWS KMS, etc.). The encrypted values are stored in `fnox.local.toml` (gitignored) so that subsequent access is instant and offline — no remote calls needed.
 
 ## Why Sync?
 
@@ -23,7 +23,7 @@ This works, but every time you `cd` into the project (with [shell integration](/
 With `fnox sync`, you pull those values once and cache them locally with a fast, offline encryption provider:
 
 ```bash
-fnox sync --provider age
+fnox sync --provider age --config fnox.local.toml
 ```
 
 Now entering the directory is instant — secrets are decrypted locally from age without any remote calls.
@@ -39,51 +39,39 @@ When fnox resolves secrets, it checks for a `sync` field first and uses that ins
 
 ## Basic Usage
 
-### Sync all remote secrets to age
-
 ```bash
 # Set up an age provider if you haven't already
 fnox set --provider age  # or add [providers.age] to your config
 
-# Sync everything
-fnox sync --provider age
+# Sync everything to fnox.local.toml
+fnox sync --provider age --config fnox.local.toml
 ```
 
 ### Preview what would be synced
 
 ```bash
-fnox sync --provider age --dry-run
+fnox sync --provider age --config fnox.local.toml --dry-run
 ```
 
 ### Sync specific secrets
 
 ```bash
-fnox sync --provider age DATABASE_URL STRIPE_KEY
+fnox sync --provider age --config fnox.local.toml DATABASE_URL STRIPE_KEY
 ```
 
 ### Sync only secrets from a specific source
 
 ```bash
-fnox sync --provider age --source op
+fnox sync --provider age --config fnox.local.toml --source op
 ```
 
 ### Filter by regex pattern
 
 ```bash
-fnox sync --provider age --filter "^DB_"
+fnox sync --provider age --config fnox.local.toml --filter "^DB_"
 ```
 
-## Caching in fnox.local.toml
-
-By default, `fnox sync` writes the sync cache to the project `fnox.toml`. Since the cache contains encrypted values that are specific to your machine/key, you'll typically want to keep them out of version control.
-
-The recommended pattern: keep your shared secret references in `fnox.toml` (committed) and sync the cached values into `fnox.local.toml` (gitignored):
-
-```bash
-# Sync writes to fnox.local.toml by default when it exists,
-# or you can use --config to target it explicitly
-fnox sync --provider age --config fnox.local.toml
-```
+## What It Looks Like
 
 After syncing, your files look like this:
 
@@ -126,7 +114,7 @@ recipients = ["age1yubikey1q..."]  # YubiKey recipient
 ```
 
 ```bash
-fnox sync --provider age
+fnox sync --provider age --config fnox.local.toml
 ```
 
 Secrets are encrypted to your YubiKey's age identity. Decryption requires the YubiKey to be plugged in, adding hardware-based security to your local cache.
@@ -136,20 +124,10 @@ Secrets are encrypted to your YubiKey's age identity. Decryption requires the Yu
 When secrets change in the remote provider, re-run sync to update the local cache:
 
 ```bash
-fnox sync --provider age --force
+fnox sync --provider age --config fnox.local.toml --force
 ```
 
 The `--force` flag skips the confirmation prompt. fnox re-fetches from the original provider and re-encrypts.
-
-## Syncing to Global Config
-
-If you want synced secrets available across all projects (e.g., shared API keys):
-
-```bash
-fnox sync --provider age --global
-```
-
-This writes to `~/.config/fnox/config.toml` instead of the project config.
 
 ## Full Workflow Example
 
