@@ -156,6 +156,7 @@ impl LeaseCreateCommand {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn run_all(
         &self,
         _cli: &Cli,
@@ -206,6 +207,7 @@ impl LeaseCreateCommand {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn create_single(
         &self,
         backend_name: &str,
