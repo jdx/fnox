@@ -82,7 +82,11 @@ pub static FNOX_PROMPT_AUTH: LazyLock<Option<bool>> = LazyLock::new(|| {
 
 // Helper functions for parsing environment variables
 fn var_path(name: &str) -> Option<PathBuf> {
-    var(name).map(PathBuf::from).ok()
+    var(name)
+        .ok()
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
 }
 
 /// Validates that a profile name is safe to use in file paths
@@ -128,6 +132,12 @@ mod tests {
                 var_path("FNOX_TEST_PATH").unwrap(),
                 PathBuf::from("/foo/bar")
             );
+            // Empty values are treated as unset per XDG spec
+            set_var("FNOX_TEST_PATH", "");
+            assert_eq!(var_path("FNOX_TEST_PATH"), None);
+            // Relative paths are rejected per XDG spec
+            set_var("FNOX_TEST_PATH", "relative/path");
+            assert_eq!(var_path("FNOX_TEST_PATH"), None);
             remove_var("FNOX_TEST_PATH");
         }
     }
