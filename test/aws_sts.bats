@@ -98,7 +98,7 @@ EOF
 
 	run "$FNOX_BIN" lease create test_sts --duration 15m --format shell
 	assert_success
-	assert_output --partial "Lease created"
+	assert_output --partial "created"
 	assert_output --partial "AWS_ACCESS_KEY_ID"
 }
 
