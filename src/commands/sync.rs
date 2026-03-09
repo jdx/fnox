@@ -140,18 +140,19 @@ impl SyncCommand {
             return Ok(());
         }
 
+        let destination_suffix = if self.local_file {
+            " (local-file)"
+        } else if self.global {
+            " (global)"
+        } else {
+            ""
+        };
+
         // Dry-run mode: show what would be done and exit
         if self.dry_run {
             let dry_run_label = console::style("[dry-run]").yellow().bold();
             let styled_profile = console::style(&profile).magenta();
             let styled_provider = console::style(&target_provider_name).green();
-            let destination_suffix = if self.local_file {
-                " (local-file)"
-            } else if self.global {
-                " (global)"
-            } else {
-                ""
-            };
 
             println!(
                 "{dry_run_label} Would sync {} secrets in profile {styled_profile} to provider {styled_provider}{destination_suffix}:",
@@ -270,13 +271,6 @@ impl SyncCommand {
         // Save to config
         Config::save_secrets_to_source(&synced_secrets, &profile, &target_path)?;
 
-        let destination_suffix = if self.local_file {
-            " (local-file)"
-        } else if self.global {
-            " (global)"
-        } else {
-            ""
-        };
         println!(
             "Synced {} secrets to provider '{}'{}",
             synced_count, target_provider_name, destination_suffix
