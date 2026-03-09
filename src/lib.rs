@@ -9,6 +9,7 @@ pub mod hook_env;
 pub mod http;
 pub mod lease;
 pub mod lease_backends;
+pub mod mcp_server;
 pub mod providers;
 pub mod secret_resolver;
 pub mod settings;

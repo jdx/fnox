@@ -55,6 +55,7 @@ pluralizer = "0.5.0"
 ratatui = "0.29"
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+rmcp = { version = "1", features = ["server", "transport-io", "macros"] }
 rmp-serde = "1"
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std"] }
 schemars = { version = "1", features = ["indexmap2"] }

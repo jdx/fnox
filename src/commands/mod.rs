@@ -21,6 +21,7 @@ pub mod import;
 pub mod init;
 pub mod lease;
 pub mod list;
+pub mod mcp;
 pub mod profiles;
 pub mod provider;
 pub mod remove;
@@ -122,6 +123,9 @@ pub enum Commands {
     /// List all secrets
     List(list::ListCommand),
 
+    /// Start an MCP server for secret-gated AI agent access
+    Mcp(mcp::McpCommand),
+
     /// List available profiles
     Profiles(profiles::ProfilesCommand),
 
@@ -187,6 +191,7 @@ impl Commands {
             Commands::Import(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Lease(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::List(cmd) => cmd.run(cli, self.load_config(cli)?).await,
+            Commands::Mcp(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Profiles(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Provider(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Remove(cmd) => cmd.run(cli).await,

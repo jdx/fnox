@@ -119,6 +119,10 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_auth: Option<bool>,
 
+    /// MCP server configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mcp: Option<McpConfig>,
+
     /// Track which config file each provider came from (not serialized)
     #[serde(skip)]
     pub provider_sources: HashMap<String, PathBuf>,
@@ -221,6 +225,29 @@ pub struct ProfileConfig {
     /// Track which config file the default_provider came from (not serialized)
     #[serde(skip)]
     pub default_provider_source: Option<PathBuf>,
+}
+
+/// MCP server configuration
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct McpConfig {
+    /// Which MCP tools to expose (default: ["get_secret", "exec"])
+    #[serde(default = "McpConfig::default_tools")]
+    pub tools: Vec<String>,
+}
+
+impl Default for McpConfig {
+    fn default() -> Self {
+        Self {
+            tools: Self::default_tools(),
+        }
+    }
+}
+
+impl McpConfig {
+    fn default_tools() -> Vec<String> {
+        vec!["get_secret".to_string(), "exec".to_string()]
+    }
 }
 
 #[derive(
@@ -467,6 +494,11 @@ impl Config {
         // Merge prompt_auth (overlay takes precedence)
         if overlay.prompt_auth.is_some() {
             merged.prompt_auth = overlay.prompt_auth;
+        }
+
+        // Merge mcp (overlay takes precedence)
+        if overlay.mcp.is_some() {
+            merged.mcp = overlay.mcp;
         }
 
         // Merge default_provider and its source (overlay takes precedence)
@@ -847,6 +879,7 @@ impl Config {
             age_key_file: None,
             if_missing: None,
             prompt_auth: None,
+            mcp: None,
             provider_sources: HashMap::new(),
             secret_sources: HashMap::new(),
             default_provider_source: None,
