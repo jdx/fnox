@@ -17,9 +17,6 @@ use crate::secret_resolver::resolve_secrets_batch;
 /// Maximum output size (1 MiB) to prevent unbounded memory usage
 const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
 
-/// Essential environment variables to forward to child processes
-const FORWARDED_ENV_VARS: &[&str] = &["PATH", "HOME", "USER", "SHELL", "TERM", "LANG"];
-
 /// MCP tool parameter: request a secret by name
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct GetSecretParams {
@@ -166,14 +163,7 @@ impl FnoxMcpServer {
             cmd.args(&params.command[1..]);
         }
 
-        // Clear the environment to prevent leaking parent process secrets,
-        // then selectively re-add essential vars and inject resolved secrets.
-        cmd.env_clear();
-        for &var in FORWARDED_ENV_VARS {
-            if let Ok(val) = std::env::var(var) {
-                cmd.env(var, val);
-            }
-        }
+        // Inject secrets as env vars (inherits parent environment like fnox exec)
         for (key, value) in cache.iter() {
             cmd.env(key, value);
         }

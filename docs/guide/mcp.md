@@ -78,7 +78,6 @@ Executes a command with all secrets injected as environment variables. The agent
 ## Security Considerations
 
 - Secrets live only in process memory — never written to disk
-- The `exec` tool clears the parent environment before injecting secrets, preventing leakage of host credentials (`AWS_*`, `FNOX_*`, etc.) to subprocesses. Only essential variables (`PATH`, `HOME`, `USER`, `SHELL`, `TERM`, `LANG`) are forwarded
 - The `exec` tool captures stdout/stderr (does not inherit stdio, which would corrupt the JSON-RPC stream) and caps output at 1 MiB to prevent unbounded memory usage
 - Non-interactive mode prevents provider auth prompts from interfering with the protocol
 - Use `tools = ["exec"]` to prevent agents from reading raw secret values
