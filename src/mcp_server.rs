@@ -18,6 +18,10 @@ use crate::temp_file_secrets::create_ephemeral_secret_file;
 /// Maximum output size (1 MiB) to prevent unbounded memory usage
 const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
 
+/// Per-stream (stdout/stderr) read limit. Half the total budget + 1 byte
+/// so we can detect truncation when a single stream overflows.
+const PER_STREAM_LIMIT: usize = (MAX_OUTPUT_BYTES / 2) + 1;
+
 /// Default execution timeout (5 minutes)
 const DEFAULT_EXEC_TIMEOUT_SECS: u64 = 300;
 
@@ -288,7 +292,7 @@ impl FnoxMcpServer {
                 .filter(|(key, _)| {
                     self.profile_secrets
                         .get(key.as_str())
-                        .is_none_or(|sc| sc.env)
+                        .map_or(false, |sc| sc.env)
                 })
                 .filter_map(|(k, v)| v.as_ref().map(|val| (k.clone(), val.clone())))
                 .collect()
@@ -352,7 +356,7 @@ impl FnoxMcpServer {
         let collect_bounded = async {
             use tokio::io::AsyncReadExt;
             // Split budget: half for stdout, half for stderr (+1 each to detect truncation)
-            let per_stream_limit = (MAX_OUTPUT_BYTES / 2) + 1;
+            let per_stream_limit = PER_STREAM_LIMIT;
 
             let stdout_fut = async {
                 let mut buf = Vec::with_capacity(per_stream_limit.min(65536));
@@ -406,7 +410,7 @@ impl FnoxMcpServer {
             )
         })?;
 
-        let per_stream_cap = (MAX_OUTPUT_BYTES / 2) + 1;
+        let per_stream_cap = PER_STREAM_LIMIT;
         let total_collected = stdout_buf.len() + stderr_buf.len();
         let stdout_truncated = stdout_buf.len() >= per_stream_cap;
         let stderr_truncated = stderr_buf.len() >= per_stream_cap;
@@ -511,6 +515,17 @@ impl ServerHandler for FnoxMcpServer {
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
+        let tools = self.mcp_config.tools();
+        let enabled: Vec<&str> = tools.iter().map(|t| t.tool_name()).collect();
+        if !enabled.contains(&request.name.as_ref()) {
+            return Err(McpError::invalid_request(
+                format!(
+                    "Tool '{}' is not enabled in this configuration",
+                    request.name
+                ),
+                None,
+            ));
+        }
         let tcc = rmcp::handler::server::tool::ToolCallContext::new(self, request, context);
         self.tool_router.call(tcc).await
     }
