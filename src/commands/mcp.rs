@@ -20,6 +20,12 @@ impl McpCommand {
         let profile_secrets = config.get_secrets(&profile)?;
         let mcp_config = config.mcp.clone().unwrap_or_default();
 
+        if mcp_config.exec_timeout_secs == Some(0) {
+            return Err(FnoxError::Config(
+                "mcp.exec_timeout_secs must be >= 1; use a large value to effectively disable the timeout".into(),
+            ));
+        }
+
         let server = FnoxMcpServer::new(config, profile, mcp_config, profile_secrets);
 
         let service: RunningService<RoleServer, FnoxMcpServer> = server

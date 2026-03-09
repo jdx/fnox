@@ -273,7 +273,7 @@ impl FnoxMcpServer {
             ));
         }
 
-        if params.command.is_empty() {
+        if params.command.is_empty() || params.command[0].is_empty() {
             return Err(McpError::invalid_params("Command must not be empty", None));
         }
 
@@ -336,12 +336,6 @@ impl FnoxMcpServer {
             .mcp_config
             .exec_timeout_secs
             .unwrap_or(DEFAULT_EXEC_TIMEOUT_SECS);
-        if timeout_secs == 0 {
-            return Err(McpError::invalid_params(
-                "exec_timeout_secs must be >= 1 (use a large value to effectively disable the timeout)",
-                None,
-            ));
-        }
         let mut child = cmd.spawn().map_err(|e| {
             McpError::internal_error(
                 format!("Failed to execute command '{}': {e}", params.command[0]),
