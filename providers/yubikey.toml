@@ -1,0 +1,27 @@
+# YubiKey HMAC-SHA1 hardware-backed encryption
+display_name = "YubiKey"
+serde_rename = "yubikey"
+rust_variant = "Yubikey"
+module = "yubikey"
+struct_name = "YubikeyProvider"
+pass_provider_name = true
+requires_interactive_auth = true
+category = "Local"
+description = "Hardware-backed encryption using YubiKey HMAC-SHA1 challenge-response"
+default_name = "yubikey"
+setup_instructions = """
+YubiKey provider uses HMAC-SHA1 challenge-response to derive an encryption key.
+Secrets are encrypted with AES-256-GCM — decryption requires the same YubiKey.
+Run: fnox provider add --type yubikey"""
+
+[fields.challenge]
+type = "required"
+placeholder = ""
+label = "Challenge (hex, auto-generated during setup):"
+wizard = false
+
+[fields.slot]
+type = "required"
+placeholder = "2"
+label = "YubiKey slot (1 or 2):"
+wizard = false

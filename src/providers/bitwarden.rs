@@ -35,13 +35,13 @@ impl BitwardenProvider {
         organization_id: Option<String>,
         profile: Option<String>,
         backend: Option<BitwardenBackend>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        Ok(Self {
             collection,
             organization_id,
             profile,
             backend: backend.unwrap_or(BitwardenBackend::Bw),
-        }
+        })
     }
 
     fn build_command(

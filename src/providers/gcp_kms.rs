@@ -17,13 +17,13 @@ pub struct GcpKmsProvider {
 }
 
 impl GcpKmsProvider {
-    pub fn new(project: String, location: String, keyring: String, key: String) -> Self {
-        Self {
+    pub fn new(project: String, location: String, keyring: String, key: String) -> Result<Self> {
+        Ok(Self {
             project,
             location,
             keyring,
             key,
-        }
+        })
     }
 
     /// Get the full resource name for the crypto key

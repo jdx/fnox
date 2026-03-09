@@ -195,3 +195,83 @@ EOF
 	refute_output --partial "CHILD_SECRET"
 	refute_output --partial "updated-child-value"
 }
+
+@test "fnox set writes to fnox.local.toml when it is the only config file" {
+	# Only create fnox.local.toml, no fnox.toml
+	cat >fnox.local.toml <<EOF
+[providers.plain]
+type = "plain"
+EOF
+
+	run "$FNOX_BIN" set MY_SECRET "my-value"
+	assert_success
+
+	# Secret should be written to fnox.local.toml
+	run cat fnox.local.toml
+	assert_success
+	assert_output --partial "MY_SECRET"
+
+	# fnox.toml should NOT have been created
+	assert [ ! -f fnox.toml ]
+}
+
+@test "fnox set writes to fnox.toml when both fnox.toml and fnox.local.toml exist" {
+	# Create both files
+	cat >fnox.toml <<EOF
+[providers.plain]
+type = "plain"
+
+[secrets]
+EXISTING = { default = "existing" }
+EOF
+
+	cat >fnox.local.toml <<EOF
+[secrets]
+LOCAL_OVERRIDE = { default = "local" }
+EOF
+
+	run "$FNOX_BIN" set NEW_SECRET "new-value"
+	assert_success
+
+	# Secret should be written to fnox.toml (lowest priority)
+	run cat fnox.toml
+	assert_success
+	assert_output --partial "NEW_SECRET"
+	assert_output --partial "EXISTING"
+
+	# fnox.local.toml should NOT have the new secret
+	run cat fnox.local.toml
+	assert_success
+	refute_output --partial "NEW_SECRET"
+	assert_output --partial "LOCAL_OVERRIDE"
+}
+
+@test "fnox set --profile staging writes to fnox.staging.toml when it exists alongside fnox.toml" {
+	cat >fnox.toml <<EOF
+[providers.plain]
+type = "plain"
+
+[secrets]
+BASE_SECRET = { default = "base" }
+EOF
+
+	cat >fnox.staging.toml <<EOF
+[secrets]
+STAGING_EXISTING = { default = "staging" }
+EOF
+
+	run "$FNOX_BIN" set --profile staging NEW_STAGING "staging-value"
+	assert_success
+
+	# Secret should be written to fnox.staging.toml (profile-specific)
+	run cat fnox.staging.toml
+	assert_success
+	assert_output --partial "NEW_STAGING"
+	assert_output --partial "STAGING_EXISTING"
+
+	# fnox.toml should NOT have the new secret
+	run cat fnox.toml
+	assert_success
+	refute_output --partial "NEW_STAGING"
+	assert_output --partial "BASE_SECRET"
+}

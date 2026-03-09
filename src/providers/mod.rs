@@ -11,8 +11,10 @@ pub mod azure_kms;
 pub mod azure_sm;
 pub mod bitwarden;
 pub mod bitwarden_sm;
+pub mod fido2;
 pub mod gcp_kms;
 pub mod gcp_sm;
+pub mod hw_encrypt;
 pub mod infisical;
 pub mod keepass;
 pub mod keychain;
@@ -25,6 +27,7 @@ pub mod resolved;
 pub mod resolver;
 pub mod secret_ref;
 pub mod vault;
+pub mod yubikey;
 
 pub use bitwarden::BitwardenBackend;
 pub use resolver::resolve_provider_config;
@@ -133,9 +136,9 @@ mod generated {
     pub(super) mod providers_instantiate {
         // Need to import provider modules for instantiation
         use super::super::{
-            age, aws_kms, aws_ps, aws_sm, azure_kms, azure_sm, bitwarden, bitwarden_sm, gcp_kms,
-            gcp_sm, infisical, keepass, keychain, onepassword, password_store, passwordstate,
-            plain, proton_pass, vault,
+            age, aws_kms, aws_ps, aws_sm, azure_kms, azure_sm, bitwarden, bitwarden_sm, fido2,
+            gcp_kms, gcp_sm, infisical, keepass, keychain, onepassword, password_store,
+            passwordstate, plain, proton_pass, vault, yubikey,
         };
         include!(concat!(
             env!("OUT_DIR"),
@@ -278,5 +281,5 @@ pub async fn get_provider_resolved(
     provider_config: &ProviderConfig,
 ) -> Result<Box<dyn Provider>> {
     let resolved = resolve_provider_config(config, profile, provider_name, provider_config).await?;
-    get_provider_from_resolved(&resolved)
+    get_provider_from_resolved(provider_name, &resolved)
 }

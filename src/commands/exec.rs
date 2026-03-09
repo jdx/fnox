@@ -1,8 +1,10 @@
 use crate::error::{FnoxError, Result};
+use crate::lease::{self, LeaseLedger};
 use crate::secret_resolver::resolve_secrets_batch;
 use crate::temp_file_secrets::create_ephemeral_secret_file;
 use crate::{commands::Cli, config::Config};
 use clap::{Args, ValueHint};
+use std::collections::HashSet;
 use std::process::Command;
 use tempfile::NamedTempFile;
 
@@ -31,14 +33,95 @@ impl ExecCommand {
             cmd.args(&self.command[1..]);
         }
 
-        // Resolve secrets using batch resolution for better performance
+        // Resolve secrets using batch resolution first
         let resolved_secrets = resolve_secrets_batch(&config, &profile, &profile_secrets).await?;
 
         // Keep temp files alive for the duration of the command
         let mut _temp_files: Vec<NamedTempFile> = Vec::new();
 
+        // Track which env var keys are set by lease backends so regular secrets
+        // don't overwrite short-lived lease credentials with long-lived master ones
+        let mut lease_keys: HashSet<String> = HashSet::new();
+
+        // Resolve leases if configured.
+        // Temporarily set resolved secrets as process env vars so lease backend
+        // SDKs (AWS, GCP, Azure) can find master credentials during lease creation.
+        // The TempEnvGuard ensures cleanup on all exit paths (including errors).
+        let leases = config.get_leases(&profile);
+        let mut _temp_env_guard = lease::TempEnvGuard::default();
+        if !leases.is_empty() {
+            _temp_files.extend(lease::set_secrets_as_env(
+                &resolved_secrets,
+                &profile_secrets,
+                &mut _temp_env_guard,
+            )?);
+            let project_dir = lease::project_dir_from_config(&config, &cli.config);
+            // Each resolve_lease call manages its own short-lived ledger locks.
+            // Leases are processed sequentially; no shared lock is needed.
+            for (name, lease_config) in &leases {
+                // Check prerequisites before attempting to create/use a lease
+                let prereq_missing = lease_config.check_prerequisites();
+                if let Some(ref missing) = prereq_missing {
+                    // Check if there's a cached lease we can still use (short lock).
+                    let has_cache = {
+                        let _lock = LeaseLedger::lock(&project_dir)?;
+                        let ledger = LeaseLedger::load(&project_dir)?;
+                        let config_hash = lease_config.config_hash();
+                        ledger
+                            .find_reusable(name, &config_hash)
+                            .is_some_and(|r| r.cached_credentials.is_some())
+                    };
+                    if !has_cache {
+                        tracing::warn!(
+                            "Skipping lease '{}': {}\nRun 'fnox lease create -i {}' to set up credentials interactively.",
+                            name,
+                            missing,
+                            name
+                        );
+                        continue;
+                    }
+                }
+                // Intentionally hard-fail: if prerequisites pass but lease
+                // creation fails (network, permissions, etc.), abort rather
+                // than silently running the subprocess without expected creds.
+                // resolve_lease manages its own ledger locks with minimal scope.
+                let creds = lease::resolve_lease(
+                    name,
+                    lease_config,
+                    &config,
+                    &profile,
+                    &project_dir,
+                    prereq_missing.as_deref(),
+                    "exec",
+                    false,
+                )
+                .await?;
+                for (cred_key, cred_value) in creds {
+                    lease_keys.insert(cred_key.clone());
+                    cmd.env(cred_key, cred_value);
+                }
+            }
+        }
+
         // Add resolved secrets as environment variables
         for (key, value) in resolved_secrets {
+            // Skip secrets whose keys were already set by lease backends.
+            // This MUST come before env=false: if a master credential has
+            // env=false and the lease backend produced a short-lived credential
+            // under the same key (e.g., AWS_ACCESS_KEY_ID), calling env_remove
+            // here would strip the lease credential that cmd.env() already set.
+            if lease_keys.contains(&key) {
+                tracing::debug!("Skipping secret '{}': already set by lease backend", key);
+                continue;
+            }
+            // Strip env=false secrets from child environment regardless of whether
+            // resolution succeeded — a stale inherited env var must not leak through.
+            if let Some(secret_config) = profile_secrets.get(&key)
+                && !secret_config.env
+            {
+                cmd.env_remove(&key);
+                continue;
+            }
             if let Some(value) = value {
                 // Check if this secret should be written to a file
                 if let Some(secret_config) = profile_secrets.get(&key) {
@@ -68,23 +151,57 @@ impl ExecCommand {
             }
         }
 
-        let status = cmd
-            .status()
+        // Drop the temp env guard BEFORE spawning the child process.
+        // This removes temporary secrets (including env=false master credentials)
+        // from the parent process environment so the child doesn't inherit them.
+        drop(_temp_env_guard);
+
+        let mut child = cmd.spawn().map_err(|e| FnoxError::CommandExecutionFailed {
+            command: self.command.join(" "),
+            source: e,
+        })?;
+
+        // Forward SIGINT/SIGTERM to the child so Ctrl-C and `kill` reach it.
+        #[cfg(unix)]
+        {
+            let child_pid = nix::unistd::Pid::from_raw(child.id() as i32);
+            unsafe {
+                // Ignore signals in the parent — the child handles them.
+                // When the child exits we propagate its exit code below.
+                signal_hook::low_level::register(signal_hook::consts::SIGINT, move || {
+                    nix::sys::signal::kill(child_pid, nix::sys::signal::SIGINT).ok();
+                })
+                .ok();
+                signal_hook::low_level::register(signal_hook::consts::SIGTERM, move || {
+                    nix::sys::signal::kill(child_pid, nix::sys::signal::SIGTERM).ok();
+                })
+                .ok();
+            }
+        }
+
+        let status = child
+            .wait()
             .map_err(|e| FnoxError::CommandExecutionFailed {
                 command: self.command.join(" "),
                 source: e,
             })?;
 
-        if !status.success()
-            && let Some(code) = status.code()
-        {
-            return Err(FnoxError::CommandExitFailed {
-                command: self.command.join(" "),
-                status: code,
-            });
+        // Temp files are cleaned up when _temp_files drops here
+        drop(_temp_files);
+
+        if !status.success() {
+            // Exit silently — the child already printed its own errors.
+            #[cfg(unix)]
+            {
+                use std::os::unix::process::ExitStatusExt;
+                // If killed by signal, exit with 128+signal (standard convention)
+                if let Some(sig) = status.signal() {
+                    std::process::exit(128 + sig);
+                }
+            }
+            std::process::exit(status.code().unwrap_or(1));
         }
 
-        // Temp files are automatically deleted when _temp_files goes out of scope
         Ok(())
     }
 }

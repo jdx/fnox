@@ -121,11 +121,16 @@ where
 pub struct AwsKmsProvider {
     key_id: String,
     region: String,
+    endpoint: Option<String>,
 }
 
 impl AwsKmsProvider {
-    pub fn new(key_id: String, region: String) -> Self {
-        Self { key_id, region }
+    pub fn new(key_id: String, region: String, endpoint: Option<String>) -> Result<Self> {
+        Ok(Self {
+            key_id,
+            region,
+            endpoint,
+        })
     }
 
     /// Create an AWS KMS client
@@ -136,7 +141,12 @@ impl AwsKmsProvider {
             .load()
             .await;
 
-        Ok(Client::new(&config))
+        let mut kms_config_builder = aws_sdk_kms::config::Builder::from(&config);
+        if let Some(endpoint) = &self.endpoint {
+            kms_config_builder = kms_config_builder.endpoint_url(endpoint);
+        }
+
+        Ok(Client::from_conf(kms_config_builder.build()))
     }
 
     /// Decrypt a ciphertext value using KMS

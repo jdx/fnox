@@ -27,3 +27,8 @@ type = "optional"
 placeholder = "/myapp/prod/"
 label = "Parameter path prefix (optional):"
 wizard = true
+
+[fields.endpoint]
+type = "optional"
+placeholder = "http://localhost:4566"
+label = "Custom endpoint URL (optional):"

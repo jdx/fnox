@@ -14,11 +14,11 @@ pub struct AgeEncryptionProvider {
 }
 
 impl AgeEncryptionProvider {
-    pub fn new(recipients: Vec<String>, key_file: Option<String>) -> Self {
-        Self {
+    pub fn new(recipients: Vec<String>, key_file: Option<String>) -> Result<Self> {
+        Ok(Self {
             recipients,
             key_file: key_file.map(|k| PathBuf::from(shellexpand::tilde(&k).to_string())),
-        }
+        })
     }
 }
 

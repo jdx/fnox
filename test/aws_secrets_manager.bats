@@ -1,30 +1,31 @@
 #!/usr/bin/env bats
-# bats file_tags=expensive
 #
 # AWS Secrets Manager Provider Tests
 #
-# These tests verify the AWS Secrets Manager provider integration with fnox.
-# Note: Tests should run serially (within this file) due to AWS Secrets Manager
-#       eventual consistency. Use `--no-parallelize-within-files` bats flag.
+# These tests verify the AWS Secrets Manager provider integration with fnox
+# using LocalStack for mock AWS services.
 #
 # Prerequisites:
-#   1. AWS credentials configured (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
-#   2. IAM permissions: secretsmanager:GetSecretValue, secretsmanager:CreateSecret, secretsmanager:PutSecretValue
+#   1. Start LocalStack: docker run -d -p 4566:4566 -e SERVICES=secretsmanager localstack/localstack
+#   2. Set LOCALSTACK_ENDPOINT=http://localhost:4566
 #   3. Run tests: mise run test:bats -- test/aws_secrets_manager.bats
 #
-# Note: Tests will automatically skip if AWS credentials are not available.
-#       The mise task runs `fnox exec` which automatically decrypts provider-based secrets.
+# Note: Tests will automatically skip if LOCALSTACK_ENDPOINT is not set.
 #
 
 # File-level setup - runs once before all tests (reduces API calls)
 setup_file() {
 	export SM_REGION="us-east-1"
 
-	# Check if AWS credentials are available
-	if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-		export SKIP_AWS_SM_TESTS="AWS credentials not available. Ensure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are configured."
+	if [ -z "$LOCALSTACK_ENDPOINT" ]; then
+		export SKIP_AWS_SM_TESTS="LOCALSTACK_ENDPOINT not set. Start LocalStack and set LOCALSTACK_ENDPOINT=http://localhost:4566"
 		return
 	fi
+
+	# Set dummy AWS credentials for LocalStack
+	export AWS_ACCESS_KEY_ID="test"
+	export AWS_SECRET_ACCESS_KEY="test"
+	export AWS_DEFAULT_REGION="us-east-1"
 
 	# Check if aws CLI is installed
 	if ! command -v aws >/dev/null 2>&1; then
@@ -32,30 +33,40 @@ setup_file() {
 		return
 	fi
 
-	# Verify we can access Secrets Manager (expensive call - do once)
-	if ! aws secretsmanager list-secrets --region "$SM_REGION" --max-results 1 >/dev/null 2>&1; then
-		export SKIP_AWS_SM_TESTS="Cannot access AWS Secrets Manager. Permissions may be insufficient."
-		return
-	fi
+	# Wait for LocalStack to be ready
+	local retries=10
+	while ! curl -sf "$LOCALSTACK_ENDPOINT/_localstack/health" >/dev/null 2>&1; do
+		retries=$((retries - 1))
+		if [ "$retries" -le 0 ]; then
+			export SKIP_AWS_SM_TESTS="LocalStack not ready"
+			return
+		fi
+		sleep 1
+	done
 
-	# Create a shared test secret for reuse across multiple tests
-	# This reduces API calls vs creating/deleting per test
+	# Create shared test secrets in LocalStack
 	export SHARED_SECRET_NAME="fnox-test/shared-test-$$"
 	export SHARED_SECRET_VALUE="shared-test-value-for-fnox"
-	aws secretsmanager create-secret \
+	aws --endpoint-url "$LOCALSTACK_ENDPOINT" secretsmanager create-secret \
 		--name "$SHARED_SECRET_NAME" \
 		--secret-string "$SHARED_SECRET_VALUE" \
 		--region "$SM_REGION" >/dev/null 2>&1
 
-	# Wait for propagation (eventual consistency)
-	sleep 2
+	# Create the pre-existing test secret
+	aws --endpoint-url "$LOCALSTACK_ENDPOINT" secretsmanager create-secret \
+		--name "fnox/test-secret" \
+		--secret-string "This is a test secret in AWS Secrets Manager!" \
+		--region "$SM_REGION" >/dev/null 2>&1 ||
+		aws --endpoint-url "$LOCALSTACK_ENDPOINT" secretsmanager put-secret-value \
+			--secret-id "fnox/test-secret" \
+			--secret-string "This is a test secret in AWS Secrets Manager!" \
+			--region "$SM_REGION" >/dev/null 2>&1
 }
 
 # File-level teardown - runs once after all tests
 teardown_file() {
-	# Clean up shared test secret
-	if [ -n "$SHARED_SECRET_NAME" ]; then
-		aws secretsmanager delete-secret \
+	if [ -n "$SHARED_SECRET_NAME" ] && [ -n "$LOCALSTACK_ENDPOINT" ]; then
+		aws --endpoint-url "$LOCALSTACK_ENDPOINT" secretsmanager delete-secret \
 			--secret-id "$SHARED_SECRET_NAME" \
 			--force-delete-without-recovery \
 			--region "$SM_REGION" >/dev/null 2>&1 || true
@@ -92,6 +103,7 @@ root = true
 [providers.sm]
 type = "aws-sm"
 region = "$region"
+endpoint = "$LOCALSTACK_ENDPOINT"
 
 [secrets]
 EOF
@@ -103,6 +115,7 @@ root = true
 type = "aws-sm"
 region = "$region"
 prefix = "$prefix"
+endpoint = "$LOCALSTACK_ENDPOINT"
 
 [secrets]
 EOF
@@ -113,10 +126,8 @@ EOF
 	create_sm_config
 
 	# Use the shared test secret (created in setup_file)
-	# Extract the suffix after "fnox-test/" prefix
 	local secret_suffix="${SHARED_SECRET_NAME#fnox-test/}"
 
-	# Add secret reference to config (using just the name without prefix)
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.SM_TEST]
@@ -124,7 +135,6 @@ provider = "sm"
 value = "${secret_suffix}"
 EOF
 
-	# Get the secret
 	run "$FNOX_BIN" get SM_TEST
 	assert_success
 	assert_output "$SHARED_SECRET_VALUE"
@@ -133,11 +143,8 @@ EOF
 @test "fnox get with prefix prepends prefix to secret name" {
 	create_sm_config "us-east-1" "fnox-test/"
 
-	# Use the shared test secret (created in setup_file)
-	# Extract the suffix after "fnox-test/" prefix
 	local secret_suffix="${SHARED_SECRET_NAME#fnox-test/}"
 
-	# Add secret reference using just the suffix (prefix will be prepended)
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.PREFIXED_SECRET]
@@ -145,7 +152,6 @@ provider = "sm"
 value = "${secret_suffix}"
 EOF
 
-	# Get the secret
 	run "$FNOX_BIN" get PREFIXED_SECRET
 	assert_success
 	assert_output "$SHARED_SECRET_VALUE"
@@ -154,7 +160,6 @@ EOF
 @test "fnox get without prefix uses full secret name" {
 	create_sm_config "us-east-1" ""
 
-	# Use existing fnox/test-secret (no prefix, so full path required)
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.FULL_NAME_SECRET]
@@ -162,7 +167,6 @@ provider = "sm"
 value = "fnox/test-secret"
 EOF
 
-	# Get the secret
 	run "$FNOX_BIN" get FULL_NAME_SECRET
 	assert_success
 	assert_output "This is a test secret in AWS Secrets Manager!"
@@ -210,7 +214,6 @@ EOF
 @test "fnox get respects region configuration" {
 	create_sm_config "us-east-1"
 
-	# Use the shared test secret to verify region config works
 	local secret_suffix="${SHARED_SECRET_NAME#fnox-test/}"
 
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
@@ -220,14 +223,12 @@ provider = "sm"
 value = "${secret_suffix}"
 EOF
 
-	# Get the secret
 	run "$FNOX_BIN" get REGIONAL_SECRET
 	assert_success
 	assert_output "$SHARED_SECRET_VALUE"
 }
 
 @test "AWS Secrets Manager works with existing fnox/test-secret" {
-	# Test with the pre-created secret from setup
 	create_sm_config "us-east-1" "fnox/"
 
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
@@ -237,7 +238,6 @@ provider = "sm"
 value = "test-secret"
 EOF
 
-	# Get the secret
 	run "$FNOX_BIN" get EXISTING_SECRET
 	assert_success
 	assert_output "This is a test secret in AWS Secrets Manager!"

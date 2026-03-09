@@ -1,5 +1,5 @@
 use crate::commands::Cli;
-use crate::config::{Config, IfMissing};
+use crate::config::{self, Config, IfMissing};
 use crate::error::{FnoxError, Result};
 use clap::Args;
 use std::io::{self, Read};
@@ -147,19 +147,10 @@ impl SetCommand {
                             // In dry-run mode, skip actual encryption
                             (Some("<encrypted>".to_string()), None)
                         } else {
-                            // Encrypt with the provider
-                            match provider.encrypt(value).await {
-                                Ok(encrypted) => (Some(encrypted), None),
-                                Err(e) => {
-                                    // Provider doesn't support encryption, store plaintext
-                                    tracing::warn!(
-                                        "Encryption not supported for provider '{}': {}. Storing plaintext.",
-                                        provider_name,
-                                        e
-                                    );
-                                    (Some(value.clone()), None)
-                                }
-                            }
+                            // Encrypt with the provider — fail on error rather than
+                            // silently storing plaintext
+                            let encrypted = provider.encrypt(value).await?;
+                            (Some(encrypted), None)
                         }
                     } else if is_remote_storage_provider {
                         tracing::debug!(
@@ -267,11 +258,16 @@ impl SetCommand {
             }
             global_path
         } else {
-            // Save to current directory's config
             let current_dir = std::env::current_dir().map_err(|e| {
                 FnoxError::Config(format!("Failed to get current directory: {}", e))
             })?;
-            current_dir.join(&cli.config)
+            // Only use auto-detection when --config is the clap default ("fnox.toml").
+            // Any other value means the user explicitly chose a config file.
+            if cli.config == std::path::Path::new(config::DEFAULT_CONFIG_FILENAME) {
+                config::find_local_config(&current_dir, Some(&profile))
+            } else {
+                current_dir.join(&cli.config)
+            }
         };
 
         if self.dry_run {

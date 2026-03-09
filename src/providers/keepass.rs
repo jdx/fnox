@@ -16,12 +16,16 @@ pub struct KeePassProvider {
 }
 
 impl KeePassProvider {
-    pub fn new(database: String, keyfile: Option<String>, password: Option<String>) -> Self {
-        Self {
+    pub fn new(
+        database: String,
+        keyfile: Option<String>,
+        password: Option<String>,
+    ) -> Result<Self> {
+        Ok(Self {
             database_path: PathBuf::from(shellexpand::tilde(&database).to_string()),
             keyfile_path: keyfile.map(|k| PathBuf::from(shellexpand::tilde(&k).to_string())),
             password,
-        }
+        })
     }
 
     /// Get the password from environment variable or config

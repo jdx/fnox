@@ -1,48 +1,80 @@
 [package]
 name = "fnox"
-version = "1.15.1"
+version = "1.17.0"
 edition = "2024"
 authors = ["@jdx"]
 description = "A flexible secret management tool supporting multiple providers and encryption methods"
 license = "MIT"
 repository = "https://github.com/jdx/fnox"
 readme = "README.md"
-rust-version = "1.91"
+rust-version = "1.91.1"
 
 [[bin]]
 name = "fnox"
 path = "src/main.rs"
 
 [dependencies]
+aes-gcm = "0.10"
+age = { version = "0.11", features = ["ssh"] }
 anyhow = "1"
+arboard = "3"
 arc-swap = "1"
 async-trait = "0.1"
 atty = "0.2"
+aws-config = { version = "1", features = ["sso", "credentials-process", "credentials-login"] }
+aws-sdk-kms = { version = "1" }
+aws-sdk-secretsmanager = { version = "1" }
+aws-sdk-ssm = { version = "1" }
+aws-sdk-sts = { version = "1" }
+azure_core = { version = "0.30" }
+azure_identity = { version = "0.30" }
+azure_security_keyvault_keys = { version = "0.9" }
+azure_security_keyvault_secrets = { version = "0.9" }
 base64 = "0.22"
 blake3 = "1"
 chrono = "0.4"
 ci_info = "0.14"
 clap = { version = "4", features = ["derive", "env"] }
 console = "0.16"
+crossterm = { version = "0.29", features = ["event-stream"] }
+ctap-hid-fido2 = "3"
 data-encoding = "2"
-demand = "1"
-usage-lib = { version = "2", features = ["clap"] }
+demand = "2"
 dirs = "6"
+fslock = "0.2"
 futures = "0.3"
+gcp_auth = { version = "0.12" }
+google-cloud-kms = { version = "0.6" }
+google-cloud-secretmanager-v1 = { version = "1.1" }
+hex = "0.4"
+hkdf = "0.12"
 indexmap = { version = "2", features = ["serde"] }
+jsonwebtoken = { version = "10", features = ["aws_lc_rs"] }
+keepass = { version = "0.8", features = ["save_kdbx4"] }
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 miette = { version = "7", features = ["fancy"] }
 miniz_oxide = "0.8"
+nix = { version = "0.31", features = ["signal", "process"] }
+pluralizer = "0.5"
+rand = "0.8"
+ratatui = "0.29"
 regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+rmcp = { version = "1", features = ["server", "transport-io", "macros"] }
 rmp-serde = "1"
+rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std"] }
 schemars = { version = "1", features = ["indexmap2"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_spanned = "1"
 serde_yaml = "0.9"
+sha2 = "0.10"
 shellexpand = "3"
+shlex = "1"
+signal-hook = "0.4"
 strsim = "0.11"
 strum = { version = "0.27", features = ["derive"] }
-tabled = {version = "0.20", features = ["ansi"]}
+tabled = { version = "0.20", features = ["ansi"] }
 tempfile = "3"
 terminal_size = "0.4"
 thiserror = "2"
@@ -50,43 +82,16 @@ tokio = { version = "1", features = ["full"] }
 toml_edit = { version = "0.22", features = ["serde"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+urlencoding = "2"
+usage-lib = { version = "2", features = ["clap"] }
 walkdir = "2"
 which = "7"
+xx = { version = "2", features = ["fslock"] }
+yubico_manager = "0.9"
 
-# TUI dependencies
-ratatui = "0.29"
-crossterm = { version = "0.29", features = ["event-stream"] }
-arboard = "3"
-
-# HTTP client for providers without SDKs or native CLIs
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
-urlencoding = "2.1"
-
-# Provider dependencies
-age = { version = "0.11", features = ["ssh"] }
-aws-config = { version = "1", features = ["sso", "credentials-process", "credentials-login"] }
-aws-sdk-kms = { version = "1" }
-aws-sdk-secretsmanager = { version = "1" }
-aws-sdk-ssm = { version = "1" }
-azure_core = { version = "0.30" }
-azure_identity = { version = "0.30" }
-azure_security_keyvault_keys = { version = "0.9" }
-azure_security_keyvault_secrets = { version = "0.9" }
-google-cloud-kms = { version = "0.6" }
-google-cloud-secretmanager-v1 = { version = "1.1" }
-gcp_auth = { version = "0.12" }
-keepass = { version = "0.8", features = ["save_kdbx4"] }
-keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
-# Required for rustls crypto provider (used by GCP SDKs)
-rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std"] }
-pluralizer = "0.5.0"
-
-# Linux-specific dependencies for cross-compilation
 [target.'cfg(target_os = "linux")'.dependencies]
-# Vendored OpenSSL builds from source to support cross-compilation
-openssl-sys = { version = "0.9", features = ["vendored"] }
-# Vendored dbus builds from source to support cross-compilation
 dbus = { version = "0.9", features = ["vendored"] }
+openssl-sys = { version = "0.9", features = ["vendored"] }
 
 [dev-dependencies]
 tempfile = "3"

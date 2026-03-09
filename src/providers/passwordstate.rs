@@ -46,7 +46,7 @@ impl PasswordstateProvider {
         api_key: Option<String>,
         password_list_id: String,
         verify_ssl: Option<String>,
-    ) -> Self {
+    ) -> Result<Self> {
         let api_key = api_key.or_else(passwordstate_api_key).unwrap_or_default();
 
         let verify_ssl = verify_ssl
@@ -56,12 +56,12 @@ impl PasswordstateProvider {
         // Normalize base_url (remove trailing slash)
         let base_url = base_url.trim_end_matches('/').to_string();
 
-        Self {
+        Ok(Self {
             base_url,
             api_key,
             password_list_id,
             verify_ssl,
-        }
+        })
     }
 
     /// Create an HTTP client with appropriate SSL settings

@@ -18,8 +18,8 @@ pub fn env_dependencies() -> &'static [&'static str] {
 pub struct PlainProvider;
 
 impl PlainProvider {
-    pub fn new() -> Self {
-        Self
+    pub fn new() -> Result<Self> {
+        Ok(Self)
     }
 }
 

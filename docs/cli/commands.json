@@ -449,22 +449,22 @@
         "args": [],
         "flags": [
           {
+            "name": "force",
+            "usage": "-f --force",
+            "help": "Overwrite existing configuration file",
+            "help_first_line": "Overwrite existing configuration file",
+            "short": ["f"],
+            "long": ["force"],
+            "hide": false,
+            "global": false
+          },
+          {
             "name": "global",
             "usage": "-g --global",
             "help": "Initialize the global config file (~/.config/fnox/config.toml)",
             "help_first_line": "Initialize the global config file (~/.config/fnox/config.toml)",
             "short": ["g"],
             "long": ["global"],
-            "hide": false,
-            "global": false
-          },
-          {
-            "name": "force",
-            "usage": "--force",
-            "help": "Overwrite existing configuration file",
-            "help_first_line": "Overwrite existing configuration file",
-            "short": [],
-            "long": ["force"],
             "hide": false,
             "global": false
           },
@@ -484,6 +484,195 @@
         "help": "Initialize a new fnox configuration file",
         "name": "init",
         "aliases": ["i"],
+        "hidden_aliases": [],
+        "examples": []
+      },
+      "lease": {
+        "full_cmd": ["lease"],
+        "usage": "lease <SUBCOMMAND>",
+        "subcommands": {
+          "cleanup": {
+            "full_cmd": ["lease", "cleanup"],
+            "usage": "lease cleanup",
+            "subcommands": {},
+            "args": [],
+            "flags": [],
+            "mounts": [],
+            "hide": false,
+            "help": "Revoke all expired leases that need manual cleanup",
+            "name": "cleanup",
+            "aliases": [],
+            "hidden_aliases": [],
+            "examples": []
+          },
+          "create": {
+            "full_cmd": ["lease", "create"],
+            "usage": "lease create [FLAGS] [BACKEND_NAME]",
+            "subcommands": {},
+            "args": [
+              {
+                "name": "BACKEND_NAME",
+                "usage": "[BACKEND_NAME]",
+                "help": "Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted",
+                "help_first_line": "Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted",
+                "required": false,
+                "double_dash": "Optional",
+                "hide": false
+              }
+            ],
+            "flags": [
+              {
+                "name": "all",
+                "usage": "-a --all",
+                "help": "Create leases for all configured backends",
+                "help_first_line": "Create leases for all configured backends",
+                "short": ["a"],
+                "long": ["all"],
+                "hide": false,
+                "global": false
+              },
+              {
+                "name": "duration",
+                "usage": "-d --duration <DURATION>",
+                "help": "Lease duration (e.g., \"15m\", \"1h\", \"2h30m\"); overrides config duration",
+                "help_first_line": "Lease duration (e.g., \"15m\", \"1h\", \"2h30m\"); overrides config duration",
+                "short": ["d"],
+                "long": ["duration"],
+                "hide": false,
+                "global": false,
+                "arg": {
+                  "name": "DURATION",
+                  "usage": "<DURATION>",
+                  "required": true,
+                  "double_dash": "Optional",
+                  "hide": false
+                }
+              },
+              {
+                "name": "format",
+                "usage": "-f --format <FORMAT>",
+                "help": "Output format",
+                "help_first_line": "Output format",
+                "short": ["f"],
+                "long": ["format"],
+                "hide": false,
+                "global": false,
+                "arg": {
+                  "name": "FORMAT",
+                  "usage": "<FORMAT>",
+                  "required": true,
+                  "double_dash": "Optional",
+                  "hide": false,
+                  "choices": {
+                    "choices": ["shell", "json", "env"]
+                  }
+                },
+                "default": ["shell"]
+              },
+              {
+                "name": "interactive",
+                "usage": "-i --interactive",
+                "help": "Prompt interactively for missing credentials",
+                "help_first_line": "Prompt interactively for missing credentials",
+                "short": ["i"],
+                "long": ["interactive"],
+                "hide": false,
+                "global": false
+              },
+              {
+                "name": "label",
+                "usage": "-l --label <LABEL>",
+                "help": "Label for the lease (e.g., session purpose)",
+                "help_first_line": "Label for the lease (e.g., session purpose)",
+                "short": ["l"],
+                "long": ["label"],
+                "hide": false,
+                "global": false,
+                "arg": {
+                  "name": "LABEL",
+                  "usage": "<LABEL>",
+                  "required": true,
+                  "double_dash": "Optional",
+                  "hide": false
+                },
+                "default": ["fnox-lease"]
+              }
+            ],
+            "mounts": [],
+            "hide": false,
+            "help": "Create a short-lived credential lease from a secret",
+            "name": "create",
+            "aliases": [],
+            "hidden_aliases": [],
+            "examples": []
+          },
+          "list": {
+            "full_cmd": ["lease", "list"],
+            "usage": "lease list [--active] [--expired]",
+            "subcommands": {},
+            "args": [],
+            "flags": [
+              {
+                "name": "active",
+                "usage": "--active",
+                "help": "Show only active (non-expired, non-revoked) leases",
+                "help_first_line": "Show only active (non-expired, non-revoked) leases",
+                "short": [],
+                "long": ["active"],
+                "hide": false,
+                "global": false
+              },
+              {
+                "name": "expired",
+                "usage": "--expired",
+                "help": "Show only expired leases",
+                "help_first_line": "Show only expired leases",
+                "short": [],
+                "long": ["expired"],
+                "hide": false,
+                "global": false
+              }
+            ],
+            "mounts": [],
+            "hide": false,
+            "help": "List tracked leases",
+            "name": "list",
+            "aliases": [],
+            "hidden_aliases": [],
+            "examples": []
+          },
+          "revoke": {
+            "full_cmd": ["lease", "revoke"],
+            "usage": "lease revoke <LEASE_ID>",
+            "subcommands": {},
+            "args": [
+              {
+                "name": "LEASE_ID",
+                "usage": "<LEASE_ID>",
+                "help": "Lease ID to revoke",
+                "help_first_line": "Lease ID to revoke",
+                "required": true,
+                "double_dash": "Optional",
+                "hide": false
+              }
+            ],
+            "flags": [],
+            "mounts": [],
+            "hide": false,
+            "help": "Revoke a lease by ID",
+            "name": "revoke",
+            "aliases": [],
+            "hidden_aliases": [],
+            "examples": []
+          }
+        },
+        "args": [],
+        "flags": [],
+        "mounts": [],
+        "hide": false,
+        "help": "Manage ephemeral credential leases",
+        "name": "lease",
+        "aliases": [],
         "hidden_aliases": [],
         "examples": []
       },
@@ -539,6 +728,20 @@
         "help": "List all secrets",
         "name": "list",
         "aliases": ["ls", "secrets"],
+        "hidden_aliases": [],
+        "examples": []
+      },
+      "mcp": {
+        "full_cmd": ["mcp"],
+        "usage": "mcp",
+        "subcommands": {},
+        "args": [],
+        "flags": [],
+        "mounts": [],
+        "hide": false,
+        "help": "Start an MCP server for secret-gated AI agent access",
+        "name": "mcp",
+        "aliases": [],
         "hidden_aliases": [],
         "examples": []
       },
@@ -604,6 +807,7 @@
                     "azure-sm",
                     "gcp",
                     "gcp-kms",
+                    "fido2",
                     "bitwarden",
                     "bitwarden-sm",
                     "infisical",
@@ -613,7 +817,8 @@
                     "passwordstate",
                     "plain",
                     "proton-pass",
-                    "vault"
+                    "vault",
+                    "yubikey"
                   ]
                 }
               }
@@ -1306,7 +1511,7 @@
   "config": {
     "props": {}
   },
-  "version": "1.15.1",
+  "version": "1.17.0",
   "usage": "Usage: fnox [OPTIONS] <COMMAND>",
   "complete": {
     "key": {

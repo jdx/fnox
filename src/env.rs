@@ -1,7 +1,20 @@
 pub use std::env::*;
 use std::ffi::OsStr;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{path::PathBuf, sync::LazyLock};
+
+/// Whether we're running in a non-interactive context (e.g. TUI) where
+/// providers must not prompt or write to stderr.
+static NON_INTERACTIVE: AtomicBool = AtomicBool::new(false);
+
+pub fn set_non_interactive(value: bool) {
+    NON_INTERACTIVE.store(value, Ordering::Release);
+}
+
+pub fn is_non_interactive() -> bool {
+    NON_INTERACTIVE.load(Ordering::Acquire)
+}
 
 /// Mutex to serialize access to std::env::set_var, which is unsafe in Rust 2024 edition.
 static ENV_MUTEX: Mutex<()> = Mutex::new(());
@@ -21,11 +34,27 @@ pub fn set_var<K: AsRef<OsStr>, V: AsRef<OsStr>>(key: K, val: V) {
 pub static HOME_DIR: LazyLock<PathBuf> = LazyLock::new(|| dirs::home_dir().unwrap_or_default());
 pub static FNOX_CONFIG_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     var_path("FNOX_CONFIG_DIR").unwrap_or_else(|| {
-        #[cfg(unix)]
-        let default = HOME_DIR.join(".config").join("fnox");
-        #[cfg(windows)]
-        let default = HOME_DIR.join("AppData").join("Local").join("fnox");
-        default
+        var_path("XDG_CONFIG_HOME")
+            .unwrap_or_else(|| {
+                #[cfg(unix)]
+                return HOME_DIR.join(".config");
+                #[cfg(windows)]
+                return HOME_DIR.join("AppData").join("Local");
+            })
+            .join("fnox")
+    })
+});
+
+pub static FNOX_STATE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
+    var_path("FNOX_STATE_DIR").unwrap_or_else(|| {
+        var_path("XDG_STATE_HOME")
+            .unwrap_or_else(|| {
+                #[cfg(unix)]
+                return HOME_DIR.join(".local").join("state");
+                #[cfg(windows)]
+                return HOME_DIR.join("AppData").join("Local");
+            })
+            .join("fnox")
     })
 });
 
@@ -53,7 +82,11 @@ pub static FNOX_PROMPT_AUTH: LazyLock<Option<bool>> = LazyLock::new(|| {
 
 // Helper functions for parsing environment variables
 fn var_path(name: &str) -> Option<PathBuf> {
-    var(name).map(PathBuf::from).ok()
+    var(name)
+        .ok()
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
 }
 
 /// Validates that a profile name is safe to use in file paths
@@ -99,6 +132,12 @@ mod tests {
                 var_path("FNOX_TEST_PATH").unwrap(),
                 PathBuf::from("/foo/bar")
             );
+            // Empty values are treated as unset per XDG spec
+            set_var("FNOX_TEST_PATH", "");
+            assert_eq!(var_path("FNOX_TEST_PATH"), None);
+            // Relative paths are rejected per XDG spec
+            set_var("FNOX_TEST_PATH", "relative/path");
+            assert_eq!(var_path("FNOX_TEST_PATH"), None);
             remove_var("FNOX_TEST_PATH");
         }
     }

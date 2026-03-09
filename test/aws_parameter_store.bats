@@ -2,25 +2,47 @@
 #
 # AWS Parameter Store Provider Tests
 #
-# These tests verify the AWS Systems Manager Parameter Store provider integration with fnox.
-# Note: Tests should run serially (within this file) due to AWS eventual consistency.
-#       Use `--no-parallelize-within-files` bats flag.
+# These tests verify the AWS Systems Manager Parameter Store provider integration with fnox
+# using LocalStack for mock AWS services.
 #
 # Prerequisites:
-#   1. AWS credentials from fnox.toml (decrypted via fnox exec)
-#   2. IAM permissions: ssm:GetParameter, ssm:GetParameters, ssm:PutParameter, ssm:DeleteParameter, ssm:DescribeParameters
+#   1. Start LocalStack: docker run -d -p 4566:4566 -e SERVICES=ssm localstack/localstack
+#   2. Set LOCALSTACK_ENDPOINT=http://localhost:4566
 #   3. Run tests: mise run test:bats -- test/aws_parameter_store.bats
 #
+# Note: Tests will automatically skip if LOCALSTACK_ENDPOINT is not set.
+#
+
+setup_file() {
+	if [ -z "$LOCALSTACK_ENDPOINT" ]; then
+		export SKIP_AWS_PS_TESTS="LOCALSTACK_ENDPOINT not set. Start LocalStack and set LOCALSTACK_ENDPOINT=http://localhost:4566"
+		return
+	fi
+
+	# Wait for LocalStack to be ready
+	local retries=10
+	while ! curl -sf "$LOCALSTACK_ENDPOINT/_localstack/health" >/dev/null 2>&1; do
+		retries=$((retries - 1))
+		if [ "$retries" -le 0 ]; then
+			export SKIP_AWS_PS_TESTS="LocalStack not ready"
+			return
+		fi
+		sleep 1
+	done
+}
 
 setup() {
 	load 'test_helper/common_setup'
 	_common_setup
 
-	# Check if AWS credentials are available
-	# (mise run test:bats automatically loads secrets via fnox exec)
-	if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-		skip "AWS credentials not available. Ensure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are configured."
+	if [ -n "$SKIP_AWS_PS_TESTS" ]; then
+		skip "$SKIP_AWS_PS_TESTS"
 	fi
+
+	# Set dummy AWS credentials for LocalStack
+	export AWS_ACCESS_KEY_ID="test"
+	export AWS_SECRET_ACCESS_KEY="test"
+	export AWS_DEFAULT_REGION="us-east-1"
 
 	# Check if aws CLI is installed
 	if ! command -v aws >/dev/null 2>&1; then
@@ -33,8 +55,8 @@ setup() {
 
 teardown() {
 	# Clean up any test parameters created during tests
-	if [ -n "$TEST_PARAM_NAME" ]; then
-		aws ssm delete-parameter \
+	if [ -n "$TEST_PARAM_NAME" ] && [ -n "$LOCALSTACK_ENDPOINT" ]; then
+		aws --endpoint-url "$LOCALSTACK_ENDPOINT" ssm delete-parameter \
 			--name "$TEST_PARAM_NAME" \
 			--region "$PS_REGION" >/dev/null 2>&1 || true
 	fi
@@ -58,6 +80,7 @@ root = true
 [providers.ps]
 type = "aws-ps"
 region = "$region"
+endpoint = "$LOCALSTACK_ENDPOINT"
 
 [secrets]
 EOF
@@ -69,26 +92,24 @@ root = true
 type = "aws-ps"
 region = "$region"
 prefix = "$prefix"
+endpoint = "$LOCALSTACK_ENDPOINT"
 
 [secrets]
 EOF
 	fi
 }
 
-# Helper function to create a test parameter in AWS Parameter Store
+# Helper function to create a test parameter in LocalStack
 create_test_parameter() {
 	local param_name="$1"
 	local param_value="$2"
 
-	aws ssm put-parameter \
+	aws --endpoint-url "$LOCALSTACK_ENDPOINT" ssm put-parameter \
 		--name "$param_name" \
 		--value "$param_value" \
 		--type "SecureString" \
 		--overwrite \
 		--region "$PS_REGION"
-
-	# Give AWS Parameter Store time to propagate the parameter
-	sleep 1
 
 	export TEST_PARAM_NAME="$param_name"
 }

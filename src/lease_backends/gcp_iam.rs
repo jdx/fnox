@@ -1,0 +1,184 @@
+use crate::error::{FnoxError, Result};
+use crate::lease_backends::{Lease, LeaseBackend};
+use async_trait::async_trait;
+use indexmap::IndexMap;
+use std::time::Duration;
+
+const URL: &str = "https://fnox.jdx.dev/leases/gcp-iam";
+
+/// All env var names the GCP IAM backend may consume at runtime.
+pub const CONSUMED_ENV_VARS: &[&str] =
+    &["GOOGLE_APPLICATION_CREDENTIALS", "GCP_SERVICE_ACCOUNT_KEY"];
+
+pub fn check_prerequisites() -> Option<String> {
+    let has_env = std::env::var("GOOGLE_APPLICATION_CREDENTIALS").is_ok()
+        || std::env::var("GCP_SERVICE_ACCOUNT_KEY").is_ok();
+    let has_adc = dirs::config_dir()
+        .map(|c| {
+            c.join("gcloud/application_default_credentials.json")
+                .exists()
+        })
+        .unwrap_or(false);
+    if has_env || has_adc {
+        None
+    } else {
+        Some("GCP credentials not found. Run 'gcloud auth application-default login' or set GOOGLE_APPLICATION_CREDENTIALS.".to_string())
+    }
+}
+
+pub fn required_env_vars() -> Vec<(&'static str, &'static str)> {
+    vec![(
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "path to service account JSON key file",
+    )]
+}
+
+pub struct GcpIamBackend {
+    service_account_email: String,
+    scopes: Vec<String>,
+    env_var: String,
+}
+
+impl GcpIamBackend {
+    pub fn new(service_account_email: String, scopes: Vec<String>, env_var: String) -> Self {
+        Self {
+            service_account_email,
+            scopes,
+            env_var,
+        }
+    }
+}
+
+#[async_trait]
+impl LeaseBackend for GcpIamBackend {
+    async fn create_lease(&self, duration: Duration, label: &str) -> Result<Lease> {
+        // GCP's generateAccessToken API does not accept a label/session name,
+        // so we log it for debugging. The label is still recorded in the ledger.
+        tracing::debug!("Creating GCP IAM lease with label '{}'", label);
+        let auth_manager =
+            gcp_auth::provider()
+                .await
+                .map_err(|e| {
+                    FnoxError::ProviderAuthFailed {
+                provider: "GCP IAM".to_string(),
+                details: e.to_string(),
+                hint:
+                    "Ensure GCP credentials are configured (gcloud auth, service account key, etc.)"
+                        .to_string(),
+                url: URL.to_string(),
+            }
+                })?;
+
+        // The caller's ADC token always uses cloud-platform scope because it needs
+        // iam.serviceAccounts.getAccessToken permission to call the IAM Credentials API.
+        // This is distinct from self.scopes, which controls what the *impersonated*
+        // service account's token can access via generateAccessToken.
+        let token = auth_manager
+            .token(&["https://www.googleapis.com/auth/cloud-platform"])
+            .await
+            .map_err(|e| FnoxError::ProviderAuthFailed {
+                provider: "GCP IAM".to_string(),
+                details: e.to_string(),
+                hint: "Failed to get caller credentials for IAM API".to_string(),
+                url: URL.to_string(),
+            })?;
+
+        let bearer = token.as_str();
+        let lifetime = format!("{}s", duration.as_secs());
+        let url = format!(
+            "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{}:generateAccessToken",
+            self.service_account_email
+        );
+
+        let body = serde_json::json!({
+            "scope": self.scopes,
+            "lifetime": lifetime,
+        });
+
+        let client = crate::http::http_client();
+        let response = client
+            .post(&url)
+            .bearer_auth(bearer)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| FnoxError::ProviderApiError {
+                provider: "GCP IAM".to_string(),
+                details: e.to_string(),
+                hint: "Failed to call IAM Credentials API".to_string(),
+                url: URL.to_string(),
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body_text = response.text().await.unwrap_or_default();
+            if status.as_u16() == 403 || status.as_u16() == 401 {
+                return Err(FnoxError::ProviderAuthFailed {
+                    provider: "GCP IAM".to_string(),
+                    details: body_text,
+                    hint: format!(
+                        "Check IAM permissions for impersonating '{}'",
+                        self.service_account_email
+                    ),
+                    url: URL.to_string(),
+                });
+            }
+            return Err(FnoxError::ProviderApiError {
+                provider: "GCP IAM".to_string(),
+                details: format!("HTTP {}: {}", status, body_text),
+                hint: "Check service account email and scopes".to_string(),
+                url: URL.to_string(),
+            });
+        }
+
+        let resp: serde_json::Value =
+            response
+                .json()
+                .await
+                .map_err(|e| FnoxError::ProviderInvalidResponse {
+                    provider: "GCP IAM".to_string(),
+                    details: e.to_string(),
+                    hint: "Unexpected response from IAM Credentials API".to_string(),
+                    url: URL.to_string(),
+                })?;
+
+        let access_token = resp["accessToken"]
+            .as_str()
+            .ok_or_else(|| FnoxError::ProviderInvalidResponse {
+                provider: "GCP IAM".to_string(),
+                details: "Response missing 'accessToken' field".to_string(),
+                hint: "Unexpected response from IAM Credentials API".to_string(),
+                url: URL.to_string(),
+            })?
+            .to_string();
+
+        let expire_time = resp["expireTime"].as_str().and_then(|s| {
+            match chrono::DateTime::parse_from_rfc3339(s) {
+                Ok(dt) => Some(dt.with_timezone(&chrono::Utc)),
+                Err(e) => {
+                    tracing::warn!(
+                        "GCP IAM: could not parse expireTime {:?}: {}; lease treated as non-expiring",
+                        s, e
+                    );
+                    None
+                }
+            }
+        });
+
+        let mut credentials = IndexMap::new();
+        credentials.insert(self.env_var.clone(), access_token);
+
+        let lease_id = super::generate_lease_id(&format!("gcp-iam-{}", self.service_account_email));
+
+        Ok(Lease {
+            credentials,
+            expires_at: expire_time,
+            lease_id,
+        })
+    }
+
+    fn max_lease_duration(&self) -> Duration {
+        // GCP default max is 1 hour (3600s); can be extended to 12h with org policy
+        Duration::from_secs(3600)
+    }
+}

@@ -1,6 +1,66 @@
 # Changelog
 
+## [1.17.0](https://github.com/jdx/fnox/compare/v1.16.1..v1.17.0) - 2026-03-09
+
+### 🚀 Features
+
+- **(cloudflare)** add Cloudflare API token lease backend by [@jdx](https://github.com/jdx) in [#335](https://github.com/jdx/fnox/pull/335)
+- **(fido2)** bump demand to v2, mask PIN during typing by [@jdx](https://github.com/jdx) in [#334](https://github.com/jdx/fnox/pull/334)
+- **(get)** resolve leased credentials from `fnox get` by [@jdx](https://github.com/jdx) in [#338](https://github.com/jdx/fnox/pull/338)
+- **(init)** add -f as short alias for --force by [@jdx](https://github.com/jdx) in [#329](https://github.com/jdx/fnox/pull/329)
+- **(lease)** add --all flag, default to creating all leases by [@jdx](https://github.com/jdx) in [#337](https://github.com/jdx/fnox/pull/337)
+- **(lease)** add GitHub App installation token lease backend by [@jdx](https://github.com/jdx) in [#342](https://github.com/jdx/fnox/pull/342)
+
+### 🐛 Bug Fixes
+
+- **(config)** fix directory locations to follow XDG spec by [@jdx](https://github.com/jdx) in [#336](https://github.com/jdx/fnox/pull/336)
+- **(exec)** use unix exec and exit silently on subprocess failure by [@jdx](https://github.com/jdx) in [#339](https://github.com/jdx/fnox/pull/339)
+- **(fido2)** remove duplicate touch prompt by [@jdx](https://github.com/jdx) in [#332](https://github.com/jdx/fnox/pull/332)
+- **(set)** write to lowest-priority existing config file by [@jdx](https://github.com/jdx) in [#331](https://github.com/jdx/fnox/pull/331)
+- **(tui)** skip providers requiring interactive auth by [@jdx](https://github.com/jdx) in [#333](https://github.com/jdx/fnox/pull/333)
+
+### 🛡️ Security
+
+- **(ci)** retry lint step to handle transient pkl fetch failures by [@jdx](https://github.com/jdx) in [#341](https://github.com/jdx/fnox/pull/341)
+- **(mcp)** add MCP server for secret-gated AI agent access by [@jdx](https://github.com/jdx) in [#343](https://github.com/jdx/fnox/pull/343)
+- add guide for fnox sync by [@jdx](https://github.com/jdx) in [#328](https://github.com/jdx/fnox/pull/328)
+
+### 🔍 Other Changes
+
+- share Rust cache across CI jobs by [@jdx](https://github.com/jdx) in [#340](https://github.com/jdx/fnox/pull/340)
+
+## [1.16.1](https://github.com/jdx/fnox/compare/v1.16.0..v1.16.1) - 2026-03-08
+
+### 🐛 Bug Fixes
+
+- **(set)** error on encryption failure; use LocalStack for AWS tests by [@jdx](https://github.com/jdx) in [#324](https://github.com/jdx/fnox/pull/324)
+
+### 📦️ Dependency Updates
+
+- add Cross.toml to install libudev-dev for linux cross-compilation by [@jdx](https://github.com/jdx) in [#326](https://github.com/jdx/fnox/pull/326)
+
+## [1.16.0](https://github.com/jdx/fnox/compare/v1.15.1..v1.16.0) - 2026-03-08
+
+### 🐛 Bug Fixes
+
+- **(docs)** escape angle brackets in lease create doc by [@jdx](https://github.com/jdx) in [#323](https://github.com/jdx/fnox/pull/323)
+
+### 🛡️ Security
+
+- **(lease)** ephemeral credential leasing by [@jdx](https://github.com/jdx) in [#318](https://github.com/jdx/fnox/pull/318)
+
+### 📦️ Dependency Updates
+
+- update jdx/mise-action digest to e79ddf6 by [@renovate[bot]](https://github.com/renovate[bot]) in [#312](https://github.com/jdx/fnox/pull/312)
+- publish to crates.io on release by [@jdx](https://github.com/jdx) in [#315](https://github.com/jdx/fnox/pull/315)
+- add libudev-dev to release-plz CI workflow by [@jdx](https://github.com/jdx) in [#322](https://github.com/jdx/fnox/pull/322)
+- update aws-sdk-rust monorepo to v1.8.15 by [@renovate[bot]](https://github.com/renovate[bot]) in [#313](https://github.com/jdx/fnox/pull/313)
+
 ## [1.15.1](https://github.com/jdx/fnox/compare/v1.15.0..v1.15.1) - 2026-03-02
+
+### 🐛 Bug Fixes
+
+- **(sync)** use sync cache field instead of overwriting provider/value by [@jdx](https://github.com/jdx) in [#309](https://github.com/jdx/fnox/pull/309)
 
 ### ⚡ Performance
 

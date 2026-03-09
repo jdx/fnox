@@ -22,3 +22,8 @@ type = "required"
 placeholder = "us-east-1"
 label = "AWS Region:"
 wizard = true
+
+[fields.endpoint]
+type = "optional"
+placeholder = "http://localhost:4566"
+label = "Custom endpoint URL (optional):"

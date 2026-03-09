@@ -51,6 +51,9 @@ pub enum ProviderType {
     #[value(name = "gcp-kms")]
     #[strum(serialize = "gcp-kms")]
     GcpKms,
+    /// FIDO2 hmac-secret hardware-backed encryption
+    #[value(name = "fido2")]
+    Fido2,
     /// Bitwarden Password Manager
     #[value(name = "bitwarden")]
     Bitwarden,
@@ -85,6 +88,9 @@ pub enum ProviderType {
     /// HashiCorp Vault
     #[value(name = "vault")]
     Vault,
+    /// YubiKey HMAC-SHA1 hardware-backed encryption
+    #[value(name = "yubikey")]
+    Yubikey,
 }
 
 #[derive(Debug, Args)]

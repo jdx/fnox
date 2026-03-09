@@ -1,7 +1,7 @@
 min_usage_version "1.3"
 name fnox
 bin fnox
-version "1.15.1"
+version "1.17.0"
 about "A flexible secret management tool by @jdx"
 usage "Usage: fnox [OPTIONS] <COMMAND>"
 flag "-c --config" help="Path to the configuration file (default: fnox.toml, searches parent directories)" global=#true default=fnox.toml {
@@ -87,9 +87,35 @@ cmd import help="Import secrets from various sources" {
 }
 cmd init help="Initialize a new fnox configuration file" {
     alias i
+    flag "-f --force" help="Overwrite existing configuration file"
     flag "-g --global" help="Initialize the global config file (~/.config/fnox/config.toml)"
-    flag --force help="Overwrite existing configuration file"
     flag --skip-wizard help="Skip the interactive wizard and create a minimal config"
+}
+cmd lease help="Manage ephemeral credential leases" {
+    cmd cleanup help="Revoke all expired leases that need manual cleanup"
+    cmd create help="Create a short-lived credential lease from a secret" {
+        flag "-a --all" help="Create leases for all configured backends"
+        flag "-d --duration" help="Lease duration (e.g., \"15m\", \"1h\", \"2h30m\"); overrides config duration" {
+            arg <DURATION>
+        }
+        flag "-f --format" help="Output format" default=shell {
+            arg <FORMAT> {
+                choices shell json env
+            }
+        }
+        flag "-i --interactive" help="Prompt interactively for missing credentials"
+        flag "-l --label" help="Label for the lease (e.g., session purpose)" default=fnox-lease {
+            arg <LABEL>
+        }
+        arg "[BACKEND_NAME]" help="Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted" required=#false
+    }
+    cmd list help="List tracked leases" {
+        flag --active help="Show only active (non-expired, non-revoked) leases"
+        flag --expired help="Show only expired leases"
+    }
+    cmd revoke help="Revoke a lease by ID" {
+        arg <LEASE_ID> help="Lease ID to revoke"
+    }
 }
 cmd list help="List all secrets" {
     alias ls secrets
@@ -98,6 +124,7 @@ cmd list help="List all secrets" {
     flag "-V --values" help="Show secret values (if available)"
     flag --complete help="Output secret keys for shell completion (one per line)" hide=#true
 }
+cmd mcp help="Start an MCP server for secret-gated AI agent access"
 cmd profiles help="List available profiles" {
     alias profile hide=#true
     flag --complete help="Output profile names for shell completion (one per line)" hide=#true
@@ -111,7 +138,7 @@ cmd provider help="Manage providers (defaults to list)" {
         }
         arg <PROVIDER> help="Provider name"
         arg <PROVIDER_TYPE> help="Provider type" {
-            choices "1password" age aws aws-kms aws-ps azure-kms azure-sm gcp gcp-kms bitwarden bitwarden-sm infisical keepass keychain password-store passwordstate plain proton-pass vault
+            choices "1password" age aws aws-kms aws-ps azure-kms azure-sm gcp gcp-kms fido2 bitwarden bitwarden-sm infisical keepass keychain password-store passwordstate plain proton-pass vault yubikey
         }
     }
     cmd list help="List available providers" {

@@ -19,7 +19,9 @@ pub mod get;
 pub mod hook_env;
 pub mod import;
 pub mod init;
+pub mod lease;
 pub mod list;
+pub mod mcp;
 pub mod profiles;
 pub mod provider;
 pub mod remove;
@@ -38,7 +40,7 @@ pub mod version;
 #[command(help_expected = true)]
 pub struct Cli {
     /// Path to the configuration file (default: fnox.toml, searches parent directories)
-    #[arg(short, long, default_value = "fnox.toml", global = true)]
+    #[arg(short, long, default_value = crate::config::DEFAULT_CONFIG_FILENAME, global = true)]
     pub config: PathBuf,
 
     /// Profile to use (default: default, or FNOX_PROFILE env var)
@@ -115,8 +117,14 @@ pub enum Commands {
     /// Initialize a new fnox configuration file
     Init(init::InitCommand),
 
+    /// Manage ephemeral credential leases
+    Lease(lease::LeaseCommand),
+
     /// List all secrets
     List(list::ListCommand),
+
+    /// Start an MCP server for secret-gated AI agent access
+    Mcp(mcp::McpCommand),
 
     /// List available profiles
     Profiles(profiles::ProfilesCommand),
@@ -181,7 +189,9 @@ impl Commands {
             Commands::Export(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Get(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Import(cmd) => cmd.run(cli, self.load_config(cli)?).await,
+            Commands::Lease(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::List(cmd) => cmd.run(cli, self.load_config(cli)?).await,
+            Commands::Mcp(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Profiles(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Provider(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Remove(cmd) => cmd.run(cli).await,

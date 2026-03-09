@@ -20,12 +20,16 @@ pub struct OnePasswordProvider {
 }
 
 impl OnePasswordProvider {
-    pub fn new(vault: Option<String>, account: Option<String>, token: Option<String>) -> Self {
-        Self {
+    pub fn new(
+        vault: Option<String>,
+        account: Option<String>,
+        token: Option<String>,
+    ) -> Result<Self> {
+        Ok(Self {
             vault,
             account,
             token,
-        }
+        })
     }
 
     /// Get the service account token, preferring the configured token over environment variable.

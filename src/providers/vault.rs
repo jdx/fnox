@@ -16,13 +16,13 @@ impl HashiCorpVaultProvider {
         path: Option<String>,
         token: Option<String>,
         namespace: Option<String>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        Ok(Self {
             address,
             path,
             token,
             namespace,
-        }
+        })
     }
 
     fn get_secret_path(&self, key: &str) -> String {

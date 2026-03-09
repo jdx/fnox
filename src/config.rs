@@ -14,12 +14,18 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use strum::VariantNames;
 
+/// Default config filename, used as the clap default for `--config`.
+pub const DEFAULT_CONFIG_FILENAME: &str = "fnox.toml";
+
 /// Returns all config filenames in load order (first = lowest priority, last = highest priority).
 ///
 /// Order: main configs → profile configs → local configs
-/// Within each group, dotfiles come first (higher priority than non-dotfiles).
+/// Within each group, non-dotfiles come first (lower priority); dotfiles follow (higher priority).
 pub fn all_config_filenames(profile: Option<&str>) -> Vec<String> {
-    let mut files = vec!["fnox.toml".to_string(), ".fnox.toml".to_string()];
+    let mut files = vec![
+        DEFAULT_CONFIG_FILENAME.to_string(),
+        ".fnox.toml".to_string(),
+    ];
     if let Some(p) = profile.filter(|p| *p != "default") {
         files.push(format!("fnox.{p}.toml"));
         files.push(format!(".fnox.{p}.toml"));
@@ -40,6 +46,44 @@ pub fn local_override_filename(path: &Path) -> Option<&'static str> {
     }
 }
 
+/// Find the most appropriate existing config file in `dir` for writing.
+///
+/// When a non-default profile is active, prefers the profile-specific file
+/// (e.g. `fnox.staging.toml`) if it exists, so secrets stay scoped to that
+/// profile. Otherwise falls back to the lowest-priority existing file.
+/// If no config files exist yet, returns `fnox.toml`.
+pub fn find_local_config(dir: &Path, profile: Option<&str>) -> PathBuf {
+    // If a non-default profile is specified, prefer its config file first
+    if let Some(p) = profile.filter(|p| *p != "default") {
+        for name in [format!("fnox.{p}.toml"), format!(".fnox.{p}.toml")] {
+            let path = dir.join(&name);
+            if path.exists() {
+                return path;
+            }
+        }
+    }
+
+    // Fall back to lowest-priority existing base file.
+    // When a profile is active, exclude local files (fnox.local.toml, .fnox.local.toml)
+    // to avoid silently routing profile-scoped secrets into a gitignored local-override file.
+    let is_profiled = profile.is_some_and(|p| p != "default");
+    for name in &["fnox.toml", ".fnox.toml"] {
+        let path = dir.join(name);
+        if path.exists() {
+            return path;
+        }
+    }
+    if !is_profiled {
+        for name in &["fnox.local.toml", ".fnox.local.toml"] {
+            let path = dir.join(name);
+            if path.exists() {
+                return path;
+            }
+        }
+    }
+    dir.join(DEFAULT_CONFIG_FILENAME)
+}
+
 // Re-export ProviderConfig from providers module
 pub use crate::providers::ProviderConfig;
 
@@ -53,6 +97,10 @@ pub struct Config {
     /// Root configuration - stops recursion at this level
     #[serde(default, skip_serializing_if = "is_false")]
     pub root: bool,
+
+    /// Lease backend configurations (for default profile)
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub leases: IndexMap<String, crate::lease_backends::LeaseBackendConfig>,
 
     /// Provider configurations (for default profile)
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
@@ -82,6 +130,10 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_auth: Option<bool>,
 
+    /// MCP server configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mcp: Option<McpConfig>,
+
     /// Track which config file each provider came from (not serialized)
     #[serde(skip)]
     pub provider_sources: HashMap<String, PathBuf>,
@@ -93,6 +145,11 @@ pub struct Config {
     /// Track which config file the default_provider came from (not serialized)
     #[serde(skip)]
     pub default_provider_source: Option<PathBuf>,
+
+    /// The project root directory — the nearest directory to cwd that contains
+    /// a config file. Used for scoping the lease ledger per-project.
+    #[serde(skip)]
+    pub project_dir: Option<PathBuf>,
 }
 
 /// Cached sync data for a secret (provider + encrypted value)
@@ -126,6 +183,11 @@ pub struct SecretConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     value: Option<SpannedValue<String>>,
 
+    /// Whether to inject this secret into env vars (default: true)
+    /// When false, the secret is only accessible via `fnox get`
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub env: bool,
+
     /// Write secret to a temporary file and set env var to the file path instead of the secret value
     #[serde(default, skip_serializing_if = "is_false")]
     pub as_file: bool,
@@ -147,6 +209,10 @@ pub struct SecretConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProfileConfig {
+    /// Lease backend configurations for this profile
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub leases: IndexMap<String, crate::lease_backends::LeaseBackendConfig>,
+
     /// Provider configurations for this profile
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub providers: IndexMap<String, ProviderConfig>,
@@ -170,6 +236,60 @@ pub struct ProfileConfig {
     /// Track which config file the default_provider came from (not serialized)
     #[serde(skip)]
     pub default_provider_source: Option<PathBuf>,
+}
+
+/// Available MCP tools
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum McpTool {
+    GetSecret,
+    Exec,
+}
+
+impl McpTool {
+    /// Returns the tool name as it appears in MCP protocol
+    pub fn tool_name(&self) -> &'static str {
+        match self {
+            McpTool::GetSecret => "get_secret",
+            McpTool::Exec => "exec",
+        }
+    }
+}
+
+/// MCP server configuration
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[derive(Default)]
+pub struct McpConfig {
+    /// Which MCP tools to expose (default: ["get_secret", "exec"])
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "tools")]
+    tools_raw: Option<Vec<McpTool>>,
+
+    /// Timeout in seconds for exec tool subprocess (default: 300, minimum: 1)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 1))]
+    pub exec_timeout_secs: Option<u64>,
+}
+
+impl McpConfig {
+    fn default_tools() -> Vec<McpTool> {
+        vec![McpTool::GetSecret, McpTool::Exec]
+    }
+
+    /// Whether `tools` was explicitly set in the config file
+    pub fn tools_explicitly_set(&self) -> bool {
+        self.tools_raw.is_some()
+    }
+
+    /// Returns the effective tools list (default if not explicitly set)
+    pub fn tools(&self) -> Vec<McpTool> {
+        self.tools_raw.clone().unwrap_or_else(Self::default_tools)
+    }
+
+    /// Set the tools list explicitly
+    pub fn set_tools(&mut self, tools: Vec<McpTool>) {
+        self.tools_raw = Some(tools);
+    }
 }
 
 #[derive(
@@ -260,7 +380,12 @@ impl Config {
                     help: "Run 'fnox init' to create a configuration file".to_string(),
                 })
             }
-            Ok((config, _)) => Ok(config),
+            Ok((mut config, _)) => {
+                // Find the nearest directory to cwd that contains a config file.
+                // This is the project root used for scoping the lease ledger.
+                config.project_dir = Self::find_project_dir(&current_dir);
+                Ok(config)
+            }
             Err(e) => Err(e),
         }
     }
@@ -322,6 +447,23 @@ impl Config {
         }
 
         Ok((config, found))
+    }
+
+    /// Find the nearest directory to `start` that contains a config file.
+    /// Walks upward from `start` and returns the first match.
+    fn find_project_dir(start: &Path) -> Option<PathBuf> {
+        let profile = crate::settings::Settings::get().profile.clone();
+        let filenames = all_config_filenames(Some(&profile));
+        let mut dir = Some(start);
+        while let Some(d) = dir {
+            for filename in &filenames {
+                if d.join(filename).exists() {
+                    return Some(d.to_path_buf());
+                }
+            }
+            dir = d.parent();
+        }
+        None
     }
 
     /// Get the path to the global config file
@@ -396,10 +538,27 @@ impl Config {
             merged.prompt_auth = overlay.prompt_auth;
         }
 
+        // Merge mcp (overlay takes precedence, field-by-field to avoid
+        // silently re-enabling tools when overlay only sets exec_timeout_secs)
+        if let Some(overlay_mcp) = overlay.mcp {
+            let base_mcp = merged.mcp.get_or_insert_with(McpConfig::default);
+            if overlay_mcp.tools_explicitly_set() {
+                base_mcp.set_tools(overlay_mcp.tools());
+            }
+            if overlay_mcp.exec_timeout_secs.is_some() {
+                base_mcp.exec_timeout_secs = overlay_mcp.exec_timeout_secs;
+            }
+        }
+
         // Merge default_provider and its source (overlay takes precedence)
         if overlay.default_provider.is_some() {
             merged.default_provider = overlay.default_provider;
             merged.default_provider_source = overlay.default_provider_source;
+        }
+
+        // Merge lease backends (overlay takes precedence)
+        for (name, lease) in overlay.leases {
+            merged.leases.insert(name, lease);
         }
 
         // Merge providers (overlay takes precedence)
@@ -426,6 +585,9 @@ impl Config {
         for (name, profile) in overlay.profiles {
             if let Some(existing_profile) = merged.profiles.get_mut(&name) {
                 // Merge existing profile
+                for (lease_name, lease) in profile.leases {
+                    existing_profile.leases.insert(lease_name, lease);
+                }
                 for (provider_name, provider) in profile.providers {
                     existing_profile.providers.insert(provider_name, provider);
                 }
@@ -758,6 +920,7 @@ impl Config {
         Self {
             import: Vec::new(),
             root: false,
+            leases: IndexMap::new(),
             providers: IndexMap::new(),
             default_provider: None,
             secrets: IndexMap::new(),
@@ -765,9 +928,11 @@ impl Config {
             age_key_file: None,
             if_missing: None,
             prompt_auth: None,
+            mcp: None,
             provider_sources: HashMap::new(),
             secret_sources: HashMap::new(),
             default_provider_source: None,
+            project_dir: None,
         }
     }
 
@@ -845,6 +1010,22 @@ impl Config {
         } else {
             self.get_profile_secrets_mut(profile)
         }
+    }
+
+    /// Get effective lease backends for a profile
+    pub fn get_leases(
+        &self,
+        profile: &str,
+    ) -> IndexMap<String, crate::lease_backends::LeaseBackendConfig> {
+        let mut leases = self.leases.clone();
+
+        if profile != "default"
+            && let Some(profile_config) = self.profiles.get(profile)
+        {
+            leases.extend(profile_config.leases.clone());
+        }
+
+        leases
     }
 
     /// Get effective providers for a profile
@@ -1218,6 +1399,7 @@ impl SecretConfig {
             default: None,
             provider: None,
             value: None,
+            env: true,
             as_file: false,
             json_path: None,
             sync: None,
@@ -1251,6 +1433,9 @@ impl SecretConfig {
                 IfMissing::Ignore => "ignore",
             };
             inline.insert("if_missing", toml_edit::Value::from(if_missing_str));
+        }
+        if !self.env {
+            inline.insert("env", toml_edit::Value::from(false));
         }
         if self.as_file {
             inline.insert("as_file", toml_edit::Value::from(true));
@@ -1305,6 +1490,7 @@ impl ProfileConfig {
     /// Create a new profile config
     pub fn new() -> Self {
         Self {
+            leases: IndexMap::new(),
             providers: IndexMap::new(),
             default_provider: None,
             secrets: IndexMap::new(),
@@ -1316,7 +1502,10 @@ impl ProfileConfig {
 
     /// Check if the profile is effectively empty (no serializable content)
     pub fn is_empty(&self) -> bool {
-        self.providers.is_empty() && self.secrets.is_empty() && self.default_provider().is_none()
+        self.leases.is_empty()
+            && self.providers.is_empty()
+            && self.secrets.is_empty()
+            && self.default_provider().is_none()
     }
 
     /// Get the default provider name, if set.
@@ -1349,6 +1538,14 @@ impl Default for ProfileConfig {
 
 fn is_false(value: &bool) -> bool {
     !value
+}
+
+fn is_true(value: &bool) -> bool {
+    *value
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[cfg(test)]
@@ -1441,8 +1638,14 @@ mod tests {
 
     #[test]
     fn test_local_override_filename_rejects_non_standard_config_names() {
-        assert_eq!(local_override_filename(Path::new("nested/custom.toml")), None);
-        assert_eq!(local_override_filename(Path::new("nested/fnox.dev.toml")), None);
+        assert_eq!(
+            local_override_filename(Path::new("nested/custom.toml")),
+            None
+        );
+        assert_eq!(
+            local_override_filename(Path::new("nested/fnox.dev.toml")),
+            None
+        );
     }
 
     #[test]
@@ -1523,5 +1726,102 @@ mod tests {
 
         let secrets = config.get_secrets("prod").unwrap();
         assert!(secrets.is_empty());
+    }
+
+    #[test]
+    fn test_find_local_config_no_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = super::find_local_config(dir.path(), None);
+        assert_eq!(result, dir.path().join("fnox.toml"));
+    }
+
+    #[test]
+    fn test_find_local_config_only_fnox_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
+        let result = super::find_local_config(dir.path(), None);
+        assert_eq!(result, dir.path().join("fnox.toml"));
+    }
+
+    #[test]
+    fn test_find_local_config_only_local_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("fnox.local.toml"), "").unwrap();
+        let result = super::find_local_config(dir.path(), None);
+        assert_eq!(result, dir.path().join("fnox.local.toml"));
+    }
+
+    #[test]
+    fn test_find_local_config_both_exist() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
+        std::fs::write(dir.path().join("fnox.local.toml"), "").unwrap();
+        let result = super::find_local_config(dir.path(), None);
+        // Should pick fnox.toml (lowest priority)
+        assert_eq!(result, dir.path().join("fnox.toml"));
+    }
+
+    #[test]
+    fn test_find_local_config_only_dotfile() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(".fnox.toml"), "").unwrap();
+        let result = super::find_local_config(dir.path(), None);
+        assert_eq!(result, dir.path().join(".fnox.toml"));
+    }
+
+    #[test]
+    fn test_find_local_config_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("fnox.staging.toml"), "").unwrap();
+        let result = super::find_local_config(dir.path(), Some("staging"));
+        assert_eq!(result, dir.path().join("fnox.staging.toml"));
+    }
+
+    #[test]
+    fn test_find_local_config_profile_with_base() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
+        std::fs::write(dir.path().join("fnox.staging.toml"), "").unwrap();
+        let result = super::find_local_config(dir.path(), Some("staging"));
+        // Profile-specific file is preferred when profile is active
+        assert_eq!(result, dir.path().join("fnox.staging.toml"));
+    }
+
+    #[test]
+    fn test_find_local_config_default_profile_with_base() {
+        // Default profile should still pick fnox.toml (lowest priority)
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
+        std::fs::write(dir.path().join("fnox.local.toml"), "").unwrap();
+        let result = super::find_local_config(dir.path(), Some("default"));
+        assert_eq!(result, dir.path().join("fnox.toml"));
+    }
+
+    #[test]
+    fn test_find_local_config_profile_only_base_exists() {
+        // Profile specified but only base config exists — fall back to it
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
+        let result = super::find_local_config(dir.path(), Some("staging"));
+        assert_eq!(result, dir.path().join("fnox.toml"));
+    }
+
+    #[test]
+    fn test_find_local_config_profile_skips_local_file() {
+        // When a profile is active and only fnox.local.toml exists,
+        // should NOT write there — fall through to creating fnox.toml
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("fnox.local.toml"), "").unwrap();
+        let result = super::find_local_config(dir.path(), Some("staging"));
+        assert_eq!(result, dir.path().join("fnox.toml"));
+    }
+
+    #[test]
+    fn test_find_local_config_no_profile_uses_local_file() {
+        // Without a profile, fnox.local.toml is a valid write target
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("fnox.local.toml"), "").unwrap();
+        let result = super::find_local_config(dir.path(), None);
+        assert_eq!(result, dir.path().join("fnox.local.toml"));
     }
 }

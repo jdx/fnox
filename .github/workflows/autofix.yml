@@ -26,11 +26,12 @@ jobs:
           submodules: recursive
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
         with:
-          shared-key: autofix
+          shared-key: debug-ubuntu-latest
+          save-if: false
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libdbus-1-dev pkg-config
+          sudo apt-get install -y libdbus-1-dev libudev-dev pkg-config
       - uses: jdx/mise-action@e79ddf65a11cec7b0e882bedced08d6e976efb2d # v3
       - run: "mise run render ::: lint-fix"
       - uses: autofix-ci/action@7a166d7532b277f34e16238930461bf77f9d7ed8 # v1.3.3

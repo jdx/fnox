@@ -36,6 +36,24 @@
         "type": "string"
       }
     },
+    "leases": {
+      "description": "Lease backend configurations (for default profile)",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/LeaseBackendConfig"
+      }
+    },
+    "mcp": {
+      "description": "MCP server configuration",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/McpConfig"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "profiles": {
       "description": "Named profiles",
       "type": "object",
@@ -72,9 +90,306 @@
       "type": "string",
       "enum": ["bw", "rbw"]
     },
+    "CloudflarePermissionGroup": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": ["string", "null"]
+        }
+      },
+      "required": ["id"]
+    },
+    "CloudflarePolicy": {
+      "description": "A Cloudflare API token permission policy.\nMaps to the Cloudflare API's `policies` array in POST /user/tokens.",
+      "type": "object",
+      "properties": {
+        "effect": {
+          "$ref": "#/$defs/CloudflarePolicyEffect",
+          "default": "allow"
+        },
+        "permission_groups": {
+          "description": "Permission group IDs (UUIDs from Cloudflare's permission groups API)",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CloudflarePermissionGroup"
+          }
+        },
+        "resources": {
+          "description": "Resource scope, e.g. {\"com.cloudflare.api.account.*\": \"*\"}",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["permission_groups", "resources"]
+    },
+    "CloudflarePolicyEffect": {
+      "type": "string",
+      "enum": ["allow", "deny"]
+    },
+    "CloudflareTokenType": {
+      "oneOf": [
+        {
+          "description": "User-owned token (POST /user/tokens)",
+          "type": "string",
+          "const": "user"
+        },
+        {
+          "description": "Account-owned token (POST /accounts/{account_id}/tokens)",
+          "type": "string",
+          "const": "account"
+        }
+      ]
+    },
     "IfMissing": {
       "type": "string",
       "enum": ["error", "warn", "ignore"]
+    },
+    "LeaseBackendConfig": {
+      "description": "Configuration for a lease backend (manually defined, no codegen)",
+      "oneOf": [
+        {
+          "description": "AWS STS AssumeRole",
+          "type": "object",
+          "properties": {
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "endpoint": {
+              "type": ["string", "null"]
+            },
+            "profile": {
+              "type": ["string", "null"]
+            },
+            "region": {
+              "type": "string"
+            },
+            "role_arn": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "aws-sts"
+            }
+          },
+          "required": ["type", "region", "role_arn"]
+        },
+        {
+          "description": "GCP Service Account Impersonation",
+          "type": "object",
+          "properties": {
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "env_var": {
+              "type": "string",
+              "default": "CLOUDSDK_AUTH_ACCESS_TOKEN"
+            },
+            "scopes": {
+              "type": "array",
+              "default": ["https://www.googleapis.com/auth/cloud-platform"],
+              "items": {
+                "type": "string"
+              }
+            },
+            "service_account_email": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "gcp-iam"
+            }
+          },
+          "required": ["type", "service_account_email"]
+        },
+        {
+          "description": "HashiCorp Vault Dynamic Secrets",
+          "type": "object",
+          "properties": {
+            "address": {
+              "type": ["string", "null"]
+            },
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "env_map": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "method": {
+              "description": "HTTP method: \"get\" (default) or \"post\" (required for pki/issue and some engines)",
+              "type": "string",
+              "default": "get"
+            },
+            "namespace": {
+              "type": ["string", "null"]
+            },
+            "secret_path": {
+              "type": "string"
+            },
+            "token": {
+              "type": ["string", "null"]
+            },
+            "type": {
+              "type": "string",
+              "const": "vault"
+            }
+          },
+          "required": ["type", "secret_path", "env_map"]
+        },
+        {
+          "description": "Azure Token Acquisition",
+          "type": "object",
+          "properties": {
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "env_var": {
+              "type": "string",
+              "default": "AZURE_ACCESS_TOKEN"
+            },
+            "scope": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "azure-token"
+            }
+          },
+          "required": ["type", "scope"]
+        },
+        {
+          "description": "Cloudflare API Token",
+          "type": "object",
+          "properties": {
+            "account_id": {
+              "type": ["string", "null"]
+            },
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "env_var": {
+              "type": "string",
+              "default": "CLOUDFLARE_API_TOKEN"
+            },
+            "policies": {
+              "type": ["array", "null"],
+              "items": {
+                "$ref": "#/$defs/CloudflarePolicy"
+              }
+            },
+            "token_type": {
+              "description": "Token type: \"user\" (default) or \"account\"",
+              "$ref": "#/$defs/CloudflareTokenType",
+              "default": "user"
+            },
+            "type": {
+              "type": "string",
+              "const": "cloudflare"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "description": "GitHub App Installation Token",
+          "type": "object",
+          "properties": {
+            "api_base": {
+              "description": "GitHub API base URL (default: https://api.github.com)",
+              "type": ["string", "null"]
+            },
+            "app_id": {
+              "type": "string"
+            },
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "env_var": {
+              "type": "string",
+              "default": "GITHUB_TOKEN"
+            },
+            "installation_id": {
+              "type": "string"
+            },
+            "permissions": {
+              "type": ["object", "null"],
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "private_key_file": {
+              "type": ["string", "null"]
+            },
+            "repositories": {
+              "type": ["array", "null"],
+              "items": {
+                "type": "string"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "github-app"
+            }
+          },
+          "required": ["type", "app_id", "installation_id"]
+        },
+        {
+          "description": "Generic Command Backend",
+          "type": "object",
+          "properties": {
+            "create_command": {
+              "type": "string"
+            },
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "revoke_command": {
+              "type": ["string", "null"]
+            },
+            "timeout": {
+              "description": "Timeout for command execution (e.g., \"30s\", \"2m\"; default: \"30s\")",
+              "type": "string",
+              "default": "30s"
+            },
+            "type": {
+              "type": "string",
+              "const": "command"
+            }
+          },
+          "required": ["type", "create_command"]
+        }
+      ]
+    },
+    "McpConfig": {
+      "description": "MCP server configuration",
+      "type": "object",
+      "properties": {
+        "exec_timeout_secs": {
+          "description": "Timeout in seconds for exec tool subprocess (default: 300, minimum: 1)",
+          "type": ["integer", "null"],
+          "format": "uint64",
+          "minimum": 1
+        },
+        "tools": {
+          "description": "Which MCP tools to expose (default: [\"get_secret\", \"exec\"])",
+          "type": ["array", "null"],
+          "items": {
+            "$ref": "#/$defs/McpTool"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "McpTool": {
+      "description": "Available MCP tools",
+      "type": "string",
+      "enum": ["get_secret", "exec"]
     },
     "OptionStringOrSecretRef": {
       "description": "An optional value that can be a literal string, a secret reference, or absent.\n\nIn TOML, this deserializes from:\n- Field absent: `None`\n- `field = \"literal-value\"`: `Some(Literal(\"literal-value\"))`\n- `field = { secret = \"SECRET_NAME\" }`: `Some(SecretRef { secret: \"SECRET_NAME\" })`",
@@ -101,6 +416,13 @@
               "type": "null"
             }
           ]
+        },
+        "leases": {
+          "description": "Lease backend configurations for this profile",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/LeaseBackendConfig"
+          }
         },
         "providers": {
           "description": "Provider configurations for this profile",
@@ -143,6 +465,26 @@
           },
           "additionalProperties": false,
           "required": ["type", "database"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "challenge": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "slot": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "yubikey"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "challenge", "slot"]
         },
         {
           "type": "object",
@@ -203,6 +545,32 @@
           },
           "additionalProperties": false,
           "required": ["type", "recipients"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "credential_id": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "pin": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "rp_id": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "salt": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "fido2"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "credential_id", "salt", "rp_id"]
         },
         {
           "type": "object",
@@ -332,6 +700,9 @@
             "auth_command": {
               "type": ["string", "null"]
             },
+            "endpoint": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "key_id": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
@@ -398,6 +769,9 @@
             "auth_command": {
               "type": ["string", "null"]
             },
+            "endpoint": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -420,6 +794,9 @@
           "properties": {
             "auth_command": {
               "type": ["string", "null"]
+            },
+            "endpoint": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -561,6 +938,10 @@
         "description": {
           "description": "Description of the secret",
           "type": ["string", "null"]
+        },
+        "env": {
+          "description": "Whether to inject this secret into env vars (default: true)\nWhen false, the secret is only accessible via `fnox get`",
+          "type": "boolean"
         },
         "if_missing": {
           "description": "What to do if the secret is missing (error, warn, or ignore)",

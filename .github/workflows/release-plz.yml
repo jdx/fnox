@@ -26,10 +26,13 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.FNOX_GH_TOKEN }}
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
+        with:
+          shared-key: debug-ubuntu-latest
+          save-if: false
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libdbus-1-dev pkg-config
+          sudo apt-get install -y libdbus-1-dev libudev-dev pkg-config
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
         with:
           experimental: true

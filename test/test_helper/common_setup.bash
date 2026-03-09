@@ -76,6 +76,13 @@ _common_setup() {
 	# Clear hook-env session state to ensure clean test environment
 	unset __FNOX_SESSION
 
+	# Clear XDG variables so config/state dirs fall back to HOME-based defaults.
+	# Tests set HOME to a temp dir and create configs at $HOME/.config/fnox/;
+	# if XDG_CONFIG_HOME is set (e.g. in CI), it would override HOME and cause
+	# fnox to look in the wrong directory.
+	unset XDG_CONFIG_HOME
+	unset XDG_STATE_HOME
+
 	# Ensure no existing config
 	rm -f "$FNOX_CONFIG_FILE"
 }

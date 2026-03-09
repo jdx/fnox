@@ -238,6 +238,7 @@ mod tests {
             shell_integration_output: "normal".to_string(),
             if_missing: None,
             if_missing_default: None,
+            http_timeout: "30s".to_string(),
         };
 
         let mut env = SourceMap::new();
@@ -270,6 +271,7 @@ mod tests {
             shell_integration_output: "normal".to_string(),
             if_missing: None,
             if_missing_default: None,
+            http_timeout: "30s".to_string(),
         };
 
         let mut env = SourceMap::new();

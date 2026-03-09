@@ -18,11 +18,11 @@ pub struct AzureKeyVaultProvider {
 }
 
 impl AzureKeyVaultProvider {
-    pub fn new(vault_url: String, key_name: String) -> Self {
-        Self {
+    pub fn new(vault_url: String, key_name: String) -> Result<Self> {
+        Ok(Self {
             vault_url,
             key_name,
-        }
+        })
     }
 
     /// Create an Azure Key Vault key client

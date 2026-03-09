@@ -61,6 +61,20 @@ export default defineConfig({
             link: "/guide/missing-secrets",
           },
           { text: "Import/Export", link: "/guide/import-export" },
+          { text: "Syncing Secrets Locally", link: "/guide/sync" },
+          { text: "Credential Leases", link: "/guide/leases" },
+          { text: "MCP Server", link: "/guide/mcp" },
+        ],
+      },
+      {
+        text: "Lease Backends",
+        collapsed: true,
+        items: [
+          { text: "AWS STS", link: "/leases/aws-sts" },
+          { text: "GCP IAM", link: "/leases/gcp-iam" },
+          { text: "Azure Token", link: "/leases/azure-token" },
+          { text: "HashiCorp Vault", link: "/leases/vault" },
+          { text: "Custom Command", link: "/leases/command" },
         ],
       },
       {
@@ -78,6 +92,8 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: "Age Encryption", link: "/providers/age" },
+              { text: "FIDO2", link: "/providers/fido2" },
+              { text: "YubiKey", link: "/providers/yubikey" },
               { text: "AWS KMS", link: "/providers/aws-kms" },
               { text: "Azure Key Vault Keys", link: "/providers/azure-kms" },
               { text: "Google Cloud KMS", link: "/providers/gcp-kms" },

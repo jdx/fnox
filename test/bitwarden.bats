@@ -19,6 +19,13 @@
 export BATS_NO_PARALLELIZE_WITHIN_FILE=true
 
 setup() {
+	# Preserve bw CLI config dir before _common_setup changes HOME.
+	# The bw CLI stores server URL and login state in data.json under
+	# this directory; without it, bw reports "You are not logged in".
+	if [ -z "$BITWARDENCLI_APPDATA_DIR" ]; then
+		export BITWARDENCLI_APPDATA_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/Bitwarden CLI"
+	fi
+
 	load 'test_helper/common_setup'
 	_common_setup
 

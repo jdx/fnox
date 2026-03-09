@@ -328,6 +328,13 @@ async fn try_get_secret(
     provider_config: &ProviderConfig,
     provider_value: &str,
 ) -> Result<String> {
+    if crate::env::is_non_interactive() && provider_config.requires_interactive_auth() {
+        return Err(FnoxError::Provider(format!(
+            "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
+            provider_name
+        )));
+    }
+
     let provider = get_provider_resolved(config, profile, provider_name, provider_config).await?;
     provider.get_secret(provider_value).await
 }
@@ -648,6 +655,25 @@ async fn resolve_provider_batch(
             return Ok(results);
         }
     };
+
+    // Skip interactive providers in non-interactive mode (e.g. TUI).
+    // Handle per-secret if_missing policy (like ProviderNotConfigured above)
+    // so other providers at the same resolution level are not affected.
+    if crate::env::is_non_interactive() && provider_config.requires_interactive_auth() {
+        for (key, _) in &provider_secrets {
+            let secret_config = &secrets[key];
+            let if_missing = resolve_if_missing_behavior(secret_config, config);
+            let error = FnoxError::Provider(format!(
+                "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
+                provider_name
+            ));
+            if let Some(error) = handle_provider_error(key, error, if_missing, true) {
+                return Err(error);
+            }
+            results.insert(key.clone(), None);
+        }
+        return Ok(results);
+    }
 
     // Try to get secrets with auth retry on failure
     try_batch_with_auth_retry(
