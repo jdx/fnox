@@ -14,6 +14,9 @@ const MAX_DURATION_SECS: u64 = 3600;
 /// JWT expiration — GitHub accepts up to 10 minutes
 const JWT_EXPIRY_SECS: i64 = 600;
 
+/// All env var names the GitHub App backend may consume at runtime.
+pub const CONSUMED_ENV_VARS: &[&str] = &["FNOX_GITHUB_APP_PRIVATE_KEY"];
+
 pub fn check_prerequisites(private_key_file: &Option<String>) -> Option<String> {
     let has_key = std::env::var("FNOX_GITHUB_APP_PRIVATE_KEY").is_ok()
         || private_key_file

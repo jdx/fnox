@@ -223,6 +223,7 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::AzureToken { env_var, .. } => env_var == key,
             LeaseBackendConfig::Command { .. } => false,
             LeaseBackendConfig::Cloudflare { env_var, .. } => env_var == key,
+            LeaseBackendConfig::GithubApp { env_var, .. } => env_var == key,
         }
     }
 
@@ -238,6 +239,7 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::AzureToken { .. } => azure_token::CONSUMED_ENV_VARS,
             LeaseBackendConfig::Command { .. } => command::CONSUMED_ENV_VARS,
             LeaseBackendConfig::Cloudflare { .. } => cloudflare::CONSUMED_ENV_VARS,
+            LeaseBackendConfig::GithubApp { .. } => github_app::CONSUMED_ENV_VARS,
         }
     }
 
