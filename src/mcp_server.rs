@@ -308,28 +308,41 @@ impl FnoxMcpServer {
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
 
+        // kill_on_drop ensures the child is killed if the future is cancelled
+        // (e.g. on timeout), preventing orphaned/zombie processes.
+        cmd.kill_on_drop(true);
+
         let timeout_secs = self
             .mcp_config
             .exec_timeout_secs
             .unwrap_or(DEFAULT_EXEC_TIMEOUT_SECS);
-        let output =
-            tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), cmd.output())
-                .await
-                .map_err(|_| {
-                    McpError::internal_error(
-                        format!(
-                            "Command '{}' timed out after {timeout_secs}s",
-                            params.command[0]
-                        ),
-                        None,
-                    )
-                })?
-                .map_err(|e| {
-                    McpError::internal_error(
-                        format!("Failed to execute command '{}': {e}", params.command[0]),
-                        None,
-                    )
-                })?;
+        let mut child = cmd.spawn().map_err(|e| {
+            McpError::internal_error(
+                format!("Failed to execute command '{}': {e}", params.command[0]),
+                None,
+            )
+        })?;
+        let output = tokio::time::timeout(
+            std::time::Duration::from_secs(timeout_secs),
+            child.wait_with_output(),
+        )
+        .await
+        .map_err(|_| {
+            // child is dropped here → kill_on_drop sends SIGKILL
+            McpError::internal_error(
+                format!(
+                    "Command '{}' timed out after {timeout_secs}s",
+                    params.command[0]
+                ),
+                None,
+            )
+        })?
+        .map_err(|e| {
+            McpError::internal_error(
+                format!("Failed to execute command '{}': {e}", params.command[0]),
+                None,
+            )
+        })?;
 
         let stdout_raw = &output.stdout;
         let stderr_raw = &output.stderr;
