@@ -206,11 +206,10 @@ impl FnoxMcpServer {
         // Not in cache — check if it's a configured secret
         if let Some(secret_config) = self.profile_secrets.get(&params.name) {
             // env=false secrets are deferred; try on-demand resolution
-            if !secret_config.env {
-                if let Some(value) = self.resolve_single(&params.name).await? {
+            if !secret_config.env
+                && let Some(value) = self.resolve_single(&params.name).await? {
                     return Ok(CallToolResult::success(vec![Content::text(value)]));
                 }
-            }
             // env=true: was included in batch resolution and simply had no value.
             // env=false: on-demand resolution returned None.
             // Either way, resolution succeeded but the secret is absent (optional).
