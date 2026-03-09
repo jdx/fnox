@@ -521,38 +521,15 @@ pub async fn try_cached_credentials(
     let cached_creds = cached_lease.cached_credentials.as_ref()?;
 
     if let Some(ref enc_provider_name) = cached_lease.encryption_provider {
-        match find_encryption_provider(config, profile).await {
-            EncryptionProviderResult::Available(found_name, provider)
-                if found_name == *enc_provider_name =>
-            {
-                match decrypt_credentials(provider.as_ref(), cached_creds).await {
-                    Ok(decrypted) => {
-                        tracing::debug!(
-                            "Reusing cached encrypted lease '{}' for backend '{}'",
-                            cached_lease.lease_id,
-                            name
-                        );
-                        Some(decrypted)
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            "Failed to decrypt cached lease '{}': {}, creating fresh lease",
-                            cached_lease.lease_id,
-                            e
-                        );
-                        None
-                    }
-                }
-            }
-            _ => {
-                tracing::warn!(
-                    "Encryption provider '{}' not available for cached lease '{}', creating fresh lease",
-                    enc_provider_name,
-                    cached_lease.lease_id
-                );
-                None
-            }
-        }
+        try_decrypt_cached(
+            config,
+            profile,
+            enc_provider_name,
+            cached_creds,
+            &cached_lease.lease_id,
+            name,
+        )
+        .await
     } else {
         tracing::debug!(
             "Reusing cached plaintext lease '{}' for backend '{}'",
@@ -560,6 +537,50 @@ pub async fn try_cached_credentials(
             name
         );
         Some(cached_creds.clone())
+    }
+}
+
+/// Attempt to decrypt cached credentials using the named encryption provider.
+/// Returns `None` if the provider is unavailable or decryption fails.
+pub async fn try_decrypt_cached(
+    config: &Config,
+    profile: &str,
+    enc_provider_name: &str,
+    cached_creds: &IndexMap<String, String>,
+    lease_id: &str,
+    backend_name: &str,
+) -> Option<IndexMap<String, String>> {
+    match find_encryption_provider(config, profile).await {
+        EncryptionProviderResult::Available(found_name, provider)
+            if found_name == enc_provider_name =>
+        {
+            match decrypt_credentials(provider.as_ref(), cached_creds).await {
+                Ok(decrypted) => {
+                    tracing::debug!(
+                        "Reusing cached encrypted lease '{}' for backend '{}'",
+                        lease_id,
+                        backend_name
+                    );
+                    Some(decrypted)
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to decrypt cached lease '{}': {}, creating fresh lease",
+                        lease_id,
+                        e
+                    );
+                    None
+                }
+            }
+        }
+        _ => {
+            tracing::warn!(
+                "Encryption provider '{}' not available for cached lease '{}', creating fresh lease",
+                enc_provider_name,
+                lease_id
+            );
+            None
+        }
     }
 }
 
@@ -576,6 +597,11 @@ pub async fn resolve_lease(
     prereq_missing: Option<&str>,
     label_prefix: &str,
 ) -> Result<IndexMap<String, String>> {
+    // NOTE: try_cached_credentials is called again here even though `fnox get`
+    // already performed a pre-check (get.rs resolve_from_lease). This guards
+    // against a concurrent process writing a valid cache entry between that
+    // earlier check and the ledger lock acquired here. Do not remove without
+    // re-establishing that TOCTOU safety.
     let config_hash = lease_config.config_hash();
     if let Some(creds) = try_cached_credentials(ledger, name, &config_hash, config, profile).await {
         return Ok(creds);

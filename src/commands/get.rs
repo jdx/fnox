@@ -129,15 +129,49 @@ impl GetCommand {
         // Cache-first: check the ledger for a reusable lease before resolving
         // any secrets. This avoids network calls to secret providers when the
         // cache already has valid credentials.
-        let cached_creds = {
+        //
+        // Only the synchronous ledger read is held under the file lock;
+        // decryption (which may involve async network I/O to an encryption
+        // provider) runs after the lock is released.
+        let cached_entry = {
             let _lock = LeaseLedger::lock(&project_dir)?;
             let ledger = LeaseLedger::load(&project_dir)?;
-            lease::try_cached_credentials(&ledger, name, &config_hash, config, profile).await
+            ledger.find_reusable(name, &config_hash).and_then(|lease| {
+                lease.cached_credentials.as_ref().map(|creds| {
+                    (
+                        creds.clone(),
+                        lease.encryption_provider.clone(),
+                        lease.lease_id.clone(),
+                    )
+                })
+            })
         };
 
-        if let Some(creds) = cached_creds {
-            let all_secrets = config.get_secrets(profile)?;
-            return self.extract_key_from_creds(name, creds, all_secrets);
+        if let Some((cached_creds, enc_provider, lease_id)) = cached_entry {
+            let decrypted = if let Some(ref enc_provider_name) = enc_provider {
+                lease::try_decrypt_cached(
+                    config,
+                    profile,
+                    enc_provider_name,
+                    &cached_creds,
+                    &lease_id,
+                    name,
+                )
+                .await
+            } else {
+                tracing::debug!(
+                    "Reusing cached plaintext lease '{}' for backend '{}'",
+                    lease_id,
+                    name
+                );
+                Some(cached_creds)
+            };
+            if let Some(creds) = decrypted {
+                // as_file is a presentation hint; a get_secrets failure should
+                // not discard a successfully retrieved cached credential.
+                let all_secrets = config.get_secrets(profile).unwrap_or_default();
+                return self.extract_key_from_creds(name, creds, all_secrets);
+            }
         }
 
         // Cache miss: resolve only the consumed secrets and create a fresh lease.
