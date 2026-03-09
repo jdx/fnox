@@ -30,22 +30,6 @@ start_mock_github_api() {
 	local token="${2:-ghs_mock_installation_token_abc123}"
 	local expires_at="${3:-2099-01-01T00:00:00Z}"
 
-	# Simple HTTP server using bash + nc
-	cat >"$TEST_TEMP_DIR/mock-server.sh" <<SCRIPT
-#!/usr/bin/env bash
-while true; do
-	# Read request
-	read -r method path version < <(nc -l "$port" 2>/dev/null | head -1 | tr -d '\r')
-
-	# Respond with token
-	BODY='{"token":"$token","expires_at":"$expires_at","permissions":{"contents":"read"}}'
-	RESPONSE="HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \${#BODY}\r\n\r\n\$BODY"
-	echo -ne "\$RESPONSE"
-done
-SCRIPT
-	chmod +x "$TEST_TEMP_DIR/mock-server.sh"
-
-	# Use python for a more reliable mock server
 	cat >"$TEST_TEMP_DIR/mock_github.py" <<PYEOF
 import http.server, json, sys
 
@@ -220,7 +204,7 @@ app_id = "12345"
 installation_id = "67890"
 private_key_file = "$TEST_TEMP_DIR/test-app.pem"
 api_base = "http://127.0.0.1:9882"
-repositories = ["my-org/my-repo"]
+repositories = ["my-repo"]
 EOF
 
 	run fnox lease create github

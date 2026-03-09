@@ -26,7 +26,7 @@ pull_requests = "write"
 | `private_key_file` | No\*     | Path to the GitHub App's PEM private key file (supports `~` expansion)               |
 | `env_var`          | No       | Environment variable name for the token (default: `"GITHUB_TOKEN"`)                  |
 | `permissions`      | No       | Map of permission names to access levels (omit to use all installation permissions)  |
-| `repositories`     | No       | Array of repository names to scope the token to (omit for all installed repos)       |
+| `repositories`     | No       | Array of bare repository names to scope the token to (omit for all installed repos)  |
 | `api_base`         | No       | GitHub API base URL (default: `"https://api.github.com"`; set for GitHub Enterprise) |
 | `duration`         | No       | Ignored — GitHub controls token lifetime (always 1 hour)                             |
 
@@ -82,7 +82,7 @@ The env var name is configurable via the `env_var` field.
 ## Limits
 
 - **Max duration:** 1 hour (enforced by GitHub)
-- **Revocation:** Not supported — tokens auto-expire. GitHub's revocation API requires the token itself (not a lease ID), so fnox relies on the short TTL.
+- **Revocation:** Supported — fnox calls `DELETE /installation/token` to immediately invalidate the token
 
 ## Examples
 
@@ -125,7 +125,7 @@ type = "github-app"
 app_id = "12345"
 installation_id = "67890"
 private_key_file = "~/.config/fnox/github-app.pem"
-repositories = ["my-org/api", "my-org/frontend"]
+repositories = ["api", "frontend"]
 
 [leases.github.permissions]
 contents = "read"

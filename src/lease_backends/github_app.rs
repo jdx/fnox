@@ -31,10 +31,10 @@ pub fn check_prerequisites(private_key_file: &Option<String>) -> Option<String> 
 }
 
 pub fn required_env_vars() -> Vec<(&'static str, &'static str)> {
-    vec![(
-        "FNOX_GITHUB_APP_PRIVATE_KEY",
-        "GitHub App private key in PEM format (or set private_key_file in config)",
-    )]
+    // The env var is optional when private_key_file is configured, so we
+    // don't unconditionally list it as required. check_prerequisites()
+    // handles the two-path validation correctly.
+    vec![]
 }
 
 pub struct GitHubAppBackend {
@@ -101,12 +101,22 @@ impl GitHubAppBackend {
     fn generate_jwt(&self, pem_key: &str) -> Result<String> {
         let now = chrono::Utc::now();
         let iat = now.timestamp() - 60; // issued 60s in the past to allow clock drift
-        let exp = now.timestamp() + JWT_EXPIRY_SECS;
+        let exp = iat + JWT_EXPIRY_SECS; // exp - iat must be ≤ 600s (GitHub's limit)
+
+        let app_id_num: u64 = self
+            .app_id
+            .parse()
+            .map_err(|_| FnoxError::ProviderAuthFailed {
+                provider: "GitHub App".to_string(),
+                details: format!("app_id '{}' is not a valid integer", self.app_id),
+                hint: "app_id must be a numeric GitHub App ID".to_string(),
+                url: URL.to_string(),
+            })?;
 
         let claims = serde_json::json!({
             "iat": iat,
             "exp": exp,
-            "iss": self.app_id,
+            "iss": app_id_num,
         });
 
         let key = jsonwebtoken::EncodingKey::from_rsa_pem(pem_key.as_bytes()).map_err(|e| {
@@ -238,7 +248,9 @@ impl LeaseBackend for GitHubAppBackend {
         let mut credentials = IndexMap::new();
         credentials.insert(self.env_var.clone(), token.to_string());
 
-        let lease_id = super::generate_lease_id("github-app");
+        // Use the token itself as the lease_id so revoke_lease can call
+        // DELETE /installation/token (which authenticates with the token).
+        let lease_id = token.to_string();
 
         Ok(Lease {
             credentials,
@@ -248,14 +260,40 @@ impl LeaseBackend for GitHubAppBackend {
     }
 
     async fn revoke_lease(&self, lease_id: &str) -> Result<()> {
-        // Extract the token from cached credentials to revoke it.
-        // GitHub's revoke endpoint requires the token itself, not a lease ID.
-        // Since we use a generated lease_id (not the token), we can't revoke
-        // without the token value. The token auto-expires in ≤1 hour anyway.
-        tracing::debug!(
-            lease_id,
-            "GitHub App tokens auto-expire; skipping explicit revocation"
-        );
+        // The lease_id is the installation token itself, so we can authenticate
+        // the DELETE /installation/token request with it.
+        let api_base = self.api_base();
+        let url = format!("{api_base}/installation/token");
+
+        let client = crate::http::http_client();
+        let response = client
+            .delete(&url)
+            .header("Accept", "application/vnd.github+json")
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .bearer_auth(lease_id)
+            .send()
+            .await
+            .map_err(|e| FnoxError::ProviderApiError {
+                provider: "GitHub App".to_string(),
+                details: e.to_string(),
+                hint: "Failed to connect to GitHub API for token revocation".to_string(),
+                url: URL.to_string(),
+            })?;
+
+        let status = response.status();
+        if !status.is_success() {
+            // 404 = token already expired or revoked — treat as success
+            if status.as_u16() != 404 {
+                let body_text = response.text().await.unwrap_or_default();
+                return Err(FnoxError::ProviderApiError {
+                    provider: "GitHub App".to_string(),
+                    details: format!("HTTP {status}: {body_text}"),
+                    hint: "Failed to revoke GitHub installation token".to_string(),
+                    url: URL.to_string(),
+                });
+            }
+        }
+
         Ok(())
     }
 
