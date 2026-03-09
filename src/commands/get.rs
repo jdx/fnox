@@ -177,22 +177,21 @@ impl GetCommand {
         // Now that credentials are in the environment, attempt encrypted cache
         // decryption. This must happen after set_secrets_as_env so the
         // encryption provider (e.g. Vault) can find its credentials.
+        // On failure, fall through to create a fresh lease — matching exec's
+        // behaviour. create_and_record_lease handles encryption failure
+        // gracefully by storing (None, None) for cached credentials.
         if let Some(entry) = cached_entry {
             // entry.encryption_provider is guaranteed Some here (plaintext
             // was handled above), so resolve_cached_entry will attempt decrypt.
             if let Some(creds) = lease::resolve_cached_entry(entry, config, profile, name).await {
                 return self.extract_key_from_creds(name, creds, all_secrets.clone());
             }
-            // Decryption failed even with credentials injected — don't silently
-            // create a new (also un-decryptable) lease that repeats the cycle.
-            return Err(FnoxError::Config(format!(
-                "Lease '{}': cached credentials could not be decrypted. \
-                 Ensure the encryption provider is reachable or run \
-                 'fnox lease create -i {}' to refresh credentials.",
-                name, name
-            )));
         }
 
+        // check_prerequisites is intentionally called after set_secrets_as_env:
+        // profile secrets (e.g. AWS_ACCESS_KEY_ID) are already injected into the
+        // process env, so prerequisites that are met via profile secrets will pass.
+        // This matches exec.rs behaviour.
         let prereq_missing = lease_config.check_prerequisites();
 
         // Acquire ledger lock only for the load → cache-check → mutate → save
