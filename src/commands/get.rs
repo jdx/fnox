@@ -136,7 +136,7 @@ impl GetCommand {
         };
 
         if let Some(creds) = cached_creds {
-            let all_secrets = config.get_secrets(profile).unwrap_or_default();
+            let all_secrets = config.get_secrets(profile)?;
             return self.extract_key_from_creds(name, creds, all_secrets);
         }
 
