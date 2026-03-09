@@ -152,8 +152,22 @@ impl GetCommand {
         // Resolve consumed secrets and inject them as env vars so that:
         // 1. The encryption provider can initialize (e.g. VAULT_TOKEN)
         // 2. The backend SDK can authenticate for fresh lease creation
-        let consumed: std::collections::HashSet<&str> =
+        let mut consumed: std::collections::HashSet<&str> =
             lease_config.consumed_env_vars().iter().copied().collect();
+
+        // If the cached entry is encrypted, the encryption provider may need
+        // its own credentials (e.g. Vault transit needs VAULT_TOKEN). Include
+        // the provider's env_dependencies so they get resolved and injected.
+        if let Some(ref entry) = cached_entry
+            && let Some(ref enc_provider_name) = entry.encryption_provider
+        {
+            let providers_map = config.get_providers(profile);
+            if let Some(provider_config) = providers_map.get(enc_provider_name) {
+                for dep in provider_config.env_dependencies() {
+                    consumed.insert(dep);
+                }
+            }
+        }
         // When consumed is empty the backend needs no profile secrets (e.g. it
         // authenticates via instance metadata). Avoid aborting on a transient
         // secrets-config read error that would be irrelevant in that case.
@@ -227,14 +241,10 @@ impl GetCommand {
     ) -> Result<Option<(String, IndexMap<String, SecretConfig>)>> {
         match creds.get(&self.key) {
             Some(value) => Ok(Some((value.clone(), all_secrets))),
-            // This is a backend contract violation (produces_env_var returned true
-            // but the credential map lacks the key), not a static config error.
-            // Using FnoxError::Config for now as there is no dedicated variant.
-            None => Err(FnoxError::Config(format!(
-                "Lease '{}' produced credentials at runtime but the expected key '{}' was absent. \
-                 This is a backend contract violation, not a config error.",
-                name, self.key,
-            ))),
+            None => Err(FnoxError::LeaseContractViolation {
+                lease: name.to_string(),
+                key: self.key.clone(),
+            }),
         }
     }
 }

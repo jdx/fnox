@@ -414,6 +414,20 @@ pub enum FnoxError {
     EditorExitFailed { editor: String, status: i32 },
 
     // ========================================================================
+    // Lease Errors
+    // ========================================================================
+    #[error("Lease '{lease}' produced credentials but key '{key}' was absent")]
+    #[diagnostic(
+        code(fnox::lease::contract_violation),
+        help(
+            "The lease backend's produces_env_var() reported it provides '{key}', \
+             but the credential map returned at runtime did not contain it. \
+             This is a bug in the backend implementation."
+        )
+    )]
+    LeaseContractViolation { lease: String, key: String },
+
+    // ========================================================================
     // Command Execution Errors
     // ========================================================================
     #[error("No command specified")]
