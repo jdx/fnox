@@ -366,25 +366,20 @@ pub async fn find_encryption_provider(config: &Config, profile: &str) -> Encrypt
     }
 }
 
-/// Create a lease, cache credentials, and record it in the ledger.
-/// Shared between `fnox exec` and `fnox lease create` to avoid duplication.
+/// Record a lease result in the ledger (add + save). No lock management —
+/// the caller must hold the ledger lock. Shared by `create_and_record_lease`
+/// and `resolve_lease` to avoid duplicating the add+save+warn pattern.
 #[allow(clippy::too_many_arguments)]
-pub async fn create_and_record_lease(
-    backend: &dyn crate::lease_backends::LeaseBackend,
+fn record_lease(
+    ledger: &mut LeaseLedger,
+    result: &crate::lease_backends::Lease,
     backend_name: &str,
     label: &str,
-    duration: std::time::Duration,
     config_hash: String,
-    config: &Config,
-    profile: &str,
-    ledger: &mut LeaseLedger,
+    cached_credentials: Option<IndexMap<String, String>>,
+    encryption_provider: Option<String>,
     project_dir: &Path,
-) -> Result<crate::lease_backends::Lease> {
-    let result = backend.create_lease(duration, label).await?;
-
-    let (cached_credentials, encryption_provider) =
-        cache_credentials(config, profile, &result.credentials, &result.lease_id).await;
-
+) {
     ledger.add(LeaseRecord {
         lease_id: result.lease_id.clone(),
         backend_name: backend_name.to_string(),
@@ -405,6 +400,37 @@ pub async fn create_and_record_lease(
             save_err
         );
     }
+}
+
+/// Create a lease, cache credentials, and record it in the ledger.
+/// Used by `fnox lease create` where the caller manages its own lock.
+#[allow(clippy::too_many_arguments)]
+pub async fn create_and_record_lease(
+    backend: &dyn crate::lease_backends::LeaseBackend,
+    backend_name: &str,
+    label: &str,
+    duration: std::time::Duration,
+    config_hash: String,
+    config: &Config,
+    profile: &str,
+    ledger: &mut LeaseLedger,
+    project_dir: &Path,
+) -> Result<crate::lease_backends::Lease> {
+    let result = backend.create_lease(duration, label).await?;
+
+    let (cached_credentials, encryption_provider) =
+        cache_credentials(config, profile, &result.credentials, &result.lease_id).await;
+
+    record_lease(
+        ledger,
+        &result,
+        backend_name,
+        label,
+        config_hash,
+        cached_credentials,
+        encryption_provider,
+        project_dir,
+    );
 
     Ok(result)
 }
@@ -614,10 +640,16 @@ pub async fn try_decrypt_cached(
 /// Shared between `fnox exec` and `fnox get`.
 ///
 /// Manages its own ledger locks with minimal scope: a short lock for the
-/// TOCTOU cache check (sync read, release, async decrypt), the lease creation
+/// cache check (sync read, release, async decrypt), the lease creation
 /// network call and credential encryption run with no lock held, and a final
 /// short lock for the ledger write. This prevents concurrent `fnox get`/`exec`
 /// calls from serializing on a single lock for the duration of network I/O.
+///
+/// When `skip_cache` is true the initial cache check is skipped entirely. Use
+/// this when the caller has already performed a cache lookup and decryption
+/// attempt (e.g. `get.rs` does its own encrypted-cache check after injecting
+/// encryption-provider credentials), avoiding a redundant network round-trip
+/// to the encryption provider on cache-miss.
 #[allow(clippy::too_many_arguments)]
 pub async fn resolve_lease(
     name: &str,
@@ -627,20 +659,24 @@ pub async fn resolve_lease(
     project_dir: &Path,
     prereq_missing: Option<&str>,
     label_prefix: &str,
+    skip_cache: bool,
 ) -> Result<IndexMap<String, String>> {
-    // TOCTOU cache check: sync ledger read under a short lock, then release
-    // before async decryption. Guards against a concurrent process writing a
-    // valid cache entry between an earlier check and now.
     let config_hash = lease_config.config_hash();
-    let cached_entry = {
-        let _lock = LeaseLedger::lock(project_dir)?;
-        let ledger = LeaseLedger::load(project_dir)?;
-        find_cached_entry(&ledger, name, &config_hash)
-    };
-    if let Some(entry) = cached_entry
-        && let Some(creds) = resolve_cached_entry(entry, config, profile, name).await
-    {
-        return Ok(creds);
+
+    if !skip_cache {
+        // Cache check: sync ledger read under a short lock, then release
+        // before async decryption. Guards against a concurrent process writing
+        // a valid cache entry between an earlier check and now.
+        let cached_entry = {
+            let _lock = LeaseLedger::lock(project_dir)?;
+            let ledger = LeaseLedger::load(project_dir)?;
+            find_cached_entry(&ledger, name, &config_hash)
+        };
+        if let Some(entry) = cached_entry
+            && let Some(creds) = resolve_cached_entry(entry, config, profile, name).await
+        {
+            return Ok(creds);
+        }
     }
 
     if let Some(missing) = prereq_missing {
@@ -683,26 +719,16 @@ pub async fn resolve_lease(
     {
         let _lock = LeaseLedger::lock(project_dir)?;
         let mut ledger = LeaseLedger::load(project_dir)?;
-        ledger.add(LeaseRecord {
-            lease_id: result.lease_id.clone(),
-            backend_name: name.to_string(),
-            label,
-            created_at: Utc::now(),
-            expires_at: result.expires_at,
-            revoked: false,
+        record_lease(
+            &mut ledger,
+            &result,
+            name,
+            &label,
+            config_hash,
             cached_credentials,
             encryption_provider,
-            config_hash: Some(config_hash),
-        });
-        if let Err(save_err) = ledger.save(project_dir) {
-            tracing::warn!(
-                "Lease '{}' created for backend '{}' but ledger save failed: {}. \
-                 This lease is untracked and must be revoked manually.",
-                result.lease_id,
-                name,
-                save_err
-            );
-        }
+            project_dir,
+        );
     }
 
     Ok(result.credentials)

@@ -209,6 +209,10 @@ impl GetCommand {
         // This matches exec.rs behaviour.
         let prereq_missing = lease_config.check_prerequisites();
 
+        // skip_cache: true — we already performed the full cache lookup and
+        // decryption attempt above (with encryption-provider credentials
+        // injected). Skipping avoids a redundant network round-trip to the
+        // encryption provider on cache-miss.
         let creds = lease::resolve_lease(
             name,
             lease_config,
@@ -217,6 +221,7 @@ impl GetCommand {
             &project_dir,
             prereq_missing.as_deref(),
             "get",
+            true,
         )
         .await?;
 

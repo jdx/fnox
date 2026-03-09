@@ -56,6 +56,8 @@ impl ExecCommand {
                 &mut _temp_env_guard,
             )?);
             let project_dir = lease::project_dir_from_config(&config, &cli.config);
+            // Each resolve_lease call manages its own short-lived ledger locks.
+            // Leases are processed sequentially; no shared lock is needed.
             for (name, lease_config) in &leases {
                 // Check prerequisites before attempting to create/use a lease
                 let prereq_missing = lease_config.check_prerequisites();
@@ -91,6 +93,7 @@ impl ExecCommand {
                     &project_dir,
                     prereq_missing.as_deref(),
                     "exec",
+                    false,
                 )
                 .await?;
                 for (cred_key, cred_value) in creds {
