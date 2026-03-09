@@ -13,9 +13,13 @@ use tokio::sync::{OnceCell, RwLock};
 
 use crate::config::{Config, McpConfig, McpTool, SecretConfig};
 use crate::secret_resolver::resolve_secrets_batch;
+use crate::temp_file_secrets::create_ephemeral_secret_file;
 
 /// Maximum output size (1 MiB) to prevent unbounded memory usage
 const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
+
+/// Default execution timeout (5 minutes)
+const DEFAULT_EXEC_TIMEOUT_SECS: u64 = 300;
 
 /// MCP tool parameter: request a secret by name
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -42,6 +46,8 @@ pub struct FnoxMcpServer {
     mcp_config: Arc<McpConfig>,
     profile_secrets: Arc<IndexMap<String, SecretConfig>>,
     cache: Arc<RwLock<HashMap<String, String>>>,
+    /// Keeps temp files alive for as_file secrets across the session
+    _temp_files: Arc<RwLock<Vec<tempfile::NamedTempFile>>>,
     /// Tracks whether secrets have been resolved (separate from cache emptiness,
     /// since all secrets may resolve to None for optional/absent secrets).
     resolved: Arc<OnceCell<()>>,
@@ -62,6 +68,7 @@ impl FnoxMcpServer {
             mcp_config: Arc::new(mcp_config),
             profile_secrets: Arc::new(profile_secrets),
             cache: Arc::new(RwLock::new(HashMap::new())),
+            _temp_files: Arc::new(RwLock::new(Vec::new())),
             resolved: Arc::new(OnceCell::new()),
             tool_router: Self::tool_router(),
         }
@@ -69,11 +76,15 @@ impl FnoxMcpServer {
 
     /// Ensure all secrets are resolved and cached. First call resolves the
     /// entire batch (amortizes yubikey/SSO cost); subsequent calls are no-ops.
+    ///
+    /// Respects `env = false` (skips injection) and `as_file = true` (writes
+    /// to a temp file and stores the path instead of the raw value).
     async fn ensure_resolved(&self) -> Result<(), McpError> {
         let config = self.config.clone();
         let profile = self.profile.clone();
         let profile_secrets = self.profile_secrets.clone();
         let cache = self.cache.clone();
+        let temp_files = self._temp_files.clone();
 
         self.resolved
             .get_or_try_init(|| async {
@@ -84,8 +95,35 @@ impl FnoxMcpServer {
                     })?;
 
                 let mut cache = cache.write().await;
+                let mut temp_files = temp_files.write().await;
                 for (key, value) in resolved {
+                    // Skip secrets marked env=false — they should only be
+                    // accessible via `fnox get`, not injected into env.
+                    if let Some(secret_config) = profile_secrets.get(&key) {
+                        if !secret_config.env {
+                            continue;
+                        }
+                    }
+
                     if let Some(v) = value {
+                        // Handle as_file: write to temp file, store path
+                        if let Some(secret_config) = profile_secrets.get(&key) {
+                            if secret_config.as_file {
+                                let temp_file =
+                                    create_ephemeral_secret_file(&key, &v).map_err(|e| {
+                                        McpError::internal_error(
+                                            format!(
+                                                "Failed to create temp file for secret '{key}': {e}"
+                                            ),
+                                            None,
+                                        )
+                                    })?;
+                                let file_path = temp_file.path().to_string_lossy().to_string();
+                                temp_files.push(temp_file);
+                                cache.insert(key, file_path);
+                                continue;
+                            }
+                        }
                         cache.insert(key, v);
                     }
                 }
@@ -163,9 +201,17 @@ impl FnoxMcpServer {
             cmd.args(&params.command[1..]);
         }
 
-        // Inject secrets as env vars (inherits parent environment like fnox exec)
+        // Inject cached secrets as env vars (already filtered for env/as_file)
         for (key, value) in cache.iter() {
             cmd.env(key, value);
+        }
+
+        // Strip env=false secrets that resolve_secrets_batch may have set
+        // as process env vars (side effect of dependency resolution).
+        for (key, secret_config) in self.profile_secrets.iter() {
+            if !secret_config.env {
+                cmd.env_remove(key);
+            }
         }
 
         // Must NOT inherit stdio — would corrupt JSON-RPC stream
@@ -173,12 +219,28 @@ impl FnoxMcpServer {
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
 
-        let output = cmd.output().await.map_err(|e| {
-            McpError::internal_error(
-                format!("Failed to execute command '{}': {e}", params.command[0]),
-                None,
-            )
-        })?;
+        let timeout_secs = self
+            .mcp_config
+            .exec_timeout_secs
+            .unwrap_or(DEFAULT_EXEC_TIMEOUT_SECS);
+        let output =
+            tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), cmd.output())
+                .await
+                .map_err(|_| {
+                    McpError::internal_error(
+                        format!(
+                            "Command '{}' timed out after {timeout_secs}s",
+                            params.command[0]
+                        ),
+                        None,
+                    )
+                })?
+                .map_err(|e| {
+                    McpError::internal_error(
+                        format!("Failed to execute command '{}': {e}", params.command[0]),
+                        None,
+                    )
+                })?;
 
         let stdout_raw = &output.stdout;
         let stderr_raw = &output.stderr;
@@ -209,7 +271,11 @@ impl FnoxMcpServer {
         }
 
         let text = parts.join("\n");
-        Ok(CallToolResult::success(vec![Content::text(text)]))
+        if output.status.success() {
+            Ok(CallToolResult::success(vec![Content::text(text)]))
+        } else {
+            Ok(CallToolResult::error(vec![Content::text(text)]))
+        }
     }
 }
 

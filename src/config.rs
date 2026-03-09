@@ -252,12 +252,17 @@ pub struct McpConfig {
     /// Which MCP tools to expose (default: ["get_secret", "exec"])
     #[serde(default = "McpConfig::default_tools")]
     pub tools: Vec<McpTool>,
+
+    /// Timeout in seconds for exec tool subprocess (default: 300)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exec_timeout_secs: Option<u64>,
 }
 
 impl Default for McpConfig {
     fn default() -> Self {
         Self {
             tools: Self::default_tools(),
+            exec_timeout_secs: None,
         }
     }
 }
