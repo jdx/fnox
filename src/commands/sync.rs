@@ -223,21 +223,27 @@ impl SyncCommand {
         let mut skipped_count = 0;
 
         // Determine target config file path
-        let target_path = if self.local_file {
+        let (target_path, ensure_parent_dir) = if self.local_file {
             let config_dir = cli
                 .config
                 .parent()
                 .filter(|p| !p.as_os_str().is_empty())
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("."));
-            config_dir.join(local_override_filename.expect("validated local override filename"))
+            (
+                config_dir.join(
+                    local_override_filename.expect("validated local override filename"),
+                ),
+                true,
+            )
         } else if self.global {
-            Config::global_config_path()
+            (Config::global_config_path(), true)
         } else {
-            cli.config.clone()
+            (cli.config.clone(), false)
         };
 
-        if let Some(parent) = target_path.parent()
+        if ensure_parent_dir
+            && let Some(parent) = target_path.parent()
             && !parent.as_os_str().is_empty()
         {
             std::fs::create_dir_all(parent).map_err(|e| FnoxError::CreateDirFailed {

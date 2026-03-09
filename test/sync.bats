@@ -195,6 +195,16 @@ EOF
 	[ ! -f nested/fnox.local.toml ]
 }
 
+@test "fnox sync does not create parent directory for explicit default config path" {
+	setup_sync_env
+
+	run "$FNOX_BIN" --config nonexistent/fnox.toml sync -p age --force
+	assert_failure
+	assert_output --partial "Failed to read configuration file:"
+	assert_output --partial "/nonexistent/fnox.toml"
+	[ ! -d nonexistent ]
+}
+
 @test "fnox sync with --source filters by source provider" {
 	setup_sync_env
 
