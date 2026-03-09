@@ -132,8 +132,7 @@ impl GetCommand {
         let cached_creds = {
             let _lock = LeaseLedger::lock(&project_dir)?;
             let ledger = LeaseLedger::load(&project_dir)?;
-            self.try_cached_lease(&ledger, name, &config_hash, config, profile)
-                .await
+            lease::try_cached_credentials(&ledger, name, &config_hash, config, profile).await
         };
 
         if let Some(creds) = cached_creds {
@@ -175,63 +174,6 @@ impl GetCommand {
         .await?;
 
         self.extract_key_from_creds(name, creds, all_secrets)
-    }
-
-    /// Try to return cached credentials from the ledger without any network calls.
-    /// Returns `None` on cache miss or if decryption fails (caller should create
-    /// a fresh lease).
-    async fn try_cached_lease(
-        &self,
-        ledger: &LeaseLedger,
-        name: &str,
-        config_hash: &str,
-        config: &Config,
-        profile: &str,
-    ) -> Option<IndexMap<String, String>> {
-        let cached_lease = ledger.find_reusable(name, config_hash)?;
-        let cached_creds = cached_lease.cached_credentials.as_ref()?;
-
-        if let Some(ref enc_provider_name) = cached_lease.encryption_provider {
-            match lease::find_encryption_provider(config, profile).await {
-                lease::EncryptionProviderResult::Available(found_name, provider)
-                    if found_name == *enc_provider_name =>
-                {
-                    match lease::decrypt_credentials(provider.as_ref(), cached_creds).await {
-                        Ok(decrypted) => {
-                            tracing::debug!(
-                                "Reusing cached encrypted lease '{}' for backend '{}'",
-                                cached_lease.lease_id,
-                                name
-                            );
-                            Some(decrypted)
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "Failed to decrypt cached lease '{}': {}, creating fresh lease",
-                                cached_lease.lease_id,
-                                e
-                            );
-                            None
-                        }
-                    }
-                }
-                _ => {
-                    tracing::warn!(
-                        "Encryption provider '{}' not available for cached lease '{}', creating fresh lease",
-                        enc_provider_name,
-                        cached_lease.lease_id
-                    );
-                    None
-                }
-            }
-        } else {
-            tracing::debug!(
-                "Reusing cached plaintext lease '{}' for backend '{}'",
-                cached_lease.lease_id,
-                name
-            );
-            Some(cached_creds.clone())
-        }
     }
 
     fn extract_key_from_creds(
