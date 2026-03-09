@@ -138,6 +138,7 @@ EOF
 - Always add `fnox.local.toml` to `.gitignore`
 - Provide a `fnox.local.toml.example` (committed) for team guidance
 - Use explicit paths to bypass local overrides: `fnox -c ./fnox.toml get SECRET`
+- `fnox sync --local-file` only supports `fnox.toml` and `.fnox.toml`. Other config filenames are rejected because adjacent local override files are not loaded.
 
 ## Global Configuration
 

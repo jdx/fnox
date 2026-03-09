@@ -148,15 +148,51 @@ EOF
 	setup_sync_env
 
 	mkdir -p nested
+	mv fnox.toml nested/fnox.toml
+
+	cd nested || exit 1
+
+	run "$FNOX_BIN" --config fnox.toml sync -p age --local-file --force
+	assert_success
+
+	[ -f fnox.local.toml ]
+	[ ! -f ../fnox.local.toml ]
+	run grep 'sync = { provider = "age", value = "' fnox.local.toml
+	assert_success
+
+	run "$FNOX_BIN" --config fnox.toml get MY_SECRET --age-key-file ../key.txt
+	assert_success
+	assert_output "remote-secret-value"
+}
+
+@test "fnox sync --local-file round-trips with .fnox.toml" {
+	setup_sync_env
+
+	mv fnox.toml .fnox.toml
+
+	run "$FNOX_BIN" --config .fnox.toml sync -p age --local-file --force
+	assert_success
+
+	[ -f .fnox.local.toml ]
+	[ ! -f fnox.local.toml ]
+	run grep 'sync = { provider = "age", value = "' .fnox.local.toml
+	assert_success
+
+	run "$FNOX_BIN" --config .fnox.toml get MY_SECRET --age-key-file key.txt
+	assert_success
+	assert_output "remote-secret-value"
+}
+
+@test "fnox sync --local-file fails with non-default --config filename" {
+	setup_sync_env
+
+	mkdir -p nested
 	mv fnox.toml nested/custom.toml
 
 	run "$FNOX_BIN" --config nested/custom.toml sync -p age --local-file --force
-	assert_success
-
-	[ -f nested/fnox.local.toml ]
-	[ ! -f fnox.local.toml ]
-	run grep 'sync = { provider = "age", value = "' nested/fnox.local.toml
-	assert_success
+	assert_failure
+	assert_output --partial "Configuration error: --local-file requires --config to be 'fnox.toml'"
+	[ ! -f nested/fnox.local.toml ]
 }
 
 @test "fnox sync with --source filters by source provider" {

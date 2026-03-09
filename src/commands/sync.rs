@@ -1,5 +1,5 @@
 use crate::commands::Cli;
-use crate::config::{Config, SyncConfig};
+use crate::config::{Config, SyncConfig, local_override_filename};
 use crate::error::{FnoxError, Result};
 use crate::secret_resolver::resolve_secrets_batch;
 use clap::Args;
@@ -39,7 +39,7 @@ pub struct SyncCommand {
     #[arg(long)]
     filter: Option<String>,
 
-    /// Write sync overrides to fnox.local.toml next to the config file
+    /// Write sync overrides to the local override file next to the config file
     #[arg(long, conflicts_with = "global")]
     local_file: bool,
 }
@@ -48,6 +48,18 @@ impl SyncCommand {
     pub async fn run(&self, cli: &Cli, merged_config: Config) -> Result<()> {
         let profile = Config::get_profile(cli.profile.as_deref());
         tracing::debug!("Syncing secrets for profile '{}'", profile);
+
+        let local_override_filename = self
+            .local_file
+            .then(|| {
+                local_override_filename(&cli.config).ok_or_else(|| {
+                    FnoxError::Config(format!(
+                        "--local-file requires --config to be 'fnox.toml' or '.fnox.toml'; '{}' would not load the adjacent local override file",
+                        cli.config.display()
+                    ))
+                })
+            })
+            .transpose()?;
 
         // Determine target provider
         let target_provider_name = if let Some(ref p) = self.provider {
@@ -218,7 +230,7 @@ impl SyncCommand {
                 .filter(|p| !p.as_os_str().is_empty())
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("."));
-            config_dir.join("fnox.local.toml")
+            config_dir.join(local_override_filename.expect("validated local override filename"))
         } else if self.global {
             Config::global_config_path()
         } else {
