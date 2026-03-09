@@ -168,19 +168,23 @@ impl GetCommand {
                 }
             }
         }
-        // When consumed is empty the backend needs no profile secrets (e.g. it
-        // authenticates via instance metadata). Avoid aborting on a transient
-        // secrets-config read error that would be irrelevant in that case.
-        let all_secrets = if consumed.is_empty() {
-            config.get_secrets(profile).unwrap_or_default()
-        } else {
-            config.get_secrets(profile)?
-        };
+        // Fetch secrets with unwrap_or_default first — if no consumed var is
+        // actually present as a profile secret, the backend authenticates via
+        // non-secret means (private_key_file, instance metadata, az CLI, etc.)
+        // and a transient secrets-config read error should not abort the command.
+        let all_secrets = config.get_secrets(profile).unwrap_or_default();
         let needed_secrets: indexmap::IndexMap<_, _> = all_secrets
             .iter()
             .filter(|(k, _)| consumed.contains(k.as_str()))
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
+        // Re-fetch with hard error if we actually need profile secrets — the
+        // unwrap_or_default result may have silently swallowed a real failure.
+        let all_secrets = if needed_secrets.is_empty() {
+            all_secrets
+        } else {
+            config.get_secrets(profile)?
+        };
         let resolved_secrets =
             crate::secret_resolver::resolve_secrets_batch(config, profile, &needed_secrets).await?;
 

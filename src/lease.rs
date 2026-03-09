@@ -535,6 +535,11 @@ pub fn find_cached_entry(
 
 /// Resolve a [`CachedEntry`] into usable credentials, decrypting if needed.
 /// Returns `None` if decryption fails (caller should create a fresh lease).
+///
+/// When called from `get.rs` the plaintext branch is unreachable because
+/// `resolve_from_lease` returns early for plaintext entries before calling
+/// this function. The plaintext path is exercised via `try_cached_credentials`
+/// → `resolve_lease` (the `fnox exec` code path).
 pub async fn resolve_cached_entry(
     entry: CachedEntry,
     config: &Config,
