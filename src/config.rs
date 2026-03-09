@@ -250,26 +250,41 @@ impl McpTool {
 #[serde(deny_unknown_fields)]
 pub struct McpConfig {
     /// Which MCP tools to expose (default: ["get_secret", "exec"])
-    #[serde(default = "McpConfig::default_tools")]
-    pub tools: Vec<McpTool>,
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "tools")]
+    tools_raw: Option<Vec<McpTool>>,
 
     /// Timeout in seconds for exec tool subprocess (default: 300)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exec_timeout_secs: Option<u64>,
 }
 
-impl Default for McpConfig {
-    fn default() -> Self {
-        Self {
-            tools: Self::default_tools(),
-            exec_timeout_secs: None,
-        }
-    }
-}
-
 impl McpConfig {
     fn default_tools() -> Vec<McpTool> {
         vec![McpTool::GetSecret, McpTool::Exec]
+    }
+
+    /// Whether `tools` was explicitly set in the config file
+    pub fn tools_explicitly_set(&self) -> bool {
+        self.tools_raw.is_some()
+    }
+
+    /// Returns the effective tools list (default if not explicitly set)
+    pub fn tools(&self) -> Vec<McpTool> {
+        self.tools_raw.clone().unwrap_or_else(Self::default_tools)
+    }
+
+    /// Set the tools list explicitly
+    pub fn set_tools(&mut self, tools: Vec<McpTool>) {
+        self.tools_raw = Some(tools);
+    }
+}
+
+impl Default for McpConfig {
+    fn default() -> Self {
+        Self {
+            tools_raw: None,
+            exec_timeout_secs: None,
+        }
     }
 }
 
@@ -519,9 +534,16 @@ impl Config {
             merged.prompt_auth = overlay.prompt_auth;
         }
 
-        // Merge mcp (overlay takes precedence)
-        if overlay.mcp.is_some() {
-            merged.mcp = overlay.mcp;
+        // Merge mcp (overlay takes precedence, field-by-field to avoid
+        // silently re-enabling tools when overlay only sets exec_timeout_secs)
+        if let Some(overlay_mcp) = overlay.mcp {
+            let base_mcp = merged.mcp.get_or_insert_with(McpConfig::default);
+            if overlay_mcp.tools_explicitly_set() {
+                base_mcp.set_tools(overlay_mcp.tools());
+            }
+            if overlay_mcp.exec_timeout_secs.is_some() {
+                base_mcp.exec_timeout_secs = overlay_mcp.exec_timeout_secs;
+            }
         }
 
         // Merge default_provider and its source (overlay takes precedence)

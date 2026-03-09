@@ -45,6 +45,7 @@ pub struct FnoxMcpServer {
     profile: Arc<String>,
     mcp_config: Arc<McpConfig>,
     profile_secrets: Arc<IndexMap<String, SecretConfig>>,
+    /// All resolved secrets (used by get_secret)
     cache: Arc<RwLock<HashMap<String, String>>>,
     /// Keeps temp files alive for as_file secrets across the session
     _temp_files: Arc<RwLock<Vec<tempfile::NamedTempFile>>>,
@@ -77,8 +78,12 @@ impl FnoxMcpServer {
     /// Ensure all secrets are resolved and cached. First call resolves the
     /// entire batch (amortizes yubikey/SSO cost); subsequent calls are no-ops.
     ///
-    /// Respects `env = false` (skips injection) and `as_file = true` (writes
-    /// to a temp file and stores the path instead of the raw value).
+    /// All resolved secrets go into the cache (including env=false). The exec
+    /// tool filters env=false at injection time, while get_secret can access
+    /// all secrets (matching `fnox get` behavior).
+    ///
+    /// Secrets with `as_file = true` are written to temp files; the cache
+    /// stores the file path instead of the raw value.
     async fn ensure_resolved(&self) -> Result<(), McpError> {
         let config = self.config.clone();
         let profile = self.profile.clone();
@@ -97,14 +102,6 @@ impl FnoxMcpServer {
                 let mut cache = cache.write().await;
                 let mut temp_files = temp_files.write().await;
                 for (key, value) in resolved {
-                    // Skip secrets marked env=false — they should only be
-                    // accessible via `fnox get`, not injected into env.
-                    if let Some(secret_config) = profile_secrets.get(&key)
-                        && !secret_config.env
-                    {
-                        continue;
-                    }
-
                     if let Some(v) = value {
                         // Handle as_file: write to temp file, store path
                         if let Some(secret_config) = profile_secrets.get(&key)
@@ -141,7 +138,7 @@ impl FnoxMcpServer {
         &self,
         Parameters(params): Parameters<GetSecretParams>,
     ) -> Result<CallToolResult, McpError> {
-        if !self.mcp_config.tools.contains(&McpTool::GetSecret) {
+        if !self.mcp_config.tools().contains(&McpTool::GetSecret) {
             return Err(McpError::invalid_request(
                 "Tool 'get_secret' is not enabled in this configuration",
                 None,
@@ -154,7 +151,6 @@ impl FnoxMcpServer {
         match cache.get(&params.name) {
             Some(value) => Ok(CallToolResult::success(vec![Content::text(value.clone())])),
             None => {
-                // Check if the secret exists in config but resolved to None
                 if self.profile_secrets.contains_key(&params.name) {
                     Err(McpError::internal_error(
                         format!(
@@ -181,7 +177,7 @@ impl FnoxMcpServer {
         &self,
         Parameters(params): Parameters<ExecParams>,
     ) -> Result<CallToolResult, McpError> {
-        if !self.mcp_config.tools.contains(&McpTool::Exec) {
+        if !self.mcp_config.tools().contains(&McpTool::Exec) {
             return Err(McpError::invalid_request(
                 "Tool 'exec' is not enabled in this configuration",
                 None,
@@ -194,15 +190,28 @@ impl FnoxMcpServer {
 
         self.ensure_resolved().await?;
 
-        let cache = self.cache.read().await;
+        // Snapshot env vars from cache, filtering out env=false secrets.
+        // This releases the read lock before the potentially long subprocess.
+        let env_vars: Vec<(String, String)> = {
+            let cache = self.cache.read().await;
+            cache
+                .iter()
+                .filter(|(key, _)| {
+                    self.profile_secrets
+                        .get(key.as_str())
+                        .map_or(true, |sc| sc.env)
+                })
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect()
+        };
 
         let mut cmd = tokio::process::Command::new(&params.command[0]);
         if params.command.len() > 1 {
             cmd.args(&params.command[1..]);
         }
 
-        // Inject cached secrets as env vars (already filtered for env/as_file)
-        for (key, value) in cache.iter() {
+        // Inject filtered secrets as env vars
+        for (key, value) in &env_vars {
             cmd.env(key, value);
         }
 
@@ -301,12 +310,8 @@ impl ServerHandler for FnoxMcpServer {
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
         let all_tools = self.tool_router.list_all();
-        let enabled: Vec<&str> = self
-            .mcp_config
-            .tools
-            .iter()
-            .map(|t| t.tool_name())
-            .collect();
+        let tools = self.mcp_config.tools();
+        let enabled: Vec<&str> = tools.iter().map(|t| t.tool_name()).collect();
         let filtered = all_tools
             .into_iter()
             .filter(|t| enabled.contains(&t.name.as_ref()))
@@ -319,12 +324,8 @@ impl ServerHandler for FnoxMcpServer {
     }
 
     fn get_tool(&self, name: &str) -> Option<Tool> {
-        let enabled: Vec<&str> = self
-            .mcp_config
-            .tools
-            .iter()
-            .map(|t| t.tool_name())
-            .collect();
+        let tools = self.mcp_config.tools();
+        let enabled: Vec<&str> = tools.iter().map(|t| t.tool_name()).collect();
         if !enabled.contains(&name) {
             return None;
         }
