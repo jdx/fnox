@@ -48,8 +48,9 @@ pub struct FnoxMcpServer {
     profile: Arc<String>,
     mcp_config: Arc<McpConfig>,
     profile_secrets: Arc<IndexMap<String, SecretConfig>>,
-    /// Resolved secret values (raw). as_file conversion happens at exec time.
-    cache: Arc<RwLock<HashMap<String, String>>>,
+    /// Resolved secret values (raw). None means "resolved but absent".
+    /// as_file conversion happens at exec time.
+    cache: Arc<RwLock<HashMap<String, Option<String>>>>,
     /// Tracks whether secrets have been resolved (separate from cache emptiness,
     /// since all secrets may resolve to None for optional/absent secrets).
     resolved: Arc<OnceCell<()>>,
@@ -103,9 +104,7 @@ impl FnoxMcpServer {
 
                 let mut cache = cache.write().await;
                 for (key, value) in resolved {
-                    if let Some(v) = value {
-                        cache.insert(key, v);
-                    }
+                    cache.insert(key, value);
                 }
 
                 Ok(())
@@ -116,13 +115,14 @@ impl FnoxMcpServer {
     }
 
     /// Resolve a single env=false secret on demand and cache it.
-    /// Returns the cached value if already resolved.
+    /// Returns the cached value if already resolved, or None for absent secrets.
+    /// Caches None results so absent optional secrets don't re-trigger auth.
     async fn resolve_single(&self, name: &str) -> Result<Option<String>, McpError> {
-        // Check cache first
+        // Check cache first (Some(Some(_)) = present, Some(None) = known absent)
         {
             let cache = self.cache.read().await;
             if let Some(v) = cache.get(name) {
-                return Ok(Some(v.clone()));
+                return Ok(v.clone());
             }
         }
 
@@ -143,18 +143,16 @@ impl FnoxMcpServer {
             })?;
 
         let value = resolved.into_iter().next().and_then(|(_, v)| v);
-        if let Some(v) = value {
-            let mut cache = self.cache.write().await;
-            // Re-check under write lock to avoid TOCTOU race: another concurrent
-            // get_secret may have resolved and cached this while we were waiting.
-            if let Some(existing) = cache.get(name) {
-                return Ok(Some(existing.clone()));
-            }
-            cache.insert(name.to_string(), v.clone());
-            return Ok(Some(v));
-        }
 
-        Ok(None)
+        let mut cache = self.cache.write().await;
+        // Re-check under write lock to avoid TOCTOU race: another concurrent
+        // get_secret may have resolved and cached this while we were waiting.
+        if let Some(existing) = cache.get(name) {
+            return Ok(existing.clone());
+        }
+        // Cache both present and absent (None) values to avoid re-triggering auth
+        cache.insert(name.to_string(), value.clone());
+        Ok(value)
     }
 
     /// Write a secret value to a temp file and return the path.
@@ -195,25 +193,41 @@ impl FnoxMcpServer {
         // Ensure env=true secrets are batch-resolved
         self.ensure_resolved().await?;
 
-        // Check cache (covers env=true secrets and previously resolved env=false)
+        // Check cache (covers env=true secrets and previously resolved env=false).
+        // Some(Some(v)) = present, Some(None) = known absent, None = not yet resolved.
         {
             let cache = self.cache.read().await;
-            if let Some(value) = cache.get(&params.name) {
-                return Ok(CallToolResult::success(vec![Content::text(value.clone())]));
+            if let Some(cached) = cache.get(&params.name) {
+                return match cached {
+                    Some(value) => Ok(CallToolResult::success(vec![Content::text(value.clone())])),
+                    None => Err(McpError::invalid_request(
+                        format!(
+                            "Secret '{}' has no value (it may be optional and absent)",
+                            params.name
+                        ),
+                        None,
+                    )),
+                };
             }
         }
 
         // Not in cache — check if it's a configured secret
         if let Some(secret_config) = self.profile_secrets.get(&params.name) {
             // env=false secrets are deferred; try on-demand resolution
-            if !secret_config.env
-                && let Some(value) = self.resolve_single(&params.name).await?
-            {
-                return Ok(CallToolResult::success(vec![Content::text(value)]));
+            if !secret_config.env {
+                return match self.resolve_single(&params.name).await? {
+                    Some(value) => Ok(CallToolResult::success(vec![Content::text(value)])),
+                    None => Err(McpError::invalid_request(
+                        format!(
+                            "Secret '{}' has no value (it may be optional and absent)",
+                            params.name
+                        ),
+                        None,
+                    )),
+                };
             }
-            // env=true: was included in batch resolution and simply had no value.
-            // env=false: on-demand resolution returned None.
-            // Either way, resolution succeeded but the secret is absent (optional).
+            // env=true but not in cache — should not happen after ensure_resolved,
+            // but handle gracefully
             Err(McpError::invalid_request(
                 format!(
                     "Secret '{}' has no value (it may be optional and absent)",
@@ -250,7 +264,7 @@ impl FnoxMcpServer {
 
         self.ensure_resolved().await?;
 
-        // Snapshot env vars from cache, filtering out env=false secrets.
+        // Snapshot env vars from cache, filtering out env=false and absent secrets.
         // This releases the read lock before the potentially long subprocess.
         let env_vars: Vec<(String, String)> = {
             let cache = self.cache.read().await;
@@ -261,7 +275,7 @@ impl FnoxMcpServer {
                         .get(key.as_str())
                         .is_none_or(|sc| sc.env)
                 })
-                .map(|(k, v)| (k.clone(), v.clone()))
+                .filter_map(|(k, v)| v.as_ref().map(|val| (k.clone(), val.clone())))
                 .collect()
         };
 
@@ -377,15 +391,25 @@ impl FnoxMcpServer {
 /// at call time).
 impl ServerHandler for FnoxMcpServer {
     fn get_info(&self) -> ServerInfo {
+        let tools = self.mcp_config.tools();
+        let has_get_secret = tools.contains(&McpTool::GetSecret);
+        let has_exec = tools.contains(&McpTool::Exec);
+        let instructions = if has_get_secret && has_exec {
+            "fnox MCP server — a session-scoped secret broker. \
+             Use get_secret to retrieve individual secrets, \
+             or exec to run commands with secrets injected as environment variables."
+        } else if has_get_secret {
+            "fnox MCP server — a session-scoped secret broker. \
+             Use get_secret to retrieve individual secrets."
+        } else {
+            "fnox MCP server — a session-scoped secret broker. \
+             Use exec to run commands with secrets injected as environment variables."
+        };
+
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(Implementation::new("fnox-mcp", env!("CARGO_PKG_VERSION")))
             .with_protocol_version(ProtocolVersion::V_2024_11_05)
-            .with_instructions(
-                "fnox MCP server — a session-scoped secret broker. \
-                 Use get_secret to retrieve individual secrets, \
-                 or exec to run commands with secrets injected as environment variables."
-                    .to_string(),
-            )
+            .with_instructions(instructions.to_string())
     }
 
     async fn list_tools(
