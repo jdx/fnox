@@ -191,6 +191,20 @@ impl FnoxMcpServer {
             ));
         }
 
+        // as_file secrets are meant to be consumed as file paths via exec, not
+        // retrieved as raw content. Reject them to avoid leaking key material.
+        if let Some(sc) = self.profile_secrets.get(&params.name) {
+            if sc.as_file {
+                return Err(McpError::invalid_request(
+                    format!(
+                        "Secret '{}' is configured with as_file=true and can only be used via the exec tool",
+                        params.name
+                    ),
+                    None,
+                ));
+            }
+        }
+
         // Ensure env=true secrets are batch-resolved
         self.ensure_resolved().await?;
 
@@ -328,15 +342,51 @@ impl FnoxMcpServer {
                 None,
             ));
         }
-        let child = cmd.spawn().map_err(|e| {
+        let mut child = cmd.spawn().map_err(|e| {
             McpError::internal_error(
                 format!("Failed to execute command '{}': {e}", params.command[0]),
                 None,
             )
         })?;
-        let output = tokio::time::timeout(
+
+        // Read stdout/stderr with bounded buffers to prevent OOM from commands
+        // that produce large output. We read up to MAX_OUTPUT_BYTES + 1 so we
+        // can detect truncation, then wait for the child to exit.
+        let mut child_stdout = child.stdout.take();
+        let mut child_stderr = child.stderr.take();
+
+        let collect_bounded = async {
+            use tokio::io::AsyncReadExt;
+            let read_limit = MAX_OUTPUT_BYTES + 1; // +1 to detect truncation
+
+            let mut stdout_buf = Vec::with_capacity(read_limit.min(65536));
+            if let Some(ref mut out) = child_stdout {
+                out.take(read_limit as u64)
+                    .read_to_end(&mut stdout_buf)
+                    .await
+                    .ok();
+            }
+
+            let stderr_budget = read_limit.saturating_sub(stdout_buf.len());
+            let mut stderr_buf = Vec::with_capacity(stderr_budget.min(65536));
+            if let Some(ref mut err) = child_stderr {
+                err.take(stderr_budget as u64)
+                    .read_to_end(&mut stderr_buf)
+                    .await
+                    .ok();
+            }
+
+            // Drop pipe handles so the child can exit if it's blocked on write
+            drop(child_stdout);
+            drop(child_stderr);
+
+            let status = child.wait().await;
+            (stdout_buf, stderr_buf, status)
+        };
+
+        let (stdout_buf, stderr_buf, status) = tokio::time::timeout(
             std::time::Duration::from_secs(timeout_secs),
-            child.wait_with_output(),
+            collect_bounded,
         )
         .await
         .map_err(|_| {
@@ -348,23 +398,21 @@ impl FnoxMcpServer {
                 ),
                 None,
             )
-        })?
-        .map_err(|e| {
+        })?;
+
+        let status = status.map_err(|e| {
             McpError::internal_error(
-                format!("Failed to execute command '{}': {e}", params.command[0]),
+                format!("Failed to wait for command '{}': {e}", params.command[0]),
                 None,
             )
         })?;
 
-        let stdout_raw = &output.stdout;
-        let stderr_raw = &output.stderr;
-        let total_bytes = stdout_raw.len() + stderr_raw.len();
-        let truncated = total_bytes > MAX_OUTPUT_BYTES;
+        let total_collected = stdout_buf.len() + stderr_buf.len();
+        let truncated = total_collected > MAX_OUTPUT_BYTES;
 
-        // Cap output to prevent unbounded memory usage in JSON-RPC response
-        let stdout = String::from_utf8_lossy(&stdout_raw[..stdout_raw.len().min(MAX_OUTPUT_BYTES)]);
-        let stderr_budget = MAX_OUTPUT_BYTES.saturating_sub(stdout_raw.len().min(MAX_OUTPUT_BYTES));
-        let stderr = String::from_utf8_lossy(&stderr_raw[..stderr_raw.len().min(stderr_budget)]);
+        let stdout = String::from_utf8_lossy(&stdout_buf[..stdout_buf.len().min(MAX_OUTPUT_BYTES)]);
+        let stderr_cap = MAX_OUTPUT_BYTES.saturating_sub(stdout_buf.len().min(MAX_OUTPUT_BYTES));
+        let stderr = String::from_utf8_lossy(&stderr_buf[..stderr_buf.len().min(stderr_cap)]);
 
         let mut parts = Vec::new();
         if !stdout.is_empty() {
@@ -374,18 +422,18 @@ impl FnoxMcpServer {
             parts.push(format!("[stderr]\n{stderr}"));
         }
 
-        let exit_code = output.status.code().unwrap_or(-1);
-        if !output.status.success() || parts.is_empty() {
+        let exit_code = status.code().unwrap_or(-1);
+        if !status.success() || parts.is_empty() {
             parts.push(format!("[exit code: {exit_code}]"));
         }
         if truncated {
             parts.push(format!(
-                "[output truncated: {total_bytes} bytes exceeded {MAX_OUTPUT_BYTES} byte limit]"
+                "[output truncated: {total_collected} bytes exceeded {MAX_OUTPUT_BYTES} byte limit]"
             ));
         }
 
         let text = parts.join("\n");
-        if output.status.success() {
+        if status.success() {
             Ok(CallToolResult::success(vec![Content::text(text)]))
         } else {
             Ok(CallToolResult::error(vec![Content::text(text)]))
