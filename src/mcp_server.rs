@@ -408,9 +408,9 @@ impl FnoxMcpServer {
 
         let per_stream_cap = (MAX_OUTPUT_BYTES / 2) + 1;
         let total_collected = stdout_buf.len() + stderr_buf.len();
-        let truncated = stdout_buf.len() >= per_stream_cap
-            || stderr_buf.len() >= per_stream_cap
-            || total_collected > MAX_OUTPUT_BYTES;
+        let stdout_truncated = stdout_buf.len() >= per_stream_cap;
+        let stderr_truncated = stderr_buf.len() >= per_stream_cap;
+        let truncated = stdout_truncated || stderr_truncated || total_collected > MAX_OUTPUT_BYTES;
 
         let stdout = String::from_utf8_lossy(&stdout_buf[..stdout_buf.len().min(MAX_OUTPUT_BYTES)]);
         let stderr_cap = MAX_OUTPUT_BYTES.saturating_sub(stdout_buf.len().min(MAX_OUTPUT_BYTES));
@@ -429,9 +429,16 @@ impl FnoxMcpServer {
             parts.push(format!("[exit code: {exit_code}]"));
         }
         if truncated {
-            parts.push(format!(
-                "[output truncated: {total_collected} bytes exceeded {MAX_OUTPUT_BYTES} byte limit]"
-            ));
+            if stdout_truncated || stderr_truncated {
+                let stream_limit = per_stream_cap - 1;
+                parts.push(format!(
+                    "[output truncated: per-stream limit of {stream_limit} bytes exceeded (total collected: {total_collected} bytes)]"
+                ));
+            } else {
+                parts.push(format!(
+                    "[output truncated: {total_collected} bytes exceeded {MAX_OUTPUT_BYTES} byte limit]"
+                ));
+            }
         }
 
         let text = parts.join("\n");
