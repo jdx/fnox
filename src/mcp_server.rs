@@ -99,16 +99,15 @@ impl FnoxMcpServer {
                 for (key, value) in resolved {
                     // Skip secrets marked env=false — they should only be
                     // accessible via `fnox get`, not injected into env.
-                    if let Some(secret_config) = profile_secrets.get(&key) {
-                        if !secret_config.env {
+                    if let Some(secret_config) = profile_secrets.get(&key)
+                        && !secret_config.env {
                             continue;
                         }
-                    }
 
                     if let Some(v) = value {
                         // Handle as_file: write to temp file, store path
-                        if let Some(secret_config) = profile_secrets.get(&key) {
-                            if secret_config.as_file {
+                        if let Some(secret_config) = profile_secrets.get(&key)
+                            && secret_config.as_file {
                                 let temp_file =
                                     create_ephemeral_secret_file(&key, &v).map_err(|e| {
                                         McpError::internal_error(
@@ -123,7 +122,6 @@ impl FnoxMcpServer {
                                 cache.insert(key, file_path);
                                 continue;
                             }
-                        }
                         cache.insert(key, v);
                     }
                 }

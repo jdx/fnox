@@ -327,6 +327,12 @@
       "description": "MCP server configuration",
       "type": "object",
       "properties": {
+        "exec_timeout_secs": {
+          "description": "Timeout in seconds for exec tool subprocess (default: 300)",
+          "type": ["integer", "null"],
+          "format": "uint64",
+          "minimum": 0
+        },
         "tools": {
           "description": "Which MCP tools to expose (default: [\"get_secret\", \"exec\"])",
           "type": "array",
