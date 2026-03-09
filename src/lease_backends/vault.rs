@@ -247,7 +247,11 @@ impl LeaseBackend for VaultBackend {
         })
     }
 
-    async fn revoke_lease(&self, lease_id: &str) -> Result<()> {
+    async fn revoke_lease(
+        &self,
+        lease_id: &str,
+        _credentials: Option<&IndexMap<String, String>>,
+    ) -> Result<()> {
         let url = format!(
             "{}/v1/sys/leases/revoke",
             self.address.trim_end_matches('/')

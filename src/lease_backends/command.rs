@@ -159,7 +159,11 @@ impl LeaseBackend for CommandBackend {
         })
     }
 
-    async fn revoke_lease(&self, lease_id: &str) -> Result<()> {
+    async fn revoke_lease(
+        &self,
+        lease_id: &str,
+        _credentials: Option<&IndexMap<String, String>>,
+    ) -> Result<()> {
         let Some(revoke_cmd) = &self.revoke_command else {
             return Ok(());
         };
