@@ -508,9 +508,6 @@ pub async fn cache_credentials(
     }
 }
 
-/// Resolve a lease backend into credentials, reusing cached credentials when available.
-/// Shared between `fnox exec` and `fnox get`.
-#[allow(clippy::too_many_arguments)]
 /// Try to return cached credentials from the ledger without creating a new lease.
 /// Returns `None` on cache miss, missing credentials, or if decryption fails.
 pub async fn try_cached_credentials(
@@ -566,6 +563,9 @@ pub async fn try_cached_credentials(
     }
 }
 
+/// Resolve a lease backend into credentials, reusing cached credentials when available.
+/// Shared between `fnox exec` and `fnox get`.
+#[allow(clippy::too_many_arguments)]
 pub async fn resolve_lease(
     name: &str,
     lease_config: &crate::lease_backends::LeaseBackendConfig,
