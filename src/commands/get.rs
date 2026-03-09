@@ -126,41 +126,32 @@ impl GetCommand {
         let project_dir = lease::project_dir_from_config(config, &cli.config);
         let config_hash = lease_config.config_hash();
 
-        // Cache-first: check the ledger for a reusable lease before resolving
-        // any secrets. This avoids network calls to secret providers when the
-        // cache already has valid credentials.
-        //
-        // Only the synchronous ledger read is held under the file lock;
-        // decryption (which may involve async network I/O to an encryption
-        // provider) runs after the lock is released.
+        // Cache-first fast path for plaintext cached entries: no secret
+        // resolution or env injection needed, so we can return immediately.
+        // Encrypted entries are deferred until after secret injection below,
+        // since the encryption provider may need credentials from profile
+        // secrets (e.g. VAULT_TOKEN stored as a secret).
         let cached_entry = {
             let _lock = LeaseLedger::lock(&project_dir)?;
             let ledger = LeaseLedger::load(&project_dir)?;
             lease::find_cached_entry(&ledger, name, &config_hash)
         };
 
-        let had_cached_entry = cached_entry.is_some();
-        if let Some(entry) = cached_entry
-            && let Some(creds) = lease::resolve_cached_entry(entry, config, profile, name).await
+        if let Some(ref entry) = cached_entry
+            && entry.encryption_provider.is_none()
         {
-            // as_file is a presentation hint; a get_secrets failure should
-            // not discard a successfully retrieved cached credential.
+            tracing::debug!(
+                "Reusing cached plaintext lease '{}' for backend '{}'",
+                entry.lease_id,
+                name
+            );
             let all_secrets = config.get_secrets(profile).unwrap_or_default();
-            return self.extract_key_from_creds(name, creds, all_secrets);
+            return self.extract_key_from_creds(name, entry.credentials.clone(), all_secrets);
         }
 
-        // A cached entry existed but decryption failed — don't silently create
-        // a new (also un-decryptable) lease that repeats the same failure cycle.
-        if had_cached_entry {
-            return Err(FnoxError::Config(format!(
-                "Lease '{}': cached credentials could not be decrypted. \
-                 Ensure the encryption provider is reachable or run \
-                 'fnox lease create -i {}' to refresh credentials.",
-                name, name
-            )));
-        }
-
-        // Cache miss: resolve only the consumed secrets and create a fresh lease.
+        // Resolve consumed secrets and inject them as env vars so that:
+        // 1. The encryption provider can initialize (e.g. VAULT_TOKEN)
+        // 2. The backend SDK can authenticate for fresh lease creation
         let consumed: std::collections::HashSet<&str> =
             lease_config.consumed_env_vars().iter().copied().collect();
         let all_secrets = config.get_secrets(profile)?;
@@ -175,6 +166,26 @@ impl GetCommand {
         let mut temp_env_guard = lease::TempEnvGuard::default();
         let _temp_files =
             lease::set_secrets_as_env(&resolved_secrets, &needed_secrets, &mut temp_env_guard)?;
+
+        // Now that credentials are in the environment, attempt encrypted cache
+        // decryption. This must happen after set_secrets_as_env so the
+        // encryption provider (e.g. Vault) can find its credentials.
+        if let Some(entry) = cached_entry {
+            // entry.encryption_provider is guaranteed Some here (plaintext
+            // was handled above), so resolve_cached_entry will attempt decrypt.
+            if let Some(creds) = lease::resolve_cached_entry(entry, config, profile, name).await {
+                let all_secrets_for_file = config.get_secrets(profile).unwrap_or_default();
+                return self.extract_key_from_creds(name, creds, all_secrets_for_file);
+            }
+            // Decryption failed even with credentials injected — don't silently
+            // create a new (also un-decryptable) lease that repeats the cycle.
+            return Err(FnoxError::Config(format!(
+                "Lease '{}': cached credentials could not be decrypted. \
+                 Ensure the encryption provider is reachable or run \
+                 'fnox lease create -i {}' to refresh credentials.",
+                name, name
+            )));
+        }
 
         let prereq_missing = lease_config.check_prerequisites();
 
