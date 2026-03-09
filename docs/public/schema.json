@@ -371,7 +371,7 @@
       "type": "object",
       "properties": {
         "exec_timeout_secs": {
-          "description": "Timeout in seconds for exec tool subprocess (default: 300)",
+          "description": "Timeout in seconds for exec tool subprocess (default: 300, minimum: 1)",
           "type": ["integer", "null"],
           "format": "uint64",
           "minimum": 1
