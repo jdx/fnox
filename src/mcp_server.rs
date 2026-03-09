@@ -193,8 +193,8 @@ impl FnoxMcpServer {
 
         // as_file secrets are meant to be consumed as file paths via exec, not
         // retrieved as raw content. Reject them to avoid leaking key material.
-        if let Some(sc) = self.profile_secrets.get(&params.name) {
-            if sc.as_file {
+        if let Some(sc) = self.profile_secrets.get(&params.name)
+            && sc.as_file {
                 return Err(McpError::invalid_request(
                     format!(
                         "Secret '{}' is configured with as_file=true and can only be used via the exec tool",
@@ -203,7 +203,6 @@ impl FnoxMcpServer {
                     None,
                 ));
             }
-        }
 
         // Ensure env=true secrets are batch-resolved
         self.ensure_resolved().await?;
