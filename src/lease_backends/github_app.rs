@@ -103,20 +103,11 @@ impl GitHubAppBackend {
         let iat = now.timestamp() - 60; // issued 60s in the past to allow clock drift
         let exp = iat + JWT_EXPIRY_SECS; // exp - iat must be ≤ 600s (GitHub's limit)
 
-        let app_id_num: u64 = self
-            .app_id
-            .parse()
-            .map_err(|_| FnoxError::ProviderAuthFailed {
-                provider: "GitHub App".to_string(),
-                details: format!("app_id '{}' is not a valid integer", self.app_id),
-                hint: "app_id must be a numeric GitHub App ID".to_string(),
-                url: URL.to_string(),
-            })?;
-
+        // JWT RFC 7519 defines `iss` as a StringOrURI — it must be a string.
         let claims = serde_json::json!({
             "iat": iat,
             "exp": exp,
-            "iss": app_id_num,
+            "iss": &self.app_id,
         });
 
         let key = jsonwebtoken::EncodingKey::from_rsa_pem(pem_key.as_bytes()).map_err(|e| {
@@ -240,10 +231,15 @@ impl LeaseBackend for GitHubAppBackend {
                 url: URL.to_string(),
             })?;
 
+        // Fall back to now + 1 hour if expires_at is missing or unparseable,
+        // since GitHub hard-expires installation tokens after 1 hour. Without
+        // this, a None expiry would cause the ledger to treat the token as
+        // never-expiring, serving a stale token indefinitely.
         let expires_at = resp["expires_at"]
             .as_str()
             .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-            .map(|dt| dt.with_timezone(&chrono::Utc));
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .or_else(|| Some(chrono::Utc::now() + chrono::Duration::hours(1)));
 
         let mut credentials = IndexMap::new();
         credentials.insert(self.env_var.clone(), token.to_string());

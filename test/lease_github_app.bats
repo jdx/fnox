@@ -45,6 +45,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body.encode())
+    def do_DELETE(self):
+        # DELETE /installation/token — revocation endpoint
+        self.send_response(204)
+        self.end_headers()
     def log_message(self, format, *args):
         pass
 
@@ -238,4 +242,31 @@ EOF
 	run fnox lease list
 	assert_success
 	assert_output --partial "github"
+}
+
+@test "github-app: lease revoke calls DELETE /installation/token" {
+	generate_test_key
+	start_mock_github_api
+
+	cat >"$FNOX_CONFIG_FILE" <<EOF
+[leases.github]
+type = "github-app"
+app_id = "12345"
+installation_id = "67890"
+private_key_file = "$TEST_TEMP_DIR/test-app.pem"
+api_base = "http://127.0.0.1:$MOCK_PORT"
+EOF
+
+	# Create the lease
+	run fnox lease create github
+	assert_success
+
+	# Read the ledger file directly to get the full (non-truncated) lease ID
+	local lease_id
+	lease_id=$(grep 'lease_id' "$HOME"/.local/state/fnox/leases/*.toml | head -1 | sed 's/.*= *"//;s/".*//')
+
+	# Revoke it (mock server returns 204 for DELETE)
+	run fnox lease revoke "$lease_id"
+	assert_success
+	assert_output --partial "revoked"
 }
