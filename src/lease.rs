@@ -508,8 +508,65 @@ pub async fn cache_credentials(
     }
 }
 
+/// Data extracted from a cached lease entry. All fields are cloned so the
+/// ledger (and its file lock) can be released before any async work.
+pub struct CachedEntry {
+    pub credentials: IndexMap<String, String>,
+    pub encryption_provider: Option<String>,
+    pub lease_id: String,
+}
+
+/// Synchronous ledger lookup: find a reusable cached entry and clone the
+/// relevant fields. This is safe to call under a file lock since it performs
+/// no I/O beyond the already-loaded ledger.
+pub fn find_cached_entry(
+    ledger: &LeaseLedger,
+    name: &str,
+    config_hash: &str,
+) -> Option<CachedEntry> {
+    let cached_lease = ledger.find_reusable(name, config_hash)?;
+    let cached_creds = cached_lease.cached_credentials.as_ref()?;
+    Some(CachedEntry {
+        credentials: cached_creds.clone(),
+        encryption_provider: cached_lease.encryption_provider.clone(),
+        lease_id: cached_lease.lease_id.clone(),
+    })
+}
+
+/// Resolve a [`CachedEntry`] into usable credentials, decrypting if needed.
+/// Returns `None` if decryption fails (caller should create a fresh lease).
+pub async fn resolve_cached_entry(
+    entry: CachedEntry,
+    config: &Config,
+    profile: &str,
+    backend_name: &str,
+) -> Option<IndexMap<String, String>> {
+    if let Some(ref enc_provider_name) = entry.encryption_provider {
+        try_decrypt_cached(
+            config,
+            profile,
+            enc_provider_name,
+            &entry.credentials,
+            &entry.lease_id,
+            backend_name,
+        )
+        .await
+    } else {
+        tracing::debug!(
+            "Reusing cached plaintext lease '{}' for backend '{}'",
+            entry.lease_id,
+            backend_name
+        );
+        Some(entry.credentials)
+    }
+}
+
 /// Try to return cached credentials from the ledger without creating a new lease.
 /// Returns `None` on cache miss, missing credentials, or if decryption fails.
+///
+/// **Note:** This performs the ledger lookup and optional decryption in a single
+/// call. When the caller holds a file lock, prefer [`find_cached_entry`] +
+/// [`resolve_cached_entry`] to release the lock before async decryption.
 pub async fn try_cached_credentials(
     ledger: &LeaseLedger,
     name: &str,
@@ -517,27 +574,8 @@ pub async fn try_cached_credentials(
     config: &Config,
     profile: &str,
 ) -> Option<IndexMap<String, String>> {
-    let cached_lease = ledger.find_reusable(name, config_hash)?;
-    let cached_creds = cached_lease.cached_credentials.as_ref()?;
-
-    if let Some(ref enc_provider_name) = cached_lease.encryption_provider {
-        try_decrypt_cached(
-            config,
-            profile,
-            enc_provider_name,
-            cached_creds,
-            &cached_lease.lease_id,
-            name,
-        )
-        .await
-    } else {
-        tracing::debug!(
-            "Reusing cached plaintext lease '{}' for backend '{}'",
-            cached_lease.lease_id,
-            name
-        );
-        Some(cached_creds.clone())
-    }
+    let entry = find_cached_entry(ledger, name, config_hash)?;
+    resolve_cached_entry(entry, config, profile, name).await
 }
 
 /// Attempt to decrypt cached credentials using the named encryption provider.

@@ -136,42 +136,16 @@ impl GetCommand {
         let cached_entry = {
             let _lock = LeaseLedger::lock(&project_dir)?;
             let ledger = LeaseLedger::load(&project_dir)?;
-            ledger.find_reusable(name, &config_hash).and_then(|lease| {
-                lease.cached_credentials.as_ref().map(|creds| {
-                    (
-                        creds.clone(),
-                        lease.encryption_provider.clone(),
-                        lease.lease_id.clone(),
-                    )
-                })
-            })
+            lease::find_cached_entry(&ledger, name, &config_hash)
         };
 
-        if let Some((cached_creds, enc_provider, lease_id)) = cached_entry {
-            let decrypted = if let Some(ref enc_provider_name) = enc_provider {
-                lease::try_decrypt_cached(
-                    config,
-                    profile,
-                    enc_provider_name,
-                    &cached_creds,
-                    &lease_id,
-                    name,
-                )
-                .await
-            } else {
-                tracing::debug!(
-                    "Reusing cached plaintext lease '{}' for backend '{}'",
-                    lease_id,
-                    name
-                );
-                Some(cached_creds)
-            };
-            if let Some(creds) = decrypted {
-                // as_file is a presentation hint; a get_secrets failure should
-                // not discard a successfully retrieved cached credential.
-                let all_secrets = config.get_secrets(profile).unwrap_or_default();
-                return self.extract_key_from_creds(name, creds, all_secrets);
-            }
+        if let Some(entry) = cached_entry
+            && let Some(creds) = lease::resolve_cached_entry(entry, config, profile, name).await
+        {
+            // as_file is a presentation hint; a get_secrets failure should
+            // not discard a successfully retrieved cached credential.
+            let all_secrets = config.get_secrets(profile).unwrap_or_default();
+            return self.extract_key_from_creds(name, creds, all_secrets);
         }
 
         // Cache miss: resolve only the consumed secrets and create a fresh lease.
@@ -186,14 +160,21 @@ impl GetCommand {
         let resolved_secrets =
             crate::secret_resolver::resolve_secrets_batch(config, profile, &needed_secrets).await?;
 
-        let _ledger_lock = LeaseLedger::lock(&project_dir)?;
-        let mut ledger = LeaseLedger::load(&project_dir)?;
-
         let mut temp_env_guard = lease::TempEnvGuard::default();
         let _temp_files =
             lease::set_secrets_as_env(&resolved_secrets, &needed_secrets, &mut temp_env_guard)?;
 
         let prereq_missing = lease_config.check_prerequisites();
+
+        // Acquire ledger lock only for the load → cache-check → mutate → save
+        // cycle. resolve_lease releases the lock (via the caller dropping it)
+        // before returning, but the outbound lease creation API call happens
+        // inside create_and_record_lease which needs the mutable ledger ref.
+        // This is acceptable because the lock protects ledger consistency,
+        // not the network call duration — and the lock scope is minimised
+        // compared to holding it across secret resolution above.
+        let _ledger_lock = LeaseLedger::lock(&project_dir)?;
+        let mut ledger = LeaseLedger::load(&project_dir)?;
 
         let creds = lease::resolve_lease(
             name,

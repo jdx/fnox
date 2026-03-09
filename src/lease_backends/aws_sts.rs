@@ -24,6 +24,8 @@ pub const CONSUMED_ENV_VARS: &[&str] = &[
     "AWS_SSO_SESSION",
     "AWS_CONFIG_FILE",
     "AWS_SHARED_CREDENTIALS_FILE",
+    "AWS_DEFAULT_REGION",
+    "AWS_REGION",
 ];
 
 /// Check if AWS credentials are available.
