@@ -248,6 +248,7 @@ impl McpTool {
 /// MCP server configuration
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[derive(Default)]
 pub struct McpConfig {
     /// Which MCP tools to expose (default: ["get_secret", "exec"])
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "tools")]
@@ -279,14 +280,6 @@ impl McpConfig {
     }
 }
 
-impl Default for McpConfig {
-    fn default() -> Self {
-        Self {
-            tools_raw: None,
-            exec_timeout_secs: None,
-        }
-    }
-}
 
 #[derive(
     Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq, ValueEnum, VariantNames,

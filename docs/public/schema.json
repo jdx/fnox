@@ -378,8 +378,7 @@
         },
         "tools": {
           "description": "Which MCP tools to expose (default: [\"get_secret\", \"exec\"])",
-          "type": "array",
-          "default": ["get_secret", "exec"],
+          "type": ["array", "null"],
           "items": {
             "$ref": "#/$defs/McpTool"
           }
