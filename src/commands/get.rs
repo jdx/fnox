@@ -123,10 +123,25 @@ impl GetCommand {
             return Ok(None);
         };
 
-        // Only resolve secrets this lease backend may consume at runtime,
-        // including all known aliases (e.g. FNOX_VAULT_TOKEN, CF_API_TOKEN).
-        // This avoids unnecessary network calls to unrelated providers while
-        // still covering every env var name the backend checks.
+        let project_dir = lease::project_dir_from_config(config, &cli.config);
+        let config_hash = lease_config.config_hash();
+
+        // Cache-first: check the ledger for a reusable lease before resolving
+        // any secrets. This avoids network calls to secret providers when the
+        // cache already has valid credentials.
+        let cached_creds = {
+            let _lock = LeaseLedger::lock(&project_dir)?;
+            let ledger = LeaseLedger::load(&project_dir)?;
+            self.try_cached_lease(&ledger, name, &config_hash, config, profile)
+                .await
+        };
+
+        if let Some(creds) = cached_creds {
+            let all_secrets = config.get_secrets(profile).unwrap_or_default();
+            return self.extract_key_from_creds(name, creds, all_secrets);
+        }
+
+        // Cache miss: resolve only the consumed secrets and create a fresh lease.
         let consumed: std::collections::HashSet<&str> =
             lease_config.consumed_env_vars().iter().copied().collect();
         let all_secrets = config.get_secrets(profile)?;
@@ -138,7 +153,6 @@ impl GetCommand {
         let resolved_secrets =
             crate::secret_resolver::resolve_secrets_batch(config, profile, &needed_secrets).await?;
 
-        let project_dir = lease::project_dir_from_config(config, &cli.config);
         let _ledger_lock = LeaseLedger::lock(&project_dir)?;
         let mut ledger = LeaseLedger::load(&project_dir)?;
 
@@ -160,6 +174,72 @@ impl GetCommand {
         )
         .await?;
 
+        self.extract_key_from_creds(name, creds, all_secrets)
+    }
+
+    /// Try to return cached credentials from the ledger without any network calls.
+    /// Returns `None` on cache miss or if decryption fails (caller should create
+    /// a fresh lease).
+    async fn try_cached_lease(
+        &self,
+        ledger: &LeaseLedger,
+        name: &str,
+        config_hash: &str,
+        config: &Config,
+        profile: &str,
+    ) -> Option<IndexMap<String, String>> {
+        let cached_lease = ledger.find_reusable(name, config_hash)?;
+        let cached_creds = cached_lease.cached_credentials.as_ref()?;
+
+        if let Some(ref enc_provider_name) = cached_lease.encryption_provider {
+            match lease::find_encryption_provider(config, profile).await {
+                lease::EncryptionProviderResult::Available(found_name, provider)
+                    if found_name == *enc_provider_name =>
+                {
+                    match lease::decrypt_credentials(provider.as_ref(), cached_creds).await {
+                        Ok(decrypted) => {
+                            tracing::debug!(
+                                "Reusing cached encrypted lease '{}' for backend '{}'",
+                                cached_lease.lease_id,
+                                name
+                            );
+                            Some(decrypted)
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to decrypt cached lease '{}': {}, creating fresh lease",
+                                cached_lease.lease_id,
+                                e
+                            );
+                            None
+                        }
+                    }
+                }
+                _ => {
+                    tracing::warn!(
+                        "Encryption provider '{}' not available for cached lease '{}', creating fresh lease",
+                        enc_provider_name,
+                        cached_lease.lease_id
+                    );
+                    None
+                }
+            }
+        } else {
+            tracing::debug!(
+                "Reusing cached plaintext lease '{}' for backend '{}'",
+                cached_lease.lease_id,
+                name
+            );
+            Some(cached_creds.clone())
+        }
+    }
+
+    fn extract_key_from_creds(
+        &self,
+        name: &str,
+        creds: IndexMap<String, String>,
+        all_secrets: IndexMap<String, SecretConfig>,
+    ) -> Result<Option<(String, IndexMap<String, SecretConfig>)>> {
         match creds.get(&self.key) {
             Some(value) => Ok(Some((value.clone(), all_secrets))),
             None => Err(FnoxError::Config(format!(
