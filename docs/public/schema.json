@@ -286,6 +286,49 @@
           "required": ["type"]
         },
         {
+          "description": "GitHub App Installation Token",
+          "type": "object",
+          "properties": {
+            "api_base": {
+              "description": "GitHub API base URL (default: https://api.github.com)",
+              "type": ["string", "null"]
+            },
+            "app_id": {
+              "type": "string"
+            },
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "env_var": {
+              "type": "string",
+              "default": "GITHUB_TOKEN"
+            },
+            "installation_id": {
+              "type": "string"
+            },
+            "permissions": {
+              "type": ["object", "null"],
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "private_key_file": {
+              "type": ["string", "null"]
+            },
+            "repositories": {
+              "type": ["array", "null"],
+              "items": {
+                "type": "string"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "github-app"
+            }
+          },
+          "required": ["type", "app_id", "installation_id"]
+        },
+        {
           "description": "Generic Command Backend",
           "type": "object",
           "properties": {
