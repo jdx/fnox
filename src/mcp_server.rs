@@ -75,12 +75,11 @@ impl FnoxMcpServer {
         }
     }
 
-    /// Ensure all secrets are resolved and cached. First call resolves the
-    /// entire batch (amortizes yubikey/SSO cost); subsequent calls are no-ops.
+    /// Ensure env=true secrets are resolved and cached. First call resolves
+    /// the batch (amortizes yubikey/SSO cost); subsequent calls are no-ops.
     ///
-    /// All resolved secrets go into the cache (including env=false). The exec
-    /// tool filters env=false at injection time, while get_secret can access
-    /// all secrets (matching `fnox get` behavior).
+    /// env=false secrets are NOT resolved here — they are more sensitive and
+    /// resolved on-demand by `get_secret` to avoid unnecessary auth prompts.
     ///
     /// Secrets with `as_file = true` are written to temp files; the cache
     /// stores the file path instead of the raw value.
@@ -93,7 +92,14 @@ impl FnoxMcpServer {
 
         self.resolved
             .get_or_try_init(|| async {
-                let resolved = resolve_secrets_batch(&config, &profile, &profile_secrets)
+                // Only batch-resolve env=true secrets; env=false are deferred
+                let env_secrets: IndexMap<String, SecretConfig> = profile_secrets
+                    .iter()
+                    .filter(|(_, sc)| sc.env)
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect();
+
+                let resolved = resolve_secrets_batch(&config, &profile, &env_secrets)
                     .await
                     .map_err(|e| {
                         McpError::internal_error(format!("Failed to resolve secrets: {e}"), None)
@@ -103,25 +109,13 @@ impl FnoxMcpServer {
                 let mut temp_files = temp_files.write().await;
                 for (key, value) in resolved {
                     if let Some(v) = value {
-                        // Handle as_file: write to temp file, store path
-                        if let Some(secret_config) = profile_secrets.get(&key)
-                            && secret_config.as_file
-                        {
-                            let temp_file =
-                                create_ephemeral_secret_file(&key, &v).map_err(|e| {
-                                    McpError::internal_error(
-                                        format!(
-                                            "Failed to create temp file for secret '{key}': {e}"
-                                        ),
-                                        None,
-                                    )
-                                })?;
-                            let file_path = temp_file.path().to_string_lossy().to_string();
-                            temp_files.push(temp_file);
-                            cache.insert(key, file_path);
-                            continue;
-                        }
-                        cache.insert(key, v);
+                        Self::insert_into_cache(
+                            &key,
+                            v,
+                            &profile_secrets,
+                            &mut cache,
+                            &mut temp_files,
+                        )?;
                     }
                 }
 
@@ -132,7 +126,80 @@ impl FnoxMcpServer {
         Ok(())
     }
 
+    /// Resolve a single env=false secret on demand and cache it.
+    /// Returns the cached value if already resolved.
+    async fn resolve_single(&self, name: &str) -> Result<Option<String>, McpError> {
+        // Check cache first
+        {
+            let cache = self.cache.read().await;
+            if let Some(v) = cache.get(name) {
+                return Ok(Some(v.clone()));
+            }
+        }
+
+        let secret_config = match self.profile_secrets.get(name) {
+            Some(sc) => sc,
+            None => return Ok(None),
+        };
+
+        // Build a single-entry map for resolve_secrets_batch
+        let single: IndexMap<String, SecretConfig> = [(name.to_string(), secret_config.clone())]
+            .into_iter()
+            .collect();
+
+        let resolved = resolve_secrets_batch(&self.config, &self.profile, &single)
+            .await
+            .map_err(|e| {
+                McpError::internal_error(format!("Failed to resolve secret '{name}': {e}"), None)
+            })?;
+
+        let value = resolved.into_iter().next().and_then(|(_, v)| v);
+        if let Some(v) = &value {
+            let mut cache = self.cache.write().await;
+            let mut temp_files = self._temp_files.write().await;
+            Self::insert_into_cache(
+                name,
+                v.clone(),
+                &self.profile_secrets,
+                &mut cache,
+                &mut temp_files,
+            )?;
+        }
+
+        Ok(value)
+    }
+
+    /// Insert a resolved secret into the cache, handling as_file conversion.
+    fn insert_into_cache(
+        key: &str,
+        value: String,
+        profile_secrets: &IndexMap<String, SecretConfig>,
+        cache: &mut HashMap<String, String>,
+        temp_files: &mut Vec<tempfile::NamedTempFile>,
+    ) -> Result<(), McpError> {
+        if let Some(secret_config) = profile_secrets.get(key)
+            && secret_config.as_file
+        {
+            let temp_file = create_ephemeral_secret_file(key, &value).map_err(|e| {
+                McpError::internal_error(
+                    format!("Failed to create temp file for secret '{key}': {e}"),
+                    None,
+                )
+            })?;
+            let file_path = temp_file.path().to_string_lossy().to_string();
+            temp_files.push(temp_file);
+            cache.insert(key.to_string(), file_path);
+        } else {
+            cache.insert(key.to_string(), value);
+        }
+        Ok(())
+    }
+
     /// Retrieve a single secret by name.
+    ///
+    /// env=true secrets are resolved eagerly in the first batch. env=false
+    /// secrets are resolved on-demand here (may trigger auth) and cached for
+    /// subsequent calls.
     #[tool(description = "Get a secret value by name from the fnox configuration")]
     async fn get_secret(
         &self,
@@ -145,27 +212,37 @@ impl FnoxMcpServer {
             ));
         }
 
+        // Ensure env=true secrets are batch-resolved
         self.ensure_resolved().await?;
 
-        let cache = self.cache.read().await;
-        match cache.get(&params.name) {
-            Some(value) => Ok(CallToolResult::success(vec![Content::text(value.clone())])),
-            None => {
-                if self.profile_secrets.contains_key(&params.name) {
-                    Err(McpError::internal_error(
-                        format!(
-                            "Secret '{}' is configured but could not be resolved",
-                            params.name
-                        ),
-                        None,
-                    ))
-                } else {
-                    Err(McpError::invalid_params(
-                        format!("Secret '{}' not found in configuration", params.name),
-                        None,
-                    ))
+        // Check cache (covers env=true secrets and previously resolved env=false)
+        {
+            let cache = self.cache.read().await;
+            if let Some(value) = cache.get(&params.name) {
+                return Ok(CallToolResult::success(vec![Content::text(value.clone())]));
+            }
+        }
+
+        // Not in cache — check if it's an env=false secret that needs on-demand resolution
+        if let Some(secret_config) = self.profile_secrets.get(&params.name) {
+            if !secret_config.env {
+                if let Some(value) = self.resolve_single(&params.name).await? {
+                    return Ok(CallToolResult::success(vec![Content::text(value)]));
                 }
             }
+            // Configured but couldn't resolve
+            Err(McpError::internal_error(
+                format!(
+                    "Secret '{}' is configured but could not be resolved",
+                    params.name
+                ),
+                None,
+            ))
+        } else {
+            Err(McpError::invalid_params(
+                format!("Secret '{}' not found in configuration", params.name),
+                None,
+            ))
         }
     }
 
