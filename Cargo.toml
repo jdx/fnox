@@ -14,6 +14,7 @@ name = "fnox"
 path = "src/main.rs"
 
 [dependencies]
+aes-gcm = "0.10"
 age = { version = "0.11", features = ["ssh"] }
 anyhow = "1"
 arboard = "3"
@@ -36,6 +37,7 @@ ci_info = "0.14"
 clap = { version = "4", features = ["derive", "env"] }
 console = "0.16"
 crossterm = { version = "0.29", features = ["event-stream"] }
+ctap-hid-fido2 = "3"
 data-encoding = "2"
 demand = "2"
 dirs = "6"
@@ -47,11 +49,14 @@ google-cloud-secretmanager-v1 = { version = "1.1" }
 hex = "0.4"
 hkdf = "0.12"
 indexmap = { version = "2", features = ["serde"] }
+jsonwebtoken = { version = "10", features = ["aws_lc_rs"] }
 keepass = { version = "0.8", features = ["save_kdbx4"] }
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 miette = { version = "7", features = ["fancy"] }
 miniz_oxide = "0.8"
-pluralizer = "0.5.0"
+nix = { version = "0.31", features = ["signal", "process"] }
+pluralizer = "0.5"
+rand = "0.8"
 ratatui = "0.29"
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
@@ -64,7 +69,8 @@ serde_spanned = "1"
 serde_yaml = "0.9"
 sha2 = "0.10"
 shellexpand = "3"
-shlex = "1.3.0"
+shlex = "1"
+signal-hook = "0.4"
 strsim = "0.11"
 strum = { version = "0.27", features = ["derive"] }
 tabled = { version = "0.20", features = ["ansi"] }
@@ -73,20 +79,14 @@ terminal_size = "0.4"
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 toml_edit = { version = "0.22", features = ["serde"] }
-aes-gcm = "0.10"
-ctap-hid-fido2 = "3.5.8"
-rand = "0.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-urlencoding = "2.1"
+urlencoding = "2"
 usage-lib = { version = "2", features = ["clap"] }
 walkdir = "2"
-xx = { version = "2", features = ["fslock"] }
 which = "7"
+xx = { version = "2", features = ["fslock"] }
 yubico_manager = "0.9"
-signal-hook = "0.4.3"
-nix = { version = "0.31.2", features = ["signal", "process"] }
-jsonwebtoken = { version = "10.3.0", features = ["aws_lc_rs"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus = { version = "0.9", features = ["vendored"] }
