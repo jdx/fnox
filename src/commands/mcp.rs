@@ -20,16 +20,6 @@ impl McpCommand {
         let profile_secrets = config.get_secrets(&profile)?;
         let mcp_config = config.mcp.clone().unwrap_or_default();
 
-        // Validate tool names
-        for tool_name in &mcp_config.tools {
-            if tool_name != "get_secret" && tool_name != "exec" {
-                return Err(FnoxError::Config(format!(
-                    "Unknown MCP tool '{}'. Valid tools: get_secret, exec",
-                    tool_name
-                )));
-            }
-        }
-
         let server = FnoxMcpServer::new(config, profile, mcp_config, profile_secrets);
 
         let service: RunningService<RoleServer, FnoxMcpServer> = server

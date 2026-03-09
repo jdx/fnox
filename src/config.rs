@@ -227,13 +227,31 @@ pub struct ProfileConfig {
     pub default_provider_source: Option<PathBuf>,
 }
 
+/// Available MCP tools
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum McpTool {
+    GetSecret,
+    Exec,
+}
+
+impl McpTool {
+    /// Returns the tool name as it appears in MCP protocol
+    pub fn tool_name(&self) -> &'static str {
+        match self {
+            McpTool::GetSecret => "get_secret",
+            McpTool::Exec => "exec",
+        }
+    }
+}
+
 /// MCP server configuration
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct McpConfig {
     /// Which MCP tools to expose (default: ["get_secret", "exec"])
     #[serde(default = "McpConfig::default_tools")]
-    pub tools: Vec<String>,
+    pub tools: Vec<McpTool>,
 }
 
 impl Default for McpConfig {
@@ -245,8 +263,8 @@ impl Default for McpConfig {
 }
 
 impl McpConfig {
-    fn default_tools() -> Vec<String> {
-        vec!["get_secret".to_string(), "exec".to_string()]
+    fn default_tools() -> Vec<McpTool> {
+        vec![McpTool::GetSecret, McpTool::Exec]
     }
 }
 

@@ -27,7 +27,7 @@ API_KEY = { provider = "age", value = "AGE-SECRET-KEY-..." }
 tools = ["get_secret", "exec"]  # default: both enabled
 ```
 
-Set `tools = ["exec"]` to only allow running commands (agent never sees raw secrets). Set `tools = ["get_secret"]` to only allow reading secrets directly.
+The `tools` array controls which tools are available to the agent. For example, to only allow executing commands without exposing raw secrets, set `tools = ["exec"]`. To only allow retrieving secrets directly, set `tools = ["get_secret"]`.
 
 ### 3. Configure your AI agent
 
@@ -78,6 +78,8 @@ Executes a command with all secrets injected as environment variables. The agent
 ## Security Considerations
 
 - Secrets live only in process memory — never written to disk
-- The `exec` tool captures stdout/stderr (does not inherit stdio, which would corrupt the JSON-RPC stream)
+- The `exec` tool clears the parent environment before injecting secrets, preventing leakage of host credentials (`AWS_*`, `FNOX_*`, etc.) to subprocesses. Only essential variables (`PATH`, `HOME`, `USER`, `SHELL`, `TERM`, `LANG`) are forwarded
+- The `exec` tool captures stdout/stderr (does not inherit stdio, which would corrupt the JSON-RPC stream) and caps output at 1 MiB to prevent unbounded memory usage
 - Non-interactive mode prevents provider auth prompts from interfering with the protocol
 - Use `tools = ["exec"]` to prevent agents from reading raw secret values
+- Disabled tools are not advertised in `tools/list` — agents only see tools they can actually call
