@@ -432,13 +432,48 @@ impl LeaseRevokeCommand {
         }
 
         let backend_name = record.backend_name.clone();
+        let cached_credentials = record.cached_credentials.clone();
+        let encryption_provider_name = record.encryption_provider.clone();
         let profile = Config::get_profile(cli.profile.as_deref());
         let leases = config.get_leases(&profile);
+
+        // Decrypt cached credentials (if encrypted) so backends can use
+        // credential values for revocation (e.g. GitHub App needs the token).
+        let decrypted_credentials = match (&cached_credentials, &encryption_provider_name) {
+            (Some(creds), Some(enc_name)) => {
+                match lease::find_encryption_provider(&config, &profile).await {
+                    lease::EncryptionProviderResult::Available(found_name, provider)
+                        if found_name == *enc_name =>
+                    {
+                        match lease::decrypt_credentials(provider.as_ref(), creds).await {
+                            Ok(decrypted) => Some(decrypted),
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Failed to decrypt cached credentials for revocation: {e}"
+                                );
+                                None
+                            }
+                        }
+                    }
+                    _ => {
+                        tracing::warn!(
+                            "Encryption provider '{enc_name}' not available for credential decryption"
+                        );
+                        None
+                    }
+                }
+            }
+            (Some(creds), None) => Some(creds.clone()),
+            _ => None,
+        };
 
         if let Some(backend_config) = leases.get(&backend_name) {
             match backend_config.create_backend() {
                 Ok(backend) => {
-                    if let Err(e) = backend.revoke_lease(&self.lease_id).await {
+                    if let Err(e) = backend
+                        .revoke_lease(&self.lease_id, decrypted_credentials.as_ref())
+                        .await
+                    {
                         tracing::warn!("Backend revocation failed for '{}': {}", self.lease_id, e);
                         eprintln!(
                             "Warning: backend revocation failed; only the local ledger entry will be revoked."
@@ -501,7 +536,9 @@ impl LeaseCleanupCommand {
             if let Some(backend_config) = leases.get(&record.backend_name) {
                 match backend_config.create_backend() {
                     Ok(backend) => {
-                        if let Err(e) = backend.revoke_lease(&record.lease_id).await {
+                        // Expired leases: pass None for credentials since the
+                        // token has expired and can't be revoked server-side anyway.
+                        if let Err(e) = backend.revoke_lease(&record.lease_id, None).await {
                             tracing::warn!("Failed to revoke lease '{}': {}", record.lease_id, e);
                             // Still mark revoked locally — the credential has expired anyway
                         }

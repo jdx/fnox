@@ -173,7 +173,11 @@ impl LeaseBackend for AwsStsBackend {
         })
     }
 
-    async fn revoke_lease(&self, _lease_id: &str) -> Result<()> {
+    async fn revoke_lease(
+        &self,
+        _lease_id: &str,
+        _credentials: Option<&IndexMap<String, String>>,
+    ) -> Result<()> {
         // AWS STS credentials have native TTL, no manual revocation needed
         Ok(())
     }

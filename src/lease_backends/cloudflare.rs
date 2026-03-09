@@ -445,7 +445,11 @@ impl LeaseBackend for CloudflareBackend {
         })
     }
 
-    async fn revoke_lease(&self, lease_id: &str) -> Result<()> {
+    async fn revoke_lease(
+        &self,
+        lease_id: &str,
+        _credentials: Option<&IndexMap<String, String>>,
+    ) -> Result<()> {
         let parent_token = Self::get_api_token()?;
         let tokens_path = self.tokens_path();
 

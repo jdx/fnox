@@ -5,8 +5,10 @@ pub fn http_client() -> reqwest::Client {
     let settings = crate::settings::Settings::get();
     let timeout =
         crate::lease::parse_duration(&settings.http_timeout).unwrap_or(Duration::from_secs(30));
+    let user_agent = format!("fnox/{}", env!("CARGO_PKG_VERSION"));
     reqwest::Client::builder()
         .timeout(timeout)
+        .user_agent(user_agent)
         .build()
         .unwrap_or_else(|e| {
             tracing::warn!(

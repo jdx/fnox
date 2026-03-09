@@ -248,7 +248,11 @@ jobs:
       - name: Run tests
         run: cargo test
       - name: Check formatting
-        run: mise run lint
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          command: mise run lint
       - name: Run clippy
         run: cargo clippy -- -D warnings
 
