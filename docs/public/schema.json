@@ -332,11 +332,16 @@
           "type": "array",
           "default": ["get_secret", "exec"],
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/McpTool"
           }
         }
       },
       "additionalProperties": false
+    },
+    "McpTool": {
+      "description": "Available MCP tools",
+      "type": "string",
+      "enum": ["get_secret", "exec"]
     },
     "OptionStringOrSecretRef": {
       "description": "An optional value that can be a literal string, a secret reference, or absent.\n\nIn TOML, this deserializes from:\n- Field absent: `None`\n- `field = \"literal-value\"`: `Some(Literal(\"literal-value\"))`\n- `field = { secret = \"SECRET_NAME\" }`: `Some(SecretRef { secret: \"SECRET_NAME\" })`",
