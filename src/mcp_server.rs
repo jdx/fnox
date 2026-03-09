@@ -164,9 +164,12 @@ impl FnoxMcpServer {
                 &mut cache,
                 &mut temp_files,
             )?;
+            // Return the cached value, which may differ from the raw value
+            // (e.g. as_file secrets store a temp file path instead).
+            return Ok(cache.get(name).cloned());
         }
 
-        Ok(value)
+        Ok(None)
     }
 
     /// Insert a resolved secret into the cache, handling as_file conversion.
