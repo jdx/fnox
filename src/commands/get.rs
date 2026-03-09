@@ -154,7 +154,14 @@ impl GetCommand {
         // 2. The backend SDK can authenticate for fresh lease creation
         let consumed: std::collections::HashSet<&str> =
             lease_config.consumed_env_vars().iter().copied().collect();
-        let all_secrets = config.get_secrets(profile)?;
+        // When consumed is empty the backend needs no profile secrets (e.g. it
+        // authenticates via instance metadata). Avoid aborting on a transient
+        // secrets-config read error that would be irrelevant in that case.
+        let all_secrets = if consumed.is_empty() {
+            config.get_secrets(profile).unwrap_or_default()
+        } else {
+            config.get_secrets(profile)?
+        };
         let needed_secrets: indexmap::IndexMap<_, _> = all_secrets
             .iter()
             .filter(|(k, _)| consumed.contains(k.as_str()))

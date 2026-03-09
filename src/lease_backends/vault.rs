@@ -13,6 +13,7 @@ pub const CONSUMED_ENV_VARS: &[&str] = &[
     "FNOX_VAULT_ADDR",
     "VAULT_TOKEN",
     "FNOX_VAULT_TOKEN",
+    "VAULT_NAMESPACE",
 ];
 
 pub fn check_prerequisites(address: &Option<String>, token: &Option<String>) -> Option<String> {
