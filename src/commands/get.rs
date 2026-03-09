@@ -139,6 +139,7 @@ impl GetCommand {
             lease::find_cached_entry(&ledger, name, &config_hash)
         };
 
+        let had_cached_entry = cached_entry.is_some();
         if let Some(entry) = cached_entry
             && let Some(creds) = lease::resolve_cached_entry(entry, config, profile, name).await
         {
@@ -146,6 +147,17 @@ impl GetCommand {
             // not discard a successfully retrieved cached credential.
             let all_secrets = config.get_secrets(profile).unwrap_or_default();
             return self.extract_key_from_creds(name, creds, all_secrets);
+        }
+
+        // A cached entry existed but decryption failed — don't silently create
+        // a new (also un-decryptable) lease that repeats the same failure cycle.
+        if had_cached_entry {
+            return Err(FnoxError::Config(format!(
+                "Lease '{}': cached credentials could not be decrypted. \
+                 Ensure the encryption provider is reachable or run \
+                 'fnox lease create -i {}' to refresh credentials.",
+                name, name
+            )));
         }
 
         // Cache miss: resolve only the consumed secrets and create a fresh lease.
