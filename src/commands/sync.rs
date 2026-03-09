@@ -1,5 +1,5 @@
 use crate::commands::Cli;
-use crate::config::{Config, SyncConfig, local_override_filename};
+use crate::config::{self, Config, SyncConfig, local_override_filename};
 use crate::error::{FnoxError, Result};
 use crate::secret_resolver::resolve_secrets_batch;
 use clap::Args;
@@ -49,13 +49,27 @@ impl SyncCommand {
         let profile = Config::get_profile(cli.profile.as_deref());
         tracing::debug!("Syncing secrets for profile '{}'", profile);
 
+        let effective_config_path = if cli.config == std::path::Path::new(config::DEFAULT_CONFIG_FILENAME) {
+            let current_dir = std::env::current_dir().map_err(|e| {
+                FnoxError::Config(format!("Failed to get current directory: {}", e))
+            })?;
+            let candidate = config::find_local_config(&current_dir, Some(&profile));
+            if local_override_filename(&candidate).is_some() {
+                candidate
+            } else {
+                cli.config.clone()
+            }
+        } else {
+            cli.config.clone()
+        };
+
         let local_override_filename = self
             .local_file
             .then(|| {
-                local_override_filename(&cli.config).ok_or_else(|| {
+                local_override_filename(&effective_config_path).ok_or_else(|| {
                     FnoxError::Config(format!(
                         "--local-file requires --config to be 'fnox.toml' or '.fnox.toml'; '{}' would not load the adjacent local override file",
-                        cli.config.display()
+                        effective_config_path.display()
                     ))
                 })
             })
@@ -224,8 +238,7 @@ impl SyncCommand {
 
         // Determine target config file path
         let (target_path, ensure_parent_dir) = if self.local_file {
-            let config_dir = cli
-                .config
+            let config_dir = effective_config_path
                 .parent()
                 .filter(|p| !p.as_os_str().is_empty())
                 .map(PathBuf::from)

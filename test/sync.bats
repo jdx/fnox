@@ -165,6 +165,24 @@ EOF
 	assert_output "remote-secret-value"
 }
 
+@test "fnox sync --local-file uses .fnox.local.toml when default config is .fnox.toml" {
+	setup_sync_env
+
+	mv fnox.toml .fnox.toml
+
+	run "$FNOX_BIN" sync -p age --local-file --force
+	assert_success
+
+	[ -f .fnox.local.toml ]
+	[ ! -f fnox.local.toml ]
+	run grep 'sync = { provider = "age", value = "' .fnox.local.toml
+	assert_success
+
+	run "$FNOX_BIN" get MY_SECRET --age-key-file key.txt
+	assert_success
+	assert_output "remote-secret-value"
+}
+
 @test "fnox sync --local-file round-trips with .fnox.toml" {
 	setup_sync_env
 
