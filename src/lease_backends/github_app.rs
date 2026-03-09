@@ -248,9 +248,10 @@ impl LeaseBackend for GitHubAppBackend {
         let mut credentials = IndexMap::new();
         credentials.insert(self.env_var.clone(), token.to_string());
 
-        // Use the token itself as the lease_id so revoke_lease can call
-        // DELETE /installation/token (which authenticates with the token).
-        let lease_id = token.to_string();
+        // Use a hash of the token as the lease_id. This is deterministic
+        // (useful for debugging) without leaking the secret in the ledger.
+        let hash = blake3::hash(token.as_bytes());
+        let lease_id = format!("github-app-{}", &hash.to_hex()[..16]);
 
         Ok(Lease {
             credentials,
@@ -259,9 +260,23 @@ impl LeaseBackend for GitHubAppBackend {
         })
     }
 
-    async fn revoke_lease(&self, lease_id: &str) -> Result<()> {
-        // The lease_id is the installation token itself, so we can authenticate
-        // the DELETE /installation/token request with it.
+    async fn revoke_lease(
+        &self,
+        _lease_id: &str,
+        credentials: Option<&IndexMap<String, String>>,
+    ) -> Result<()> {
+        // GitHub's DELETE /installation/token requires authenticating with the
+        // token being revoked. We retrieve it from the cached credentials
+        // (which are encrypted at rest in the ledger).
+        let token = credentials
+            .and_then(|creds| creds.get(&self.env_var))
+            .ok_or_else(|| FnoxError::ProviderApiError {
+                provider: "GitHub App".to_string(),
+                details: "Cached credentials unavailable for revocation".to_string(),
+                hint: "The token may have already been cleaned up from the ledger".to_string(),
+                url: URL.to_string(),
+            })?;
+
         let api_base = self.api_base();
         let url = format!("{api_base}/installation/token");
 
@@ -270,7 +285,7 @@ impl LeaseBackend for GitHubAppBackend {
             .delete(&url)
             .header("Accept", "application/vnd.github+json")
             .header("X-GitHub-Api-Version", "2022-11-28")
-            .bearer_auth(lease_id)
+            .bearer_auth(token)
             .send()
             .await
             .map_err(|e| FnoxError::ProviderApiError {

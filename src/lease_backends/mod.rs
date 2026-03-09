@@ -30,8 +30,16 @@ pub trait LeaseBackend: Send + Sync {
     /// Create a short-lived credential
     async fn create_lease(&self, duration: Duration, label: &str) -> Result<Lease>;
 
-    /// Revoke a previously issued lease (for cleanup)
-    async fn revoke_lease(&self, _lease_id: &str) -> Result<()> {
+    /// Revoke a previously issued lease (for cleanup).
+    /// `credentials` contains the cached credential values (decrypted) when
+    /// available — backends that need a credential value for revocation (e.g.
+    /// GitHub App, which must authenticate DELETE with the token itself) can
+    /// look it up here instead of storing secrets in `lease_id`.
+    async fn revoke_lease(
+        &self,
+        _lease_id: &str,
+        _credentials: Option<&IndexMap<String, String>>,
+    ) -> Result<()> {
         // Default: no-op (for backends with native TTL)
         Ok(())
     }
