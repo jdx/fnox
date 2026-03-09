@@ -155,36 +155,33 @@ impl GetCommand {
         let mut consumed: std::collections::HashSet<&str> =
             lease_config.consumed_env_vars().iter().copied().collect();
 
-        // If the cached entry is encrypted, the encryption provider may need
-        // its own credentials (e.g. Vault transit needs VAULT_TOKEN). Include
-        // the provider's env_dependencies so they get resolved and injected.
-        if let Some(ref entry) = cached_entry
-            && let Some(ref enc_provider_name) = entry.encryption_provider
-        {
+        // Always include the default encryption provider's env deps so that
+        // create_and_record_lease can encrypt cached credentials even on a cold
+        // start (no cached_entry). Without this, the provider's credentials
+        // (e.g. VAULT_TOKEN) would never be injected and encryption would fail
+        // permanently, forcing a fresh API call on every invocation.
+        if let Ok(Some(ref default_provider_name)) = config.get_default_provider(profile) {
             let providers_map = config.get_providers(profile);
-            if let Some(provider_config) = providers_map.get(enc_provider_name) {
+            if let Some(provider_config) = providers_map.get(default_provider_name) {
                 for dep in provider_config.env_dependencies() {
                     consumed.insert(dep);
                 }
             }
         }
-        // Fetch secrets with unwrap_or_default first — if no consumed var is
-        // actually present as a profile secret, the backend authenticates via
-        // non-secret means (private_key_file, instance metadata, az CLI, etc.)
-        // and a transient secrets-config read error should not abort the command.
-        let all_secrets = config.get_secrets(profile).unwrap_or_default();
+
+        // When consumed is empty the backend needs no profile secrets (e.g. it
+        // authenticates via instance metadata). Avoid aborting on a transient
+        // secrets-config read error that would be irrelevant in that case.
+        let all_secrets = if consumed.is_empty() {
+            config.get_secrets(profile).unwrap_or_default()
+        } else {
+            config.get_secrets(profile)?
+        };
         let needed_secrets: indexmap::IndexMap<_, _> = all_secrets
             .iter()
             .filter(|(k, _)| consumed.contains(k.as_str()))
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
-        // Re-fetch with hard error if we actually need profile secrets — the
-        // unwrap_or_default result may have silently swallowed a real failure.
-        let all_secrets = if needed_secrets.is_empty() {
-            all_secrets
-        } else {
-            config.get_secrets(profile)?
-        };
         let resolved_secrets =
             crate::secret_resolver::resolve_secrets_batch(config, profile, &needed_secrets).await?;
 
