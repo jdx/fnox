@@ -49,19 +49,20 @@ impl SyncCommand {
         let profile = Config::get_profile(cli.profile.as_deref());
         tracing::debug!("Syncing secrets for profile '{}'", profile);
 
-        let effective_config_path = if cli.config == std::path::Path::new(config::DEFAULT_CONFIG_FILENAME) {
-            let current_dir = std::env::current_dir().map_err(|e| {
-                FnoxError::Config(format!("Failed to get current directory: {}", e))
-            })?;
-            let candidate = config::find_local_config(&current_dir, Some(&profile));
-            if local_override_filename(&candidate).is_some() {
-                candidate
+        let effective_config_path =
+            if cli.config == std::path::Path::new(config::DEFAULT_CONFIG_FILENAME) {
+                let current_dir = std::env::current_dir().map_err(|e| {
+                    FnoxError::Config(format!("Failed to get current directory: {}", e))
+                })?;
+                let candidate = config::find_local_config(&current_dir, Some(&profile));
+                if local_override_filename(&candidate).is_some() {
+                    candidate
+                } else {
+                    cli.config.clone()
+                }
             } else {
                 cli.config.clone()
-            }
-        } else {
-            cli.config.clone()
-        };
+            };
 
         let local_override_filename = self
             .local_file
