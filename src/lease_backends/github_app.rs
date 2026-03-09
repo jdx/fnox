@@ -268,14 +268,12 @@ impl LeaseBackend for GitHubAppBackend {
         // GitHub's DELETE /installation/token requires authenticating with the
         // token being revoked. We retrieve it from the cached credentials
         // (which are encrypted at rest in the ledger).
-        let token = credentials
-            .and_then(|creds| creds.get(&self.env_var))
-            .ok_or_else(|| FnoxError::ProviderApiError {
-                provider: "GitHub App".to_string(),
-                details: "Cached credentials unavailable for revocation".to_string(),
-                hint: "The token may have already been cleaned up from the ledger".to_string(),
-                url: URL.to_string(),
-            })?;
+        let Some(token) = credentials.and_then(|creds| creds.get(&self.env_var)) else {
+            // No token available — either already expired/cleaned up or the
+            // encryption provider is unavailable. Skip server-side revocation
+            // silently; the local ledger entry is cleaned up by the caller.
+            return Ok(());
+        };
 
         let api_base = self.api_base();
         let url = format!("{api_base}/installation/token");

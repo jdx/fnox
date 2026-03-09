@@ -12,7 +12,7 @@ setup() {
 
 teardown() {
 	# Kill mock server if running
-	if [[ -n "${MOCK_PID:-}" ]]; then
+	if [[ -n ${MOCK_PID:-} ]]; then
 		kill "$MOCK_PID" 2>/dev/null || true
 		wait "$MOCK_PID" 2>/dev/null || true
 	fi
@@ -24,14 +24,14 @@ generate_test_key() {
 	openssl genrsa 2048 2>/dev/null >"$TEST_TEMP_DIR/test-app.pem"
 }
 
-# Helper: start a mock GitHub API server that returns a valid token response
+# Helper: start a mock GitHub API server that returns a valid token response.
+# Binds to an OS-assigned free port and exports MOCK_PORT.
 start_mock_github_api() {
-	local port="${1:-9876}"
-	local token="${2:-ghs_mock_installation_token_abc123}"
-	local expires_at="${3:-2099-01-01T00:00:00Z}"
+	local token="${1:-ghs_mock_installation_token_abc123}"
+	local expires_at="${2:-2099-01-01T00:00:00Z}"
 
 	cat >"$TEST_TEMP_DIR/mock_github.py" <<PYEOF
-import http.server, json, sys
+import http.server, json, sys, socket
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
@@ -48,23 +48,31 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
-http.server.HTTPServer(("127.0.0.1", $port), Handler).serve_forever()
+# Bind to port 0 to let the OS pick a free port
+server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+port = server.server_address[1]
+# Write the assigned port so the test can read it
+with open("$TEST_TEMP_DIR/mock_port", "w") as f:
+    f.write(str(port))
+server.serve_forever()
 PYEOF
 
 	python3 "$TEST_TEMP_DIR/mock_github.py" &
 	MOCK_PID=$!
-	# Wait for server to start
-	for _ in $(seq 1 20); do
-		if curl -s "http://127.0.0.1:$port" >/dev/null 2>&1; then
+	# Wait for the port file to appear
+	for _ in $(seq 1 30); do
+		if [[ -f "$TEST_TEMP_DIR/mock_port" ]]; then
 			break
 		fi
 		sleep 0.1
 	done
+	MOCK_PORT=$(cat "$TEST_TEMP_DIR/mock_port")
+	export MOCK_PORT
 }
 
 @test "github-app: creates installation token with private key file" {
 	generate_test_key
-	start_mock_github_api 9876
+	start_mock_github_api
 
 	cat >"$FNOX_CONFIG_FILE" <<EOF
 [leases.github]
@@ -72,7 +80,7 @@ type = "github-app"
 app_id = "12345"
 installation_id = "67890"
 private_key_file = "$TEST_TEMP_DIR/test-app.pem"
-api_base = "http://127.0.0.1:9876"
+api_base = "http://127.0.0.1:$MOCK_PORT"
 EOF
 
 	run fnox lease create github
@@ -82,7 +90,7 @@ EOF
 
 @test "github-app: creates installation token via env var" {
 	generate_test_key
-	start_mock_github_api 9877
+	start_mock_github_api
 
 	export FNOX_GITHUB_APP_PRIVATE_KEY
 	FNOX_GITHUB_APP_PRIVATE_KEY="$(cat "$TEST_TEMP_DIR/test-app.pem")"
@@ -92,7 +100,7 @@ EOF
 type = "github-app"
 app_id = "12345"
 installation_id = "67890"
-api_base = "http://127.0.0.1:9877"
+api_base = "http://127.0.0.1:$MOCK_PORT"
 EOF
 
 	run fnox lease create github
@@ -101,7 +109,7 @@ EOF
 
 @test "github-app: token is available via fnox exec" {
 	generate_test_key
-	start_mock_github_api 9878
+	start_mock_github_api
 
 	cat >"$FNOX_CONFIG_FILE" <<EOF
 [leases.github]
@@ -109,7 +117,7 @@ type = "github-app"
 app_id = "12345"
 installation_id = "67890"
 private_key_file = "$TEST_TEMP_DIR/test-app.pem"
-api_base = "http://127.0.0.1:9878"
+api_base = "http://127.0.0.1:$MOCK_PORT"
 EOF
 
 	run fnox exec -- printenv GITHUB_TOKEN
@@ -119,7 +127,7 @@ EOF
 
 @test "github-app: custom env_var" {
 	generate_test_key
-	start_mock_github_api 9879
+	start_mock_github_api
 
 	cat >"$FNOX_CONFIG_FILE" <<EOF
 [leases.github]
@@ -128,7 +136,7 @@ app_id = "12345"
 installation_id = "67890"
 private_key_file = "$TEST_TEMP_DIR/test-app.pem"
 env_var = "GH_TOKEN"
-api_base = "http://127.0.0.1:9879"
+api_base = "http://127.0.0.1:$MOCK_PORT"
 EOF
 
 	run fnox exec -- printenv GH_TOKEN
@@ -138,7 +146,7 @@ EOF
 
 @test "github-app: lease is recorded in ledger after create" {
 	generate_test_key
-	start_mock_github_api 9880
+	start_mock_github_api
 
 	cat >"$FNOX_CONFIG_FILE" <<EOF
 [leases.github]
@@ -146,7 +154,7 @@ type = "github-app"
 app_id = "12345"
 installation_id = "67890"
 private_key_file = "$TEST_TEMP_DIR/test-app.pem"
-api_base = "http://127.0.0.1:9880"
+api_base = "http://127.0.0.1:$MOCK_PORT"
 EOF
 
 	run fnox lease create github
@@ -174,7 +182,7 @@ EOF
 
 @test "github-app: supports permissions config" {
 	generate_test_key
-	start_mock_github_api 9881
+	start_mock_github_api
 
 	cat >"$FNOX_CONFIG_FILE" <<EOF
 [leases.github]
@@ -182,7 +190,7 @@ type = "github-app"
 app_id = "12345"
 installation_id = "67890"
 private_key_file = "$TEST_TEMP_DIR/test-app.pem"
-api_base = "http://127.0.0.1:9881"
+api_base = "http://127.0.0.1:$MOCK_PORT"
 
 [leases.github.permissions]
 contents = "read"
@@ -195,7 +203,7 @@ EOF
 
 @test "github-app: supports repositories config" {
 	generate_test_key
-	start_mock_github_api 9882
+	start_mock_github_api
 
 	cat >"$FNOX_CONFIG_FILE" <<EOF
 [leases.github]
@@ -203,7 +211,7 @@ type = "github-app"
 app_id = "12345"
 installation_id = "67890"
 private_key_file = "$TEST_TEMP_DIR/test-app.pem"
-api_base = "http://127.0.0.1:9882"
+api_base = "http://127.0.0.1:$MOCK_PORT"
 repositories = ["my-repo"]
 EOF
 
@@ -213,7 +221,7 @@ EOF
 
 @test "github-app: lease list shows created lease" {
 	generate_test_key
-	start_mock_github_api 9883
+	start_mock_github_api
 
 	cat >"$FNOX_CONFIG_FILE" <<EOF
 [leases.github]
@@ -221,7 +229,7 @@ type = "github-app"
 app_id = "12345"
 installation_id = "67890"
 private_key_file = "$TEST_TEMP_DIR/test-app.pem"
-api_base = "http://127.0.0.1:9883"
+api_base = "http://127.0.0.1:$MOCK_PORT"
 EOF
 
 	run fnox lease create github
