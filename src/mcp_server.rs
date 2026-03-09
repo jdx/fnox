@@ -31,7 +31,10 @@ pub struct GetSecretParams {
 /// MCP tool parameter: execute a command with secrets injected
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct ExecParams {
-    /// The command and arguments to execute (e.g. ["curl", "-H", "Authorization: Bearer $TOKEN", "https://api.example.com"])
+    /// The command and arguments to execute as a list where the first element is the program and the rest are arguments.
+    /// No shell is invoked — env vars are NOT expanded in argument strings. The injected secrets are available
+    /// as environment variables that the command reads through its own API. To use shell expansion, pass
+    /// ["sh", "-c", "your shell command here"].
     pub command: Vec<String>,
 }
 
@@ -200,17 +203,20 @@ impl FnoxMcpServer {
             }
         }
 
-        // Not in cache — check if it's an env=false secret that needs on-demand resolution
+        // Not in cache — check if it's a configured secret
         if let Some(secret_config) = self.profile_secrets.get(&params.name) {
-            if !secret_config.env
-                && let Some(value) = self.resolve_single(&params.name).await?
-            {
-                return Ok(CallToolResult::success(vec![Content::text(value)]));
+            // env=false secrets are deferred; try on-demand resolution
+            if !secret_config.env {
+                if let Some(value) = self.resolve_single(&params.name).await? {
+                    return Ok(CallToolResult::success(vec![Content::text(value)]));
+                }
             }
-            // Configured but couldn't resolve
-            Err(McpError::internal_error(
+            // env=true: was included in batch resolution and simply had no value.
+            // env=false: on-demand resolution returned None.
+            // Either way, resolution succeeded but the secret is absent (optional).
+            Err(McpError::invalid_request(
                 format!(
-                    "Secret '{}' is configured but could not be resolved",
+                    "Secret '{}' has no value (it may be optional and absent)",
                     params.name
                 ),
                 None,
