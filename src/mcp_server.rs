@@ -292,7 +292,7 @@ impl FnoxMcpServer {
                 .filter(|(key, _)| {
                     self.profile_secrets
                         .get(key.as_str())
-                        .map_or(false, |sc| sc.env)
+                        .is_some_and(|sc| sc.env)
                 })
                 .filter_map(|(k, v)| v.as_ref().map(|val| (k.clone(), val.clone())))
                 .collect()
