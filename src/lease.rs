@@ -538,8 +538,8 @@ pub fn find_cached_entry(
 ///
 /// When called from `get.rs` the plaintext branch is unreachable because
 /// `resolve_from_lease` returns early for plaintext entries before calling
-/// this function. The plaintext path is exercised via `try_cached_credentials`
-/// → `resolve_lease` (the `fnox exec` code path).
+/// this function. The plaintext path is exercised via `resolve_lease`'s
+/// TOCTOU cache check (shared by both `fnox exec` and `fnox get`).
 pub async fn resolve_cached_entry(
     entry: CachedEntry,
     config: &Config,
@@ -564,23 +564,6 @@ pub async fn resolve_cached_entry(
         );
         Some(entry.credentials)
     }
-}
-
-/// Try to return cached credentials from the ledger without creating a new lease.
-/// Returns `None` on cache miss, missing credentials, or if decryption fails.
-///
-/// **Note:** This performs the ledger lookup and optional decryption in a single
-/// call. When the caller holds a file lock, prefer [`find_cached_entry`] +
-/// [`resolve_cached_entry`] to release the lock before async decryption.
-pub async fn try_cached_credentials(
-    ledger: &LeaseLedger,
-    name: &str,
-    config_hash: &str,
-    config: &Config,
-    profile: &str,
-) -> Option<IndexMap<String, String>> {
-    let entry = find_cached_entry(ledger, name, config_hash)?;
-    resolve_cached_entry(entry, config, profile, name).await
 }
 
 /// Attempt to decrypt cached credentials using the named encryption provider.
@@ -629,6 +612,12 @@ pub async fn try_decrypt_cached(
 
 /// Resolve a lease backend into credentials, reusing cached credentials when available.
 /// Shared between `fnox exec` and `fnox get`.
+///
+/// Manages its own ledger locks with minimal scope: a short lock for the
+/// TOCTOU cache check (sync read, release, async decrypt), the lease creation
+/// network call and credential encryption run with no lock held, and a final
+/// short lock for the ledger write. This prevents concurrent `fnox get`/`exec`
+/// calls from serializing on a single lock for the duration of network I/O.
 #[allow(clippy::too_many_arguments)]
 pub async fn resolve_lease(
     name: &str,
@@ -636,17 +625,21 @@ pub async fn resolve_lease(
     config: &Config,
     profile: &str,
     project_dir: &Path,
-    ledger: &mut LeaseLedger,
     prereq_missing: Option<&str>,
     label_prefix: &str,
 ) -> Result<IndexMap<String, String>> {
-    // NOTE: try_cached_credentials is called again here even though `fnox get`
-    // already performed a pre-check (get.rs resolve_from_lease). This guards
-    // against a concurrent process writing a valid cache entry between that
-    // earlier check and the ledger lock acquired here. Do not remove without
-    // re-establishing that TOCTOU safety.
+    // TOCTOU cache check: sync ledger read under a short lock, then release
+    // before async decryption. Guards against a concurrent process writing a
+    // valid cache entry between an earlier check and now.
     let config_hash = lease_config.config_hash();
-    if let Some(creds) = try_cached_credentials(ledger, name, &config_hash, config, profile).await {
+    let cached_entry = {
+        let _lock = LeaseLedger::lock(project_dir)?;
+        let ledger = LeaseLedger::load(project_dir)?;
+        find_cached_entry(&ledger, name, &config_hash)
+    };
+    if let Some(entry) = cached_entry
+        && let Some(creds) = resolve_cached_entry(entry, config, profile, name).await
+    {
         return Ok(creds);
     }
 
@@ -671,19 +664,9 @@ pub async fn resolve_lease(
         )));
     }
 
+    // Create the lease (async network call) with no lock held.
     let label = format!("fnox-{}-{}", label_prefix, name);
-    let result = create_and_record_lease(
-        backend.as_ref(),
-        name,
-        &label,
-        duration,
-        config_hash,
-        config,
-        profile,
-        ledger,
-        project_dir,
-    )
-    .await?;
+    let result = backend.create_lease(duration, &label).await?;
 
     tracing::debug!(
         "Created lease '{}' for backend '{}' (expires {:?})",
@@ -691,6 +674,36 @@ pub async fn resolve_lease(
         name,
         result.expires_at
     );
+
+    // Encrypt credentials for caching (async, may call encryption provider).
+    let (cached_credentials, encryption_provider) =
+        cache_credentials(config, profile, &result.credentials, &result.lease_id).await;
+
+    // Acquire lock only for the synchronous ledger write.
+    {
+        let _lock = LeaseLedger::lock(project_dir)?;
+        let mut ledger = LeaseLedger::load(project_dir)?;
+        ledger.add(LeaseRecord {
+            lease_id: result.lease_id.clone(),
+            backend_name: name.to_string(),
+            label,
+            created_at: Utc::now(),
+            expires_at: result.expires_at,
+            revoked: false,
+            cached_credentials,
+            encryption_provider,
+            config_hash: Some(config_hash),
+        });
+        if let Err(save_err) = ledger.save(project_dir) {
+            tracing::warn!(
+                "Lease '{}' created for backend '{}' but ledger save failed: {}. \
+                 This lease is untracked and must be revoked manually.",
+                result.lease_id,
+                name,
+                save_err
+            );
+        }
+    }
 
     Ok(result.credentials)
 }

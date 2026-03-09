@@ -56,19 +56,20 @@ impl ExecCommand {
                 &mut _temp_env_guard,
             )?);
             let project_dir = lease::project_dir_from_config(&config, &cli.config);
-            let ledger_lock = LeaseLedger::lock(&project_dir)?;
-            let mut ledger = LeaseLedger::load(&project_dir)?;
             for (name, lease_config) in &leases {
                 // Check prerequisites before attempting to create/use a lease
                 let prereq_missing = lease_config.check_prerequisites();
                 if let Some(ref missing) = prereq_missing {
-                    // Check if there's a cached lease we can still use
-                    let config_hash = lease_config.config_hash();
-                    if let Some(cached) = ledger.find_reusable(name, &config_hash)
-                        && cached.cached_credentials.is_some()
-                    {
-                        // Fall through to resolve_lease which will use the cache
-                    } else {
+                    // Check if there's a cached lease we can still use (short lock).
+                    let has_cache = {
+                        let _lock = LeaseLedger::lock(&project_dir)?;
+                        let ledger = LeaseLedger::load(&project_dir)?;
+                        let config_hash = lease_config.config_hash();
+                        ledger
+                            .find_reusable(name, &config_hash)
+                            .is_some_and(|r| r.cached_credentials.is_some())
+                    };
+                    if !has_cache {
                         tracing::warn!(
                             "Skipping lease '{}': {}\nRun 'fnox lease create -i {}' to set up credentials interactively.",
                             name,
@@ -81,13 +82,13 @@ impl ExecCommand {
                 // Intentionally hard-fail: if prerequisites pass but lease
                 // creation fails (network, permissions, etc.), abort rather
                 // than silently running the subprocess without expected creds.
+                // resolve_lease manages its own ledger locks with minimal scope.
                 let creds = lease::resolve_lease(
                     name,
                     lease_config,
                     &config,
                     &profile,
                     &project_dir,
-                    &mut ledger,
                     prereq_missing.as_deref(),
                     "exec",
                 )
@@ -97,11 +98,6 @@ impl ExecCommand {
                     cmd.env(cred_key, cred_value);
                 }
             }
-            // Release the ledger lock before spawning the subprocess.
-            // The lock is only needed for the load → mutate → save cycle above;
-            // holding it for the subprocess lifetime would serialize all concurrent
-            // fnox exec invocations in the same project directory.
-            drop(ledger_lock);
         }
 
         // Add resolved secrets as environment variables

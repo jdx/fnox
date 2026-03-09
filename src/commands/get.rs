@@ -209,83 +209,18 @@ impl GetCommand {
         // This matches exec.rs behaviour.
         let prereq_missing = lease_config.check_prerequisites();
 
-        // TOCTOU cache re-check: a concurrent process may have written a valid
-        // cache entry between our first check and now. Sync ledger read under
-        // a short lock, then release before async decryption.
-        let toctou_entry = {
-            let _lock = LeaseLedger::lock(&project_dir)?;
-            let ledger = LeaseLedger::load(&project_dir)?;
-            lease::find_cached_entry(&ledger, name, &config_hash)
-        };
-        if let Some(entry) = toctou_entry
-            && let Some(creds) = lease::resolve_cached_entry(entry, config, profile, name).await
-        {
-            return self.extract_key_from_creds(name, creds, all_secrets);
-        }
-
-        if let Some(missing) = prereq_missing {
-            return Err(FnoxError::Config(format!(
-                "Lease '{}': no usable cached credentials and \
-                 prerequisites are missing: {}\n\
-                 Run 'fnox lease create -i {}' to set up credentials interactively.",
-                name, missing, name
-            )));
-        }
-
-        // Create the lease (async network call) outside any lock.
-        let backend = lease_config.create_backend()?;
-        let duration_str = lease_config
-            .duration()
-            .unwrap_or(lease::DEFAULT_LEASE_DURATION);
-        let duration = lease::parse_duration(duration_str)?;
-        let max_duration = backend.max_lease_duration();
-        if duration > max_duration {
-            return Err(FnoxError::Config(format!(
-                "Lease duration '{}' for '{}' exceeds maximum {:?}",
-                duration_str, name, max_duration
-            )));
-        }
-        let label = format!("fnox-get-{}", name);
-        let result = backend.create_lease(duration, &label).await?;
-
-        tracing::debug!(
-            "Created lease '{}' for backend '{}' (expires {:?})",
-            result.lease_id,
+        let creds = lease::resolve_lease(
             name,
-            result.expires_at
-        );
+            lease_config,
+            config,
+            profile,
+            &project_dir,
+            prereq_missing.as_deref(),
+            "get",
+        )
+        .await?;
 
-        // Encrypt credentials for caching (async, may call encryption provider).
-        let (cached_credentials, encryption_provider) =
-            lease::cache_credentials(config, profile, &result.credentials, &result.lease_id).await;
-
-        // Acquire lock only for the synchronous ledger write.
-        {
-            let _lock = LeaseLedger::lock(&project_dir)?;
-            let mut ledger = LeaseLedger::load(&project_dir)?;
-            ledger.add(lease::LeaseRecord {
-                lease_id: result.lease_id.clone(),
-                backend_name: name.to_string(),
-                label,
-                created_at: chrono::Utc::now(),
-                expires_at: result.expires_at,
-                revoked: false,
-                cached_credentials,
-                encryption_provider,
-                config_hash: Some(config_hash),
-            });
-            if let Err(save_err) = ledger.save(&project_dir) {
-                tracing::warn!(
-                    "Lease '{}' created for backend '{}' but ledger save failed: {}. \
-                     This lease is untracked and must be revoked manually.",
-                    result.lease_id,
-                    name,
-                    save_err
-                );
-            }
-        }
-
-        self.extract_key_from_creds(name, result.credentials, all_secrets)
+        self.extract_key_from_creds(name, creds, all_secrets)
     }
 
     fn extract_key_from_creds(
