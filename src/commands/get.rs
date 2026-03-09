@@ -174,8 +174,7 @@ impl GetCommand {
             // entry.encryption_provider is guaranteed Some here (plaintext
             // was handled above), so resolve_cached_entry will attempt decrypt.
             if let Some(creds) = lease::resolve_cached_entry(entry, config, profile, name).await {
-                let all_secrets_for_file = config.get_secrets(profile).unwrap_or_default();
-                return self.extract_key_from_creds(name, creds, all_secrets_for_file);
+                return self.extract_key_from_creds(name, creds, all_secrets.clone());
             }
             // Decryption failed even with credentials injected — don't silently
             // create a new (also un-decryptable) lease that repeats the cycle.
