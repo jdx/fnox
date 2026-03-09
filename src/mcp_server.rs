@@ -45,10 +45,8 @@ pub struct FnoxMcpServer {
     profile: Arc<String>,
     mcp_config: Arc<McpConfig>,
     profile_secrets: Arc<IndexMap<String, SecretConfig>>,
-    /// All resolved secrets (used by get_secret)
+    /// Resolved secret values (raw). as_file conversion happens at exec time.
     cache: Arc<RwLock<HashMap<String, String>>>,
-    /// Keeps temp files alive for as_file secrets across the session
-    _temp_files: Arc<RwLock<Vec<tempfile::NamedTempFile>>>,
     /// Tracks whether secrets have been resolved (separate from cache emptiness,
     /// since all secrets may resolve to None for optional/absent secrets).
     resolved: Arc<OnceCell<()>>,
@@ -69,7 +67,6 @@ impl FnoxMcpServer {
             mcp_config: Arc::new(mcp_config),
             profile_secrets: Arc::new(profile_secrets),
             cache: Arc::new(RwLock::new(HashMap::new())),
-            _temp_files: Arc::new(RwLock::new(Vec::new())),
             resolved: Arc::new(OnceCell::new()),
             tool_router: Self::tool_router(),
         }
@@ -80,15 +77,11 @@ impl FnoxMcpServer {
     ///
     /// env=false secrets are NOT resolved here — they are more sensitive and
     /// resolved on-demand by `get_secret` to avoid unnecessary auth prompts.
-    ///
-    /// Secrets with `as_file = true` are written to temp files; the cache
-    /// stores the file path instead of the raw value.
     async fn ensure_resolved(&self) -> Result<(), McpError> {
         let config = self.config.clone();
         let profile = self.profile.clone();
         let profile_secrets = self.profile_secrets.clone();
         let cache = self.cache.clone();
-        let temp_files = self._temp_files.clone();
 
         self.resolved
             .get_or_try_init(|| async {
@@ -106,16 +99,9 @@ impl FnoxMcpServer {
                     })?;
 
                 let mut cache = cache.write().await;
-                let mut temp_files = temp_files.write().await;
                 for (key, value) in resolved {
                     if let Some(v) = value {
-                        Self::insert_into_cache(
-                            &key,
-                            v,
-                            &profile_secrets,
-                            &mut cache,
-                            &mut temp_files,
-                        )?;
+                        cache.insert(key, v);
                     }
                 }
 
@@ -154,48 +140,36 @@ impl FnoxMcpServer {
             })?;
 
         let value = resolved.into_iter().next().and_then(|(_, v)| v);
-        if let Some(v) = &value {
+        if let Some(v) = value {
             let mut cache = self.cache.write().await;
-            let mut temp_files = self._temp_files.write().await;
-            Self::insert_into_cache(
-                name,
-                v.clone(),
-                &self.profile_secrets,
-                &mut cache,
-                &mut temp_files,
-            )?;
-            // Return the cached value, which may differ from the raw value
-            // (e.g. as_file secrets store a temp file path instead).
-            return Ok(cache.get(name).cloned());
+            // Re-check under write lock to avoid TOCTOU race: another concurrent
+            // get_secret may have resolved and cached this while we were waiting.
+            if let Some(existing) = cache.get(name) {
+                return Ok(Some(existing.clone()));
+            }
+            cache.insert(name.to_string(), v.clone());
+            return Ok(Some(v));
         }
 
         Ok(None)
     }
 
-    /// Insert a resolved secret into the cache, handling as_file conversion.
-    fn insert_into_cache(
+    /// Write a secret value to a temp file and return the path.
+    /// The temp file handle is pushed to `temp_files` to keep it alive.
+    fn create_secret_file(
         key: &str,
-        value: String,
-        profile_secrets: &IndexMap<String, SecretConfig>,
-        cache: &mut HashMap<String, String>,
+        value: &str,
         temp_files: &mut Vec<tempfile::NamedTempFile>,
-    ) -> Result<(), McpError> {
-        if let Some(secret_config) = profile_secrets.get(key)
-            && secret_config.as_file
-        {
-            let temp_file = create_ephemeral_secret_file(key, &value).map_err(|e| {
-                McpError::internal_error(
-                    format!("Failed to create temp file for secret '{key}': {e}"),
-                    None,
-                )
-            })?;
-            let file_path = temp_file.path().to_string_lossy().to_string();
-            temp_files.push(temp_file);
-            cache.insert(key.to_string(), file_path);
-        } else {
-            cache.insert(key.to_string(), value);
-        }
-        Ok(())
+    ) -> Result<String, McpError> {
+        let temp_file = create_ephemeral_secret_file(key, value).map_err(|e| {
+            McpError::internal_error(
+                format!("Failed to create temp file for secret '{key}': {e}"),
+                None,
+            )
+        })?;
+        let file_path = temp_file.path().to_string_lossy().to_string();
+        temp_files.push(temp_file);
+        Ok(file_path)
     }
 
     /// Retrieve a single secret by name.
@@ -285,14 +259,25 @@ impl FnoxMcpServer {
                 .collect()
         };
 
+        // For as_file secrets, write raw values to temp files and inject the
+        // file path as the env var. Temp files are kept alive until the
+        // subprocess completes (held in _exec_temp_files).
+        let mut _exec_temp_files = Vec::new();
         let mut cmd = tokio::process::Command::new(&params.command[0]);
         if params.command.len() > 1 {
             cmd.args(&params.command[1..]);
         }
 
-        // Inject filtered secrets as env vars
+        // Inject filtered secrets as env vars, converting as_file to temp paths
         for (key, value) in &env_vars {
-            cmd.env(key, value);
+            if let Some(sc) = self.profile_secrets.get(key.as_str())
+                && sc.as_file
+            {
+                let path = Self::create_secret_file(key, value, &mut _exec_temp_files)?;
+                cmd.env(key, &path);
+            } else {
+                cmd.env(key, value);
+            }
         }
 
         // Strip env=false secrets that resolve_secrets_batch may have set
@@ -316,7 +301,7 @@ impl FnoxMcpServer {
             .mcp_config
             .exec_timeout_secs
             .unwrap_or(DEFAULT_EXEC_TIMEOUT_SECS);
-        let mut child = cmd.spawn().map_err(|e| {
+        let child = cmd.spawn().map_err(|e| {
             McpError::internal_error(
                 format!("Failed to execute command '{}': {e}", params.command[0]),
                 None,
