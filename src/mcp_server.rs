@@ -343,37 +343,42 @@ impl FnoxMcpServer {
             )
         })?;
 
-        // Read stdout/stderr with bounded buffers to prevent OOM from commands
-        // that produce large output. We read up to MAX_OUTPUT_BYTES + 1 so we
-        // can detect truncation, then wait for the child to exit.
+        // Read stdout/stderr concurrently with bounded buffers to prevent both
+        // OOM and pipe deadlocks (sequential reads can deadlock if the child
+        // fills one pipe buffer while we're blocked reading the other).
         let mut child_stdout = child.stdout.take();
         let mut child_stderr = child.stderr.take();
 
         let collect_bounded = async {
             use tokio::io::AsyncReadExt;
-            let read_limit = MAX_OUTPUT_BYTES + 1; // +1 to detect truncation
+            // Split budget: half for stdout, half for stderr (+1 each to detect truncation)
+            let per_stream_limit = (MAX_OUTPUT_BYTES / 2) + 1;
 
-            let mut stdout_buf = Vec::with_capacity(read_limit.min(65536));
-            if let Some(ref mut out) = child_stdout {
-                out.take(read_limit as u64)
-                    .read_to_end(&mut stdout_buf)
-                    .await
-                    .ok();
-            }
+            let stdout_fut = async {
+                let mut buf = Vec::with_capacity(per_stream_limit.min(65536));
+                if let Some(ref mut out) = child_stdout {
+                    out.take(per_stream_limit as u64)
+                        .read_to_end(&mut buf)
+                        .await
+                        .ok();
+                }
+                drop(child_stdout);
+                buf
+            };
 
-            let stderr_budget = read_limit.saturating_sub(stdout_buf.len());
-            let mut stderr_buf = Vec::with_capacity(stderr_budget.min(65536));
-            if let Some(ref mut err) = child_stderr {
-                err.take(stderr_budget as u64)
-                    .read_to_end(&mut stderr_buf)
-                    .await
-                    .ok();
-            }
+            let stderr_fut = async {
+                let mut buf = Vec::with_capacity(per_stream_limit.min(65536));
+                if let Some(ref mut err) = child_stderr {
+                    err.take(per_stream_limit as u64)
+                        .read_to_end(&mut buf)
+                        .await
+                        .ok();
+                }
+                drop(child_stderr);
+                buf
+            };
 
-            // Drop pipe handles so the child can exit if it's blocked on write
-            drop(child_stdout);
-            drop(child_stderr);
-
+            let (stdout_buf, stderr_buf) = tokio::join!(stdout_fut, stderr_fut);
             let status = child.wait().await;
             (stdout_buf, stderr_buf, status)
         };
