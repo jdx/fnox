@@ -416,9 +416,9 @@ impl FnoxMcpServer {
         let stderr_truncated = stderr_buf.len() >= per_stream_cap;
         let truncated = stdout_truncated || stderr_truncated || total_collected > MAX_OUTPUT_BYTES;
 
-        let stdout = String::from_utf8_lossy(&stdout_buf[..stdout_buf.len().min(MAX_OUTPUT_BYTES)]);
-        let stderr_cap = MAX_OUTPUT_BYTES.saturating_sub(stdout_buf.len().min(MAX_OUTPUT_BYTES));
-        let stderr = String::from_utf8_lossy(&stderr_buf[..stderr_buf.len().min(stderr_cap)]);
+        let display_limit = PER_STREAM_LIMIT - 1;
+        let stdout = String::from_utf8_lossy(&stdout_buf[..stdout_buf.len().min(display_limit)]);
+        let stderr = String::from_utf8_lossy(&stderr_buf[..stderr_buf.len().min(display_limit)]);
 
         let mut parts = Vec::new();
         if !stdout.is_empty() {

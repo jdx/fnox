@@ -65,7 +65,7 @@ Retrieves a single secret by name. The agent provides the secret name (must matc
 
 ### `exec`
 
-Executes a command with all secrets injected as environment variables. The agent provides a command and arguments, and receives stdout/stderr output. The agent never sees the raw secret values — they're only present in the subprocess environment.
+Executes a command with all secrets injected as environment variables. The agent provides a command and arguments, and receives stdout/stderr output. Note that the agent controls the command, so it could run `printenv` or `echo $SECRET` to read injected values — `exec` provides **audit visibility** (you can see what commands were run), not secret isolation.
 
 ## How It Works
 
@@ -80,5 +80,5 @@ Executes a command with all secrets injected as environment variables. The agent
 - Secrets live only in process memory — except for `as_file = true` secrets, which are written to ephemeral temp files for subprocess injection and deleted when the command completes
 - The `exec` tool captures stdout/stderr (does not inherit stdio, which would corrupt the JSON-RPC stream) and caps output at 1 MiB to prevent unbounded memory usage
 - Non-interactive mode prevents provider auth prompts from interfering with the protocol
-- Use `tools = ["exec"]` to prevent agents from reading raw secret values
+- With `tools = ["exec"]`, agents don't receive secrets via `get_secret`, but can still read injected env vars by running commands like `printenv`. This provides audit visibility rather than strict secret isolation
 - Disabled tools are not advertised in `tools/list` — agents only see tools they can actually call

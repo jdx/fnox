@@ -254,8 +254,9 @@ pub struct McpConfig {
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "tools")]
     tools_raw: Option<Vec<McpTool>>,
 
-    /// Timeout in seconds for exec tool subprocess (default: 300)
+    /// Timeout in seconds for exec tool subprocess (default: 300, minimum: 1)
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 1))]
     pub exec_timeout_secs: Option<u64>,
 }
 
