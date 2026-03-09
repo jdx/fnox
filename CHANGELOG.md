@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.17.0](https://github.com/jdx/fnox/compare/v1.16.1..v1.17.0) - 2026-03-09
+
+### 🚀 Features
+
+- **(cloudflare)** add Cloudflare API token lease backend by [@jdx](https://github.com/jdx) in [#335](https://github.com/jdx/fnox/pull/335)
+- **(fido2)** bump demand to v2, mask PIN during typing by [@jdx](https://github.com/jdx) in [#334](https://github.com/jdx/fnox/pull/334)
+- **(get)** resolve leased credentials from `fnox get` by [@jdx](https://github.com/jdx) in [#338](https://github.com/jdx/fnox/pull/338)
+- **(init)** add -f as short alias for --force by [@jdx](https://github.com/jdx) in [#329](https://github.com/jdx/fnox/pull/329)
+- **(lease)** add --all flag, default to creating all leases by [@jdx](https://github.com/jdx) in [#337](https://github.com/jdx/fnox/pull/337)
+- **(lease)** add GitHub App installation token lease backend by [@jdx](https://github.com/jdx) in [#342](https://github.com/jdx/fnox/pull/342)
+
+### 🐛 Bug Fixes
+
+- **(config)** fix directory locations to follow XDG spec by [@jdx](https://github.com/jdx) in [#336](https://github.com/jdx/fnox/pull/336)
+- **(exec)** use unix exec and exit silently on subprocess failure by [@jdx](https://github.com/jdx) in [#339](https://github.com/jdx/fnox/pull/339)
+- **(fido2)** remove duplicate touch prompt by [@jdx](https://github.com/jdx) in [#332](https://github.com/jdx/fnox/pull/332)
+- **(set)** write to lowest-priority existing config file by [@jdx](https://github.com/jdx) in [#331](https://github.com/jdx/fnox/pull/331)
+- **(tui)** skip providers requiring interactive auth by [@jdx](https://github.com/jdx) in [#333](https://github.com/jdx/fnox/pull/333)
+
+### 🛡️ Security
+
+- **(ci)** retry lint step to handle transient pkl fetch failures by [@jdx](https://github.com/jdx) in [#341](https://github.com/jdx/fnox/pull/341)
+- **(mcp)** add MCP server for secret-gated AI agent access by [@jdx](https://github.com/jdx) in [#343](https://github.com/jdx/fnox/pull/343)
+- add guide for fnox sync by [@jdx](https://github.com/jdx) in [#328](https://github.com/jdx/fnox/pull/328)
+
+### 🔍 Other Changes
+
+- share Rust cache across CI jobs by [@jdx](https://github.com/jdx) in [#340](https://github.com/jdx/fnox/pull/340)
+
 ## [1.16.1](https://github.com/jdx/fnox/compare/v1.16.0..v1.16.1) - 2026-03-08
 
 ### 🐛 Bug Fixes
