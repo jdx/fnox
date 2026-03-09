@@ -231,9 +231,8 @@ impl SyncCommand {
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("."));
             (
-                config_dir.join(
-                    local_override_filename.expect("validated local override filename"),
-                ),
+                config_dir
+                    .join(local_override_filename.expect("validated local override filename")),
                 true,
             )
         } else if self.global {
