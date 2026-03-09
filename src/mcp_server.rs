@@ -100,28 +100,30 @@ impl FnoxMcpServer {
                     // Skip secrets marked env=false — they should only be
                     // accessible via `fnox get`, not injected into env.
                     if let Some(secret_config) = profile_secrets.get(&key)
-                        && !secret_config.env {
-                            continue;
-                        }
+                        && !secret_config.env
+                    {
+                        continue;
+                    }
 
                     if let Some(v) = value {
                         // Handle as_file: write to temp file, store path
                         if let Some(secret_config) = profile_secrets.get(&key)
-                            && secret_config.as_file {
-                                let temp_file =
-                                    create_ephemeral_secret_file(&key, &v).map_err(|e| {
-                                        McpError::internal_error(
-                                            format!(
-                                                "Failed to create temp file for secret '{key}': {e}"
-                                            ),
-                                            None,
-                                        )
-                                    })?;
-                                let file_path = temp_file.path().to_string_lossy().to_string();
-                                temp_files.push(temp_file);
-                                cache.insert(key, file_path);
-                                continue;
-                            }
+                            && secret_config.as_file
+                        {
+                            let temp_file =
+                                create_ephemeral_secret_file(&key, &v).map_err(|e| {
+                                    McpError::internal_error(
+                                        format!(
+                                            "Failed to create temp file for secret '{key}': {e}"
+                                        ),
+                                        None,
+                                    )
+                                })?;
+                            let file_path = temp_file.path().to_string_lossy().to_string();
+                            temp_files.push(temp_file);
+                            cache.insert(key, file_path);
+                            continue;
+                        }
                         cache.insert(key, v);
                     }
                 }
