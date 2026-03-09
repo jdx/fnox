@@ -406,8 +406,11 @@ impl FnoxMcpServer {
             )
         })?;
 
+        let per_stream_cap = (MAX_OUTPUT_BYTES / 2) + 1;
         let total_collected = stdout_buf.len() + stderr_buf.len();
-        let truncated = total_collected > MAX_OUTPUT_BYTES;
+        let truncated = stdout_buf.len() >= per_stream_cap
+            || stderr_buf.len() >= per_stream_cap
+            || total_collected > MAX_OUTPUT_BYTES;
 
         let stdout = String::from_utf8_lossy(&stdout_buf[..stdout_buf.len().min(MAX_OUTPUT_BYTES)]);
         let stderr_cap = MAX_OUTPUT_BYTES.saturating_sub(stdout_buf.len().min(MAX_OUTPUT_BYTES));
