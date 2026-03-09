@@ -123,6 +123,21 @@ EOF
 	diff fnox.toml fnox.toml.orig
 }
 
+@test "fnox sync --dry-run --local-file shows marker without creating file" {
+	setup_sync_env
+
+	cp fnox.toml fnox.toml.orig
+
+	assert_fnox_success sync -p age --dry-run --local-file
+	assert_output --partial "[dry-run]"
+	assert_output --partial "(local-file)"
+	assert_output --partial "MY_SECRET"
+	assert_output --partial "ANOTHER_SECRET"
+
+	[ ! -f fnox.local.toml ]
+	diff fnox.toml fnox.toml.orig
+}
+
 @test "fnox sync --local-file writes sync overrides to fnox.local.toml" {
 	setup_sync_env
 
