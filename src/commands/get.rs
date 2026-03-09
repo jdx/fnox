@@ -227,8 +227,12 @@ impl GetCommand {
     ) -> Result<Option<(String, IndexMap<String, SecretConfig>)>> {
         match creds.get(&self.key) {
             Some(value) => Ok(Some((value.clone(), all_secrets))),
+            // This is a backend contract violation (produces_env_var returned true
+            // but the credential map lacks the key), not a static config error.
+            // Using FnoxError::Config for now as there is no dedicated variant.
             None => Err(FnoxError::Config(format!(
-                "Lease '{}' claims to produce '{}' but returned credentials did not contain it",
+                "Lease '{}' produced credentials at runtime but the expected key '{}' was absent. \
+                 This is a backend contract violation, not a config error.",
                 name, self.key,
             ))),
         }
