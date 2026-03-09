@@ -420,9 +420,11 @@ pub enum FnoxError {
     #[diagnostic(
         code(fnox::lease::contract_violation),
         help(
-            "The lease backend's produces_env_var() reported it provides '{key}', \
-             but the credential map returned at runtime did not contain it. \
-             This is a bug in the backend implementation."
+            "The lease backend '{lease}' declared it would produce env var '{key}' \
+             (via produces_env_var()), but the credential map returned at runtime \
+             did not contain it. For Vault backends, verify that the remote secret \
+             path contains the key specified in your env_map configuration. For \
+             other backends, this may indicate a bug in the backend implementation."
         )
     )]
     LeaseContractViolation { lease: String, key: String },
