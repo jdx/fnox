@@ -63,6 +63,7 @@ export default defineConfig({
           { text: "Import/Export", link: "/guide/import-export" },
           { text: "Syncing Secrets Locally", link: "/guide/sync" },
           { text: "Credential Leases", link: "/guide/leases" },
+          { text: "MCP Server", link: "/guide/mcp" },
         ],
       },
       {
