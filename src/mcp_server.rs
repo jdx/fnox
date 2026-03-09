@@ -321,6 +321,12 @@ impl FnoxMcpServer {
             .mcp_config
             .exec_timeout_secs
             .unwrap_or(DEFAULT_EXEC_TIMEOUT_SECS);
+        if timeout_secs == 0 {
+            return Err(McpError::invalid_params(
+                "exec_timeout_secs must be >= 1 (use a large value to effectively disable the timeout)",
+                None,
+            ));
+        }
         let child = cmd.spawn().map_err(|e| {
             McpError::internal_error(
                 format!("Failed to execute command '{}': {e}", params.command[0]),
@@ -401,9 +407,11 @@ impl ServerHandler for FnoxMcpServer {
         } else if has_get_secret {
             "fnox MCP server — a session-scoped secret broker. \
              Use get_secret to retrieve individual secrets."
-        } else {
+        } else if has_exec {
             "fnox MCP server — a session-scoped secret broker. \
              Use exec to run commands with secrets injected as environment variables."
+        } else {
+            "fnox MCP server — no tools are currently enabled."
         };
 
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
