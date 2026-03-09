@@ -86,6 +86,7 @@ which = "7"
 yubico_manager = "0.9"
 signal-hook = "0.4.3"
 nix = { version = "0.31.2", features = ["signal", "process"] }
+jsonwebtoken = { version = "10.3.0", features = ["aws_lc_rs"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus = { version = "0.9", features = ["vendored"] }

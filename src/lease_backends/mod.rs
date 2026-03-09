@@ -10,6 +10,7 @@ pub mod azure_token;
 pub mod cloudflare;
 pub mod command;
 pub mod gcp_iam;
+pub mod github_app;
 pub mod vault;
 
 /// A credential lease with metadata for tracking and revocation
@@ -61,6 +62,10 @@ fn default_azure_env_var() -> String {
 
 fn default_cloudflare_env_var() -> String {
     "CLOUDFLARE_API_TOKEN".to_string()
+}
+
+fn default_github_env_var() -> String {
+    "GITHUB_TOKEN".to_string()
 }
 
 /// Generate a unique lease ID with a prefix.
@@ -134,6 +139,24 @@ pub enum LeaseBackendConfig {
         #[serde(skip_serializing_if = "Option::is_none")]
         duration: Option<String>,
     },
+    /// GitHub App Installation Token
+    GithubApp {
+        app_id: String,
+        installation_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        private_key_file: Option<String>,
+        #[serde(default = "default_github_env_var")]
+        env_var: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        permissions: Option<IndexMap<String, String>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        repositories: Option<Vec<String>>,
+        /// GitHub API base URL (default: https://api.github.com)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        api_base: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        duration: Option<String>,
+    },
     /// Generic Command Backend
     Command {
         create_command: String,
@@ -159,6 +182,9 @@ impl LeaseBackendConfig {
             }
             LeaseBackendConfig::AzureToken { .. } => azure_token::check_prerequisites(),
             LeaseBackendConfig::Cloudflare { .. } => cloudflare::check_prerequisites(),
+            LeaseBackendConfig::GithubApp {
+                private_key_file, ..
+            } => github_app::check_prerequisites(private_key_file),
             LeaseBackendConfig::Command { .. } => command::check_prerequisites(),
         }
     }
@@ -175,6 +201,7 @@ impl LeaseBackendConfig {
             }
             LeaseBackendConfig::AzureToken { .. } => azure_token::required_env_vars(),
             LeaseBackendConfig::Cloudflare { .. } => cloudflare::required_env_vars(),
+            LeaseBackendConfig::GithubApp { .. } => github_app::required_env_vars(),
             LeaseBackendConfig::Command { .. } => command::required_env_vars(),
         }
     }
@@ -235,6 +262,24 @@ impl LeaseBackendConfig {
                 policies.clone(),
                 env_var.clone(),
             )?)),
+            LeaseBackendConfig::GithubApp {
+                app_id,
+                installation_id,
+                private_key_file,
+                env_var,
+                permissions,
+                repositories,
+                api_base,
+                ..
+            } => Ok(Box::new(github_app::GitHubAppBackend::new(
+                app_id.clone(),
+                installation_id.clone(),
+                private_key_file.clone(),
+                env_var.clone(),
+                permissions.clone(),
+                repositories.clone(),
+                api_base.clone(),
+            ))),
             LeaseBackendConfig::Command {
                 create_command,
                 revoke_command,
@@ -279,6 +324,7 @@ impl LeaseBackendConfig {
             | LeaseBackendConfig::Vault { duration, .. }
             | LeaseBackendConfig::AzureToken { duration, .. }
             | LeaseBackendConfig::Cloudflare { duration, .. }
+            | LeaseBackendConfig::GithubApp { duration, .. }
             | LeaseBackendConfig::Command { duration, .. } => duration.as_deref(),
         }
     }
