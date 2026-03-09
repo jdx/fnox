@@ -731,6 +731,20 @@
         "hidden_aliases": [],
         "examples": []
       },
+      "mcp": {
+        "full_cmd": ["mcp"],
+        "usage": "mcp",
+        "subcommands": {},
+        "args": [],
+        "flags": [],
+        "mounts": [],
+        "hide": false,
+        "help": "Start an MCP server for secret-gated AI agent access",
+        "name": "mcp",
+        "aliases": [],
+        "hidden_aliases": [],
+        "examples": []
+      },
       "profiles": {
         "full_cmd": ["profiles"],
         "usage": "profiles",

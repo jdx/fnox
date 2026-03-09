@@ -56,6 +56,7 @@ Do not merge top-level secrets into the selected profile
 - [`fnox lease list [--active] [--expired]`](/cli/lease/list.md)
 - [`fnox lease revoke <LEASE_ID>`](/cli/lease/revoke.md)
 - [`fnox list [FLAGS]`](/cli/list.md)
+- [`fnox mcp`](/cli/mcp.md)
 - [`fnox profiles`](/cli/profiles.md)
 - [`fnox provider <SUBCOMMAND>`](/cli/provider.md)
 - [`fnox provider add [-g --global] [--vault <VAULT>] <PROVIDER> <PROVIDER_TYPE>`](/cli/provider/add.md)

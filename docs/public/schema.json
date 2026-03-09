@@ -43,6 +43,17 @@
         "$ref": "#/$defs/LeaseBackendConfig"
       }
     },
+    "mcp": {
+      "description": "MCP server configuration",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/McpConfig"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "profiles": {
       "description": "Named profiles",
       "type": "object",
@@ -311,6 +322,21 @@
           "required": ["type", "create_command"]
         }
       ]
+    },
+    "McpConfig": {
+      "description": "MCP server configuration",
+      "type": "object",
+      "properties": {
+        "tools": {
+          "description": "Which MCP tools to expose (default: [\"get_secret\", \"exec\"])",
+          "type": "array",
+          "default": ["get_secret", "exec"],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
     },
     "OptionStringOrSecretRef": {
       "description": "An optional value that can be a literal string, a secret reference, or absent.\n\nIn TOML, this deserializes from:\n- Field absent: `None`\n- `field = \"literal-value\"`: `Some(Literal(\"literal-value\"))`\n- `field = { secret = \"SECRET_NAME\" }`: `Some(SecretRef { secret: \"SECRET_NAME\" })`",

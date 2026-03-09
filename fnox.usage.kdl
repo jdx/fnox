@@ -124,6 +124,7 @@ cmd list help="List all secrets" {
     flag "-V --values" help="Show secret values (if available)"
     flag --complete help="Output secret keys for shell completion (one per line)" hide=#true
 }
+cmd mcp help="Start an MCP server for secret-gated AI agent access"
 cmd profiles help="List available profiles" {
     alias profile hide=#true
     flag --complete help="Output profile names for shell completion (one per line)" hide=#true
