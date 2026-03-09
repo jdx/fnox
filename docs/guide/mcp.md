@@ -4,7 +4,7 @@
 
 ## Why?
 
-When you give an AI agent `GITHUB_TOKEN` as an environment variable, it can use that token however it wants. The MCP server acts as a **session-scoped secret broker** — secrets are resolved on first access, cached in memory for the session, and never persisted to disk.
+When you give an AI agent `GITHUB_TOKEN` as an environment variable, it can use that token however it wants. The MCP server acts as a **session-scoped secret broker** — secrets are resolved on first access and cached in memory for the session.
 
 ## Quick Setup
 
@@ -70,14 +70,14 @@ Executes a command with all secrets injected as environment variables. The agent
 ## How It Works
 
 1. The MCP server starts in non-interactive mode (no stdin prompts)
-2. On the **first tool call**, all profile secrets are resolved in a single batch — this amortizes the cost of yubikey taps or SSO prompts
+2. On the **first tool call**, all `env = true` profile secrets are resolved in a single batch — this amortizes the cost of yubikey taps or SSO prompts. Secrets configured with `env = false` are resolved on-demand when individually requested via `get_secret`.
 3. Resolved secrets are cached in process memory for the session
 4. Subsequent tool calls use the cache
 5. When the agent disconnects (EOF), the process exits and all secrets are cleared from memory
 
 ## Security Considerations
 
-- Secrets live only in process memory — never written to disk
+- Secrets live only in process memory — except for `as_file = true` secrets, which are written to ephemeral temp files for subprocess injection and deleted when the command completes
 - The `exec` tool captures stdout/stderr (does not inherit stdio, which would corrupt the JSON-RPC stream) and caps output at 1 MiB to prevent unbounded memory usage
 - Non-interactive mode prevents provider auth prompts from interfering with the protocol
 - Use `tools = ["exec"]` to prevent agents from reading raw secret values

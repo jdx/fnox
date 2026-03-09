@@ -40,8 +40,9 @@ pub struct ExecParams {
 
 /// The fnox MCP server — acts as a session-scoped secret broker.
 ///
-/// Secrets are resolved on first access (may require yubikey/SSO), cached in
-/// memory for the session, and never persisted to disk.
+/// Secrets are resolved on first access (may require yubikey/SSO) and cached
+/// in memory for the session. `as_file = true` secrets are written to
+/// ephemeral temp files scoped to each exec call.
 #[derive(Clone)]
 pub struct FnoxMcpServer {
     config: Arc<Config>,
