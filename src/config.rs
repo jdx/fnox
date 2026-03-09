@@ -280,7 +280,6 @@ impl McpConfig {
     }
 }
 
-
 #[derive(
     Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq, ValueEnum, VariantNames,
 )]

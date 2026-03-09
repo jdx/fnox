@@ -226,9 +226,10 @@ impl FnoxMcpServer {
         // Not in cache — check if it's an env=false secret that needs on-demand resolution
         if let Some(secret_config) = self.profile_secrets.get(&params.name) {
             if !secret_config.env
-                && let Some(value) = self.resolve_single(&params.name).await? {
-                    return Ok(CallToolResult::success(vec![Content::text(value)]));
-                }
+                && let Some(value) = self.resolve_single(&params.name).await?
+            {
+                return Ok(CallToolResult::success(vec![Content::text(value)]));
+            }
             // Configured but couldn't resolve
             Err(McpError::internal_error(
                 format!(
