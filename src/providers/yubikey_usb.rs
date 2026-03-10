@@ -3,6 +3,10 @@
 //! This module replaces the `yubico_manager` crate with a minimal implementation
 //! that loads libusb at runtime via `libloading`. If libusb is not installed,
 //! the binary still starts — the YubiKey provider returns a clear error when used.
+//!
+//! The YubiKey OTP frame protocol and USB HID report handling are based on
+//! yubico_manager (https://github.com/wisespace-io/yubico-rs), licensed under
+//! MIT OR Apache-2.0.
 
 use std::ptr;
 use std::thread;
