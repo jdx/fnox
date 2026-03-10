@@ -28,6 +28,7 @@ pub mod resolver;
 pub mod secret_ref;
 pub mod vault;
 pub mod yubikey;
+pub mod yubikey_usb;
 
 pub use bitwarden::BitwardenBackend;
 pub use resolver::resolve_provider_config;

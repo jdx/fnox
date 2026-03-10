@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use super::hw_encrypt;
+use super::yubikey_usb;
 
 pub fn env_dependencies() -> &'static [&'static str] {
     &[]
@@ -56,33 +57,11 @@ impl YubikeyProvider {
 
         eprintln!("Tap your YubiKey...");
 
-        let mut yk = yubico_manager::Yubico::new();
-        let device = yk
-            .find_yubikey()
-            .map_err(|e| FnoxError::Provider(format!("Failed to find YubiKey: {:?}", e)))?;
+        let device = yubikey_usb::find_yubikey()
+            .map_err(|e| FnoxError::Provider(format!("Failed to find YubiKey: {e}")))?;
 
-        let slot = match self.slot {
-            1 => yubico_manager::config::Slot::Slot1,
-            _ => yubico_manager::config::Slot::Slot2,
-        };
-        let command = match self.slot {
-            1 => yubico_manager::config::Command::ChallengeHmac1,
-            _ => yubico_manager::config::Command::ChallengeHmac2,
-        };
-        let yk_conf = yubico_manager::config::Config {
-            product_id: device.product_id,
-            vendor_id: device.vendor_id,
-            variable: false,
-            slot,
-            mode: yubico_manager::config::Mode::Sha1,
-            command,
-        };
-
-        let hmac_result = yk
-            .challenge_response_hmac(&self.challenge, yk_conf)
-            .map_err(|e| {
-                FnoxError::Provider(format!("YubiKey HMAC-SHA1 challenge failed: {:?}", e))
-            })?;
+        let hmac_result = yubikey_usb::challenge_response_hmac(&self.challenge, &device, self.slot)
+            .map_err(|e| FnoxError::Provider(format!("YubiKey HMAC-SHA1 challenge failed: {e}")))?;
 
         let secret = hmac_result.to_vec();
         guard.insert(self.provider_name.clone(), secret.clone());
@@ -120,6 +99,7 @@ impl crate::providers::Provider for YubikeyProvider {
 
 /// Setup helpers for `fnox provider add --type yubikey`
 pub mod setup {
+    use super::yubikey_usb;
     use crate::error::{FnoxError, Result};
 
     pub fn setup_yubikey(provider_name: &str) -> Result<(String, String)> {
@@ -148,36 +128,14 @@ pub mod setup {
         eprintln!("Tap your YubiKey now...");
 
         // Verify the YubiKey works with this challenge
-        let mut yk = yubico_manager::Yubico::new();
-        let device = yk
-            .find_yubikey()
-            .map_err(|e| FnoxError::Provider(format!("Failed to find YubiKey: {:?}", e)))?;
+        let device = yubikey_usb::find_yubikey()
+            .map_err(|e| FnoxError::Provider(format!("Failed to find YubiKey: {e}")))?;
 
-        let slot = match slot_num {
-            1 => yubico_manager::config::Slot::Slot1,
-            _ => yubico_manager::config::Slot::Slot2,
-        };
-        let command = match slot_num {
-            1 => yubico_manager::config::Command::ChallengeHmac1,
-            _ => yubico_manager::config::Command::ChallengeHmac2,
-        };
-        let yk_conf = yubico_manager::config::Config {
-            product_id: device.product_id,
-            vendor_id: device.vendor_id,
-            variable: false,
-            slot,
-            mode: yubico_manager::config::Mode::Sha1,
-            command,
-        };
-
-        let _ = yk
-            .challenge_response_hmac(&challenge, yk_conf)
-            .map_err(|e| {
-                FnoxError::Provider(format!(
-                    "YubiKey HMAC-SHA1 challenge failed: {:?}. Make sure HMAC-SHA1 is configured on slot {}.",
-                    e, slot_num
-                ))
-            })?;
+        yubikey_usb::challenge_response_hmac(&challenge, &device, slot_num).map_err(|e| {
+            FnoxError::Provider(format!(
+                "YubiKey HMAC-SHA1 challenge failed: {e}. Make sure HMAC-SHA1 is configured on slot {slot_num}.",
+            ))
+        })?;
 
         eprintln!(
             "YubiKey verified successfully for provider '{}'.",
