@@ -712,20 +712,20 @@ async fn try_batch_with_auth_retry(
     {
         Ok(batch_results) => {
             let auth_error = extract_auth_error_from_batch(&batch_results);
-            if let Some(ref auth_err) = auth_error {
-                if prompt_and_run_auth(config, provider_config, provider_name, auth_err)? {
-                    // Auth prompt successful, retry the batch operation.
-                    let retry_results = try_get_secrets_batch(
-                        config,
-                        profile,
-                        provider_name,
-                        provider_config,
-                        provider_secrets,
-                    )
-                    .await?;
-                    process_batch_results(secrets, config, retry_results, results)?;
-                    return Ok(std::mem::take(results));
-                }
+            if let Some(ref auth_err) = auth_error
+                && prompt_and_run_auth(config, provider_config, provider_name, auth_err)?
+            {
+                // Auth prompt successful, retry the batch operation.
+                let retry_results = try_get_secrets_batch(
+                    config,
+                    profile,
+                    provider_name,
+                    provider_config,
+                    provider_secrets,
+                )
+                .await?;
+                process_batch_results(secrets, config, retry_results, results)?;
+                return Ok(std::mem::take(results));
             }
             // No auth error, or user declined auth prompt. Process original results.
             process_batch_results(secrets, config, batch_results, results)?;
