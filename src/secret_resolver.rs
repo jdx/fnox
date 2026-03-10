@@ -711,6 +711,23 @@ async fn try_batch_with_auth_retry(
     .await
     {
         Ok(batch_results) => {
+            let auth_error = extract_auth_error_from_batch(&batch_results);
+            if let Some(ref auth_err) = auth_error {
+                if prompt_and_run_auth(config, provider_config, provider_name, auth_err)? {
+                    // Auth prompt successful, retry the batch operation.
+                    let retry_results = try_get_secrets_batch(
+                        config,
+                        profile,
+                        provider_name,
+                        provider_config,
+                        provider_secrets,
+                    )
+                    .await?;
+                    process_batch_results(secrets, config, retry_results, results)?;
+                    return Ok(std::mem::take(results));
+                }
+            }
+            // No auth error, or user declined auth prompt. Process original results.
             process_batch_results(secrets, config, batch_results, results)?;
             Ok(std::mem::take(results))
         }
@@ -760,6 +777,27 @@ fn handle_batch_error(
         results.insert(key.clone(), None);
     }
     Ok(std::mem::take(results))
+}
+
+/// Extract the first auth error from batch results, if any.
+/// Returns an owned clone so we can use it without borrowing `batch_results`.
+fn extract_auth_error_from_batch(
+    batch_results: &HashMap<String, Result<String>>,
+) -> Option<FnoxError> {
+    batch_results.values().find_map(|result| match result {
+        Err(FnoxError::ProviderAuthFailed {
+            provider,
+            details,
+            hint,
+            url,
+        }) => Some(FnoxError::ProviderAuthFailed {
+            provider: provider.clone(),
+            details: details.clone(),
+            hint: hint.clone(),
+            url: url.clone(),
+        }),
+        _ => None,
+    })
 }
 
 /// Helper to get multiple secrets in batch from a provider without auth retry logic.
