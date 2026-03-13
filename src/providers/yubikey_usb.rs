@@ -16,13 +16,20 @@ use crate::error::{FnoxError, Result};
 
 const VENDOR_ID: u16 = 0x1050;
 
-// Known OTP-capable YubiKey product IDs. FIDO2-only Security Keys and YubiKey Bio
-// do not support the HMAC-SHA1 HID frame protocol.
+// OTP-capable YubiKey product IDs, sourced from yubikey-manager (ykman).
+// Only PIDs with the OTP interface enabled support HMAC-SHA1 challenge-response.
+// PIDs without OTP (e.g. 0x0112 NEO CCID, 0x0402 FIDO, 0x0406 FIDO+CCID) are excluded.
 const OTP_PRODUCT_IDS: &[u16] = &[
-    0x0010, // YubiKey 1
-    0x0110, 0x0111, 0x0112, 0x0114, 0x0116, // YubiKey NEO
-    0x0401, 0x0403, 0x0405, 0x0407, // YubiKey 4/5 OTP+U2F, OTP+U2F+CCID, OTP+CCID, OTP
-    0x0410, // YubiKey Plus
+    0x0010, // YubiKey Standard (v1/v2) — OTP
+    0x0110, // YubiKey NEO — OTP
+    0x0111, // YubiKey NEO — OTP+CCID
+    0x0114, // YubiKey NEO — OTP+FIDO
+    0x0116, // YubiKey NEO — OTP+FIDO+CCID
+    0x0401, // YubiKey 4/5 — OTP
+    0x0403, // YubiKey 4/5 — OTP+FIDO
+    0x0405, // YubiKey 4/5 — OTP+CCID
+    0x0407, // YubiKey 4/5 — OTP+FIDO+CCID
+    0x0410, // YubiKey Plus — OTP+FIDO
 ];
 
 // HID constants
@@ -108,7 +115,12 @@ impl LibUsb {
                 "/usr/local/lib/libusb-1.0.0.dylib",
             ]
         } else if cfg!(target_os = "windows") {
-            &["libusb-1.0.dll"]
+            &[
+                "libusb-1.0.dll",
+                "C:\\Program Files\\LibUSB-Win32\\bin\\amd64\\libusb-1.0.dll",
+                "C:\\Program Files\\libusb\\bin\\libusb-1.0.dll",
+                "C:\\vcpkg\\installed\\x64-windows\\bin\\libusb-1.0.dll",
+            ]
         } else {
             // Linux / other Unix
             &["libusb-1.0.so", "libusb-1.0.so.0"]
