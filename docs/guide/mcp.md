@@ -80,5 +80,6 @@ Executes a command with all secrets injected as environment variables. The agent
 - Secrets live only in process memory — except for `as_file = true` secrets, which are written to ephemeral temp files for subprocess injection and deleted when the command completes
 - The `exec` tool captures stdout/stderr (does not inherit stdio, which would corrupt the JSON-RPC stream) and caps output at 1 MiB to prevent unbounded memory usage
 - Non-interactive mode prevents provider auth prompts from interfering with the protocol
-- With `tools = ["exec"]`, agents don't receive secrets via `get_secret`, but can still read injected env vars by running commands like `printenv`. This provides audit visibility rather than strict secret isolation
+- The `exec` tool redacts resolved secret values from stdout/stderr before returning output to the agent — commands like `printenv` or `echo $SECRET` will show `[REDACTED]` instead of the raw value. Redaction performs literal string matching and does not detect base64-encoded or otherwise transformed values. To disable (not recommended): `mcp.redact_output = false`
+- With `tools = ["exec"]` and redaction enabled (default), agents cannot retrieve raw secret values through either `get_secret` or subprocess output
 - Disabled tools are not advertised in `tools/list` — agents only see tools they can actually call

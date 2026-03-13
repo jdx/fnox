@@ -258,6 +258,12 @@ pub struct McpConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 1))]
     pub exec_timeout_secs: Option<u64>,
+
+    /// Whether to redact secret values from exec tool output (default: true).
+    /// When enabled, resolved secret values are replaced with [REDACTED] in
+    /// stdout/stderr before returning to the agent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub redact_output: Option<bool>,
 }
 
 impl McpConfig {
@@ -278,6 +284,11 @@ impl McpConfig {
     /// Set the tools list explicitly
     pub fn set_tools(&mut self, tools: Vec<McpTool>) {
         self.tools_raw = Some(tools);
+    }
+
+    /// Whether exec output redaction is enabled (default: true)
+    pub fn redact_output(&self) -> bool {
+        self.redact_output.unwrap_or(true)
     }
 }
 
@@ -536,6 +547,9 @@ impl Config {
             }
             if overlay_mcp.exec_timeout_secs.is_some() {
                 base_mcp.exec_timeout_secs = overlay_mcp.exec_timeout_secs;
+            }
+            if overlay_mcp.redact_output.is_some() {
+                base_mcp.redact_output = overlay_mcp.redact_output;
             }
         }
 

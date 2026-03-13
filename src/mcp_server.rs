@@ -417,12 +417,25 @@ impl FnoxMcpServer {
         let truncated = stdout_truncated || stderr_truncated || total_collected > MAX_OUTPUT_BYTES;
 
         let display_limit = PER_STREAM_LIMIT - 1;
-        let stdout = String::from_utf8_lossy(&stdout_buf[..stdout_buf.len().min(display_limit)]);
-        let stderr = String::from_utf8_lossy(&stderr_buf[..stderr_buf.len().min(display_limit)]);
+        let stdout_raw =
+            String::from_utf8_lossy(&stdout_buf[..stdout_buf.len().min(display_limit)]);
+        let stderr_raw =
+            String::from_utf8_lossy(&stderr_buf[..stderr_buf.len().min(display_limit)]);
+
+        // Redact secret values from output to prevent exfiltration via
+        // commands like `printenv` or `echo $SECRET`.
+        let (stdout, stderr) = if self.mcp_config.redact_output() {
+            (
+                redact_secrets(&stdout_raw, &env_vars),
+                redact_secrets(&stderr_raw, &env_vars),
+            )
+        } else {
+            (stdout_raw.to_string(), stderr_raw.to_string())
+        };
 
         let mut parts = Vec::new();
         if !stdout.is_empty() {
-            parts.push(stdout.to_string());
+            parts.push(stdout);
         }
         if !stderr.is_empty() {
             parts.push(format!("[stderr]\n{stderr}"));
@@ -452,6 +465,34 @@ impl FnoxMcpServer {
             Ok(CallToolResult::error(vec![Content::text(text)]))
         }
     }
+}
+
+/// Replace all occurrences of secret values in `text` with `[REDACTED]`.
+///
+/// Secrets are sorted longest-first to avoid partial matches (e.g., if secret
+/// "abc" and "abcdef" both exist, "abcdef" is replaced first).
+/// Empty and whitespace-only secrets are skipped to avoid false positives.
+fn redact_secrets(text: &str, secret_values: &[(String, String)]) -> String {
+    let mut values: Vec<&str> = secret_values
+        .iter()
+        .map(|(_, v)| v.as_str())
+        .filter(|v| !v.trim().is_empty())
+        .collect();
+
+    if values.is_empty() {
+        return text.to_string();
+    }
+
+    values.sort_unstable();
+    values.dedup();
+    // Sort longest first for greedy replacement
+    values.sort_by(|a, b| b.len().cmp(&a.len()));
+
+    let mut result = text.to_string();
+    for secret in &values {
+        result = result.replace(secret, "[REDACTED]");
+    }
+    result
 }
 
 /// Manually implement ServerHandler instead of using #[tool_handler] so we can
@@ -528,5 +569,59 @@ impl ServerHandler for FnoxMcpServer {
         }
         let tcc = rmcp::handler::server::tool::ToolCallContext::new(self, request, context);
         self.tool_router.call(tcc).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn redact_replaces_secret_values() {
+        let secrets = vec![
+            ("API_KEY".into(), "sk-abc123".into()),
+            ("DB_PASS".into(), "hunter2".into()),
+        ];
+        let input = "API_KEY=sk-abc123\nDB_PASS=hunter2\nOK=public";
+        let result = redact_secrets(input, &secrets);
+        assert_eq!(result, "API_KEY=[REDACTED]\nDB_PASS=[REDACTED]\nOK=public");
+    }
+
+    #[test]
+    fn redact_longest_first() {
+        let secrets = vec![
+            ("SHORT".into(), "abc".into()),
+            ("LONG".into(), "abcdef".into()),
+        ];
+        let input = "value is abcdef";
+        let result = redact_secrets(input, &secrets);
+        assert_eq!(result, "value is [REDACTED]");
+    }
+
+    #[test]
+    fn redact_skips_empty_secrets() {
+        let secrets = vec![
+            ("EMPTY".into(), "".into()),
+            ("SPACES".into(), "   ".into()),
+            ("REAL".into(), "secret".into()),
+        ];
+        let input = "the secret is here";
+        let result = redact_secrets(input, &secrets);
+        assert_eq!(result, "the [REDACTED] is here");
+    }
+
+    #[test]
+    fn redact_no_secrets_returns_unchanged() {
+        let input = "nothing to redact here";
+        let result = redact_secrets(input, &[]);
+        assert_eq!(result, input);
+    }
+
+    #[test]
+    fn redact_multiple_occurrences() {
+        let secrets = vec![("TOKEN".into(), "xyz".into())];
+        let input = "xyz and xyz again";
+        let result = redact_secrets(input, &secrets);
+        assert_eq!(result, "[REDACTED] and [REDACTED] again");
     }
 }
