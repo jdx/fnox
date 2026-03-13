@@ -1868,4 +1868,55 @@ mod tests {
         let result = super::find_local_config(dir.path(), None);
         assert_eq!(result, dir.path().join("fnox.local.toml"));
     }
+
+    #[test]
+    fn filter_secrets_none_allowlist_returns_all() {
+        let cfg = McpConfig::default(); // secrets: None
+        let mut m = IndexMap::new();
+        m.insert("A".to_string(), SecretConfig::new());
+        m.insert("B".to_string(), SecretConfig::new());
+        let result = cfg.filter_secrets(m.clone());
+        assert_eq!(
+            result.keys().collect::<Vec<_>>(),
+            m.keys().collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn filter_secrets_empty_allowlist_returns_empty() {
+        let cfg = McpConfig {
+            secrets: Some(vec![]),
+            ..Default::default()
+        };
+        let mut m = IndexMap::new();
+        m.insert("A".to_string(), SecretConfig::new());
+        assert!(cfg.filter_secrets(m).is_empty());
+    }
+
+    #[test]
+    fn filter_secrets_subset() {
+        let cfg = McpConfig {
+            secrets: Some(vec!["A".into()]),
+            ..Default::default()
+        };
+        let mut m = IndexMap::new();
+        m.insert("A".to_string(), SecretConfig::new());
+        m.insert("B".to_string(), SecretConfig::new());
+        let result = cfg.filter_secrets(m);
+        assert!(result.contains_key("A"));
+        assert!(!result.contains_key("B"));
+    }
+
+    #[test]
+    fn filter_secrets_unknown_allowlist_entry_ignored() {
+        let cfg = McpConfig {
+            secrets: Some(vec!["A".into(), "NONEXISTENT".into()]),
+            ..Default::default()
+        };
+        let mut m = IndexMap::new();
+        m.insert("A".to_string(), SecretConfig::new());
+        let result = cfg.filter_secrets(m);
+        assert_eq!(result.len(), 1);
+        assert!(result.contains_key("A"));
+    }
 }
