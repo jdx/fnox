@@ -93,7 +93,9 @@ struct LibUsb {
         unsafe extern "C" fn(*mut LibusbDeviceHandle, u8, u8, u16, u16, *mut u8, u16, u32) -> i32,
     kernel_driver_active: unsafe extern "C" fn(*mut LibusbDeviceHandle, i32) -> i32,
     detach_kernel_driver: unsafe extern "C" fn(*mut LibusbDeviceHandle, i32) -> i32,
+    attach_kernel_driver: unsafe extern "C" fn(*mut LibusbDeviceHandle, i32) -> i32,
     claim_interface: unsafe extern "C" fn(*mut LibusbDeviceHandle, i32) -> i32,
+    release_interface: unsafe extern "C" fn(*mut LibusbDeviceHandle, i32) -> i32,
 }
 
 impl LibUsb {
@@ -180,9 +182,19 @@ impl LibUsb {
                     b"libusb_detach_kernel_driver\0",
                 )
                 .map_err(|e| FnoxError::Provider(format!("libusb symbol error: {e}")))?;
+            let attach_kernel_driver = *lib
+                .get::<unsafe extern "C" fn(*mut LibusbDeviceHandle, i32) -> i32>(
+                    b"libusb_attach_kernel_driver\0",
+                )
+                .map_err(|e| FnoxError::Provider(format!("libusb symbol error: {e}")))?;
             let claim_interface = *lib
                 .get::<unsafe extern "C" fn(*mut LibusbDeviceHandle, i32) -> i32>(
                     b"libusb_claim_interface\0",
+                )
+                .map_err(|e| FnoxError::Provider(format!("libusb symbol error: {e}")))?;
+            let release_interface = *lib
+                .get::<unsafe extern "C" fn(*mut LibusbDeviceHandle, i32) -> i32>(
+                    b"libusb_release_interface\0",
                 )
                 .map_err(|e| FnoxError::Provider(format!("libusb symbol error: {e}")))?;
 
@@ -198,7 +210,9 @@ impl LibUsb {
                 control_transfer,
                 kernel_driver_active,
                 detach_kernel_driver,
+                attach_kernel_driver,
                 claim_interface,
+                release_interface,
             })
         }
     }
@@ -304,6 +318,7 @@ impl UsbContext {
                     // Without this, control transfers fail with LIBUSB_ERROR_ACCESS (-3)
                     // or LIBUSB_ERROR_BUSY (-6) because the kernel driver owns the device.
                     // On macOS/Windows this is not needed (returns LIBUSB_ERROR_NOT_SUPPORTED).
+                    let mut driver_was_detached = false;
                     unsafe {
                         let active = (self.lib.kernel_driver_active)(handle, 0);
                         if active == 1 {
@@ -315,9 +330,16 @@ impl UsbContext {
                                     "Failed to detach kernel driver from YubiKey (libusb error {rc})"
                                 )));
                             }
+                            if rc == 0 {
+                                driver_was_detached = true;
+                            }
                         }
                         let rc = (self.lib.claim_interface)(handle, 0);
                         if rc < 0 && rc != -12 {
+                            // Re-attach if we detached before failing
+                            if driver_was_detached {
+                                (self.lib.attach_kernel_driver)(handle, 0);
+                            }
                             (self.lib.close)(handle);
                             return Err(FnoxError::Provider(format!(
                                 "Failed to claim YubiKey interface (libusb error {rc})"
@@ -328,6 +350,7 @@ impl UsbContext {
                     return Ok(DeviceHandle {
                         lib: &self.lib,
                         handle,
+                        driver_was_detached,
                     });
                 }
             }
@@ -351,6 +374,7 @@ impl Drop for UsbContext {
 struct DeviceHandle<'a> {
     lib: &'a LibUsb,
     handle: *mut LibusbDeviceHandle,
+    driver_was_detached: bool,
 }
 
 impl DeviceHandle<'_> {
@@ -492,7 +516,13 @@ impl DeviceHandle<'_> {
 
 impl Drop for DeviceHandle<'_> {
     fn drop(&mut self) {
-        unsafe { (self.lib.close)(self.handle) };
+        unsafe {
+            (self.lib.release_interface)(self.handle, 0);
+            if self.driver_was_detached {
+                (self.lib.attach_kernel_driver)(self.handle, 0);
+            }
+            (self.lib.close)(self.handle);
+        }
     }
 }
 
