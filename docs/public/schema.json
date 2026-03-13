@@ -376,6 +376,10 @@
           "format": "uint64",
           "minimum": 1
         },
+        "redact_output": {
+          "description": "Whether to redact secret values from exec tool output (default: true).\nWhen enabled, resolved secret values are replaced with [REDACTED] in\nstdout/stderr before returning to the agent.",
+          "type": ["boolean", "null"]
+        },
         "tools": {
           "description": "Which MCP tools to expose (default: [\"get_secret\", \"exec\"])",
           "type": ["array", "null"],
