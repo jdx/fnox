@@ -29,6 +29,23 @@ tools = ["get_secret", "exec"]  # default: both enabled
 
 The `tools` array controls which tools are available to the agent. For example, to only allow executing commands without exposing raw secrets, set `tools = ["exec"]`. To only allow retrieving secrets directly, set `tools = ["get_secret"]`.
 
+### Secret allowlist
+
+By default, all profile secrets are available to the MCP server. You can restrict which secrets are visible:
+
+```toml
+[mcp]
+secrets = ["GITHUB_TOKEN", "NPM_TOKEN"]  # only these are available
+```
+
+When `secrets` is set:
+
+- `get_secret` can only retrieve listed secrets; other names return "not found"
+- `exec` only injects listed secrets as environment variables
+- Unlisted secrets are never resolved (no unnecessary auth prompts)
+
+When `secrets` is omitted, all profile secrets are available (the default).
+
 ### 3. Configure your AI agent
 
 For Claude Code, add to `.claude/settings.json`:
@@ -82,4 +99,5 @@ Executes a command with all secrets injected as environment variables. The agent
 - Non-interactive mode prevents provider auth prompts from interfering with the protocol
 - The `exec` tool redacts resolved secret values from stdout/stderr before returning output to the agent — commands like `printenv` or `echo $SECRET` will show `[REDACTED]` instead of the raw value. Redaction performs literal string matching and does not detect base64-encoded or otherwise transformed values. To disable (not recommended): `mcp.redact_output = false`
 - With `tools = ["exec"]` and redaction enabled (default), agents cannot retrieve raw secret values through either `get_secret` or subprocess output
+- Use `mcp.secrets` to limit which secrets the agent can access — unlisted secrets are never resolved or injected
 - Disabled tools are not advertised in `tools/list` — agents only see tools they can actually call

@@ -275,6 +275,12 @@ pub struct McpConfig {
     /// stdout/stderr before returning to the agent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub redact_output: Option<bool>,
+
+    /// Optional allowlist of secret names visible to the MCP server.
+    /// When set, only these secrets are resolved and available via get_secret/exec.
+    /// When None, all profile secrets are available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secrets: Option<Vec<String>>,
 }
 
 impl McpConfig {
@@ -300,6 +306,25 @@ impl McpConfig {
     /// Whether exec output redaction is enabled (default: true)
     pub fn redact_output(&self) -> bool {
         self.redact_output.unwrap_or(true)
+    }
+
+    /// Filter a secrets map to only include allowed secrets.
+    /// Returns the map unchanged if no allowlist is set.
+    pub fn filter_secrets(
+        &self,
+        secrets: IndexMap<String, SecretConfig>,
+    ) -> IndexMap<String, SecretConfig> {
+        match &self.secrets {
+            None => secrets,
+            Some(allowlist) => {
+                let allowed: std::collections::HashSet<&str> =
+                    allowlist.iter().map(|s| s.as_str()).collect();
+                secrets
+                    .into_iter()
+                    .filter(|(k, _)| allowed.contains(k.as_str()))
+                    .collect()
+            }
+        }
     }
 }
 
@@ -561,6 +586,11 @@ impl Config {
             }
             if overlay_mcp.redact_output.is_some() {
                 base_mcp.redact_output = overlay_mcp.redact_output;
+            }
+            // Replace entirely — a partial overlay should not silently
+            // re-expose secrets that the base config restricted.
+            if overlay_mcp.secrets.is_some() {
+                base_mcp.secrets = overlay_mcp.secrets;
             }
         }
 

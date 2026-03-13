@@ -17,8 +17,22 @@ impl McpCommand {
         env::set_non_interactive(true);
 
         let profile = Config::get_profile(cli.profile.as_deref());
-        let profile_secrets = config.get_secrets(&profile)?;
         let mcp_config = config.mcp.clone().unwrap_or_default();
+
+        // Warn about allowlist entries that don't match any configured secret
+        let all_secrets = config.get_secrets(&profile)?;
+        if let Some(ref allowlist) = mcp_config.secrets {
+            for name in allowlist {
+                if !all_secrets.contains_key(name) {
+                    tracing::warn!(
+                        "mcp.secrets allowlist contains '{name}' which is not a configured secret"
+                    );
+                }
+            }
+        }
+
+        // Apply MCP secret allowlist (no-op if not set)
+        let profile_secrets = mcp_config.filter_secrets(all_secrets);
 
         if mcp_config.exec_timeout_secs == Some(0) {
             return Err(FnoxError::Config(
