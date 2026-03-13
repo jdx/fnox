@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.18.0](https://github.com/jdx/fnox/compare/v1.17.0..v1.18.0) - 2026-03-13
+
+### 🚀 Features
+
+- **(mcp)** add secret allowlist to limit agent access by [@jdx](https://github.com/jdx) in [#358](https://github.com/jdx/fnox/pull/358)
+- **(sync)** add --local-file output target by [@florian-lackner365](https://github.com/florian-lackner365) in [#317](https://github.com/jdx/fnox/pull/317)
+
+### 🐛 Bug Fixes
+
+- properly handle auth prompt in batch providers by [@johnpyp](https://github.com/johnpyp) in [#349](https://github.com/jdx/fnox/pull/349)
+
+### 🚜 Refactor
+
+- **(yubikey)** dynamically load libusb at runtime by [@jdx](https://github.com/jdx) in [#348](https://github.com/jdx/fnox/pull/348)
+
+### 🛡️ Security
+
+- **(mcp)** redact secret values from exec output by [@jdx](https://github.com/jdx) in [#357](https://github.com/jdx/fnox/pull/357)
+
+### 📦️ Dependency Updates
+
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#344](https://github.com/jdx/fnox/pull/344)
+- update jdx/mise-action digest to 5228313 by [@renovate[bot]](https://github.com/renovate[bot]) in [#351](https://github.com/jdx/fnox/pull/351)
+- update swatinem/rust-cache digest to e18b497 by [@renovate[bot]](https://github.com/renovate[bot]) in [#352](https://github.com/jdx/fnox/pull/352)
+- update taiki-e/upload-rust-binary-action digest to 381995c by [@renovate[bot]](https://github.com/renovate[bot]) in [#353](https://github.com/jdx/fnox/pull/353)
+- update dependency vue to v3.5.30 by [@renovate[bot]](https://github.com/renovate[bot]) in [#354](https://github.com/jdx/fnox/pull/354)
+- update rust crate openssl-sys to v0.9.112 by [@renovate[bot]](https://github.com/renovate[bot]) in [#355](https://github.com/jdx/fnox/pull/355)
+- update rust crate clap to v4.6.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#356](https://github.com/jdx/fnox/pull/356)
+
+### New Contributors
+
+- @florian-lackner365 made their first contribution in [#317](https://github.com/jdx/fnox/pull/317)
+
 ## [1.17.0](https://github.com/jdx/fnox/compare/v1.16.1..v1.17.0) - 2026-03-09
 
 ### 🚀 Features
