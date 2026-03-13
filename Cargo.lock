@@ -2214,6 +2214,7 @@ version = "1.17.0"
 dependencies = [
  "aes-gcm",
  "age",
+ "aho-corasick",
  "anyhow",
  "arboard",
  "arc-swap",

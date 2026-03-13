@@ -467,32 +467,40 @@ impl FnoxMcpServer {
     }
 }
 
+/// Minimum secret length for redaction. Secrets shorter than this are skipped
+/// to avoid false-positive redaction that corrupts output readability.
+const MIN_REDACT_LENGTH: usize = 3;
+
 /// Replace all occurrences of secret values in `text` with `[REDACTED]`.
 ///
-/// Secrets are sorted longest-first to avoid partial matches (e.g., if secret
-/// "abc" and "abcdef" both exist, "abcdef" is replaced first).
-/// Empty and whitespace-only secrets are skipped to avoid false positives.
+/// Uses Aho-Corasick with leftmost-longest matching for single-pass replacement,
+/// avoiding issues with sequential replacement (e.g., a short secret matching
+/// inside an already-placed `[REDACTED]` marker).
+///
+/// Secrets shorter than `MIN_REDACT_LENGTH` or that are empty/whitespace-only
+/// are skipped to avoid false positives.
 fn redact_secrets(text: &str, secret_values: &[(String, String)]) -> String {
-    let mut values: Vec<&str> = secret_values
+    let values: Vec<&str> = secret_values
         .iter()
         .map(|(_, v)| v.as_str())
-        .filter(|v| !v.trim().is_empty())
+        .filter(|v| {
+            let trimmed = v.trim();
+            !trimmed.is_empty() && trimmed.len() >= MIN_REDACT_LENGTH
+        })
         .collect();
 
     if values.is_empty() {
         return text.to_string();
     }
 
-    values.sort_unstable();
-    values.dedup();
-    // Sort longest first for greedy replacement
-    values.sort_by_key(|v| std::cmp::Reverse(v.len()));
+    let Ok(ac) = aho_corasick::AhoCorasick::builder()
+        .match_kind(aho_corasick::MatchKind::LeftmostLongest)
+        .build(&values)
+    else {
+        return text.to_string();
+    };
 
-    let mut result = text.to_string();
-    for secret in &values {
-        result = result.replace(secret, "[REDACTED]");
-    }
-    result
+    ac.replace_all(text, &vec!["[REDACTED]"; values.len()])
 }
 
 /// Manually implement ServerHandler instead of using #[tool_handler] so we can
@@ -588,7 +596,7 @@ mod tests {
     }
 
     #[test]
-    fn redact_longest_first() {
+    fn redact_longest_match_wins() {
         let secrets = vec![
             ("SHORT".into(), "abc".into()),
             ("LONG".into(), "abcdef".into()),
@@ -599,15 +607,16 @@ mod tests {
     }
 
     #[test]
-    fn redact_skips_empty_secrets() {
+    fn redact_skips_empty_and_short_secrets() {
         let secrets = vec![
             ("EMPTY".into(), "".into()),
             ("SPACES".into(), "   ".into()),
+            ("SHORT".into(), "ab".into()),
             ("REAL".into(), "secret".into()),
         ];
-        let input = "the secret is here";
+        let input = "the secret has ab in it";
         let result = redact_secrets(input, &secrets);
-        assert_eq!(result, "the [REDACTED] is here");
+        assert_eq!(result, "the [REDACTED] has ab in it");
     }
 
     #[test]
@@ -619,9 +628,22 @@ mod tests {
 
     #[test]
     fn redact_multiple_occurrences() {
-        let secrets = vec![("TOKEN".into(), "xyz".into())];
-        let input = "xyz and xyz again";
+        let secrets = vec![("TOKEN".into(), "xyz789".into())];
+        let input = "xyz789 and xyz789 again";
         let result = redact_secrets(input, &secrets);
         assert_eq!(result, "[REDACTED] and [REDACTED] again");
+    }
+
+    #[test]
+    fn redact_does_not_corrupt_markers() {
+        // A secret that is a substring of "[REDACTED]" should not corrupt
+        // already-placed markers (aho-corasick does single-pass replacement).
+        let secrets = vec![
+            ("LONG".into(), "sk-abc123".into()),
+            ("OVERLAP".into(), "DACT".into()),
+        ];
+        let input = "sk-abc123 key";
+        let result = redact_secrets(input, &secrets);
+        assert_eq!(result, "[REDACTED] key");
     }
 }

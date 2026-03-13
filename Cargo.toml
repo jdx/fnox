@@ -16,6 +16,7 @@ path = "src/main.rs"
 [dependencies]
 aes-gcm = "0.10"
 age = { version = "0.11", features = ["ssh"] }
+aho-corasick = "1.1.4"
 anyhow = "1"
 arboard = "3"
 arc-swap = "1"
