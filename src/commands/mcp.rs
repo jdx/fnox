@@ -22,6 +22,11 @@ impl McpCommand {
         // Warn about allowlist entries that don't match any configured secret
         let all_secrets = config.get_secrets(&profile)?;
         if let Some(ref allowlist) = mcp_config.secrets {
+            if allowlist.is_empty() {
+                tracing::warn!(
+                    "mcp.secrets is set to an empty list — no secrets will be available to the MCP server"
+                );
+            }
             for name in allowlist {
                 if !all_secrets.contains_key(name) {
                     tracing::warn!(
