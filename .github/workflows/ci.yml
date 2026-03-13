@@ -30,7 +30,7 @@ jobs:
         with:
           submodules: recursive
       - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           shared-key: debug-${{ matrix.os }}
           save-if: false
@@ -209,7 +209,7 @@ jobs:
         with:
           submodules: recursive
       - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           shared-key: debug-${{ matrix.os }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -263,7 +263,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           submodules: recursive
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           shared-key: msrv
           save-if: ${{ github.ref == 'refs/heads/main' }}
