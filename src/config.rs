@@ -1919,4 +1919,47 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert!(result.contains_key("A"));
     }
+
+    #[test]
+    fn mcp_secrets_overlay_replaces_base_not_appends() {
+        let base = Config {
+            mcp: Some(McpConfig {
+                secrets: Some(vec!["A".into()]),
+                ..Default::default()
+            }),
+            ..Config::new()
+        };
+        let overlay = Config {
+            mcp: Some(McpConfig {
+                secrets: Some(vec!["B".into()]),
+                ..Default::default()
+            }),
+            ..Config::new()
+        };
+        let merged = Config::merge_configs(base, overlay).unwrap();
+        assert_eq!(
+            merged.mcp.unwrap().secrets,
+            Some(vec!["B".into()]),
+            "overlay must replace, not append, the base allowlist"
+        );
+    }
+
+    #[test]
+    fn mcp_secrets_overlay_without_secrets_preserves_base() {
+        let base = Config {
+            mcp: Some(McpConfig {
+                secrets: Some(vec!["A".into()]),
+                ..Default::default()
+            }),
+            ..Config::new()
+        };
+        let overlay = Config {
+            mcp: Some(McpConfig {
+                ..Default::default()
+            }),
+            ..Config::new()
+        };
+        let merged = Config::merge_configs(base, overlay).unwrap();
+        assert_eq!(merged.mcp.unwrap().secrets, Some(vec!["A".into()]));
+    }
 }
