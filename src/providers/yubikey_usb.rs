@@ -10,11 +10,20 @@
 
 use std::ptr;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::error::{FnoxError, Result};
 
 const VENDOR_ID: u16 = 0x1050;
+
+// Known OTP-capable YubiKey product IDs. FIDO2-only Security Keys and YubiKey Bio
+// do not support the HMAC-SHA1 HID frame protocol.
+const OTP_PRODUCT_IDS: &[u16] = &[
+    0x0010, // YubiKey 1
+    0x0110, 0x0111, 0x0112, 0x0114, 0x0116, // YubiKey NEO
+    0x0401, 0x0403, 0x0405, 0x0407, // YubiKey 4/5 OTP+U2F, OTP+U2F+CCID, OTP+CCID, OTP
+    0x0410, // YubiKey Plus
+];
 
 // HID constants
 const HID_GET_REPORT: u8 = 0x01;
@@ -41,6 +50,9 @@ const RESP_PENDING_FLAG: u8 = 0x40;
 // Commands
 const CHALLENGE_HMAC1: u8 = 0x30;
 const CHALLENGE_HMAC2: u8 = 0x38;
+
+// Timeout for wait_for polling loop
+const WAIT_TIMEOUT: Duration = Duration::from_secs(15);
 
 // Opaque libusb types
 enum LibusbContext {}
@@ -79,6 +91,9 @@ struct LibUsb {
     close: unsafe extern "C" fn(*mut LibusbDeviceHandle),
     control_transfer:
         unsafe extern "C" fn(*mut LibusbDeviceHandle, u8, u8, u16, u16, *mut u8, u16, u32) -> i32,
+    kernel_driver_active: unsafe extern "C" fn(*mut LibusbDeviceHandle, i32) -> i32,
+    detach_kernel_driver: unsafe extern "C" fn(*mut LibusbDeviceHandle, i32) -> i32,
+    claim_interface: unsafe extern "C" fn(*mut LibusbDeviceHandle, i32) -> i32,
 }
 
 impl LibUsb {
@@ -155,6 +170,21 @@ impl LibUsb {
                     u32,
                 ) -> i32>(b"libusb_control_transfer\0")
                 .map_err(|e| FnoxError::Provider(format!("libusb symbol error: {e}")))?;
+            let kernel_driver_active = *lib
+                .get::<unsafe extern "C" fn(*mut LibusbDeviceHandle, i32) -> i32>(
+                    b"libusb_kernel_driver_active\0",
+                )
+                .map_err(|e| FnoxError::Provider(format!("libusb symbol error: {e}")))?;
+            let detach_kernel_driver = *lib
+                .get::<unsafe extern "C" fn(*mut LibusbDeviceHandle, i32) -> i32>(
+                    b"libusb_detach_kernel_driver\0",
+                )
+                .map_err(|e| FnoxError::Provider(format!("libusb symbol error: {e}")))?;
+            let claim_interface = *lib
+                .get::<unsafe extern "C" fn(*mut LibusbDeviceHandle, i32) -> i32>(
+                    b"libusb_claim_interface\0",
+                )
+                .map_err(|e| FnoxError::Provider(format!("libusb symbol error: {e}")))?;
 
             Ok(LibUsb {
                 _lib: lib,
@@ -166,6 +196,9 @@ impl LibUsb {
                 open,
                 close,
                 control_transfer,
+                kernel_driver_active,
+                detach_kernel_driver,
+                claim_interface,
             })
         }
     }
@@ -200,6 +233,7 @@ impl UsbContext {
         }
 
         let result = (|| {
+            let mut found_non_otp = false;
             for i in 0..count as usize {
                 let dev = unsafe { *list.add(i) };
                 if dev.is_null() {
@@ -211,15 +245,26 @@ impl UsbContext {
                     continue;
                 }
                 if desc.id_vendor == VENDOR_ID {
-                    return Ok(Device {
-                        vendor_id: desc.id_vendor,
-                        product_id: desc.id_product,
-                    });
+                    if OTP_PRODUCT_IDS.contains(&desc.id_product) {
+                        return Ok(Device {
+                            vendor_id: desc.id_vendor,
+                            product_id: desc.id_product,
+                        });
+                    }
+                    found_non_otp = true;
                 }
             }
-            Err(FnoxError::Provider(
-                "No YubiKey found. Make sure it is plugged in.".to_string(),
-            ))
+            if found_non_otp {
+                Err(FnoxError::Provider(
+                    "Found a Yubico device, but it does not support OTP/HMAC-SHA1. \
+                     FIDO2-only Security Keys are not supported for this provider."
+                        .to_string(),
+                ))
+            } else {
+                Err(FnoxError::Provider(
+                    "No YubiKey found. Make sure it is plugged in.".to_string(),
+                ))
+            }
         })();
 
         unsafe { (self.lib.free_device_list)(list, 1) };
@@ -254,6 +299,32 @@ impl UsbContext {
                             "Failed to open YubiKey (libusb error {rc})"
                         )));
                     }
+
+                    // On Linux, detach the kernel HID driver and claim the interface.
+                    // Without this, control transfers fail with LIBUSB_ERROR_ACCESS (-3)
+                    // or LIBUSB_ERROR_BUSY (-6) because the kernel driver owns the device.
+                    // On macOS/Windows this is not needed (returns LIBUSB_ERROR_NOT_SUPPORTED).
+                    unsafe {
+                        let active = (self.lib.kernel_driver_active)(handle, 0);
+                        if active == 1 {
+                            let rc = (self.lib.detach_kernel_driver)(handle, 0);
+                            if rc < 0 && rc != -12 {
+                                // -12 = LIBUSB_ERROR_NOT_SUPPORTED (macOS/Windows)
+                                (self.lib.close)(handle);
+                                return Err(FnoxError::Provider(format!(
+                                    "Failed to detach kernel driver from YubiKey (libusb error {rc})"
+                                )));
+                            }
+                        }
+                        let rc = (self.lib.claim_interface)(handle, 0);
+                        if rc < 0 && rc != -12 {
+                            (self.lib.close)(handle);
+                            return Err(FnoxError::Provider(format!(
+                                "Failed to claim YubiKey interface (libusb error {rc})"
+                            )));
+                        }
+                    }
+
                     return Ok(DeviceHandle {
                         lib: &self.lib,
                         handle,
@@ -330,8 +401,14 @@ impl DeviceHandle<'_> {
     }
 
     fn wait_for<F: Fn(u8) -> bool>(&self, predicate: F) -> Result<[u8; 8]> {
+        let deadline = Instant::now() + WAIT_TIMEOUT;
         let mut buf = [0u8; 8];
         loop {
+            if Instant::now() > deadline {
+                return Err(FnoxError::Provider(
+                    "Timed out waiting for YubiKey response (is the key plugged in?)".to_string(),
+                ));
+            }
             self.read_report(&mut buf)?;
             let flags = buf[7];
             if predicate(flags) {
@@ -354,6 +431,9 @@ impl DeviceHandle<'_> {
             let is_last = offset + chunk_len >= FRAME_SIZE;
             let is_nonzero = packet[..7].iter().any(|&b| b != 0);
 
+            // NOTE: The YubiKey firmware treats undelivered zero-payload chunks as
+            // zero-filled. This optimization matches yubico_manager behavior and has
+            // been stable across all firmware versions since YubiKey 2.x.
             if is_first || is_last || is_nonzero {
                 packet[7] = SLOT_WRITE_FLAG | seq;
                 self.wait_for(|f| f & SLOT_WRITE_FLAG == 0)?;
@@ -373,10 +453,16 @@ impl DeviceHandle<'_> {
         let mut r0: usize = 7;
 
         loop {
+            if r0 >= 36 {
+                break;
+            }
             let mut buf = [0u8; 8];
             let n = self.read_report(&mut buf)?;
             if n < 8 {
-                break;
+                return Err(FnoxError::Provider(format!(
+                    "YubiKey returned a short HID report ({n} bytes, expected 8); \
+                     is the key still plugged in?"
+                )));
             }
             let end = (r0 + 8).min(36);
             let copy_len = end - r0;
@@ -438,7 +524,8 @@ fn build_frame(payload: &[u8; DATA_SIZE], command: u8) -> [u8; FRAME_SIZE] {
     let mut frame = [0u8; FRAME_SIZE];
     frame[..DATA_SIZE].copy_from_slice(payload);
     frame[DATA_SIZE] = command;
-    let crc = crc16(&frame[..DATA_SIZE]).to_le_bytes();
+    // CRC covers payload + command byte (65 bytes), per YubiKey protocol spec
+    let crc = crc16(&frame[..DATA_SIZE + 1]).to_le_bytes();
     frame[DATA_SIZE + 1] = crc[0];
     frame[DATA_SIZE + 2] = crc[1];
     // filler bytes remain 0
@@ -459,6 +546,12 @@ pub fn find_yubikey() -> Result<Device> {
 ///
 /// Returns the 20-byte HMAC-SHA1 response.
 pub fn challenge_response_hmac(challenge: &[u8], device: &Device, slot: u8) -> Result<[u8; 20]> {
+    if slot != 1 && slot != 2 {
+        return Err(FnoxError::Provider(format!(
+            "Invalid YubiKey slot {slot}, must be 1 or 2"
+        )));
+    }
+
     let ctx = UsbContext::new()?;
     let handle = ctx.open_device(device.vendor_id, device.product_id)?;
 
