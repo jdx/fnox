@@ -426,8 +426,8 @@ impl FnoxMcpServer {
         // commands like `printenv` or `echo $SECRET`.
         let (stdout, stderr) = if self.mcp_config.redact_output() {
             (
-                redact_secrets(&stdout_raw, &env_vars),
-                redact_secrets(&stderr_raw, &env_vars),
+                redact_secrets(&stdout_raw, &env_vars)?,
+                redact_secrets(&stderr_raw, &env_vars)?,
             )
         } else {
             (stdout_raw.to_string(), stderr_raw.to_string())
@@ -481,7 +481,7 @@ const MIN_REDACT_LENGTH: usize = 3;
 /// are skipped to avoid false positives. Values are trimmed before matching
 /// so that trailing newlines (common when secrets are loaded from files) don't
 /// prevent redaction of the core value in output.
-fn redact_secrets(text: &str, secret_values: &[(String, String)]) -> String {
+fn redact_secrets(text: &str, secret_values: &[(String, String)]) -> Result<String, McpError> {
     let values: Vec<&str> = secret_values
         .iter()
         .map(|(_, v)| v.trim())
@@ -489,17 +489,22 @@ fn redact_secrets(text: &str, secret_values: &[(String, String)]) -> String {
         .collect();
 
     if values.is_empty() {
-        return text.to_string();
+        return Ok(text.to_string());
     }
 
-    let Ok(ac) = aho_corasick::AhoCorasick::builder()
+    let ac = aho_corasick::AhoCorasick::builder()
         .match_kind(aho_corasick::MatchKind::LeftmostLongest)
         .build(&values)
-    else {
-        return text.to_string();
-    };
+        .map_err(|e| {
+            McpError::internal_error(
+                format!(
+                    "Failed to build redaction filter: {e}. Refusing to return unredacted output."
+                ),
+                None,
+            )
+        })?;
 
-    ac.replace_all(text, &vec!["[REDACTED]"; values.len()])
+    Ok(ac.replace_all(text, &vec!["[REDACTED]"; values.len()]))
 }
 
 /// Manually implement ServerHandler instead of using #[tool_handler] so we can
@@ -590,7 +595,7 @@ mod tests {
             ("DB_PASS".into(), "hunter2".into()),
         ];
         let input = "API_KEY=sk-abc123\nDB_PASS=hunter2\nOK=public";
-        let result = redact_secrets(input, &secrets);
+        let result = redact_secrets(input, &secrets).unwrap();
         assert_eq!(result, "API_KEY=[REDACTED]\nDB_PASS=[REDACTED]\nOK=public");
     }
 
@@ -601,7 +606,7 @@ mod tests {
             ("LONG".into(), "abcdef".into()),
         ];
         let input = "value is abcdef";
-        let result = redact_secrets(input, &secrets);
+        let result = redact_secrets(input, &secrets).unwrap();
         assert_eq!(result, "value is [REDACTED]");
     }
 
@@ -614,14 +619,14 @@ mod tests {
             ("REAL".into(), "secret".into()),
         ];
         let input = "the secret has ab in it";
-        let result = redact_secrets(input, &secrets);
+        let result = redact_secrets(input, &secrets).unwrap();
         assert_eq!(result, "the [REDACTED] has ab in it");
     }
 
     #[test]
     fn redact_no_secrets_returns_unchanged() {
         let input = "nothing to redact here";
-        let result = redact_secrets(input, &[]);
+        let result = redact_secrets(input, &[]).unwrap();
         assert_eq!(result, input);
     }
 
@@ -629,7 +634,7 @@ mod tests {
     fn redact_multiple_occurrences() {
         let secrets = vec![("TOKEN".into(), "xyz789".into())];
         let input = "xyz789 and xyz789 again";
-        let result = redact_secrets(input, &secrets);
+        let result = redact_secrets(input, &secrets).unwrap();
         assert_eq!(result, "[REDACTED] and [REDACTED] again");
     }
 
@@ -642,7 +647,7 @@ mod tests {
             ("OVERLAP".into(), "DACT".into()),
         ];
         let input = "sk-abc123 key";
-        let result = redact_secrets(input, &secrets);
+        let result = redact_secrets(input, &secrets).unwrap();
         assert_eq!(result, "[REDACTED] key");
     }
 }
