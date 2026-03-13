@@ -478,15 +478,14 @@ const MIN_REDACT_LENGTH: usize = 3;
 /// inside an already-placed `[REDACTED]` marker).
 ///
 /// Secrets shorter than `MIN_REDACT_LENGTH` or that are empty/whitespace-only
-/// are skipped to avoid false positives.
+/// are skipped to avoid false positives. Values are trimmed before matching
+/// so that trailing newlines (common when secrets are loaded from files) don't
+/// prevent redaction of the core value in output.
 fn redact_secrets(text: &str, secret_values: &[(String, String)]) -> String {
     let values: Vec<&str> = secret_values
         .iter()
-        .map(|(_, v)| v.as_str())
-        .filter(|v| {
-            let trimmed = v.trim();
-            !trimmed.is_empty() && trimmed.len() >= MIN_REDACT_LENGTH
-        })
+        .map(|(_, v)| v.trim())
+        .filter(|v| !v.is_empty() && v.len() >= MIN_REDACT_LENGTH)
         .collect();
 
     if values.is_empty() {
