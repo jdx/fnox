@@ -486,7 +486,7 @@ fn redact_secrets(text: &str, secret_values: &[(String, String)]) -> String {
     values.sort_unstable();
     values.dedup();
     // Sort longest first for greedy replacement
-    values.sort_by(|a, b| b.len().cmp(&a.len()));
+    values.sort_by_key(|v| std::cmp::Reverse(v.len()));
 
     let mut result = text.to_string();
     for secret in &values {
