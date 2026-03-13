@@ -57,10 +57,7 @@ impl YubikeyProvider {
 
         eprintln!("Tap your YubiKey...");
 
-        let device = yubikey_usb::find_yubikey()
-            .map_err(|e| FnoxError::Provider(format!("Failed to find YubiKey: {e}")))?;
-
-        let hmac_result = yubikey_usb::challenge_response_hmac(&self.challenge, &device, self.slot)
+        let hmac_result = yubikey_usb::challenge_response_hmac(&self.challenge, self.slot)
             .map_err(|e| FnoxError::Provider(format!("YubiKey HMAC-SHA1 challenge failed: {e}")))?;
 
         let secret = hmac_result.to_vec();
@@ -128,10 +125,7 @@ pub mod setup {
         eprintln!("Tap your YubiKey now...");
 
         // Verify the YubiKey works with this challenge
-        let device = yubikey_usb::find_yubikey()
-            .map_err(|e| FnoxError::Provider(format!("Failed to find YubiKey: {e}")))?;
-
-        yubikey_usb::challenge_response_hmac(&challenge, &device, slot_num).map_err(|e| {
+        yubikey_usb::challenge_response_hmac(&challenge, slot_num).map_err(|e| {
             FnoxError::Provider(format!(
                 "YubiKey HMAC-SHA1 challenge failed: {e}. Make sure HMAC-SHA1 is configured on slot {slot_num}.",
             ))

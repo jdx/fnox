@@ -237,7 +237,9 @@ impl UsbContext {
         Ok(UsbContext { lib, ctx })
     }
 
-    fn find_yubikey(&self) -> Result<Device> {
+    /// Find the first OTP-capable YubiKey and open it in a single enumeration pass.
+    /// This avoids a TOCTOU gap between finding and opening the device.
+    fn find_and_open(&self) -> Result<DeviceHandle<'_>> {
         let mut list: *mut *mut LibusbDevice = ptr::null_mut();
         let count = unsafe { (self.lib.get_device_list)(self.ctx, &mut list) };
         if count < 0 {
@@ -259,53 +261,11 @@ impl UsbContext {
                     continue;
                 }
                 if desc.id_vendor == VENDOR_ID {
-                    if OTP_PRODUCT_IDS.contains(&desc.id_product) {
-                        return Ok(Device {
-                            vendor_id: desc.id_vendor,
-                            product_id: desc.id_product,
-                        });
+                    if !OTP_PRODUCT_IDS.contains(&desc.id_product) {
+                        found_non_otp = true;
+                        continue;
                     }
-                    found_non_otp = true;
-                }
-            }
-            if found_non_otp {
-                Err(FnoxError::Provider(
-                    "Found a Yubico device, but it does not support OTP/HMAC-SHA1. \
-                     FIDO2-only Security Keys are not supported for this provider."
-                        .to_string(),
-                ))
-            } else {
-                Err(FnoxError::Provider(
-                    "No YubiKey found. Make sure it is plugged in.".to_string(),
-                ))
-            }
-        })();
 
-        unsafe { (self.lib.free_device_list)(list, 1) };
-        result
-    }
-
-    fn open_device(&self, vid: u16, pid: u16) -> Result<DeviceHandle<'_>> {
-        let mut list: *mut *mut LibusbDevice = ptr::null_mut();
-        let count = unsafe { (self.lib.get_device_list)(self.ctx, &mut list) };
-        if count < 0 {
-            return Err(FnoxError::Provider(
-                "Failed to enumerate USB devices".to_string(),
-            ));
-        }
-
-        let result = (|| {
-            for i in 0..count as usize {
-                let dev = unsafe { *list.add(i) };
-                if dev.is_null() {
-                    break;
-                }
-                let mut desc = LibusbDeviceDescriptor::default();
-                let rc = unsafe { (self.lib.get_device_descriptor)(dev, &mut desc) };
-                if rc < 0 {
-                    continue;
-                }
-                if desc.id_vendor == vid && desc.id_product == pid {
                     let mut handle: *mut LibusbDeviceHandle = ptr::null_mut();
                     let rc = unsafe { (self.lib.open)(dev, &mut handle) };
                     if rc < 0 {
@@ -336,7 +296,6 @@ impl UsbContext {
                         }
                         let rc = (self.lib.claim_interface)(handle, 0);
                         if rc < 0 && rc != -12 {
-                            // Re-attach if we detached before failing
                             if driver_was_detached {
                                 (self.lib.attach_kernel_driver)(handle, 0);
                             }
@@ -354,9 +313,17 @@ impl UsbContext {
                     });
                 }
             }
-            Err(FnoxError::Provider(
-                "YubiKey not found during open".to_string(),
-            ))
+            if found_non_otp {
+                Err(FnoxError::Provider(
+                    "Found a Yubico device, but it does not support OTP/HMAC-SHA1. \
+                     FIDO2-only Security Keys are not supported for this provider."
+                        .to_string(),
+                ))
+            } else {
+                Err(FnoxError::Provider(
+                    "No YubiKey found. Make sure it is plugged in.".to_string(),
+                ))
+            }
         })();
 
         unsafe { (self.lib.free_device_list)(list, 1) };
@@ -529,12 +496,6 @@ impl Drop for DeviceHandle<'_> {
 // Ensure the handle types are Send (the raw pointers are only accessed from one thread).
 unsafe impl Send for UsbContext {}
 
-#[derive(Clone, Debug)]
-pub struct Device {
-    pub vendor_id: u16,
-    pub product_id: u16,
-}
-
 fn crc16(data: &[u8]) -> u16 {
     let mut crc = CRC_PRESET;
     for &b in data {
@@ -562,20 +523,16 @@ fn build_frame(payload: &[u8; DATA_SIZE], command: u8) -> [u8; FRAME_SIZE] {
     frame
 }
 
-/// Find a connected YubiKey. Returns device info (VID/PID).
-pub fn find_yubikey() -> Result<Device> {
-    let ctx = UsbContext::new()?;
-    ctx.find_yubikey()
-}
-
 /// Perform HMAC-SHA1 challenge-response with a YubiKey.
 ///
+/// Finds the first OTP-capable YubiKey, opens it, and performs the challenge
+/// in a single libusb context — no TOCTOU gap between discovery and use.
+///
 /// `challenge`: the raw challenge bytes (up to 64 bytes)
-/// `device`: the device returned by `find_yubikey()`
 /// `slot`: 1 or 2
 ///
 /// Returns the 20-byte HMAC-SHA1 response.
-pub fn challenge_response_hmac(challenge: &[u8], device: &Device, slot: u8) -> Result<[u8; 20]> {
+pub fn challenge_response_hmac(challenge: &[u8], slot: u8) -> Result<[u8; 20]> {
     if slot != 1 && slot != 2 {
         return Err(FnoxError::Provider(format!(
             "Invalid YubiKey slot {slot}, must be 1 or 2"
@@ -583,7 +540,7 @@ pub fn challenge_response_hmac(challenge: &[u8], device: &Device, slot: u8) -> R
     }
 
     let ctx = UsbContext::new()?;
-    let handle = ctx.open_device(device.vendor_id, device.product_id)?;
+    let handle = ctx.find_and_open()?;
 
     let mut payload = [0u8; DATA_SIZE];
     let len = challenge.len().min(DATA_SIZE);
