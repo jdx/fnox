@@ -380,6 +380,13 @@
           "description": "Whether to redact secret values from exec tool output (default: true).\nWhen enabled, resolved secret values are replaced with [REDACTED] in\nstdout/stderr before returning to the agent.",
           "type": ["boolean", "null"]
         },
+        "secrets": {
+          "description": "Optional allowlist of secret names visible to the MCP server.\nWhen set, only these secrets are resolved and available via get_secret/exec.\nWhen None, all profile secrets are available.",
+          "type": ["array", "null"],
+          "items": {
+            "type": "string"
+          }
+        },
         "tools": {
           "description": "Which MCP tools to expose (default: [\"get_secret\", \"exec\"])",
           "type": ["array", "null"],
