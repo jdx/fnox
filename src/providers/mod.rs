@@ -287,10 +287,15 @@ pub async fn get_provider_resolved(
         prefix,
         store_dir,
         gpg_opts,
-    } = resolved {
+    } = resolved
+    {
         let provider_source = config.provider_sources.get(provider_name).cloned();
         let joined_path = join_path(store_dir, provider_source);
-        let x = ResolvedProviderConfig::PasswordStore { prefix, store_dir: joined_path, gpg_opts };
+        let x = ResolvedProviderConfig::PasswordStore {
+            prefix,
+            store_dir: joined_path,
+            gpg_opts,
+        };
         return get_provider_from_resolved(provider_name, &x);
     }
 
@@ -300,15 +305,13 @@ pub async fn get_provider_resolved(
 pub fn join_path(store_dir: Option<String>, provider_source: Option<PathBuf>) -> Option<String> {
     if let Some(store_path) = store_dir.as_deref() {
         let path = PathBuf::from(store_path);
-        if path.is_relative() {
-            if let Some(provider_source_path) = provider_source {
-                if provider_source_path.is_file() {
-                    if let Some(mut parent) = provider_source_path.parent().map(|x| x.to_path_buf()) {
-                        parent.extend(&path);
-                        return parent.into_os_string().to_str().map(|x| String::from(x));
-                    }
-                }
-            }
+        if path.is_relative()
+            && let Some(provider_source_path) = provider_source
+            && provider_source_path.is_file()
+            && let Some(mut parent) = provider_source_path.parent().map(|x| x.to_path_buf())
+        {
+            parent.extend(&path);
+            return parent.into_os_string().to_str().map(String::from);
         }
     }
     store_dir
@@ -320,8 +323,14 @@ mod tests {
 
     #[test]
     fn test() {
-        let result = join_path(Some(String::from("./password-store")), Some(PathBuf::from("/home/replace/me/with/a/real/path/fnox.toml")));
+        let result = join_path(
+            Some(String::from("./password-store")),
+            Some(PathBuf::from("/home/replace/me/with/a/real/path/fnox.toml")),
+        );
         assert!(result.is_some());
-        assert_eq!(result.unwrap(), "/home/replace/me/with/a/real/path/./password-store")
+        assert_eq!(
+            result.unwrap(),
+            "/home/replace/me/with/a/real/path/./password-store"
+        )
     }
 }
