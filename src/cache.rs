@@ -12,8 +12,6 @@
 //!
 //! ```text
 //! ~/.local/state/fnox/cache/<project-hash>.toml         # cache data
-//! ~/.local/state/fnox/cache/<project-hash>.lock          # file lock (sentinel)
-//! ~/.local/state/fnox/cache/<project-hash>.refreshing    # background refresh lock
 //! ```
 
 use crate::config::Config;
@@ -23,9 +21,10 @@ use crate::providers;
 use crate::settings::Settings;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use std::{fs, io::Write};
 
 /// Cache entry stored on disk
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,11 +49,9 @@ pub struct CacheMetadata {
 /// Result of checking cache validity
 #[derive(Debug)]
 pub enum CacheStatus {
-    /// Cache is fresh (within soft TTL)
+    /// Cache is fresh (within TTL)
     Fresh(CacheEntry),
-    /// Cache is stale but usable (between soft and hard TTL)
-    Stale(CacheEntry),
-    /// Cache is expired (past hard TTL) or key mismatch
+    /// Cache is expired (past TTL) or key mismatch
     Expired,
     /// No cache file exists
     Missing,
@@ -121,10 +118,6 @@ fn cache_dir() -> PathBuf {
 fn cache_path(project_dir: &Path) -> PathBuf {
     let hash = hash_project_dir(project_dir);
     cache_dir().join(format!("{hash}.toml"))
-}
-
-fn cache_refreshing_path(project_dir: &Path) -> PathBuf {
-    cache_path(project_dir).with_extension("refreshing")
 }
 
 // ---------------------------------------------------------------------------
@@ -295,10 +288,7 @@ pub fn check_cache(project_dir: &Path, current_cache_key: &str) -> CacheStatus {
 
     // Check TTL
     let settings = Settings::get();
-    let soft_ttl =
-        parse_duration_string(&settings.cache_soft_ttl).unwrap_or(Duration::from_secs(900));
-    let hard_ttl =
-        parse_duration_string(&settings.cache_hard_ttl).unwrap_or(Duration::from_secs(14400));
+    let ttl = parse_duration_string(&settings.cache_ttl).unwrap_or(Duration::from_secs(900));
 
     let now_millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -308,12 +298,10 @@ pub fn check_cache(project_dir: &Path, current_cache_key: &str) -> CacheStatus {
     let age_millis = now_millis.saturating_sub(entry.metadata.created_at);
     let age = Duration::from_millis(age_millis);
 
-    if age < soft_ttl {
+    if age < ttl {
         CacheStatus::Fresh(entry)
-    } else if age < hard_ttl {
-        CacheStatus::Stale(entry)
     } else {
-        tracing::debug!("cache hard TTL exceeded ({:?} old)", age);
+        tracing::debug!("cache TTL exceeded ({:?} old)", age);
         CacheStatus::Expired
     }
 }
@@ -579,98 +567,6 @@ fn find_project_dir_from_cwd(cwd: &Path) -> PathBuf {
 }
 
 // ---------------------------------------------------------------------------
-// Background refresh
-// ---------------------------------------------------------------------------
-
-/// Spawn a detached background process to refresh the cache.
-///
-/// Uses a `.refreshing` lock file to prevent concurrent refresh processes.
-/// The parent returns immediately.
-pub fn spawn_background_refresh(project_dir: &Path) {
-    let refreshing_path = cache_refreshing_path(project_dir);
-
-    // Try to create the refreshing lock file (non-blocking)
-    // If it already exists, another refresh is in progress — skip.
-    match fs::OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(&refreshing_path)
-    {
-        Ok(mut f) => {
-            // Write PID for debugging
-            let _ = write!(f, "{}", std::process::id());
-        }
-        Err(_) => {
-            // Check if the existing lock is stale (older than 2 minutes)
-            if let Ok(metadata) = fs::metadata(&refreshing_path)
-                && let Ok(modified) = metadata.modified()
-                && let Ok(age) = SystemTime::now().duration_since(modified)
-            {
-                if age > Duration::from_secs(120) {
-                    // Stale lock — remove and retry
-                    let _ = fs::remove_file(&refreshing_path);
-                    tracing::debug!("removed stale refresh lock");
-                } else {
-                    tracing::debug!("background refresh already in progress, skipping");
-                    return;
-                }
-            } else {
-                tracing::debug!("background refresh lock exists, skipping");
-                return;
-            }
-            // Try again after removing stale lock
-            if fs::OpenOptions::new()
-                .create_new(true)
-                .write(true)
-                .open(&refreshing_path)
-                .is_err()
-            {
-                return;
-            }
-        }
-    }
-
-    // Get the current exe path
-    let exe = match std::env::current_exe() {
-        Ok(e) => e,
-        Err(e) => {
-            tracing::warn!("cannot find current exe for background refresh: {}", e);
-            let _ = fs::remove_file(&refreshing_path);
-            return;
-        }
-    };
-
-    // Get the project directory for cwd of the child process
-    let project_dir_str = project_dir.to_string_lossy().to_string();
-
-    // Spawn detached: `fnox cache refresh` with the project dir as cwd
-    // We pass the project dir as an env var so the child can find it
-    let result = std::process::Command::new(&exe)
-        .arg("cache")
-        .arg("refresh")
-        .env("__FNOX_CACHE_PROJECT_DIR", &project_dir_str)
-        .env(
-            "__FNOX_CACHE_REFRESHING_PATH",
-            refreshing_path.to_string_lossy().as_ref(),
-        )
-        .current_dir(&project_dir_str)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn();
-
-    match result {
-        Ok(_) => {
-            tracing::debug!("background cache refresh spawned");
-        }
-        Err(e) => {
-            tracing::warn!("failed to spawn background cache refresh: {}", e);
-            let _ = fs::remove_file(cache_refreshing_path(Path::new(&project_dir_str)));
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Cache status report (for doctor command)
 // ---------------------------------------------------------------------------
 
@@ -891,19 +787,13 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // cache_path / cache_refreshing_path (via hash_project_dir)
+    // cache_path (via hash_project_dir)
     // -----------------------------------------------------------------------
 
     #[test]
     fn cache_path_ends_with_toml() {
         let p = cache_path(Path::new("/project"));
         assert!(p.extension().is_some_and(|e| e == "toml"));
-    }
-
-    #[test]
-    fn cache_refreshing_path_ends_with_refreshing() {
-        let p = cache_refreshing_path(Path::new("/project"));
-        assert!(p.extension().is_some_and(|e| e == "refreshing"));
     }
 
     #[test]
@@ -996,25 +886,11 @@ mod tests {
     }
 
     #[test]
-    fn check_cache_stale_after_soft_ttl() {
+    fn check_cache_expired_after_ttl() {
         crate::settings::Settings::reset_for_tests();
         let dir = tempfile::tempdir().unwrap();
-        // Default soft TTL is 15m = 900_000ms. Create entry 16 minutes old.
+        // Default TTL is 15m = 900_000ms. Create entry 16 minutes old.
         let entry = make_cache_entry("k", 16 * 60 * 1000);
-        write_test_cache(dir.path(), &entry);
-
-        match check_cache(dir.path(), "k") {
-            CacheStatus::Stale(e) => assert_eq!(e.metadata.cache_key, "k"),
-            other => panic!("expected Stale, got {:?}", status_name(&other)),
-        }
-    }
-
-    #[test]
-    fn check_cache_expired_after_hard_ttl() {
-        crate::settings::Settings::reset_for_tests();
-        let dir = tempfile::tempdir().unwrap();
-        // Default hard TTL is 4h = 14_400_000ms. Create entry 5 hours old.
-        let entry = make_cache_entry("k", 5 * 60 * 60 * 1000);
         write_test_cache(dir.path(), &entry);
 
         assert!(matches!(check_cache(dir.path(), "k"), CacheStatus::Expired));
@@ -1420,10 +1296,10 @@ mod tests {
     }
 
     #[test]
-    fn check_cache_fresh_just_before_soft_ttl() {
+    fn check_cache_fresh_just_before_ttl() {
         crate::settings::Settings::reset_for_tests();
         let dir = tempfile::tempdir().unwrap();
-        // 14m59s old (soft TTL is 15m)
+        // 14m59s old (TTL is 15m)
         let entry = make_cache_entry("k", 14 * 60 * 1000 + 59 * 1000);
         write_test_cache(dir.path(), &entry);
 
@@ -1434,103 +1310,14 @@ mod tests {
     }
 
     #[test]
-    fn check_cache_stale_just_past_soft_ttl() {
+    fn check_cache_expired_just_past_ttl() {
         crate::settings::Settings::reset_for_tests();
         let dir = tempfile::tempdir().unwrap();
         // 15m01s old
         let entry = make_cache_entry("k", 15 * 60 * 1000 + 1_000);
         write_test_cache(dir.path(), &entry);
 
-        assert!(matches!(
-            check_cache(dir.path(), "k"),
-            CacheStatus::Stale(_)
-        ));
-    }
-
-    #[test]
-    fn check_cache_stale_midway_between_soft_and_hard() {
-        crate::settings::Settings::reset_for_tests();
-        let dir = tempfile::tempdir().unwrap();
-        // 2h old (between 15m soft and 4h hard)
-        let entry = make_cache_entry("k", 2 * 60 * 60 * 1000);
-        write_test_cache(dir.path(), &entry);
-
-        assert!(matches!(
-            check_cache(dir.path(), "k"),
-            CacheStatus::Stale(_)
-        ));
-    }
-
-    #[test]
-    fn check_cache_stale_just_before_hard_ttl() {
-        crate::settings::Settings::reset_for_tests();
-        let dir = tempfile::tempdir().unwrap();
-        // 3h59m old
-        let entry = make_cache_entry("k", 3 * 60 * 60 * 1000 + 59 * 60 * 1000);
-        write_test_cache(dir.path(), &entry);
-
-        assert!(matches!(
-            check_cache(dir.path(), "k"),
-            CacheStatus::Stale(_)
-        ));
-    }
-
-    #[test]
-    fn check_cache_expired_just_past_hard_ttl() {
-        crate::settings::Settings::reset_for_tests();
-        let dir = tempfile::tempdir().unwrap();
-        // 4h01s old
-        let entry = make_cache_entry("k", 4 * 60 * 60 * 1000 + 1_000);
-        write_test_cache(dir.path(), &entry);
-
         assert!(matches!(check_cache(dir.path(), "k"), CacheStatus::Expired));
-    }
-
-    // -----------------------------------------------------------------------
-    // Background refresh lock
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn refreshing_lock_prevents_duplicate_spawn() {
-        let dir = tempfile::tempdir().unwrap();
-        let refreshing = cache_refreshing_path(dir.path());
-
-        // Simulate an in-progress refresh
-        fs::create_dir_all(refreshing.parent().unwrap()).unwrap();
-        fs::write(&refreshing, "12345").unwrap();
-
-        // spawn_background_refresh should detect the lock and not panic
-        spawn_background_refresh(dir.path());
-
-        // Lock file should still exist (not removed by spawn)
-        assert!(refreshing.exists());
-    }
-
-    #[test]
-    fn stale_refreshing_lock_is_cleaned_up() {
-        let dir = tempfile::tempdir().unwrap();
-        let refreshing = cache_refreshing_path(dir.path());
-
-        fs::create_dir_all(refreshing.parent().unwrap()).unwrap();
-        fs::write(&refreshing, "old-pid").unwrap();
-
-        // Backdate the lock file to 3 minutes ago (stale threshold is 2 min)
-        let old_time = std::time::SystemTime::now() - std::time::Duration::from_secs(3 * 60);
-        filetime::set_file_mtime(&refreshing, filetime::FileTime::from_system_time(old_time))
-            .unwrap();
-
-        // spawn_background_refresh should remove the stale lock.
-        // (The actual child process may fail since fnox binary might not be the
-        // test binary, but the stale lock removal is what we're testing.)
-        spawn_background_refresh(dir.path());
-
-        // The function either removed the old lock and created a new one (if
-        // the exe exists), or removed it and failed to spawn (leaving it gone).
-        // Either way, the OLD content should be gone.
-        if refreshing.exists() {
-            let content = fs::read_to_string(&refreshing).unwrap();
-            assert_ne!(content, "old-pid");
-        }
     }
 
     // -----------------------------------------------------------------------
@@ -1616,7 +1403,6 @@ mod tests {
     fn status_name(s: &CacheStatus) -> &'static str {
         match s {
             CacheStatus::Fresh(_) => "Fresh",
-            CacheStatus::Stale(_) => "Stale",
             CacheStatus::Expired => "Expired",
             CacheStatus::Missing => "Missing",
         }

@@ -166,39 +166,21 @@ examples = [
 ]
 since = "1.18.0"
 
-[cache_soft_ttl]
+[cache_ttl]
 type = "string"
 default = "\"15m\""
-sources.env = ["FNOX_CACHE_SOFT_TTL"]
+sources.env = ["FNOX_CACHE_TTL"]
 docs = """
-Soft TTL for the auto-sync cache. After this duration, stale data is served
-immediately while a background refresh runs.
+TTL for the auto-sync cache. After this duration, the cache is considered
+expired and a synchronous refresh is performed on the next read command.
 
 Accepts duration strings: "30s", "5m", "1h", "2h30m".
 
 Priority: Environment > Default
 """
 examples = [
-  "FNOX_CACHE_SOFT_TTL=5m fnox export --format json",
-  "FNOX_CACHE_SOFT_TTL=30m fnox exec -- ./my-app",
-]
-since = "1.18.0"
-
-[cache_hard_ttl]
-type = "string"
-default = "\"4h\""
-sources.env = ["FNOX_CACHE_HARD_TTL"]
-docs = """
-Hard TTL for the auto-sync cache. After this duration, the cache is considered
-invalid and a synchronous refresh is performed.
-
-Accepts duration strings: "30m", "1h", "4h", "12h".
-
-Priority: Environment > Default
-"""
-examples = [
-  "FNOX_CACHE_HARD_TTL=1h fnox export --format json",
-  "FNOX_CACHE_HARD_TTL=8h fnox exec -- ./my-app",
+  "FNOX_CACHE_TTL=5m fnox export --format json",
+  "FNOX_CACHE_TTL=30m fnox exec -- ./my-app",
 ]
 since = "1.18.0"
 

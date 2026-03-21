@@ -370,9 +370,8 @@ fn handle_missing_secret(
 /// Cache-aware wrapper around `resolve_secrets_batch`.
 ///
 /// Checks the auto-sync cache before performing full resolution. If the cache
-/// is fresh, returns decrypted cached values immediately. If stale, returns
-/// stale values and spawns a background refresh. If expired or missing,
-/// performs full resolution and writes the result to the cache.
+/// is fresh, returns decrypted cached values immediately. If expired or missing,
+/// performs full synchronous resolution and writes the result to the cache.
 pub async fn resolve_secrets_batch_cached(
     config: &Config,
     profile: &str,
@@ -399,19 +398,6 @@ pub async fn resolve_secrets_batch_cached(
                 Ok(decrypted) => return Ok(decrypted),
                 Err(e) => {
                     tracing::warn!("cache decryption failed, falling through: {}", e);
-                    // Fall through to full resolution
-                }
-            }
-        }
-        cache::CacheStatus::Stale(entry) => {
-            tracing::debug!("cache hit (stale), spawning background refresh");
-            // Spawn background refresh
-            cache::spawn_background_refresh(project_dir);
-            // Return stale data
-            match cache::decrypt_cache_entry(config, profile, &entry).await {
-                Ok(decrypted) => return Ok(decrypted),
-                Err(e) => {
-                    tracing::warn!("stale cache decryption failed, falling through: {}", e);
                     // Fall through to full resolution
                 }
             }

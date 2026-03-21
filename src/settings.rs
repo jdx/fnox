@@ -240,8 +240,7 @@ mod tests {
             if_missing_default: None,
             http_timeout: "30s".to_string(),
             cache: "auto".to_string(),
-            cache_soft_ttl: "15m".to_string(),
-            cache_hard_ttl: "4h".to_string(),
+            cache_ttl: "15m".to_string(),
         };
 
         let mut env = SourceMap::new();
@@ -276,8 +275,7 @@ mod tests {
             if_missing_default: None,
             http_timeout: "30s".to_string(),
             cache: "auto".to_string(),
-            cache_soft_ttl: "15m".to_string(),
-            cache_hard_ttl: "4h".to_string(),
+            cache_ttl: "15m".to_string(),
         };
 
         let mut env = SourceMap::new();
