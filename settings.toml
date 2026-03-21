@@ -140,6 +140,68 @@ examples = [
 ]
 since = "1.16.0"
 
+[cache]
+type = "string"
+default = "\"auto\""
+sources.env = ["FNOX_CACHE"]
+docs = """
+Control the auto-sync cache for resolved secrets.
+
+Available modes:
+- "auto" (default): enabled if a default encryption provider with Encryption
+  capability is configured, disabled otherwise. No warning, no friction.
+- "true": force enable — stores plaintext on disk if no encryption provider
+  (user explicitly accepts the trade-off).
+- "false": force disable — no caching, every call does full resolution.
+
+The cache stores encrypted copies of resolved secrets at
+~/.local/state/fnox/cache/<project-hash>.toml and serves them on subsequent
+calls to avoid remote provider round-trips.
+
+Priority: Environment > Default
+"""
+examples = [
+  "FNOX_CACHE=false fnox export --format json",
+  "FNOX_CACHE=true fnox exec -- ./my-app",
+]
+since = "1.18.0"
+
+[cache_soft_ttl]
+type = "string"
+default = "\"15m\""
+sources.env = ["FNOX_CACHE_SOFT_TTL"]
+docs = """
+Soft TTL for the auto-sync cache. After this duration, stale data is served
+immediately while a background refresh runs.
+
+Accepts duration strings: "30s", "5m", "1h", "2h30m".
+
+Priority: Environment > Default
+"""
+examples = [
+  "FNOX_CACHE_SOFT_TTL=5m fnox export --format json",
+  "FNOX_CACHE_SOFT_TTL=30m fnox exec -- ./my-app",
+]
+since = "1.18.0"
+
+[cache_hard_ttl]
+type = "string"
+default = "\"4h\""
+sources.env = ["FNOX_CACHE_HARD_TTL"]
+docs = """
+Hard TTL for the auto-sync cache. After this duration, the cache is considered
+invalid and a synchronous refresh is performed.
+
+Accepts duration strings: "30m", "1h", "4h", "12h".
+
+Priority: Environment > Default
+"""
+examples = [
+  "FNOX_CACHE_HARD_TTL=1h fnox export --format json",
+  "FNOX_CACHE_HARD_TTL=8h fnox exec -- ./my-app",
+]
+since = "1.18.0"
+
 [if_missing_default]
 type = "option<string>"
 default = "None"

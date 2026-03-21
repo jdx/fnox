@@ -367,6 +367,83 @@ fn handle_missing_secret(
 /// Secrets are resolved in dependency order using Kahn's algorithm. If a provider
 /// declares env var dependencies (e.g., 1Password needs `OP_SERVICE_ACCOUNT_TOKEN`),
 /// and another secret provides that env var (e.g., an age-encrypted secret named
+/// Cache-aware wrapper around `resolve_secrets_batch`.
+///
+/// Checks the auto-sync cache before performing full resolution. If the cache
+/// is fresh, returns decrypted cached values immediately. If stale, returns
+/// stale values and spawns a background refresh. If expired or missing,
+/// performs full resolution and writes the result to the cache.
+pub async fn resolve_secrets_batch_cached(
+    config: &Config,
+    profile: &str,
+    secrets: &IndexMap<String, SecretConfig>,
+    project_dir: &std::path::Path,
+) -> Result<IndexMap<String, Option<String>>> {
+    use crate::cache;
+
+    // Check if caching is enabled
+    let encryption_provider = match cache::is_cache_enabled(config, profile) {
+        Some(ep) => ep,
+        None => {
+            // Caching disabled — fall through to direct resolution
+            return resolve_secrets_batch(config, profile, secrets).await;
+        }
+    };
+
+    let cache_key = cache::compute_cache_key(project_dir, profile);
+
+    match cache::check_cache(project_dir, &cache_key) {
+        cache::CacheStatus::Fresh(entry) => {
+            tracing::debug!("cache hit (fresh)");
+            match cache::decrypt_cache_entry(config, profile, &entry).await {
+                Ok(decrypted) => return Ok(decrypted),
+                Err(e) => {
+                    tracing::warn!("cache decryption failed, falling through: {}", e);
+                    // Fall through to full resolution
+                }
+            }
+        }
+        cache::CacheStatus::Stale(entry) => {
+            tracing::debug!("cache hit (stale), spawning background refresh");
+            // Spawn background refresh
+            cache::spawn_background_refresh(project_dir);
+            // Return stale data
+            match cache::decrypt_cache_entry(config, profile, &entry).await {
+                Ok(decrypted) => return Ok(decrypted),
+                Err(e) => {
+                    tracing::warn!("stale cache decryption failed, falling through: {}", e);
+                    // Fall through to full resolution
+                }
+            }
+        }
+        cache::CacheStatus::Expired => {
+            tracing::debug!("cache expired or key mismatch, performing full resolution");
+        }
+        cache::CacheStatus::Missing => {
+            tracing::debug!("no cache, performing full resolution");
+        }
+    }
+
+    // Full resolution
+    let resolved = resolve_secrets_batch(config, profile, secrets).await?;
+
+    // Write to cache (best-effort, don't fail the command)
+    if let Err(e) = cache::write_cache(
+        config,
+        profile,
+        project_dir,
+        &cache_key,
+        &encryption_provider,
+        &resolved,
+    )
+    .await
+    {
+        tracing::warn!("failed to write cache: {}", e);
+    }
+
+    Ok(resolved)
+}
+
 /// `OP_SERVICE_ACCOUNT_TOKEN`), the dependency is resolved first. Between resolution
 /// levels, resolved values are set as environment variables so subsequent providers
 /// can read them.

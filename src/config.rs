@@ -130,6 +130,10 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_auth: Option<bool>,
 
+    /// Per-project cache opt-out (set to false to disable auto-sync cache)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache: Option<bool>,
+
     /// MCP server configuration
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp: Option<McpConfig>,
@@ -972,6 +976,7 @@ impl Config {
             age_key_file: None,
             if_missing: None,
             prompt_auth: None,
+            cache: None,
             mcp: None,
             provider_sources: HashMap::new(),
             secret_sources: HashMap::new(),

@@ -90,6 +90,9 @@ impl RemoveCommand {
                     "{check} Removed secret {styled_key} from profile {styled_profile}{global_suffix}"
                 );
             }
+
+            // Invalidate the auto-sync cache after removing a secret
+            crate::cache::invalidate_cache_for_cwd();
         }
 
         Ok(())

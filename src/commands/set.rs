@@ -327,6 +327,9 @@ impl SetCommand {
                     "{check} Set secret {styled_key} in profile {styled_profile}{global_suffix}"
                 );
             }
+
+            // Invalidate the auto-sync cache after modifying secrets
+            crate::cache::invalidate_cache_for_cwd();
         }
 
         Ok(())

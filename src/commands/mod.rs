@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand};
 use crate::config::Config;
 
 pub mod activate;
+pub mod cache;
 pub mod check;
 pub mod ci_redact;
 pub mod completion;
@@ -75,6 +76,9 @@ pub struct Cli {
 pub enum Commands {
     /// Output shell activation code to enable automatic secret loading
     Activate(activate::ActivateCommand),
+
+    /// Manage the auto-sync secret cache
+    Cache(cache::CacheCommand),
 
     /// Check if all required secrets are defined and configured
     Check(check::CheckCommand),
@@ -182,6 +186,7 @@ impl Commands {
                 .map_err(|e| FnoxError::Config(e.to_string())),
 
             // Commands that need config
+            Commands::Cache(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Check(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::CiRedact(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Doctor(cmd) => cmd.run(cli, self.load_config(cli)?).await,

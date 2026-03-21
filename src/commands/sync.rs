@@ -310,6 +310,9 @@ impl SyncCommand {
             println!("Skipped {} secrets (could not resolve)", skipped_count);
         }
 
+        // Invalidate the auto-sync cache after syncing
+        crate::cache::invalidate_cache_for_cwd();
+
         Ok(())
     }
 }

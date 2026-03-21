@@ -253,6 +253,9 @@ impl ImportCommand {
             total_secrets, profile, self.provider, global_suffix
         );
 
+        // Invalidate the auto-sync cache after importing
+        crate::cache::invalidate_cache_for_cwd();
+
         Ok(())
     }
 

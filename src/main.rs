@@ -2,6 +2,7 @@ use clap::Parser;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod auth_prompt;
+mod cache;
 mod commands;
 mod config;
 mod env;

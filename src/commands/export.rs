@@ -1,7 +1,7 @@
 use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
-use crate::secret_resolver::resolve_secrets_batch;
+use crate::secret_resolver::resolve_secrets_batch_cached;
 use crate::temp_file_secrets::create_persistent_secret_file;
 use clap::{Args, ValueEnum};
 use console;
@@ -61,8 +61,10 @@ impl ExportCommand {
 
         let profile_secrets = config.get_secrets(&profile)?;
 
-        // Resolve secrets using batch resolution for better performance
-        let resolved_secrets = resolve_secrets_batch(&config, &profile, &profile_secrets).await?;
+        // Resolve secrets using cached batch resolution for better performance
+        let project_dir = crate::lease::project_dir_from_config(&config, &cli.config);
+        let resolved_secrets =
+            resolve_secrets_batch_cached(&config, &profile, &profile_secrets, &project_dir).await?;
 
         // Build secrets map, preserving insertion order
         // For file-based secrets, create persistent temp files

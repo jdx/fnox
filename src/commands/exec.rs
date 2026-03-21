@@ -1,6 +1,6 @@
 use crate::error::{FnoxError, Result};
 use crate::lease::{self, LeaseLedger};
-use crate::secret_resolver::resolve_secrets_batch;
+use crate::secret_resolver::resolve_secrets_batch_cached;
 use crate::temp_file_secrets::create_ephemeral_secret_file;
 use crate::{commands::Cli, config::Config};
 use clap::{Args, ValueHint};
@@ -33,8 +33,10 @@ impl ExecCommand {
             cmd.args(&self.command[1..]);
         }
 
-        // Resolve secrets using batch resolution first
-        let resolved_secrets = resolve_secrets_batch(&config, &profile, &profile_secrets).await?;
+        // Resolve secrets using cached batch resolution first
+        let project_dir = crate::lease::project_dir_from_config(&config, &cli.config);
+        let resolved_secrets =
+            resolve_secrets_batch_cached(&config, &profile, &profile_secrets, &project_dir).await?;
 
         // Keep temp files alive for the duration of the command
         let mut _temp_files: Vec<NamedTempFile> = Vec::new();

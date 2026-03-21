@@ -178,8 +178,6 @@ struct LoadedSecrets {
 
 /// Load all secrets from a fnox.toml config file
 async fn load_secrets_from_config() -> Result<LoadedSecrets> {
-    use crate::secret_resolver::resolve_secrets_batch;
-
     // Use load_smart to ensure provider inheritance from parent configs
     // This handles fnox.toml and fnox.local.toml with proper recursion
     let settings =
@@ -222,8 +220,19 @@ async fn load_secrets_from_config() -> Result<LoadedSecrets> {
         .get_secrets(profile_name)
         .map_err(|e| anyhow::anyhow!("Failed to get secrets: {}", e))?;
 
-    // Use batch resolution for better performance
-    let resolved = match resolve_secrets_batch(&config, profile_name, &profile_secrets).await {
+    // Use cached batch resolution for better performance
+    let project_dir = config
+        .project_dir
+        .clone()
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    let resolved = match crate::secret_resolver::resolve_secrets_batch_cached(
+        &config,
+        profile_name,
+        &profile_secrets,
+        &project_dir,
+    )
+    .await
+    {
         Ok(r) => r,
         Err(e) => {
             // Log error but don't fail the shell hook

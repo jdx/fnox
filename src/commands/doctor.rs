@@ -109,6 +109,44 @@ impl DoctorCommand {
             }
         }
 
+        // Cache info
+        {
+            println!();
+            println!("💾 Cache:");
+            let project_dir = crate::lease::project_dir_from_config(&config, &cli.config);
+            let report = crate::cache::cache_report(&config, &profile, &project_dir);
+            println!(
+                "  Status: {}",
+                if report.enabled {
+                    "enabled"
+                } else {
+                    "disabled"
+                }
+            );
+            if let Some(ref ep) = report.encryption_provider {
+                println!("  Encryption: {}", ep);
+            }
+            if report.plaintext_warning {
+                println!(
+                    "  ⚠ WARNING: cache stores secrets in plaintext (force-enabled without encryption provider)"
+                );
+            }
+            if let Some(ref path) = report.cache_file {
+                println!("  File: {}", path.display());
+                println!("  Secrets: {}", report.num_secrets);
+                if let Some(age) = report.age_seconds {
+                    let mins = age / 60;
+                    if mins > 0 {
+                        println!("  Age: {}m", mins);
+                    } else {
+                        println!("  Age: <1m");
+                    }
+                }
+            } else if report.enabled {
+                println!("  File: (not yet created)");
+            }
+        }
+
         // Summary
         println!();
         println!("📊 Summary:");
