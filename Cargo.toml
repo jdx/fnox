@@ -95,6 +95,7 @@ dbus = { version = "0.9", features = ["vendored"] }
 openssl-sys = { version = "0.9", features = ["vendored"] }
 
 [dev-dependencies]
+filetime = "0.2"
 tempfile = "3"
 
 [build-dependencies]

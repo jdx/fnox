@@ -40,7 +40,7 @@ pub struct CacheMetadata {
     /// BLAKE3 hash of config state (files + mtimes + profile + env vars)
     pub cache_key: String,
     /// UTC milliseconds when the cache was created
-    pub created_at: u128,
+    pub created_at: u64,
     /// Name of the encryption provider used (empty string if plaintext)
     pub encryption_provider: String,
     /// Active profile name
@@ -303,10 +303,10 @@ pub fn check_cache(project_dir: &Path, current_cache_key: &str) -> CacheStatus {
     let now_millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
-        .as_millis();
+        .as_millis() as u64;
 
     let age_millis = now_millis.saturating_sub(entry.metadata.created_at);
-    let age = Duration::from_millis(age_millis as u64);
+    let age = Duration::from_millis(age_millis);
 
     if age < soft_ttl {
         CacheStatus::Fresh(entry)
@@ -463,7 +463,7 @@ pub async fn write_cache(
             created_at: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
-                .as_millis(),
+                .as_millis() as u64,
             encryption_provider: encryption_provider_name.to_string(),
             profile: profile.to_string(),
         },
@@ -722,21 +722,95 @@ pub fn cache_report(config: &Config, profile: &str, project_dir: &Path) -> Cache
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Config;
+    use crate::providers::ProviderConfig;
+    use crate::spanned::SpannedValue;
+
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+
+    /// Create a Config with an age encryption provider set as default.
+    fn config_with_age_provider() -> Config {
+        let mut config = Config::new();
+        config.providers.insert(
+            "age".to_string(),
+            ProviderConfig::AgeEncryption {
+                recipients: vec!["age1test".to_string()],
+                key_file: Default::default(),
+                auth_command: None,
+            },
+        );
+        config.set_default_provider(Some("age".to_string()));
+        config
+    }
+
+    /// Create a Config with only a plain (non-encryption) provider.
+    fn config_with_plain_provider() -> Config {
+        let mut config = Config::new();
+        config.providers.insert(
+            "plain".to_string(),
+            ProviderConfig::Plain { auth_command: None },
+        );
+        config.set_default_provider(Some("plain".to_string()));
+        config
+    }
+
+    /// Create a minimal CacheEntry for testing.
+    fn make_cache_entry(cache_key: &str, age_millis: u64) -> CacheEntry {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        let mut secrets = IndexMap::new();
+        secrets.insert("DB_URL".to_string(), "encrypted-db-url".to_string());
+        secrets.insert("API_KEY".to_string(), "encrypted-api-key".to_string());
+        CacheEntry {
+            metadata: CacheMetadata {
+                cache_key: cache_key.to_string(),
+                created_at: now.saturating_sub(age_millis),
+                encryption_provider: "age".to_string(),
+                profile: "default".to_string(),
+            },
+            secrets,
+        }
+    }
+
+    /// Write a CacheEntry directly to a project dir's cache path.
+    fn write_test_cache(project_dir: &Path, entry: &CacheEntry) {
+        write_cache_entry(project_dir, entry).unwrap();
+    }
+
+    // -----------------------------------------------------------------------
+    // parse_duration_string
+    // -----------------------------------------------------------------------
 
     #[test]
-    fn test_parse_duration_string() {
+    fn parse_duration_minutes() {
         assert_eq!(
             parse_duration_string("15m").unwrap(),
             Duration::from_secs(900)
         );
+    }
+
+    #[test]
+    fn parse_duration_hours() {
         assert_eq!(
             parse_duration_string("4h").unwrap(),
             Duration::from_secs(14400)
         );
+    }
+
+    #[test]
+    fn parse_duration_seconds() {
         assert_eq!(
             parse_duration_string("30s").unwrap(),
             Duration::from_secs(30)
         );
+    }
+
+    #[test]
+    fn parse_duration_combined() {
         assert_eq!(
             parse_duration_string("2h30m").unwrap(),
             Duration::from_secs(9000)
@@ -745,29 +819,806 @@ mod tests {
             parse_duration_string("1h15m30s").unwrap(),
             Duration::from_secs(4530)
         );
+    }
+
+    #[test]
+    fn parse_duration_days() {
         assert_eq!(
             parse_duration_string("1d").unwrap(),
             Duration::from_secs(86400)
         );
+    }
+
+    #[test]
+    fn parse_duration_bare_number_treated_as_seconds() {
         assert_eq!(
             parse_duration_string("60").unwrap(),
             Duration::from_secs(60)
         );
-
-        assert!(parse_duration_string("").is_err());
-        assert!(parse_duration_string("0s").is_err());
-        assert!(parse_duration_string("abc").is_err());
     }
 
     #[test]
-    fn test_hash_project_dir() {
-        let hash1 = hash_project_dir(Path::new("/home/user/project-a"));
-        let hash2 = hash_project_dir(Path::new("/home/user/project-b"));
-        assert_ne!(hash1, hash2);
-        assert_eq!(hash1.len(), 16);
+    fn parse_duration_whitespace_trimmed() {
+        assert_eq!(
+            parse_duration_string("  5m  ").unwrap(),
+            Duration::from_secs(300)
+        );
+    }
 
-        // Deterministic
-        let hash1_again = hash_project_dir(Path::new("/home/user/project-a"));
-        assert_eq!(hash1, hash1_again);
+    #[test]
+    fn parse_duration_rejects_empty() {
+        assert!(parse_duration_string("").is_err());
+    }
+
+    #[test]
+    fn parse_duration_rejects_zero() {
+        assert!(parse_duration_string("0s").is_err());
+        assert!(parse_duration_string("0m").is_err());
+        assert!(parse_duration_string("0").is_err());
+    }
+
+    #[test]
+    fn parse_duration_rejects_invalid_unit() {
+        assert!(parse_duration_string("5x").is_err());
+    }
+
+    #[test]
+    fn parse_duration_rejects_non_numeric() {
+        assert!(parse_duration_string("abc").is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // hash_project_dir
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn hash_project_dir_different_paths_different_hashes() {
+        let h1 = hash_project_dir(Path::new("/home/user/project-a"));
+        let h2 = hash_project_dir(Path::new("/home/user/project-b"));
+        assert_ne!(h1, h2);
+    }
+
+    #[test]
+    fn hash_project_dir_fixed_length() {
+        let h = hash_project_dir(Path::new("/some/long/deeply/nested/path/to/project"));
+        assert_eq!(h.len(), 16);
+    }
+
+    #[test]
+    fn hash_project_dir_deterministic() {
+        let p = Path::new("/home/user/my-project");
+        assert_eq!(hash_project_dir(p), hash_project_dir(p));
+    }
+
+    // -----------------------------------------------------------------------
+    // cache_path / cache_refreshing_path (via hash_project_dir)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn cache_path_ends_with_toml() {
+        let p = cache_path(Path::new("/project"));
+        assert!(p.extension().is_some_and(|e| e == "toml"));
+    }
+
+    #[test]
+    fn cache_refreshing_path_ends_with_refreshing() {
+        let p = cache_refreshing_path(Path::new("/project"));
+        assert!(p.extension().is_some_and(|e| e == "refreshing"));
+    }
+
+    #[test]
+    fn cache_path_different_projects_different_files() {
+        let p1 = cache_path(Path::new("/project-a"));
+        let p2 = cache_path(Path::new("/project-b"));
+        assert_ne!(p1, p2);
+    }
+
+    // -----------------------------------------------------------------------
+    // CacheEntry serialization round-trip
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn cache_entry_toml_roundtrip() {
+        let entry = make_cache_entry("test-key-abc", 0);
+        let serialized = toml_edit::ser::to_string_pretty(&entry).unwrap();
+        let deserialized: CacheEntry = toml_edit::de::from_str(&serialized).unwrap();
+
+        assert_eq!(deserialized.metadata.cache_key, "test-key-abc");
+        assert_eq!(deserialized.metadata.encryption_provider, "age");
+        assert_eq!(deserialized.metadata.profile, "default");
+        assert_eq!(deserialized.secrets.len(), 2);
+        assert_eq!(deserialized.secrets["DB_URL"], "encrypted-db-url");
+        assert_eq!(deserialized.secrets["API_KEY"], "encrypted-api-key");
+    }
+
+    #[test]
+    fn cache_entry_preserves_secret_order() {
+        let mut secrets = IndexMap::new();
+        secrets.insert("ZZZ".to_string(), "val-z".to_string());
+        secrets.insert("AAA".to_string(), "val-a".to_string());
+        secrets.insert("MMM".to_string(), "val-m".to_string());
+        let entry = CacheEntry {
+            metadata: CacheMetadata {
+                cache_key: "k".to_string(),
+                created_at: 0,
+                encryption_provider: String::new(),
+                profile: "default".to_string(),
+            },
+            secrets,
+        };
+        let serialized = toml_edit::ser::to_string_pretty(&entry).unwrap();
+        let deserialized: CacheEntry = toml_edit::de::from_str(&serialized).unwrap();
+        let keys: Vec<&String> = deserialized.secrets.keys().collect();
+        assert_eq!(keys, vec!["ZZZ", "AAA", "MMM"]);
+    }
+
+    // -----------------------------------------------------------------------
+    // write_cache_entry + read (check_cache)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn write_and_read_cache_fresh() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        let entry = make_cache_entry("my-key", 0);
+        write_test_cache(dir.path(), &entry);
+
+        match check_cache(dir.path(), "my-key") {
+            CacheStatus::Fresh(e) => {
+                assert_eq!(e.metadata.cache_key, "my-key");
+                assert_eq!(e.secrets.len(), 2);
+            }
+            other => panic!("expected Fresh, got {:?}", status_name(&other)),
+        }
+    }
+
+    #[test]
+    fn check_cache_missing_when_no_file() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        assert!(matches!(
+            check_cache(dir.path(), "any-key"),
+            CacheStatus::Missing
+        ));
+    }
+
+    #[test]
+    fn check_cache_expired_on_key_mismatch() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        let entry = make_cache_entry("original-key", 0);
+        write_test_cache(dir.path(), &entry);
+
+        assert!(matches!(
+            check_cache(dir.path(), "different-key"),
+            CacheStatus::Expired
+        ));
+    }
+
+    #[test]
+    fn check_cache_stale_after_soft_ttl() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        // Default soft TTL is 15m = 900_000ms. Create entry 16 minutes old.
+        let entry = make_cache_entry("k", 16 * 60 * 1000);
+        write_test_cache(dir.path(), &entry);
+
+        match check_cache(dir.path(), "k") {
+            CacheStatus::Stale(e) => assert_eq!(e.metadata.cache_key, "k"),
+            other => panic!("expected Stale, got {:?}", status_name(&other)),
+        }
+    }
+
+    #[test]
+    fn check_cache_expired_after_hard_ttl() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        // Default hard TTL is 4h = 14_400_000ms. Create entry 5 hours old.
+        let entry = make_cache_entry("k", 5 * 60 * 60 * 1000);
+        write_test_cache(dir.path(), &entry);
+
+        assert!(matches!(check_cache(dir.path(), "k"), CacheStatus::Expired));
+    }
+
+    #[test]
+    fn check_cache_corrupt_file_treated_as_missing() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        let path = cache_path(dir.path());
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "this is not valid toml {{{{").unwrap();
+
+        assert!(matches!(
+            check_cache(dir.path(), "any"),
+            CacheStatus::Missing
+        ));
+    }
+
+    // -----------------------------------------------------------------------
+    // invalidate_cache
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn invalidate_cache_removes_file() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        let entry = make_cache_entry("k", 0);
+        write_test_cache(dir.path(), &entry);
+
+        let path = cache_path(dir.path());
+        assert!(path.exists());
+
+        invalidate_cache(dir.path());
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn invalidate_cache_noop_when_no_file() {
+        let dir = tempfile::tempdir().unwrap();
+        // Should not panic or error
+        invalidate_cache(dir.path());
+    }
+
+    #[test]
+    fn invalidate_then_check_returns_missing() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        let entry = make_cache_entry("k", 0);
+        write_test_cache(dir.path(), &entry);
+
+        invalidate_cache(dir.path());
+        assert!(matches!(check_cache(dir.path(), "k"), CacheStatus::Missing));
+    }
+
+    // -----------------------------------------------------------------------
+    // write_cache_entry: file permissions
+    // -----------------------------------------------------------------------
+
+    #[cfg(unix)]
+    #[test]
+    fn cache_file_permissions_are_restrictive() {
+        use std::os::unix::fs::PermissionsExt;
+
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        let entry = make_cache_entry("k", 0);
+        write_test_cache(dir.path(), &entry);
+
+        let path = cache_path(dir.path());
+        let perms = fs::metadata(&path).unwrap().permissions();
+        assert_eq!(perms.mode() & 0o777, 0o600);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cache_dir_permissions_are_restrictive() {
+        use std::os::unix::fs::PermissionsExt;
+
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        let entry = make_cache_entry("k", 0);
+        write_test_cache(dir.path(), &entry);
+
+        let cache_directory = cache_dir();
+        let perms = fs::metadata(&cache_directory).unwrap().permissions();
+        assert_eq!(perms.mode() & 0o777, 0o700);
+    }
+
+    // -----------------------------------------------------------------------
+    // write_cache_entry: atomicity (no partial writes)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn write_cache_does_not_leave_tmp_file() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        let entry = make_cache_entry("k", 0);
+        write_test_cache(dir.path(), &entry);
+
+        let tmp_path = cache_path(dir.path()).with_extension("toml.tmp");
+        assert!(
+            !tmp_path.exists(),
+            "temp file should be cleaned up after rename"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // compute_cache_key
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn cache_key_changes_with_profile() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        let k1 = compute_cache_key(dir.path(), "default");
+        let k2 = compute_cache_key(dir.path(), "production");
+        assert_ne!(k1, k2);
+    }
+
+    #[test]
+    fn cache_key_deterministic() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        let k1 = compute_cache_key(dir.path(), "default");
+        let k2 = compute_cache_key(dir.path(), "default");
+        assert_eq!(k1, k2);
+    }
+
+    #[test]
+    fn cache_key_changes_when_config_file_appears() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        let k1 = compute_cache_key(dir.path(), "default");
+
+        // Create a config file
+        fs::write(dir.path().join("fnox.toml"), "[secrets]\n").unwrap();
+        let k2 = compute_cache_key(dir.path(), "default");
+        assert_ne!(k1, k2);
+    }
+
+    #[test]
+    fn cache_key_changes_when_config_file_modified() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("fnox.toml");
+        fs::write(&config_path, "[secrets]\n").unwrap();
+        let k1 = compute_cache_key(dir.path(), "default");
+
+        // Wait a bit to ensure mtime differs, then modify
+        std::thread::sleep(Duration::from_millis(50));
+        fs::write(&config_path, "[secrets]\nFOO = \"bar\"\n").unwrap();
+        let k2 = compute_cache_key(dir.path(), "default");
+        assert_ne!(k1, k2);
+    }
+
+    #[test]
+    fn cache_key_fixed_length() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        let k = compute_cache_key(dir.path(), "default");
+        assert_eq!(k.len(), 32);
+    }
+
+    // -----------------------------------------------------------------------
+    // is_cache_enabled
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn is_cache_enabled_auto_with_age_provider() {
+        crate::settings::Settings::reset_for_tests();
+        let config = config_with_age_provider();
+        let result = is_cache_enabled(&config, "default");
+        assert_eq!(result, Some("age".to_string()));
+    }
+
+    #[test]
+    fn is_cache_enabled_auto_without_encryption_provider() {
+        crate::settings::Settings::reset_for_tests();
+        let config = config_with_plain_provider();
+        let result = is_cache_enabled(&config, "default");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn is_cache_enabled_auto_no_providers_at_all() {
+        crate::settings::Settings::reset_for_tests();
+        let config = Config::new();
+        // Config::new() has no providers, so get_default_provider will error.
+        // is_cache_enabled should return None, not panic.
+        let result = is_cache_enabled(&config, "default");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn is_cache_enabled_config_opt_out() {
+        crate::settings::Settings::reset_for_tests();
+        let mut config = config_with_age_provider();
+        config.cache = Some(false);
+        let result = is_cache_enabled(&config, "default");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn is_cache_enabled_config_opt_in_is_not_override() {
+        // cache = true in config does NOT force-enable; it just doesn't opt out.
+        // The FNOX_CACHE env var / settings control force-enable.
+        crate::settings::Settings::reset_for_tests();
+        let mut config = config_with_plain_provider();
+        config.cache = Some(true);
+        // Auto mode still requires encryption provider
+        let result = is_cache_enabled(&config, "default");
+        assert_eq!(result, None);
+    }
+
+    // -----------------------------------------------------------------------
+    // find_encryption_provider
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn find_encryption_provider_age() {
+        let config = config_with_age_provider();
+        assert_eq!(
+            find_encryption_provider(&config, "default"),
+            Some("age".to_string())
+        );
+    }
+
+    #[test]
+    fn find_encryption_provider_plain_is_none() {
+        let config = config_with_plain_provider();
+        assert_eq!(find_encryption_provider(&config, "default"), None);
+    }
+
+    #[test]
+    fn find_encryption_provider_no_default() {
+        let config = Config::new();
+        assert_eq!(find_encryption_provider(&config, "default"), None);
+    }
+
+    #[test]
+    fn find_encryption_provider_1password_is_none() {
+        let mut config = Config::new();
+        config.providers.insert(
+            "op".to_string(),
+            ProviderConfig::OnePassword {
+                vault: Default::default(),
+                account: Default::default(),
+                token: Default::default(),
+                auth_command: None,
+            },
+        );
+        config.set_default_provider(Some("op".to_string()));
+        assert_eq!(find_encryption_provider(&config, "default"), None);
+    }
+
+    // -----------------------------------------------------------------------
+    // find_project_dir_from_cwd
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn find_project_dir_with_config_file() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("fnox.toml"), "").unwrap();
+        let result = find_project_dir_from_cwd(dir.path());
+        assert_eq!(result, dir.path());
+    }
+
+    #[test]
+    fn find_project_dir_falls_back_to_cwd() {
+        let dir = tempfile::tempdir().unwrap();
+        // No config file — should return the dir itself
+        let result = find_project_dir_from_cwd(dir.path());
+        assert_eq!(result, dir.path());
+    }
+
+    #[test]
+    fn find_project_dir_finds_parent_config() {
+        crate::settings::Settings::reset_for_tests();
+        let parent = tempfile::tempdir().unwrap();
+        fs::write(parent.path().join("fnox.toml"), "").unwrap();
+        let child = parent.path().join("subdir");
+        fs::create_dir(&child).unwrap();
+
+        let result = find_project_dir_from_cwd(&child);
+        assert_eq!(result, parent.path());
+    }
+
+    // -----------------------------------------------------------------------
+    // cache_report
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn cache_report_disabled_when_no_encryption() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        let config = config_with_plain_provider();
+        let report = cache_report(&config, "default", dir.path());
+
+        assert!(!report.enabled);
+        assert!(report.encryption_provider.is_none());
+        assert!(!report.plaintext_warning);
+        assert!(report.cache_file.is_none());
+    }
+
+    #[test]
+    fn cache_report_enabled_with_age() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        let config = config_with_age_provider();
+        let report = cache_report(&config, "default", dir.path());
+
+        assert!(report.enabled);
+        assert_eq!(report.encryption_provider, Some("age".to_string()));
+        assert!(!report.plaintext_warning);
+    }
+
+    #[test]
+    fn cache_report_shows_existing_cache_file() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        let entry = make_cache_entry("k", 0);
+        write_test_cache(dir.path(), &entry);
+
+        let config = config_with_age_provider();
+        let report = cache_report(&config, "default", dir.path());
+
+        assert!(report.cache_file.is_some());
+        assert_eq!(report.num_secrets, 2);
+        assert!(report.age_seconds.is_some());
+    }
+
+    #[test]
+    fn cache_report_no_file_when_cache_not_written() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        let config = config_with_age_provider();
+        let report = cache_report(&config, "default", dir.path());
+
+        assert!(report.cache_file.is_none());
+        assert_eq!(report.num_secrets, 0);
+        assert!(report.age_seconds.is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // Overwrite and update scenarios
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn write_cache_overwrites_previous_entry() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+
+        let entry1 = make_cache_entry("key-v1", 0);
+        write_test_cache(dir.path(), &entry1);
+
+        let mut secrets2 = IndexMap::new();
+        secrets2.insert("NEW_SECRET".to_string(), "new-val".to_string());
+        let entry2 = CacheEntry {
+            metadata: CacheMetadata {
+                cache_key: "key-v2".to_string(),
+                created_at: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as u64,
+                encryption_provider: "age".to_string(),
+                profile: "default".to_string(),
+            },
+            secrets: secrets2,
+        };
+        write_test_cache(dir.path(), &entry2);
+
+        match check_cache(dir.path(), "key-v2") {
+            CacheStatus::Fresh(e) => {
+                assert_eq!(e.secrets.len(), 1);
+                assert_eq!(e.secrets["NEW_SECRET"], "new-val");
+            }
+            other => panic!("expected Fresh, got {:?}", status_name(&other)),
+        }
+
+        // Old key no longer matches
+        assert!(matches!(
+            check_cache(dir.path(), "key-v1"),
+            CacheStatus::Expired
+        ));
+    }
+
+    // -----------------------------------------------------------------------
+    // TTL boundary tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn check_cache_fresh_at_one_second_old() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        let entry = make_cache_entry("k", 1_000); // 1 second old
+        write_test_cache(dir.path(), &entry);
+
+        assert!(matches!(
+            check_cache(dir.path(), "k"),
+            CacheStatus::Fresh(_)
+        ));
+    }
+
+    #[test]
+    fn check_cache_fresh_just_before_soft_ttl() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        // 14m59s old (soft TTL is 15m)
+        let entry = make_cache_entry("k", 14 * 60 * 1000 + 59 * 1000);
+        write_test_cache(dir.path(), &entry);
+
+        assert!(matches!(
+            check_cache(dir.path(), "k"),
+            CacheStatus::Fresh(_)
+        ));
+    }
+
+    #[test]
+    fn check_cache_stale_just_past_soft_ttl() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        // 15m01s old
+        let entry = make_cache_entry("k", 15 * 60 * 1000 + 1_000);
+        write_test_cache(dir.path(), &entry);
+
+        assert!(matches!(
+            check_cache(dir.path(), "k"),
+            CacheStatus::Stale(_)
+        ));
+    }
+
+    #[test]
+    fn check_cache_stale_midway_between_soft_and_hard() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        // 2h old (between 15m soft and 4h hard)
+        let entry = make_cache_entry("k", 2 * 60 * 60 * 1000);
+        write_test_cache(dir.path(), &entry);
+
+        assert!(matches!(
+            check_cache(dir.path(), "k"),
+            CacheStatus::Stale(_)
+        ));
+    }
+
+    #[test]
+    fn check_cache_stale_just_before_hard_ttl() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        // 3h59m old
+        let entry = make_cache_entry("k", 3 * 60 * 60 * 1000 + 59 * 60 * 1000);
+        write_test_cache(dir.path(), &entry);
+
+        assert!(matches!(
+            check_cache(dir.path(), "k"),
+            CacheStatus::Stale(_)
+        ));
+    }
+
+    #[test]
+    fn check_cache_expired_just_past_hard_ttl() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        // 4h01s old
+        let entry = make_cache_entry("k", 4 * 60 * 60 * 1000 + 1_000);
+        write_test_cache(dir.path(), &entry);
+
+        assert!(matches!(check_cache(dir.path(), "k"), CacheStatus::Expired));
+    }
+
+    // -----------------------------------------------------------------------
+    // Background refresh lock
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn refreshing_lock_prevents_duplicate_spawn() {
+        let dir = tempfile::tempdir().unwrap();
+        let refreshing = cache_refreshing_path(dir.path());
+
+        // Simulate an in-progress refresh
+        fs::create_dir_all(refreshing.parent().unwrap()).unwrap();
+        fs::write(&refreshing, "12345").unwrap();
+
+        // spawn_background_refresh should detect the lock and not panic
+        spawn_background_refresh(dir.path());
+
+        // Lock file should still exist (not removed by spawn)
+        assert!(refreshing.exists());
+    }
+
+    #[test]
+    fn stale_refreshing_lock_is_cleaned_up() {
+        let dir = tempfile::tempdir().unwrap();
+        let refreshing = cache_refreshing_path(dir.path());
+
+        fs::create_dir_all(refreshing.parent().unwrap()).unwrap();
+        fs::write(&refreshing, "old-pid").unwrap();
+
+        // Backdate the lock file to 3 minutes ago (stale threshold is 2 min)
+        let old_time = std::time::SystemTime::now() - std::time::Duration::from_secs(3 * 60);
+        filetime::set_file_mtime(&refreshing, filetime::FileTime::from_system_time(old_time))
+            .unwrap();
+
+        // spawn_background_refresh should remove the stale lock.
+        // (The actual child process may fail since fnox binary might not be the
+        // test binary, but the stale lock removal is what we're testing.)
+        spawn_background_refresh(dir.path());
+
+        // The function either removed the old lock and created a new one (if
+        // the exe exists), or removed it and failed to spawn (leaving it gone).
+        // Either way, the OLD content should be gone.
+        if refreshing.exists() {
+            let content = fs::read_to_string(&refreshing).unwrap();
+            assert_ne!(content, "old-pid");
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Multiple projects don't interfere
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn separate_projects_have_independent_caches() {
+        crate::settings::Settings::reset_for_tests();
+        let dir_a = tempfile::tempdir().unwrap();
+        let dir_b = tempfile::tempdir().unwrap();
+
+        let entry_a = make_cache_entry("key-a", 0);
+        let mut entry_b = make_cache_entry("key-b", 0);
+        entry_b
+            .secrets
+            .insert("EXTRA".to_string(), "val".to_string());
+
+        write_test_cache(dir_a.path(), &entry_a);
+        write_test_cache(dir_b.path(), &entry_b);
+
+        // Each project sees its own cache
+        match check_cache(dir_a.path(), "key-a") {
+            CacheStatus::Fresh(e) => assert_eq!(e.secrets.len(), 2),
+            other => panic!("expected Fresh for A, got {:?}", status_name(&other)),
+        }
+        match check_cache(dir_b.path(), "key-b") {
+            CacheStatus::Fresh(e) => assert_eq!(e.secrets.len(), 3),
+            other => panic!("expected Fresh for B, got {:?}", status_name(&other)),
+        }
+
+        // Invalidating one doesn't affect the other
+        invalidate_cache(dir_a.path());
+        assert!(matches!(
+            check_cache(dir_a.path(), "key-a"),
+            CacheStatus::Missing
+        ));
+        assert!(matches!(
+            check_cache(dir_b.path(), "key-b"),
+            CacheStatus::Fresh(_)
+        ));
+    }
+
+    // -----------------------------------------------------------------------
+    // Plaintext cache entry (empty encryption_provider)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn plaintext_cache_entry_roundtrip() {
+        crate::settings::Settings::reset_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+
+        let mut secrets = IndexMap::new();
+        secrets.insert("PLAIN_SECRET".to_string(), "hello-world".to_string());
+        let entry = CacheEntry {
+            metadata: CacheMetadata {
+                cache_key: "pt-key".to_string(),
+                created_at: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as u64,
+                encryption_provider: String::new(),
+                profile: "default".to_string(),
+            },
+            secrets,
+        };
+
+        write_test_cache(dir.path(), &entry);
+
+        match check_cache(dir.path(), "pt-key") {
+            CacheStatus::Fresh(e) => {
+                assert!(e.metadata.encryption_provider.is_empty());
+                assert_eq!(e.secrets["PLAIN_SECRET"], "hello-world");
+            }
+            other => panic!("expected Fresh, got {:?}", status_name(&other)),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Helper for debug output
+    // -----------------------------------------------------------------------
+
+    fn status_name(s: &CacheStatus) -> &'static str {
+        match s {
+            CacheStatus::Fresh(_) => "Fresh",
+            CacheStatus::Stale(_) => "Stale",
+            CacheStatus::Expired => "Expired",
+            CacheStatus::Missing => "Missing",
+        }
     }
 }
