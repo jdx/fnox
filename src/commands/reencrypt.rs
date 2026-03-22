@@ -69,14 +69,20 @@ impl ReencryptCommand {
         // Collect secrets that use encryption providers
         let mut secrets_to_reencrypt: IndexMap<String, (String, SecretConfig)> = IndexMap::new();
 
+        let default_provider = merged_config.get_default_provider(&profile)?;
+
         for (key, secret_config) in &all_secrets {
-            let Some(provider_name) = secret_config.provider() else {
+            let provider_name = if let Some(p) = secret_config.provider() {
+                p.to_string()
+            } else if let Some(ref dp) = default_provider {
+                dp.clone()
+            } else {
                 continue;
             };
 
             // Apply --provider filter
             if let Some(ref p) = self.provider
-                && provider_name != p
+                && provider_name != *p
             {
                 continue;
             }
@@ -94,19 +100,19 @@ impl ReencryptCommand {
             }
 
             // Skip providers already known to lack Encryption capability
-            if non_encryption_providers.contains(provider_name) {
+            if non_encryption_providers.contains(&provider_name) {
                 continue;
             }
 
             // Check if provider has Encryption capability (resolve once and cache)
-            let Some(provider_config) = providers.get(provider_name) else {
+            let Some(provider_config) = providers.get(provider_name.as_str()) else {
                 continue;
             };
-            if !provider_cache.contains_key(provider_name) {
+            if !provider_cache.contains_key(&provider_name) {
                 let provider = crate::providers::get_provider_resolved(
                     &merged_config,
                     &profile,
-                    provider_name,
+                    &provider_name,
                     provider_config,
                 )
                 .await?;
@@ -114,16 +120,13 @@ impl ReencryptCommand {
                     .capabilities()
                     .contains(&crate::providers::ProviderCapability::Encryption)
                 {
-                    non_encryption_providers.insert(provider_name.to_string());
+                    non_encryption_providers.insert(provider_name.clone());
                     continue;
                 }
-                provider_cache.insert(provider_name.to_string(), provider);
+                provider_cache.insert(provider_name.clone(), provider);
             }
 
-            secrets_to_reencrypt.insert(
-                key.clone(),
-                (provider_name.to_string(), secret_config.clone()),
-            );
+            secrets_to_reencrypt.insert(key.clone(), (provider_name, secret_config.clone()));
         }
 
         // Warn about explicitly-requested keys that weren't found or eligible
@@ -207,7 +210,10 @@ impl ReencryptCommand {
 
         for (key, plaintext) in &resolved {
             let Some(plaintext) = plaintext else {
-                tracing::warn!("Skipping '{}': could not resolve value", key);
+                tracing::warn!(
+                    "Skipping '{}': could not decrypt value — secret remains encrypted with old recipients",
+                    key
+                );
                 skipped_count += 1;
                 continue;
             };
@@ -228,10 +234,13 @@ impl ReencryptCommand {
                     let mut updated = secret_config.clone();
                     updated.set_value(Some(encrypted));
 
-                    let source_path = secret_config
-                        .source_path
-                        .clone()
-                        .unwrap_or_else(|| cli.config.clone());
+                    let source_path =
+                        secret_config.source_path.clone().ok_or_else(|| {
+                            FnoxError::Config(format!(
+                                "Secret '{}' has no known source file; cannot write back re-encrypted value",
+                                key
+                            ))
+                        })?;
 
                     by_source
                         .entry(source_path)
