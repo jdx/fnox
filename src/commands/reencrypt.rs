@@ -129,13 +129,17 @@ impl ReencryptCommand {
             secrets_to_reencrypt.insert(key.clone(), (provider_name, secret_config.clone()));
         }
 
-        // Warn about explicitly-requested keys that weren't found or eligible
+        // Error if explicitly-requested keys weren't found or eligible
         for key in &self.keys {
             if !secrets_to_reencrypt.contains_key(key) {
-                tracing::warn!(
-                    "Key '{}' was not found or is not eligible for re-encryption",
-                    key
-                );
+                return Err(FnoxError::SecretNotFound {
+                    key: key.clone(),
+                    profile: profile.to_string(),
+                    config_path: None,
+                    suggestion: Some(
+                        "The key was not found or does not use an encryption provider".to_string(),
+                    ),
+                });
             }
         }
 
@@ -206,16 +210,14 @@ impl ReencryptCommand {
         // Re-encrypt each secret and group by source file
         let mut by_source: IndexMap<PathBuf, IndexMap<String, SecretConfig>> = IndexMap::new();
         let mut reencrypted_count = 0;
-        let mut skipped_count = 0;
 
         for (key, plaintext) in &resolved {
             let Some(plaintext) = plaintext else {
-                tracing::warn!(
-                    "Skipping '{}': could not decrypt value — secret remains encrypted with old recipients",
+                return Err(FnoxError::Config(format!(
+                    "Failed to decrypt secret '{}' — cannot re-encrypt. \
+                     Ensure you have the correct private key for the current recipients.",
                     key
-                );
-                skipped_count += 1;
-                continue;
+                )));
             };
 
             let (provider_name, secret_config) = &secrets_to_reencrypt[key];
@@ -264,9 +266,6 @@ impl ReencryptCommand {
         }
 
         println!("Re-encrypted {} secrets", reencrypted_count);
-        if skipped_count > 0 {
-            println!("Skipped {} secrets (could not resolve)", skipped_count);
-        }
 
         Ok(())
     }
