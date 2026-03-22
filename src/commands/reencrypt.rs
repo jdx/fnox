@@ -216,6 +216,7 @@ impl ReencryptCommand {
                 let mut resolve_config = sc.clone();
                 resolve_config.json_path = None;
                 resolve_config.sync = None;
+                resolve_config.default = None;
                 (key.clone(), resolve_config)
             })
             .collect();
@@ -233,8 +234,21 @@ impl ReencryptCommand {
             }
         }
 
-        // Re-encrypt each secret and group by source file
-        let mut by_source: IndexMap<PathBuf, IndexMap<String, SecretConfig>> = IndexMap::new();
+        // Determine which secrets are profile-level vs base-level.
+        // Base secrets should be saved back to [secrets], not [profiles.X.secrets].
+        let profile_secret_keys: std::collections::HashSet<String> = if profile != "default" {
+            merged_config
+                .profiles
+                .get(profile.as_str())
+                .map(|pc| pc.secrets.keys().cloned().collect())
+                .unwrap_or_default()
+        } else {
+            std::collections::HashSet::new()
+        };
+
+        // Re-encrypt each secret and group by (source file, effective profile)
+        let mut by_source: IndexMap<(PathBuf, String), IndexMap<String, SecretConfig>> =
+            IndexMap::new();
         let mut reencrypted_count = 0;
 
         for (key, plaintext) in &resolved {
@@ -271,8 +285,17 @@ impl ReencryptCommand {
                             ))
                         })?;
 
+                    // Base-level secrets must be saved to [secrets] (profile "default"),
+                    // not [profiles.X.secrets]
+                    let save_profile = if profile != "default" && !profile_secret_keys.contains(key)
+                    {
+                        "default".to_string()
+                    } else {
+                        profile.clone()
+                    };
+
                     by_source
-                        .entry(source_path)
+                        .entry((source_path, save_profile))
                         .or_default()
                         .insert(key.clone(), updated);
                     reencrypted_count += 1;
@@ -287,9 +310,9 @@ impl ReencryptCommand {
             }
         }
 
-        // Save back to each source file
-        for (source_path, secrets) in &by_source {
-            Config::save_secrets_to_source(secrets, &profile, source_path)?;
+        // Save back to each source file under the correct TOML section
+        for ((source_path, save_profile), secrets) in &by_source {
+            Config::save_secrets_to_source(secrets, save_profile, source_path)?;
         }
 
         println!("Re-encrypted {} secrets", reencrypted_count);
