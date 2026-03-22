@@ -203,11 +203,13 @@ impl ReencryptCommand {
 
         // Build a SecretConfig map for batch resolution (decrypt step).
         // Strip json_path so we get the full encrypted value, not the extracted field.
+        // Strip sync cache so we decrypt from the main provider/value, not a stale cache.
         let secrets_for_resolve: IndexMap<String, SecretConfig> = secrets_to_reencrypt
             .iter()
             .map(|(key, (_, sc))| {
                 let mut resolve_config = sc.clone();
                 resolve_config.json_path = None;
+                resolve_config.sync = None;
                 (key.clone(), resolve_config)
             })
             .collect();
@@ -253,6 +255,7 @@ impl ReencryptCommand {
                 Ok(encrypted) => {
                     let mut updated = secret_config.clone();
                     updated.set_value(Some(encrypted));
+                    updated.sync = None; // Clear stale sync cache
 
                     let source_path =
                         secret_config.source_path.clone().ok_or_else(|| {
