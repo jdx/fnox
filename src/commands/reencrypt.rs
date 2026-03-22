@@ -224,13 +224,12 @@ impl ReencryptCommand {
             })
             .collect();
 
-        let resolved =
-            resolve_secrets_batch(&merged_config, &profile, &secrets_for_resolve).await?;
+        let resolved = resolve_secrets_batch(&merged_config, &profile, &secrets_for_resolve).await;
 
-        // Scrub decrypted plaintext from the process environment.
-        // resolve_secrets_batch calls set_var for each resolved secret, which is
-        // useful for exec/run but leaks plaintext here (visible via /proc and
-        // inherited by child processes).
+        // Scrub decrypted plaintext from the process environment regardless of
+        // success/failure. resolve_secrets_batch calls set_var for each resolved
+        // secret, which leaks plaintext here (visible via /proc and inherited by
+        // child processes).
         for key in secrets_to_reencrypt.keys() {
             // SAFETY: reencrypt is single-threaded at this point; no other threads
             // are reading the environment concurrently.
@@ -238,6 +237,8 @@ impl ReencryptCommand {
                 std::env::remove_var(key);
             }
         }
+
+        let resolved = resolved?;
 
         // Verify all secrets were resolved (catch silent drops from resolve_secrets_batch)
         for key in secrets_to_reencrypt.keys() {
@@ -248,18 +249,6 @@ impl ReencryptCommand {
                 });
             }
         }
-
-        // Determine which secrets are profile-level vs base-level.
-        // Base secrets should be saved back to [secrets], not [profiles.X.secrets].
-        let profile_secret_keys: std::collections::HashSet<String> = if profile != "default" {
-            merged_config
-                .profiles
-                .get(profile.as_str())
-                .map(|pc| pc.secrets.keys().cloned().collect())
-                .unwrap_or_default()
-        } else {
-            std::collections::HashSet::new()
-        };
 
         // Re-encrypt each secret and group by (source file, effective profile)
         let mut by_source: IndexMap<(PathBuf, String), IndexMap<String, SecretConfig>> =
@@ -299,13 +288,13 @@ impl ReencryptCommand {
                             ))
                         })?;
 
-                    // Base-level secrets must be saved to [secrets] (profile "default"),
-                    // not [profiles.X.secrets]
-                    let save_profile = if profile != "default" && !profile_secret_keys.contains(key)
-                    {
-                        "default".to_string()
-                    } else {
+                    // Use source_is_profile to determine the correct TOML section.
+                    // Secrets loaded from root [secrets] must be saved back there,
+                    // not to [profiles.X.secrets].
+                    let save_profile = if secret_config.source_is_profile {
                         profile.clone()
+                    } else {
+                        "default".to_string()
                     };
 
                     by_source
