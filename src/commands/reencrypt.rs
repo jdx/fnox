@@ -106,6 +106,9 @@ impl ReencryptCommand {
 
             // Check if provider has Encryption capability (resolve once and cache)
             let Some(provider_config) = providers.get(provider_name.as_str()) else {
+                tracing::warn!(
+                    "Skipping '{key}': provider '{provider_name}' not found in current config"
+                );
                 continue;
             };
             if !provider_cache.contains_key(&provider_name) {
