@@ -261,21 +261,22 @@ fnox get DATABASE_URL  # Works for all recipients!
 
 3. **Re-encrypt all secrets** (necessary for new recipient):
 
-   Individual examples:
-
    ```bash
-   # Re-encrypt each secret with new recipient list
-   fnox set DATABASE_URL "$(fnox get DATABASE_URL)" --provider age
-   fnox set API_KEY "$(fnox get API_KEY)" --provider age
-   # ... repeat for all secrets
+   fnox reencrypt -p age
    ```
 
-   Looping example:
+   Use `--dry-run` to preview what would be re-encrypted:
 
    ```bash
-   fnox list | awk '/provider \(age\)/ {print $1}' | while read env_key; do
-     fnox set "$env_key" "$(fnox get "$env_key")" --provider age
-   done
+   fnox reencrypt -p age --dry-run
+   ```
+
+   For multiple profiles:
+
+   ```bash
+   fnox reencrypt -p age -P default
+   fnox reencrypt -p age -P staging
+   fnox reencrypt -p age -P prod
    ```
 
 4. **Commit and push**:

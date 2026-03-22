@@ -338,8 +338,7 @@ echo 'eval "$(fnox activate bash)"' >> ~/.bashrc
 
 # 7. Team lead updates fnox.toml with new recipient
 # Then re-encrypts all secrets:
-fnox set DATABASE_URL "$(fnox get DATABASE_URL)" --provider age
-# ... repeat for all secrets
+fnox reencrypt -p age
 
 # 8. New team member pulls and runs
 git pull
