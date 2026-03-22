@@ -65,7 +65,7 @@ impl SetCommand {
         let secret_value = if let Some(ref v) = self.value {
             // Value provided as argument
             Some(v.clone())
-        } else if has_metadata {
+        } else if has_metadata && self.key_name.is_none() {
             // Only metadata is being set, no secret value needed
             None
         } else if !atty::is(atty::Stream::Stdin) {

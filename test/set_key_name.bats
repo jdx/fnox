@@ -51,3 +51,16 @@ teardown() {
 	# key_name is silently ignored for encryption providers — it should not appear in config
 	assert_file_not_contains test-config.toml "custom-key-name"
 }
+
+@test "fnox set -k combined with -d still prompts for secret value" {
+	# When -k is combined with metadata flags like -d, the secret value should
+	# still be read (not skipped by the metadata-only path)
+	run bash -c 'echo "my-secret-value" | "$FNOX_BIN" --config test-config.toml set -p age -k custom-key-name -d "my description" MY_SECRET'
+	assert_success
+
+	# The config should reference the secret with description and encrypted value
+	assert_file_contains test-config.toml "MY_SECRET"
+	assert_file_contains test-config.toml "my description"
+	# The plaintext secret value should NOT appear (it should be encrypted)
+	assert_file_not_contains test-config.toml "my-secret-value"
+}
