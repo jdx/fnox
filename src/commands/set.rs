@@ -58,12 +58,8 @@ impl SetCommand {
         tracing::debug!("Setting secret '{}' in profile '{}'", self.key, profile);
 
         // Check if we're only setting metadata (no actual secret value)
-        // Note: provider is not considered "metadata only" because we need it for encryption
-        // key_name is metadata-only because it just sets the reference without encrypting
-        let has_metadata = self.description.is_some()
-            || self.if_missing.is_some()
-            || self.default.is_some()
-            || self.key_name.is_some();
+        let has_metadata =
+            self.description.is_some() || self.if_missing.is_some() || self.default.is_some();
 
         // Get the secret value if provided
         let secret_value = if let Some(ref v) = self.value {
@@ -217,9 +213,7 @@ impl SetCommand {
             secret_config.set_provider(provider_name_to_use.clone());
         }
 
-        if let Some(ref key_name) = self.key_name {
-            secret_config.set_value(Some(key_name.clone()));
-        } else if let Some(ref value) = secret_value {
+        if let Some(ref value) = secret_value {
             // Priority order: remote key name, encrypted value, then plaintext
             if let Some(remote_key) = remote_key_name {
                 // Store the key name for remote storage providers
