@@ -126,6 +126,12 @@ impl ReencryptCommand {
                 provider_cache.insert(provider_name.clone(), provider);
             }
 
+            // Skip secrets with no stored ciphertext — nothing to re-encrypt
+            if secret_config.value().is_none() {
+                tracing::debug!("Skipping '{key}': no encrypted value stored");
+                continue;
+            }
+
             secrets_to_reencrypt.insert(key.clone(), (provider_name, secret_config.clone()));
         }
 
