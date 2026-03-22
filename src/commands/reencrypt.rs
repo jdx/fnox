@@ -136,9 +136,17 @@ impl ReencryptCommand {
                     key: key.clone(),
                     profile: profile.to_string(),
                     config_path: None,
-                    suggestion: Some(
-                        "The key was not found or does not use an encryption provider".to_string(),
-                    ),
+                    suggestion: Some(format!(
+                        "The key was not found, does not use an encryption provider, or was excluded by filters{}{}",
+                        self.provider
+                            .as_ref()
+                            .map(|p| format!(" (--provider {})", p))
+                            .unwrap_or_default(),
+                        self.filter
+                            .as_ref()
+                            .map(|f| format!(" (--filter {})", f))
+                            .unwrap_or_default(),
+                    )),
                 });
             }
         }
@@ -206,6 +214,16 @@ impl ReencryptCommand {
 
         let resolved =
             resolve_secrets_batch(&merged_config, &profile, &secrets_for_resolve).await?;
+
+        // Verify all secrets were resolved (catch silent drops from resolve_secrets_batch)
+        for key in secrets_to_reencrypt.keys() {
+            if !resolved.contains_key(key) {
+                return Err(FnoxError::Config(format!(
+                    "Secret '{}' was not returned by the resolver — cannot re-encrypt",
+                    key
+                )));
+            }
+        }
 
         // Re-encrypt each secret and group by source file
         let mut by_source: IndexMap<PathBuf, IndexMap<String, SecretConfig>> = IndexMap::new();
