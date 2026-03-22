@@ -59,9 +59,12 @@ impl ReencryptCommand {
 
         let keys_filter: std::collections::HashSet<_> = self.keys.iter().collect();
 
-        // Resolve and cache encryption providers
+        // Resolve and cache encryption providers; track non-encryption providers
+        // to avoid redundant resolution
         let mut provider_cache: HashMap<String, Box<dyn crate::providers::Provider>> =
             HashMap::new();
+        let mut non_encryption_providers: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
 
         // Collect secrets that use encryption providers
         let mut secrets_to_reencrypt: IndexMap<String, (String, SecretConfig)> = IndexMap::new();
@@ -90,6 +93,11 @@ impl ReencryptCommand {
                 continue;
             }
 
+            // Skip providers already known to lack Encryption capability
+            if non_encryption_providers.contains(provider_name) {
+                continue;
+            }
+
             // Check if provider has Encryption capability (resolve once and cache)
             let Some(provider_config) = providers.get(provider_name) else {
                 continue;
@@ -106,6 +114,7 @@ impl ReencryptCommand {
                     .capabilities()
                     .contains(&crate::providers::ProviderCapability::Encryption)
                 {
+                    non_encryption_providers.insert(provider_name.to_string());
                     continue;
                 }
                 provider_cache.insert(provider_name.to_string(), provider);
@@ -115,6 +124,16 @@ impl ReencryptCommand {
                 key.clone(),
                 (provider_name.to_string(), secret_config.clone()),
             );
+        }
+
+        // Warn about explicitly-requested keys that weren't found or eligible
+        for key in &self.keys {
+            if !secrets_to_reencrypt.contains_key(key) {
+                tracing::warn!(
+                    "Key '{}' was not found or is not eligible for re-encryption",
+                    key
+                );
+            }
         }
 
         if secrets_to_reencrypt.is_empty() {
