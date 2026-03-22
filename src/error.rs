@@ -561,6 +561,14 @@ pub enum FnoxError {
         details: String,
     },
 
+    #[error("Failed to decrypt secret '{key}' — cannot re-encrypt: {details}")]
+    #[diagnostic(
+        code(fnox::reencrypt::decrypt_failed),
+        help("Ensure you have the correct private key for the current recipients"),
+        url("https://fnox.jdx.dev/cli/reencrypt")
+    )]
+    ReencryptDecryptFailed { key: String, details: String },
+
     #[error("Failed to create directory: {}", path.display())]
     #[diagnostic(
         code(fnox::io::create_dir_failed),

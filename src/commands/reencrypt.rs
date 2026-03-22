@@ -227,13 +227,25 @@ impl ReencryptCommand {
         let resolved =
             resolve_secrets_batch(&merged_config, &profile, &secrets_for_resolve).await?;
 
+        // Scrub decrypted plaintext from the process environment.
+        // resolve_secrets_batch calls set_var for each resolved secret, which is
+        // useful for exec/run but leaks plaintext here (visible via /proc and
+        // inherited by child processes).
+        for key in secrets_to_reencrypt.keys() {
+            // SAFETY: reencrypt is single-threaded at this point; no other threads
+            // are reading the environment concurrently.
+            unsafe {
+                std::env::remove_var(key);
+            }
+        }
+
         // Verify all secrets were resolved (catch silent drops from resolve_secrets_batch)
         for key in secrets_to_reencrypt.keys() {
             if !resolved.contains_key(key) {
-                return Err(FnoxError::Config(format!(
-                    "Secret '{}' was not returned by the resolver — cannot re-encrypt",
-                    key
-                )));
+                return Err(FnoxError::ReencryptDecryptFailed {
+                    key: key.clone(),
+                    details: "secret was not returned by the resolver".to_string(),
+                });
             }
         }
 
@@ -256,11 +268,10 @@ impl ReencryptCommand {
 
         for (key, plaintext) in &resolved {
             let Some(plaintext) = plaintext else {
-                return Err(FnoxError::Config(format!(
-                    "Failed to decrypt secret '{}' — cannot re-encrypt. \
-                     Ensure you have the correct private key for the current recipients.",
-                    key
-                )));
+                return Err(FnoxError::ReencryptDecryptFailed {
+                    key: key.clone(),
+                    details: "resolver returned no value for this secret".to_string(),
+                });
             };
 
             let (provider_name, secret_config) = &secrets_to_reencrypt[key];
