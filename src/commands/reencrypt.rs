@@ -6,6 +6,7 @@ use clap::Args;
 use console;
 use indexmap::IndexMap;
 use regex::Regex;
+use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
 
@@ -58,6 +59,10 @@ impl ReencryptCommand {
 
         let keys_filter: std::collections::HashSet<_> = self.keys.iter().collect();
 
+        // Resolve and cache encryption providers
+        let mut provider_cache: HashMap<String, Box<dyn crate::providers::Provider>> =
+            HashMap::new();
+
         // Collect secrets that use encryption providers
         let mut secrets_to_reencrypt: IndexMap<String, (String, SecretConfig)> = IndexMap::new();
 
@@ -85,22 +90,25 @@ impl ReencryptCommand {
                 continue;
             }
 
-            // Check if provider has Encryption capability
+            // Check if provider has Encryption capability (resolve once and cache)
             let Some(provider_config) = providers.get(provider_name) else {
                 continue;
             };
-            let provider = crate::providers::get_provider_resolved(
-                &merged_config,
-                &profile,
-                provider_name,
-                provider_config,
-            )
-            .await?;
-            if !provider
-                .capabilities()
-                .contains(&crate::providers::ProviderCapability::Encryption)
-            {
-                continue;
+            if !provider_cache.contains_key(provider_name) {
+                let provider = crate::providers::get_provider_resolved(
+                    &merged_config,
+                    &profile,
+                    provider_name,
+                    provider_config,
+                )
+                .await?;
+                if !provider
+                    .capabilities()
+                    .contains(&crate::providers::ProviderCapability::Encryption)
+                {
+                    continue;
+                }
+                provider_cache.insert(provider_name.to_string(), provider);
             }
 
             secrets_to_reencrypt.insert(
@@ -159,10 +167,15 @@ impl ReencryptCommand {
             }
         }
 
-        // Build a SecretConfig map for batch resolution (decrypt step)
+        // Build a SecretConfig map for batch resolution (decrypt step).
+        // Strip json_path so we get the full encrypted value, not the extracted field.
         let secrets_for_resolve: IndexMap<String, SecretConfig> = secrets_to_reencrypt
             .iter()
-            .map(|(key, (_, sc))| (key.clone(), sc.clone()))
+            .map(|(key, (_, sc))| {
+                let mut resolve_config = sc.clone();
+                resolve_config.json_path = None;
+                (key.clone(), resolve_config)
+            })
             .collect();
 
         let resolved =
@@ -182,14 +195,14 @@ impl ReencryptCommand {
 
             let (provider_name, secret_config) = &secrets_to_reencrypt[key];
 
-            let provider_config = providers.get(provider_name.as_str()).unwrap();
-            let provider = crate::providers::get_provider_resolved(
-                &merged_config,
-                &profile,
-                provider_name,
-                provider_config,
-            )
-            .await?;
+            let provider = provider_cache.get(provider_name.as_str()).ok_or_else(|| {
+                FnoxError::ProviderNotConfigured {
+                    provider: provider_name.clone(),
+                    profile: profile.to_string(),
+                    config_path: None,
+                    suggestion: None,
+                }
+            })?;
 
             match provider.encrypt(plaintext).await {
                 Ok(encrypted) => {

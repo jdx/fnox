@@ -274,9 +274,9 @@ fnox get DATABASE_URL  # Works for all recipients!
    For multiple profiles:
 
    ```bash
-   fnox reencrypt -p age -P default
-   fnox reencrypt -p age -P staging
-   fnox reencrypt -p age -P prod
+   fnox reencrypt -p age -P default -f
+   fnox reencrypt -p age -P staging -f
+   fnox reencrypt -p age -P prod -f
    ```
 
 4. **Commit and push**:
