@@ -210,18 +210,12 @@ impl ReencryptCommand {
             }
         }
 
-        // Build a SecretConfig map for batch resolution (decrypt step).
-        // Strip json_path so we get the full encrypted value, not the extracted field.
-        // Strip sync cache so we decrypt from the main provider/value, not a stale cache.
+        // Resolve raw values from the original provider:
+        // - Cached sync values would reencrypt stale data instead of the latest.
+        // - Post-processed values (e.g. from json_path) would cause future reads to fail.
         let secrets_for_resolve: IndexMap<String, SecretConfig> = secrets_to_reencrypt
             .iter()
-            .map(|(key, (_, sc))| {
-                let mut resolve_config = sc.clone();
-                resolve_config.json_path = None;
-                resolve_config.sync = None;
-                resolve_config.default = None;
-                (key.clone(), resolve_config)
-            })
+            .map(|(key, (_, sc))| (key.clone(), sc.for_raw_resolve()))
             .collect();
 
         let resolved = resolve_secrets_batch(&merged_config, &profile, &secrets_for_resolve).await;

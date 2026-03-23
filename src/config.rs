@@ -1458,6 +1458,16 @@ impl SecretConfig {
         }
     }
 
+    /// Return a copy that will resolve to the original provider value,
+    /// skipping post-processing and cached sync values.
+    pub fn for_raw_resolve(&self) -> Self {
+        let mut config = self.clone();
+        config.json_path = None;
+        config.sync = None;
+        config.default = None;
+        config
+    }
+
     /// Convert this secret config to a TOML inline table for saving
     pub fn to_inline_table(&self) -> toml_edit::InlineTable {
         let mut inline = toml_edit::InlineTable::new();
@@ -1968,5 +1978,72 @@ mod tests {
         };
         let merged = Config::merge_configs(base, overlay).unwrap();
         assert_eq!(merged.mcp.unwrap().secrets, Some(vec!["A".into()]));
+    }
+
+    #[test]
+    fn test_for_raw_resolve_strips_post_processing_fields() {
+        let mut secret = SecretConfig::new();
+        secret.set_provider(Some("plain".to_string()));
+        secret.set_value(Some(r#"{"user":"admin"}"#.to_string()));
+        secret.default = Some("fallback".to_string());
+        secret.json_path = Some("user".to_string());
+        secret.sync = Some(SyncConfig {
+            provider: "age".to_string(),
+            value: "encrypted-blob".to_string(),
+        });
+
+        let raw = secret.for_raw_resolve();
+
+        assert!(raw.default.is_none());
+        assert!(raw.json_path.is_none());
+        assert!(raw.sync.is_none());
+    }
+
+    #[test]
+    fn test_for_raw_resolve_preserves_non_post_processing_fields() {
+        let mut secret = SecretConfig::new();
+        secret.set_provider(Some("plain".to_string()));
+        secret.set_value(Some("my-secret".to_string()));
+        secret.description = Some("A test secret".to_string());
+        secret.if_missing = Some(IfMissing::Warn);
+        secret.env = false;
+        secret.as_file = true;
+        secret.source_path = Some(PathBuf::from("/tmp/fnox.toml"));
+        secret.source_is_profile = true;
+        secret.default = Some("default-val".to_string());
+        secret.json_path = Some("key".to_string());
+        secret.sync = Some(SyncConfig {
+            provider: "age".to_string(),
+            value: "blob".to_string(),
+        });
+
+        let raw = secret.for_raw_resolve();
+
+        assert_eq!(raw.provider(), Some("plain"));
+        assert_eq!(raw.value(), Some("my-secret"));
+        assert_eq!(raw.description.as_deref(), Some("A test secret"));
+        assert_eq!(raw.if_missing, Some(IfMissing::Warn));
+        assert!(!raw.env);
+        assert!(raw.as_file);
+        assert_eq!(
+            raw.source_path.as_deref(),
+            Some(Path::new("/tmp/fnox.toml"))
+        );
+        assert!(raw.source_is_profile);
+    }
+
+    #[test]
+    fn test_for_raw_resolve_with_no_post_processing_fields() {
+        let mut secret = SecretConfig::new();
+        secret.set_provider(Some("plain".to_string()));
+        secret.set_value(Some("simple-value".to_string()));
+
+        let raw = secret.for_raw_resolve();
+
+        assert_eq!(raw.provider(), Some("plain"));
+        assert_eq!(raw.value(), Some("simple-value"));
+        assert!(raw.default.is_none());
+        assert!(raw.json_path.is_none());
+        assert!(raw.sync.is_none());
     }
 }

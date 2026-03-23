@@ -351,6 +351,97 @@ EOF
 	assert_output "updated-remote-value"
 }
 
+@test "fnox sync works with secrets that use json_path" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local keygen_output
+	keygen_output=$(age-keygen -o key.txt 2>&1)
+	local public_key
+	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.plain]
+type = "plain"
+
+[providers.age]
+type = "age"
+recipients = ["$public_key"]
+
+[secrets]
+DB_USER = { provider = "plain", value = '{"username":"admin","password":"secret123"}', json_path = "username" }
+DB_PASS = { provider = "plain", value = '{"username":"admin","password":"secret123"}', json_path = "password" }
+EOF
+
+	# Pre-sync: json_path extraction works
+	assert_fnox_success get DB_USER
+	assert_output "admin"
+	assert_fnox_success get DB_PASS
+	assert_output "secret123"
+
+	# Sync to age
+	assert_fnox_success sync -p age --force --age-key-file key.txt
+
+	# Post-sync: json_path extraction still works on the cached value
+	assert_fnox_success get DB_USER --age-key-file key.txt
+	assert_output "admin"
+	assert_fnox_success get DB_PASS --age-key-file key.txt
+	assert_output "secret123"
+}
+
+@test "fnox sync skips secrets that fall back to a default value" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local keygen_output
+	keygen_output=$(age-keygen -o key.txt 2>&1)
+	local public_key
+	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.plain]
+type = "plain"
+
+[providers.age]
+type = "age"
+recipients = ["$public_key"]
+
+[secrets]
+HAS_VALUE = { provider = "plain", value = "real-value" }
+HAS_DEFAULT_ONLY = { provider = "plain", default = "fallback" }
+EOF
+
+	# Pre-sync: secrets can be resolved
+	assert_fnox_success get HAS_VALUE
+	assert_output "real-value"
+	assert_fnox_success get HAS_DEFAULT_ONLY
+	assert_output "fallback"
+
+	# Sync — HAS_DEFAULT_ONLY should be skipped (no provider value to cache)
+	assert_fnox_success sync -p age --force --age-key-file key.txt
+	assert_output --partial "Skipped 1 secrets"
+
+	# Post-sync: secrets can still be resolved
+	assert_fnox_success get HAS_VALUE --age-key-file key.txt
+	assert_output "real-value"
+	assert_fnox_success get HAS_DEFAULT_ONLY
+	assert_output "fallback"
+
+	# HAS_VALUE should have a sync section in the config
+	run grep 'HAS_VALUE.*sync' fnox.toml
+	assert_success
+
+	# HAS_DEFAULT_ONLY should not have a sync section in the config
+	run grep 'HAS_DEFAULT_ONLY.*sync' fnox.toml
+	assert_failure
+}
+
 @test "fnox sync with no eligible secrets shows message" {
 	if ! command -v age-keygen >/dev/null 2>&1; then
 		skip "age-keygen not installed"

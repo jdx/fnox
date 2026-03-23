@@ -1,5 +1,5 @@
 use crate::commands::Cli;
-use crate::config::{self, Config, SyncConfig, local_override_filename};
+use crate::config::{self, Config, SecretConfig, SyncConfig, local_override_filename};
 use crate::error::{FnoxError, Result};
 use crate::secret_resolver::resolve_secrets_batch;
 use clap::Args;
@@ -223,12 +223,14 @@ impl SyncCommand {
             }
         }
 
-        // Resolve plaintext values from source providers (strip sync cache so we
-        // re-fetch from the original provider rather than the cached sync value)
-        let mut secrets_for_resolve = secrets_to_sync.clone();
-        for secret_config in secrets_for_resolve.values_mut() {
-            secret_config.sync = None;
-        }
+        // Resolve raw values from the original provider:
+        // - Cached sync values would prevent picking up changes after the first sync.
+        // - Post-processed values (e.g. from json_path) would cause future reads to fail.
+        let secrets_for_resolve: IndexMap<String, SecretConfig> = secrets_to_sync
+            .iter()
+            .map(|(key, sc)| (key.clone(), sc.for_raw_resolve()))
+            .collect();
+
         let resolved =
             resolve_secrets_batch(&merged_config, &profile, &secrets_for_resolve).await?;
 
