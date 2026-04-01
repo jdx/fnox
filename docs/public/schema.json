@@ -483,6 +483,32 @@
             "auth_command": {
               "type": ["string", "null"]
             },
+            "credential_id": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "pin": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "rp_id": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "salt": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "fido2"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "credential_id", "salt", "rp_id"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "challenge": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
@@ -563,25 +589,16 @@
             "auth_command": {
               "type": ["string", "null"]
             },
-            "credential_id": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
-            "pin": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "rp_id": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
-            "salt": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
             "type": {
               "type": "string",
-              "const": "fido2"
+              "const": "proton-pass"
+            },
+            "vault": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
             }
           },
           "additionalProperties": false,
-          "required": ["type", "credential_id", "salt", "rp_id"]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -609,41 +626,21 @@
         {
           "type": "object",
           "properties": {
-            "api_key": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
             "auth_command": {
               "type": ["string", "null"]
             },
-            "base_url": {
-              "$ref": "#/$defs/StringOrSecretRef"
+            "environment": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
             },
-            "password_list_id": {
-              "$ref": "#/$defs/StringOrSecretRef"
+            "path": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "project_id": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "type": {
               "type": "string",
-              "const": "passwordstate"
-            },
-            "verify_ssl": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            }
-          },
-          "additionalProperties": false,
-          "required": ["type", "base_url", "password_list_id"]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "auth_command": {
-              "type": ["string", "null"]
-            },
-            "type": {
-              "type": "string",
-              "const": "proton-pass"
-            },
-            "vault": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
+              "const": "infisical"
             }
           },
           "additionalProperties": false,
@@ -685,48 +682,28 @@
         {
           "type": "object",
           "properties": {
+            "api_key": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "auth_command": {
               "type": ["string", "null"]
             },
-            "environment": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "path": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "project_id": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "type": {
-              "type": "string",
-              "const": "infisical"
-            }
-          },
-          "additionalProperties": false,
-          "required": ["type"]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "auth_command": {
-              "type": ["string", "null"]
-            },
-            "endpoint": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "key_id": {
+            "base_url": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
-            "region": {
+            "password_list_id": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
             "type": {
               "type": "string",
-              "const": "aws-kms"
+              "const": "passwordstate"
+            },
+            "verify_ssl": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
             }
           },
           "additionalProperties": false,
-          "required": ["type", "key_id", "region"]
+          "required": ["type", "base_url", "password_list_id"]
         },
         {
           "type": "object",
@@ -783,6 +760,95 @@
             "endpoint": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
+            "key_id": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "region": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "aws-kms"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "key_id", "region"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "profile": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "project_id": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "bitwarden-sm"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "address": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "namespace": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "path": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "token": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "vault"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "prefix": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "project": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "gcp-sm"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "project"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "endpoint": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -829,52 +895,6 @@
         {
           "type": "object",
           "properties": {
-            "address": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "auth_command": {
-              "type": ["string", "null"]
-            },
-            "namespace": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "path": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "token": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "type": {
-              "type": "string",
-              "const": "vault"
-            }
-          },
-          "additionalProperties": false,
-          "required": ["type"]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "auth_command": {
-              "type": ["string", "null"]
-            },
-            "profile": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "project_id": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "type": {
-              "type": "string",
-              "const": "bitwarden-sm"
-            }
-          },
-          "additionalProperties": false,
-          "required": ["type"]
-        },
-        {
-          "type": "object",
-          "properties": {
             "auth_command": {
               "type": ["string", "null"]
             },
@@ -898,19 +918,22 @@
             "auth_command": {
               "type": ["string", "null"]
             },
-            "prefix": {
+            "config": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "project": {
-              "$ref": "#/$defs/StringOrSecretRef"
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "token": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "type": {
               "type": "string",
-              "const": "gcp-sm"
+              "const": "doppler"
             }
           },
           "additionalProperties": false,
-          "required": ["type", "project"]
+          "required": ["type"]
         },
         {
           "type": "object",

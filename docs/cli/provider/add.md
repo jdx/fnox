@@ -30,8 +30,8 @@ Provider type
 - `gcp-kms`
 - `fido2`
 - `bitwarden`
-- `bitwarden-sm`
 - `doppler`
+- `bitwarden-sm`
 - `infisical`
 - `keepass`
 - `keychain`

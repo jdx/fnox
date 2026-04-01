@@ -138,7 +138,7 @@ cmd provider help="Manage providers (defaults to list)" {
         }
         arg <PROVIDER> help="Provider name"
         arg <PROVIDER_TYPE> help="Provider type" {
-            choices "1password" age aws aws-kms aws-ps azure-kms azure-sm gcp gcp-kms fido2 bitwarden bitwarden-sm infisical keepass keychain password-store passwordstate plain proton-pass vault yubikey
+            choices "1password" age aws aws-kms aws-ps azure-kms azure-sm gcp gcp-kms fido2 bitwarden doppler bitwarden-sm infisical keepass keychain password-store passwordstate plain proton-pass vault yubikey
         }
     }
     cmd list help="List available providers" {

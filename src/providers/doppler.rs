@@ -28,13 +28,11 @@ impl DopplerProvider {
 
     /// Get authentication token from config or environment
     fn get_token(&self) -> Option<String> {
-        self.token
-            .clone()
-            .or_else(|| {
-                env::var("FNOX_DOPPLER_TOKEN")
-                    .or_else(|_| env::var("DOPPLER_TOKEN"))
-                    .ok()
-            })
+        self.token.clone().or_else(|| {
+            env::var("FNOX_DOPPLER_TOKEN")
+                .or_else(|_| env::var("DOPPLER_TOKEN"))
+                .ok()
+        })
     }
 
     /// Build common args for project/config/token
