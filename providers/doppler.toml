@@ -1,0 +1,31 @@
+# Doppler provider - retrieves secrets from Doppler
+display_name = "Doppler"
+serde_rename = "doppler"
+rust_variant = "Doppler"
+category = "CloudSecretsManager"
+description = "Doppler secrets manager"
+default_name = "doppler"
+auth_command = "doppler login"
+setup_instructions = """
+Requires: Doppler CLI (https://docs.doppler.com/docs/cli)
+Install: brew install dopplerhq/cli/doppler
+Authenticate: doppler login
+Set project/config: doppler setup (or specify in provider config)
+Or use a service token: export DOPPLER_TOKEN=dp.st.xxx"""
+
+[fields.project]
+type = "optional"
+placeholder = "my-project"
+label = "Project:"
+wizard = true
+
+[fields.config]
+type = "optional"
+placeholder = "prd"
+label = "Config (environment):"
+wizard = true
+
+[fields.token]
+type = "optional"
+placeholder = ""
+label = "Service token (optional, uses env var if not set):"
