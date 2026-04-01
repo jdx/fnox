@@ -31,6 +31,7 @@ Provider type
 - `fido2`
 - `bitwarden`
 - `bitwarden-sm`
+- `doppler`
 - `infisical`
 - `keepass`
 - `keychain`

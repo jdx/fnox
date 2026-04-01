@@ -351,15 +351,15 @@ fn classify_cli_error(stderr: &str, secret_ref: Option<&str>) -> FnoxError {
         };
     }
 
-    if let Some(secret_name) = secret_ref {
-        if contains_any(&stderr_lower, SECRET_NOT_FOUND_PATTERNS) {
-            return FnoxError::ProviderSecretNotFound {
-                provider: PROVIDER_NAME.to_string(),
-                secret: secret_name.to_string(),
-                hint: "Check that the secret exists in your Doppler project/config".to_string(),
-                url: PROVIDER_URL.to_string(),
-            };
-        }
+    if let Some(secret_name) = secret_ref
+        && contains_any(&stderr_lower, SECRET_NOT_FOUND_PATTERNS)
+    {
+        return FnoxError::ProviderSecretNotFound {
+            provider: PROVIDER_NAME.to_string(),
+            secret: secret_name.to_string(),
+            hint: "Check that the secret exists in your Doppler project/config".to_string(),
+            url: PROVIDER_URL.to_string(),
+        };
     }
 
     FnoxError::ProviderCliFailed {

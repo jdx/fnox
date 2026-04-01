@@ -182,6 +182,12 @@ impl AddCommand {
                     auth_command: None,
                 }
             }
+            ProviderType::Doppler => crate::config::ProviderConfig::Doppler {
+                project: OptionStringOrSecretRef::literal("my-project"),
+                config: OptionStringOrSecretRef::literal("prd"),
+                token: OptionStringOrSecretRef::none(),
+                auth_command: None,
+            },
             ProviderType::Infisical => crate::config::ProviderConfig::Infisical {
                 project_id: OptionStringOrSecretRef::literal("your-project-id"),
                 environment: OptionStringOrSecretRef::literal("dev"),

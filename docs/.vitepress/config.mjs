@@ -106,6 +106,7 @@ export default defineConfig({
               { text: "AWS Parameter Store", link: "/providers/aws-ps" },
               { text: "AWS Secrets Manager", link: "/providers/aws-sm" },
               { text: "Azure Key Vault Secrets", link: "/providers/azure-sm" },
+              { text: "Doppler", link: "/providers/doppler" },
               { text: "GCP Secret Manager", link: "/providers/gcp-sm" },
               {
                 text: "Bitwarden Secrets Manager",

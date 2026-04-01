@@ -91,6 +91,7 @@ API_KEY = { default = "dev-key-12345" }  # ← plain default value for local dev
 - **azure-sm** - Azure Key Vault Secrets
 - **gcp-sm** - Google Cloud Secret Manager
 - **bitwarden-sm** - Bitwarden Secrets Manager
+- **doppler** - Doppler secrets manager
 - **vault** - HashiCorp Vault
 
 ### 🔑 Password Managers & Secret Services

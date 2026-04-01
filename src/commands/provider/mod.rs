@@ -57,6 +57,9 @@ pub enum ProviderType {
     /// Bitwarden Password Manager
     #[value(name = "bitwarden")]
     Bitwarden,
+    /// Doppler secrets manager
+    #[value(name = "doppler")]
+    Doppler,
     /// Bitwarden Secrets Manager
     #[value(name = "bitwarden-sm")]
     #[strum(serialize = "bitwarden-sm")]
