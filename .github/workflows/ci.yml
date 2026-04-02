@@ -118,10 +118,27 @@ jobs:
             -p 4566:4566 \
             -e SERVICES=sts,iam,kms,secretsmanager,ssm \
             localstack/localstack:latest
-          # Wait for services to be ready
-          # Poll LocalStack health endpoint (can take 10-30s on cold runners)
-          for _i in $(seq 1 30); do
-            curl -sf http://localhost:4566/_localstack/health && break
+          # Wait for LocalStack to be ready (can take 10-60s on cold runners)
+          echo "Waiting for LocalStack..."
+          localstack_ready=false
+          for _i in $(seq 1 45); do
+            if curl -sf http://localhost:4566/_localstack/health >/dev/null 2>&1; then
+              localstack_ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$localstack_ready" = false ]; then
+            echo "::error::LocalStack failed to start within 90 seconds"
+            docker logs localstack
+            exit 1
+          fi
+          # Verify individual services are responding
+          echo "Verifying LocalStack services..."
+          for _i in $(seq 1 15); do
+            if aws --endpoint-url http://localhost:4566 sts get-caller-identity --region us-east-1 --no-sign-request >/dev/null 2>&1; then
+              break
+            fi
             sleep 2
           done
           # Wait for Vault to be ready
