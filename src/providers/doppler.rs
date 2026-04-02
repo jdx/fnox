@@ -35,7 +35,7 @@ impl DopplerProvider {
         })
     }
 
-    /// Build common args for project/config/token
+    /// Build common args for project/config
     fn build_common_args(&self) -> Vec<String> {
         let mut args = Vec::new();
 
@@ -44,9 +44,6 @@ impl DopplerProvider {
         }
         if let Some(ref config) = self.config {
             args.push(format!("--config={}", config));
-        }
-        if let Some(ref token) = self.get_token() {
-            args.push(format!("--token={}", token));
         }
 
         args
@@ -66,6 +63,10 @@ impl DopplerProvider {
         let common_args = self.build_common_args();
         for arg in &common_args {
             cmd.arg(arg);
+        }
+
+        if let Some(token) = self.get_token() {
+            cmd.env("DOPPLER_TOKEN", token);
         }
 
         cmd.stdin(std::process::Stdio::null());
@@ -110,20 +111,8 @@ impl crate::providers::Provider for DopplerProvider {
     async fn get_secret(&self, value: &str) -> Result<String> {
         tracing::debug!("Getting secret '{}' from Doppler", value);
 
-        let result = self
-            .execute_doppler_command(&["secrets", "get", value, "--plain"], Some(value))
-            .await?;
-
-        if result.is_empty() {
-            return Err(FnoxError::ProviderSecretNotFound {
-                provider: PROVIDER_NAME.to_string(),
-                secret: value.to_string(),
-                hint: "Check that the secret exists in your Doppler project/config".to_string(),
-                url: PROVIDER_URL.to_string(),
-            });
-        }
-
-        Ok(result)
+        self.execute_doppler_command(&["secrets", "get", value, "--plain"], Some(value))
+            .await
     }
 
     async fn get_secrets_batch(
@@ -312,7 +301,6 @@ const SECRET_NOT_FOUND_PATTERNS: &[&str] = &[
     "could not find secret",
     "secret not found",
     "does not exist",
-    "not found",
 ];
 
 const RESOURCE_NOT_FOUND_PATTERNS: &[&str] = &[
