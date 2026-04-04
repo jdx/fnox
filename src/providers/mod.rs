@@ -311,7 +311,7 @@ pub fn join_path(store_dir: Option<String>, provider_source: Option<PathBuf>) ->
             && let Some(mut parent) = provider_source_path.parent().map(|x| x.to_path_buf())
         {
             parent.extend(&path);
-            return parent.into_os_string().to_str().map(String::from);
+            return Some(parent.to_string_lossy().into_owned());
         }
     }
     store_dir
