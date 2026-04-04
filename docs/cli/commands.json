@@ -966,6 +966,86 @@
         "hidden_aliases": [],
         "examples": []
       },
+      "reencrypt": {
+        "full_cmd": ["reencrypt"],
+        "usage": "reencrypt [FLAGS] [KEYS]…",
+        "subcommands": {},
+        "args": [
+          {
+            "name": "KEYS",
+            "usage": "[KEYS]…",
+            "help": "Only re-encrypt these specific secret keys",
+            "help_first_line": "Only re-encrypt these specific secret keys",
+            "required": false,
+            "double_dash": "Optional",
+            "var": true,
+            "hide": false
+          }
+        ],
+        "flags": [
+          {
+            "name": "force",
+            "usage": "-f --force",
+            "help": "Skip confirmation prompt",
+            "help_first_line": "Skip confirmation prompt",
+            "short": ["f"],
+            "long": ["force"],
+            "hide": false,
+            "global": false
+          },
+          {
+            "name": "dry-run",
+            "usage": "-n --dry-run",
+            "help": "Show what would be done without making changes",
+            "help_first_line": "Show what would be done without making changes",
+            "short": ["n"],
+            "long": ["dry-run"],
+            "hide": false,
+            "global": false
+          },
+          {
+            "name": "provider",
+            "usage": "-p --provider <PROVIDER>",
+            "help": "Only re-encrypt secrets from this provider",
+            "help_first_line": "Only re-encrypt secrets from this provider",
+            "short": ["p"],
+            "long": ["provider"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "PROVIDER",
+              "usage": "<PROVIDER>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            }
+          },
+          {
+            "name": "filter",
+            "usage": "--filter <FILTER>",
+            "help": "Only re-encrypt matching secrets (regex pattern)",
+            "help_first_line": "Only re-encrypt matching secrets (regex pattern)",
+            "short": [],
+            "long": ["filter"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "FILTER",
+              "usage": "<FILTER>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            }
+          }
+        ],
+        "mounts": [],
+        "hide": false,
+        "help": "Re-encrypt secrets with current provider configuration",
+        "name": "reencrypt",
+        "aliases": [],
+        "hidden_aliases": [],
+        "examples": []
+      },
       "remove": {
         "full_cmd": ["remove"],
         "usage": "remove [-g --global] [-n --dry-run] <KEY>",
@@ -1511,7 +1591,7 @@
   "config": {
     "props": {}
   },
-  "version": "1.18.0",
+  "version": "1.19.0",
   "usage": "Usage: fnox [OPTIONS] <COMMAND>",
   "complete": {
     "key": {

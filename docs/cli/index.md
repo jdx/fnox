@@ -4,7 +4,7 @@
 
 **Usage**: `fnox [FLAGS] <SUBCOMMAND>`
 
-**Version**: 1.18.0
+**Version**: 1.19.0
 
 - **Usage**: `fnox [FLAGS] <SUBCOMMAND>`
 
@@ -63,6 +63,7 @@ Do not merge top-level secrets into the selected profile
 - [`fnox provider list`](/cli/provider/list.md)
 - [`fnox provider remove [-g --global] <PROVIDER>`](/cli/provider/remove.md)
 - [`fnox provider test [-a --all] [PROVIDER]`](/cli/provider/test.md)
+- [`fnox reencrypt [FLAGS] [KEYS]…`](/cli/reencrypt.md)
 - [`fnox remove [-g --global] [-n --dry-run] <KEY>`](/cli/remove.md)
 - [`fnox scan [FLAGS]`](/cli/scan.md)
 - [`fnox set [FLAGS] <KEY> [VALUE]`](/cli/set.md)

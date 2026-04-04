@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.19.0](https://github.com/jdx/fnox/compare/v1.18.0..v1.19.0) - 2026-03-22
+
+### 🚀 Features
+
+- add `reencrypt` subcommand for updating encryption recipients by [@jdx](https://github.com/jdx) in [#365](https://github.com/jdx/fnox/pull/365)
+
+### 🐛 Bug Fixes
+
+- **(set)** prompt for secret value when -k flag is used by [@jdx](https://github.com/jdx) in [#367](https://github.com/jdx/fnox/pull/367)
+
+### 📦️ Dependency Updates
+
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#360](https://github.com/jdx/fnox/pull/360)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#362](https://github.com/jdx/fnox/pull/362)
+
 ## [1.18.0](https://github.com/jdx/fnox/compare/v1.17.0..v1.18.0) - 2026-03-13
 
 ### 🚀 Features
