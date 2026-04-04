@@ -117,7 +117,7 @@ jobs:
           docker run -d --name localstack \
             -p 4566:4566 \
             -e SERVICES=sts,iam,kms,secretsmanager,ssm \
-            localstack/localstack:4.14.0
+            localstack/localstack:latest
           # Wait for LocalStack to be ready (can take 10-60s on cold runners)
           echo "Waiting for LocalStack..."
           localstack_ready=false
