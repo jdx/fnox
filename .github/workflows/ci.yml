@@ -117,7 +117,7 @@ jobs:
           docker run -d --name localstack \
             -p 4566:4566 \
             -e SERVICES=sts,iam,kms,secretsmanager,ssm \
-            localstack/localstack:latest
+            localstack/localstack:4
           # Wait for services to be ready
           # Poll LocalStack health endpoint (can take 10-30s on cold runners)
           for _i in $(seq 1 30); do
