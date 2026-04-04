@@ -283,6 +283,14 @@ pub async fn get_provider_resolved(
     provider_config: &ProviderConfig,
 ) -> Result<Box<dyn Provider>> {
     let resolved = resolve_provider_config(config, profile, provider_name, provider_config).await?;
+    get_provider_from_resolved2(config, provider_name, resolved)
+}
+
+pub fn get_provider_from_resolved2(
+    config: &crate::config::Config,
+    provider_name: &str,
+    resolved: ResolvedProviderConfig
+) -> Result<Box<dyn Provider>> {
     if let ResolvedProviderConfig::PasswordStore {
         prefix,
         store_dir,

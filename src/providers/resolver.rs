@@ -13,7 +13,7 @@ use crate::suggest::{find_similar, format_suggestions};
 use std::collections::HashSet;
 
 use super::secret_ref::{OptionStringOrSecretRef, StringOrSecretRef};
-use super::{ProviderConfig, ResolvedProviderConfig};
+use super::{get_provider_from_resolved2, ProviderConfig, ResolvedProviderConfig};
 
 /// Context for resolving provider configurations, tracking the resolution stack
 /// to detect circular dependencies.
@@ -209,9 +209,10 @@ fn resolve_secret_ref<'a>(
                     .await?;
 
                     // Create the provider and get the secret
-                    let provider = super::get_provider_from_resolved(
+                    let provider = get_provider_from_resolved2(
+                        config,
                         secret_provider_name,
-                        &resolved_provider,
+                        resolved_provider,
                     )?;
                     return provider.get_secret(provider_value).await;
                 } else {
