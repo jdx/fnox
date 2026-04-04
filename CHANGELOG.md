@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.20.0](https://github.com/jdx/fnox/compare/v1.19.0..v1.20.0) - 2026-04-04
+
+### 🚀 Features
+
+- **(provider)** add Doppler secrets manager provider by [@natefaerber](https://github.com/natefaerber) in [#376](https://github.com/jdx/fnox/pull/376)
+
+### 🐛 Bug Fixes
+
+- **(ci)** pin LocalStack to v4 (last free community version) by [@jdx](https://github.com/jdx) in [#379](https://github.com/jdx/fnox/pull/379)
+- **(sync)** skip post-processing when resolving secrets for sync by [@rpendleton](https://github.com/rpendleton) in [#371](https://github.com/jdx/fnox/pull/371)
+
+### 🚜 Refactor
+
+- **(providers)** extract shared error helpers to FnoxError methods by [@jdx](https://github.com/jdx) in [#380](https://github.com/jdx/fnox/pull/380)
+
+### 📦️ Dependency Updates
+
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#369](https://github.com/jdx/fnox/pull/369)
+- update taiki-e/upload-rust-binary-action digest to 0e34102 by [@renovate[bot]](https://github.com/renovate[bot]) in [#372](https://github.com/jdx/fnox/pull/372)
+- update dependency vue to v3.5.32 by [@renovate[bot]](https://github.com/renovate[bot]) in [#373](https://github.com/jdx/fnox/pull/373)
+- update rust crate indexmap to v2.13.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#378](https://github.com/jdx/fnox/pull/378)
+- update rust crate blake3 to v1.8.4 by [@renovate[bot]](https://github.com/renovate[bot]) in [#377](https://github.com/jdx/fnox/pull/377)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#374](https://github.com/jdx/fnox/pull/374)
+
+### New Contributors
+
+- @natefaerber made their first contribution in [#376](https://github.com/jdx/fnox/pull/376)
+- @rpendleton made their first contribution in [#371](https://github.com/jdx/fnox/pull/371)
+
 ## [1.19.0](https://github.com/jdx/fnox/compare/v1.18.0..v1.19.0) - 2026-03-22
 
 ### 🚀 Features
