@@ -672,6 +672,106 @@ impl FnoxError {
     pub fn is_auth_error(&self) -> bool {
         matches!(self, FnoxError::ProviderAuthFailed { .. })
     }
+
+    /// Clone a provider error variant (all fields are `String`, so always cloneable).
+    ///
+    /// Returns `None` for non-provider error variants.
+    pub fn clone_provider_error(&self) -> Option<FnoxError> {
+        Some(match self {
+            FnoxError::ProviderAuthFailed {
+                provider,
+                details,
+                hint,
+                url,
+            } => FnoxError::ProviderAuthFailed {
+                provider: provider.clone(),
+                details: details.clone(),
+                hint: hint.clone(),
+                url: url.clone(),
+            },
+            FnoxError::ProviderCliNotFound {
+                provider,
+                cli,
+                install_hint,
+                url,
+            } => FnoxError::ProviderCliNotFound {
+                provider: provider.clone(),
+                cli: cli.clone(),
+                install_hint: install_hint.clone(),
+                url: url.clone(),
+            },
+            FnoxError::ProviderInvalidResponse {
+                provider,
+                details,
+                hint,
+                url,
+            } => FnoxError::ProviderInvalidResponse {
+                provider: provider.clone(),
+                details: details.clone(),
+                hint: hint.clone(),
+                url: url.clone(),
+            },
+            FnoxError::ProviderApiError {
+                provider,
+                details,
+                hint,
+                url,
+            } => FnoxError::ProviderApiError {
+                provider: provider.clone(),
+                details: details.clone(),
+                hint: hint.clone(),
+                url: url.clone(),
+            },
+            FnoxError::ProviderCliFailed {
+                provider,
+                details,
+                hint,
+                url,
+            } => FnoxError::ProviderCliFailed {
+                provider: provider.clone(),
+                details: details.clone(),
+                hint: hint.clone(),
+                url: url.clone(),
+            },
+            _ => return None,
+        })
+    }
+
+    /// Map a batch-level error to a per-secret error, preserving structured variants.
+    ///
+    /// If the error is `ProviderSecretNotFound`, the secret name is replaced with the given name.
+    /// Other provider error variants are cloned as-is. Non-provider errors fall back to
+    /// `ProviderCliFailed` with the given provider name, hint, and URL.
+    pub fn map_batch_error(
+        &self,
+        secret_name: &str,
+        fallback_provider: &str,
+        fallback_hint: &str,
+        fallback_url: &str,
+    ) -> FnoxError {
+        if let FnoxError::ProviderSecretNotFound {
+            provider,
+            hint,
+            url,
+            ..
+        } = self
+        {
+            return FnoxError::ProviderSecretNotFound {
+                provider: provider.clone(),
+                secret: secret_name.to_string(),
+                hint: hint.clone(),
+                url: url.clone(),
+            };
+        }
+
+        self.clone_provider_error()
+            .unwrap_or_else(|| FnoxError::ProviderCliFailed {
+                provider: fallback_provider.to_string(),
+                details: self.to_string(),
+                hint: fallback_hint.to_string(),
+                url: fallback_url.to_string(),
+            })
+    }
 }
 
 pub type Result<T> = std::result::Result<T, FnoxError>;
@@ -723,6 +823,56 @@ mod tests {
 
         for err in cases {
             assert!(!err.is_auth_error(), "Expected false for {:?}", err);
+        }
+    }
+
+    #[test]
+    fn clone_provider_error_clones_auth_failed() {
+        let err = FnoxError::ProviderAuthFailed {
+            provider: "test".to_string(),
+            details: "unauthorized".to_string(),
+            hint: "login".to_string(),
+            url: "https://example.com".to_string(),
+        };
+        assert!(matches!(
+            err.clone_provider_error(),
+            Some(FnoxError::ProviderAuthFailed { .. })
+        ));
+    }
+
+    #[test]
+    fn clone_provider_error_returns_none_for_non_provider() {
+        let err = FnoxError::Provider("generic".to_string());
+        assert!(err.clone_provider_error().is_none());
+    }
+
+    #[test]
+    fn map_batch_error_replaces_secret_name() {
+        let err = FnoxError::ProviderSecretNotFound {
+            provider: "test".to_string(),
+            secret: "original".to_string(),
+            hint: "check".to_string(),
+            url: "https://example.com".to_string(),
+        };
+        let mapped = err.map_batch_error("new_secret", "test", "hint", "url");
+        match mapped {
+            FnoxError::ProviderSecretNotFound { secret, .. } => {
+                assert_eq!(secret, "new_secret");
+            }
+            other => panic!("Expected ProviderSecretNotFound, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn map_batch_error_falls_back_for_non_provider() {
+        let err = FnoxError::Provider("generic".to_string());
+        let mapped = err.map_batch_error("secret", "MyProvider", "check config", "https://x.com");
+        match mapped {
+            FnoxError::ProviderCliFailed { provider, hint, .. } => {
+                assert_eq!(provider, "MyProvider");
+                assert_eq!(hint, "check config");
+            }
+            other => panic!("Expected ProviderCliFailed, got {:?}", other),
         }
     }
 }

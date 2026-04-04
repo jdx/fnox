@@ -398,7 +398,17 @@ impl crate::providers::Provider for InfisicalProvider {
                 // Preserve the structured error variant for each secret
                 secrets
                     .iter()
-                    .map(|(key, secret_name)| (key.clone(), Err(map_batch_error(&e, secret_name))))
+                    .map(|(key, secret_name)| {
+                        (
+                            key.clone(),
+                            Err(e.map_batch_error(
+                                secret_name,
+                                PROVIDER_NAME,
+                                "Check your Infisical configuration",
+                                PROVIDER_URL,
+                            )),
+                        )
+                    })
                     .collect()
             }
         }
@@ -455,92 +465,6 @@ fn infisical_api_url() -> Option<String> {
 
 // Cache login token to avoid repeated login calls
 static CACHED_LOGIN_TOKEN: LazyLock<Mutex<Option<String>>> = LazyLock::new(|| Mutex::new(None));
-
-fn clone_provider_error(error: &FnoxError) -> Option<FnoxError> {
-    Some(match error {
-        FnoxError::ProviderAuthFailed {
-            provider,
-            details,
-            hint,
-            url,
-        } => FnoxError::ProviderAuthFailed {
-            provider: provider.clone(),
-            details: details.clone(),
-            hint: hint.clone(),
-            url: url.clone(),
-        },
-        FnoxError::ProviderCliNotFound {
-            provider,
-            cli,
-            install_hint,
-            url,
-        } => FnoxError::ProviderCliNotFound {
-            provider: provider.clone(),
-            cli: cli.clone(),
-            install_hint: install_hint.clone(),
-            url: url.clone(),
-        },
-        FnoxError::ProviderInvalidResponse {
-            provider,
-            details,
-            hint,
-            url,
-        } => FnoxError::ProviderInvalidResponse {
-            provider: provider.clone(),
-            details: details.clone(),
-            hint: hint.clone(),
-            url: url.clone(),
-        },
-        FnoxError::ProviderApiError {
-            provider,
-            details,
-            hint,
-            url,
-        } => FnoxError::ProviderApiError {
-            provider: provider.clone(),
-            details: details.clone(),
-            hint: hint.clone(),
-            url: url.clone(),
-        },
-        FnoxError::ProviderCliFailed {
-            provider,
-            details,
-            hint,
-            url,
-        } => FnoxError::ProviderCliFailed {
-            provider: provider.clone(),
-            details: details.clone(),
-            hint: hint.clone(),
-            url: url.clone(),
-        },
-        _ => return None,
-    })
-}
-
-/// Map a batch-level error to a per-secret error, preserving structured variants.
-fn map_batch_error(e: &FnoxError, secret_name: &str) -> FnoxError {
-    if let FnoxError::ProviderSecretNotFound {
-        provider,
-        hint,
-        url,
-        ..
-    } = e
-    {
-        return FnoxError::ProviderSecretNotFound {
-            provider: provider.clone(),
-            secret: secret_name.to_string(),
-            hint: hint.clone(),
-            url: url.clone(),
-        };
-    }
-
-    clone_provider_error(e).unwrap_or_else(|| FnoxError::ProviderCliFailed {
-        provider: PROVIDER_NAME.to_string(),
-        details: e.to_string(),
-        hint: "Check your Infisical configuration".to_string(),
-        url: PROVIDER_URL.to_string(),
-    })
-}
 
 const AUTH_ERROR_PATTERNS: &[&str] = &[
     "unauthorized",
@@ -701,7 +625,8 @@ mod tests {
             url: PROVIDER_URL.to_string(),
         };
 
-        let result = map_batch_error(&error, "secret1");
+        let result =
+            error.map_batch_error("secret1", PROVIDER_NAME, "Check your config", PROVIDER_URL);
         assert!(
             matches!(result, FnoxError::ProviderAuthFailed { .. }),
             "Expected ProviderAuthFailed, got {:?}",
@@ -718,7 +643,8 @@ mod tests {
             url: PROVIDER_URL.to_string(),
         };
 
-        let result = map_batch_error(&error, "secret1");
+        let result =
+            error.map_batch_error("secret1", PROVIDER_NAME, "Check your config", PROVIDER_URL);
         assert!(
             matches!(result, FnoxError::ProviderCliNotFound { .. }),
             "Expected ProviderCliNotFound, got {:?}",
@@ -735,7 +661,8 @@ mod tests {
             url: PROVIDER_URL.to_string(),
         };
 
-        let result = map_batch_error(&error, "secret_a");
+        let result =
+            error.map_batch_error("secret_a", PROVIDER_NAME, "Check your config", PROVIDER_URL);
         match result {
             FnoxError::ProviderSecretNotFound { secret, .. } => {
                 assert_eq!(secret, "secret_a");
@@ -753,7 +680,8 @@ mod tests {
             url: PROVIDER_URL.to_string(),
         };
 
-        let result = map_batch_error(&error, "secret1");
+        let result =
+            error.map_batch_error("secret1", PROVIDER_NAME, "Check your config", PROVIDER_URL);
         match result {
             FnoxError::ProviderCliFailed { details, hint, .. } => {
                 assert_eq!(details, "some error");
