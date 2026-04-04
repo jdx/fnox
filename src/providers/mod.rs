@@ -289,7 +289,7 @@ pub async fn get_provider_resolved(
 pub fn get_provider_from_resolved2(
     config: &crate::config::Config,
     provider_name: &str,
-    resolved: ResolvedProviderConfig
+    resolved: ResolvedProviderConfig,
 ) -> Result<Box<dyn Provider>> {
     if let ResolvedProviderConfig::PasswordStore {
         prefix,

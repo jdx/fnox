@@ -13,7 +13,7 @@ use crate::suggest::{find_similar, format_suggestions};
 use std::collections::HashSet;
 
 use super::secret_ref::{OptionStringOrSecretRef, StringOrSecretRef};
-use super::{get_provider_from_resolved2, ProviderConfig, ResolvedProviderConfig};
+use super::{ProviderConfig, ResolvedProviderConfig, get_provider_from_resolved2};
 
 /// Context for resolving provider configurations, tracking the resolution stack
 /// to detect circular dependencies.
