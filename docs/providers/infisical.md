@@ -11,34 +11,28 @@ brew install infisical/get-cli/infisical
 # 2. Login to Infisical
 infisical login
 
-# 3. Get a service token or universal auth token
-# Option A: Service token (from Infisical dashboard)
-export INFISICAL_TOKEN="your-service-token"
-
-# Option B: Universal auth (machine identity)
-infisical login --method=universal-auth
-
-# 4. Store token (optional, for bootstrap)
-fnox set INFISICAL_TOKEN "your-service-token" --provider age
-
-# 5. Configure Infisical provider
+# 3. Configure Infisical provider
 cat >> fnox.toml << 'EOF'
 [providers]
 infisical = { type = "infisical", project_id = "your-project-id", environment = "dev", path = "/" }
 EOF
 
-# 6. Add secrets to Infisical
+# 4. Add secrets to Infisical
 infisical secrets set DATABASE_PASSWORD "secret-password"
 
-# 7. Reference in fnox
+# 5. Reference in fnox
 cat >> fnox.toml << 'EOF'
 [secrets]
 DATABASE_PASSWORD = { provider = "infisical", value = "DATABASE_PASSWORD" }
 EOF
 
-# 8. Use it
+# 6. Use it
 fnox get DATABASE_PASSWORD
 ```
+
+With just `infisical login`, fnox uses the CLI's cached session automatically. No
+environment variables needed for local development. For CI/CD or machine identities, see
+[Authentication](#2-get-authentication-token) below.
 
 ## Prerequisites
 
@@ -74,9 +68,25 @@ infisical login
 infisical login --domain=https://infisical.example.com
 ```
 
-### 2. Get Authentication Token
+### 2. Get authentication token
 
-#### Option A: Service Token (Recommended for CI/CD)
+fnox tries authentication in this order:
+
+1. `INFISICAL_TOKEN` / `FNOX_INFISICAL_TOKEN` environment variable (explicit token, used as-is)
+2. `INFISICAL_CLIENT_ID` + `INFISICAL_CLIENT_SECRET` (universal auth login, token cached)
+3. CLI session fallback (no env vars needed; the CLI uses its own cached session from `infisical login`)
+
+#### Option A: CLI session (simplest)
+
+If you have already run `infisical login`, fnox uses the CLI's cached session with no extra
+configuration. This is the easiest option for local development.
+
+```bash
+infisical login
+# That's it. fnox will use the session automatically.
+```
+
+#### Option B: Service token (recommended for CI/CD)
 
 1. Go to your Infisical project settings
 2. Navigate to "Service Tokens"
@@ -87,30 +97,28 @@ infisical login --domain=https://infisical.example.com
 export INFISICAL_TOKEN="st.xxx.yyy.zzz"
 ```
 
-#### Option B: Universal Auth (Machine Identity)
+#### Option C: Universal auth (machine identity)
 
 ```bash
-# Configure universal auth
-infisical login --method=universal-auth \
-  --client-id="your-client-id" \
-  --client-secret="your-client-secret"
+export INFISICAL_CLIENT_ID="your-client-id"
+export INFISICAL_CLIENT_SECRET="your-client-secret"
 
-# Token is automatically managed
+# fnox will run `infisical login --method=universal-auth` automatically and cache the token.
 ```
 
-### 3. Store Token (Bootstrap)
+### 3. Store token (bootstrap)
 
-Optionally, store the token encrypted for easy bootstrap:
+Optionally, store a service token encrypted for easy bootstrap:
 
 ```bash
-# Store token encrypted with age
+# Store once
 fnox set INFISICAL_TOKEN "st.xxx.yyy.zzz" --provider age
 
-# Next time, bootstrap from fnox:
+# Use repeatedly
 export INFISICAL_TOKEN=$(fnox get INFISICAL_TOKEN)
 ```
 
-### 4. Configure Infisical Provider
+### 4. Configure Infisical provider
 
 ```toml
 [providers]
@@ -139,10 +147,7 @@ All fields are optional. If not specified, the Infisical CLI will use its own de
 ### Via Infisical CLI
 
 ```bash
-# Set authentication
-export INFISICAL_TOKEN="st.xxx.yyy.zzz"
-
-# Set a secret
+# Set a secret (uses CLI session auth, or set INFISICAL_TOKEN if needed)
 infisical secrets set DATABASE_PASSWORD "secret-password" \
   --projectId="your-project-id" \
   --env="dev" \
@@ -181,13 +186,12 @@ The `value` is the secret key name in Infisical. The provider configuration dete
 ## Usage
 
 ```bash
-# Set authentication token (once per session)
-export INFISICAL_TOKEN=$(fnox get INFISICAL_TOKEN)
-
-# Get secrets
+# If using CLI session auth, just run commands directly:
 fnox get DATABASE_PASSWORD
+fnox exec -- npm start
 
-# Run commands
+# If using a stored service token instead:
+export INFISICAL_TOKEN=$(fnox get INFISICAL_TOKEN)
 fnox exec -- npm start
 ```
 
@@ -296,11 +300,14 @@ export INFISICAL_API_URL=https://infisical.example.com/api
 fnox get DATABASE_PASSWORD
 ```
 
-## Token Management
+## Token management
 
-The `INFISICAL_TOKEN` is typically a service token or machine identity token.
+For local development, `infisical login` is usually sufficient. fnox uses the CLI's cached
+session automatically, so no token management is needed.
 
-### Option 1: Set Each Time
+For CI/CD or automation where interactive login isn't possible, you need an explicit token:
+
+### Option 1: Set each time
 
 ```bash
 #!/bin/bash
@@ -308,7 +315,7 @@ export INFISICAL_TOKEN="st.xxx.yyy.zzz"
 fnox exec -- npm start
 ```
 
-### Option 2: Store Encrypted (Bootstrap)
+### Option 2: Store encrypted (bootstrap)
 
 ```bash
 # Store once
@@ -319,28 +326,33 @@ export INFISICAL_TOKEN=$(fnox get INFISICAL_TOKEN)
 fnox exec -- npm start
 ```
 
-## Service Token vs Universal Auth
+## Authentication methods compared
 
-### Service Token (Simple)
+### CLI session (simplest)
 
-- **Best for:** CI/CD, simple automation
-- **Pros:** Easy to set up, just one token
-- **Cons:** Manual rotation, less granular permissions
+- Best for local development
+- Just run `infisical login`; fnox handles the rest
+- No env vars needed
+
+### Service token
+
+- Best for CI/CD and simple automation
+- Easy to set up (one token)
+- Manual rotation, less granular permissions
 
 ```bash
 export INFISICAL_TOKEN="st.xxx.yyy.zzz"
 ```
 
-### Universal Auth (Advanced)
+### Universal auth (machine identity)
 
-- **Best for:** Machine identities, advanced use cases
-- **Pros:** Automatic rotation, better audit logs, fine-grained permissions
-- **Cons:** More complex setup
+- Best for machine identities and advanced use cases
+- Automatic rotation, better audit logs, fine-grained permissions
+- More complex setup
 
 ```bash
-infisical login --method=universal-auth \
-  --client-id="..." \
-  --client-secret="..."
+export INFISICAL_CLIENT_ID="..."
+export INFISICAL_CLIENT_SECRET="..."
 ```
 
 ## Pros
@@ -362,8 +374,10 @@ infisical login --method=universal-auth \
 ### "You are not logged in"
 
 ```bash
+# Re-authenticate with the CLI
 infisical login
-# Or set token directly
+
+# Or set a token directly
 export INFISICAL_TOKEN="st.xxx.yyy.zzz"
 ```
 
@@ -392,12 +406,13 @@ fnox set INFISICAL_TOKEN "new-token" --provider age
 
 ## Best Practices
 
-1. **Use service tokens for automation** - Create read-only tokens for CI/CD
-2. **Organize with paths** - Use paths to logically group secrets
-3. **Leverage environments** - Use dev/staging/prod environments
-4. **Store token encrypted** - Use age to encrypt `INFISICAL_TOKEN`
-5. **Self-host for sensitive workloads** - Full control over your secrets
-6. **Use secret versioning** - Track changes and rollback if needed
+1. **Use CLI session auth for local dev** - Just `infisical login`, no env vars needed
+2. **Use service tokens for automation** - Create read-only tokens for CI/CD
+3. **Organize with paths** - Use paths to logically group secrets
+4. **Leverage environments** - Use dev/staging/prod environments
+5. **Store token encrypted** - Use age to encrypt `INFISICAL_TOKEN` for bootstrap
+6. **Self-host for sensitive workloads** - Full control over your secrets
+7. **Use secret versioning** - Track changes and rollback if needed
 
 ## Next Steps
 

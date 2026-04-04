@@ -365,7 +365,10 @@ EOF
 
 	run "$FNOX_BIN" get TEST_SECRET
 	assert_failure
-	assert_output --partial "auth_failed"
+	# With CLI session fallback, missing credentials may produce either:
+	# - auth_failed (CLI reports an auth error)
+	# - cli_failed (CLI attempts interactive login and fails in non-TTY)
+	[[ "$output" == *"auth_failed"* || "$output" == *"cli_failed"* ]]
 
 	# Restore credentials
 	export INFISICAL_TOKEN="$original_token"
