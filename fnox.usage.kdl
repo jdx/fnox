@@ -1,7 +1,7 @@
 min_usage_version "1.3"
 name fnox
 bin fnox
-version "1.18.0"
+version "1.19.0"
 about "A flexible secret management tool by @jdx"
 usage "Usage: fnox [OPTIONS] <COMMAND>"
 flag "-c --config" help="Path to the configuration file (default: fnox.toml, searches parent directories)" global=#true default=fnox.toml {
@@ -155,6 +155,17 @@ cmd provider help="Manage providers (defaults to list)" {
         flag "-a --all" help="Test all configured providers"
         arg "[PROVIDER]" help="Provider name (optional when using --all)" required=#false
     }
+}
+cmd reencrypt help="Re-encrypt secrets with current provider configuration" {
+    flag "-f --force" help="Skip confirmation prompt"
+    flag "-n --dry-run" help="Show what would be done without making changes"
+    flag "-p --provider" help="Only re-encrypt secrets from this provider" {
+        arg <PROVIDER>
+    }
+    flag --filter help="Only re-encrypt matching secrets (regex pattern)" {
+        arg <FILTER>
+    }
+    arg "[KEYS]…" help="Only re-encrypt these specific secret keys" required=#false var=#true
 }
 cmd remove help="Remove a secret" {
     alias rm delete

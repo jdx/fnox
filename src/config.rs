@@ -203,6 +203,11 @@ pub struct SecretConfig {
     /// Path to the config file where this secret was defined (not serialized)
     #[serde(skip)]
     pub source_path: Option<PathBuf>,
+
+    /// Whether this secret was loaded from a [profiles.X.secrets] section (not serialized).
+    /// When false, the secret was loaded from a root-level [secrets] section.
+    #[serde(skip)]
+    pub source_is_profile: bool,
 }
 
 /// Configuration for a profile
@@ -1194,6 +1199,7 @@ impl Config {
         for (_profile_name, profile) in self.profiles.iter_mut() {
             for (key, secret) in profile.secrets.iter_mut() {
                 secret.source_path = Some(path.to_path_buf());
+                secret.source_is_profile = true;
                 profile
                     .secret_sources
                     .insert(key.clone(), path.to_path_buf());
@@ -1448,6 +1454,7 @@ impl SecretConfig {
             json_path: None,
             sync: None,
             source_path: None,
+            source_is_profile: false,
         }
     }
 
