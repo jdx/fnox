@@ -1971,9 +1971,9 @@ dependencies = [
 
 [[package]]
 name = "fastrand"
-version = "2.3.0"
+version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
+checksum = "a043dc74da1e37d6afe657061213aa6f425f855399a11d3463c6ecccc4dfda1f"
 
 [[package]]
 name = "fax"
@@ -7654,9 +7654,9 @@ checksum = "66fee0b777b0f5ac1c69bb06d361268faafa61cd4682ae064a171c16c433e9e4"
 
 [[package]]
 name = "xx"
-version = "2.5.2"
+version = "2.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6421bd0c62aed0062f02c54ad5983e54c1bf884fae7ea9ab57f25eb59f47adad"
+checksum = "61cdbadb4cf2151c38b7c07c1383284bcf63b51baac062c83bd8286962b41dd9"
 dependencies = [
  "duct",
  "filetime",
@@ -7664,7 +7664,7 @@ dependencies = [
  "homedir",
  "log",
  "miette",
- "rand 0.9.2",
+ "rand 0.10.0",
  "regex",
  "sha2",
  "strsim",
