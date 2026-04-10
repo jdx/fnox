@@ -86,7 +86,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 urlencoding = "2"
 usage-lib = { version = "2", features = ["clap"] }
 walkdir = "2"
-which = "7"
+which = "8"
 xx = { version = "2", features = ["fslock"] }
 libloading = "0.8"
 
