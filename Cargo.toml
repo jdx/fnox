@@ -74,7 +74,7 @@ shellexpand = "3"
 shlex = "1"
 signal-hook = "0.4"
 strsim = "0.11"
-strum = { version = "0.27", features = ["derive"] }
+strum = { version = "0.28", features = ["derive"] }
 tabled = { version = "0.20", features = ["ansi"] }
 tempfile = "3"
 terminal_size = "0.4"
