@@ -58,7 +58,7 @@ miniz_oxide = "0.9"
 nix = { version = "0.31", features = ["signal", "process"] }
 pluralizer = "0.5"
 rand = "0.8"
-ratatui = "0.29"
+ratatui = "0.30"
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 rmcp = { version = "1", features = ["server", "transport-io", "macros"] }
