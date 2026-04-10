@@ -84,7 +84,7 @@ toml_edit = { version = "0.25", features = ["serde"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 urlencoding = "2"
-usage-lib = { version = "2", features = ["clap"] }
+usage-lib = { version = "3", features = ["clap"] }
 walkdir = "2"
 which = "7"
 xx = { version = "2", features = ["fslock"] }
