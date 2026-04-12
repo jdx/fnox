@@ -321,7 +321,7 @@ impl KeePassProvider {
 
         // Use Protected for Password field (in-memory encryption and proper KDBX marking)
         let field_value = if field == "Password" {
-            Value::Protected(value.as_bytes().into())
+            Value::protected(value.to_string())
         } else {
             Value::Unprotected(value.to_string())
         };
