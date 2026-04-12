@@ -2336,7 +2336,7 @@ dependencies = [
  "pluralizer",
  "proc-macro2",
  "quote",
- "rand 0.8.5",
+ "rand 0.10.0",
  "ratatui",
  "regex",
  "reqwest 0.12.28",
