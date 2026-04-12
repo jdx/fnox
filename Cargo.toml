@@ -88,7 +88,7 @@ usage-lib = { version = "3", features = ["clap"] }
 walkdir = "2"
 which = "8"
 xx = { version = "2", features = ["fslock"] }
-libloading = "0.8"
+libloading = "0.9"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus = { version = "0.9", features = ["vendored"] }
