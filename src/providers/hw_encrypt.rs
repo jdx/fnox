@@ -8,8 +8,6 @@ use crate::error::{FnoxError, Result};
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
 use hkdf::Hkdf;
-use rand::RngCore;
-use rand::rngs::OsRng;
 use sha2::Sha256;
 
 /// Derive a 256-bit AES key from raw hardware secret bytes using HKDF.
@@ -31,7 +29,7 @@ pub fn encrypt(hw_secret: &[u8], context: &[u8], plaintext: &str) -> Result<Stri
 
     // Generate a random 96-bit nonce using the OS CSPRNG
     let mut nonce_bytes = [0u8; 12];
-    OsRng.fill_bytes(&mut nonce_bytes);
+    rand::fill(&mut nonce_bytes);
     let nonce = Nonce::from(nonce_bytes);
 
     let ciphertext = cipher
