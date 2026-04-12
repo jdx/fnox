@@ -51,7 +51,7 @@ hex = "0.4"
 hkdf = "0.13"
 indexmap = { version = "2", features = ["serde"] }
 jsonwebtoken = { version = "10", features = ["aws_lc_rs"] }
-keepass = { version = "0.8", features = ["save_kdbx4"] }
+keepass = { version = "0.10", features = ["save_kdbx4"] }
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 miette = { version = "7", features = ["fancy"] }
 miniz_oxide = "0.9"
