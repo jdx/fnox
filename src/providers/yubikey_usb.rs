@@ -128,7 +128,7 @@ impl LibUsb {
 
         let lib = lib_names
             .iter()
-            .find_map(|name| unsafe { libloading::Library::new(name).ok() })
+            .find_map(|name| unsafe { libloading::Library::new(*name).ok() })
             .ok_or_else(|| {
                 let install_hint = if cfg!(target_os = "macos") {
                     "Install it with: brew install libusb"
