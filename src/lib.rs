@@ -20,8 +20,5 @@ pub mod suggest;
 pub mod temp_file_secrets;
 pub mod tui;
 
-#[cfg(test)]
-mod clap_sort;
-
 // Re-export commonly used items
 pub use error::{FnoxError, Result};

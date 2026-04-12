@@ -21,9 +21,6 @@ mod suggest;
 mod temp_file_secrets;
 mod tui;
 
-#[cfg(test)]
-mod clap_sort;
-
 use commands::Cli;
 
 #[tokio::main]

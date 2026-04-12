@@ -221,7 +221,7 @@ mod tests {
     #[test]
     fn test_cli_ordering() {
         // Validate that CLI commands and arguments are properly sorted
-        // according to clap_sort conventions
-        crate::clap_sort::assert_command_order(&Cli::command());
+        // using the published clap-sort crate.
+        clap_sort::assert_sorted(&Cli::command());
     }
 }
