@@ -5,9 +5,11 @@
 //! `base64(nonce || ciphertext || tag)`.
 
 use crate::error::{FnoxError, Result};
-use aes_gcm::aead::{Aead, AeadCore, KeyInit, OsRng};
+use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
 use hkdf::Hkdf;
+use rand::RngCore;
+use rand::rngs::OsRng;
 use sha2::Sha256;
 
 /// Derive a 256-bit AES key from raw hardware secret bytes using HKDF.
@@ -28,7 +30,9 @@ pub fn encrypt(hw_secret: &[u8], context: &[u8], plaintext: &str) -> Result<Stri
         .map_err(|e| FnoxError::Provider(format!("Failed to create AES-256-GCM cipher: {}", e)))?;
 
     // Generate a random 96-bit nonce using the OS CSPRNG
-    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let mut nonce_bytes = [0u8; 12];
+    OsRng.fill_bytes(&mut nonce_bytes);
+    let nonce = Nonce::from(nonce_bytes);
 
     let ciphertext = cipher
         .encrypt(&nonce, plaintext.as_bytes())
@@ -61,9 +65,12 @@ pub fn decrypt(hw_secret: &[u8], context: &[u8], encrypted: &str) -> Result<Stri
     }
 
     let (nonce_bytes, ciphertext) = data.split_at(12);
-    let nonce = Nonce::from_slice(nonce_bytes);
+    let nonce_arr: [u8; 12] = nonce_bytes
+        .try_into()
+        .map_err(|_| FnoxError::Provider("Invalid nonce length".to_string()))?;
+    let nonce = Nonce::from(nonce_arr);
 
-    let plaintext = cipher.decrypt(nonce, ciphertext).map_err(|_| {
+    let plaintext = cipher.decrypt(&nonce, ciphertext).map_err(|_| {
         FnoxError::Provider("Decryption failed — wrong hardware key or corrupted data".to_string())
     })?;
 
