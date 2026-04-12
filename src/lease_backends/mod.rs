@@ -79,8 +79,7 @@ fn default_github_env_var() -> String {
 /// Generate a unique lease ID with a prefix.
 /// Appends a random suffix to avoid collisions between concurrent invocations.
 pub fn generate_lease_id(prefix: &str) -> String {
-    use rand::Rng;
-    let suffix: u64 = rand::thread_rng().r#gen();
+    let suffix: u64 = rand::random();
     format!("{prefix}-{suffix:016x}")
 }
 
