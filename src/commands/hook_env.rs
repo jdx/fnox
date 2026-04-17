@@ -37,7 +37,7 @@ impl OutputMode {
 #[derive(Debug, Parser)]
 #[command(about = "Internal command used by shell hooks to load secrets")]
 pub struct HookEnvCommand {
-    /// Shell type (bash, zsh, fish, nu)
+    /// Shell type (bash, zsh, fish, nu, pwsh)
     #[arg(short = 's', long)]
     pub shell: Option<String>,
 }

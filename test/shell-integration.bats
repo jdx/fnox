@@ -44,6 +44,16 @@ teardown() {
 	assert_output --partial "function __fnox_cd_hook --on-variable PWD"
 }
 
+@test "fnox activate pwsh generates valid powershell code" {
+	run "$FNOX_BIN" activate pwsh
+
+	assert_success
+	assert_output --partial "\$env:FNOX_SHELL='pwsh'"
+	assert_output --partial "function fnox {"
+	assert_output --partial "function Global:_fnox_hook {"
+	assert_output --partial "__enable_fnox_prompt"
+}
+
 @test "fnox activate nu generates valid nushell code" {
 	run "$FNOX_BIN" activate nu
 
@@ -62,6 +72,16 @@ teardown() {
 	assert_output --partial "fnox()"
 	refute_output --partial "_fnox_hook()"
 	refute_output --partial "PROMPT_COMMAND"
+}
+
+@test "fnox activate pwsh --no-hook-env skips hook setup" {
+	run "$FNOX_BIN" activate pwsh --no-hook-env
+
+	assert_success
+	assert_output --partial "\$env:FNOX_SHELL='pwsh'"
+	assert_output --partial "function fnox {"
+	refute_output --partial "_fnox_hook"
+	refute_output --partial "__enable_fnox_prompt"
 }
 
 @test "fnox activate with invalid shell fails" {
@@ -175,6 +195,41 @@ teardown() {
 	assert_success
 	assert_output --partial 'set -gx FISH_SECRET "fish-value"'
 	assert_output --partial 'set -gx __FNOX_SESSION'
+}
+
+@test "fnox hook-env generates powershell-compatible output" {
+	cd "$TEST_TEMP_DIR"
+	cat >fnox.toml <<-EOF
+		[providers.plain]
+		type = "plain"
+
+		[secrets.PWSH_SECRET]
+		provider = "plain"
+		value = "pwsh-value"
+	EOF
+
+	run "$FNOX_BIN" hook-env -s pwsh
+
+	assert_success
+	assert_output --partial "\$Env:PWSH_SECRET='pwsh-value'"
+	assert_output --partial "\$Env:__FNOX_SESSION="
+}
+
+@test "fnox hook-env escapes single quotes for powershell" {
+	cd "$TEST_TEMP_DIR"
+	cat >fnox.toml <<-'EOF'
+		[providers.plain]
+		type = "plain"
+
+		[secrets.PWSH_QUOTE]
+		provider = "plain"
+		value = "it's a value"
+	EOF
+
+	run "$FNOX_BIN" hook-env -s pwsh
+
+	assert_success
+	assert_output --partial "\$Env:PWSH_QUOTE='it''s a value'"
 }
 
 @test "fnox hook-env finds config in parent directory" {

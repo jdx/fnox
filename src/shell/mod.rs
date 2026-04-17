@@ -3,11 +3,13 @@ use std::fmt;
 mod bash;
 mod fish;
 mod nushell;
+mod pwsh;
 mod zsh;
 
 pub use bash::Bash;
 pub use fish::Fish;
 pub use nushell::Nushell;
+pub use pwsh::Pwsh;
 pub use zsh::Zsh;
 
 /// Options for shell activation
@@ -84,6 +86,7 @@ pub fn get_shell(name: Option<&str>) -> anyhow::Result<Box<dyn Shell>> {
         "zsh" => Ok(Box::new(Zsh)),
         "fish" => Ok(Box::new(Fish)),
         "nu" => Ok(Box::new(Nushell)),
+        "pwsh" | "powershell" => Ok(Box::new(Pwsh)),
         _ => anyhow::bail!("unsupported shell: {}", shell_name),
     }
 }

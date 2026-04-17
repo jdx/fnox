@@ -31,6 +31,12 @@ mkdir ($nu.data-dir | path join "vendor/autoload")
 fnox activate nu | save -f ($nu.data-dir | path join "vendor/autoload/fnox.nu")
 ```
 
+```powershell [Powershell]
+# Add this to your Powershell profile.
+# To find your profile, see https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_profiles
+(&fnox activate pwsh) | Out-String | Invoke-Expression
+```
+
 :::
 
 ## How It Works

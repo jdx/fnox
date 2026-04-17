@@ -50,7 +50,7 @@ eval "$(fnox activate bash)"  # or zsh, fish
 echo 'eval "$(fnox activate bash)"' >> ~/.bashrc
 ```
 
-For Nushell setup, see the [Shell Integration](/guide/shell-integration) guide.
+To enable integration in other shells (Nushell, Powershell), see the [Shell Integration](/guide/shell-integration) guide.
 
 Now secrets auto-load:
 
