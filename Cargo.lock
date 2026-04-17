@@ -99,7 +99,7 @@ dependencies = [
  "base64 0.21.7",
  "bcrypt-pbkdf",
  "bech32",
- "cbc",
+ "cbc 0.1.2",
  "chacha20poly1305",
  "cipher 0.4.4",
  "cookie-factory",
@@ -1101,6 +1101,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "block-padding"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "710f1dd022ef4e93f8a438b4ba958de7f64308434fa6a87104481645cc30068b"
+dependencies = [
+ "hybrid-array",
+]
+
+[[package]]
 name = "blowfish"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1188,6 +1197,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cbc"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98db6aeaef0eeef2c1e3ce9a27b739218825dae116076352ac3777076aa22225"
+dependencies = [
+ "cipher 0.5.1",
+]
+
+[[package]]
 name = "cc"
 version = "1.2.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1235,6 +1253,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6f8d983286843e49675a4b7a2d174efe136dc93a18d69130dd18198a6c167601"
 dependencies = [
  "cfg-if",
+ "cipher 0.5.1",
  "cpufeatures 0.3.0",
  "rand_core 0.10.0",
 ]
@@ -1695,7 +1714,7 @@ dependencies = [
  "anyhow",
  "base64 0.22.1",
  "byteorder",
- "cbc",
+ "cbc 0.1.2",
  "ciborium",
  "hex",
  "hidapi",
@@ -3607,7 +3626,7 @@ version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "879f10e63c20629ecabbb64a8010319738c66a5cd0c29b02d63d272b03751d01"
 dependencies = [
- "block-padding",
+ "block-padding 0.3.3",
  "generic-array",
 ]
 
@@ -3617,6 +3636,7 @@ version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4250ce6452e92010fdf7268ccc5d14faa80bb12fc741938534c58f16804e03c7"
 dependencies = [
+ "block-padding 0.4.2",
  "hybrid-array",
 ]
 
@@ -3823,30 +3843,31 @@ dependencies = [
 
 [[package]]
 name = "keepass"
-version = "0.10.5"
+version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "860a1d4ce488661bbc40369cf6588c27a6820020754afb1d66a5b317b648acc8"
+checksum = "efeccc75f644caf8e5446979eea4c14255a87718bbd9cfe1d69e8fbd56724734"
 dependencies = [
- "aes 0.8.4",
+ "aes 0.9.0",
  "base64 0.22.1",
  "block-modes",
  "byteorder",
- "cbc",
- "chacha20 0.9.1",
+ "cbc 0.2.0",
+ "chacha20 0.10.0",
  "chrono",
- "cipher 0.4.4",
+ "cipher 0.5.1",
  "flate2",
  "getrandom 0.4.2",
  "hex",
  "hex-literal",
- "hmac 0.12.1",
+ "hmac 0.13.0",
+ "hybrid-array",
  "js-sys",
  "quick-xml",
  "rust-argon2",
- "salsa20",
+ "salsa20 0.11.0",
  "secrecy",
  "serde",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "thiserror 2.0.18",
  "twofish",
  "uuid",
@@ -5740,6 +5761,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "salsa20"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f874456e72520ff1375a06c588eaf074b0f01f9e9e1aada45bd9b7954a6e42c"
+dependencies = [
+ "cfg-if",
+ "cipher 0.5.1",
+]
+
+[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5809,7 +5840,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0516a385866c09368f0b5bcd1caff3366aace790fcd46e2bb032697bb172fd1f"
 dependencies = [
  "pbkdf2",
- "salsa20",
+ "salsa20 0.10.2",
  "sha2 0.10.9",
 ]
 
@@ -7026,11 +7057,11 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "twofish"
-version = "0.7.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a78e83a30223c757c3947cd144a31014ff04298d8719ae10d03c31c0448c8013"
+checksum = "0218ef702a91e18ba84dd516edf8df33a9f9fb4431d6ada13e6f9502c3bcb6fc"
 dependencies = [
- "cipher 0.4.4",
+ "cipher 0.5.1",
 ]
 
 [[package]]
