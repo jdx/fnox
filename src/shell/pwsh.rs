@@ -44,7 +44,8 @@ function fnox {{
         ));
 
         if !opts.no_hook_env {
-            out.push_str(&format!(r#"
+            out.push_str(&format!(
+                r#"
 function Global:_fnox_hook {{
     if ($env:FNOX_SHELL -eq 'pwsh') {{
         $output = & "{exe}" hook-env -s pwsh | Out-String
@@ -124,9 +125,7 @@ Remove-Item -ErrorAction SilentlyContinue -Path Env:__FNOX_SESSION
             output.push_str(&format!(
                 "    Write-Host '{prefix}' -NoNewline -ForegroundColor DarkGray\n"
             ));
-            output.push_str(&format!(
-                "    Write-Host '{keys}' -ForegroundColor Cyan\n"
-            ));
+            output.push_str(&format!("    Write-Host '{keys}' -ForegroundColor Cyan\n"));
             output.push_str("}\n");
         }
 
@@ -159,7 +158,9 @@ impl fmt::Display for Pwsh {
 }
 
 fn powershell_escape(s: Cow<str>) -> Cow<str> {
-    let needs_escape = s.chars().any(|c| matches!(c, '\t' | '\n' | '\r' | '\'' | '`'));
+    let needs_escape = s
+        .chars()
+        .any(|c| matches!(c, '\t' | '\n' | '\r' | '\'' | '`'));
 
     if !needs_escape {
         return s;
