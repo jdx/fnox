@@ -55,7 +55,7 @@ jobs:
         with:
           p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
           p12-password: ${{ secrets.CERTIFICATES_P12_PASS }}
-      - uses: taiki-e/upload-rust-binary-action@10c1cf6a3da113ad4e60018e386570529aa5f1d3 # v1
+      - uses: taiki-e/upload-rust-binary-action@f0d45ae91ee7b8ee928de7a9d04d893a08bcbec6 # v1
         with:
           bin: fnox
           target: ${{ matrix.target }}
