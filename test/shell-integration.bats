@@ -211,8 +211,8 @@ teardown() {
 	run "$FNOX_BIN" hook-env -s pwsh
 
 	assert_success
-	assert_output --partial "\$Env:PWSH_SECRET='pwsh-value'"
-	assert_output --partial "\$Env:__FNOX_SESSION="
+	assert_output --partial "\${Env:PWSH_SECRET}='pwsh-value'"
+	assert_output --partial '${Env:__FNOX_SESSION}='
 }
 
 @test "fnox hook-env escapes single quotes for powershell" {
@@ -229,7 +229,7 @@ teardown() {
 	run "$FNOX_BIN" hook-env -s pwsh
 
 	assert_success
-	assert_output --partial "\$Env:PWSH_QUOTE='it''s a value'"
+	assert_output --partial "\${Env:PWSH_QUOTE}='it''s a value'"
 }
 
 @test "fnox hook-env finds config in parent directory" {
