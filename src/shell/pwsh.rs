@@ -19,14 +19,14 @@ function fnox {{
         [string[]] $arguments
     )
 
-    if ($arguments.count -eq 0) {{
+    if ($arguments.Count -eq 0) {{
         & "{exe}"
         return
     }}
 
     $command = $arguments[0]
-    if ($arguments.Length -gt 1) {{
-        $remainingArgs = $arguments[1..($arguments.Length - 1)]
+    if ($arguments.Count -gt 1) {{
+        $remainingArgs = $arguments[1..($arguments.Count - 1)]
     }} else {{
         $remainingArgs = @()
     }}
@@ -82,10 +82,14 @@ _fnox_hook"#,
 
     fn deactivate(&self) -> String {
         r#"
-Remove-Item -ErrorAction SilentlyContinue Function:fnox
-Remove-Item -ErrorAction SilentlyContinue Function:_fnox_hook
-Remove-Item -ErrorAction SilentlyContinue -Path Env:FNOX_SHELL
-Remove-Item -ErrorAction SilentlyContinue -Path Env:__FNOX_SESSION
+if ($Global:__fnox_pwsh_previous_prompt_function) {
+    $function:prompt = $Global:__fnox_pwsh_previous_prompt_function
+    Remove-Variable -Name __fnox_pwsh_previous_prompt_function -Scope Global -ErrorAction SilentlyContinue
+}
+Remove-Item -ErrorAction SilentlyContinue -Path Function:\fnox
+Remove-Item -ErrorAction SilentlyContinue -Path Function:\_fnox_hook
+Remove-Item -ErrorAction SilentlyContinue -LiteralPath 'Env:FNOX_SHELL'
+Remove-Item -ErrorAction SilentlyContinue -LiteralPath 'Env:__FNOX_SESSION'
         "#
         .to_string()
     }
@@ -140,14 +144,13 @@ Remove-Item -ErrorAction SilentlyContinue -Path Env:__FNOX_SESSION
     }
 
     fn set_env(&self, key: &str, value: &str) -> String {
-        let k = powershell_escape(key.into());
         let v = powershell_escape(value.into());
-        format!("$Env:{k}='{v}'\n")
+        format!("${{Env:{key}}}='{v}'\n")
     }
 
     fn unset_env(&self, key: &str) -> String {
         let k = powershell_escape(key.into());
-        format!("Remove-Item -ErrorAction SilentlyContinue -Path Env:\\{k}\n")
+        format!("Remove-Item -ErrorAction SilentlyContinue -LiteralPath 'Env:{k}'\n")
     }
 }
 
@@ -158,24 +161,8 @@ impl fmt::Display for Pwsh {
 }
 
 fn powershell_escape(s: Cow<str>) -> Cow<str> {
-    let needs_escape = s
-        .chars()
-        .any(|c| matches!(c, '\t' | '\n' | '\r' | '\'' | '`'));
-
-    if !needs_escape {
+    if !s.contains('\'') {
         return s;
     }
-
-    let mut es = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '\t' => es.push_str("`t"),
-            '\n' => es.push_str("`n"),
-            '\r' => es.push_str("`r"),
-            '\'' => es.push_str("''"),
-            '`' => es.push_str("``"),
-            c => es.push(c),
-        }
-    }
-    es.into()
+    s.replace('\'', "''").into()
 }
