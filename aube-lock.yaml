@@ -29,10 +29,18 @@ time:
   "@docsearch/js@3.8.2": 2024-12-17T15:34:38.867Z
   "@docsearch/react@3.8.2": 2024-12-17T15:34:36.229Z
   "@esbuild/darwin-arm64@0.21.5": 2024-06-09T21:17:13.758Z
+  "@esbuild/darwin-x64@0.21.5": 2024-06-09T21:17:00.976Z
+  "@esbuild/linux-arm64@0.21.5": 2024-06-09T21:17:23.384Z
+  "@esbuild/linux-x64@0.21.5": 2024-06-09T21:17:15.111Z
   "@iconify-json/simple-icons@1.2.78": 2026-04-13T04:57:35.352Z
   "@iconify/types@2.0.0": 2022-09-08T06:23:03.369Z
   "@jridgewell/sourcemap-codec@1.5.5": 2025-08-12T06:43:59.139Z
   "@rollup/rollup-darwin-arm64@4.60.2": 2026-04-18T13:58:27.555Z
+  "@rollup/rollup-darwin-x64@4.60.2": 2026-04-18T13:59:28.701Z
+  "@rollup/rollup-linux-arm64-gnu@4.60.2": 2026-04-18T13:58:41.555Z
+  "@rollup/rollup-linux-arm64-musl@4.60.2": 2026-04-18T13:58:45.162Z
+  "@rollup/rollup-linux-x64-gnu@4.60.2": 2026-04-18T13:59:43.183Z
+  "@rollup/rollup-linux-x64-musl@4.60.2": 2026-04-18T13:59:46.857Z
   "@shikijs/core@2.5.0": 2025-02-18T09:10:12.142Z
   "@shikijs/engine-javascript@2.5.0": 2025-02-18T09:09:26.369Z
   "@shikijs/engine-oniguruma@2.5.0": 2025-02-18T09:09:33.593Z
@@ -263,6 +271,27 @@ packages:
       - darwin
     cpu:
       - arm64
+  "@esbuild/darwin-x64@0.21.5":
+    resolution:
+      integrity: sha512-se/JjF8NlmKVG4kNIuyWMV/22ZaerB+qaSi5MdrXtd6R08kvs2qCN4C09miupktDitvh8jRFflwGFBQcxZRjbw==
+    os:
+      - darwin
+    cpu:
+      - x64
+  "@esbuild/linux-arm64@0.21.5":
+    resolution:
+      integrity: sha512-ibKvmyYzKsBeX8d8I7MH/TMfWDXBF3db4qM6sy+7re0YXya+K1cem3on9XgdT2EQGMu4hQyZhan7TeQ8XkGp4Q==
+    os:
+      - linux
+    cpu:
+      - arm64
+  "@esbuild/linux-x64@0.21.5":
+    resolution:
+      integrity: sha512-1rYdTpyv03iycF1+BhzrzQJCdOuAOtaqHTWJZCWvijKD2N5Xu0TtVC8/+1faWqcP9iBCWOmjmhoH94dH82BxPQ==
+    os:
+      - linux
+    cpu:
+      - x64
   "@iconify-json/simple-icons@1.2.78":
     resolution:
       integrity: sha512-I3lkNp0Qu7q2iZWkdcf/I2hqGhzK6qxdILh9T7XqowQrnpmG/BayDsiCf6PktDoWlW0U971xA5g+panm+NFrfQ==
@@ -279,6 +308,49 @@ packages:
       - darwin
     cpu:
       - arm64
+  "@rollup/rollup-darwin-x64@4.60.2":
+    resolution:
+      integrity: sha512-gjEtURKLCC5VXm1I+2i1u9OhxFsKAQJKTVB8WvDAHF+oZlq0GTVFOlTlO1q3AlCTE/DF32c16ESvfgqR7343/g==
+    os:
+      - darwin
+    cpu:
+      - x64
+  "@rollup/rollup-linux-arm64-gnu@4.60.2":
+    resolution:
+      integrity: sha512-bO/rVDiDUuM2YfuCUwZ1t1cP+/yqjqz+Xf2VtkdppefuOFS2OSeAfgafaHNkFn0t02hEyXngZkxtGqXcXwO8Rg==
+    os:
+      - linux
+    cpu:
+      - arm64
+    libc:
+      - glibc
+  "@rollup/rollup-linux-arm64-musl@4.60.2":
+    resolution:
+      integrity: sha512-hr26p7e93Rl0Za+JwW7EAnwAvKkehh12BU1Llm9Ykiibg4uIr2rbpxG9WCf56GuvidlTG9KiiQT/TXT1yAWxTA==
+    os:
+      - linux
+    cpu:
+      - arm64
+    libc:
+      - musl
+  "@rollup/rollup-linux-x64-gnu@4.60.2":
+    resolution:
+      integrity: sha512-UQjrkIdWrKI626Du8lCQ6MJp/6V1LAo2bOK9OTu4mSn8GGXIkPXk/Vsp4bLHCd9Z9Iz2OTEaokUE90VweJgIYQ==
+    os:
+      - linux
+    cpu:
+      - x64
+    libc:
+      - glibc
+  "@rollup/rollup-linux-x64-musl@4.60.2":
+    resolution:
+      integrity: sha512-bTsRGj6VlSdn/XD4CGyzMnzaBs9bsRxy79eTqTCBsA8TMIEky7qg48aPkvJvFe1HyzQ5oMZdg7AnVlWQSKLTnw==
+    os:
+      - linux
+    cpu:
+      - x64
+    libc:
+      - musl
   "@shikijs/core@2.5.0":
     resolution:
       integrity: sha512-uu/8RExTKtavlpH7XqnVYBrfBkUc20ngXiX9NSrBhOVZYv/7XQRKUyhtkeflY5QsxC0GbJThCerruZfsUaSldg==
@@ -764,12 +836,20 @@ snapshots:
       algoliasearch: 5.50.2
       search-insights: 2.17.3
   "@esbuild/darwin-arm64@0.21.5": {}
+  "@esbuild/darwin-x64@0.21.5": {}
+  "@esbuild/linux-arm64@0.21.5": {}
+  "@esbuild/linux-x64@0.21.5": {}
   "@iconify-json/simple-icons@1.2.78":
     dependencies:
       "@iconify/types": 2.0.0
   "@iconify/types@2.0.0": {}
   "@jridgewell/sourcemap-codec@1.5.5": {}
   "@rollup/rollup-darwin-arm64@4.60.2": {}
+  "@rollup/rollup-darwin-x64@4.60.2": {}
+  "@rollup/rollup-linux-arm64-gnu@4.60.2": {}
+  "@rollup/rollup-linux-arm64-musl@4.60.2": {}
+  "@rollup/rollup-linux-x64-gnu@4.60.2": {}
+  "@rollup/rollup-linux-x64-musl@4.60.2": {}
   "@shikijs/core@2.5.0":
     dependencies:
       "@shikijs/engine-javascript": 2.5.0
@@ -932,6 +1012,9 @@ snapshots:
   esbuild@0.21.5:
     optionalDependencies:
       "@esbuild/darwin-arm64": 0.21.5
+      "@esbuild/darwin-x64": 0.21.5
+      "@esbuild/linux-arm64": 0.21.5
+      "@esbuild/linux-x64": 0.21.5
   estree-walker@2.0.2: {}
   focus-trap@7.8.0:
     dependencies:
@@ -1013,6 +1096,11 @@ snapshots:
       "@types/estree": 1.0.8
     optionalDependencies:
       "@rollup/rollup-darwin-arm64": 4.60.2
+      "@rollup/rollup-darwin-x64": 4.60.2
+      "@rollup/rollup-linux-arm64-gnu": 4.60.2
+      "@rollup/rollup-linux-arm64-musl": 4.60.2
+      "@rollup/rollup-linux-x64-gnu": 4.60.2
+      "@rollup/rollup-linux-x64-musl": 4.60.2
       fsevents: 2.3.3
   search-insights@2.17.3: {}
   shiki@2.5.0:
