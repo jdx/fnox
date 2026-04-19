@@ -36,6 +36,7 @@ export default defineConfig({
       { text: "Providers", link: "/providers/overview" },
       { text: "CLI Reference", link: "/cli/" },
       { text: "Reference", link: "/reference/environment" },
+      { text: "Releases", link: "https://github.com/jdx/fnox/releases" },
     ],
 
     sidebar: [

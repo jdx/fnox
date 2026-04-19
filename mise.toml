@@ -2,6 +2,7 @@
 _.path = ["target/debug", "test/bats/bin"]
 
 [tools]
+aube = "latest"
 age = "latest"
 "cargo:cargo-msrv" = "latest"
 cargo-binstall = "latest"
@@ -19,6 +20,7 @@ bitwarden = "latest"
 bitwarden-secrets-manager = "latest"
 vault = "latest"
 infisical = "latest"
+node = "24"
 usage = "latest"
 
 [tasks.test]

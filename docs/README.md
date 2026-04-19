@@ -6,16 +6,16 @@ This directory contains the VitePress documentation for fnox.
 
 ```bash
 # Install dependencies
-npm install
+aube install
 
 # Start dev server
-npm run docs:dev
+aube run docs:dev
 
 # Build for production
-npm run docs:build
+aube run docs:build
 
 # Preview production build
-npm run docs:preview
+aube run docs:preview
 ```
 
 ## Deployment

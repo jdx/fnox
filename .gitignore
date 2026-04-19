@@ -37,6 +37,7 @@ fnox.local.toml
 mise.local.toml
 
 # VitePress
+.aube/
 node_modules/
 docs/.vitepress/dist
 docs/.vitepress/cache
