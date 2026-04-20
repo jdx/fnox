@@ -37,7 +37,7 @@ def --env --wrapped fnox [...rest] {{
     let command = ($rest | first | default "")
     match $command {{
         "deactivate" => {{
-            let result = (do -i {{ ^'{exe}' $command ...($rest | skip 1) }} | complete)
+            let result = (do -i {{ ^"{exe}" $command ...($rest | skip 1) }} | complete)
             if ($result.stderr | str trim | is-not-empty) {{
                 print -e $result.stderr
             }}
@@ -50,7 +50,7 @@ def --env --wrapped fnox [...rest] {{
                 hide-env -i __FNOX_SESSION
             }}
         }}
-        _ => {{ ^'{exe}' ...$rest }}
+        _ => {{ ^"{exe}" ...$rest }}
     }}
 }}
 "#,
@@ -62,7 +62,7 @@ def --env --wrapped fnox [...rest] {{
             out.push_str(&format!(
                 r#"
 def --env _fnox_hook [] {{
-    let result = (do -i {{ ^'{exe}' hook-env -s nu }} | complete)
+    let result = (do -i {{ ^"{exe}" hook-env -s nu }} | complete)
     if ($result.stderr | str trim | is-not-empty) {{
         print -e $result.stderr
     }}
