@@ -128,7 +128,13 @@ impl EditCommand {
                 }
             });
 
-        let status = Command::new(&editor)
+        let editor_path = if cfg!(windows) {
+            which::which(&editor).unwrap_or_else(|_| editor.clone().into())
+        } else {
+            editor.clone().into()
+        };
+
+        let status = Command::new(editor_path)
             .arg(&temp_path)
             .status()
             .map_err(|e| FnoxError::EditorLaunchFailed {
