@@ -128,11 +128,10 @@ impl EditCommand {
                 }
             });
 
-        let editor_path = if cfg!(windows) {
-            which::which(&editor).unwrap_or_else(|_| editor.clone().into())
-        } else {
-            editor.clone().into()
-        };
+        #[cfg(windows)]
+        let editor_path = which::which(&editor).unwrap_or_else(|_| editor.clone().into());
+        #[cfg(not(windows))]
+        let editor_path = &editor;
 
         let status = Command::new(editor_path)
             .arg(&temp_path)

@@ -302,13 +302,13 @@ impl FnoxMcpServer {
         // file path as the env var. Temp files are kept alive until the
         // subprocess completes (held in _exec_temp_files).
         let mut _exec_temp_files = Vec::new();
-        let cmd_name = &params.command[0];
-        let mut cmd = if cfg!(windows) {
-            let resolved = which::which(cmd_name).unwrap_or_else(|_| cmd_name.into());
-            tokio::process::Command::new(resolved)
-        } else {
-            tokio::process::Command::new(cmd_name)
-        };
+        
+        #[cfg(windows)]
+        let cmd_path = which::which(cmd_name).unwrap_or_else(|_| cmd_name.into());
+        #[cfg(not(windows))]        
+        let cmd_path = cmd_name;
+        
+        let mut cmd = Command::new(cmd_path);
         if params.command.len() > 1 {
             cmd.args(&params.command[1..]);
         }
