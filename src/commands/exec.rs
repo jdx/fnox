@@ -28,11 +28,13 @@ impl ExecCommand {
         // Get the profile secrets
         let profile_secrets = config.get_secrets(&profile)?;
 
+        let cmd_name = &self.command[0];
+
         #[cfg(windows)]
         let cmd_path = which::which(cmd_name).unwrap_or_else(|_| cmd_name.into());
         #[cfg(not(windows))]
         let cmd_path = cmd_name;
-        
+
         let mut cmd = Command::new(cmd_path);
 
         if self.command.len() > 1 {
