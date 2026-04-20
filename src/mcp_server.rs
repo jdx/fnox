@@ -310,7 +310,7 @@ impl FnoxMcpServer {
         #[cfg(not(windows))]        
         let cmd_path = cmd_name;
 
-        let mut cmd = Command::new(cmd_path);
+        let mut cmd = tokio::process::Command::new(cmd_path);
         if params.command.len() > 1 {
             cmd.args(&params.command[1..]);
         }
