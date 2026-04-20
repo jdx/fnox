@@ -6,7 +6,7 @@ pub struct Nushell;
 impl Shell for Nushell {
     fn activate(&self, opts: ActivateOptions) -> String {
         let mut out = String::new();
-        let exe = opts.exe.display().to_string();
+        let exe = opts.exe.to_string_lossy().replace('\\', "/");
 
         out.push_str("$env.FNOX_SHELL = \"nu\"\n");
 
