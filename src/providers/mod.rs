@@ -24,6 +24,7 @@ pub mod password_store;
 pub mod passwordstate;
 pub mod plain;
 pub mod proton_pass;
+pub mod pulumi_esc;
 pub mod resolved;
 pub mod resolver;
 pub mod secret_ref;
@@ -140,7 +141,7 @@ mod generated {
         use super::super::{
             age, aws_kms, aws_ps, aws_sm, azure_kms, azure_sm, bitwarden, bitwarden_sm, doppler,
             fido2, gcp_kms, gcp_sm, infisical, keepass, keychain, onepassword, password_store,
-            passwordstate, plain, proton_pass, vault, yubikey,
+            passwordstate, plain, proton_pass, pulumi_esc, vault, yubikey,
         };
         include!(concat!(
             env!("OUT_DIR"),
