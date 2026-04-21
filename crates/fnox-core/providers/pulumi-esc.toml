@@ -1,0 +1,36 @@
+# Pulumi ESC provider - retrieves secrets from Pulumi ESC environments
+display_name = "Pulumi ESC"
+serde_rename = "pulumi-esc"
+rust_variant = "PulumiEsc"
+category = "CloudSecretsManager"
+description = "Pulumi ESC (Environments, Secrets, and Configuration)"
+default_name = "pulumi-esc"
+auth_command = "esc login"
+setup_instructions = """
+Requires: Pulumi ESC CLI (https://www.pulumi.com/docs/esc/download-install/)
+Install: brew install pulumi/tap/esc
+Authenticate: esc login
+Or use an access token: export PULUMI_ACCESS_TOKEN=pul-xxx"""
+
+[fields.organization]
+type = "required"
+placeholder = "my-org"
+label = "Organization:"
+wizard = true
+
+[fields.project]
+type = "optional"
+placeholder = "my-project"
+label = "Project (optional, omit for legacy org/env format):"
+wizard = true
+
+[fields.environment]
+type = "required"
+placeholder = "dev"
+label = "Environment:"
+wizard = true
+
+[fields.token]
+type = "optional"
+placeholder = ""
+label = "Access token (optional, uses PULUMI_ACCESS_TOKEN if not set):"

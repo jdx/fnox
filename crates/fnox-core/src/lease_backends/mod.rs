@@ -12,6 +12,7 @@ pub mod command;
 pub mod gcp_iam;
 pub mod github_app;
 pub mod github_oauth;
+pub mod pulumi_esc;
 pub mod vault;
 
 /// A credential lease with metadata for tracking and revocation
@@ -213,6 +214,21 @@ pub enum LeaseBackendConfig {
         #[serde(skip_serializing_if = "Option::is_none")]
         duration: Option<String>,
     },
+    /// Pulumi ESC Environment (dynamic credentials via `esc env open`)
+    PulumiEsc {
+        organization: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        project: Option<String>,
+        environment: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        token: Option<String>,
+        /// Optional filter: only surface these env var names from the ESC environment.
+        /// When omitted, all `environmentVariables` entries are surfaced.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        env_vars: Option<Vec<String>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        duration: Option<String>,
+    },
     /// Generic Command Backend
     Command {
         create_command: String,
@@ -245,6 +261,7 @@ impl LeaseBackendConfig {
                 private_key_file, ..
             } => github_app::check_prerequisites(private_key_file),
             LeaseBackendConfig::GithubOauth { .. } => github_oauth::check_prerequisites(),
+            LeaseBackendConfig::PulumiEsc { .. } => pulumi_esc::check_prerequisites(),
             LeaseBackendConfig::Command { .. } => command::check_prerequisites(),
         }
     }
@@ -266,6 +283,7 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::Cloudflare { .. } => cloudflare::required_env_vars(),
             LeaseBackendConfig::GithubApp { .. } => github_app::required_env_vars(),
             LeaseBackendConfig::GithubOauth { .. } => github_oauth::required_env_vars(),
+            LeaseBackendConfig::PulumiEsc { .. } => pulumi_esc::required_env_vars(),
             LeaseBackendConfig::Command { .. } => command::required_env_vars(),
         }
     }
@@ -281,6 +299,9 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::Cloudflare { env_var, .. } => env_var == key,
             LeaseBackendConfig::GithubApp { env_var, .. } => env_var == key,
             LeaseBackendConfig::GithubOauth { env_var, .. } => env_var == key,
+            LeaseBackendConfig::PulumiEsc { env_vars, .. } => env_vars
+                .as_ref()
+                .is_some_and(|vars| vars.iter().any(|v| v == key)),
         }
     }
 
@@ -298,6 +319,7 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::Cloudflare { .. } => cloudflare::CONSUMED_ENV_VARS,
             LeaseBackendConfig::GithubApp { .. } => github_app::CONSUMED_ENV_VARS,
             LeaseBackendConfig::GithubOauth { .. } => github_oauth::CONSUMED_ENV_VARS,
+            LeaseBackendConfig::PulumiEsc { .. } => pulumi_esc::CONSUMED_ENV_VARS,
         }
     }
 
@@ -397,6 +419,20 @@ impl LeaseBackendConfig {
                 auth_base.clone(),
                 api_base.clone(),
             ))),
+            LeaseBackendConfig::PulumiEsc {
+                organization,
+                project,
+                environment,
+                token,
+                env_vars,
+                ..
+            } => Ok(Box::new(pulumi_esc::PulumiEscBackend::new(
+                organization.clone(),
+                project.clone(),
+                environment.clone(),
+                token.clone(),
+                env_vars.clone(),
+            ))),
             LeaseBackendConfig::Command {
                 create_command,
                 revoke_command,
@@ -443,6 +479,7 @@ impl LeaseBackendConfig {
             | LeaseBackendConfig::Cloudflare { duration, .. }
             | LeaseBackendConfig::GithubApp { duration, .. }
             | LeaseBackendConfig::GithubOauth { duration, .. }
+            | LeaseBackendConfig::PulumiEsc { duration, .. }
             | LeaseBackendConfig::Command { duration, .. } => duration.as_deref(),
         }
     }

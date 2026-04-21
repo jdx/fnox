@@ -297,6 +297,13 @@ impl AddCommand {
                 auth_command: None,
                 daemon_cache: None,
             },
+            ProviderType::PulumiEsc => crate::config::ProviderConfig::PulumiEsc {
+                organization: StringOrSecretRef::from("my-org"),
+                project: OptionStringOrSecretRef::none(),
+                environment: StringOrSecretRef::from("dev"),
+                token: OptionStringOrSecretRef::none(),
+                auth_command: None,
+            },
         };
 
         // Insert into the appropriate section — after the match so no
