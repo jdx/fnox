@@ -1,5 +1,69 @@
 # Changelog
 
+## [1.21.0](https://github.com/jdx/fnox/compare/v1.20.0..v1.21.0) - 2026-04-21
+
+### 🚀 Features
+
+- Powershell integration by [@nbfritch](https://github.com/nbfritch) in [#421](https://github.com/jdx/fnox/pull/421)
+
+### 🐛 Bug Fixes
+
+- **(Windows)** Nushell integration by [@john-trieu-nguyen](https://github.com/john-trieu-nguyen) in [#425](https://github.com/jdx/fnox/pull/425)
+- **(Windows)** Command resolution for executables by [@john-trieu-nguyen](https://github.com/john-trieu-nguyen) in [#427](https://github.com/jdx/fnox/pull/427)
+
+### 📚 Documentation
+
+- add releases nav and aube lock by [@jdx](https://github.com/jdx) in [#422](https://github.com/jdx/fnox/pull/422)
+- include linux native packages in aube lock by [@jdx](https://github.com/jdx) in [#423](https://github.com/jdx/fnox/pull/423)
+
+### 🔍 Other Changes
+
+- Use published `clap-sort` crate instead of inlined module by [@jdx](https://github.com/jdx) in [#409](https://github.com/jdx/fnox/pull/409)
+- add communique 1.0.1 by [@jdx](https://github.com/jdx) in [#424](https://github.com/jdx/fnox/pull/424)
+
+### 📦️ Dependency Updates
+
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#381](https://github.com/jdx/fnox/pull/381)
+- update taiki-e/upload-rust-binary-action digest to 10c1cf6 by [@renovate[bot]](https://github.com/renovate[bot]) in [#383](https://github.com/jdx/fnox/pull/383)
+- update rust crate tokio to v1.51.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#384](https://github.com/jdx/fnox/pull/384)
+- update rust crate indexmap to v2.14.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#385](https://github.com/jdx/fnox/pull/385)
+- update rust crate rmcp to v1.4.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#389](https://github.com/jdx/fnox/pull/389)
+- update rust crate strum to 0.28 by [@renovate[bot]](https://github.com/renovate[bot]) in [#395](https://github.com/jdx/fnox/pull/395)
+- update rust crate toml_edit to 0.25 by [@renovate[bot]](https://github.com/renovate[bot]) in [#396](https://github.com/jdx/fnox/pull/396)
+- update rust crate miniz_oxide to 0.9 by [@renovate[bot]](https://github.com/renovate[bot]) in [#390](https://github.com/jdx/fnox/pull/390)
+- update rust crate ratatui to 0.30 by [@renovate[bot]](https://github.com/renovate[bot]) in [#392](https://github.com/jdx/fnox/pull/392)
+- update actions/checkout action to v6 by [@renovate[bot]](https://github.com/renovate[bot]) in [#397](https://github.com/jdx/fnox/pull/397)
+- update actions/deploy-pages action to v5 by [@renovate[bot]](https://github.com/renovate[bot]) in [#399](https://github.com/jdx/fnox/pull/399)
+- update actions/configure-pages action to v6 by [@renovate[bot]](https://github.com/renovate[bot]) in [#398](https://github.com/jdx/fnox/pull/398)
+- update actions/setup-node action to v6 by [@renovate[bot]](https://github.com/renovate[bot]) in [#400](https://github.com/jdx/fnox/pull/400)
+- update actions/upload-pages-artifact action to v4 by [@renovate[bot]](https://github.com/renovate[bot]) in [#401](https://github.com/jdx/fnox/pull/401)
+- update dependency node to v24 by [@renovate[bot]](https://github.com/renovate[bot]) in [#403](https://github.com/jdx/fnox/pull/403)
+- update apple-actions/import-codesign-certs action to v6 by [@renovate[bot]](https://github.com/renovate[bot]) in [#402](https://github.com/jdx/fnox/pull/402)
+- update nick-fields/retry action to v4 by [@renovate[bot]](https://github.com/renovate[bot]) in [#406](https://github.com/jdx/fnox/pull/406)
+- update github artifact actions (major) by [@renovate[bot]](https://github.com/renovate[bot]) in [#404](https://github.com/jdx/fnox/pull/404)
+- update jdx/mise-action action to v4 by [@renovate[bot]](https://github.com/renovate[bot]) in [#405](https://github.com/jdx/fnox/pull/405)
+- update rust crate which to v8 by [@renovate[bot]](https://github.com/renovate[bot]) in [#408](https://github.com/jdx/fnox/pull/408)
+- update rust crate usage-lib to v3 by [@renovate[bot]](https://github.com/renovate[bot]) in [#407](https://github.com/jdx/fnox/pull/407)
+- bump rustcrypto stack (aes-gcm, sha2, hkdf) together by [@jdx](https://github.com/jdx) in [#410](https://github.com/jdx/fnox/pull/410)
+- update rust crate reqwest to 0.13 by [@renovate[bot]](https://github.com/renovate[bot]) in [#393](https://github.com/jdx/fnox/pull/393)
+- update rust crate libloading to 0.9 by [@renovate[bot]](https://github.com/renovate[bot]) in [#388](https://github.com/jdx/fnox/pull/388)
+- update rust crate keepass to 0.10 by [@renovate[bot]](https://github.com/renovate[bot]) in [#387](https://github.com/jdx/fnox/pull/387)
+- update rust crate rand to 0.10 by [@renovate[bot]](https://github.com/renovate[bot]) in [#391](https://github.com/jdx/fnox/pull/391)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#411](https://github.com/jdx/fnox/pull/411)
+- update rust crate google-cloud-secretmanager-v1 to v1.8.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#415](https://github.com/jdx/fnox/pull/415)
+- update actions/upload-pages-artifact action to v5 by [@renovate[bot]](https://github.com/renovate[bot]) in [#418](https://github.com/jdx/fnox/pull/418)
+- update rust crate rmcp to v1.5.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#416](https://github.com/jdx/fnox/pull/416)
+- update rust crate clap to v4.6.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#413](https://github.com/jdx/fnox/pull/413)
+- update rust crate tokio to v1.52.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#417](https://github.com/jdx/fnox/pull/417)
+- update rust crate keepass to v0.10.6 by [@renovate[bot]](https://github.com/renovate[bot]) in [#414](https://github.com/jdx/fnox/pull/414)
+- update taiki-e/upload-rust-binary-action digest to f0d45ae by [@renovate[bot]](https://github.com/renovate[bot]) in [#419](https://github.com/jdx/fnox/pull/419)
+- update rust crate aws-sdk-sts to v1.102.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#420](https://github.com/jdx/fnox/pull/420)
+
+### New Contributors
+
+- @john-trieu-nguyen made their first contribution in [#427](https://github.com/jdx/fnox/pull/427)
+- @nbfritch made their first contribution in [#421](https://github.com/jdx/fnox/pull/421)
+
 ## [1.20.0](https://github.com/jdx/fnox/compare/v1.19.0..v1.20.0) - 2026-04-04
 
 ### 🚀 Features
