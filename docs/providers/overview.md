@@ -19,15 +19,16 @@ Store encrypted secrets in your `fnox.toml` file. The encrypted ciphertext is sa
 
 Store secrets remotely in cloud providers. Your `fnox.toml` contains only references to secret names.
 
-| Provider                                             | Description                         | Best For                                 |
-| ---------------------------------------------------- | ----------------------------------- | ---------------------------------------- |
-| [AWS Parameter Store](/providers/aws-ps)             | AWS SSM Parameter Store             | Config values, simple secrets            |
-| [AWS Secrets Manager](/providers/aws-sm)             | AWS centralized secrets             | Production AWS workloads                 |
-| [Azure Key Vault Secrets](/providers/azure-sm)       | Azure secret storage                | Production Azure workloads               |
-| [GCP Secret Manager](/providers/gcp-sm)              | Google Cloud secrets                | Production GCP workloads                 |
-| [Bitwarden Secrets Manager](/providers/bitwarden-sm) | Bitwarden Secrets Manager (bws CLI) | Teams using Bitwarden for DevOps secrets |
-| [Doppler](/providers/doppler)                        | Doppler secrets manager             | Developer-friendly cloud secrets         |
-| [HashiCorp Vault](/providers/vault)                  | Self-hosted or HCP Vault            | Multi-cloud, advanced features           |
+| Provider                                             | Description                          | Best For                                 |
+| ---------------------------------------------------- | ------------------------------------ | ---------------------------------------- |
+| [AWS Parameter Store](/providers/aws-ps)             | AWS SSM Parameter Store              | Config values, simple secrets            |
+| [AWS Secrets Manager](/providers/aws-sm)             | AWS centralized secrets              | Production AWS workloads                 |
+| [Azure Key Vault Secrets](/providers/azure-sm)       | Azure secret storage                 | Production Azure workloads               |
+| [GCP Secret Manager](/providers/gcp-sm)              | Google Cloud secrets                 | Production GCP workloads                 |
+| [Bitwarden Secrets Manager](/providers/bitwarden-sm) | Bitwarden Secrets Manager (bws CLI)  | Teams using Bitwarden for DevOps secrets |
+| [Doppler](/providers/doppler)                        | Doppler secrets manager              | Developer-friendly cloud secrets         |
+| [Pulumi ESC](/providers/pulumi-esc)                  | Pulumi Environments, Secrets, Config | Composable envs, dynamic cloud creds     |
+| [HashiCorp Vault](/providers/vault)                  | Self-hosted or HCP Vault             | Multi-cloud, advanced features           |
 
 ### 🔑 Password Managers & Secret Services
 
