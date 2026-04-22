@@ -37,6 +37,12 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             build-tool: cross
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            build-tool: cross
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            build-tool: cross
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             build-tool: cargo
