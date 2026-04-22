@@ -165,7 +165,7 @@ pub enum LeaseBackendConfig {
         #[serde(skip_serializing_if = "Option::is_none")]
         duration: Option<String>,
     },
-    /// Pulumi ESC Environment (dynamic credentials via `esc env open`)
+    /// Pulumi ESC Environment (dynamic credentials via the ESC REST API)
     PulumiEsc {
         organization: String,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -177,6 +177,14 @@ pub enum LeaseBackendConfig {
         /// When omitted, all `environmentVariables` entries are surfaced.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         env_vars: Option<Vec<String>>,
+        /// Sigil character for single-pass reference interpolation. When set
+        /// (e.g. `"%"`), any `<sigil>{path}` substring in a surfaced env var
+        /// is replaced with the resolved leaf value from the environment
+        /// (e.g. `%{anthropic.api_key}` → `properties.anthropic.value.api_key.value`).
+        /// Missing references are a hard error. Single pass only — no recursion
+        /// into the replaced text. Omit (default) to pass values through literally.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        interpolate: Option<char>,
         #[serde(skip_serializing_if = "Option::is_none")]
         duration: Option<String>,
     },
@@ -344,6 +352,7 @@ impl LeaseBackendConfig {
                 environment,
                 token,
                 env_vars,
+                interpolate,
                 ..
             } => Ok(Box::new(pulumi_esc::PulumiEscBackend::new(
                 organization.clone(),
@@ -351,6 +360,7 @@ impl LeaseBackendConfig {
                 environment.clone(),
                 token.clone(),
                 env_vars.clone(),
+                *interpolate,
             ))),
             LeaseBackendConfig::Command {
                 create_command,
