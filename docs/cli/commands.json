@@ -818,6 +818,7 @@
                     "passwordstate",
                     "plain",
                     "proton-pass",
+                    "pulumi-esc",
                     "vault",
                     "yubikey"
                   ]
@@ -1592,7 +1593,7 @@
   "config": {
     "props": {}
   },
-  "version": "1.21.0",
+  "version": "1.21.1-dev.pulumi-esc.1",
   "usage": "Usage: fnox [OPTIONS] <COMMAND>",
   "complete": {
     "key": {

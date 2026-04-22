@@ -4,7 +4,7 @@
 
 **Usage**: `fnox [FLAGS] <SUBCOMMAND>`
 
-**Version**: 1.21.0
+**Version**: 1.21.1-dev.pulumi-esc.1
 
 - **Usage**: `fnox [FLAGS] <SUBCOMMAND>`
 
