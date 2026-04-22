@@ -41,6 +41,7 @@ Provider type
 - `passwordstate`
 - `plain`
 - `proton-pass`
+- `pulumi-esc`
 - `vault`
 - `yubikey`
 
