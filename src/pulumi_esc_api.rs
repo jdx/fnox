@@ -105,6 +105,9 @@ pub fn build_env_ref(organization: &str, project: Option<&str>, environment: &st
 /// segment. Non-string leaves (bool, number) are coerced to their JSON-string
 /// form so callers can always export them as env vars.
 pub fn lookup(root: &serde_json::Value, path: &str) -> Option<String> {
+    if path.is_empty() {
+        return None;
+    }
     let mut cur = root.pointer("/properties")?;
     for segment in path.split('.') {
         cur = cur.get(segment)?.get("value")?;
@@ -166,11 +169,15 @@ impl EscClient {
     pub async fn open(&self, env_ref: &str, duration: Duration) -> Result<String> {
         let url = format!("{}/api/esc/environments/{env_ref}/open", self.base);
         let duration_param = format!("{}s", duration.as_secs());
+        // Send an explicit empty JSON body so middleware/proxies that require
+        // Content-Type on POST don't bounce us with 415 Unsupported Media Type.
         let resp = self
             .http
             .post(&url)
             .header("Authorization", &self.auth)
+            .header("Content-Type", "application/json")
             .query(&[("duration", duration_param.as_str())])
+            .body("{}")
             .send()
             .await
             .map_err(|e| FnoxError::ProviderApiError {
@@ -273,6 +280,14 @@ mod tests {
         assert_eq!(lookup(&b, "aws.region"), Some("us-west-2".into()));
         assert_eq!(lookup(&b, "aws.port"), Some("5432".into()));
         assert_eq!(lookup(&b, "nope"), None);
+    }
+
+    #[test]
+    fn lookup_empty_path_returns_none() {
+        // An empty dot-path would otherwise walk to `cur.get("")` which returns
+        // None cleanly — the fast-path guard just makes intent explicit.
+        let b = sample_body();
+        assert_eq!(lookup(&b, ""), None);
     }
 
     #[test]
