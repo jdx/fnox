@@ -12,6 +12,7 @@ mod lease;
 mod lease_backends;
 mod mcp_server;
 mod providers;
+mod pulumi_esc_api;
 mod secret_resolver;
 mod settings;
 mod shell;
