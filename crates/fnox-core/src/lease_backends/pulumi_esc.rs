@@ -1,14 +1,11 @@
-use crate::env;
 use crate::error::{FnoxError, Result};
 use crate::lease_backends::{Lease, LeaseBackend};
+use crate::pulumi_esc_api::{self, EscClient};
 use async_trait::async_trait;
 use indexmap::IndexMap;
-use serde::Deserialize;
-use std::path::PathBuf;
 use std::time::Duration;
 
 const URL: &str = "https://fnox.jdx.dev/leases/pulumi-esc";
-const DEFAULT_API_BASE: &str = "https://api.pulumi.com";
 
 pub const CONSUMED_ENV_VARS: &[&str] = &[
     "PULUMI_ACCESS_TOKEN",
@@ -18,71 +15,11 @@ pub const CONSUMED_ENV_VARS: &[&str] = &[
 ];
 
 pub fn check_prerequisites() -> Option<String> {
-    resolve_auth().err()
+    pulumi_esc_api::resolve_auth().err()
 }
 
 pub fn required_env_vars() -> Vec<(&'static str, &'static str)> {
     vec![("PULUMI_ACCESS_TOKEN", "Pulumi Cloud access token")]
-}
-
-fn pulumi_home() -> Option<PathBuf> {
-    std::env::var("PULUMI_HOME")
-        .ok()
-        .map(PathBuf::from)
-        .or_else(|| dirs::home_dir().map(|h| h.join(".pulumi")))
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PulumiCredentials {
-    current: Option<String>,
-    #[serde(default)]
-    access_tokens: IndexMap<String, String>,
-    #[serde(default)]
-    accounts: IndexMap<String, PulumiAccount>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PulumiAccount {
-    access_token: Option<String>,
-}
-
-/// Resolve (base_url, token) the same way the `esc` CLI does:
-/// env var → $PULUMI_HOME/credentials.json → ~/.pulumi/credentials.json.
-fn resolve_auth() -> std::result::Result<(String, String), String> {
-    if let Ok(token) =
-        env::var("FNOX_PULUMI_ACCESS_TOKEN").or_else(|_| env::var("PULUMI_ACCESS_TOKEN"))
-    {
-        let base =
-            std::env::var("PULUMI_BACKEND_URL").unwrap_or_else(|_| DEFAULT_API_BASE.to_string());
-        return Ok((base, token));
-    }
-    let home = pulumi_home().ok_or_else(|| "Could not locate Pulumi home directory".to_string())?;
-    let cred_path = home.join("credentials.json");
-    let raw = std::fs::read_to_string(&cred_path).map_err(|_| {
-        "Pulumi ESC credentials not found. Run 'esc login' or set PULUMI_ACCESS_TOKEN.".to_string()
-    })?;
-    let creds: PulumiCredentials = serde_json::from_str(&raw)
-        .map_err(|e| format!("Failed to parse {}: {e}", cred_path.display()))?;
-    let current = creds.current.ok_or_else(|| {
-        format!(
-            "{} missing 'current' field. Run 'esc login'.",
-            cred_path.display()
-        )
-    })?;
-    let token = creds
-        .accounts
-        .get(&current)
-        .and_then(|a| a.access_token.clone())
-        .or_else(|| creds.access_tokens.get(&current).cloned())
-        .ok_or_else(|| {
-            format!(
-                "No access token for '{current}' in {}. Run 'esc login'.",
-                cred_path.display()
-            )
-        })?;
-    Ok((current, token))
 }
 
 pub struct PulumiEscBackend {
@@ -114,45 +51,11 @@ impl PulumiEscBackend {
     }
 
     fn env_ref(&self) -> String {
-        match &self.project {
-            Some(project) => format!("{}/{}/{}", self.organization, project, self.environment),
-            None => format!("{}/{}", self.organization, self.environment),
-        }
-    }
-
-    fn resolve_auth(&self) -> Result<(String, String)> {
-        if let Some(token) = self.token.clone() {
-            let base = std::env::var("PULUMI_BACKEND_URL")
-                .unwrap_or_else(|_| DEFAULT_API_BASE.to_string());
-            return Ok((base, token));
-        }
-        resolve_auth().map_err(|details| FnoxError::ProviderAuthFailed {
-            provider: "Pulumi ESC".to_string(),
-            details,
-            hint: "Run 'esc login' or set PULUMI_ACCESS_TOKEN".to_string(),
-            url: URL.to_string(),
-        })
-    }
-}
-
-#[derive(Deserialize)]
-struct OpenResponse {
-    id: String,
-}
-
-/// Walk the resolved `properties` tree for a dot-path reference like
-/// `anthropic.api_key`. Every node is wrapped in `{value, trace}`, so we unwrap
-/// `.value` after each segment.
-fn lookup(root: &serde_json::Value, path: &str) -> Option<String> {
-    let mut cur = root.pointer("/properties")?;
-    for segment in path.split('.') {
-        cur = cur.get(segment)?.get("value")?;
-    }
-    match cur {
-        serde_json::Value::String(s) => Some(s.clone()),
-        serde_json::Value::Bool(b) => Some(b.to_string()),
-        serde_json::Value::Number(n) => Some(n.to_string()),
-        _ => None,
+        pulumi_esc_api::build_env_ref(
+            &self.organization,
+            self.project.as_deref(),
+            &self.environment,
+        )
     }
 }
 
@@ -176,11 +79,13 @@ fn resolve_refs(raw: &str, root: &serde_json::Value, sigil: char) -> Result<Stri
                 url: URL.to_string(),
             })?;
         let path = &after_open[..end];
-        let resolved = lookup(root, path).ok_or_else(|| FnoxError::ProviderInvalidResponse {
-            provider: "Pulumi ESC".to_string(),
-            details: format!("Unresolved reference '{open}{path}}}' in value"),
-            hint: "Check the path exists in this environment's `properties` tree".to_string(),
-            url: URL.to_string(),
+        let resolved = pulumi_esc_api::lookup(root, path).ok_or_else(|| {
+            FnoxError::ProviderInvalidResponse {
+                provider: "Pulumi ESC".to_string(),
+                details: format!("Unresolved reference '{open}{path}}}' in value"),
+                hint: "Check the path exists in this environment's `properties` tree".to_string(),
+                url: URL.to_string(),
+            }
         })?;
         out.push_str(&resolved);
         rest = &after_open[end + 1..];
@@ -204,26 +109,6 @@ fn extract_value(wrapped: Option<&serde_json::Value>) -> Option<String> {
     }
 }
 
-async fn http_error(resp: reqwest::Response) -> FnoxError {
-    let status = resp.status();
-    let body = resp.text().await.unwrap_or_default();
-    if status.as_u16() == 401 || status.as_u16() == 403 {
-        FnoxError::ProviderAuthFailed {
-            provider: "Pulumi ESC".to_string(),
-            details: format!("HTTP {status}: {body}"),
-            hint: "Run 'esc login' or check PULUMI_ACCESS_TOKEN".to_string(),
-            url: URL.to_string(),
-        }
-    } else {
-        FnoxError::ProviderApiError {
-            provider: "Pulumi ESC".to_string(),
-            details: format!("HTTP {status}: {body}"),
-            hint: "Check organization/project/environment in your lease config".to_string(),
-            url: URL.to_string(),
-        }
-    }
-}
-
 #[async_trait]
 impl LeaseBackend for PulumiEscBackend {
     async fn create_lease(&self, duration: Duration, label: &str) -> Result<Lease> {
@@ -235,64 +120,8 @@ impl LeaseBackend for PulumiEscBackend {
             duration.as_secs()
         );
 
-        let (base_url, token) = self.resolve_auth()?;
-        let base = base_url.trim_end_matches('/');
-        let auth = format!("token {token}");
-        let client = crate::http::http_client();
-        let duration_param = format!("{}s", duration.as_secs());
-
-        let open_url = format!("{base}/api/esc/environments/{env_ref}/open");
-        let open_resp = client
-            .post(&open_url)
-            .header("Authorization", &auth)
-            .query(&[("duration", duration_param.as_str())])
-            .send()
-            .await
-            .map_err(|e| FnoxError::ProviderApiError {
-                provider: "Pulumi ESC".to_string(),
-                details: e.to_string(),
-                hint: "Failed to reach Pulumi Cloud".to_string(),
-                url: URL.to_string(),
-            })?;
-        if !open_resp.status().is_success() {
-            return Err(http_error(open_resp).await);
-        }
-        let open: OpenResponse =
-            open_resp
-                .json()
-                .await
-                .map_err(|e| FnoxError::ProviderInvalidResponse {
-                    provider: "Pulumi ESC".to_string(),
-                    details: format!("Failed to parse open response: {e}"),
-                    hint: "Unexpected response from Pulumi ESC 'open' endpoint".to_string(),
-                    url: URL.to_string(),
-                })?;
-
-        let read_url = format!("{base}/api/esc/environments/{env_ref}/open/{}", open.id);
-        let read_resp = client
-            .get(&read_url)
-            .header("Authorization", &auth)
-            .send()
-            .await
-            .map_err(|e| FnoxError::ProviderApiError {
-                provider: "Pulumi ESC".to_string(),
-                details: e.to_string(),
-                hint: "Failed to read opened ESC environment".to_string(),
-                url: URL.to_string(),
-            })?;
-        if !read_resp.status().is_success() {
-            return Err(http_error(read_resp).await);
-        }
-        let body: serde_json::Value =
-            read_resp
-                .json()
-                .await
-                .map_err(|e| FnoxError::ProviderInvalidResponse {
-                    provider: "Pulumi ESC".to_string(),
-                    details: format!("Failed to parse environment response: {e}"),
-                    hint: "Unexpected response from Pulumi ESC".to_string(),
-                    url: URL.to_string(),
-                })?;
+        let client = EscClient::new(self.token.as_deref(), URL)?;
+        let body = client.open_and_read(&env_ref, duration).await?;
 
         let env_vars_obj = body
             .pointer("/properties/environmentVariables/value")
@@ -348,7 +177,7 @@ impl LeaseBackend for PulumiEscBackend {
 
         let expires_at =
             Some(chrono::Utc::now() + chrono::Duration::seconds(duration.as_secs() as i64));
-        let lease_id = super::generate_lease_id(&format!("pulumi-esc-{}", env_ref));
+        let lease_id = super::generate_lease_id(&format!("pulumi-esc-{env_ref}"));
 
         Ok(Lease {
             credentials,
@@ -389,30 +218,28 @@ mod tests {
         serde_json::json!({
             "properties": {
                 "anthropic": {
-                    "value": {
-                        "api_key": {"value": "sk-test-123"}
-                    }
+                    "value": { "api_key": { "value": "sk-test-123" } }
                 },
                 "aws": {
-                    "value": {
-                        "region": {"value": "us-west-2"},
-                        "port": {"value": 5432}
-                    }
+                    "value": { "region": { "value": "us-west-2" } }
                 }
             }
         })
     }
 
     #[test]
-    fn lookup_walks_value_wrappers() {
-        let body = sample_body();
-        assert_eq!(
-            lookup(&body, "anthropic.api_key"),
-            Some("sk-test-123".to_string())
-        );
-        assert_eq!(lookup(&body, "aws.region"), Some("us-west-2".to_string()));
-        assert_eq!(lookup(&body, "aws.port"), Some("5432".to_string()));
-        assert_eq!(lookup(&body, "nope.missing"), None);
+    fn extract_value_handles_scalar_types() {
+        let s = serde_json::json!({"value": "hello", "trace": {}});
+        assert_eq!(extract_value(Some(&s)), Some("hello".to_string()));
+        let b = serde_json::json!({"value": false});
+        assert_eq!(extract_value(Some(&b)), Some("false".to_string()));
+        let n = serde_json::json!({"value": 42});
+        assert_eq!(extract_value(Some(&n)), Some("42".to_string()));
+        let null = serde_json::json!({"value": null});
+        assert_eq!(extract_value(Some(&null)), None);
+        let missing = serde_json::json!({"trace": {}});
+        assert_eq!(extract_value(Some(&missing)), None);
+        assert_eq!(extract_value(None), None);
     }
 
     #[test]
@@ -454,8 +281,6 @@ mod tests {
 
     #[test]
     fn resolve_refs_is_single_pass_not_recursive() {
-        // `%{foo.%{bar}}` — non-greedy scan consumes up to the first `}`, yielding
-        // path `foo.%{bar`, which does not exist → error (no recursion).
         let body = sample_body();
         let err = resolve_refs("%{foo.%{bar}}", &body, '%').unwrap_err();
         assert!(matches!(err, FnoxError::ProviderInvalidResponse { .. }));
@@ -467,65 +292,6 @@ mod tests {
         assert_eq!(
             resolve_refs("${aws.region}", &body, '$').unwrap(),
             "us-west-2"
-        );
-    }
-
-    #[test]
-    fn parse_credentials_accounts_variant() {
-        let json = r#"{
-            "current": "https://api.pulumi.com",
-            "accessTokens": {"https://api.pulumi.com": "fallback-token"},
-            "accounts": {
-                "https://api.pulumi.com": {"accessToken": "primary-token"}
-            }
-        }"#;
-        let creds: PulumiCredentials = serde_json::from_str(json).unwrap();
-        assert_eq!(creds.current.as_deref(), Some("https://api.pulumi.com"));
-        assert_eq!(
-            creds
-                .accounts
-                .get("https://api.pulumi.com")
-                .and_then(|a| a.access_token.as_deref()),
-            Some("primary-token")
-        );
-        assert_eq!(
-            creds
-                .access_tokens
-                .get("https://api.pulumi.com")
-                .map(String::as_str),
-            Some("fallback-token")
-        );
-    }
-
-    #[test]
-    fn extract_value_handles_scalar_types() {
-        let s = serde_json::json!({"value": "hello", "trace": {}});
-        assert_eq!(extract_value(Some(&s)), Some("hello".to_string()));
-        let b = serde_json::json!({"value": false});
-        assert_eq!(extract_value(Some(&b)), Some("false".to_string()));
-        let n = serde_json::json!({"value": 42});
-        assert_eq!(extract_value(Some(&n)), Some("42".to_string()));
-        let null = serde_json::json!({"value": null});
-        assert_eq!(extract_value(Some(&null)), None);
-        let missing = serde_json::json!({"trace": {}});
-        assert_eq!(extract_value(Some(&missing)), None);
-        assert_eq!(extract_value(None), None);
-    }
-
-    #[test]
-    fn parse_credentials_tokens_only() {
-        let json = r#"{
-            "current": "https://api.pulumi.com",
-            "accessTokens": {"https://api.pulumi.com": "tok"}
-        }"#;
-        let creds: PulumiCredentials = serde_json::from_str(json).unwrap();
-        assert!(creds.accounts.is_empty());
-        assert_eq!(
-            creds
-                .access_tokens
-                .get("https://api.pulumi.com")
-                .map(String::as_str),
-            Some("tok")
         );
     }
 }
