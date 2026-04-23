@@ -41,22 +41,19 @@ impl EventHandler {
                 if event::poll(tick_rate).unwrap_or(false) {
                     if let Ok(evt) = event::read() {
                         match evt {
-                            CrosstermEvent::Key(key) => {
-                                if tx_clone.send(Event::Key(key)).is_err() {
+                            CrosstermEvent::Key(key)
+                                if tx_clone.send(Event::Key(key)).is_err() => {
                                     break;
                                 }
-                            }
-                            CrosstermEvent::Mouse(mouse) => {
-                                if tx_clone.send(Event::Mouse(mouse)).is_err() {
+                            CrosstermEvent::Mouse(mouse)
+                                if tx_clone.send(Event::Mouse(mouse)).is_err() => {
                                     break;
                                 }
-                            }
-                            CrosstermEvent::Resize(_, _) => {
+                            CrosstermEvent::Resize(_, _)
                                 // Terminal resize - send tick to trigger redraw
-                                if tx_clone.send(Event::Tick).is_err() {
+                                if tx_clone.send(Event::Tick).is_err() => {
                                     break;
                                 }
-                            }
                             _ => {}
                         }
                     }
