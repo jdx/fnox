@@ -5,7 +5,7 @@ const STORAGE_KEY = "jdx-banner-dismissed";
 
 export function initBanner() {
   if (typeof window === "undefined") return;
-  fetch(ENDPOINT, { cache: "no-cache" })
+  fetch(ENDPOINT)
     .then((r) => (r.ok ? r.json() : null))
     .then((b) => {
       if (!b || !b.enabled) return;
