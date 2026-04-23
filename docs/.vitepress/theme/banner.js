@@ -43,12 +43,25 @@ function render(b) {
     el.appendChild(a);
   }
 
+  const syncHeight = () => {
+    document.documentElement.style.setProperty(
+      "--vp-layout-top-height",
+      `${el.offsetHeight}px`,
+    );
+  };
+
+  const observer =
+    typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(syncHeight)
+      : null;
+
   const btn = document.createElement("button");
   btn.type = "button";
   btn.setAttribute("aria-label", "Dismiss");
   btn.textContent = "\u00d7";
   btn.addEventListener("click", () => {
     localStorage.setItem(STORAGE_KEY, b.id);
+    observer?.disconnect();
     el.remove();
     document.documentElement.style.removeProperty("--vp-layout-top-height");
   });
@@ -56,10 +69,6 @@ function render(b) {
 
   document.body.prepend(el);
 
-  requestAnimationFrame(() => {
-    document.documentElement.style.setProperty(
-      "--vp-layout-top-height",
-      `${el.offsetHeight}px`,
-    );
-  });
+  requestAnimationFrame(syncHeight);
+  observer?.observe(el);
 }
