@@ -15,6 +15,15 @@ export function initBanner() {
     .catch(() => {});
 }
 
+function isHttpUrl(value) {
+  try {
+    const u = new URL(value, window.location.href);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function render(b) {
   const el = document.createElement("div");
   el.className = "jdx-banner";
@@ -25,11 +34,11 @@ function render(b) {
   msg.textContent = b.message;
   el.appendChild(msg);
 
-  if (b.link) {
+  if (b.link && isHttpUrl(b.link)) {
     const a = document.createElement("a");
     a.href = b.link;
     a.target = "_blank";
-    a.rel = "noopener";
+    a.rel = "noopener noreferrer";
     a.textContent = b.linkText || "Learn more";
     el.appendChild(a);
   }
