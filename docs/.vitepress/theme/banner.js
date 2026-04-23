@@ -9,10 +9,18 @@ export function initBanner() {
     .then((r) => (r.ok ? r.json() : null))
     .then((b) => {
       if (!b || !b.enabled) return;
+      if (isExpired(b.expires)) return;
       if (localStorage.getItem(STORAGE_KEY) === b.id) return;
       render(b);
     })
     .catch(() => {});
+}
+
+function isExpired(expires) {
+  if (!expires) return false;
+  const t = Date.parse(expires);
+  if (Number.isNaN(t)) return false;
+  return Date.now() >= t;
 }
 
 function isHttpUrl(value) {
