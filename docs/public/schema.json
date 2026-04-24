@@ -911,32 +911,6 @@
             "auth_command": {
               "type": ["string", "null"]
             },
-            "environment": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
-            "organization": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
-            "project": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "token": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "type": {
-              "type": "string",
-              "const": "pulumi-esc"
-            }
-          },
-          "additionalProperties": false,
-          "required": ["type", "organization", "environment"]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "auth_command": {
-              "type": ["string", "null"]
-            },
             "config": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -973,6 +947,32 @@
           },
           "additionalProperties": false,
           "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "environment": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "organization": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "project": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "token": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "pulumi-esc"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "organization", "environment"]
         },
         {
           "type": "object",
