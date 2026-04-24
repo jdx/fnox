@@ -176,7 +176,10 @@ fn load_providers() -> Result<Vec<(String, ProviderToml)>, Box<dyn std::error::E
         }
     }
 
-    // Sort by category for consistent ordering
+    // Sort by category, then by name. The secondary name sort is required for
+    // determinism — fs::read_dir returns entries in OS-dependent order, so
+    // sorting by category alone leaves within-category ordering at the mercy of
+    // the filesystem, producing schema.json churn across machines/CI runs.
     providers.sort_by(|a, b| {
         let cat_order = |cat: &str| -> usize {
             match cat {
@@ -188,7 +191,9 @@ fn load_providers() -> Result<Vec<(String, ProviderToml)>, Box<dyn std::error::E
                 _ => 5,
             }
         };
-        cat_order(&a.1.category).cmp(&cat_order(&b.1.category))
+        cat_order(&a.1.category)
+            .cmp(&cat_order(&b.1.category))
+            .then_with(|| a.0.cmp(&b.0))
     });
 
     Ok(providers)
