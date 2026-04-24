@@ -90,11 +90,19 @@ pub fn resolve_auth_for(config_token: Option<&str>, help_url: &str) -> Result<(S
     })
 }
 
-/// `org/project/env` (modern) or `org/env` (legacy, no project).
+/// `org/project/env` (modern) or `org/env` (legacy, no project). Each segment
+/// is percent-encoded so names containing URL-special chars don't corrupt the
+/// request path — Pulumi Cloud names are typically `[a-zA-Z0-9-]`, but encoding
+/// is cheap insurance.
 pub fn build_env_ref(organization: &str, project: Option<&str>, environment: &str) -> String {
+    let o = urlencoding::encode(organization);
+    let e = urlencoding::encode(environment);
     match project {
-        Some(p) => format!("{organization}/{p}/{environment}"),
-        None => format!("{organization}/{environment}"),
+        Some(p) => {
+            let p = urlencoding::encode(p);
+            format!("{o}/{p}/{e}")
+        }
+        None => format!("{o}/{e}"),
     }
 }
 
