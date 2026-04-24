@@ -5,12 +5,11 @@ rust_variant = "PulumiEsc"
 category = "CloudSecretsManager"
 description = "Pulumi ESC (Environments, Secrets, and Configuration)"
 default_name = "pulumi-esc"
-auth_command = "esc login"
 setup_instructions = """
-Requires: Pulumi ESC CLI (https://www.pulumi.com/docs/esc/download-install/)
-Install: brew install pulumi/tap/esc
-Authenticate: esc login
-Or use an access token: export PULUMI_ACCESS_TOKEN=pul-xxx"""
+fnox talks to the Pulumi Cloud REST API directly — no esc CLI required.
+Authenticate one of two ways:
+  1. export PULUMI_ACCESS_TOKEN=pul-xxx (create at https://app.pulumi.com/account/tokens)
+  2. Run `esc login` once to populate ~/.pulumi/credentials.json (CLI not needed at runtime)"""
 
 [fields.organization]
 type = "required"
