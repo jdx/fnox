@@ -29,7 +29,7 @@ struct PulumiAccount {
 }
 
 fn pulumi_home() -> Option<PathBuf> {
-    std::env::var("PULUMI_HOME")
+    env::var("PULUMI_HOME")
         .ok()
         .map(PathBuf::from)
         .or_else(|| dirs::home_dir().map(|h| h.join(".pulumi")))
@@ -45,8 +45,7 @@ pub fn resolve_auth() -> std::result::Result<(String, String), String> {
     if let Ok(token) =
         env::var("FNOX_PULUMI_ACCESS_TOKEN").or_else(|_| env::var("PULUMI_ACCESS_TOKEN"))
     {
-        let base =
-            std::env::var("PULUMI_BACKEND_URL").unwrap_or_else(|_| DEFAULT_API_BASE.to_string());
+        let base = env::var("PULUMI_BACKEND_URL").unwrap_or_else(|_| DEFAULT_API_BASE.to_string());
         return Ok((base, token));
     }
     let home = pulumi_home().ok_or_else(|| "Could not locate Pulumi home directory".to_string())?;
@@ -80,8 +79,7 @@ pub fn resolve_auth() -> std::result::Result<(String, String), String> {
 /// `FnoxError` tagged with the caller's help URL on failure.
 pub fn resolve_auth_for(config_token: Option<&str>, help_url: &str) -> Result<(String, String)> {
     if let Some(t) = config_token {
-        let base =
-            std::env::var("PULUMI_BACKEND_URL").unwrap_or_else(|_| DEFAULT_API_BASE.to_string());
+        let base = env::var("PULUMI_BACKEND_URL").unwrap_or_else(|_| DEFAULT_API_BASE.to_string());
         return Ok((base, t.to_string()));
     }
     resolve_auth().map_err(|details| FnoxError::ProviderAuthFailed {
