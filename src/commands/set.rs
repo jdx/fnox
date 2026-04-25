@@ -89,6 +89,12 @@ impl SetCommand {
         // Determine which provider to use
         let provider_name_to_use = if let Some(ref provider_name) = self.provider {
             Some(provider_name.clone())
+        } else if let Some(existing) = config
+            .get_secrets(&profile)?
+            .get(&self.key)
+            .and_then(|s| s.provider().map(str::to_string))
+        {
+            Some(existing)
         } else {
             // Try to use default provider if available, but it's OK if there isn't one
             // (will store as plaintext)
