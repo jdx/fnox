@@ -26,7 +26,9 @@ function getCommands(cmd) {
 const commands = getCommands(spec.cmd);
 const configDir = dirname(fileURLToPath(import.meta.url));
 const cargoToml = readFileSync(resolve(configDir, "../../Cargo.toml"), "utf8");
-const versionMatch = cargoToml.match(/\[package\][\s\S]*?\nversion\s*=\s*"([^"]+)"/);
+const versionMatch = cargoToml.match(
+  /\[package\][\s\S]*?\nversion\s*=\s*"([^"]+)"/,
+);
 const latestVersion = versionMatch?.[1] ?? "0.0.0";
 
 export default defineConfig({
@@ -43,7 +45,10 @@ export default defineConfig({
       { text: "Providers", link: "/providers/overview" },
       { text: "CLI Reference", link: "/cli/" },
       { text: "Reference", link: "/reference/environment" },
-      { text: `v${latestVersion}`, link: "https://github.com/jdx/fnox/releases" },
+      {
+        text: `v${latestVersion}`,
+        link: "https://github.com/jdx/fnox/releases",
+      },
     ],
 
     sidebar: [
