@@ -1052,6 +1052,26 @@ impl Config {
         Ok(secrets)
     }
 
+    /// Look up a single secret by key without cloning the secrets map.
+    ///
+    /// Mirrors the precedence used by [`Self::get_secrets`]: profile-specific
+    /// secrets take precedence, falling back to top-level secrets unless
+    /// `no_defaults` is set.
+    pub fn get_secret(&self, profile: &str, key: &str) -> Option<&SecretConfig> {
+        if profile != "default"
+            && let Some(profile_config) = self.profiles.get(profile)
+            && let Some(secret) = profile_config.secrets.get(key)
+        {
+            return Some(secret);
+        }
+
+        if profile != "default" && Settings::get().no_defaults {
+            return None;
+        }
+
+        self.secrets.get(key)
+    }
+
     /// Get effective secrets (default or profile, mutable)
     pub fn get_secrets_mut(&mut self, profile: &str) -> &mut IndexMap<String, SecretConfig> {
         if profile == "default" {

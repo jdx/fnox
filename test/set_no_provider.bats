@@ -122,3 +122,58 @@ EOF
 	assert_file_contains test-config5.toml 'provider = "age"'
 	assert_file_not_contains test-config5.toml "default-value"
 }
+
+@test "fnox set falls back to current provider when updating secrets" {
+	# With multiple providers configured and no default_provider, `fnox set`
+	# previously stored the new value as plaintext while leaving the original
+	# `provider` key in place. Subsequent `fnox get` calls then failed, since
+	# fnox would try to decrypt a value that was no longer encrypted.
+	#
+	# This test ensures `fnox set` reuses the secret's existing provider before
+	# falling back to `default_provider` or plaintext.
+
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local keygen_output1
+	keygen_output1=$(age-keygen -o key1.txt 2>&1)
+	local public_key1
+	public_key1=$(echo "$keygen_output1" | grep "^Public key:" | cut -d' ' -f3)
+
+	local keygen_output2
+	keygen_output2=$(age-keygen -o key2.txt 2>&1)
+	local public_key2
+	public_key2=$(echo "$keygen_output2" | grep "^Public key:" | cut -d' ' -f3)
+
+	cat >test-config-multi.toml <<EOF
+root = true
+
+[providers.provider1]
+type = "age"
+recipients = ["$public_key1"]
+
+[providers.provider2]
+type = "age"
+recipients = ["$public_key2"]
+
+[secrets]
+EOF
+
+	# Explicitly create MY_SECRET using --provider provider1.
+	run "$FNOX_BIN" --config test-config-multi.toml set --provider provider1 MY_SECRET "original-value"
+	assert_success
+	assert_file_contains test-config-multi.toml 'provider = "provider1"'
+	assert_file_not_contains test-config-multi.toml "original-value"
+
+	# Update without --provider: should reuse the secret's existing provider.
+	run "$FNOX_BIN" --config test-config-multi.toml set MY_SECRET "new-value"
+	assert_success
+	assert_file_contains test-config-multi.toml 'provider = "provider1"'
+	assert_file_not_contains test-config-multi.toml "new-value"
+
+	# Round-trip decrypts to the new value with the provider1 key.
+	run "$FNOX_BIN" --config test-config-multi.toml get MY_SECRET --age-key-file key1.txt
+	assert_success
+	assert_output "new-value"
+}
