@@ -90,8 +90,7 @@ impl SetCommand {
         let provider_name_to_use = if let Some(ref provider_name) = self.provider {
             Some(provider_name.clone())
         } else if let Some(existing) = config
-            .get_secrets(&profile)?
-            .get(&self.key)
+            .get_secret(&profile, &self.key)
             .and_then(|s| s.provider().map(str::to_string))
         {
             Some(existing)
