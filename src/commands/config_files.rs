@@ -110,14 +110,13 @@ fn normalize_path(path: PathBuf) -> PathBuf {
         match component {
             Component::Prefix(_) | Component::RootDir => out.push(component),
             Component::CurDir => {}
-            Component::ParentDir => {
-                let can_pop = matches!(out.components().next_back(), Some(Component::Normal(_)));
-                if can_pop {
+            Component::ParentDir => match out.components().next_back() {
+                Some(Component::Normal(_)) => {
                     out.pop();
-                } else {
-                    out.push("..");
                 }
-            }
+                Some(Component::RootDir) => {}
+                _ => out.push(".."),
+            },
             Component::Normal(c) => out.push(c),
         }
     }
@@ -160,6 +159,15 @@ mod tests {
     #[test]
     fn empty_becomes_cur_dir() {
         assert_eq!(normalize_path(PathBuf::from("a/..")), PathBuf::from("."));
+    }
+
+    #[test]
+    fn parent_of_root_is_root() {
+        assert_eq!(normalize_path(PathBuf::from("/..")), PathBuf::from("/"));
+        assert_eq!(
+            normalize_path(PathBuf::from("/../../a")),
+            PathBuf::from("/a")
+        );
     }
 
     #[test]
