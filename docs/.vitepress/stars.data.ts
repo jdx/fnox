@@ -1,4 +1,4 @@
-const fallbackStars = 1510;
+const fallbackStars = 0;
 
 function formatStars(stars: number) {
   if (stars < 1000) return String(stars);
@@ -21,6 +21,7 @@ export default {
 
         const response = await fetch("https://api.github.com/repos/jdx/fnox", {
           headers,
+          signal: AbortSignal.timeout(10000),
         });
         if (response.ok) {
           const data = (await response.json()) as { stargazers_count?: number };
@@ -34,7 +35,7 @@ export default {
     }
 
     return {
-      stars: formatStars(stars),
+      stars: stars > 0 ? formatStars(stars) : "",
     };
   },
 };
