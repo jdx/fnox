@@ -363,8 +363,8 @@ impl Config {
             } else {
                 path_ref.to_path_buf()
             };
-            // For explicit paths, use direct loading
-            Self::load(resolved_path)
+            // For explicit paths, load the file and its imports relative to that file
+            Self::load_with_imports(&resolved_path)
         }
     }
 
@@ -400,6 +400,19 @@ impl Config {
 
         // Set source paths for all secrets and providers
         config.set_source_paths(path);
+
+        Ok(config)
+    }
+
+    /// Load configuration from a file and merge any direct imports declared by that file.
+    fn load_with_imports(path: &Path) -> Result<Self> {
+        let mut config = Self::load(path)?;
+        let base_dir = path.parent().unwrap_or_else(|| Path::new("."));
+
+        for import_path in &config.import.clone() {
+            let import_config = Self::load_import(import_path, base_dir)?;
+            config = Self::merge_configs(import_config, config)?;
+        }
 
         Ok(config)
     }
@@ -445,7 +458,7 @@ impl Config {
         for filename in &filenames {
             let path = dir.join(filename);
             if path.exists() {
-                let file_config = Self::load(&path)?;
+                let file_config = Self::load_with_imports(&path)?;
                 config = Self::merge_configs(config, file_config)?;
                 found = true;
             }
@@ -453,11 +466,6 @@ impl Config {
 
         // If this config marks root, stop recursion but still load global config
         if config.root {
-            // Load imports if any
-            for import_path in &config.import.clone() {
-                let import_config = Self::load_import(import_path, dir)?;
-                config = Self::merge_configs(import_config, config)?;
-            }
             // Load global config as the base even for root configs
             let (global_config, global_found) = Self::load_global()?;
             if global_found {
@@ -465,12 +473,6 @@ impl Config {
                 found = true;
             }
             return Ok((config, found));
-        }
-
-        // Load imports first (they get overridden by local config)
-        for import_path in &config.import.clone() {
-            let import_config = Self::load_import(import_path, dir)?;
-            config = Self::merge_configs(import_config, config)?;
         }
 
         // If we have a parent directory, recurse up and merge
@@ -522,7 +524,7 @@ impl Config {
                 "Loading global config from {}",
                 global_config_path.display()
             );
-            let config = Self::load(&global_config_path)?;
+            let config = Self::load_with_imports(&global_config_path)?;
             Ok((config, true))
         } else {
             Ok((Self::new(), false))
