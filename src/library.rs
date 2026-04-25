@@ -26,7 +26,7 @@
 //! // global config — same exact merge the binary does.
 //! let fnox = Fnox::discover()?;
 //! let value = fnox.get("MY_KEY").await?;
-//! let names = fnox.list();
+//! let names = fnox.list()?;
 //! # Ok(()) }
 //! ```
 
@@ -111,26 +111,39 @@ impl Fnox {
     }
 
     /// Resolve a secret by name. Returns the resolved value, or
-    /// `None` if the key is declared with `if_missing = "ignore"` and
-    /// has no value.
+    /// `None` if the key is declared with `if_missing = "ignore"` or
+    /// `"warn"` and has no value (per `secret_resolver::handle_missing_secret`).
     ///
     /// Returns [`FnoxError::SecretNotFound`] if the key isn't declared
     /// in the active profile (matches the binary's error shape so
     /// downstream consumers can pattern-match without a wrapper-
-    /// specific variant).
+    /// specific variant). The returned error carries a `suggestion`
+    /// computed from declared keys via [`crate::suggest`], matching
+    /// `GetCommand::run`'s "Did you mean…" UX.
     pub async fn get(&self, key: &str) -> Result<Option<String>> {
         // get_secret returns Option<&SecretConfig> without cloning the
         // whole IndexMap — preferred over get_secrets(profile)?.get(key).
-        let secret_config = self.config.get_secret(&self.profile, key).ok_or_else(|| {
-            FnoxError::SecretNotFound {
-                key: key.to_string(),
-                profile: self.profile.clone(),
-                config_path: self.config.secret_sources.get(key).cloned(),
-                suggestion: None,
-            }
-        })?;
-        crate::secret_resolver::resolve_secret(&self.config, &self.profile, key, secret_config)
-            .await
+        if let Some(secret_config) = self.config.get_secret(&self.profile, key) {
+            return crate::secret_resolver::resolve_secret(
+                &self.config,
+                &self.profile,
+                key,
+                secret_config,
+            )
+            .await;
+        }
+        // Compute "Did you mean…" suggestions from the declared key
+        // set in the active profile. Matches GetCommand::run's UX.
+        let suggestion = self.list().ok().and_then(|names| {
+            let similar = crate::suggest::find_similar(key, names.iter().map(|s| s.as_str()));
+            crate::suggest::format_suggestions(&similar)
+        });
+        Err(FnoxError::SecretNotFound {
+            key: key.to_string(),
+            profile: self.profile.clone(),
+            config_path: self.config.secret_sources.get(key).cloned(),
+            suggestion,
+        })
     }
 
     /// Declared secret names for the active profile, in declaration
@@ -247,6 +260,40 @@ LIB_TEST_DEFAULTS_KEY_UNIQUE_X = { default = "the-default-value" }
             FnoxError::SecretNotFound { key, profile, .. } => {
                 assert_eq!(key, "UNDECLARED");
                 assert!(!profile.is_empty());
+            }
+            other => panic!("expected SecretNotFound, got {other:?}"),
+        }
+    }
+
+    /// Given a fnox.toml that declares similarly-named keys,
+    /// when get() is called with a typo,
+    /// then SecretNotFound carries a populated `suggestion` (matches
+    /// GetCommand::run's "Did you mean…" UX) so consumers don't need
+    /// to recompute it from list() at every call site.
+    #[tokio::test]
+    async fn get_secret_not_found_carries_did_you_mean_suggestion() {
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join(CONFIG_FILENAME),
+            r#"
+[secrets]
+DATABASE_URL = { default = "x" }
+DATABASE_TOKEN = { default = "y" }
+NPM_TOKEN = { default = "z" }
+"#,
+        )
+        .unwrap();
+
+        let fnox = Fnox::open(dir.path().join(CONFIG_FILENAME)).unwrap();
+        // Typo: missing trailing 'L'
+        let err = fnox.get("DATABASE_UR").await.expect_err("must fail");
+        match err {
+            FnoxError::SecretNotFound { suggestion, .. } => {
+                let s = suggestion.expect("suggestion should be populated for near-matches");
+                assert!(
+                    s.contains("DATABASE_URL"),
+                    "suggestion should mention the closest match; got: {s:?}"
+                );
             }
             other => panic!("expected SecretNotFound, got {other:?}"),
         }
