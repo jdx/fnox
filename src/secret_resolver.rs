@@ -1086,7 +1086,7 @@ mod tests {
 
     #[test]
     fn test_extract_line_preserves_intra_line_whitespace() {
-        // Trimming should not happen — `username: alice` stays intact.
+        // Leading and trailing whitespace within a line must not be trimmed.
         let value = "pw\n  spaced  ";
         assert_eq!(extract_line(value, 2).unwrap(), "  spaced  ");
     }
