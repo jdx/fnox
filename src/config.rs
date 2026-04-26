@@ -201,6 +201,7 @@ pub struct SecretConfig {
     /// Useful for providers whose entries pack multiple related values into a
     /// single secret (e.g. one value per line). Mutually exclusive with `json_path`.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 1))]
     pub line: Option<usize>,
 
     /// Cached sync data (provider + encrypted value from `fnox sync`)
