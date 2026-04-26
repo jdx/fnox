@@ -9,6 +9,7 @@ pub mod hook_env;
 pub mod http;
 pub mod lease;
 pub mod lease_backends;
+pub mod library;
 pub mod mcp_server;
 pub mod providers;
 pub mod secret_resolver;
@@ -22,3 +23,4 @@ pub mod tui;
 
 // Re-export commonly used items
 pub use error::{FnoxError, Result};
+pub use library::Fnox;
