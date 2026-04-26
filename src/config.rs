@@ -196,6 +196,13 @@ pub struct SecretConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub json_path: Option<String>,
 
+    /// 1-indexed line number to extract from the secret value.
+    /// When set, the secret value is split on newlines and the Nth line is returned.
+    /// Useful for providers whose entries pack multiple related values into a
+    /// single secret (e.g. one value per line). Mutually exclusive with `json_path`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<usize>,
+
     /// Cached sync data (provider + encrypted value from `fnox sync`)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sync: Option<SyncConfig>,
@@ -1472,6 +1479,7 @@ impl SecretConfig {
             env: true,
             as_file: false,
             json_path: None,
+            line: None,
             sync: None,
             source_path: None,
             source_is_profile: false,
@@ -1483,6 +1491,7 @@ impl SecretConfig {
     pub fn for_raw_resolve(&self) -> Self {
         let mut config = self.clone();
         config.json_path = None;
+        config.line = None;
         config.sync = None;
         config.default = None;
         config
@@ -1500,6 +1509,9 @@ impl SecretConfig {
         }
         if let Some(ref json_path) = self.json_path {
             inline.insert("json_path", toml_edit::Value::from(json_path.as_str()));
+        }
+        if let Some(line) = self.line {
+            inline.insert("line", toml_edit::Value::from(line as i64));
         }
         if let Some(ref description) = self.description {
             inline.insert("description", toml_edit::Value::from(description.as_str()));
@@ -2007,6 +2019,7 @@ mod tests {
         secret.set_value(Some(r#"{"user":"admin"}"#.to_string()));
         secret.default = Some("fallback".to_string());
         secret.json_path = Some("user".to_string());
+        secret.line = Some(2);
         secret.sync = Some(SyncConfig {
             provider: "age".to_string(),
             value: "encrypted-blob".to_string(),
@@ -2016,7 +2029,26 @@ mod tests {
 
         assert!(raw.default.is_none());
         assert!(raw.json_path.is_none());
+        assert!(raw.line.is_none());
         assert!(raw.sync.is_none());
+    }
+
+    #[test]
+    fn test_secret_config_line_roundtrip() {
+        let toml_input = r#"
+[secrets]
+USERNAME = { provider = "pass", value = "master", line = 2 }
+"#;
+        let parsed: Config = toml_edit::de::from_str(toml_input).unwrap();
+        let secret = parsed.secrets.get("USERNAME").unwrap();
+        assert_eq!(secret.line, Some(2));
+
+        let inline = secret.to_inline_table();
+        let rendered = inline.to_string();
+        assert!(
+            rendered.contains("line = 2"),
+            "expected serialized output to contain `line = 2`, got: {rendered}"
+        );
     }
 
     #[test]
