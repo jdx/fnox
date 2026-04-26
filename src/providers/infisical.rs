@@ -27,22 +27,26 @@ impl InfisicalProvider {
         })
     }
 
-    /// Get authentication token - either from environment or by logging in with client credentials
-    fn get_auth_token(&self) -> Result<String> {
+    /// Get authentication token from environment or client credentials.
+    /// Returns `None` when no explicit credentials are configured, allowing
+    /// the CLI to use its own session (e.g., from `infisical login`).
+    fn get_auth_token(&self) -> Result<Option<String>> {
         // Check if we already have a token
         if let Some(token) = infisical_token() {
             tracing::debug!("Using INFISICAL_TOKEN from environment");
-            return Ok(token);
+            return Ok(Some(token));
         }
 
         // Check if we have client credentials to obtain a token
-        let client_id = infisical_client_id().ok_or_else(|| FnoxError::ProviderAuthFailed {
-            provider: PROVIDER_NAME.to_string(),
-            details: "Authentication not found".to_string(),
-            hint: "Set INFISICAL_TOKEN, or both INFISICAL_CLIENT_ID and INFISICAL_CLIENT_SECRET"
-                .to_string(),
-            url: PROVIDER_URL.to_string(),
-        })?;
+        let client_id = match infisical_client_id() {
+            Some(id) => id,
+            None => {
+                tracing::debug!(
+                    "No explicit credentials found, falling back to CLI session auth"
+                );
+                return Ok(None);
+            }
+        };
 
         let client_secret =
             infisical_client_secret().ok_or_else(|| FnoxError::ProviderAuthFailed {
@@ -59,7 +63,7 @@ impl InfisicalProvider {
         // Check if another thread cached a token while we were waiting for the lock
         if let Some(token) = cached_token.as_ref() {
             tracing::debug!("Using cached login token");
-            return Ok(token.clone());
+            return Ok(Some(token.clone()));
         }
 
         tracing::debug!("Logging in with Universal Auth credentials");
@@ -136,7 +140,7 @@ impl InfisicalProvider {
 
         tracing::debug!("Successfully logged in and cached token");
 
-        Ok(token)
+        Ok(Some(token))
     }
 
     /// Execute infisical CLI command.
@@ -153,9 +157,12 @@ impl InfisicalProvider {
         let mut cmd = Command::new("infisical");
         cmd.args(args);
 
-        // Add authentication token
-        cmd.arg("--token");
-        cmd.arg(&token);
+        // Add authentication token if explicitly provided; otherwise rely on
+        // the CLI's own session (e.g., cached OAuth from `infisical login`)
+        if let Some(ref token) = token {
+            cmd.arg("--token");
+            cmd.arg(token);
+        }
 
         // Add custom domain if specified, stripping /api suffix if present
         // The CLI's --domain flag expects base URL (some commands append /api automatically)
@@ -417,10 +424,38 @@ impl crate::providers::Provider for InfisicalProvider {
     async fn test_connection(&self) -> Result<()> {
         tracing::debug!("Testing connection to Infisical");
 
-        // Try to authenticate and get a token
-        let _token = self.get_auth_token()?;
+        // Verify authentication works. When using CLI session auth (no
+        // explicit credentials), list secrets as a connectivity check.
+        match self.get_auth_token()? {
+            Some(_) => {
+                tracing::debug!("Infisical connection test successful (explicit credentials)");
+            }
+            None => {
+                tracing::debug!("No explicit credentials; testing CLI session auth");
+                let mut args = vec!["secrets", "list", "--output", "json"];
 
-        tracing::debug!("Infisical connection test successful");
+                let project_arg;
+                if let Some(ref project_id) = self.project_id {
+                    project_arg = format!("--projectId={}", project_id);
+                    args.push(&project_arg);
+                }
+
+                let env_arg;
+                if let Some(ref environment) = self.environment {
+                    env_arg = format!("--env={}", environment);
+                    args.push(&env_arg);
+                }
+
+                let path_arg;
+                if let Some(ref path) = self.path {
+                    path_arg = format!("--path={}", path);
+                    args.push(&path_arg);
+                }
+
+                self.execute_infisical_command(&args, None).await?;
+                tracing::debug!("Infisical connection test successful (CLI session auth)");
+            }
+        }
 
         Ok(())
     }
@@ -500,7 +535,7 @@ fn classify_cli_error(stderr: &str, secret_ref: Option<&str>) -> FnoxError {
         return FnoxError::ProviderAuthFailed {
             provider: PROVIDER_NAME.to_string(),
             details: stderr.to_string(),
-            hint: "Run 'infisical login' or check your INFISICAL_TOKEN".to_string(),
+            hint: "Run 'infisical login', or set INFISICAL_TOKEN / INFISICAL_CLIENT_ID + INFISICAL_CLIENT_SECRET".to_string(),
             url: PROVIDER_URL.to_string(),
         };
     }
