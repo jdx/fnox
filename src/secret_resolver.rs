@@ -61,17 +61,46 @@ fn split_key_path(key: &str) -> Vec<String> {
     parts
 }
 
+/// Extract the Nth (1-indexed) line from a multi-line value.
+///
+/// Uses `str::lines()` so both `\n` and `\r\n` line endings are handled and a
+/// single trailing newline is not counted as an extra empty line.
+fn extract_line(value: &str, line: usize) -> Result<String> {
+    if line == 0 {
+        return Err(FnoxError::Config(
+            "`line` must be a 1-indexed line number (got 0)".to_string(),
+        ));
+    }
+
+    if let Some(l) = value.lines().nth(line - 1) {
+        return Ok(l.to_string());
+    }
+
+    let count = value.lines().count();
+    Err(FnoxError::Config(format!(
+        "`line = {line}` is out of range; secret has {count} line(s)"
+    )))
+}
+
 /// Apply post-processing to a secret value based on SecretConfig settings.
-/// When json_path is set, extracts the specified path from a JSON value.
+/// `json_path` extracts a path from a JSON value; `line` returns the Nth
+/// line (1-indexed) of the raw value. The two are mutually exclusive.
 fn apply_post_processing(value: String, secret_config: &SecretConfig) -> Result<String> {
+    if secret_config.json_path.is_some() && secret_config.line.is_some() {
+        return Err(FnoxError::Config(
+            "`json_path` and `line` are mutually exclusive on a secret".to_string(),
+        ));
+    }
     if let Some(ref json_path) = secret_config.json_path {
         if json_path.is_empty() {
             return Err(FnoxError::Config("json_path must not be empty".to_string()));
         }
-        extract_json_path(&value, json_path)
-    } else {
-        Ok(value)
+        return extract_json_path(&value, json_path);
     }
+    if let Some(line) = secret_config.line {
+        return extract_line(&value, line);
+    }
+    Ok(value)
 }
 
 /// Creates a ProviderNotConfigured error, using source spans when available for better error display.
@@ -1035,5 +1064,99 @@ mod tests {
         assert_eq!(split_key_path(".foo"), vec!["", "foo"]);
         // Backslash at end (kept as-is)
         assert_eq!(split_key_path(r"foo\"), vec!["foo\\"]);
+    }
+
+    fn secret_with_line(line: Option<usize>) -> SecretConfig {
+        let mut s = SecretConfig::new();
+        s.line = line;
+        s
+    }
+
+    #[test]
+    fn test_extract_line_first_and_subsequent() {
+        let value = "hunter2\nuser: alice\nhttps://example.com";
+        assert_eq!(extract_line(value, 1).unwrap(), "hunter2");
+        assert_eq!(extract_line(value, 2).unwrap(), "user: alice");
+        assert_eq!(extract_line(value, 3).unwrap(), "https://example.com");
+    }
+
+    #[test]
+    fn test_extract_line_single_line_value() {
+        assert_eq!(extract_line("just-one-line", 1).unwrap(), "just-one-line");
+    }
+
+    #[test]
+    fn test_extract_line_preserves_intra_line_whitespace() {
+        // Leading and trailing whitespace within a line must not be trimmed.
+        let value = "pw\n  spaced  ";
+        assert_eq!(extract_line(value, 2).unwrap(), "  spaced  ");
+    }
+
+    #[test]
+    fn test_extract_line_zero_is_rejected() {
+        let err = extract_line("foo\nbar", 0).unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("1-indexed"), "unexpected error: {msg}");
+    }
+
+    #[test]
+    fn test_extract_line_out_of_range() {
+        let err = extract_line("foo\nbar", 5).unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("out of range"), "unexpected error: {msg}");
+        assert!(
+            msg.contains("2 line"),
+            "expected line count in error: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_extract_line_ignores_trailing_newline() {
+        // A trailing newline must not count as a fourth empty line — otherwise
+        // values from providers that emit "<value>\n" would silently shift.
+        let value = "a\nb\nc\n";
+        assert_eq!(extract_line(value, 3).unwrap(), "c");
+        let err = extract_line(value, 4).unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("out of range"), "unexpected error: {msg}");
+        assert!(
+            msg.contains("3 line"),
+            "expected line count in error: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_extract_line_handles_crlf() {
+        // Windows-style line endings should not leak `\r` into the returned line.
+        let value = "first\r\nsecond\r\nthird";
+        assert_eq!(extract_line(value, 1).unwrap(), "first");
+        assert_eq!(extract_line(value, 2).unwrap(), "second");
+        assert_eq!(extract_line(value, 3).unwrap(), "third");
+    }
+
+    #[test]
+    fn test_apply_post_processing_line() {
+        let cfg = secret_with_line(Some(2));
+        let out = apply_post_processing("a\nb\nc".to_string(), &cfg).unwrap();
+        assert_eq!(out, "b");
+    }
+
+    #[test]
+    fn test_apply_post_processing_unset_returns_value_unchanged() {
+        let cfg = secret_with_line(None);
+        let out = apply_post_processing("a\nb\nc".to_string(), &cfg).unwrap();
+        assert_eq!(out, "a\nb\nc");
+    }
+
+    #[test]
+    fn test_apply_post_processing_line_and_json_path_are_mutually_exclusive() {
+        let mut cfg = secret_with_line(Some(1));
+        cfg.json_path = Some("user".to_string());
+        let err = apply_post_processing(r#"{"user":"x"}"#.to_string(), &cfg).unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("mutually exclusive"),
+            "unexpected error: {msg}"
+        );
     }
 }

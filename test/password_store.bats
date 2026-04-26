@@ -427,3 +427,53 @@ EOF
 	assert_output --partial "database"
 	assert_output --partial "api"
 }
+
+@test "fnox get with line selects a single line of a multiline entry" {
+	create_pass_config
+
+	# Store a multi-line entry directly via `pass insert -m`, mimicking
+	# the `pass` convention of password-on-line-1, metadata below.
+	local multiline_value="hunter2
+alice
+https://example.com"
+	run bash -c "printf '%s' '$multiline_value' | pass insert -m -f db-creds"
+	assert_success
+	track_secret_path "db-creds"
+
+	# Two secrets pointing at the same entry, each selecting a different line.
+	cat >>"${FNOX_CONFIG_FILE}" <<EOF
+DB_PASSWORD = { provider = "pass", value = "db-creds", line = 1 }
+DB_USERNAME = { provider = "pass", value = "db-creds", line = 2 }
+DB_URL      = { provider = "pass", value = "db-creds", line = 3 }
+EOF
+
+	run "$FNOX_BIN" get DB_PASSWORD
+	assert_success
+	assert_output "hunter2"
+
+	run "$FNOX_BIN" get DB_USERNAME
+	assert_success
+	assert_output "alice"
+
+	run "$FNOX_BIN" get DB_URL
+	assert_success
+	assert_output "https://example.com"
+}
+
+@test "fnox get with line out of range fails with a clear error" {
+	create_pass_config
+
+	run "$FNOX_BIN" set ONE_LINE "only-line" --provider pass
+	assert_success
+	track_secret_path "ONE_LINE"
+
+	# Add a separate secret that points at the same single-line entry but
+	# requests a line that doesn't exist.
+	cat >>"${FNOX_CONFIG_FILE}" <<EOF
+OUT_OF_RANGE = { provider = "pass", value = "ONE_LINE", line = 5 }
+EOF
+
+	run "$FNOX_BIN" get OUT_OF_RANGE
+	assert_failure
+	assert_output --partial "out of range"
+}

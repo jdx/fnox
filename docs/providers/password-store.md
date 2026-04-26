@@ -212,6 +212,36 @@ API_TOKEN = { provider = "pass", value = "tokens/github" }
 # → Stored at: tokens/github.gpg (no prefix)
 ```
 
+## Selecting a Line
+
+A common `pass` convention is to pack related values into a single entry:
+the password on line 1 and other fields (username, URL, etc.) on the lines
+below. The `pass` CLI exposes this with `pass show <entry> --clip=N` to
+copy the Nth line.
+
+fnox supports the same with the `line` field on a secret. It is **1-indexed**
+and selects a single line from whatever the provider returned:
+
+```toml
+[providers.pass]
+type = "password-store"
+prefix = "fnox/"
+
+[secrets]
+# `pass show fnox/database` returns:
+#   <password>
+#   <username>
+DB_PASSWORD = { provider = "pass", value = "database", line = 1 }
+DB_USERNAME = { provider = "pass", value = "database", line = 2 }
+```
+
+Create a multi-line entry with `pass insert -m` (see [Multiline Secrets](#multiline-secrets)
+below). Without `line`, fnox returns the entire entry unchanged.
+
+`line` is mutually exclusive with `json_path`. It is also a read-only
+selector — see the warning under [Multiline Secrets](#multiline-secrets)
+for how to edit one line of an existing entry.
+
 ## Git Integration
 
 password-store has built-in git support:
@@ -332,6 +362,14 @@ MIIEpAIBAAKCAQEA...
 -----END RSA PRIVATE KEY-----
 EOF
 ```
+
+::: warning Editing existing multiline entries
+`fnox set` always replaces the entire pass entry — it cannot edit a
+single line in place. To change one field of a multi-line entry without
+losing the others, use `pass edit <entry>` (or `pass insert -m -f` to
+re-write all lines) directly. This applies whether or not the secret
+uses the [`line`](#selecting-a-line) selector.
+:::
 
 ## Environment Variables
 
