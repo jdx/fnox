@@ -212,6 +212,36 @@ API_TOKEN = { provider = "pass", value = "tokens/github" }
 # → Stored at: tokens/github.gpg (no prefix)
 ```
 
+## Selecting a Line
+
+A common `pass` convention is to pack related values into a single entry:
+the password on line 1 and other fields (username, URL, etc.) on the lines
+below. The `pass` CLI exposes this with `pass show <entry> --clip=N` to
+copy the Nth line.
+
+fnox supports the same with the `line` field on a secret. It is **1-indexed**
+and selects a single line from whatever the provider returned:
+
+```toml
+[providers.pass]
+type = "password-store"
+prefix = "fnox/"
+
+[secrets]
+# `pass show fnox/database` returns:
+#   <password>
+#   <username>
+DB_PASSWORD = { provider = "pass", value = "database", line = 1 }
+DB_USERNAME = { provider = "pass", value = "database", line = 2 }
+```
+
+Create a multi-line entry with `pass insert -m` (see [Multiline Secrets](#multiline-secrets)
+below). Without `line`, fnox returns the entire entry unchanged.
+
+`line` is mutually exclusive with `json_path` and is currently a read-only
+view: `fnox set` always overwrites the entire pass entry, so editing a
+single line should still be done with `pass edit <entry>`.
+
 ## Git Integration
 
 password-store has built-in git support:
