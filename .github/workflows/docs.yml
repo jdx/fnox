@@ -37,6 +37,8 @@ jobs:
         run: aube install
 
       - name: Build with VitePress
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: aube run docs:build
 
       - name: Upload artifact
