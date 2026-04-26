@@ -72,13 +72,14 @@ fn extract_line(value: &str, line: usize) -> Result<String> {
         ));
     }
 
-    let lines: Vec<&str> = value.lines().collect();
-    lines.get(line - 1).map(|s| s.to_string()).ok_or_else(|| {
-        FnoxError::Config(format!(
-            "`line = {line}` is out of range; secret has {} line(s)",
-            lines.len()
-        ))
-    })
+    if let Some(l) = value.lines().nth(line - 1) {
+        return Ok(l.to_string());
+    }
+
+    let count = value.lines().count();
+    Err(FnoxError::Config(format!(
+        "`line = {line}` is out of range; secret has {count} line(s)"
+    )))
 }
 
 /// Apply post-processing to a secret value based on SecretConfig settings.
