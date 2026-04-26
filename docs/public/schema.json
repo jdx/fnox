@@ -992,6 +992,12 @@
           "description": "JSON path to extract from the secret value (supports dot notation: \"nested.key\")\nWhen set, the secret value is parsed as JSON and the specified path is extracted.",
           "type": ["string", "null"]
         },
+        "line": {
+          "description": "1-indexed line number to extract from the secret value.\nWhen set, the secret value is split on newlines and the Nth line is returned.\nUseful for providers whose entries pack multiple related values into a\nsingle secret (e.g. one value per line). Mutually exclusive with `json_path`.",
+          "type": ["integer", "null"],
+          "format": "uint",
+          "minimum": 1
+        },
         "provider": {
           "description": "Provider to fetch from (age, aws-kms, 1password, aws, etc.)",
           "anyOf": [
