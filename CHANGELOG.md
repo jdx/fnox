@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.23.0](https://github.com/jdx/fnox/compare/v1.22.0..v1.23.0) - 2026-04-26
+
+### 🚀 Features
+
+- **(config)** add line selector for multiline secrets by [@fgrosse](https://github.com/fgrosse) in [#446](https://github.com/jdx/fnox/pull/446)
+
+### New Contributors
+
+- @fgrosse made their first contribution in [#446](https://github.com/jdx/fnox/pull/446)
+
 ## [1.22.0](https://github.com/jdx/fnox/compare/v1.21.0..v1.22.0) - 2026-04-26
 
 ### 🚀 Features
@@ -29,6 +39,7 @@
 
 - bump communique to 1.0.3 by [@jdx](https://github.com/jdx) in [#435](https://github.com/jdx/fnox/pull/435)
 - bump communique 1.0.3 → 1.0.4 by [@jdx](https://github.com/jdx) in [#438](https://github.com/jdx/fnox/pull/438)
+- bump communique to 1.1.2 by [@jdx](https://github.com/jdx) in [#444](https://github.com/jdx/fnox/pull/444)
 
 ### New Contributors
 

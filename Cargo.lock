@@ -2391,7 +2391,7 @@ dependencies = [
 
 [[package]]
 name = "fnox"
-version = "1.22.0"
+version = "1.23.0"
 dependencies = [
  "aes-gcm 0.11.0-rc.3",
  "age",
