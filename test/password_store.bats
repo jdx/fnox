@@ -467,7 +467,8 @@ EOF
 	assert_success
 	track_secret_path "ONE_LINE"
 
-	# Override the auto-generated entry with a line selector that is out of range.
+	# Add a separate secret that points at the same single-line entry but
+	# requests a line that doesn't exist.
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 OUT_OF_RANGE = { provider = "pass", value = "ONE_LINE", line = 5 }
 EOF
