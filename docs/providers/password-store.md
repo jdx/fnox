@@ -238,9 +238,9 @@ DB_USERNAME = { provider = "pass", value = "database", line = 2 }
 Create a multi-line entry with `pass insert -m` (see [Multiline Secrets](#multiline-secrets)
 below). Without `line`, fnox returns the entire entry unchanged.
 
-`line` is mutually exclusive with `json_path` and is currently a read-only
-view: `fnox set` always overwrites the entire pass entry, so editing a
-single line should still be done with `pass edit <entry>`.
+`line` is mutually exclusive with `json_path`. It is also a read-only
+selector — see the warning under [Multiline Secrets](#multiline-secrets)
+for how to edit one line of an existing entry.
 
 ## Git Integration
 
@@ -362,6 +362,14 @@ MIIEpAIBAAKCAQEA...
 -----END RSA PRIVATE KEY-----
 EOF
 ```
+
+::: warning Editing existing multiline entries
+`fnox set` always replaces the entire pass entry — it cannot edit a
+single line in place. To change one field of a multi-line entry without
+losing the others, use `pass edit <entry>` (or `pass insert -m -f` to
+re-write all lines) directly. This applies whether or not the secret
+uses the [`line`](#selecting-a-line) selector.
+:::
 
 ## Environment Variables
 
