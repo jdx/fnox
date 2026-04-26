@@ -62,6 +62,9 @@ fn split_key_path(key: &str) -> Vec<String> {
 }
 
 /// Extract the Nth (1-indexed) line from a multi-line value.
+///
+/// Uses `str::lines()` so both `\n` and `\r\n` line endings are handled and a
+/// single trailing newline is not counted as an extra empty line.
 fn extract_line(value: &str, line: usize) -> Result<String> {
     if line == 0 {
         return Err(FnoxError::Config(
@@ -69,7 +72,7 @@ fn extract_line(value: &str, line: usize) -> Result<String> {
         ));
     }
 
-    let lines: Vec<&str> = value.split('\n').collect();
+    let lines: Vec<&str> = value.lines().collect();
     lines.get(line - 1).map(|s| s.to_string()).ok_or_else(|| {
         FnoxError::Config(format!(
             "`line = {line}` is out of range; secret has {} line(s)",
@@ -1104,6 +1107,30 @@ mod tests {
             msg.contains("2 line"),
             "expected line count in error: {msg}"
         );
+    }
+
+    #[test]
+    fn test_extract_line_ignores_trailing_newline() {
+        // A trailing newline must not count as a fourth empty line — otherwise
+        // values from providers that emit "<value>\n" would silently shift.
+        let value = "a\nb\nc\n";
+        assert_eq!(extract_line(value, 3).unwrap(), "c");
+        let err = extract_line(value, 4).unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("out of range"), "unexpected error: {msg}");
+        assert!(
+            msg.contains("3 line"),
+            "expected line count in error: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_extract_line_handles_crlf() {
+        // Windows-style line endings should not leak `\r` into the returned line.
+        let value = "first\r\nsecond\r\nthird";
+        assert_eq!(extract_line(value, 1).unwrap(), "first");
+        assert_eq!(extract_line(value, 2).unwrap(), "second");
+        assert_eq!(extract_line(value, 3).unwrap(), "third");
     }
 
     #[test]
