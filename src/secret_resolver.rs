@@ -1100,7 +1100,10 @@ mod tests {
         let err = extract_line("foo\nbar", 5).unwrap_err();
         let msg = format!("{err}");
         assert!(msg.contains("out of range"), "unexpected error: {msg}");
-        assert!(msg.contains("2 line"), "expected line count in error: {msg}");
+        assert!(
+            msg.contains("2 line"),
+            "expected line count in error: {msg}"
+        );
     }
 
     #[test]
