@@ -2,12 +2,13 @@
   "name": "fnox",
   "short_name": "fnox",
   "description": "Fort Knox for your secrets",
+  "start_url": "/",
   "icons": [
     {
       "src": "/favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "/android-chrome-192x192.png",
