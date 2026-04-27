@@ -221,5 +221,14 @@ export default defineConfig({
       "meta",
       { name: "twitter:image", content: "https://fnox.jdx.dev/logo.png" },
     ],
+    [
+      "script",
+      {
+        defer: "",
+        "data-domain": "pa-Q_O4JS1YOlgteKkhIvxTO",
+        "data-api": "https://shrill.en.dev/f5f1/event",
+        src: "https://shrill.en.dev/shrill/script.js",
+      },
+    ],
   ],
 });
