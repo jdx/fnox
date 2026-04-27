@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.23.1](https://github.com/jdx/fnox/compare/v1.23.0..v1.23.1) - 2026-04-27
+
+### 📚 Documentation
+
+- prefix star count with ★ glyph and populate it on deploy by [@jdx](https://github.com/jdx) in [#447](https://github.com/jdx/fnox/pull/447)
+- add favicons and web app manifest by [@jdx](https://github.com/jdx) in [#448](https://github.com/jdx/fnox/pull/448)
+
+### 🔍 Other Changes
+
+- add plausible analytics by [@jdx](https://github.com/jdx) in [#451](https://github.com/jdx/fnox/pull/451)
+
 ## [1.23.0](https://github.com/jdx/fnox/compare/v1.22.0..v1.23.0) - 2026-04-26
 
 ### 🚀 Features
