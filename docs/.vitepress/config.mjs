@@ -225,7 +225,7 @@ export default defineConfig({
       "script",
       {
         defer: "",
-        "data-domain": "pa-Q_O4JS1YOlgteKkhIvxTO",
+        "data-domain": "fnox.jdx.dev",
         "data-api": "https://shrill.en.dev/f5f1/event",
         src: "https://shrill.en.dev/shrill/script.js",
       },
