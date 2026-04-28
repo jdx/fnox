@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitepress";
 import spec from "../cli/commands.json" with { type: "json" };
 
@@ -21,6 +24,15 @@ function getCommands(cmd) {
 }
 
 const commands = getCommands(spec.cmd);
+const configDir = dirname(fileURLToPath(import.meta.url));
+const cargoToml = readFileSync(resolve(configDir, "../../Cargo.toml"), "utf8");
+const versionMatch = cargoToml.match(
+  /^\[package\][\s\S]*?^\s*version\s*=\s*"([^"]+)"/m,
+);
+if (!versionMatch) {
+  console.warn("Unable to find package version in Cargo.toml");
+}
+const latestVersion = versionMatch?.[1] ?? "0.0.0";
 
 export default defineConfig({
   title: "fnox",
@@ -36,7 +48,10 @@ export default defineConfig({
       { text: "Providers", link: "/providers/overview" },
       { text: "CLI Reference", link: "/cli/" },
       { text: "Reference", link: "/reference/environment" },
-      { text: "Releases", link: "https://github.com/jdx/fnox/releases" },
+      {
+        text: `v${latestVersion}`,
+        link: "https://github.com/jdx/fnox/releases",
+      },
     ],
 
     sidebar: [
@@ -168,6 +183,35 @@ export default defineConfig({
     },
   },
   head: [
+    ["link", { rel: "icon", href: "/favicon.ico", sizes: "any" }],
+    [
+      "link",
+      {
+        rel: "icon",
+        href: "/favicon-16x16.png",
+        type: "image/png",
+        sizes: "16x16",
+      },
+    ],
+    [
+      "link",
+      {
+        rel: "icon",
+        href: "/favicon-32x32.png",
+        type: "image/png",
+        sizes: "32x32",
+      },
+    ],
+    ["link", { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" }],
+    [
+      "link",
+      {
+        rel: "apple-touch-icon",
+        href: "/apple-touch-icon.png",
+        sizes: "180x180",
+      },
+    ],
+    ["link", { rel: "manifest", href: "/site.webmanifest" }],
     ["meta", { property: "og:site_name", content: "fnox" }],
     ["meta", { property: "og:type", content: "website" }],
     [
@@ -178,6 +222,15 @@ export default defineConfig({
     [
       "meta",
       { name: "twitter:image", content: "https://fnox.jdx.dev/logo.png" },
+    ],
+    [
+      "script",
+      {
+        defer: "",
+        "data-domain": "fnox.jdx.dev",
+        "data-api": "https://shrill.en.dev/f5f1/event",
+        src: "https://shrill.en.dev/shrill/script.js",
+      },
     ],
   ],
 });

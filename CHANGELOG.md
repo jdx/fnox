@@ -1,5 +1,50 @@
 # Changelog
 
+## [1.23.0](https://github.com/jdx/fnox/compare/v1.22.0..v1.23.0) - 2026-04-26
+
+### 🚀 Features
+
+- **(config)** add line selector for multiline secrets by [@fgrosse](https://github.com/fgrosse) in [#446](https://github.com/jdx/fnox/pull/446)
+
+### New Contributors
+
+- @fgrosse made their first contribution in [#446](https://github.com/jdx/fnox/pull/446)
+
+## [1.22.0](https://github.com/jdx/fnox/compare/v1.21.0..v1.22.0) - 2026-04-26
+
+### 🚀 Features
+
+- **(library)** top-level Fnox::discover() / get / list convenience API by [@bglusman](https://github.com/bglusman) in [#442](https://github.com/jdx/fnox/pull/442)
+
+### 🐛 Bug Fixes
+
+- **(docs)** stack banner and pin close button on mobile by [@jdx](https://github.com/jdx) in [#437](https://github.com/jdx/fnox/pull/437)
+- **(set)** fall back to current provider when updating secrets by [@rpendleton](https://github.com/rpendleton) in [#439](https://github.com/jdx/fnox/pull/439)
+
+### 📚 Documentation
+
+- **(site)** show release version and github stars by [@jdx](https://github.com/jdx) in [#443](https://github.com/jdx/fnox/pull/443)
+- add cross-site announcement banner by [@jdx](https://github.com/jdx) in [#434](https://github.com/jdx/fnox/pull/434)
+- respect banner expires field by [@jdx](https://github.com/jdx) in [#436](https://github.com/jdx/fnox/pull/436)
+
+### 🛡️ Security
+
+- **(build)** deterministic provider ordering in generated schema by [@jdx](https://github.com/jdx) in [#432](https://github.com/jdx/fnox/pull/432)
+
+### 🔍 Other Changes
+
+- **(release)** append en.dev sponsor blurb to release notes by [@jdx](https://github.com/jdx) in [#431](https://github.com/jdx/fnox/pull/431)
+
+### 📦️ Dependency Updates
+
+- bump communique to 1.0.3 by [@jdx](https://github.com/jdx) in [#435](https://github.com/jdx/fnox/pull/435)
+- bump communique 1.0.3 → 1.0.4 by [@jdx](https://github.com/jdx) in [#438](https://github.com/jdx/fnox/pull/438)
+- bump communique to 1.1.2 by [@jdx](https://github.com/jdx) in [#444](https://github.com/jdx/fnox/pull/444)
+
+### New Contributors
+
+- @bglusman made their first contribution in [#442](https://github.com/jdx/fnox/pull/442)
+
 ## [1.21.0](https://github.com/jdx/fnox/compare/v1.20.0..v1.21.0) - 2026-04-21
 
 ### 🚀 Features
