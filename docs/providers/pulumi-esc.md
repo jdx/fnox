@@ -30,7 +30,9 @@ fnox get DATABASE_URL
 
 The `esc` CLI is **not** required — fnox calls the Pulumi Cloud REST API (`/api/esc/environments/{ref}/open` + `/open/{id}`) directly via HTTP.
 
-## Authentication
+## Configuration
+
+### Authentication
 
 fnox resolves the access token in this order:
 
@@ -42,8 +44,6 @@ fnox resolves the access token in this order:
 The credentials file's `current` field also determines the API base URL, so self-hosted Pulumi Cloud works without extra config. The env-var path honors `PULUMI_BACKEND_URL` (default `https://api.pulumi.com`).
 
 For CI, create a team or personal access token in the Pulumi Cloud console and set `PULUMI_ACCESS_TOKEN` on the runner.
-
-## Configuration
 
 ```toml
 [providers]
@@ -69,7 +69,17 @@ API_KEY      = { provider = "pulumi-esc", value = "apiKey" }
 
 For every `fnox get` call (single or batch via `fnox exec`), fnox opens the environment once via the REST API and extracts each path from the resolved `properties` tree locally.
 
-## Leases (dynamic credentials)
+## Usage
+
+```bash
+# Get a single secret
+fnox get DATABASE_URL
+
+# Run commands with secrets injected
+fnox exec -- ./deploy.sh
+```
+
+## Leases
 
 Pulumi ESC can mint short-lived credentials for AWS, GCP, Azure, Vault, and more via OIDC. fnox exposes these through the lease system — see [Pulumi ESC lease backend](/leases/pulumi-esc) for configuration details. Short example:
 
@@ -91,6 +101,8 @@ AWS_SESSION_TOKEN     = { lease = "aws-dev" }
 When fnox needs an env var backed by this lease, it opens the ESC environment once, caches the resulting credentials in the lease ledger, and reuses them until the configured duration elapses.
 
 ## CI/CD Example
+
+### GitHub Actions
 
 ```yaml
 name: Deploy
