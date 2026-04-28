@@ -228,6 +228,13 @@ impl AddCommand {
                     }),
                 auth_command: None,
             },
+            ProviderType::PulumiEsc => crate::config::ProviderConfig::PulumiEsc {
+                organization: StringOrSecretRef::from("my-org"),
+                project: OptionStringOrSecretRef::none(),
+                environment: StringOrSecretRef::from("dev"),
+                token: OptionStringOrSecretRef::none(),
+                auth_command: None,
+            },
         };
 
         config

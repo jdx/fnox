@@ -12,6 +12,7 @@ pub mod lease_backends;
 pub mod library;
 pub mod mcp_server;
 pub mod providers;
+pub mod pulumi_esc_api;
 pub mod secret_resolver;
 pub mod settings;
 pub mod shell;

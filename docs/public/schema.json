@@ -340,6 +340,45 @@
           "required": ["type", "app_id", "installation_id"]
         },
         {
+          "description": "Pulumi ESC Environment (dynamic credentials via the ESC REST API)",
+          "type": "object",
+          "properties": {
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "env_vars": {
+              "description": "Optional filter: only surface these env var names from the ESC environment.\nWhen omitted, all `environmentVariables` entries are surfaced.",
+              "type": ["array", "null"],
+              "items": {
+                "type": "string"
+              }
+            },
+            "environment": {
+              "type": "string"
+            },
+            "interpolate": {
+              "description": "Sigil character for single-pass reference interpolation. When set\n(e.g. `\"%\"`), any `<sigil>{path}` substring in a surfaced env var\nis replaced with the resolved leaf value from the environment\n(e.g. `%{anthropic.api_key}` → `properties.anthropic.value.api_key.value`).\nMissing references are a hard error. Single pass only — no recursion\ninto the replaced text. Omit (default) to pass values through literally.",
+              "type": ["string", "null"],
+              "maxLength": 1,
+              "minLength": 1
+            },
+            "organization": {
+              "type": "string"
+            },
+            "project": {
+              "type": ["string", "null"]
+            },
+            "token": {
+              "type": ["string", "null"]
+            },
+            "type": {
+              "type": "string",
+              "const": "pulumi-esc"
+            }
+          },
+          "required": ["type", "organization", "environment"]
+        },
+        {
           "description": "Generic Command Backend",
           "type": "object",
           "properties": {
@@ -908,6 +947,32 @@
           },
           "additionalProperties": false,
           "required": ["type", "project"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "environment": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "organization": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "project": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "token": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "pulumi-esc"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "organization", "environment"]
         },
         {
           "type": "object",
