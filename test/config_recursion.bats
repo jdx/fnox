@@ -167,6 +167,23 @@ EOF
 	assert_output --partial "abs-import-value"
 }
 
+@test "explicit --config paths load imports" {
+	cat >imported.toml <<EOF
+[providers.imported_provider]
+type = "plain"
+EOF
+
+	cat >explicit.toml <<EOF
+default_provider = "imported_provider"
+import = ["./imported.toml"]
+EOF
+
+	run "$FNOX_BIN" --config explicit.toml doctor
+	assert_success
+	assert_output --partial "Loaded successfully"
+	assert_output --partial "imported_provider (plain)"
+}
+
 @test "config import errors are handled gracefully" {
 	# Create main config with non-existent import
 	cat >fnox.toml <<EOF

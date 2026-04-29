@@ -136,6 +136,50 @@ EOF
 	assert_output --partial "fallback-value"
 }
 
+@test "global config imports are loaded" {
+	mkdir -p "$HOME/.config/fnox"
+	cat >"$HOME/.config/fnox/providers.toml" <<EOF
+[providers.imported_provider]
+type = "plain"
+EOF
+	cat >"$HOME/.config/fnox/config.toml" <<EOF
+default_provider = "imported_provider"
+import = ["./providers.toml"]
+EOF
+
+	cat >fnox.toml <<EOF
+root = true
+EOF
+
+	run "$FNOX_BIN" doctor
+	assert_success
+	assert_output --partial "Loaded successfully"
+	assert_output --partial "imported_provider (plain)"
+}
+
+@test "config-files includes global config imports" {
+	mkdir -p "$HOME/.config/fnox"
+	cat >"$HOME/.config/fnox/providers.toml" <<EOF
+[providers.imported_provider]
+type = "plain"
+EOF
+	cat >"$HOME/.config/fnox/config.toml" <<EOF
+import = ["./providers.toml"]
+EOF
+
+	cat >fnox.toml <<EOF
+root = true
+EOF
+
+	local config_dir
+	config_dir="$(cd "$HOME/.config/fnox" && pwd -P)"
+
+	run "$FNOX_BIN" config-files
+	assert_success
+	assert_output --partial "$config_dir/config.toml"
+	assert_output --partial "$config_dir/providers.toml"
+}
+
 @test "project provider overrides global provider" {
 	# Create global config with a provider
 	mkdir -p "$HOME/.config/fnox"
