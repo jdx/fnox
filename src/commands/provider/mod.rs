@@ -52,6 +52,7 @@ pub enum ProviderType {
     #[strum(serialize = "gcp-kms")]
     GcpKms,
     /// FIDO2 hmac-secret hardware-backed encryption
+    #[cfg(not(target_env = "musl"))]
     #[value(name = "fido2")]
     Fido2,
     /// Bitwarden Password Manager

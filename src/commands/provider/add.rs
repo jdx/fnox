@@ -152,6 +152,7 @@ impl AddCommand {
                 key_file: OptionStringOrSecretRef::none(),
                 auth_command: None,
             },
+            #[cfg(not(target_env = "musl"))]
             ProviderType::Fido2 => {
                 let provider_name = self.provider.clone();
                 let (credential_id_hex, salt_hex, rp_id, _pin) =

@@ -12,6 +12,7 @@ pub mod azure_sm;
 pub mod bitwarden;
 pub mod bitwarden_sm;
 pub mod doppler;
+#[cfg(not(target_env = "musl"))]
 pub mod fido2;
 pub mod gcp_kms;
 pub mod gcp_sm;
@@ -137,9 +138,11 @@ mod generated {
     }
     pub(super) mod providers_instantiate {
         // Need to import provider modules for instantiation
+        #[cfg(not(target_env = "musl"))]
+        use super::super::fido2;
         use super::super::{
             age, aws_kms, aws_ps, aws_sm, azure_kms, azure_sm, bitwarden, bitwarden_sm, doppler,
-            fido2, gcp_kms, gcp_sm, infisical, keepass, keychain, onepassword, password_store,
+            gcp_kms, gcp_sm, infisical, keepass, keychain, onepassword, password_store,
             passwordstate, plain, proton_pass, vault, yubikey,
         };
         include!(concat!(

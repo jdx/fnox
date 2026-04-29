@@ -163,15 +163,23 @@ fn load_providers() -> Result<Vec<(String, ProviderToml)>, Box<dyn std::error::E
     let providers_dir = PathBuf::from("providers");
     let mut providers = Vec::new();
 
+    // ctap-hid-fido2 → hidapi → libudev cannot be statically linked on musl,
+    // so the FIDO2 provider is excluded from musl builds. Keep this in sync
+    // with the cfg gates in src/providers/mod.rs and src/commands/provider/.
+    let is_musl = std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("musl");
+
     for entry in fs::read_dir(&providers_dir)? {
         let entry = entry?;
         let path = entry.path();
         if path.extension().is_some_and(|ext| ext == "toml") {
+            let name = path.file_stem().unwrap().to_string_lossy().to_string();
+            if is_musl && name == "fido2" {
+                continue;
+            }
             let content = fs::read_to_string(&path)?;
             let raw: ProviderTomlRaw = toml_edit::de::from_str(&content)
                 .map_err(|e| format!("Failed to parse {}: {}", path.display(), e))?;
             let provider = raw.into_provider();
-            let name = path.file_stem().unwrap().to_string_lossy().to_string();
             providers.push((name, provider));
         }
     }

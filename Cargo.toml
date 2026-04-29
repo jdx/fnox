@@ -38,7 +38,6 @@ ci_info = "0.14"
 clap = { version = "4", features = ["derive", "env"] }
 console = "0.16"
 crossterm = { version = "0.29", features = ["event-stream"] }
-ctap-hid-fido2 = "3"
 data-encoding = "2"
 demand = "2"
 dirs = "6"
@@ -93,6 +92,11 @@ libloading = "0.9"
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus = { version = "0.9", features = ["vendored"] }
 openssl-sys = { version = "0.9", features = ["vendored"] }
+
+# ctap-hid-fido2 → hidapi → libudev cannot be statically linked on musl,
+# so the FIDO2 provider is excluded from musl builds.
+[target.'cfg(not(target_env = "musl"))'.dependencies]
+ctap-hid-fido2 = "3"
 
 [dev-dependencies]
 clap-sort = "1"
