@@ -156,6 +156,8 @@ mod tests {
                 path.file_stem()
                     .map(|stem| stem.to_string_lossy().into_owned())
             })
+            // fido2 is excluded from musl builds — mirror build/generate_providers.rs.
+            .filter(|name| !(cfg!(target_env = "musl") && name == "fido2"))
             .map(|provider_type| normalize_provider_type_for_add(&provider_type))
             .collect();
 
