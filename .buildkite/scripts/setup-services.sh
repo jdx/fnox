@@ -4,6 +4,7 @@
 #   - vaultwarden  (Linux only, via Docker) for Bitwarden tests
 #   - HashiCorp Vault (Linux: Docker, macOS: dev mode) for Vault tests
 #   - Self-hosted Infisical (Linux only, via docker compose) for Infisical tests
+#   - LocalStack (Linux only) for AWS provider + STS-lease tests
 #   - Bitwarden CLI session
 #   - Infisical CLI + service token
 #
@@ -11,16 +12,18 @@
 # suite skips tests whose dependent env vars are unset.
 set -euo pipefail
 
-# shellcheck source=/dev/null
+# Append "export NAME=VALUE" to BUILDKITE_ENV_FILE, escaping VALUE so values
+# containing whitespace or shell metacharacters survive the agent re-reading
+# the env file in a fresh shell.
 append_env() {
-	echo "export $1=${2}" >>"$BUILDKITE_ENV_FILE"
+	printf 'export %s=%q\n' "$1" "$2" >>"$BUILDKITE_ENV_FILE"
 	export "$1=$2"
 }
 
 case "$(uname -s)" in
 Linux)
 	sudo apt-get update
-	sudo apt-get install -y parallel gnome-keyring libsecret-tools dbus-x11
+	sudo apt-get install -y parallel gnome-keyring libsecret-tools dbus-x11 awscli
 
 	mkdir -p ~/.dbus-session
 	dbus-daemon --session --fork --print-address=1 >~/.dbus-session/bus-address
@@ -55,10 +58,46 @@ Linux)
 
 	docker compose -f test/docker-compose.infisical-ci.yml up -d
 
-	sleep 5
+	# LocalStack for AWS provider tests (STS leases, KMS, Secrets Manager,
+	# Parameter Store). Without this the aws-* bats tests skip silently.
+	docker run -d --name localstack \
+		-p 4566:4566 \
+		-e SERVICES=sts,iam,kms,secretsmanager,ssm \
+		localstack/localstack:4
+
+	# Wait for LocalStack to be healthy (cold pulls take 10–30s).
+	for _i in $(seq 1 30); do
+		curl -sf http://localhost:4566/_localstack/health >/dev/null && break
+		sleep 2
+	done
+
+	# Wait for Vault to be ready.
+	for _i in $(seq 1 15); do
+		curl -sf http://localhost:8200/v1/sys/health >/dev/null && break
+		sleep 1
+	done
+
+	# Provision LocalStack resources expected by the AWS bats tests.
+	export AWS_ACCESS_KEY_ID=test
+	export AWS_SECRET_ACCESS_KEY=test
+	export AWS_DEFAULT_REGION=us-east-1
+	LOCALSTACK_KMS_KEY_ID=$(aws --endpoint-url http://localhost:4566 kms create-key \
+		--region us-east-1 --query 'KeyMetadata.KeyId' --output text)
+	aws --endpoint-url http://localhost:4566 kms create-alias \
+		--alias-name alias/fnox-testing \
+		--target-key-id "$LOCALSTACK_KMS_KEY_ID" \
+		--region us-east-1
+	aws --endpoint-url http://localhost:4566 secretsmanager create-secret \
+		--name "fnox/test-secret" \
+		--secret-string "This is a test secret in AWS Secrets Manager!" \
+		--region us-east-1
 
 	append_env VAULT_ADDR "http://localhost:8200"
 	append_env VAULT_TOKEN "fnox-test-token"
+	append_env LOCALSTACK_ENDPOINT "http://localhost:4566"
+	append_env AWS_ACCESS_KEY_ID "test"
+	append_env AWS_SECRET_ACCESS_KEY "test"
+	append_env AWS_DEFAULT_REGION "us-east-1"
 
 	# Bitwarden session
 	# shellcheck source=/dev/null

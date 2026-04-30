@@ -6,7 +6,7 @@
 # behavior configured in fnox.toml.
 set -euo pipefail
 
-if [[ -z "${AGE_SECRET:-}" ]]; then
+if [[ -z ${AGE_SECRET:-} ]]; then
 	echo "AGE_SECRET not set; skipping age key setup"
 	exit 0
 fi

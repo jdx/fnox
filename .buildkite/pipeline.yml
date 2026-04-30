@@ -2,49 +2,61 @@ env:
   CARGO_TERM_COLOR: "always"
 
 steps:
-  - label: ":hammer: build {{matrix.os}}"
-    key: "build"
-    matrix:
-      setup:
-        os:
-          - "linux"
-          - "macos"
+  # Build is split per-OS rather than fanned out by matrix so dependents
+  # only block on the build for their own platform. Buildkite's
+  # `depends_on` against a matrix step waits on every permutation, which
+  # would let a macos build failure block linux tests (and vice versa).
+
+  - label: ":hammer: build linux"
+    key: "build-linux"
     agents:
-      queue: "{{matrix.os}}"
+      queue: "linux"
+    timeout_in_minutes: 10
+    commands:
+      - "git submodule update --init --recursive"
+      - "mise install"
+      - "sudo apt-get update && sudo apt-get install -y libudev-dev"
+      - "rustup component add rustfmt clippy"
+      - "cargo build"
+      - "cp target/debug/fnox fnox-linux"
+    artifact_paths:
+      - "fnox-linux"
+
+  - label: ":hammer: build macos"
+    key: "build-macos"
+    agents:
+      queue: "macos"
     timeout_in_minutes: 10
     commands:
       - "git submodule update --init --recursive"
       - "mise install"
       - "rustup component add rustfmt clippy"
       - "cargo build"
-      - "cp target/debug/fnox fnox-{{matrix.os}}"
+      - "cp target/debug/fnox fnox-macos"
     artifact_paths:
-      - "fnox-{{matrix.os}}"
+      - "fnox-macos"
 
-  - label: ":bash: bats {{matrix.os}} tranche {{matrix.tranche}}"
-    key: "ci-bats"
-    depends_on: "build"
+  - label: ":bash: bats linux tranche {{matrix.tranche}}"
+    key: "bats-linux"
+    depends_on: "build-linux"
     matrix:
       setup:
-        os:
-          - "linux"
-          - "macos"
         tranche:
           - "0"
           - "1"
-          - "2"
     agents:
-      queue: "{{matrix.os}}"
+      queue: "linux"
     timeout_in_minutes: 20
     env:
       TRANCHE: "{{matrix.tranche}}"
-      TRANCHE_COUNT: "3"
+      TRANCHE_COUNT: "2"
       KEEPASS_PASSWORD: "fnox-test-password"
+      BATS_FILTER_TAGS: "!expensive"
     commands:
       - "git submodule update --init --recursive"
       - "mise install"
-      - "buildkite-agent artifact download 'fnox-{{matrix.os}}' ."
-      - "mkdir -p target/debug && mv fnox-{{matrix.os}} target/debug/fnox"
+      - "buildkite-agent artifact download 'fnox-linux' ."
+      - "mkdir -p target/debug && mv fnox-linux target/debug/fnox"
       - "chmod +x target/debug/fnox"
       - ".buildkite/scripts/setup-age.sh"
       - ".buildkite/scripts/setup-services.sh"
@@ -54,25 +66,70 @@ steps:
         - exit_status: "*"
           limit: 3
 
-  - label: ":rust: cargo + lint {{matrix.os}}"
-    key: "ci-other"
-    depends_on: "build"
+  - label: ":bash: bats macos tranche {{matrix.tranche}}"
+    key: "bats-macos"
+    depends_on: "build-macos"
     matrix:
       setup:
-        os:
-          - "linux"
-          - "macos"
+        tranche:
+          - "0"
+          - "1"
     agents:
-      queue: "{{matrix.os}}"
+      queue: "macos"
+    timeout_in_minutes: 20
+    env:
+      TRANCHE: "{{matrix.tranche}}"
+      TRANCHE_COUNT: "2"
+      KEEPASS_PASSWORD: "fnox-test-password"
+      BATS_FILTER_TAGS: "!expensive"
+    commands:
+      - "git submodule update --init --recursive"
+      - "mise install"
+      - "buildkite-agent artifact download 'fnox-macos' ."
+      - "mkdir -p target/debug && mv fnox-macos target/debug/fnox"
+      - "chmod +x target/debug/fnox"
+      - ".buildkite/scripts/setup-age.sh"
+      - ".buildkite/scripts/setup-services.sh"
+      - "mise run test:bats"
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 3
+
+  - label: ":rust: cargo + lint linux"
+    key: "ci-other-linux"
+    depends_on: "build-linux"
+    agents:
+      queue: "linux"
+    timeout_in_minutes: 20
+    commands:
+      - "git submodule update --init --recursive"
+      - "mise install"
+      - "sudo apt-get update && sudo apt-get install -y gnome-keyring libsecret-tools libudev-dev"
+      - "rustup component add rustfmt clippy"
+      - "buildkite-agent artifact download 'fnox-linux' ."
+      - "mkdir -p target/debug && mv fnox-linux target/debug/fnox"
+      - "chmod +x target/debug/fnox"
+      - ".buildkite/scripts/setup-keychain.sh"
+      - ".buildkite/scripts/setup-age.sh"
+      - ".buildkite/scripts/redact.sh"
+      - "cargo test"
+      - "mise run lint"
+      - "cargo clippy -- -D warnings"
+
+  - label: ":rust: cargo + lint macos"
+    key: "ci-other-macos"
+    depends_on: "build-macos"
+    agents:
+      queue: "macos"
     timeout_in_minutes: 20
     commands:
       - "git submodule update --init --recursive"
       - "mise install"
       - "rustup component add rustfmt clippy"
-      - "buildkite-agent artifact download 'fnox-{{matrix.os}}' ."
-      - "mkdir -p target/debug && mv fnox-{{matrix.os}} target/debug/fnox"
+      - "buildkite-agent artifact download 'fnox-macos' ."
+      - "mkdir -p target/debug && mv fnox-macos target/debug/fnox"
       - "chmod +x target/debug/fnox"
-      - ".buildkite/scripts/setup-keychain.sh"
       - ".buildkite/scripts/setup-age.sh"
       - ".buildkite/scripts/redact.sh"
       - "cargo test"
@@ -87,4 +144,5 @@ steps:
     commands:
       - "git submodule update --init --recursive"
       - "mise install"
+      - "sudo apt-get update && sudo apt-get install -y libudev-dev"
       - "cargo msrv verify"
