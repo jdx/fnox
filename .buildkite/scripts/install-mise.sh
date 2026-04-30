@@ -26,7 +26,10 @@ if [[ -z ${GITHUB_TOKEN:-} ]] && command -v buildkite-agent >/dev/null 2>&1; the
 fi
 
 if ! command -v mise >/dev/null 2>&1; then
-	curl -fsSL https://mise.run | sh
+	# Retry + HTTP/1.1 to dodge the macOS-side HTTP/2 framing flakes that
+	# bit build #13.
+	curl --retry 5 --retry-delay 2 --retry-all-errors --http1.1 \
+		-fsSL https://mise.run | sh
 fi
 
 # Bats tests + cargo runs need to trust the project's mise.toml without
