@@ -178,36 +178,34 @@ The project includes automated Vault testing in GitHub Actions using the officia
 
 ### How it works
 
-On **all runners** (Linux and macOS with Docker):
+On **all agents** (Linux via Docker, macOS via `vault server -dev`):
 
-1. GitHub Actions starts a Vault service container in dev mode
-2. Environment variables are exported:
+1. Buildkite starts Vault in dev mode (Docker on Linux, native on macOS)
+2. Environment variables are exported via `BUILDKITE_ENV_FILE`:
    - `VAULT_ADDR=http://localhost:8200`
    - `VAULT_TOKEN=fnox-test-token`
 3. Tests run with full Vault integration
 4. Each test creates/deletes its own secrets
 
-### GitHub Actions Setup
+### Buildkite Setup
 
-The workflow includes:
+The pipeline starts Vault per OS in `.buildkite/scripts/setup-services.sh`:
 
-```yaml
-services:
-  vault:
-    image: hashicorp/vault:latest
-    env:
-      VAULT_DEV_ROOT_TOKEN_ID: fnox-test-token
-      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
-    ports:
-      - 8200:8200
-    options: >-
-      --cap-add=IPC_LOCK
+```bash
+# Linux agents
+docker run -d --name vault --cap-add=IPC_LOCK \
+  -p 8200:8200 \
+  -e VAULT_DEV_ROOT_TOKEN_ID=fnox-test-token \
+  -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 \
+  hashicorp/vault:latest
 
-steps:
-  - name: Export Vault environment
-    run: |
-      echo "VAULT_ADDR=http://localhost:8200" >> $GITHUB_ENV
-      echo "VAULT_TOKEN=fnox-test-token" >> $GITHUB_ENV
+# macOS agents
+vault server -dev \
+  -dev-root-token-id=fnox-test-token \
+  -dev-listen-address=127.0.0.1:8200 &
+
+echo "export VAULT_ADDR=http://localhost:8200" >> "$BUILDKITE_ENV_FILE"
+echo "export VAULT_TOKEN=fnox-test-token" >> "$BUILDKITE_ENV_FILE"
 ```
 
 ### Testing CI changes locally

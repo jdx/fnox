@@ -142,31 +142,27 @@ git commit -m "Update vaultwarden test database"
 
 See `test/fixtures/README.md` for more details.
 
-### GitHub Actions Setup
+### Buildkite Setup
 
-The workflow includes:
+The pipeline launches vaultwarden as a Docker container on Linux agents and
+sources the setup script to populate `BW_SESSION` for the bats jobs:
 
-```yaml
-services:
-  vaultwarden:
-    image: vaultwarden/server:latest
-    ports:
-      - 8080:80
-    env:
-      SIGNUPS_ALLOWED: "true"
-      DISABLE_ADMIN_TOKEN: "true"
+```bash
+docker run -d --name vaultwarden \
+  -p 8080:80 \
+  -e SIGNUPS_ALLOWED=true \
+  -e DISABLE_ADMIN_TOKEN=true \
+  -e I_REALLY_WANT_VOLATILE_STORAGE=true \
+  vaultwarden/server:latest
 
-steps:
-  - name: Setup Bitwarden for tests
-    if: matrix.os == 'ubuntu-latest'
-    run: |
-      source ./test/setup-bitwarden-ci.sh
-      echo "BW_SESSION=$BW_SESSION" >> $GITHUB_ENV
+source ./test/setup-bitwarden-ci.sh
+echo "export BW_SESSION=$BW_SESSION" >> "$BUILDKITE_ENV_FILE"
 ```
 
 ### Files
 
-- `.github/workflows/ci.yml` - GitHub Actions workflow with vaultwarden service
+- `.buildkite/pipeline.yml` - Buildkite pipeline that runs the bats suite
+- `.buildkite/scripts/setup-services.sh` - Provisions vaultwarden + other services on Linux agents
 - `test/setup-bitwarden-ci.sh` - Automated setup script for CI environments
 
 ### Testing CI changes locally

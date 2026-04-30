@@ -2,7 +2,6 @@
 
 **Fort Knox for your secrets.**
 
-[![CI](https://github.com/jdx/fnox/actions/workflows/ci.yml/badge.svg)](https://github.com/jdx/fnox/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Manage secrets with encryption or cloud providers—or both! fnox gives you a unified interface to work with secrets across development, CI, and production.
