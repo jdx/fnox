@@ -12,5 +12,6 @@ else
 	tags="!expensive"
 fi
 
+export BATS_FILTER_TAGS="$tags"
 printf 'export BATS_FILTER_TAGS=%q\n' "$tags" >>"$BUILDKITE_ENV_FILE"
 echo "BATS_FILTER_TAGS=$tags"
