@@ -64,7 +64,7 @@ steps:
     retry:
       automatic:
         - exit_status: "*"
-          limit: 3
+          limit: 2
 
   - label: ":bash: bats macos tranche {{matrix.tranche}}"
     key: "bats-macos"
@@ -94,7 +94,7 @@ steps:
     retry:
       automatic:
         - exit_status: "*"
-          limit: 3
+          limit: 2
 
   - label: ":rust: cargo + lint linux"
     key: "ci-other-linux"

@@ -22,14 +22,12 @@ append_env() {
 
 case "$(uname -s)" in
 Linux)
-	sudo apt-get update
-	sudo apt-get install -y parallel gnome-keyring libsecret-tools dbus-x11 openssl awscli
+	# gnome-keyring + D-Bus setup is shared with ci-other; sourcing keeps
+	# DBUS_SESSION_BUS_ADDRESS in this shell's env for any later use.
+	# shellcheck source=/dev/null
+	source "$(dirname "$0")/setup-keychain.sh"
 
-	mkdir -p ~/.dbus-session
-	dbus-daemon --session --fork --print-address=1 >~/.dbus-session/bus-address
-	append_env DBUS_SESSION_BUS_ADDRESS "$(cat ~/.dbus-session/bus-address)"
-
-	echo "foobar" | gnome-keyring-daemon --unlock --components=secrets --daemonize
+	sudo apt-get install -y parallel openssl awscli
 
 	# Vaultwarden with HTTPS (self-signed). Don't swallow openssl errors —
 	# without certs the vaultwarden container fails to start later with a
