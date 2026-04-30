@@ -22,10 +22,11 @@ append_env() {
 
 case "$(uname -s)" in
 Linux)
-	# gnome-keyring + D-Bus setup is shared with ci-other; sourcing keeps
-	# DBUS_SESSION_BUS_ADDRESS in this shell's env for any later use.
+	# gnome-keyring + D-Bus setup is shared with ci-other. This script is
+	# itself sourced from the pipeline so the relative path resolves from
+	# the repo root (Buildkite's working dir).
 	# shellcheck source=/dev/null
-	source "$(dirname "$0")/setup-keychain.sh"
+	source .buildkite/scripts/setup-keychain.sh
 
 	sudo apt-get install -y parallel openssl awscli
 

@@ -57,9 +57,9 @@ steps:
       - "buildkite-agent artifact download 'fnox-linux' ."
       - "mkdir -p target/debug && mv fnox-linux target/debug/fnox"
       - "chmod +x target/debug/fnox"
-      - ".buildkite/scripts/bats-filter.sh"
+      - "source .buildkite/scripts/bats-filter.sh"
       - ".buildkite/scripts/setup-age.sh"
-      - ".buildkite/scripts/setup-services.sh"
+      - "source .buildkite/scripts/setup-services.sh"
       - "mise run test:bats"
     retry:
       automatic:
@@ -87,9 +87,9 @@ steps:
       - "buildkite-agent artifact download 'fnox-macos' ."
       - "mkdir -p target/debug && mv fnox-macos target/debug/fnox"
       - "chmod +x target/debug/fnox"
-      - ".buildkite/scripts/bats-filter.sh"
+      - "source .buildkite/scripts/bats-filter.sh"
       - ".buildkite/scripts/setup-age.sh"
-      - ".buildkite/scripts/setup-services.sh"
+      - "source .buildkite/scripts/setup-services.sh"
       - "mise run test:bats"
     retry:
       automatic:
@@ -110,7 +110,7 @@ steps:
       - "buildkite-agent artifact download 'fnox-linux' ."
       - "mkdir -p target/debug && mv fnox-linux target/debug/fnox"
       - "chmod +x target/debug/fnox"
-      - ".buildkite/scripts/setup-keychain.sh"
+      - "source .buildkite/scripts/setup-keychain.sh"
       - ".buildkite/scripts/setup-age.sh"
       - ".buildkite/scripts/redact.sh"
       - "cargo test"
