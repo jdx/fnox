@@ -1,0 +1,90 @@
+env:
+  CARGO_TERM_COLOR: "always"
+
+steps:
+  - label: ":hammer: build {{matrix.os}}"
+    key: "build"
+    matrix:
+      setup:
+        os:
+          - "linux"
+          - "macos"
+    agents:
+      queue: "{{matrix.os}}"
+    timeout_in_minutes: 10
+    commands:
+      - "git submodule update --init --recursive"
+      - "mise install"
+      - "rustup component add rustfmt clippy"
+      - "cargo build"
+      - "cp target/debug/fnox fnox-{{matrix.os}}"
+    artifact_paths:
+      - "fnox-{{matrix.os}}"
+
+  - label: ":bash: bats {{matrix.os}} tranche {{matrix.tranche}}"
+    key: "ci-bats"
+    depends_on: "build"
+    matrix:
+      setup:
+        os:
+          - "linux"
+          - "macos"
+        tranche:
+          - "0"
+          - "1"
+          - "2"
+    agents:
+      queue: "{{matrix.os}}"
+    timeout_in_minutes: 20
+    env:
+      TRANCHE: "{{matrix.tranche}}"
+      TRANCHE_COUNT: "3"
+      KEEPASS_PASSWORD: "fnox-test-password"
+    commands:
+      - "git submodule update --init --recursive"
+      - "mise install"
+      - "buildkite-agent artifact download 'fnox-{{matrix.os}}' ."
+      - "mkdir -p target/debug && mv fnox-{{matrix.os}} target/debug/fnox"
+      - "chmod +x target/debug/fnox"
+      - ".buildkite/scripts/setup-age.sh"
+      - ".buildkite/scripts/setup-services.sh"
+      - "mise run test:bats"
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 3
+
+  - label: ":rust: cargo + lint {{matrix.os}}"
+    key: "ci-other"
+    depends_on: "build"
+    matrix:
+      setup:
+        os:
+          - "linux"
+          - "macos"
+    agents:
+      queue: "{{matrix.os}}"
+    timeout_in_minutes: 20
+    commands:
+      - "git submodule update --init --recursive"
+      - "mise install"
+      - "rustup component add rustfmt clippy"
+      - "buildkite-agent artifact download 'fnox-{{matrix.os}}' ."
+      - "mkdir -p target/debug && mv fnox-{{matrix.os}} target/debug/fnox"
+      - "chmod +x target/debug/fnox"
+      - ".buildkite/scripts/setup-keychain.sh"
+      - ".buildkite/scripts/setup-age.sh"
+      - ".buildkite/scripts/redact.sh"
+      - "cargo test"
+      - "mise run lint"
+      - "cargo clippy -- -D warnings"
+
+  - label: ":rust: msrv"
+    key: "msrv"
+    agents:
+      queue: "linux"
+    timeout_in_minutes: 10
+    commands:
+      - "git submodule update --init --recursive"
+      - "mise install"
+      - "cargo msrv verify"
