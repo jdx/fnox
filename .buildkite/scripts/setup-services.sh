@@ -41,8 +41,11 @@ Linux)
 		-addext "subjectAltName=DNS:localhost,IP:127.0.0.1" 2>/dev/null
 
 	# Clear stale containers from prior runs on persistent agents — fixed
-	# names and ports collide otherwise.
+	# names and ports collide otherwise. Includes the Infisical compose
+	# stack (postgres + redis + infisical) which would otherwise leak
+	# between builds.
 	docker rm -f vaultwarden vault localstack 2>/dev/null || true
+	docker compose -f test/docker-compose.infisical-ci.yml down --remove-orphans -v 2>/dev/null || true
 
 	docker run -d --name vaultwarden \
 		-p 8080:80 \
