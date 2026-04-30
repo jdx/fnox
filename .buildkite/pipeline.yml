@@ -105,7 +105,7 @@ steps:
     commands:
       - "git submodule update --init --recursive"
       - "mise install"
-      - "sudo apt-get update && sudo apt-get install -y gnome-keyring libsecret-tools libudev-dev"
+      - "sudo apt-get update && sudo apt-get install -y libudev-dev"
       - "rustup component add rustfmt clippy"
       - "buildkite-agent artifact download 'fnox-linux' ."
       - "mkdir -p target/debug && mv fnox-linux target/debug/fnox"
