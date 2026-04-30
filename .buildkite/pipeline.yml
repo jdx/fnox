@@ -14,6 +14,7 @@ steps:
     timeout_in_minutes: 10
     commands:
       - "git submodule update --init --recursive"
+      - "source .buildkite/scripts/install-mise.sh"
       - "mise install"
       - "sudo apt-get update && sudo apt-get install -y libudev-dev"
       - "rustup component add rustfmt clippy"
@@ -29,6 +30,7 @@ steps:
     timeout_in_minutes: 10
     commands:
       - "git submodule update --init --recursive"
+      - "source .buildkite/scripts/install-mise.sh"
       - "mise install"
       - "rustup component add rustfmt clippy"
       - "cargo build"
@@ -53,6 +55,7 @@ steps:
       KEEPASS_PASSWORD: "fnox-test-password"
     commands:
       - "git submodule update --init --recursive"
+      - "source .buildkite/scripts/install-mise.sh"
       - "mise install"
       - "buildkite-agent artifact download 'fnox-linux' ."
       - "mkdir -p target/debug && mv fnox-linux target/debug/fnox"
@@ -83,6 +86,7 @@ steps:
       KEEPASS_PASSWORD: "fnox-test-password"
     commands:
       - "git submodule update --init --recursive"
+      - "source .buildkite/scripts/install-mise.sh"
       - "mise install"
       - "buildkite-agent artifact download 'fnox-macos' ."
       - "mkdir -p target/debug && mv fnox-macos target/debug/fnox"
@@ -104,6 +108,7 @@ steps:
     timeout_in_minutes: 20
     commands:
       - "git submodule update --init --recursive"
+      - "source .buildkite/scripts/install-mise.sh"
       - "mise install"
       - "sudo apt-get update && sudo apt-get install -y libudev-dev"
       - "rustup component add rustfmt clippy"
@@ -125,6 +130,7 @@ steps:
     timeout_in_minutes: 20
     commands:
       - "git submodule update --init --recursive"
+      - "source .buildkite/scripts/install-mise.sh"
       - "mise install"
       - "rustup component add rustfmt clippy"
       - "buildkite-agent artifact download 'fnox-macos' ."
@@ -143,6 +149,7 @@ steps:
     timeout_in_minutes: 10
     commands:
       - "git submodule update --init --recursive"
+      - "source .buildkite/scripts/install-mise.sh"
       - "mise install"
       - "sudo apt-get update && sudo apt-get install -y libudev-dev"
       - "cargo msrv verify"
