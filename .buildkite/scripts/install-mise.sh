@@ -7,23 +7,10 @@ set -euo pipefail
 
 export PATH="$HOME/.local/bin:$PATH"
 
-# mise resolves dozens of tool versions through the GitHub API; without a
-# token it hits the unauthenticated rate limit and fails to install.
-# Pull GITHUB_TOKEN from the Buildkite cluster secret store if the caller
-# hasn't already set it (set up via `buildkite-agent secret create` or the
-# cluster UI).
-if [[ -z ${GITHUB_TOKEN:-} ]] && command -v buildkite-agent >/dev/null 2>&1; then
-	echo "~~~ Fetching GITHUB_TOKEN from Buildkite cluster secrets"
-	if token=$(buildkite-agent secret get GITHUB_TOKEN 2>&1); then
-		export GITHUB_TOKEN="$token"
-		echo "GITHUB_TOKEN loaded from cluster secret store"
-	else
-		echo "buildkite-agent secret get GITHUB_TOKEN failed:"
-		echo "$token"
-		echo "Create the secret with: buildkite-agent secret create GITHUB_TOKEN <token>"
-		echo "  (or via the Buildkite cluster UI under Secrets)"
-	fi
-fi
+# mise.lock pins every tool's version + download URL + checksum, so
+# `mise install` shouldn't hit the GitHub API at all. If the caller
+# already exports GITHUB_TOKEN it's still used for any unforeseen
+# fallbacks; otherwise we let mise run unauthenticated.
 
 if ! command -v mise >/dev/null 2>&1; then
 	# Retry + HTTP/1.1 to dodge the macOS-side HTTP/2 framing flakes that
