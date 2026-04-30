@@ -12,8 +12,8 @@ Linux)
 	dbus-daemon --session --fork --print-address=1 >~/.dbus-session/bus-address
 	DBUS_SESSION_BUS_ADDRESS=$(cat ~/.dbus-session/bus-address)
 	export DBUS_SESSION_BUS_ADDRESS
-	buildkite-agent meta-data set "DBUS_SESSION_BUS_ADDRESS" "$DBUS_SESSION_BUS_ADDRESS" || true
-	echo "export DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >>"$BUILDKITE_ENV_FILE"
+	printf 'export DBUS_SESSION_BUS_ADDRESS=%q\n' "$DBUS_SESSION_BUS_ADDRESS" \
+		>>"$BUILDKITE_ENV_FILE"
 
 	echo "foobar" | gnome-keyring-daemon --unlock --components=secrets --daemonize
 	;;

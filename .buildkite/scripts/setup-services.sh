@@ -23,7 +23,7 @@ append_env() {
 case "$(uname -s)" in
 Linux)
 	sudo apt-get update
-	sudo apt-get install -y parallel gnome-keyring libsecret-tools dbus-x11 awscli
+	sudo apt-get install -y parallel gnome-keyring libsecret-tools dbus-x11 openssl awscli
 
 	mkdir -p ~/.dbus-session
 	dbus-daemon --session --fork --print-address=1 >~/.dbus-session/bus-address
@@ -31,13 +31,19 @@ Linux)
 
 	echo "foobar" | gnome-keyring-daemon --unlock --components=secrets --daemonize
 
-	# Vaultwarden with HTTPS (self-signed)
+	# Vaultwarden with HTTPS (self-signed). Don't swallow openssl errors —
+	# without certs the vaultwarden container fails to start later with a
+	# much less obvious error.
 	mkdir -p /tmp/vaultwarden-certs
 	openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
 		-keyout /tmp/vaultwarden-certs/key.pem \
 		-out /tmp/vaultwarden-certs/cert.pem \
 		-subj "/CN=localhost" \
-		-addext "subjectAltName=DNS:localhost,IP:127.0.0.1" 2>/dev/null || true
+		-addext "subjectAltName=DNS:localhost,IP:127.0.0.1" 2>/dev/null
+
+	# Clear stale containers from prior runs on persistent agents — fixed
+	# names and ports collide otherwise.
+	docker rm -f vaultwarden vault localstack 2>/dev/null || true
 
 	docker run -d --name vaultwarden \
 		-p 8080:80 \
@@ -74,6 +80,12 @@ Linux)
 	# Wait for Vault to be ready.
 	for _i in $(seq 1 15); do
 		curl -sf http://localhost:8200/v1/sys/health >/dev/null && break
+		sleep 1
+	done
+
+	# Wait for Vaultwarden to be ready (TLS, self-signed → -k).
+	for _i in $(seq 1 15); do
+		curl -skf https://localhost:8080/alive >/dev/null && break
 		sleep 1
 	done
 
