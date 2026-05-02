@@ -105,14 +105,12 @@ path = "src/main.rs"
 [dependencies]
 fnox-core = { version = "1.23.0", path = "crates/fnox-core" }
 
-# Re-exported through fnox-core but used directly by CLI code as well.
-aes-gcm = { workspace = true }
-age = { workspace = true }
+# Direct dependencies of the CLI binary (commands, MCP server, TUI, hook-env,
+# shell integration). Provider/config/secret-resolver crates are pulled in
+# transitively via fnox-core and are not listed here.
 aho-corasick = { workspace = true }
 anyhow = { workspace = true }
 arboard = { workspace = true }
-arc-swap = { workspace = true }
-async-trait = { workspace = true }
 atty = { workspace = true }
 base64 = { workspace = true }
 blake3 = { workspace = true }
@@ -123,51 +121,30 @@ console = { workspace = true }
 crossterm = { workspace = true }
 data-encoding = { workspace = true }
 demand = { workspace = true }
-dirs = { workspace = true }
-fslock = { workspace = true }
-futures = { workspace = true }
-hex = { workspace = true }
 indexmap = { workspace = true }
-jsonwebtoken = { workspace = true }
 miette = { workspace = true }
 miniz_oxide = { workspace = true }
 nix = { workspace = true }
-pluralizer = { workspace = true }
-rand = { workspace = true }
 ratatui = { workspace = true }
 regex = { workspace = true }
-reqwest = { workspace = true }
 rmcp = { workspace = true }
 rmp-serde = { workspace = true }
 rustls = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_spanned = { workspace = true }
 serde_yaml = { workspace = true }
-sha2 = { workspace = true }
-shellexpand = { workspace = true }
 shlex = { workspace = true }
 signal-hook = { workspace = true }
-strsim = { workspace = true }
 strum = { workspace = true }
 tabled = { workspace = true }
 tempfile = { workspace = true }
-terminal_size = { workspace = true }
-thiserror = { workspace = true }
 tokio = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-urlencoding = { workspace = true }
 usage-lib = { workspace = true }
-walkdir = { workspace = true }
 which = { workspace = true }
-xx = { workspace = true }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-dbus = { version = "0.9", features = ["vendored"] }
-openssl-sys = { version = "0.9", features = ["vendored"] }
 
 [dev-dependencies]
 clap-sort = "1"
