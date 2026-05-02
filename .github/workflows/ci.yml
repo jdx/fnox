@@ -270,7 +270,9 @@ jobs:
       - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
-      - run: cargo msrv verify --workspace
+      # cargo-msrv doesn't accept --workspace; verifying the binary's MSRV
+      # transitively covers fnox-core because the binary depends on it.
+      - run: cargo msrv verify
 
   final:
     needs:
