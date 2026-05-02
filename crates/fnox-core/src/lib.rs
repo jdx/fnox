@@ -2,11 +2,11 @@
 //!
 //! This crate is the reusable engine underneath the `fnox` binary. It contains the
 //! [`Provider`](providers::Provider) trait, every provider implementation, the config
-//! data types, the secret resolver, and the [`Fnox`](library::Fnox) convenience API
-//! for downstream consumers.
+//! data types, the secret resolver, the lease backends, and the [`Fnox`](library::Fnox)
+//! convenience API for downstream consumers.
 //!
 //! The `fnox` binary depends on this crate and adds CLI-shaped bits (commands, MCP
-//! server, TUI, shell integration, lease backends, hook-env machinery) on top.
+//! server, TUI, shell integration, hook-env machinery) on top.
 
 pub mod auth_prompt;
 pub mod config;

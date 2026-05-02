@@ -1,9 +1,9 @@
 //! Library convenience API for downstream consumers.
 //!
-//! The lower-level [`Config`] / [`secret_resolver::resolve_secret`] /
-//! [`commands`] surface is sufficient but CLI-shaped — every consumer
-//! ends up replicating what [`commands::get::GetCommand::run`] does
-//! (load config, walk profile secrets, resolve, handle missing). The
+//! The lower-level [`Config`] / [`crate::secret_resolver::resolve_secret`]
+//! surface, plus the binary's `commands` module, is sufficient but CLI-shaped —
+//! every consumer ends up replicating what `commands::get::GetCommand::run`
+//! does (load config, walk profile secrets, resolve, handle missing). The
 //! [`Fnox`] type wraps that boilerplate so consumers that just want
 //! "give me this secret" can write three lines instead of thirty.
 //!
@@ -11,10 +11,9 @@
 //! <https://github.com/jdx/fnox/discussions/441> ("Library API:
 //! top-level Fnox::discover() / get / set / list for downstream
 //! consumers"). First cut covers `get` and `list`. `set` is left to a
-//! follow-up because the orchestration in
-//! [`commands::set::SetCommand::run`] (provider/encryption/remote-
-//! storage branching, base64, dry-run) is substantial enough to
-//! warrant its own design pass.
+//! follow-up because the orchestration in `commands::set::SetCommand::run`
+//! (provider/encryption/remote-storage branching, base64, dry-run) is
+//! substantial enough to warrant its own design pass.
 //!
 //! ## Usage
 //!

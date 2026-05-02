@@ -3,6 +3,7 @@ members = [".", "crates/fnox-core"]
 resolver = "3"
 
 [workspace.package]
+version = "1.23.0"
 edition = "2024"
 authors = ["@jdx"]
 license = "MIT"
@@ -34,7 +35,9 @@ ci_info = "0.14"
 clap = { version = "4", features = ["derive", "env"] }
 console = "0.16"
 crossterm = { version = "0.29", features = ["event-stream"] }
+ctap-hid-fido2 = "3"
 data-encoding = "2"
+dbus = { version = "0.9", features = ["vendored"] }
 demand = "2"
 dirs = "6"
 fslock = "0.2"
@@ -52,6 +55,7 @@ libloading = "0.9"
 miette = { version = "7", features = ["fancy"] }
 miniz_oxide = "0.9"
 nix = { version = "0.31", features = ["signal", "process"] }
+openssl-sys = { version = "0.9", features = ["vendored"] }
 pluralizer = "0.5"
 proc-macro2 = "1"
 quote = "1"
@@ -89,7 +93,7 @@ xx = { version = "2", features = ["fslock"] }
 
 [package]
 name = "fnox"
-version = "1.23.0"
+version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -103,7 +107,7 @@ name = "fnox"
 path = "src/main.rs"
 
 [dependencies]
-fnox-core = { version = "1.23.0", path = "crates/fnox-core" }
+fnox-core = { path = "crates/fnox-core", version = "1.23.0" }
 
 # Direct dependencies of the CLI binary (commands, MCP server, TUI, hook-env,
 # shell integration). Provider/config/secret-resolver crates are pulled in

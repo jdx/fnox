@@ -1,6 +1,6 @@
 [package]
 name = "fnox-core"
-version = "1.23.0"
+version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -68,11 +68,11 @@ xx = { workspace = true }
 # ctap-hid-fido2 → hidapi → libudev cannot be statically linked on musl,
 # so the FIDO2 provider is excluded from musl builds.
 [target.'cfg(not(target_env = "musl"))'.dependencies]
-ctap-hid-fido2 = "3"
+ctap-hid-fido2 = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-dbus = { version = "0.9", features = ["vendored"] }
-openssl-sys = { version = "0.9", features = ["vendored"] }
+dbus = { workspace = true }
+openssl-sys = { workspace = true }
 
 [build-dependencies]
 indexmap = { workspace = true }
