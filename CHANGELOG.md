@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.23.1](https://github.com/jdx/fnox/compare/v1.23.0..v1.23.1) - 2026-05-02
+
+### 🚜 Refactor
+
+- extract providers and core types into fnox-core crate by [@jdx](https://github.com/jdx) in [#458](https://github.com/jdx/fnox/pull/458)
+
+### 📚 Documentation
+
+- prefix star count with ★ glyph and populate it on deploy by [@jdx](https://github.com/jdx) in [#447](https://github.com/jdx/fnox/pull/447)
+- add favicons and web app manifest by [@jdx](https://github.com/jdx) in [#448](https://github.com/jdx/fnox/pull/448)
+
+### 🔍 Other Changes
+
+- **(docs)** remove shrill.en.dev analytics script by [@jdx](https://github.com/jdx) in [#457](https://github.com/jdx/fnox/pull/457)
+- **(release)** add musl Linux targets for Alpine compatibility by [@jdx](https://github.com/jdx) in [#452](https://github.com/jdx/fnox/pull/452)
+- add plausible analytics by [@jdx](https://github.com/jdx) in [#451](https://github.com/jdx/fnox/pull/451)
+- bump hk to 1.44.3 by [@jdx](https://github.com/jdx) in [#454](https://github.com/jdx/fnox/pull/454)
+
+### 📦️ Dependency Updates
+
+- update autofix-ci/action action to v1.3.4 by [@renovate[bot]](https://github.com/renovate[bot]) in [#455](https://github.com/jdx/fnox/pull/455)
+- update apple-actions/import-codesign-certs action to v7 by [@renovate[bot]](https://github.com/renovate[bot]) in [#456](https://github.com/jdx/fnox/pull/456)
+
 ## [1.23.0](https://github.com/jdx/fnox/compare/v1.22.0..v1.23.0) - 2026-04-26
 
 ### 🚀 Features
