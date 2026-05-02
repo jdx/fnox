@@ -1,27 +1,7 @@
 use clap::Parser;
+use fnox::commands::Cli;
+use fnox::settings;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-
-mod auth_prompt;
-mod commands;
-mod config;
-mod env;
-mod error;
-mod hook_env;
-mod http;
-mod lease;
-mod lease_backends;
-mod mcp_server;
-mod providers;
-mod secret_resolver;
-mod settings;
-mod shell;
-mod source_registry;
-mod spanned;
-mod suggest;
-mod temp_file_secrets;
-mod tui;
-
-use commands::Cli;
 
 #[tokio::main]
 async fn main() -> miette::Result<()> {

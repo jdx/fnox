@@ -146,7 +146,10 @@ mod tests {
 
     #[test]
     fn provider_add_types_match_provider_definitions() {
-        let providers_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("providers");
+        let providers_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("crates")
+            .join("fnox-core")
+            .join("providers");
 
         let defined_types: BTreeSet<String> = std::fs::read_dir(&providers_dir)
             .expect("providers directory should exist")

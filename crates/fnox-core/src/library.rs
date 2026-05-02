@@ -19,8 +19,8 @@
 //! ## Usage
 //!
 //! ```no_run
-//! # async fn run() -> fnox::Result<()> {
-//! use fnox::Fnox;
+//! # async fn run() -> fnox_core::Result<()> {
+//! use fnox_core::Fnox;
 //!
 //! // Walks up from CWD to find fnox.toml + merges parent + local +
 //! // global config — same exact merge the binary does.

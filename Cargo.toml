@@ -1,19 +1,15 @@
-[package]
-name = "fnox"
-version = "1.23.0"
+[workspace]
+members = [".", "crates/fnox-core"]
+resolver = "3"
+
+[workspace.package]
 edition = "2024"
 authors = ["@jdx"]
-description = "A flexible secret management tool supporting multiple providers and encryption methods"
 license = "MIT"
 repository = "https://github.com/jdx/fnox"
-readme = "README.md"
 rust-version = "1.91.1"
 
-[[bin]]
-name = "fnox"
-path = "src/main.rs"
-
-[dependencies]
+[workspace.dependencies]
 aes-gcm = "0.11.0-rc.3"
 age = { version = "0.11", features = ["ssh"] }
 aho-corasick = "1.1.4"
@@ -52,10 +48,13 @@ indexmap = { version = "2", features = ["serde"] }
 jsonwebtoken = { version = "10", features = ["aws_lc_rs"] }
 keepass = { version = "0.10", features = ["save_kdbx4"] }
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+libloading = "0.9"
 miette = { version = "7", features = ["fancy"] }
 miniz_oxide = "0.9"
 nix = { version = "0.31", features = ["signal", "process"] }
 pluralizer = "0.5"
+proc-macro2 = "1"
+quote = "1"
 rand = "0.10"
 ratatui = "0.30"
 regex = "1"
@@ -87,24 +86,89 @@ usage-lib = { version = "3", features = ["clap"] }
 walkdir = "2"
 which = "8"
 xx = { version = "2", features = ["fslock"] }
-libloading = "0.9"
+
+[package]
+name = "fnox"
+version = "1.23.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "A flexible secret management tool supporting multiple providers and encryption methods"
+readme = "README.md"
+
+[[bin]]
+name = "fnox"
+path = "src/main.rs"
+
+[dependencies]
+fnox-core = { version = "1.23.0", path = "crates/fnox-core" }
+
+# Re-exported through fnox-core but used directly by CLI code as well.
+aes-gcm = { workspace = true }
+age = { workspace = true }
+aho-corasick = { workspace = true }
+anyhow = { workspace = true }
+arboard = { workspace = true }
+arc-swap = { workspace = true }
+async-trait = { workspace = true }
+atty = { workspace = true }
+base64 = { workspace = true }
+blake3 = { workspace = true }
+chrono = { workspace = true }
+ci_info = { workspace = true }
+clap = { workspace = true }
+console = { workspace = true }
+crossterm = { workspace = true }
+data-encoding = { workspace = true }
+demand = { workspace = true }
+dirs = { workspace = true }
+fslock = { workspace = true }
+futures = { workspace = true }
+hex = { workspace = true }
+indexmap = { workspace = true }
+jsonwebtoken = { workspace = true }
+miette = { workspace = true }
+miniz_oxide = { workspace = true }
+nix = { workspace = true }
+pluralizer = { workspace = true }
+rand = { workspace = true }
+ratatui = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true }
+rmcp = { workspace = true }
+rmp-serde = { workspace = true }
+rustls = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_spanned = { workspace = true }
+serde_yaml = { workspace = true }
+sha2 = { workspace = true }
+shellexpand = { workspace = true }
+shlex = { workspace = true }
+signal-hook = { workspace = true }
+strsim = { workspace = true }
+strum = { workspace = true }
+tabled = { workspace = true }
+tempfile = { workspace = true }
+terminal_size = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+toml_edit = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+urlencoding = { workspace = true }
+usage-lib = { workspace = true }
+walkdir = { workspace = true }
+which = { workspace = true }
+xx = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus = { version = "0.9", features = ["vendored"] }
 openssl-sys = { version = "0.9", features = ["vendored"] }
 
-# ctap-hid-fido2 → hidapi → libudev cannot be statically linked on musl,
-# so the FIDO2 provider is excluded from musl builds.
-[target.'cfg(not(target_env = "musl"))'.dependencies]
-ctap-hid-fido2 = "3"
-
 [dev-dependencies]
 clap-sort = "1"
-tempfile = "3"
-
-[build-dependencies]
-indexmap = { version = "2", features = ["serde"] }
-proc-macro2 = "1"
-quote = "1"
-serde = { version = "1", features = ["derive"] }
-toml_edit = { version = "0.25", features = ["serde"] }
+tempfile = { workspace = true }

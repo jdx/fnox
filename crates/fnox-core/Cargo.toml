@@ -1,0 +1,85 @@
+[package]
+name = "fnox-core"
+version = "1.23.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Provider library and core types for fnox"
+readme = "../../README.md"
+
+[dependencies]
+aes-gcm = { workspace = true }
+age = { workspace = true }
+arc-swap = { workspace = true }
+async-trait = { workspace = true }
+atty = { workspace = true }
+aws-config = { workspace = true }
+aws-sdk-kms = { workspace = true }
+aws-sdk-secretsmanager = { workspace = true }
+aws-sdk-ssm = { workspace = true }
+aws-sdk-sts = { workspace = true }
+azure_core = { workspace = true }
+azure_identity = { workspace = true }
+azure_security_keyvault_keys = { workspace = true }
+azure_security_keyvault_secrets = { workspace = true }
+base64 = { workspace = true }
+blake3 = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true }
+demand = { workspace = true }
+dirs = { workspace = true }
+fslock = { workspace = true }
+futures = { workspace = true }
+gcp_auth = { workspace = true }
+google-cloud-kms = { workspace = true }
+google-cloud-secretmanager-v1 = { workspace = true }
+hex = { workspace = true }
+hkdf = { workspace = true }
+indexmap = { workspace = true }
+jsonwebtoken = { workspace = true }
+keepass = { workspace = true }
+keyring = { workspace = true }
+libloading = { workspace = true }
+miette = { workspace = true }
+pluralizer = { workspace = true }
+rand = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_spanned = { workspace = true }
+serde_yaml = { workspace = true }
+sha2 = { workspace = true }
+shellexpand = { workspace = true }
+strsim = { workspace = true }
+strum = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+toml_edit = { workspace = true }
+tracing = { workspace = true }
+urlencoding = { workspace = true }
+which = { workspace = true }
+xx = { workspace = true }
+
+# ctap-hid-fido2 → hidapi → libudev cannot be statically linked on musl,
+# so the FIDO2 provider is excluded from musl builds.
+[target.'cfg(not(target_env = "musl"))'.dependencies]
+ctap-hid-fido2 = "3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+dbus = { version = "0.9", features = ["vendored"] }
+openssl-sys = { version = "0.9", features = ["vendored"] }
+
+[build-dependencies]
+indexmap = { workspace = true }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+serde = { workspace = true }
+toml_edit = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
