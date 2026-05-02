@@ -27,11 +27,17 @@ async fn main() -> miette::Result<()> {
     }
 
     // Initialize tracing
+    //
+    // Cover both the binary crate (`fnox`) and the library crate (`fnox_core`,
+    // which holds providers / config / secret resolver / lease backends / http).
+    // Without `fnox_core` in the filter, `--verbose` would silently drop debug
+    // and warn output from the bulk of the codebase.
     let log_level = if cli.verbose { "debug" } else { "info" };
     tracing_subscriber::registry()
         .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| format!("fnox={}", log_level).into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                format!("fnox={level},fnox_core={level}", level = log_level).into()
+            }),
         )
         .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
         .init();

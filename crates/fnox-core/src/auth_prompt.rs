@@ -99,7 +99,7 @@ mod tests {
             url: "https://example.com".to_string(),
         };
         let result = prompt_and_run_auth(&config, &provider_config, "1password", &error);
-        assert_eq!(result.unwrap(), false);
+        assert!(!result.unwrap());
     }
 
     #[test]
@@ -113,6 +113,6 @@ mod tests {
             url: "https://example.com".to_string(),
         };
         let result = prompt_and_run_auth(&config, &provider_config, "1password", &error);
-        assert_eq!(result.unwrap(), false);
+        assert!(!result.unwrap());
     }
 }

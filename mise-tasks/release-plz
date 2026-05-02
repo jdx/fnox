@@ -12,6 +12,10 @@ if [ -z "$released_versions" ] || ! echo "$released_versions" | grep -q "^v$cur_
     # Only create and push the tag - let the release workflow handle creating the release
     git tag "v$cur_version"
     git push --tags
+    # Publish fnox-core first; fnox depends on it via path + version, so the
+    # binary publish requires fnox-core at this version to be on crates.io.
+    # Modern cargo waits for the index to update before returning.
+    cargo publish -p fnox-core
     cargo publish -p fnox
   fi
   exit 0
@@ -31,7 +35,10 @@ if [ "$version" = "v$cur_version" ]; then
   exit 0
 fi
 
-cargo set-version --package fnox "${version#v}"
+# Bump the workspace version; both `fnox` and `fnox-core` inherit it via
+# `version.workspace = true`, and the path-dep version pin in fnox's
+# Cargo.toml is updated automatically.
+cargo set-version --workspace "${version#v}"
 
 git config user.name mise-en-dev
 git config user.email 123107610+mise-en-dev@users.noreply.github.com

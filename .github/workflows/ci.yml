@@ -246,7 +246,7 @@ jobs:
           # shellcheck disable=SC2016
           fnox run -- sh -c 'echo MY_UNIMPORTANT_SECRET: $MY_UNIMPORTANT_SECRET'
       - name: Run tests
-        run: cargo test
+        run: cargo test --workspace
       - name: Check formatting
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4
         with:
@@ -254,7 +254,7 @@ jobs:
           max_attempts: 3
           command: mise run lint
       - name: Run clippy
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
   msrv:
     runs-on: ubuntu-latest
@@ -270,7 +270,7 @@ jobs:
       - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
-      - run: cargo msrv verify
+      - run: cargo msrv verify --workspace
 
   final:
     needs:

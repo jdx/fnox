@@ -226,7 +226,7 @@ mod tests {
         let settings = GeneratedSettings::default();
         assert_eq!(settings.profile, "default");
         assert_eq!(settings.age_key_file, None);
-        assert_eq!(settings.no_defaults, false);
+        assert!(!settings.no_defaults);
     }
 
     #[test]
