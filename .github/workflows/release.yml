@@ -142,9 +142,17 @@ jobs:
           else
             TAG_NAME="${{ github.ref_name }}"
           fi
-          {
-            gh release view "$TAG_NAME" --json body --jq .body
-            cat <<'EOF'
+          # Strip any pre-existing "Sponsor fnox" section from the body so the
+          # canonical block we append below isn't duplicated. Matches headings
+          # like "## Sponsor fnox" or "## 💚 Sponsor fnox" and drops everything
+          # through the next top-level heading.
+          gh release view "$TAG_NAME" --json body --jq .body \
+            | awk '
+                /^## .*Sponsor fnox[[:space:]]*$/ { skip=1; next }
+                skip && /^## / { skip=0; print; next }
+                !skip { print }
+              ' > /tmp/release-notes.md
+          cat >> /tmp/release-notes.md <<'EOF'
 
           ## 💚 Sponsor fnox
 
@@ -152,5 +160,4 @@ jobs:
 
           If fnox is handling secrets or config for you or your team, please consider [sponsoring at en.dev](https://en.dev). Sponsorships are what let fnox stay independent and the project keep moving.
           EOF
-          } > /tmp/release-notes.md
           gh release edit "$TAG_NAME" --notes-file /tmp/release-notes.md
