@@ -281,7 +281,9 @@ jobs:
       - msrv
     runs-on: ubuntu-latest
     timeout-minutes: 1
-    if: always()
+    # Run on success or upstream failure but skip when the workflow is cancelled
+    # — `always()` would override `cancel-in-progress` and waste a runner.
+    if: ${{ !cancelled() }}
     steps:
       - name: Check job results
         if: |
