@@ -288,16 +288,16 @@ The subprocess still runs — just without the lease credentials. This means oth
 
 ## Supported Backends
 
-| Backend                              | Type             | Max Duration | Revocation              |
-| ------------------------------------ | ---------------- | ------------ | ----------------------- |
-| [AWS STS](/leases/aws-sts)           | `aws-sts`        | 12 hours     | No-op (native TTL)      |
-| [GCP IAM](/leases/gcp-iam)           | `gcp-iam`        | 1 hour       | No-op (native TTL)      |
-| [Azure Token](/leases/azure-token)   | `azure-token`    | ~1 hour      | No-op (native TTL)      |
-| [HashiCorp Vault](/leases/vault)     | `vault`          | 24 hours     | Vault lease revocation  |
-| [Cloudflare](/leases/cloudflare)     | `cloudflare`     | 24 hours     | Token deletion          |
-| [GitHub App](/leases/github-app)     | `github-app`     | 1 hour       | No-op (native TTL)      |
-| [GitHub OAuth](/leases/github-oauth) | `github-oauth`   | ~8 hours     | No-op (native TTL)      |
-| [Custom Command](/leases/command)    | `command`        | 24 hours     | Optional revoke command |
+| Backend                              | Type           | Max Duration | Revocation              |
+| ------------------------------------ | -------------- | ------------ | ----------------------- |
+| [AWS STS](/leases/aws-sts)           | `aws-sts`      | 12 hours     | No-op (native TTL)      |
+| [GCP IAM](/leases/gcp-iam)           | `gcp-iam`      | 1 hour       | No-op (native TTL)      |
+| [Azure Token](/leases/azure-token)   | `azure-token`  | ~1 hour      | No-op (native TTL)      |
+| [HashiCorp Vault](/leases/vault)     | `vault`        | 24 hours     | Vault lease revocation  |
+| [Cloudflare](/leases/cloudflare)     | `cloudflare`   | 24 hours     | Token deletion          |
+| [GitHub App](/leases/github-app)     | `github-app`   | 1 hour       | No-op (native TTL)      |
+| [GitHub OAuth](/leases/github-oauth) | `github-oauth` | ~8 hours     | No-op (native TTL)      |
+| [Custom Command](/leases/command)    | `command`      | 24 hours     | Optional revoke command |
 
 ## Managing Leases
 
