@@ -322,9 +322,9 @@ impl GitHubOauthBackend {
         );
         if self.open_browser {
             let url = device.verification_uri.clone();
-            let _ = tokio::task::spawn_blocking(move || {
+            std::mem::drop(tokio::task::spawn_blocking(move || {
                 let _ = open_browser(&url);
-            });
+            }));
         }
     }
 
@@ -357,11 +357,10 @@ impl LeaseBackend for GitHubOauthBackend {
         let mut credentials = IndexMap::new();
         credentials.insert(self.env_var.clone(), token.access_token.clone());
 
-        let hash = blake3::hash(token.access_token.as_bytes());
         Ok(Lease {
             credentials,
             expires_at: Some(token.expires_at),
-            lease_id: format!("github-oauth-{}", &hash.to_hex()[..16]),
+            lease_id: super::generate_lease_id("github-oauth"),
         })
     }
 
