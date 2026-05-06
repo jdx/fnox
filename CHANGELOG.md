@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.24.0](https://github.com/jdx/fnox/compare/v1.23.1..v1.24.0) - 2026-05-06
+
+### 🚀 Features
+
+- **(github-oauth)** add github oauth lease backend by [@jdx](https://github.com/jdx) in [#464](https://github.com/jdx/fnox/pull/464)
+
+### 🐛 Bug Fixes
+
+- **(ci)** de-duplicate sponsor section in release notes by [@jdx](https://github.com/jdx) in [#459](https://github.com/jdx/fnox/pull/459)
+
+### 🔍 Other Changes
+
+- **(ci)** use !cancelled() instead of always() for final job by [@jdx](https://github.com/jdx) in [#461](https://github.com/jdx/fnox/pull/461)
+- set dev profile debug to 1 by [@jdx](https://github.com/jdx) in [#462](https://github.com/jdx/fnox/pull/462)
+
 ## [1.23.1](https://github.com/jdx/fnox/compare/v1.23.0..v1.23.1) - 2026-05-02
 
 ### 🚜 Refactor
