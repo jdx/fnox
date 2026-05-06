@@ -11,6 +11,7 @@ pub mod cloudflare;
 pub mod command;
 pub mod gcp_iam;
 pub mod github_app;
+pub mod github_oauth;
 pub mod vault;
 
 /// A credential lease with metadata for tracking and revocation
@@ -74,6 +75,26 @@ fn default_cloudflare_env_var() -> String {
 
 fn default_github_env_var() -> String {
     "GITHUB_TOKEN".to_string()
+}
+
+fn default_github_oauth_auth_base() -> String {
+    "https://github.com/login/oauth".to_string()
+}
+
+fn default_github_oauth_api_base() -> String {
+    "https://api.github.com".to_string()
+}
+
+fn default_github_oauth_scope() -> String {
+    "repo read:org workflow".to_string()
+}
+
+fn default_github_oauth_keyring_service() -> String {
+    "fnox-github-oauth".to_string()
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// Generate a unique lease ID with a prefix.
@@ -164,6 +185,32 @@ pub enum LeaseBackendConfig {
         #[serde(skip_serializing_if = "Option::is_none")]
         duration: Option<String>,
     },
+    /// GitHub App User Access Token via OAuth Device Flow
+    GithubOauth {
+        client_id: String,
+        /// OAuth scope string requested from GitHub.
+        #[serde(default = "default_github_oauth_scope")]
+        scope: String,
+        #[serde(default = "default_github_env_var")]
+        env_var: String,
+        /// OS keyring service used to cache access/refresh tokens.
+        #[serde(default = "default_github_oauth_keyring_service")]
+        keyring_service: String,
+        /// Disable to force device flow on each lease creation.
+        #[serde(default = "default_true")]
+        keyring_cache: bool,
+        /// Open the verification URL in a browser when possible.
+        #[serde(default = "default_true")]
+        open_browser: bool,
+        /// OAuth endpoint base URL (default: https://github.com/login/oauth)
+        #[serde(default = "default_github_oauth_auth_base")]
+        auth_base: String,
+        /// GitHub API base URL (default: https://api.github.com)
+        #[serde(default = "default_github_oauth_api_base")]
+        api_base: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        duration: Option<String>,
+    },
     /// Generic Command Backend
     Command {
         create_command: String,
@@ -192,6 +239,7 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::GithubApp {
                 private_key_file, ..
             } => github_app::check_prerequisites(private_key_file),
+            LeaseBackendConfig::GithubOauth { .. } => github_oauth::check_prerequisites(),
             LeaseBackendConfig::Command { .. } => command::check_prerequisites(),
         }
     }
@@ -209,6 +257,7 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::AzureToken { .. } => azure_token::required_env_vars(),
             LeaseBackendConfig::Cloudflare { .. } => cloudflare::required_env_vars(),
             LeaseBackendConfig::GithubApp { .. } => github_app::required_env_vars(),
+            LeaseBackendConfig::GithubOauth { .. } => github_oauth::required_env_vars(),
             LeaseBackendConfig::Command { .. } => command::required_env_vars(),
         }
     }
@@ -223,6 +272,7 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::Command { .. } => false,
             LeaseBackendConfig::Cloudflare { env_var, .. } => env_var == key,
             LeaseBackendConfig::GithubApp { env_var, .. } => env_var == key,
+            LeaseBackendConfig::GithubOauth { env_var, .. } => env_var == key,
         }
     }
 
@@ -239,6 +289,7 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::Command { .. } => command::CONSUMED_ENV_VARS,
             LeaseBackendConfig::Cloudflare { .. } => cloudflare::CONSUMED_ENV_VARS,
             LeaseBackendConfig::GithubApp { .. } => github_app::CONSUMED_ENV_VARS,
+            LeaseBackendConfig::GithubOauth { .. } => github_oauth::CONSUMED_ENV_VARS,
         }
     }
 
@@ -316,6 +367,26 @@ impl LeaseBackendConfig {
                 repositories.clone(),
                 api_base.clone(),
             ))),
+            LeaseBackendConfig::GithubOauth {
+                client_id,
+                scope,
+                env_var,
+                keyring_service,
+                keyring_cache,
+                open_browser,
+                auth_base,
+                api_base,
+                ..
+            } => Ok(Box::new(github_oauth::GitHubOauthBackend::new(
+                client_id.clone(),
+                scope.clone(),
+                env_var.clone(),
+                keyring_service.clone(),
+                *keyring_cache,
+                *open_browser,
+                auth_base.clone(),
+                api_base.clone(),
+            ))),
             LeaseBackendConfig::Command {
                 create_command,
                 revoke_command,
@@ -361,6 +432,7 @@ impl LeaseBackendConfig {
             | LeaseBackendConfig::AzureToken { duration, .. }
             | LeaseBackendConfig::Cloudflare { duration, .. }
             | LeaseBackendConfig::GithubApp { duration, .. }
+            | LeaseBackendConfig::GithubOauth { duration, .. }
             | LeaseBackendConfig::Command { duration, .. } => duration.as_deref(),
         }
     }

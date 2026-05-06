@@ -4,6 +4,10 @@ The `github-app` lease backend creates short-lived [GitHub App installation acce
 
 This is ideal for CI/CD pipelines and automation workflows where you need scoped, short-lived GitHub access instead of long-lived personal access tokens.
 
+:::tip Prefer GitHub OAuth for local workflows
+If you want a short-lived token for local development or user-attributed GitHub CLI/API usage, consider [`github-oauth`](/leases/github-oauth) instead. It only requires the GitHub App client ID, so you do not need to distribute or manage an app private key.
+:::
+
 ## Configuration
 
 ```toml
