@@ -98,7 +98,13 @@ impl GitHubOauthBackend {
     }
 
     fn cache_key(&self) -> String {
-        let hash = blake3::hash(format!("{}|{}", self.client_id, self.scope).as_bytes());
+        let hash = blake3::hash(
+            format!(
+                "{}|{}|{}|{}",
+                self.client_id, self.scope, self.auth_base, self.api_base
+            )
+            .as_bytes(),
+        );
         format!("{}-{}", self.client_id, &hash.to_hex()[..16])
     }
 
@@ -138,18 +144,8 @@ impl GitHubOauthBackend {
         }
     }
 
-    fn reusable_cached_token(&self) -> Option<CachedToken> {
-        let cached = self.read_cached_token()?;
-        let buffer = chrono::Duration::seconds(CACHE_REUSE_BUFFER_SECS);
-        if cached.expires_at - buffer > chrono::Utc::now() {
-            Some(cached)
-        } else {
-            None
-        }
-    }
-
     async fn create_device_code(&self) -> Result<DeviceCodeResponse> {
-        let url = format!("{}/device/code", self.auth_base.trim_end_matches('/'));
+        let url = format!("{}/device/code", self.device_auth_base());
         crate::http::http_client()
             .post(url)
             .header("Accept", "application/json")
@@ -165,6 +161,13 @@ impl GitHubOauthBackend {
             .map_err(|e| invalid_response(format!("Invalid device code response: {e}")))
     }
 
+    fn device_auth_base(&self) -> &str {
+        self.auth_base
+            .trim_end_matches('/')
+            .strip_suffix("/oauth")
+            .unwrap_or_else(|| self.auth_base.trim_end_matches('/'))
+    }
+
     async fn poll_access_token(&self, device: &DeviceCodeResponse) -> Result<TokenResponse> {
         let deadline = chrono::Utc::now() + chrono::Duration::seconds(device.expires_in as i64);
         let mut interval = device.interval.max(1);
@@ -174,8 +177,6 @@ impl GitHubOauthBackend {
             if chrono::Utc::now() >= deadline {
                 return Err(auth_failed("Device authorization expired".to_string()));
             }
-
-            tokio::time::sleep(Duration::from_secs(interval)).await;
 
             let response = crate::http::http_client()
                 .post(&url)
@@ -194,9 +195,13 @@ impl GitHubOauthBackend {
 
             match response.error.as_deref() {
                 None => return Ok(response),
-                Some("authorization_pending") => continue,
+                Some("authorization_pending") => {
+                    tokio::time::sleep(Duration::from_secs(interval)).await;
+                    continue;
+                }
                 Some("slow_down") => {
                     interval += 5;
+                    tokio::time::sleep(Duration::from_secs(interval)).await;
                     continue;
                 }
                 Some("expired_token") => {
@@ -242,7 +247,12 @@ impl GitHubOauthBackend {
             .await
             .map_err(|e| invalid_response(format!("Invalid refresh response: {e}")))?;
 
-        if response.error.is_some() {
+        if let Some(err) = &response.error {
+            tracing::debug!(
+                error = err.as_str(),
+                description = response.error_description.as_deref().unwrap_or(""),
+                "GitHub OAuth refresh token rejected; falling back to device flow"
+            );
             return Ok(None);
         }
 
@@ -311,19 +321,23 @@ impl GitHubOauthBackend {
             device.verification_uri, device.user_code
         );
         if self.open_browser {
-            let _ = open_browser(&device.verification_uri);
+            let url = device.verification_uri.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                let _ = open_browser(&url);
+            });
         }
     }
 
     async fn create_or_load_token(&self) -> Result<CachedToken> {
-        if let Some(cached) = self.reusable_cached_token() {
-            return Ok(cached);
-        }
-        if let Some(cached) = self.read_cached_token()
-            && let Some(refreshed) = self.refresh_access_token(&cached).await?
-        {
-            self.write_cached_token(&refreshed);
-            return Ok(refreshed);
+        if let Some(cached) = self.read_cached_token() {
+            let buffer = chrono::Duration::seconds(CACHE_REUSE_BUFFER_SECS);
+            if cached.expires_at - buffer > chrono::Utc::now() {
+                return Ok(cached);
+            }
+            if let Some(refreshed) = self.refresh_access_token(&cached).await? {
+                self.write_cached_token(&refreshed);
+                return Ok(refreshed);
+            }
         }
 
         let device = self.create_device_code().await?;

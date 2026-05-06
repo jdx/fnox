@@ -202,7 +202,7 @@ pub enum LeaseBackendConfig {
         /// Open the verification URL in a browser when possible.
         #[serde(default = "default_true")]
         open_browser: bool,
-        /// OAuth endpoint base URL (default: https://github.com/login/oauth)
+        /// OAuth token endpoint base URL (default: https://github.com/login/oauth)
         #[serde(default = "default_github_oauth_auth_base")]
         auth_base: String,
         /// GitHub API base URL (default: https://api.github.com)

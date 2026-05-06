@@ -349,7 +349,7 @@
               "default": "https://api.github.com"
             },
             "auth_base": {
-              "description": "OAuth endpoint base URL (default: https://github.com/login/oauth)",
+              "description": "OAuth token endpoint base URL (default: https://github.com/login/oauth)",
               "type": "string",
               "default": "https://github.com/login/oauth"
             },

@@ -16,17 +16,17 @@ scope = "repo read:org workflow"
 duration = "8h"
 ```
 
-| Field             | Required | Description                                                            |
-| ----------------- | -------- | ---------------------------------------------------------------------- |
-| `client_id`       | Yes      | GitHub App client ID; no app secret or private key is required         |
-| `scope`           | No       | OAuth scopes to request (default: `"repo read:org workflow"`)          |
-| `env_var`         | No       | Environment variable name for the token (default: `"GITHUB_TOKEN"`)    |
-| `keyring_service` | No       | OS keyring service for cached tokens (default: `"fnox-github-oauth"`)  |
-| `keyring_cache`   | No       | Cache access/refresh tokens in the OS keyring (default: `true`)        |
-| `open_browser`    | No       | Try to open the device verification URL in a browser (default: `true`) |
-| `auth_base`       | No       | OAuth endpoint base URL (default: `"https://github.com/login/oauth"`)  |
-| `api_base`        | No       | GitHub API base URL (default: `"https://api.github.com"`)              |
-| `duration`        | No       | Requested duration; GitHub controls the actual token lifetime          |
+| Field             | Required | Description                                                                 |
+| ----------------- | -------- | --------------------------------------------------------------------------- |
+| `client_id`       | Yes      | GitHub App client ID; no app secret or private key is required              |
+| `scope`           | No       | OAuth scopes to request (default: `"repo read:org workflow"`)               |
+| `env_var`         | No       | Environment variable name for the token (default: `"GITHUB_TOKEN"`)         |
+| `keyring_service` | No       | OS keyring service for cached tokens (default: `"fnox-github-oauth"`)       |
+| `keyring_cache`   | No       | Cache access/refresh tokens in the OS keyring (default: `true`)             |
+| `open_browser`    | No       | Try to open the device verification URL in a browser (default: `true`)      |
+| `auth_base`       | No       | OAuth token endpoint base URL (default: `"https://github.com/login/oauth"`) |
+| `api_base`        | No       | GitHub API base URL (default: `"https://api.github.com"`)                   |
+| `duration`        | No       | Requested duration; GitHub controls the actual token lifetime               |
 
 ## Prerequisites
 
