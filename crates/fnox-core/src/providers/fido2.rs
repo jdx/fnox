@@ -11,6 +11,7 @@ pub fn env_dependencies() -> &'static [&'static str] {
 
 /// Cached FIDO2 hmac-secret responses keyed by provider name.
 static CACHED_SECRETS: OnceLock<std::sync::Mutex<HashMap<String, Vec<u8>>>> = OnceLock::new();
+static STDOUT_REDIRECT_LOCK: OnceLock<std::sync::Mutex<()>> = OnceLock::new();
 
 #[derive(Clone)]
 pub struct Fido2Provider {
@@ -103,8 +104,7 @@ impl Fido2Provider {
         }
         let args = builder.build();
 
-        let assertions = device
-            .get_assertion_with_args(&args)
+        let assertions = with_stdout_redirected_to_stderr(|| device.get_assertion_with_args(&args))
             .map_err(|e| FnoxError::Provider(format!("FIDO2 assertion failed: {:?}", e)))?;
 
         let assertion = assertions
@@ -158,6 +158,74 @@ impl crate::providers::Provider for Fido2Provider {
     }
 }
 
+#[cfg(unix)]
+fn with_stdout_redirected_to_stderr<T>(f: impl FnOnce() -> T) -> T {
+    use std::io::Write;
+    use std::os::raw::c_int;
+    use std::sync::MutexGuard;
+
+    const STDOUT_FILENO: c_int = 1;
+    const STDERR_FILENO: c_int = 2;
+
+    unsafe extern "C" {
+        fn close(fd: c_int) -> c_int;
+        fn dup(fd: c_int) -> c_int;
+        fn dup2(oldfd: c_int, newfd: c_int) -> c_int;
+    }
+
+    struct StdoutRedirectGuard {
+        saved_stdout: c_int,
+        _lock: MutexGuard<'static, ()>,
+    }
+
+    impl Drop for StdoutRedirectGuard {
+        fn drop(&mut self) {
+            let _ = std::io::stdout().flush();
+            // SAFETY: saved_stdout is a valid duplicate of STDOUT_FILENO when
+            // the guard is constructed, and dup2 atomically restores fd 1.
+            unsafe {
+                dup2(self.saved_stdout, STDOUT_FILENO);
+                close(self.saved_stdout);
+            }
+        }
+    }
+
+    let lock = STDOUT_REDIRECT_LOCK
+        .get_or_init(|| std::sync::Mutex::new(()))
+        .lock();
+    let Ok(lock) = lock else {
+        return f();
+    };
+
+    let _ = std::io::stdout().flush();
+
+    // SAFETY: dup/dup2 operate on process-standard file descriptors. On
+    // failure we leave stdout untouched and run the CTAP call normally.
+    let saved_stdout = unsafe { dup(STDOUT_FILENO) };
+    if saved_stdout < 0 {
+        return f();
+    }
+
+    if unsafe { dup2(STDERR_FILENO, STDOUT_FILENO) } < 0 {
+        // SAFETY: saved_stdout is an open fd returned by dup above.
+        unsafe {
+            close(saved_stdout);
+        }
+        return f();
+    }
+
+    let _guard = StdoutRedirectGuard {
+        saved_stdout,
+        _lock: lock,
+    };
+    f()
+}
+
+#[cfg(not(unix))]
+fn with_stdout_redirected_to_stderr<T>(f: impl FnOnce() -> T) -> T {
+    f()
+}
+
 /// Setup helpers for `fnox provider add --type fido2`
 pub mod setup {
     use crate::error::{FnoxError, Result};
@@ -198,9 +266,10 @@ pub mod setup {
         }
         let make_args = builder.build();
 
-        let attestation = device.make_credential_with_args(&make_args).map_err(|e| {
-            FnoxError::Provider(format!("FIDO2 credential creation failed: {:?}", e))
-        })?;
+        let attestation = super::with_stdout_redirected_to_stderr(|| {
+            device.make_credential_with_args(&make_args)
+        })
+        .map_err(|e| FnoxError::Provider(format!("FIDO2 credential creation failed: {:?}", e)))?;
 
         // Verify hmac-secret was accepted
         let hmac_ok = attestation.extensions.iter().any(|ext| {
@@ -237,7 +306,9 @@ pub mod setup {
         }
         let get_args = builder2.build();
 
-        let assertions = device.get_assertion_with_args(&get_args).map_err(|e| {
+        let assertion_result =
+            super::with_stdout_redirected_to_stderr(|| device.get_assertion_with_args(&get_args));
+        let assertions = assertion_result.map_err(|e| {
             FnoxError::Provider(format!("FIDO2 verification assertion failed: {:?}", e))
         })?;
 
