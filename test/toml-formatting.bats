@@ -182,3 +182,75 @@ EOF
 	assert_output --partial "# End of secrets"
 	assert_output --partial "API_KEY"
 }
+
+@test "fnox set preserves existing table-style secret format" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+	mkdir -p "$HOME/.config/fnox"
+	local keygen_output
+	keygen_output=$(age-keygen -o "$HOME/.config/fnox/age.txt" 2>&1)
+	local public_key
+	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.age]
+type = "age"
+recipients = ["$public_key"]
+
+[secrets."SEKRIT_PASSWORD"]
+provider = "age"
+value = "old-encrypted-value"
+if_missing = "error"
+EOF
+
+	run fnox set SEKRIT_PASSWORD "new-value" --provider age
+	assert_success
+
+	run cat fnox.toml
+	assert_output --partial '[secrets."SEKRIT_PASSWORD"]'
+	assert_output --partial 'provider = "age"'
+	assert_output --partial 'if_missing = "error"'
+	refute_output --partial '"SEKRIT_PASSWORD"= {'
+	refute_output --partial '"SEKRIT_PASSWORD" = {'
+}
+
+@test "fnox import preserves existing table-style secret format" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local keygen_output
+	keygen_output=$(age-keygen -o key.txt 2>&1)
+	local public_key
+	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.age]
+type = "age"
+recipients = ["$public_key"]
+
+[secrets."SEKRIT_PASSWORD"]
+provider = "age"
+value = "old-encrypted-value"
+if_missing = "error"
+EOF
+
+	cat >.env <<'EOF'
+SEKRIT_PASSWORD=new-value
+EOF
+
+	run fnox import -i .env --provider age --force
+	assert_success
+
+	run cat fnox.toml
+	assert_output --partial '[secrets."SEKRIT_PASSWORD"]'
+	assert_output --partial 'provider = "age"'
+	assert_output --partial 'if_missing = "error"'
+	refute_output --partial '"SEKRIT_PASSWORD"= {'
+	refute_output --partial '"SEKRIT_PASSWORD" = {'
+}

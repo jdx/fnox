@@ -821,13 +821,19 @@ impl Config {
             profile_table["secrets"].as_table_mut().unwrap()
         };
 
-        // Update/insert the secret as inline table
-        let inline = secret_config.to_inline_table();
-        secrets_table[secret_name] = Item::Value(Value::InlineTable(inline));
+        if let Some(item) = secrets_table.get_mut(secret_name) {
+            secret_config.update_toml_item(item);
+            if let Some(mut key) = secrets_table.key_mut(secret_name) {
+                key.leaf_decor_mut().set_suffix("");
+            }
+        } else {
+            secrets_table[secret_name] =
+                Item::Value(Value::InlineTable(secret_config.to_inline_table()));
 
-        // Remove trailing space from key to match format: KEY= { ... } instead of KEY = { ... }
-        if let Some(mut key) = secrets_table.key_mut(secret_name) {
-            key.leaf_decor_mut().set_suffix("");
+            // Remove trailing space from key to match format: KEY= { ... } instead of KEY = { ... }
+            if let Some(mut key) = secrets_table.key_mut(secret_name) {
+                key.leaf_decor_mut().set_suffix("");
+            }
         }
 
         // Write back (preserves all comments and formatting)
@@ -943,21 +949,20 @@ impl Config {
             profile_table["secrets"].as_table_mut().unwrap()
         };
 
-        // Insert/update each secret as an inline table
+        // Insert/update each secret, preserving existing inline-vs-table style.
         for (name, config) in secrets {
-            let inline = config.to_inline_table();
+            let name_str = name.as_str();
 
             // Update existing values in-place to preserve decor/comments on the entry
-            if let Some(item) = secrets_table.get_mut(name.as_str()) {
-                if let Item::Value(Value::InlineTable(existing_inline)) = item {
-                    *existing_inline = inline;
-                } else {
-                    *item = Item::Value(Value::InlineTable(inline));
+            if let Some(item) = secrets_table.get_mut(name_str) {
+                config.update_toml_item(item);
+                if let Some(mut key) = secrets_table.key_mut(name_str) {
+                    key.leaf_decor_mut().set_suffix("");
                 }
             } else {
-                secrets_table[name.as_str()] = Item::Value(Value::InlineTable(inline));
+                secrets_table[name_str] = Item::Value(Value::InlineTable(config.to_inline_table()));
 
-                if let Some(mut key) = secrets_table.key_mut(name.as_str()) {
+                if let Some(mut key) = secrets_table.key_mut(name_str) {
                     key.leaf_decor_mut().set_suffix("");
                 }
             }
@@ -1544,6 +1549,79 @@ impl SecretConfig {
 
         inline.fmt();
         inline
+    }
+
+    /// Write this secret config into an existing TOML table while preserving
+    /// that table's header/decor and table-style representation.
+    pub fn write_to_table(&self, table: &mut toml_edit::Table) {
+        use toml_edit::{Item, Value};
+
+        fn set_or_remove(table: &mut toml_edit::Table, key: &str, value: Option<Value>) {
+            if let Some(value) = value {
+                table[key] = Item::Value(value);
+            } else {
+                table.remove(key);
+            }
+        }
+
+        set_or_remove(table, "provider", self.provider().map(Value::from));
+        set_or_remove(table, "value", self.value().map(Value::from));
+        set_or_remove(
+            table,
+            "json_path",
+            self.json_path.as_deref().map(Value::from),
+        );
+        set_or_remove(
+            table,
+            "line",
+            self.line.map(|line| Value::from(line as i64)),
+        );
+        set_or_remove(
+            table,
+            "description",
+            self.description.as_deref().map(Value::from),
+        );
+        set_or_remove(table, "default", self.default.as_deref().map(Value::from));
+        set_or_remove(
+            table,
+            "if_missing",
+            self.if_missing.map(|if_missing| {
+                Value::from(match if_missing {
+                    IfMissing::Error => "error",
+                    IfMissing::Warn => "warn",
+                    IfMissing::Ignore => "ignore",
+                })
+            }),
+        );
+        set_or_remove(table, "env", (!self.env).then(|| Value::from(false)));
+        set_or_remove(table, "as_file", self.as_file.then(|| Value::from(true)));
+        set_or_remove(
+            table,
+            "sync",
+            self.sync.as_ref().map(|sync| {
+                let mut sync_table = toml_edit::InlineTable::new();
+                sync_table.insert("provider", Value::from(sync.provider.as_str()));
+                sync_table.insert("value", Value::from(sync.value.as_str()));
+                sync_table.fmt();
+                Value::InlineTable(sync_table)
+            }),
+        );
+    }
+
+    /// Update a TOML item with this secret config while preserving the
+    /// item's existing table-vs-inline-table style.
+    pub fn update_toml_item(&self, item: &mut toml_edit::Item) {
+        use toml_edit::{Item, Value};
+
+        match item {
+            Item::Table(table) => self.write_to_table(table),
+            Item::Value(Value::InlineTable(existing_inline)) => {
+                *existing_inline = self.to_inline_table();
+            }
+            _ => {
+                *item = Item::Value(Value::InlineTable(self.to_inline_table()));
+            }
+        }
     }
 
     /// Check if this secret has any value (provider, value, or default)
