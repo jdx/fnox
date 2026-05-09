@@ -81,8 +81,7 @@ PROMPT_COMMAND="${PROMPT_COMMAND//_fnox_hook/}"
     }
 
     fn set_env(&self, key: &str, value: &str) -> String {
-        let value = value.replace('\\', "\\\\").replace('"', "\\\"");
-        format!("export {}=\"{}\"\n", key, value)
+        format!("export {}={}\n", key, super::posix_quote(value))
     }
 
     fn unset_env(&self, key: &str) -> String {

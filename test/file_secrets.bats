@@ -298,7 +298,7 @@ EOF
 
 	# Extract the FILE_SECRET value (should be a file path)
 	local file_path
-	file_path=$(echo "$output" | grep "export FILE_SECRET=" | sed -E 's/^export FILE_SECRET=\"(.*)\"$/\1/' | head -1)
+	file_path=$(echo "$output" | grep "export FILE_SECRET=" | sed -E "s/^export FILE_SECRET=//; s/^'(.*)'\$/\\1/" | head -1)
 
 	# Verify it looks like a file path
 	[[ $file_path == *"fnox-hook-FILE_SECRET"* ]]
@@ -329,11 +329,11 @@ EOF
 
 	# Extract the session variable from output
 	local session_var
-	session_var=$(echo "$first_output" | grep "export __FNOX_SESSION=" | sed -E 's/^export __FNOX_SESSION=\"(.*)\"$/\1/')
+	session_var=$(echo "$first_output" | grep "export __FNOX_SESSION=" | sed -E "s/^export __FNOX_SESSION=//; s/^'(.*)'\$/\\1/")
 
 	# Extract first file path
 	local first_file
-	first_file=$(echo "$first_output" | grep "export FILE_SECRET=" | sed -E 's/^export FILE_SECRET=\"(.*)\"$/\1/' | head -1)
+	first_file=$(echo "$first_output" | grep "export FILE_SECRET=" | sed -E "s/^export FILE_SECRET=//; s/^'(.*)'\$/\\1/" | head -1)
 
 	# Change the secret value
 	cat >fnox.toml <<EOF
@@ -359,7 +359,7 @@ EOF
 
 	# Extract second file path
 	local second_file
-	second_file=$(echo "$second_output" | grep "export FILE_SECRET=" | sed -E 's/^export FILE_SECRET=\"(.*)\"$/\1/' | head -1)
+	second_file=$(echo "$second_output" | grep "export FILE_SECRET=" | sed -E "s/^export FILE_SECRET=//; s/^'(.*)'\$/\\1/" | head -1)
 
 	# Second file should exist
 	[ -n "$second_file" ]

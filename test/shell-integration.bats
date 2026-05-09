@@ -148,7 +148,7 @@ teardown() {
 	run "$FNOX_BIN" hook-env -s bash
 
 	assert_success
-	assert_output --partial 'export TEST_SECRET="test-value-123"'
+	assert_output --partial 'export TEST_SECRET=test-value-123'
 	assert_output --partial 'export __FNOX_SESSION='
 }
 
@@ -174,9 +174,9 @@ teardown() {
 	run "$FNOX_BIN" hook-env -s bash
 
 	assert_success
-	assert_output --partial 'export SECRET_ONE="value-one"'
-	assert_output --partial 'export SECRET_TWO="value-two"'
-	assert_output --partial 'export SECRET_THREE="value-three"'
+	assert_output --partial 'export SECRET_ONE=value-one'
+	assert_output --partial 'export SECRET_TWO=value-two'
+	assert_output --partial 'export SECRET_THREE=value-three'
 }
 
 @test "fnox hook-env generates fish-compatible output" {
@@ -250,7 +250,7 @@ teardown() {
 	run "$FNOX_BIN" hook-env -s bash
 
 	assert_success
-	assert_output --partial 'export PARENT_SECRET="parent-value"'
+	assert_output --partial 'export PARENT_SECRET=parent-value'
 }
 
 # ============================================================================
@@ -270,10 +270,10 @@ teardown() {
 
 	# First run - should load secrets
 	output1=$("$FNOX_BIN" hook-env -s bash)
-	echo "$output1" | grep -q 'export CACHED_SECRET="cached-value"'
+	echo "$output1" | grep -q 'export CACHED_SECRET=cached-value'
 
 	# Extract session from first run
-	session=$(echo "$output1" | grep '__FNOX_SESSION=' | sed 's/^export __FNOX_SESSION="//' | sed 's/"$//')
+	session=$(echo "$output1" | grep '__FNOX_SESSION=' | sed -E "s/^export __FNOX_SESSION=//; s/^'(.*)'\$/\\1/")
 
 	# Second run with session - should exit early (no output)
 	export __FNOX_SESSION="$session"
@@ -296,7 +296,7 @@ teardown() {
 
 	# First run
 	output1=$("$FNOX_BIN" hook-env -s bash)
-	session=$(echo "$output1" | grep '__FNOX_SESSION=' | sed 's/^export __FNOX_SESSION="//' | sed 's/"$//')
+	session=$(echo "$output1" | grep '__FNOX_SESSION=' | sed -E "s/^export __FNOX_SESSION=//; s/^'(.*)'\$/\\1/")
 
 	# Modify config file
 	sleep 1 # Ensure mtime changes
@@ -314,7 +314,7 @@ teardown() {
 	run "$FNOX_BIN" hook-env -s bash
 
 	assert_success
-	assert_output --partial 'export MODIFIED_SECRET="updated-value"'
+	assert_output --partial 'export MODIFIED_SECRET=updated-value'
 }
 
 @test "fnox hook-env reloads when parent config is modified" {
@@ -343,9 +343,9 @@ teardown() {
 
 	# First run - should load both parent and child secrets
 	output1=$("$FNOX_BIN" hook-env -s bash)
-	session=$(echo "$output1" | grep '__FNOX_SESSION=' | sed 's/^export __FNOX_SESSION="//' | sed 's/"$//')
-	echo "$output1" | grep -q 'export PARENT_SECRET="parent-original"'
-	echo "$output1" | grep -q 'export CHILD_SECRET="child-value"'
+	session=$(echo "$output1" | grep '__FNOX_SESSION=' | sed -E "s/^export __FNOX_SESSION=//; s/^'(.*)'\$/\\1/")
+	echo "$output1" | grep -q 'export PARENT_SECRET=parent-original'
+	echo "$output1" | grep -q 'export CHILD_SECRET=child-value'
 
 	# Modify parent config file
 	sleep 1 # Ensure mtime changes
@@ -363,7 +363,7 @@ teardown() {
 	run "$FNOX_BIN" hook-env -s bash
 
 	assert_success
-	assert_output --partial 'export PARENT_SECRET="parent-updated"'
+	assert_output --partial 'export PARENT_SECRET=parent-updated'
 }
 
 @test "fnox hook-env reloads when config is deleted" {
@@ -379,8 +379,8 @@ teardown() {
 
 	# First run - should load secret
 	output1=$("$FNOX_BIN" hook-env -s bash)
-	session=$(echo "$output1" | grep '__FNOX_SESSION=' | sed 's/^export __FNOX_SESSION="//' | sed 's/"$//')
-	echo "$output1" | grep -q 'export TEMPORARY_SECRET="temp-value"'
+	session=$(echo "$output1" | grep '__FNOX_SESSION=' | sed -E "s/^export __FNOX_SESSION=//; s/^'(.*)'\$/\\1/")
+	echo "$output1" | grep -q 'export TEMPORARY_SECRET=temp-value'
 
 	# Delete config file
 	rm fnox.toml
@@ -409,8 +409,8 @@ teardown() {
 
 	# First run in dir1
 	output1=$("$FNOX_BIN" hook-env -s bash)
-	session=$(echo "$output1" | grep '__FNOX_SESSION=' | sed 's/^export __FNOX_SESSION="//' | sed 's/"$//')
-	echo "$output1" | grep -q 'export DIR1_SECRET="dir1-value"'
+	session=$(echo "$output1" | grep '__FNOX_SESSION=' | sed -E "s/^export __FNOX_SESSION=//; s/^'(.*)'\$/\\1/")
+	echo "$output1" | grep -q 'export DIR1_SECRET=dir1-value'
 
 	# Create second directory with different config
 	dir2="$TEST_TEMP_DIR/dir2"
@@ -430,7 +430,7 @@ teardown() {
 	run "$FNOX_BIN" hook-env -s bash
 
 	assert_success
-	assert_output --partial 'export DIR2_SECRET="dir2-value"'
+	assert_output --partial 'export DIR2_SECRET=dir2-value'
 	# DIR1_SECRET should be unset
 	assert_output --partial 'unset DIR1_SECRET'
 }
@@ -451,8 +451,8 @@ teardown() {
 
 	# First run - loads secret
 	output1=$("$FNOX_BIN" hook-env -s bash)
-	session=$(echo "$output1" | grep '__FNOX_SESSION=' | sed 's/^export __FNOX_SESSION="//' | sed 's/"$//')
-	echo "$output1" | grep -q 'export TEMPORARY_SECRET="temp-value"'
+	session=$(echo "$output1" | grep '__FNOX_SESSION=' | sed -E "s/^export __FNOX_SESSION=//; s/^'(.*)'\$/\\1/")
+	echo "$output1" | grep -q 'export TEMPORARY_SECRET=temp-value'
 
 	# Move to directory without config
 	dir_without_config="$TEST_TEMP_DIR/without-config"
@@ -495,8 +495,8 @@ teardown() {
 	run "$FNOX_BIN" hook-env -s bash
 
 	assert_success
-	assert_output --partial 'export DEV_SECRET="dev-value"'
-	assert_output --partial 'export DEFAULT_SECRET="default-value"'
+	assert_output --partial 'export DEV_SECRET=dev-value'
+	assert_output --partial 'export DEFAULT_SECRET=default-value'
 }
 
 # ============================================================================
@@ -576,7 +576,7 @@ teardown() {
 	run "$FNOX_BIN" hook-env -s bash
 
 	assert_success
-	assert_output --partial 'export AGE_SECRET="encrypted-value"'
+	assert_output --partial 'export AGE_SECRET=encrypted-value'
 }
 
 # ============================================================================
@@ -597,9 +597,75 @@ teardown() {
 	run "$FNOX_BIN" hook-env -s bash
 
 	assert_success
-	# Should properly escape quotes
-	assert_output --partial 'export SPECIAL_CHARS='
-	assert_output --partial '\"quotes\"'
+	# Single-quoted form preserves embedded double quotes literally
+	assert_output --partial $'export SPECIAL_CHARS=\'value with spaces and "quotes"\''
+}
+
+@test "fnox hook-env escapes dollar signs for bash" {
+	# Regression: $$ in a secret value used to expand to the shell PID after
+	# eval-ing activate output (https://github.com/jdx/fnox/discussions/471).
+	cd "$TEST_TEMP_DIR"
+	cat >fnox.toml <<-'EOF'
+		[providers.plain]
+		type = "plain"
+
+		[secrets.DOLLAR_SECRET]
+		provider = "plain"
+		value = "$$test"
+
+		[secrets.BACKTICK_SECRET]
+		provider = "plain"
+		value = "a`whoami`b"
+	EOF
+
+	run "$FNOX_BIN" hook-env -s bash
+
+	assert_success
+	assert_output --partial $'export DOLLAR_SECRET=\'$$test\''
+	assert_output --partial $'export BACKTICK_SECRET=\'a`whoami`b\''
+
+	# Round-trip through eval to confirm the value survives unchanged.
+	out=$("$FNOX_BIN" hook-env -s bash)
+	eval "$out"
+	[ "$DOLLAR_SECRET" = '$$test' ]
+	[ "$BACKTICK_SECRET" = 'a`whoami`b' ]
+}
+
+@test "fnox hook-env escapes dollar signs for zsh" {
+	cd "$TEST_TEMP_DIR"
+	cat >fnox.toml <<-'EOF'
+		[providers.plain]
+		type = "plain"
+
+		[secrets.DOLLAR_SECRET]
+		provider = "plain"
+		value = "$$test"
+	EOF
+
+	run "$FNOX_BIN" hook-env -s zsh
+
+	assert_success
+	assert_output --partial $'export DOLLAR_SECRET=\'$$test\''
+}
+
+@test "fnox hook-env escapes single quotes for bash" {
+	cd "$TEST_TEMP_DIR"
+	cat >fnox.toml <<-'EOF'
+		[providers.plain]
+		type = "plain"
+
+		[secrets.QUOTE_SECRET]
+		provider = "plain"
+		value = "it's a value"
+	EOF
+
+	run "$FNOX_BIN" hook-env -s bash
+
+	assert_success
+	# Embedded single quotes round-trip via shlex's standard quoting.
+	out=$("$FNOX_BIN" hook-env -s bash)
+	eval "$out"
+	[ "$QUOTE_SECRET" = "it's a value" ]
 }
 
 @test "fnox hook-env handles newlines in secret values" {
@@ -638,7 +704,7 @@ teardown() {
 	EOF
 
 	output=$("$FNOX_BIN" hook-env -s bash)
-	session=$(echo "$output" | grep '__FNOX_SESSION=' | sed 's/^export __FNOX_SESSION="//' | sed 's/"$//')
+	session=$(echo "$output" | grep '__FNOX_SESSION=' | sed -E "s/^export __FNOX_SESSION=//; s/^'(.*)'\$/\\1/")
 
 	# Should be valid base64 (can decode without error)
 	run base64 -d <<<"$session"
@@ -662,7 +728,7 @@ teardown() {
 	echo "$output" | grep -q '__FNOX_SESSION='
 
 	# Extract and verify session is not empty
-	session=$(echo "$output" | grep '__FNOX_SESSION=' | sed 's/^export __FNOX_SESSION="//' | sed 's/"$//')
+	session=$(echo "$output" | grep '__FNOX_SESSION=' | sed -E "s/^export __FNOX_SESSION=//; s/^'(.*)'\$/\\1/")
 	[ -n "$session" ]
 }
 
@@ -690,6 +756,6 @@ teardown() {
 	run "$FNOX_BIN" hook-env -s bash
 
 	assert_success
-	assert_output --partial 'export LOCAL_ONLY_SECRET="local-only-value"'
+	assert_output --partial 'export LOCAL_ONLY_SECRET=local-only-value'
 	assert_output --partial '__FNOX_SESSION='
 }

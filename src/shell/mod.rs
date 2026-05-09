@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt;
 
 mod bash;
@@ -5,6 +6,18 @@ mod fish;
 mod nushell;
 mod pwsh;
 mod zsh;
+
+/// Quote a value for safe inclusion in a POSIX shell command (bash/zsh).
+///
+/// Wraps `shlex::try_quote` with a fallback for values containing NUL,
+/// which shells cannot transport in env vars anyway: the NUL is stripped
+/// and the remainder is single-quoted.
+pub(crate) fn posix_quote(value: &str) -> Cow<'_, str> {
+    shlex::try_quote(value).unwrap_or_else(|_| {
+        let cleaned = value.replace('\0', "");
+        Cow::Owned(format!("'{}'", cleaned.replace('\'', "'\\''")))
+    })
+}
 
 pub use bash::Bash;
 pub use fish::Fish;
