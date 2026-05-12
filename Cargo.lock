@@ -2379,7 +2379,7 @@ dependencies = [
 
 [[package]]
 name = "fnox"
-version = "1.24.0"
+version = "1.24.1"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -2399,7 +2399,7 @@ dependencies = [
  "indexmap 2.14.0",
  "miette",
  "miniz_oxide 0.9.1",
- "nix 0.31.2",
+ "nix 0.31.3",
  "ratatui",
  "regex",
  "rmcp",
@@ -2424,7 +2424,7 @@ dependencies = [
 
 [[package]]
 name = "fnox-core"
-version = "1.24.0"
+version = "1.24.1"
 dependencies = [
  "aes-gcm 0.11.0-rc.3",
  "age",
@@ -2456,7 +2456,7 @@ dependencies = [
  "hex",
  "hkdf 0.13.0",
  "indexmap 2.14.0",
- "jsonwebtoken 10.3.0",
+ "jsonwebtoken 10.4.0",
  "keepass",
  "keyring",
  "libloading",
@@ -3909,9 +3909,9 @@ dependencies = [
 
 [[package]]
 name = "jsonwebtoken"
-version = "10.3.0"
+version = "10.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0529410abe238729a60b108898784df8984c87f6054c9c4fcacc47e4803c1ce1"
+checksum = "eba32bfb4ffdeaca3e34431072faf01745c9b26d25504aa7a6cf5684334fc4fc"
 dependencies = [
  "aws-lc-rs",
  "base64 0.22.1",
@@ -3922,6 +3922,7 @@ dependencies = [
  "serde_json",
  "signature 2.2.0",
  "simple_asn1",
+ "zeroize",
 ]
 
 [[package]]
@@ -4280,9 +4281,9 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.31.2"
+version = "0.31.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d6d0705320c1e6ba1d912b5e37cf18071b6c2e9b7fa8215a1e8a7651966f5d3"
+checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
 dependencies = [
  "bitflags 2.11.1",
  "cfg-if",
@@ -8383,9 +8384,9 @@ dependencies = [
 
 [[package]]
 name = "zerofrom"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69faa1f2a1ea75661980b013019ed6687ed0e83d069bc1114e2cc74c6c04c4df"
+checksum = "0ec05a11813ea801ff6d75110ad09cd0824ddba17dfe17128ea0d5f68e6c5272"
 dependencies = [
  "zerofrom-derive",
 ]

@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.24.1](https://github.com/jdx/fnox/compare/v1.24.0..v1.24.1) - 2026-05-12
+
+### 🐛 Bug Fixes
+
+- **(config)** preserve secret table formatting by [@jdx](https://github.com/jdx) in [#467](https://github.com/jdx/fnox/pull/467)
+- **(shell)** prevent shell expansion of secret values in bash/zsh activation by [@jdx](https://github.com/jdx) in [#473](https://github.com/jdx/fnox/pull/473)
+
+### 📚 Documentation
+
+- clarify mise env plugin status by [@jdx](https://github.com/jdx) in [#472](https://github.com/jdx/fnox/pull/472)
+
+### 🛡️ Security
+
+- **(ci)** assert mise run render produces no diff by [@jdx](https://github.com/jdx) in [#479](https://github.com/jdx/fnox/pull/479)
+- **(ci)** add zizmor workflow for github actions security analysis by [@jdx](https://github.com/jdx) in [#480](https://github.com/jdx/fnox/pull/480)
+
+### 🔍 Other Changes
+
+- **(ci)** remove autofix.ci workflow by [@jdx](https://github.com/jdx) in [#478](https://github.com/jdx/fnox/pull/478)
+- remove pull_request_target workflow by [@jdx](https://github.com/jdx) in [#476](https://github.com/jdx/fnox/pull/476)
+- remove caching from publishing workflows by [@jdx](https://github.com/jdx) in [#477](https://github.com/jdx/fnox/pull/477)
+
+### 📦️ Dependency Updates
+
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#475](https://github.com/jdx/fnox/pull/475)
+
 ## [1.24.0](https://github.com/jdx/fnox/compare/v1.23.1..v1.24.0) - 2026-05-06
 
 ### 🚀 Features
