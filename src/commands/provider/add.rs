@@ -189,6 +189,14 @@ impl AddCommand {
                 token: OptionStringOrSecretRef::none(),
                 auth_command: None,
             },
+            ProviderType::Foks => crate::config::ProviderConfig::Foks {
+                prefix: OptionStringOrSecretRef::literal("/fnox/"),
+                team: OptionStringOrSecretRef::none(),
+                home: OptionStringOrSecretRef::none(),
+                host: OptionStringOrSecretRef::none(),
+                bot_token: OptionStringOrSecretRef::none(),
+                auth_command: None,
+            },
             ProviderType::Infisical => crate::config::ProviderConfig::Infisical {
                 project_id: OptionStringOrSecretRef::literal("your-project-id"),
                 environment: OptionStringOrSecretRef::literal("dev"),

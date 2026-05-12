@@ -1,0 +1,45 @@
+# FOKS provider - Federated Open Key Service
+display_name = "FOKS"
+serde_rename = "foks"
+rust_variant = "Foks"
+category = "CloudSecretsManager"
+description = "End-to-end encrypted, federated/self-hostable KV store"
+default_name = "foks"
+auth_command = "foks ctl start"
+setup_instructions = """
+Requires the foks CLI: see https://foks.pub for install options
+  macOS:           brew install foks
+  Debian/Ubuntu:   curl -fsSL https://pkgs.foks.pub/install.sh | sh && apt-get install foks
+  Static binary:   curl -fsSL https://pkgs.foks.pub/install-static.sh | sh
+Start the agent: foks ctl start
+Sign up or log in: foks signup (or foks login)"""
+
+[fields.prefix]
+type = "optional"
+placeholder = "/fnox/"
+label = "KV path prefix (optional, absolute):"
+wizard = true
+
+[fields.team]
+type = "optional"
+placeholder = ""
+label = "FOKS team (optional, defaults to personal):"
+wizard = true
+
+[fields.home]
+type = "optional"
+placeholder = ""
+label = "FOKS home directory (optional):"
+wizard = false
+
+[fields.host]
+type = "optional"
+placeholder = "foks.app"
+label = "FOKS host (required when using bot_token, e.g. CI):"
+wizard = false
+
+[fields.bot_token]
+type = "optional"
+placeholder = ""
+label = "Bot token for non-interactive auth (CI; falls back to FOKS_BOT_TOKEN):"
+wizard = false

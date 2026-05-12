@@ -61,6 +61,9 @@ pub enum ProviderType {
     /// Doppler secrets manager
     #[value(name = "doppler")]
     Doppler,
+    /// FOKS (Federated Open Key Service)
+    #[value(name = "foks")]
+    Foks,
     /// Bitwarden Secrets Manager
     #[value(name = "bitwarden-sm")]
     #[strum(serialize = "bitwarden-sm")]

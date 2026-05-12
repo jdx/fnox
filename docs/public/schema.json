@@ -946,6 +946,35 @@
             "auth_command": {
               "type": ["string", "null"]
             },
+            "bot_token": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "home": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "host": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "prefix": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "team": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "foks"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
