@@ -5,6 +5,10 @@ on:
   pull_request:
     paths: ['.github/workflows/**']
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions: {}
 
 jobs:
