@@ -37,7 +37,8 @@ jobs:
       - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4
         with:
           cache: false
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      # save-if: false — this job never saves to cache, only restores from main's cache.
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2 # zizmor: ignore[cache-poisoning]
         with:
           shared-key: debug-${{ matrix.os }}
           save-if: false
@@ -226,7 +227,8 @@ jobs:
       - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4
         with:
           cache: false
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      # save-if: only saves on main pushes, so PRs cannot poison the cache.
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2 # zizmor: ignore[cache-poisoning]
         with:
           shared-key: debug-${{ matrix.os }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -293,7 +295,8 @@ jobs:
         with:
           submodules: recursive
           persist-credentials: false
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      # save-if: only saves on main pushes, so PRs cannot poison the cache.
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2 # zizmor: ignore[cache-poisoning]
         with:
           shared-key: msrv
           save-if: ${{ github.ref == 'refs/heads/main' }}

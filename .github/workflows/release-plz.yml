@@ -21,9 +21,9 @@ jobs:
   release-plz:
     runs-on: ubuntu-latest
     steps:
-      # zizmor: ignore[artipacked] release-plz pushes tags and the release branch via `git push`,
-      # which needs the token persisted in the git config. The token is a scoped FNOX_GH_TOKEN.
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      # release-plz pushes tags and the release branch via `git push`, which needs the scoped
+      # FNOX_GH_TOKEN persisted in the git config.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6 # zizmor: ignore[artipacked]
         with:
           fetch-depth: 0
           token: ${{ secrets.FNOX_GH_TOKEN }}
