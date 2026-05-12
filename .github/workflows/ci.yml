@@ -15,8 +15,12 @@ env:
   CARGO_TERM_COLOR: always
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+permissions: {}
+
 jobs:
   build:
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -29,11 +33,15 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           submodules: recursive
+          persist-credentials: false
       - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4
+        with:
+          cache: false
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           shared-key: debug-${{ matrix.os }}
           save-if: false
+          lookup-only: true
       - name: Install system dependencies (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
@@ -48,6 +56,8 @@ jobs:
 
   ci-bats:
     needs: build
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -63,7 +73,10 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           submodules: recursive
+          persist-credentials: false
       - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4
+        with:
+          cache: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: fnox-${{ matrix.os }}
@@ -196,6 +209,8 @@ jobs:
 
   ci-other:
     needs: build
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -208,11 +223,15 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           submodules: recursive
+          persist-credentials: false
       - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4
+        with:
+          cache: false
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           shared-key: debug-${{ matrix.os }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          lookup-only: true
       - name: Install system dependencies (Ubuntu)
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
@@ -259,15 +278,21 @@ jobs:
   msrv:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           submodules: recursive
+          persist-credentials: false
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           shared-key: msrv
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          lookup-only: true
       - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4
+        with:
+          cache: false
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
       # cargo-msrv doesn't accept --workspace; verifying the binary's MSRV
@@ -275,6 +300,7 @@ jobs:
       - run: cargo msrv verify
 
   final:
+    permissions: {}
     needs:
       - ci-bats
       - ci-other

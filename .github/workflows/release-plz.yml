@@ -25,6 +25,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.FNOX_GH_TOKEN }}
+          persist-credentials: false
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -32,6 +33,7 @@ jobs:
       - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4
         with:
           experimental: true
+          cache: false
       - run: mise trust --all
       - name: Install Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code
