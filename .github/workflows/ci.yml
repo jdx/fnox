@@ -41,7 +41,6 @@ jobs:
         with:
           shared-key: debug-${{ matrix.os }}
           save-if: false
-          lookup-only: true
       - name: Install system dependencies (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
@@ -231,7 +230,6 @@ jobs:
         with:
           shared-key: debug-${{ matrix.os }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
-          lookup-only: true
       - name: Install system dependencies (Ubuntu)
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
@@ -299,7 +297,6 @@ jobs:
         with:
           shared-key: msrv
           save-if: ${{ github.ref == 'refs/heads/main' }}
-          lookup-only: true
       - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4
         with:
           cache: false

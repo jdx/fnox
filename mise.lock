@@ -127,6 +127,7 @@ url_api = "https://api.github.com/repos/endevco/aube/releases/assets/400209774"
 checksum = "sha256:61dfe2ece14a188da9b92510ba8c8c6584b21c865840588b25cb585e62bd23e3"
 url = "https://github.com/endevco/aube/releases/download/v1.0.0-beta.7/aube-v1.0.0-beta.7-aarch64-apple-darwin.tar.gz"
 url_api = "https://api.github.com/repos/endevco/aube/releases/assets/400209304"
+provenance = "github-attestations"
 
 [tools.aube."platforms.windows-x64"]
 checksum = "sha256:1a158bc6f0f3e16e43d81bd233ef5652f16244649559487fec08cb1c269456c9"
@@ -258,6 +259,7 @@ url_api = "https://api.github.com/repos/jdx/communique/releases/assets/405964691
 checksum = "sha256:459993e31a6c4ccbd09882f5679a2bc1ea5d9068701ecefc411a00fb69ce82e6"
 url = "https://github.com/jdx/communique/releases/download/v1.1.2/communique-aarch64-apple-darwin.tar.gz"
 url_api = "https://api.github.com/repos/jdx/communique/releases/assets/405964098"
+provenance = "github-attestations"
 
 [tools.communique."platforms.windows-x64"]
 checksum = "sha256:3cc0e880ac2168aed3163223627bbd1eee62e07a9901cb85cb507c6c8927bc93"
@@ -342,6 +344,7 @@ url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/398851172"
 checksum = "sha256:a9dbb398ba6538c4583b418854df8b6f3dd2c2fc6c7592042fbfc1f49de97b41"
 url = "https://github.com/Infisical/cli/releases/download/v0.43.76/cli_0.43.76_linux_amd64.tar.gz"
 url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/398851234"
+github_attestations = "unavailable"
 
 [tools.infisical."platforms.linux-x64-musl"]
 checksum = "sha256:a9dbb398ba6538c4583b418854df8b6f3dd2c2fc6c7592042fbfc1f49de97b41"
@@ -352,6 +355,7 @@ url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/398851234"
 checksum = "sha256:a3a38a34ca32822beb59d6ef9458e29b39611e42ac3aa149575beea1172252aa"
 url = "https://github.com/Infisical/cli/releases/download/v0.43.76/cli_0.43.76_darwin_arm64.tar.gz"
 url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/398851174"
+github_attestations = "unavailable"
 
 [tools.infisical."platforms.macos-x64"]
 checksum = "sha256:41f6b3c1a8b879ad564329f43f803436e2b3e8621d97c43e561e718dca767235"
