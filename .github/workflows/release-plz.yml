@@ -25,10 +25,6 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.FNOX_GH_TOKEN }}
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        with:
-          shared-key: debug-ubuntu-latest
-          save-if: false
       - name: Install system dependencies
         run: |
           sudo apt-get update
