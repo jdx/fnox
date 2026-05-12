@@ -79,7 +79,6 @@ depends = ["build"]
 run = [
   "fnox schema > docs/public/schema.json",
   "prettier --write docs/public/schema.json",
-  "git add docs/public/schema.json",
 ]
 
 [tasks."render:usage"]
@@ -91,5 +90,4 @@ run = [
   "usage g markdown -mf fnox.usage.kdl --out-dir docs/cli --url-prefix /cli",
   "usage g json -f fnox.usage.kdl > docs/cli/commands.json",
   "prettier --write docs/cli",
-  "git add fnox.usage.kdl docs/cli",
 ]
