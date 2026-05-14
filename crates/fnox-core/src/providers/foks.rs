@@ -166,7 +166,11 @@ impl FoksProvider {
                 url: PROVIDER_URL.to_string(),
             })?;
 
-        Ok(stdout.trim().to_string())
+        // Only strip the trailing newline that `foks kv get` appends for
+        // terminal display; preserve any other whitespace (including leading
+        // and embedded spaces) so secrets like `" pw "` or `"line1\nline2"`
+        // round-trip intact.
+        Ok(stdout.trim_end_matches(['\n', '\r']).to_string())
     }
 
     /// Run a `foks kv ...` command, transparently retrying once after a
