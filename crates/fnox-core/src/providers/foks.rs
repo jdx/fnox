@@ -432,10 +432,15 @@ const AUTH_ERROR_PATTERNS: &[&str] = &[
 /// Patterns that indicate the requested KV entry does not exist. FOKS uses
 /// "no rows in result set" (a postgres-style message bubbling up from the
 /// server) and the more user-facing "not found" / "no such" wording.
+///
+/// Deliberately excludes the generic POSIX phrase "no such file or
+/// directory": FOKS surfaces that from underlying OS errors like a missing
+/// agent socket, which is an auth-recoverable condition, not a missing
+/// secret. Letting it match here would suppress the bot-token auto-login
+/// retry path.
 const SECRET_NOT_FOUND_PATTERNS: &[&str] = &[
     "no rows in result set",
     "not found",
-    "no such file or directory",
     "no such key",
     "does not exist",
 ];
