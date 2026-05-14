@@ -5,6 +5,18 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> miette::Result<()> {
+    // Restore the default SIGPIPE handler. Rust inherits SIG_IGN from libc,
+    // so writes to a closed pipe return EPIPE and `println!` panics — e.g.
+    // `fnox get FOO | head -c 0` would crash with "failed printing to stdout".
+    // SIG_DFL makes the process exit on the signal like a normal Unix tool.
+    #[cfg(unix)]
+    unsafe {
+        let _ = nix::sys::signal::signal(
+            nix::sys::signal::Signal::SIGPIPE,
+            nix::sys::signal::SigHandler::SigDfl,
+        );
+    }
+
     miette::set_panic_hook();
 
     // Initialize rustls crypto provider for GCP SDKs
