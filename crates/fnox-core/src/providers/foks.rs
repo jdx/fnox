@@ -58,11 +58,6 @@ impl FoksProvider {
     /// `/fnox/` all map to `/fnox`.
     fn build_secret_path(&self, key: &str) -> String {
         let normalized_key = key.trim_start_matches('/');
-        let normalized_key = if normalized_key.is_empty() {
-            ""
-        } else {
-            normalized_key
-        };
 
         match &self.prefix {
             Some(prefix) => {
