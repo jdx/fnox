@@ -529,6 +529,16 @@ mod tests {
     }
 
     #[test]
+    fn build_secret_path_absolute_key_is_still_joined_under_prefix() {
+        // When a prefix is configured, a leading `/` on the key does NOT
+        // escape the prefix; the key is always namespaced under the prefix.
+        // This is intentional so prefix-scoped configs can't be accidentally
+        // bypassed by a value that happens to start with `/`.
+        let p = provider(Some("/fnox/"), None, None);
+        assert_eq!(p.build_secret_path("/explicit/path"), "/fnox/explicit/path");
+    }
+
+    #[test]
     fn common_args_empty_by_default() {
         let p = provider(None, None, None);
         assert!(p.common_args().is_empty());
