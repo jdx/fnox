@@ -199,20 +199,30 @@ impl FoksProvider {
 
         let mut child = cmd.spawn().map_err(map_spawn_error)?;
 
-        if let Some(mut stdin) = child.stdin.take() {
-            use tokio::io::AsyncWriteExt;
-            stdin
-                .write_all(value.as_bytes())
-                .await
-                .map_err(|e| FnoxError::ProviderCliFailed {
-                    provider: PROVIDER_NAME.to_string(),
-                    details: format!("Failed to write secret to foks stdin: {e}"),
-                    hint: "This is an internal error".to_string(),
-                    url: PROVIDER_URL.to_string(),
-                })?;
-            // Closing stdin signals EOF; foks treats EOF as end-of-value.
-            drop(stdin);
-        }
+        // stdin was configured as `piped()` above, so `take()` should always
+        // return `Some`. If it doesn't, fail loudly instead of silently
+        // skipping the write and blocking forever on `wait_with_output`.
+        let mut stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| FnoxError::ProviderCliFailed {
+                provider: PROVIDER_NAME.to_string(),
+                details: "foks child process did not expose a piped stdin".to_string(),
+                hint: "This is an internal error".to_string(),
+                url: PROVIDER_URL.to_string(),
+            })?;
+        use tokio::io::AsyncWriteExt;
+        stdin
+            .write_all(value.as_bytes())
+            .await
+            .map_err(|e| FnoxError::ProviderCliFailed {
+                provider: PROVIDER_NAME.to_string(),
+                details: format!("Failed to write secret to foks stdin: {e}"),
+                hint: "This is an internal error".to_string(),
+                url: PROVIDER_URL.to_string(),
+            })?;
+        // Closing stdin signals EOF; foks treats EOF as end-of-value.
+        drop(stdin);
 
         let output = child
             .wait_with_output()
