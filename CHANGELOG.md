@@ -1,6 +1,21 @@
 # Changelog
 
-## [1.24.1](https://github.com/jdx/fnox/compare/v1.24.0..v1.24.1) - 2026-05-12
+## [1.25.0](https://github.com/jdx/fnox/compare/v1.24.1..v1.25.0) - 2026-05-14
+
+### 🚀 Features
+
+- **(provider)** add FOKS (Federated Open Key Service) provider by [@maxtaco](https://github.com/maxtaco) in [#486](https://github.com/jdx/fnox/pull/486)
+
+### 🐛 Bug Fixes
+
+- **(cli)** exit cleanly on SIGPIPE instead of panicking in println! by [@maxtaco](https://github.com/maxtaco) in [#487](https://github.com/jdx/fnox/pull/487)
+- **(docs)** read version from [workspace.package] in Cargo.toml by [@jdx](https://github.com/jdx) in [#483](https://github.com/jdx/fnox/pull/483)
+
+### New Contributors
+
+- @maxtaco made their first contribution in [#486](https://github.com/jdx/fnox/pull/486)
+
+## [1.24.1](https://github.com/jdx/fnox/compare/v1.24.0..v1.24.1) - 2026-05-13
 
 ### 🐛 Bug Fixes
 

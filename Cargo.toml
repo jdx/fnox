@@ -3,7 +3,7 @@ members = [".", "crates/fnox-core"]
 resolver = "3"
 
 [workspace.package]
-version = "1.24.1"
+version = "1.25.0"
 edition = "2024"
 authors = ["@jdx"]
 license = "MIT"
@@ -107,7 +107,7 @@ name = "fnox"
 path = "src/main.rs"
 
 [dependencies]
-fnox-core = { path = "crates/fnox-core", version = "1.24.1" }
+fnox-core = { path = "crates/fnox-core", version = "1.25.0" }
 
 # Direct dependencies of the CLI binary (commands, MCP server, TUI, hook-env,
 # shell integration). Provider/config/secret-resolver crates are pulled in
