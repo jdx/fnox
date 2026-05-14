@@ -11,9 +11,13 @@ async fn main() -> miette::Result<()> {
     // SIG_DFL makes the process exit on the signal like a normal Unix tool.
     #[cfg(unix)]
     unsafe {
-        let _ = nix::sys::signal::signal(
+        let _ = nix::sys::signal::sigaction(
             nix::sys::signal::Signal::SIGPIPE,
-            nix::sys::signal::SigHandler::SigDfl,
+            &nix::sys::signal::SigAction::new(
+                nix::sys::signal::SigHandler::SigDfl,
+                nix::sys::signal::SaFlags::empty(),
+                nix::sys::signal::SigSet::empty(),
+            ),
         );
     }
 
