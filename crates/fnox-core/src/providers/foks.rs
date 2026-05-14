@@ -648,17 +648,20 @@ mod tests {
         assert!(deps.contains(&"FNOX_FOKS_BOT_TOKEN"));
     }
 
+    // The env-mutating tests below route through `env::set_var` so writes
+    // serialize on ENV_MUTEX in crate::env. They never call `remove_var`;
+    // `resolve_with_env` treats empty strings as absent (matching the
+    // wizard's behavior), so setting a var to "" is the test-equivalent of
+    // unsetting it without needing a raw `unsafe { std::env::remove_var }`.
+
     #[test]
     fn resolve_with_env_prefers_explicit() {
-        // Set the env var to a sentinel; explicit value should still win.
-        // SAFETY: tests run single-threaded for env mutation; this test name
-        // is unique within the suite.
-        // We use a unique env-var name per test to avoid cross-test races.
+        // Unique env-var name per test to avoid name collisions with other
+        // env-mutating tests in this crate.
         let env_name = "FNOX_FOKS_RESOLVE_TEST_EXPLICIT";
-        // SAFETY: safe in tests; we restore with remove_var on each branch.
-        unsafe { std::env::set_var(env_name, "from-env") };
+        env::set_var(env_name, "from-env");
         let r = resolve_with_env(Some("from-config"), &[env_name]);
-        unsafe { std::env::remove_var(env_name) };
+        env::set_var(env_name, "");
         assert_eq!(r.as_deref(), Some("from-config"));
     }
 
@@ -666,13 +669,10 @@ mod tests {
     fn resolve_with_env_falls_back_to_first_set_env() {
         let primary = "FNOX_FOKS_RESOLVE_TEST_PRIMARY";
         let secondary = "FNOX_FOKS_RESOLVE_TEST_SECONDARY";
-        // SAFETY: see above.
-        unsafe {
-            std::env::remove_var(primary);
-            std::env::set_var(secondary, "fallback");
-        }
+        env::set_var(primary, "");
+        env::set_var(secondary, "fallback");
         let r = resolve_with_env(None, &[primary, secondary]);
-        unsafe { std::env::remove_var(secondary) };
+        env::set_var(secondary, "");
         assert_eq!(r.as_deref(), Some("fallback"));
     }
 
@@ -680,10 +680,9 @@ mod tests {
     fn resolve_with_env_treats_empty_string_as_absent() {
         // Empty string from the wizard should NOT shadow a set env var.
         let env_name = "FNOX_FOKS_RESOLVE_TEST_EMPTY";
-        // SAFETY: see above.
-        unsafe { std::env::set_var(env_name, "from-env") };
+        env::set_var(env_name, "from-env");
         let r = resolve_with_env(Some(""), &[env_name]);
-        unsafe { std::env::remove_var(env_name) };
+        env::set_var(env_name, "");
         assert_eq!(r.as_deref(), Some("from-env"));
     }
 
@@ -702,14 +701,13 @@ mod tests {
     #[tokio::test]
     async fn try_auto_login_for_skips_when_no_bot_token() {
         // `resolved_bot_token` reads FOKS_BOT_TOKEN / FNOX_FOKS_BOT_TOKEN
-        // from the process env; clear them so a contributor with the var
-        // set in their shell doesn't get a spurious failure.
-        // SAFETY: tests in fnox-core that touch env vars do so unsynchronized;
-        // no other test in this crate reads these specific vars.
-        unsafe {
-            std::env::remove_var("FOKS_BOT_TOKEN");
-            std::env::remove_var("FNOX_FOKS_BOT_TOKEN");
-        }
+        // from the process env; force them empty so a contributor with the
+        // var set in their shell doesn't get a spurious failure.
+        // `resolve_with_env` treats empty strings as absent, so this is
+        // equivalent to unsetting them for the resolution logic, while
+        // still serializing through ENV_MUTEX via env::set_var.
+        env::set_var("FOKS_BOT_TOKEN", "");
+        env::set_var("FNOX_FOKS_BOT_TOKEN", "");
         let p = provider(None, None, None);
         let err = FnoxError::ProviderAuthFailed {
             provider: PROVIDER_NAME.to_string(),
