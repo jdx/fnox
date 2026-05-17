@@ -1,6 +1,16 @@
 # Changelog
 
+## [1.25.2](https://github.com/jdx/fnox/compare/v1.25.1..v1.25.2) - 2026-05-17
+
+### 🔍 Other Changes
+
+- **(release-plz)** drop cargo update from release PR by [@jdx](https://github.com/jdx) in [#496](https://github.com/jdx/fnox/pull/496)
+
 ## [1.25.1](https://github.com/jdx/fnox/compare/v1.25.0..v1.25.1) - 2026-05-17
+
+### 🐛 Bug Fixes
+
+- **(keychain)** run blocking calls on spawn_blocking; batch serially by [@jdx](https://github.com/jdx) in [#495](https://github.com/jdx/fnox/pull/495)
 
 ### 🔍 Other Changes
 
