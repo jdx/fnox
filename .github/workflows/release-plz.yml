@@ -3,6 +3,7 @@ name: release-plz
 permissions:
   pull-requests: write
   contents: write
+  id-token: write # crates.io trusted publishing
 
 on:
   workflow_dispatch: {}
@@ -38,8 +39,10 @@ jobs:
       - run: mise trust --all
       - name: Install Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code
+      - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
+        id: crates-io-auth
       - run: mise run release-plz
         env:
           GITHUB_TOKEN: ${{ secrets.FNOX_GH_TOKEN }}
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
