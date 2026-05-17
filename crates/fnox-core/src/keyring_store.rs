@@ -6,16 +6,25 @@
 //! does that lazily on first use so both the keychain provider and the
 //! github_oauth lease backend can call `init()` without worrying about order.
 
-use std::sync::Once;
+use std::sync::Mutex;
 
-static INIT: Once = Once::new();
+// Only flips to `true` once `try_init` succeeds. A `Mutex<bool>` (rather than
+// `std::sync::Once`) lets a transient failure — e.g. D-Bus not yet ready on
+// Linux — be retried on the next call instead of being latched in for the
+// process lifetime.
+static INITIALIZED: Mutex<bool> = Mutex::new(false);
 
-pub fn init() {
-    INIT.call_once(|| {
-        if let Err(e) = try_init() {
-            tracing::warn!("Failed to initialize OS keyring store: {e}");
-        }
-    });
+pub(crate) fn init() {
+    let mut done = INITIALIZED
+        .lock()
+        .expect("keyring store init mutex poisoned");
+    if *done {
+        return;
+    }
+    match try_init() {
+        Ok(()) => *done = true,
+        Err(e) => tracing::warn!("Failed to initialize OS keyring store: {e}"),
+    }
 }
 
 #[cfg(target_os = "macos")]

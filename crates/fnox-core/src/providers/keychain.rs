@@ -104,6 +104,12 @@ impl crate::providers::Provider for KeychainProvider {
                 hint: "Check that the keychain is unlocked and accessible".to_string(),
                 url: "https://fnox.jdx.dev/providers/keychain".to_string(),
             },
+            keyring_core::Error::NoDefaultStore => FnoxError::ProviderAuthFailed {
+                provider: "Keychain".to_string(),
+                details: e.to_string(),
+                hint: platform_backend_hint().to_string(),
+                url: "https://fnox.jdx.dev/providers/keychain".to_string(),
+            },
             _ => FnoxError::ProviderApiError {
                 provider: "Keychain".to_string(),
                 details: e.to_string(),
@@ -157,6 +163,27 @@ impl crate::providers::Provider for KeychainProvider {
         self.put_secret(key, value).await?;
         // Return the key name to store in config
         Ok(key.to_string())
+    }
+}
+
+fn platform_backend_hint() -> &'static str {
+    #[cfg(target_os = "linux")]
+    {
+        "No OS keyring backend is available. Start a Secret Service provider \
+         (e.g. gnome-keyring or KeePassXC) and make sure DBUS_SESSION_BUS_ADDRESS \
+         is set."
+    }
+    #[cfg(target_os = "macos")]
+    {
+        "Failed to initialize the macOS Keychain backend."
+    }
+    #[cfg(target_os = "windows")]
+    {
+        "Failed to initialize the Windows Credential Manager backend."
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        "The keychain provider is not supported on this platform."
     }
 }
 
