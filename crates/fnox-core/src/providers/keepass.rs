@@ -2,7 +2,7 @@ use crate::error::{FnoxError, Result};
 use crate::providers::ProviderCapability;
 use async_trait::async_trait;
 use keepass::DatabaseKey;
-use keepass::db::{Database, Entry, Group, Value};
+use keepass::db::{Database, EntryId, GroupId, GroupRef};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -228,74 +228,70 @@ impl KeePassProvider {
         }
     }
 
-    /// Find an entry by path in the database
-    /// If path has multiple parts, navigate through groups
-    /// If path has one part, search all entries for matching title
-    fn find_entry<'a>(group: &'a Group, path: &[&str]) -> Option<&'a Entry> {
+    /// Find an entry id by path in the database.
+    ///
+    /// Path segments before the last name exact-named subgroups to navigate into;
+    /// the final segment is searched recursively by entry title inside the
+    /// navigated group (matching the pre-0.12 lookup behavior).
+    fn find_entry_id(db: &Database, path: &[&str]) -> Option<EntryId> {
+        Self::walk_group(db.root(), path)
+    }
+
+    fn walk_group(group: GroupRef<'_>, path: &[&str]) -> Option<EntryId> {
         if path.is_empty() {
             return None;
         }
-
         if path.len() == 1 {
-            // Search for entry by title in this group and all subgroups
-            let entry_name = path[0];
-            Self::find_entry_by_title(group, entry_name)
+            Self::find_entry_id_by_title(group, path[0])
         } else {
-            // Navigate to subgroup first
-            let group_name = path[0];
-            for subgroup in &group.groups {
-                if subgroup.name == group_name {
-                    return Self::find_entry(subgroup, &path[1..]);
-                }
-            }
-            None
+            let subgroup = group.groups().find(|g| g.name == path[0])?;
+            Self::walk_group(subgroup, &path[1..])
         }
     }
 
-    /// Search for an entry by title in a group and all its subgroups
-    fn find_entry_by_title<'a>(group: &'a Group, title: &str) -> Option<&'a Entry> {
-        for entry in &group.entries {
+    /// Recursively search for an entry by title within a group and its subgroups.
+    fn find_entry_id_by_title(group: GroupRef<'_>, title: &str) -> Option<EntryId> {
+        for entry in group.entries() {
             if entry.get_title() == Some(title) {
-                return Some(entry);
+                return Some(entry.id());
             }
         }
-        for subgroup in &group.groups {
-            if let Some(entry) = Self::find_entry_by_title(subgroup, title) {
-                return Some(entry);
+        for subgroup in group.groups() {
+            if let Some(id) = Self::find_entry_id_by_title(subgroup, title) {
+                return Some(id);
             }
         }
         None
     }
 
-    /// Search for an entry by title in a group and all its subgroups (mutable version)
-    fn find_entry_by_title_mut<'a>(group: &'a mut Group, title: &str) -> Option<&'a mut Entry> {
-        // First check if entry is in this group's direct entries
-        let found_entry_idx = group
-            .entries
-            .iter()
-            .position(|e| e.get_title() == Some(title));
-
-        if let Some(idx) = found_entry_idx {
-            return Some(&mut group.entries[idx]);
+    /// Walk the group path from the root, creating any missing groups along the
+    /// way, and return the id of the deepest group.
+    fn navigate_or_create_group_path(db: &mut Database, group_path: &[&str]) -> GroupId {
+        let mut current_id = db.root().id();
+        for name in group_path {
+            let next_id = db
+                .group(current_id)
+                .expect("current group exists")
+                .groups()
+                .find(|g| &g.name == name)
+                .map(|g| g.id());
+            current_id = match next_id {
+                Some(id) => id,
+                None => {
+                    let mut group_mut = db.group_mut(current_id).expect("current group exists");
+                    let mut new_group = group_mut.add_group();
+                    new_group.name = (*name).to_string();
+                    new_group.as_ref().id()
+                }
+            };
         }
-
-        // Check subgroups
-        let found_in_subgroup_idx = group
-            .groups
-            .iter()
-            .position(|sg| Self::find_entry_by_title(sg, title).is_some());
-
-        if let Some(idx) = found_in_subgroup_idx {
-            return Self::find_entry_by_title_mut(&mut group.groups[idx], title);
-        }
-
-        None
+        current_id
     }
 
-    /// Find or create entry by path for writing
-    /// Returns the entry name (title) that was used
+    /// Find or create entry by path for writing.
+    /// Returns the entry name (title) that was used.
     fn find_or_create_entry(
-        group: &mut Group,
+        db: &mut Database,
         path: &[&str],
         value: &str,
         field: &str,
@@ -319,50 +315,37 @@ impl KeePassProvider {
             });
         }
 
-        // Use Protected for Password field (in-memory encryption and proper KDBX marking)
-        let field_value = if field == "Password" {
-            Value::protected(value.to_string())
-        } else {
-            Value::Unprotected(value.to_string())
-        };
+        let entry_name = path[path.len() - 1];
+        let group_path = &path[..path.len() - 1];
+        let target_group_id = Self::navigate_or_create_group_path(db, group_path);
 
-        if path.len() == 1 {
-            // Create or update entry in this group or any subgroup (recursive search)
-            let entry_name = path[0];
+        // Look for an existing entry by title recursively under target group.
+        let existing_id = Self::find_entry_id_by_title(
+            db.group(target_group_id).expect("target group exists"),
+            entry_name,
+        );
 
-            // Look for existing entry recursively
-            if let Some(entry) = Self::find_entry_by_title_mut(group, entry_name) {
-                // Update existing entry
-                entry.fields.insert(field.to_string(), field_value);
-                return Ok(entry_name.to_string());
+        if let Some(eid) = existing_id {
+            let mut entry_mut = db.entry_mut(eid).expect("entry exists");
+            // Use protected storage for the Password field (in-memory encryption
+            // and proper KDBX marking); other fields are unprotected.
+            if field == "Password" {
+                entry_mut.set_protected(field, value);
+            } else {
+                entry_mut.set_unprotected(field, value);
             }
-
-            // Create new entry in current group
-            let mut entry = Entry::new();
-            entry.fields.insert(
-                "Title".to_string(),
-                Value::Unprotected(entry_name.to_string()),
-            );
-            entry.fields.insert(field.to_string(), field_value);
-            group.entries.push(entry);
-            Ok(entry_name.to_string())
         } else {
-            // Navigate to or create subgroup
-            let group_name = path[0];
-
-            // Look for existing group
-            for subgroup in &mut group.groups {
-                if subgroup.name == group_name {
-                    return Self::find_or_create_entry(subgroup, &path[1..], value, field);
-                }
+            let mut group_mut = db.group_mut(target_group_id).expect("target group exists");
+            let mut entry_mut = group_mut.add_entry();
+            entry_mut.set_unprotected("Title", entry_name);
+            if field == "Password" {
+                entry_mut.set_protected(field, value);
+            } else {
+                entry_mut.set_unprotected(field, value);
             }
-
-            // Create new group
-            let mut new_group = Group::new(group_name);
-            let result = Self::find_or_create_entry(&mut new_group, &path[1..], value, field)?;
-            group.groups.push(new_group);
-            Ok(result)
         }
+
+        Ok(entry_name.to_string())
     }
 }
 
@@ -384,7 +367,7 @@ impl crate::providers::Provider for KeePassProvider {
 
         let db = self.open_database()?;
 
-        let entry = Self::find_entry(&db.root, &entry_path).ok_or_else(|| {
+        let entry_id = Self::find_entry_id(&db, &entry_path).ok_or_else(|| {
             FnoxError::ProviderSecretNotFound {
                 provider: "KeePass".to_string(),
                 secret: entry_path.join("/"),
@@ -392,6 +375,7 @@ impl crate::providers::Provider for KeePassProvider {
                 url: "https://fnox.jdx.dev/providers/keepass".to_string(),
             }
         })?;
+        let entry = db.entry(entry_id).expect("entry exists");
 
         entry
             .get(field)
@@ -428,11 +412,11 @@ impl crate::providers::Provider for KeePassProvider {
                 "Creating new KeePass database at '{}'",
                 self.database_path.display()
             );
-            Database::new(keepass::config::DatabaseConfig::default())
+            Database::new()
         };
 
         // Find or create the entry
-        let entry_name = Self::find_or_create_entry(&mut db.root, &entry_path, value, field)?;
+        let entry_name = Self::find_or_create_entry(&mut db, &entry_path, value, field)?;
 
         // Save the database
         self.save_database(&db)?;
