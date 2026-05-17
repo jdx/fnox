@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.25.1](https://github.com/jdx/fnox/compare/v1.25.0..v1.25.1) - 2026-05-17
+
+### 🔍 Other Changes
+
+- **(ci)** add PR autocloser by [@jdx](https://github.com/jdx) in [#490](https://github.com/jdx/fnox/pull/490)
+- **(release-plz)** use crates.io trusted publishing by [@jdx](https://github.com/jdx) in [#491](https://github.com/jdx/fnox/pull/491)
+
+### 📦️ Dependency Updates
+
+- update keepass to 0.12 and migrate provider to new API by [@jdx](https://github.com/jdx) in [#494](https://github.com/jdx/fnox/pull/494)
+- migrate from keyring v3 to keyring-core v1 by [@jdx](https://github.com/jdx) in [#493](https://github.com/jdx/fnox/pull/493)
+
 ## [1.25.0](https://github.com/jdx/fnox/compare/v1.24.1..v1.25.0) - 2026-05-14
 
 ### 🚀 Features
