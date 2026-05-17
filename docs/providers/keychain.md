@@ -114,6 +114,33 @@ fnox get DATABASE_URL
 fnox exec -- npm run dev
 ```
 
+## Recommended: Use With Age, Not As Bulk Storage
+
+The OS keychain is designed for **a few** long-lived secrets, not as the storage backend for every secret in a project. On macOS in particular, the system pops a Security dialog the first time each application accesses each keychain item — so if you store ten secrets directly in the keychain, you'll get up to ten "Always Allow / Allow / Deny" prompts the first time `fnox exec` runs.
+
+The pattern that scales much better is to store a single **age private key** in the keychain and encrypt all your secrets with age:
+
+```toml
+[providers]
+keychain = { type = "keychain", service = "fnox" }
+age = { type = "age", recipients = ["age1..."], identity = { provider = "keychain", value = "age-key" } }
+
+[secrets]
+# Many secrets, all encrypted with age — only one keychain access (the age key)
+DATABASE_URL = { provider = "age", value = "encrypted..." }
+API_KEY      = { provider = "age", value = "encrypted..." }
+STRIPE_KEY   = { provider = "age", value = "encrypted..." }
+# ...
+```
+
+This way:
+
+- **One keychain item, one dialog.** Hitting "Always Allow" once authorizes the age key for that machine.
+- Adding more secrets is free — they go into the encrypted config, not into the keychain.
+- Loss of the keychain item is recoverable from any other machine that holds the same age identity.
+
+Reach for direct `provider = "keychain"` only for the handful of bootstrap secrets that don't have anything else to decrypt them (e.g., the age key itself, an OP service account token).
+
 ## Bootstrap Pattern
 
 A common pattern is to store provider tokens in the keychain:
