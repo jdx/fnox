@@ -28,14 +28,26 @@ impl KeychainProvider {
     fn create_entry(&self, key: &str) -> Result<Entry> {
         crate::keyring_store::init();
         let full_key = self.build_key_name(key);
-        Entry::new(&self.service, &full_key).map_err(|e| FnoxError::ProviderApiError {
-            provider: "Keychain".to_string(),
-            details: format!(
-                "Failed to create entry for service '{}', key '{}': {}",
-                self.service, full_key, e
-            ),
-            hint: "Check that the keychain is accessible".to_string(),
-            url: "https://fnox.jdx.dev/providers/keychain".to_string(),
+        Entry::new(&self.service, &full_key).map_err(|e| match e {
+            // `Entry::new` itself fails with `NoDefaultStore` when the platform
+            // backend couldn't be registered (e.g. headless Linux without
+            // Secret Service). Surface a backend-specific hint here, since the
+            // call never reaches `get_password`/`set_password`.
+            keyring_core::Error::NoDefaultStore => FnoxError::ProviderAuthFailed {
+                provider: "Keychain".to_string(),
+                details: e.to_string(),
+                hint: platform_backend_hint().to_string(),
+                url: "https://fnox.jdx.dev/providers/keychain".to_string(),
+            },
+            _ => FnoxError::ProviderApiError {
+                provider: "Keychain".to_string(),
+                details: format!(
+                    "Failed to create entry for service '{}', key '{}': {}",
+                    self.service, full_key, e
+                ),
+                hint: "Check that the keychain is accessible".to_string(),
+                url: "https://fnox.jdx.dev/providers/keychain".to_string(),
+            },
         })
     }
 
@@ -102,12 +114,6 @@ impl crate::providers::Provider for KeychainProvider {
                 provider: "Keychain".to_string(),
                 details: e.to_string(),
                 hint: "Check that the keychain is unlocked and accessible".to_string(),
-                url: "https://fnox.jdx.dev/providers/keychain".to_string(),
-            },
-            keyring_core::Error::NoDefaultStore => FnoxError::ProviderAuthFailed {
-                provider: "Keychain".to_string(),
-                details: e.to_string(),
-                hint: platform_backend_hint().to_string(),
                 url: "https://fnox.jdx.dev/providers/keychain".to_string(),
             },
             _ => FnoxError::ProviderApiError {
