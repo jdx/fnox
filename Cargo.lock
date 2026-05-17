@@ -3949,9 +3949,9 @@ dependencies = [
 
 [[package]]
 name = "keepass"
-version = "0.10.6"
+version = "0.12.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "efeccc75f644caf8e5446979eea4c14255a87718bbd9cfe1d69e8fbd56724734"
+checksum = "4b943c051b52adc273806aaa44270f1ed77bbc8cd2a01f5aba8d73ef2ec6a68f"
 dependencies = [
  "aes 0.9.0",
  "base64 0.22.1",
@@ -5140,9 +5140,9 @@ checksum = "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3"
 
 [[package]]
 name = "quick-xml"
-version = "0.39.4"
+version = "0.40.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdcc8dd4e2f670d309a5f0e83fe36dfdc05af317008fea29144da1a2ac858e5e"
+checksum = "2474bd2e5029e7ccb6abb2ba48cf2383a333851dedf495901544281590c7da7f"
 dependencies = [
  "memchr",
  "serde",
