@@ -13,7 +13,7 @@ pub mod config;
 pub mod env;
 pub mod error;
 pub mod http;
-pub mod keyring_store;
+pub(crate) mod keyring_store;
 pub mod lease;
 pub mod lease_backends;
 pub mod library;

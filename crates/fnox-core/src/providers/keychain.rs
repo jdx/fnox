@@ -147,7 +147,7 @@ impl crate::providers::Provider for KeychainProvider {
                 url: "https://fnox.jdx.dev/providers/keychain".to_string(),
             })?;
 
-        // Clean up the test entry (delete_credential in keyring v3)
+        // Clean up the test entry
         let _ = entry.delete_credential();
 
         Ok(())
