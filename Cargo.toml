@@ -50,7 +50,10 @@ hkdf = "0.13"
 indexmap = { version = "2", features = ["serde"] }
 jsonwebtoken = { version = "10", features = ["aws_lc_rs"] }
 keepass = { version = "0.12", features = ["save_kdbx4"] }
-keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+keyring-core = "1"
+apple-native-keyring-store = { version = "1", features = ["keychain"] }
+windows-native-keyring-store = "1"
+dbus-secret-service-keyring-store = { version = "1", features = ["crypto-rust", "vendored"] }
 libloading = "0.9"
 miette = { version = "7", features = ["fancy"] }
 miniz_oxide = "0.9"

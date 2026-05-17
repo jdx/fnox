@@ -40,7 +40,7 @@ hkdf = { workspace = true }
 indexmap = { workspace = true }
 jsonwebtoken = { workspace = true }
 keepass = { workspace = true }
-keyring = { workspace = true }
+keyring-core = { workspace = true }
 libloading = { workspace = true }
 miette = { workspace = true }
 pluralizer = { workspace = true }
@@ -72,7 +72,14 @@ ctap-hid-fido2 = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus = { workspace = true }
+dbus-secret-service-keyring-store = { workspace = true }
 openssl-sys = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-native-keyring-store = { workspace = true }
 
 [build-dependencies]
 indexmap = { workspace = true }

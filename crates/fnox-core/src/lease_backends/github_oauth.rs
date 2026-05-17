@@ -2,7 +2,7 @@ use crate::error::{FnoxError, Result};
 use crate::lease_backends::{Lease, LeaseBackend};
 use async_trait::async_trait;
 use indexmap::IndexMap;
-use keyring::Entry;
+use keyring_core::Entry;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -109,6 +109,7 @@ impl GitHubOauthBackend {
     }
 
     fn keyring_entry(&self) -> Result<Entry> {
+        crate::keyring_store::init();
         Entry::new(&self.keyring_service, &self.cache_key()).map_err(|e| {
             FnoxError::ProviderApiError {
                 provider: PROVIDER.to_string(),

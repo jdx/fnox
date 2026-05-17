@@ -1,6 +1,6 @@
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
-use keyring::Entry;
+use keyring_core::Entry;
 
 pub fn env_dependencies() -> &'static [&'static str] {
     &[]
@@ -26,6 +26,7 @@ impl KeychainProvider {
 
     /// Create a keyring entry
     fn create_entry(&self, key: &str) -> Result<Entry> {
+        crate::keyring_store::init();
         let full_key = self.build_key_name(key);
         Entry::new(&self.service, &full_key).map_err(|e| FnoxError::ProviderApiError {
             provider: "Keychain".to_string(),
@@ -87,45 +88,31 @@ impl crate::providers::Provider for KeychainProvider {
             self.service
         );
 
-        entry.get_password().map_err(|e| {
-            let err_str = e.to_string();
-            // keyring errors can be: NoEntry, NoStorageAccess, PlatformFailure, etc.
-            // Linux Secret Service returns "No matching entry found in secure storage"
-            if err_str.contains("No entry")
-                || err_str.contains("No matching entry")
-                || err_str.contains("not found")
-                || err_str.contains("ItemNotFound")
-            {
-                FnoxError::ProviderSecretNotFound {
-                    provider: "Keychain".to_string(),
-                    secret: full_key.clone(),
-                    hint: format!(
-                        "Check that the secret exists in the keychain (service: '{}')",
-                        self.service
-                    ),
-                    url: "https://fnox.jdx.dev/providers/keychain".to_string(),
-                }
-            } else if err_str.contains("access")
-                || err_str.contains("permission")
-                || err_str.contains("locked")
-            {
-                FnoxError::ProviderAuthFailed {
-                    provider: "Keychain".to_string(),
-                    details: err_str,
-                    hint: "Check that the keychain is unlocked and accessible".to_string(),
-                    url: "https://fnox.jdx.dev/providers/keychain".to_string(),
-                }
-            } else {
-                FnoxError::ProviderApiError {
-                    provider: "Keychain".to_string(),
-                    details: err_str,
-                    hint: format!(
-                        "Failed to get secret from keychain (service: '{}')",
-                        self.service
-                    ),
-                    url: "https://fnox.jdx.dev/providers/keychain".to_string(),
-                }
-            }
+        entry.get_password().map_err(|e| match e {
+            keyring_core::Error::NoEntry => FnoxError::ProviderSecretNotFound {
+                provider: "Keychain".to_string(),
+                secret: full_key.clone(),
+                hint: format!(
+                    "Check that the secret exists in the keychain (service: '{}')",
+                    self.service
+                ),
+                url: "https://fnox.jdx.dev/providers/keychain".to_string(),
+            },
+            keyring_core::Error::NoStorageAccess(_) => FnoxError::ProviderAuthFailed {
+                provider: "Keychain".to_string(),
+                details: e.to_string(),
+                hint: "Check that the keychain is unlocked and accessible".to_string(),
+                url: "https://fnox.jdx.dev/providers/keychain".to_string(),
+            },
+            _ => FnoxError::ProviderApiError {
+                provider: "Keychain".to_string(),
+                details: e.to_string(),
+                hint: format!(
+                    "Failed to get secret from keychain (service: '{}')",
+                    self.service
+                ),
+                url: "https://fnox.jdx.dev/providers/keychain".to_string(),
+            },
         })
     }
 
