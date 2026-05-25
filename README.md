@@ -168,10 +168,19 @@ binary can opt out of providers they don't ship:
 # Default — every provider included (current behavior).
 cargo install fnox
 
-# Slim build: skip the KeePass provider.
-cargo install fnox --no-default-features --features all-providers
-# (`all-providers` minus any feature you don't pass).
+# Slim build: every gated provider is dropped (today: just KeePass,
+# which removes the `keepass` dependency and its transitives).
+cargo install fnox --no-default-features
+
+# Custom: drop everything but the providers you want.
+cargo install fnox --no-default-features --features keepass
 ```
+
+`--no-default-features` disables the `default` feature, which is
+`["all-providers"]`. From there, every `--features <name>` flag
+opts a single provider back in. To keep most providers but drop
+one, list the ones you want explicitly (Cargo doesn't support
+negating a feature).
 
 The feature names match the provider's `serde_rename` (and its
 descriptor file at `crates/fnox-core/providers/<name>.toml`). Features
