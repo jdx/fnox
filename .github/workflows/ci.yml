@@ -349,7 +349,13 @@ jobs:
       - name: Test (${{ matrix.combo.flags }})
         # Skips provider tests that need external services (e.g. OS
         # keyring) — those are already covered by the ci-bats matrix.
-        run: cargo test ${{ matrix.combo.flags }} --lib -- --skip providers::keychain::tests::test_keychain_set_and_get
+        #
+        # Does NOT pass `--lib`: the binary crate hosts the feature-
+        # aware drift test (`provider_add_types_match_provider_definitions`
+        # in src/commands/provider/mod.rs::tests) which is exactly the
+        # regression guard this matrix exists to exercise across
+        # feature combinations.
+        run: cargo test ${{ matrix.combo.flags }} -- --skip providers::keychain::tests::test_keychain_set_and_get
 
   final:
     permissions: {}
