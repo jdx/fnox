@@ -39,7 +39,7 @@ hex = { workspace = true }
 hkdf = { workspace = true }
 indexmap = { workspace = true }
 jsonwebtoken = { workspace = true }
-keepass = { workspace = true }
+keepass = { workspace = true, optional = true }
 keyring-core = { workspace = true }
 libloading = { workspace = true }
 miette = { workspace = true }
@@ -127,6 +127,7 @@ default = ["all-providers"]
 # pre-feature behavior; the default unless an embedder opts out.
 all-providers = ["keepass"]
 
-# Per-provider features. Empty for now; populated as each provider
-# moves to `optional = true` deps in follow-up commits.
-keepass = []
+# Per-provider features. Each enables the optional dep(s) the
+# provider needs; build.rs cfg-gates the registration code based on
+# the matching `cargo_feature` in the provider's TOML descriptor.
+keepass = ["dep:keepass"]

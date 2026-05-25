@@ -19,6 +19,7 @@ pub mod gcp_kms;
 pub mod gcp_sm;
 pub mod hw_encrypt;
 pub mod infisical;
+#[cfg(feature = "keepass")]
 pub mod keepass;
 pub mod keychain;
 pub mod onepassword;
@@ -138,13 +139,17 @@ mod generated {
         include!(concat!(env!("OUT_DIR"), "/generated/providers_methods.rs"));
     }
     pub(super) mod providers_instantiate {
-        // Need to import provider modules for instantiation
+        // Need to import provider modules for instantiation. Per-provider
+        // gated imports go in their own `#[cfg]` blocks so adding a new
+        // gated provider doesn't reshape this list.
         #[cfg(not(target_env = "musl"))]
         use super::super::fido2;
+        #[cfg(feature = "keepass")]
+        use super::super::keepass;
         use super::super::{
             age, aws_kms, aws_ps, aws_sm, azure_kms, azure_sm, bitwarden, bitwarden_sm, doppler,
-            foks, gcp_kms, gcp_sm, infisical, keepass, keychain, onepassword, password_store,
-            passwordstate, plain, proton_pass, vault, yubikey,
+            foks, gcp_kms, gcp_sm, infisical, keychain, onepassword, password_store, passwordstate,
+            plain, proton_pass, vault, yubikey,
         };
         include!(concat!(
             env!("OUT_DIR"),

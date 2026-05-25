@@ -110,13 +110,19 @@ name = "fnox"
 path = "src/main.rs"
 
 [features]
-# Pass through to fnox-core. The binary itself doesn't reference any
-# provider directly (see `src/commands/provider/add.rs` for the only
-# two exceptions, fido2 + yubikey, which would gain their own
-# passthrough features when those providers are migrated). Until then,
-# selecting a subset of fnox-core features here flows through cleanly.
-default = ["fnox-core/all-providers"]
-all-providers = ["fnox-core/all-providers"]
+# The binary has its own per-provider feature flags that mirror
+# fnox-core's. Each binary feature both enables the corresponding
+# fnox-core feature (so the provider's deps and registration code
+# compile) *and* gates any direct mention of the provider in the
+# binary's own source (the clap `ProviderType` variant + the match
+# arm in `src/commands/provider/add.rs`).
+#
+# Don't shortcut `default = ["fnox-core/all-providers"]`: that
+# enables fnox-core's features but leaves the binary's own per-
+# provider features off, so the binary's `ProviderType::KeePass`
+# variant disappears even though fnox-core compiled it.
+default = ["all-providers"]
+all-providers = ["keepass"]
 keepass = ["fnox-core/keepass"]
 
 [dependencies]

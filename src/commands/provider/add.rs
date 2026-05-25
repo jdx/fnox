@@ -203,6 +203,7 @@ impl AddCommand {
                 path: OptionStringOrSecretRef::literal("/"),
                 auth_command: None,
             },
+            #[cfg(feature = "keepass")]
             ProviderType::KeePass => crate::config::ProviderConfig::KeePass {
                 database: StringOrSecretRef::from("~/secrets.kdbx"),
                 keyfile: OptionStringOrSecretRef::none(),

@@ -2,6 +2,10 @@
 display_name = "KeePass"
 serde_rename = "keepass"
 rust_variant = "KeePass"
+# Cargo feature this provider lives behind. When the feature is
+# disabled, the provider's generated registration code is omitted
+# (build script reads this field; see crates/fnox-core/build/generate_providers.rs).
+cargo_feature = "keepass"
 category = "Local"
 description = "Local KeePass database (.kdbx)"
 default_name = "keepass"
