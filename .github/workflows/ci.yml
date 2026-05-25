@@ -310,7 +310,7 @@ jobs:
       - run: cargo msrv verify
 
   feature-combos:
-    name: feature combos build + test
+    name: feature combos build + test (${{ matrix.combo.name }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -319,13 +319,20 @@ jobs:
     # pass cargo tests. Helps catch cfg-gating regressions when a new
     # provider lands or an existing one moves to optional. Add a new
     # matrix entry whenever a new per-provider feature is introduced.
+    #
+    # `combo.name` is a slug used in the rust-cache shared-key; spaces
+    # in cache keys are tolerated by GH Actions but flaky across some
+    # backends. Keep slugs lowercase and dash-separated.
     strategy:
       fail-fast: false
       matrix:
-        flags:
-          - "--no-default-features"
-          - "--no-default-features --features keepass"
-          - "--all-features"
+        combo:
+          - name: no-default-features
+            flags: --no-default-features
+          - name: no-default-plus-keepass
+            flags: --no-default-features --features keepass
+          - name: all-features
+            flags: --all-features
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
@@ -333,16 +340,16 @@ jobs:
           persist-credentials: false
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2 # zizmor: ignore[cache-poisoning]
         with:
-          shared-key: features-${{ matrix.flags }}
+          shared-key: features-${{ matrix.combo.name }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
-      - name: Build (${{ matrix.flags }})
-        run: cargo build ${{ matrix.flags }}
-      - name: Test (${{ matrix.flags }})
+      - name: Build (${{ matrix.combo.flags }})
+        run: cargo build ${{ matrix.combo.flags }}
+      - name: Test (${{ matrix.combo.flags }})
         # Skips provider tests that need external services (e.g. OS
         # keyring) — those are already covered by the ci-bats matrix.
-        run: cargo test ${{ matrix.flags }} --lib -- --skip providers::keychain::tests::test_keychain_set_and_get
+        run: cargo test ${{ matrix.combo.flags }} --lib -- --skip providers::keychain::tests::test_keychain_set_and_get
 
   final:
     permissions: {}
