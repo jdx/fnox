@@ -24,10 +24,10 @@ aws-sdk-kms = { version = "1" }
 aws-sdk-secretsmanager = { version = "1" }
 aws-sdk-ssm = { version = "1" }
 aws-sdk-sts = { version = "1" }
-azure_core = { version = "1.0" }
-azure_identity = { version = "1.0" }
-azure_security_keyvault_keys = { version = "1.0" }
-azure_security_keyvault_secrets = { version = "1.0" }
+azure_core = { version = "1" }
+azure_identity = { version = "1" }
+azure_security_keyvault_keys = { version = "1" }
+azure_security_keyvault_secrets = { version = "1" }
 base64 = "0.22"
 blake3 = "1"
 chrono = "0.4"
