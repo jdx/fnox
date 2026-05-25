@@ -156,18 +156,21 @@ mod tests {
     /// Mirrored against the build-script behavior in
     /// `crates/fnox-core/build/generate_providers.rs`. Update both
     /// together when adding a new gated provider.
+    ///
+    /// `cfg!(feature = "<name>")` requires a string literal, so the
+    /// match below has to be updated by hand for every new gated
+    /// provider. The `panic!` arm is the safety net that surfaces
+    /// the requirement loudly if it's forgotten.
     fn provider_feature_enabled(path: &std::path::Path) -> bool {
         let Ok(content) = std::fs::read_to_string(path) else {
             return false;
         };
         let cargo_feature = content
-            .lines()
-            .find_map(|line| {
-                let line = line.trim();
-                let rest = line.strip_prefix("cargo_feature")?;
-                let rest = rest.trim_start().strip_prefix('=')?.trim();
-                rest.strip_prefix('"')
-                    .and_then(|s| s.strip_suffix('"'))
+            .parse::<toml_edit::DocumentMut>()
+            .ok()
+            .and_then(|doc| {
+                doc.get("cargo_feature")
+                    .and_then(|v| v.as_str())
                     .map(str::to_owned)
             });
 
