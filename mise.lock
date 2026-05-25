@@ -344,7 +344,6 @@ url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/398851172"
 checksum = "sha256:a9dbb398ba6538c4583b418854df8b6f3dd2c2fc6c7592042fbfc1f49de97b41"
 url = "https://github.com/Infisical/cli/releases/download/v0.43.76/cli_0.43.76_linux_amd64.tar.gz"
 url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/398851234"
-github_attestations = "unavailable"
 
 [tools.infisical."platforms.linux-x64-musl"]
 checksum = "sha256:a9dbb398ba6538c4583b418854df8b6f3dd2c2fc6c7592042fbfc1f49de97b41"
@@ -355,7 +354,6 @@ url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/398851234"
 checksum = "sha256:a3a38a34ca32822beb59d6ef9458e29b39611e42ac3aa149575beea1172252aa"
 url = "https://github.com/Infisical/cli/releases/download/v0.43.76/cli_0.43.76_darwin_arm64.tar.gz"
 url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/398851174"
-github_attestations = "unavailable"
 
 [tools.infisical."platforms.macos-x64"]
 checksum = "sha256:41f6b3c1a8b879ad564329f43f803436e2b3e8621d97c43e561e718dca767235"
