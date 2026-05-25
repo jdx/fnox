@@ -31,6 +31,12 @@ struct ProviderTomlRaw {
     /// Used to skip the provider in non-interactive contexts like the TUI.
     #[serde(default)]
     requires_interactive_auth: bool,
+    /// Optional Cargo feature flag the provider lives behind. When set, the
+    /// generated code (enum variant, match arms, `use` statement, wizard
+    /// entry) is wrapped in `#[cfg(feature = "<name>")]`. Providers without
+    /// a feature flag are always compiled in (current behavior).
+    #[serde(default)]
+    cargo_feature: Option<String>,
     #[serde(default)]
     fields: IndexMap<String, FieldDef>,
     #[serde(default)]
@@ -52,6 +58,7 @@ struct ProviderToml {
     auth_command: Option<String>,
     pass_provider_name: bool,
     requires_interactive_auth: bool,
+    cargo_feature: Option<String>,
     fields: IndexMap<String, FieldDef>,
     wizard_fields: IndexMap<String, WizardFieldDef>,
 }
@@ -88,9 +95,22 @@ impl ProviderTomlRaw {
             auth_command: self.auth_command,
             pass_provider_name: self.pass_provider_name,
             requires_interactive_auth: self.requires_interactive_auth,
+            cargo_feature: self.cargo_feature,
             fields: self.fields,
             wizard_fields: self.wizard_fields,
         }
+    }
+}
+
+/// Build the `#[cfg(feature = "<name>")]` attribute for a provider, or an
+/// empty token stream if the provider has no `cargo_feature` set. Threaded
+/// through every generator so a provider-gated build drops the matching
+/// enum variants, match arms, and `use` statements together — keeping the
+/// generated code internally consistent at any feature combination.
+fn provider_cfg_attr(provider: &ProviderToml) -> TokenStream {
+    match &provider.cargo_feature {
+        Some(feat) => quote! { #[cfg(feature = #feat)] },
+        None => quote! {},
     }
 }
 
@@ -216,12 +236,14 @@ fn generate_provider_config(
     for (_name, provider) in providers {
         let variant = Ident::new(&provider.rust_variant, Span::call_site());
         let serde_rename = &provider.serde_rename;
+        let cfg_attr = provider_cfg_attr(provider);
 
         // Generate ProviderConfig variant (always struct, includes auth_command)
         let config_fields = generate_config_variant_fields(provider);
         let resolved_fields = generate_resolved_variant_fields(provider);
 
         config_variants.push(quote! {
+            #cfg_attr
             #[serde(rename = #serde_rename)]
             #[strum(serialize = #serde_rename)]
             #variant { #(#config_fields),* }
@@ -229,10 +251,12 @@ fn generate_provider_config(
 
         if resolved_fields.is_empty() {
             resolved_variants.push(quote! {
+                #cfg_attr
                 #variant
             });
         } else {
             resolved_variants.push(quote! {
+                #cfg_attr
                 #variant { #(#resolved_fields),* }
             });
         }
@@ -355,25 +379,34 @@ fn generate_provider_methods(
         let variant = Ident::new(&provider.rust_variant, Span::call_site());
         let serde_rename = &provider.serde_rename;
         let module = Ident::new(&provider.module, Span::call_site());
+        let cfg_attr = provider_cfg_attr(provider);
 
         // try_to_resolved arm
         let try_resolved_body = generate_try_to_resolved_body(provider);
         if provider.fields.is_empty() {
             try_to_resolved_arms.push(quote! {
+                #cfg_attr
                 Self::#variant { .. } => Ok(ResolvedProviderConfig::#variant)
             });
         } else {
             let field_patterns = generate_field_patterns(provider);
             try_to_resolved_arms.push(quote! {
+                #cfg_attr
                 Self::#variant { #(#field_patterns),* , .. } => {
                     #try_resolved_body
                 }
             });
         }
 
-        // from_wizard_fields arm
+        // from_wizard_fields arm — the match is on a string, not on the
+        // ProviderConfig enum, so gating it on a feature requires the
+        // serde_rename literal to be discoverable only when the feature
+        // is enabled. Wrapping the arm in a cfg achieves that; with the
+        // feature off, the string falls through to the catch-all
+        // "Unknown provider type" error which is the correct behavior.
         let from_wizard_body = generate_from_wizard_fields_body(provider);
         from_wizard_fields_arms.push(quote! {
+            #cfg_attr
             #serde_rename => { #from_wizard_body }
         });
 
@@ -384,6 +417,7 @@ fn generate_provider_methods(
             quote! { None }
         };
         auth_command_arms.push(quote! {
+            #cfg_attr
             Self::#variant { auth_command, .. } => match auth_command.as_deref() {
                 Some("") => None,
                 Some(cmd) => Some(cmd),
@@ -391,10 +425,12 @@ fn generate_provider_methods(
             }
         });
         env_deps_arms.push(quote! {
+            #cfg_attr
             Self::#variant { .. } => #module::env_dependencies()
         });
         let interactive = provider.requires_interactive_auth;
         interactive_auth_arms.push(quote! {
+            #cfg_attr
             Self::#variant { .. } => #interactive
         });
     }
@@ -406,7 +442,8 @@ fn generate_provider_methods(
         .iter()
         .map(|(_name, provider)| {
             let module = Ident::new(&provider.module, Span::call_site());
-            quote! { use super::super::#module; }
+            let cfg_attr = provider_cfg_attr(provider);
+            quote! { #cfg_attr use super::super::#module; }
         })
         .collect();
 
@@ -682,6 +719,7 @@ fn generate_provider_instantiate(
         let variant = Ident::new(&provider.rust_variant, Span::call_site());
         let module = Ident::new(&provider.module, Span::call_site());
         let struct_name = Ident::new(&provider.struct_name, Span::call_site());
+        let cfg_attr = provider_cfg_attr(provider);
 
         // Prepend provider_name.to_string() if the provider needs it
         let name_arg: Vec<TokenStream> = if provider.pass_provider_name {
@@ -692,6 +730,7 @@ fn generate_provider_instantiate(
 
         if provider.fields.is_empty() {
             arms.push(quote! {
+                #cfg_attr
                 ResolvedProviderConfig::#variant => {
                     Ok(Box::new(#module::#struct_name::new(#(#name_arg),*)?))
                 }
@@ -700,6 +739,7 @@ fn generate_provider_instantiate(
             let field_patterns = generate_field_patterns(provider);
             let new_args = generate_new_args(provider);
             arms.push(quote! {
+                #cfg_attr
                 ResolvedProviderConfig::#variant { #(#field_patterns),* } => {
                     Ok(Box::new(#module::#struct_name::new(#(#name_arg,)* #(#new_args),*)?))
                 }
@@ -746,15 +786,18 @@ fn generate_provider_resolver(
 
     for (_name, provider) in providers {
         let variant = Ident::new(&provider.rust_variant, Span::call_site());
+        let cfg_attr = provider_cfg_attr(provider);
 
         if provider.fields.is_empty() {
             arms.push(quote! {
+                #cfg_attr
                 ProviderConfig::#variant { .. } => Ok(ResolvedProviderConfig::#variant)
             });
         } else {
             let field_patterns = generate_field_patterns(provider);
             let resolved_fields = generate_resolver_fields(provider);
             arms.push(quote! {
+                #cfg_attr
                 ProviderConfig::#variant { #(#field_patterns),* , .. } => {
                     Ok(ResolvedProviderConfig::#variant {
                         #(#resolved_fields),*
@@ -878,8 +921,16 @@ fn generate_provider_wizard(
             }
         }
 
+        let cfg_attr = provider_cfg_attr(provider);
+        // The Vec is built at first access by pushing each provider's
+        // entry under its own cfg-gate. Providers with no `cargo_feature`
+        // are always pushed; providers with a `cargo_feature` are pushed
+        // only when that feature is enabled. This keeps the wizard's
+        // visible provider list consistent with what the codegen
+        // includes elsewhere.
         wizard_info_entries.push(quote! {
-            WizardInfo {
+            #cfg_attr
+            v.push(WizardInfo {
                 provider_type: #provider_type,
                 display_name: #display_name,
                 description: #description,
@@ -887,18 +938,33 @@ fn generate_provider_wizard(
                 setup_instructions: #setup_instructions,
                 default_name: #default_name,
                 fields: &[#(#wizard_fields),*],
-            }
+            });
         });
     }
 
     // Note: Use super::super:: because this is included inside mod generated { mod providers_wizard { ... } }
+    //
+    // ALL_WIZARD_INFO is a `LazyLock<Vec<WizardInfo>>` (not a `&[WizardInfo]`)
+    // so individual entries can be cfg-gated — `#[cfg]` attributes are not
+    // permitted on elements of an array literal, but they *are* permitted
+    // on statements like `v.push(...)`. Consumers that did
+    // `ALL_WIZARD_INFO.iter()` continue to work via `LazyLock`'s `Deref`
+    // to `Vec<WizardInfo>`; iteration yields `&'static WizardInfo` exactly
+    // as before because the `LazyLock` itself is `static`.
     let output = quote! {
         use super::super::{WizardCategory, WizardField, WizardInfo};
+        use std::sync::LazyLock;
 
-        /// All wizard info for providers, generated from providers/*.toml
-        pub static ALL_WIZARD_INFO: &[WizardInfo] = &[
-            #(#wizard_info_entries),*
-        ];
+        /// All wizard info for providers, generated from providers/*.toml.
+        ///
+        /// Per-provider entries are cfg-gated on their `cargo_feature`
+        /// (see `crates/fnox-core/providers/*.toml`); a provider whose
+        /// feature is disabled does not appear in the wizard at all.
+        pub static ALL_WIZARD_INFO: LazyLock<Vec<WizardInfo>> = LazyLock::new(|| {
+            let mut v: Vec<WizardInfo> = Vec::new();
+            #(#wizard_info_entries)*
+            v
+        });
     };
 
     Ok(output.to_string())
