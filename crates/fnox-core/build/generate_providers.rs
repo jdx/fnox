@@ -35,6 +35,13 @@ struct ProviderTomlRaw {
     /// generated code (enum variant, match arms, `use` statement, wizard
     /// entry) is wrapped in `#[cfg(feature = "<name>")]`. Providers without
     /// a feature flag are always compiled in (current behavior).
+    ///
+    /// **Adding a new gated provider requires updates in lockstep here
+    /// and in the drift test at `src/commands/provider/mod.rs::tests`** —
+    /// `cfg!()` only accepts string literals, so the test's
+    /// `provider_feature_enabled` helper has a hand-written `match` arm
+    /// per gated provider. The test panics loudly if you forget. See
+    /// the "Cargo features" section in `AGENTS.md` for the full recipe.
     #[serde(default)]
     cargo_feature: Option<String>,
     #[serde(default)]
