@@ -944,13 +944,19 @@ fn generate_provider_wizard(
 
     // Note: Use super::super:: because this is included inside mod generated { mod providers_wizard { ... } }
     //
-    // ALL_WIZARD_INFO is a `LazyLock<Vec<WizardInfo>>` (not a `&[WizardInfo]`)
-    // so individual entries can be cfg-gated — `#[cfg]` attributes are not
-    // permitted on elements of an array literal, but they *are* permitted
-    // on statements like `v.push(...)`. Consumers that did
-    // `ALL_WIZARD_INFO.iter()` continue to work via `LazyLock`'s `Deref`
-    // to `Vec<WizardInfo>`; iteration yields `&'static WizardInfo` exactly
-    // as before because the `LazyLock` itself is `static`.
+    // `ALL_WIZARD_INFO` is wrapped in `LazyLock<&'static [WizardInfo]>`
+    // rather than the bare `&'static [WizardInfo]` it used to be —
+    // `#[cfg]` attributes are not permitted on elements of an array
+    // literal, but they *are* permitted on statements like
+    // `v.push(...)`, so we build a `Vec` at first access and
+    // `Box::leak` it into a `'static` slice. The inner element type
+    // is still `[WizardInfo]` (not `Vec<WizardInfo>`), which preserves
+    // backward compatibility for downstream consumers that expect a
+    // slice: `.iter()` continues to work via `LazyLock`'s `Deref` to
+    // `&'static [WizardInfo]` and yields `&'static WizardInfo` as
+    // before. The only observable change is the outer `LazyLock`
+    // wrapper; bindings of the form `let x: &'static [WizardInfo] = …`
+    // need one explicit `*` deref to compile.
     let output = quote! {
         use super::super::{WizardCategory, WizardField, WizardInfo};
         use std::sync::LazyLock;
@@ -960,10 +966,10 @@ fn generate_provider_wizard(
         /// Per-provider entries are cfg-gated on their `cargo_feature`
         /// (see `crates/fnox-core/providers/*.toml`); a provider whose
         /// feature is disabled does not appear in the wizard at all.
-        pub static ALL_WIZARD_INFO: LazyLock<Vec<WizardInfo>> = LazyLock::new(|| {
+        pub static ALL_WIZARD_INFO: LazyLock<&'static [WizardInfo]> = LazyLock::new(|| {
             let mut v: Vec<WizardInfo> = Vec::new();
             #(#wizard_info_entries)*
-            v
+            Box::leak(v.into_boxed_slice())
         });
     };
 
