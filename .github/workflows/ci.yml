@@ -309,12 +309,48 @@ jobs:
       # transitively covers fnox-core because the binary depends on it.
       - run: cargo msrv verify
 
+  feature-combos:
+    name: feature combos build + test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    # Verifies feature combinations beyond the default still compile and
+    # pass cargo tests. Helps catch cfg-gating regressions when a new
+    # provider lands or an existing one moves to optional. Add a new
+    # matrix entry whenever a new per-provider feature is introduced.
+    strategy:
+      fail-fast: false
+      matrix:
+        flags:
+          - "--no-default-features"
+          - "--no-default-features --features keepass"
+          - "--all-features"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2 # zizmor: ignore[cache-poisoning]
+        with:
+          shared-key: features-${{ matrix.flags }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev
+      - name: Build (${{ matrix.flags }})
+        run: cargo build ${{ matrix.flags }}
+      - name: Test (${{ matrix.flags }})
+        # Skips provider tests that need external services (e.g. OS
+        # keyring) — those are already covered by the ci-bats matrix.
+        run: cargo test ${{ matrix.flags }} --lib -- --skip providers::keychain::tests::test_keychain_set_and_get
+
   final:
     permissions: {}
     needs:
       - ci-bats
       - ci-other
       - msrv
+      - feature-combos
     runs-on: ubuntu-latest
     timeout-minutes: 1
     # Run on success or upstream failure but skip when the workflow is cancelled
@@ -325,6 +361,7 @@ jobs:
         if: |
           needs.ci-bats.result != 'success' ||
           needs.ci-other.result != 'success' ||
-          needs.msrv.result != 'success'
+          needs.msrv.result != 'success' ||
+          needs.feature-combos.result != 'success'
         run: exit 1
       - run: echo "All CI jobs completed successfully"
