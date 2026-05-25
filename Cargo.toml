@@ -109,8 +109,18 @@ readme = "README.md"
 name = "fnox"
 path = "src/main.rs"
 
+[features]
+# Pass through to fnox-core. The binary itself doesn't reference any
+# provider directly (see `src/commands/provider/add.rs` for the only
+# two exceptions, fido2 + yubikey, which would gain their own
+# passthrough features when those providers are migrated). Until then,
+# selecting a subset of fnox-core features here flows through cleanly.
+default = ["fnox-core/all-providers"]
+all-providers = ["fnox-core/all-providers"]
+keepass = ["fnox-core/keepass"]
+
 [dependencies]
-fnox-core = { path = "crates/fnox-core", version = "1.25.1" }
+fnox-core = { path = "crates/fnox-core", version = "1.25.1", default-features = false }
 
 # Direct dependencies of the CLI binary (commands, MCP server, TUI, hook-env,
 # shell integration). Provider/config/secret-resolver crates are pulled in

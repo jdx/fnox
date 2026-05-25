@@ -90,3 +90,43 @@ toml_edit = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+
+# -----------------------------------------------------------------------
+# Cargo features
+# -----------------------------------------------------------------------
+#
+# Each provider can be opted out of with `--no-default-features` plus the
+# specific features the install needs. Downstream crates that embed
+# `fnox-core` (e.g., the `fnox` binary in this workspace, or third-party
+# integrations) gain ~few-MiB binary-size wins by skipping unused
+# providers — provider crates pull large transitive dep chains (AWS SDK,
+# Google Cloud SDK, Azure SDK, hidapi/libudev for FIDO2, libdbus for the
+# Linux keyring backend).
+#
+# Adding a new feature here also requires:
+#   1. Setting `cargo_feature = "<name>"` in the provider's
+#      `crates/fnox-core/providers/<name>.toml` descriptor so the build
+#      script cfg-gates the generated registration code.
+#   2. Moving the corresponding dep(s) below to `optional = true`
+#      (currently none of them are — see the keepass commit for the
+#      first migration).
+#   3. Wrapping the provider's `pub mod <name>;` in
+#      `crates/fnox-core/src/providers/mod.rs` with the same
+#      `#[cfg(feature = "...")]`.
+#
+# This [features] block is intentionally introduced before any deps are
+# moved to optional, so reviewers can see the proposed feature surface
+# in isolation. With every feature still pulling its deps unconditionally,
+# `cargo build --no-default-features` produces the same artifact as
+# `cargo build` today; the size savings land as each provider is migrated
+# in follow-up work.
+[features]
+default = ["all-providers"]
+
+# Convenience meta-feature: enables every provider. Equivalent to
+# pre-feature behavior; the default unless an embedder opts out.
+all-providers = ["keepass"]
+
+# Per-provider features. Empty for now; populated as each provider
+# moves to `optional = true` deps in follow-up commits.
+keepass = []
