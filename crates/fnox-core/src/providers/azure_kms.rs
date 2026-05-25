@@ -73,6 +73,7 @@ impl AzureKeyVaultProvider {
         let response = client
             .decrypt(
                 &self.key_name,
+                "",
                 params
                     .try_into()
                     .map_err(|e| FnoxError::ProviderInvalidResponse {
