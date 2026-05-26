@@ -6,9 +6,9 @@
 #
 # Prerequisites:
 #   1. Install Proton Pass CLI: Download from https://proton.me/pass/download
-#   2. Login to Proton Pass: pass-cli login --interactive
+#   2. Login to Proton Pass: pass-cli login
 #   3. Create test items in a vault
-#   4. Run tests: mise run test:bats -- test/proton-pass.bats
+#   4. Run tests: mise run test:bats -- test/proton_pass.bats
 #
 # Note: Tests will automatically skip if:
 #       - pass-cli is not installed
@@ -16,7 +16,9 @@
 #       - Test vault/items don't exist
 #
 # Environment Variables:
-#   FNOX_PROTON_PASS_PASSWORD or PROTON_PASS_PASSWORD - Account password for non-interactive auth
+#   FNOX_PROTON_PASS_PERSONAL_ACCESS_TOKEN or PROTON_PASS_PERSONAL_ACCESS_TOKEN - PAT for login
+#   FNOX_PROTON_PASS_AGENT_REASON or PROTON_PASS_AGENT_REASON - Reason for audited agent access
+#   FNOX_PROTON_PASS_PASSWORD or PROTON_PASS_PASSWORD - Account password for interactive auth
 #   FNOX_PROTON_PASS_TOTP or PROTON_PASS_TOTP - 2FA TOTP code if enabled
 #   PROTON_PASS_TEST_VAULT - Vault name to use for tests (default: "Personal")
 #   PROTON_PASS_TEST_ITEM - An existing item in your vault that tests will read from
@@ -37,7 +39,7 @@ setup() {
 	if [[ $BATS_TEST_DESCRIPTION != *"list"* ]] && [[ $BATS_TEST_DESCRIPTION != *"fails gracefully"* ]]; then
 		# Check if we can authenticate by running pass-cli test
 		if ! pass-cli test >/dev/null 2>&1; then
-			skip "Cannot authenticate with Proton Pass. Run 'pass-cli login --interactive' first."
+			skip "Cannot authenticate with Proton Pass. Run 'pass-cli login' first."
 		fi
 	fi
 

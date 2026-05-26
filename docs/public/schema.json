@@ -815,6 +815,9 @@
         {
           "type": "object",
           "properties": {
+            "agent_reason": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "auth_command": {
               "type": ["string", "null"]
             },
