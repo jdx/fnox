@@ -170,8 +170,10 @@ pub mod setup {
 
         eprintln!("\nTouch your FIDO2 key when prompted...");
 
-        let device = ctap_hid_fido2::FidoKeyHidFactory::create(&ctap_hid_fido2::Cfg::init())
-            .map_err(|e| FnoxError::Provider(format!("Failed to find FIDO2 device: {:?}", e)))?;
+        let device = ctap_hid_fido2::FidoKeyHidFactory::create(
+            &ctap_hid_fido2::Cfg::init().with_keep_alive_msg_to_stderr(true),
+        )
+        .map_err(|e| FnoxError::Provider(format!("Failed to find FIDO2 device: {:?}", e)))?;
 
         // Check if PIN is required
         let pin_input = demand::Input::new("FIDO2 PIN (leave empty if not set)")
