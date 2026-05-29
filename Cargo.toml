@@ -76,7 +76,7 @@ serde_spanned = "1"
 serde_yaml = "0.9"
 sha2 = "0.11"
 shellexpand = "3"
-shlex = "1"
+shlex = "2"
 signal-hook = "0.4"
 strsim = "0.11"
 strum = { version = "0.28", features = ["derive"] }
