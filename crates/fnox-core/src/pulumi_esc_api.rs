@@ -12,6 +12,14 @@ use std::time::Duration;
 pub const PROVIDER_NAME: &str = "Pulumi ESC";
 pub const DEFAULT_API_BASE: &str = "https://api.pulumi.com";
 
+/// Resolved Pulumi Cloud auth: the API base URL plus the bearer token.
+/// `base` is the credentials.json `current` account key (a URL on Pulumi Cloud)
+/// or `PULUMI_BACKEND_URL`, so self-hosted backends resolve correctly.
+pub struct EscAuth {
+    pub base: String,
+    pub token: String,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PulumiCredentials {
@@ -38,16 +46,16 @@ fn pulumi_home() -> Option<PathBuf> {
 /// Sync credential resolver mirroring the `esc` CLI:
 /// `FNOX_PULUMI_ACCESS_TOKEN`/`PULUMI_ACCESS_TOKEN` env var →
 /// `$PULUMI_HOME/credentials.json` → `~/.pulumi/credentials.json`.
-/// Returns `(base_url, token)` so self-hosted Pulumi Cloud works: the file's
+/// Returns an [`EscAuth`] so self-hosted Pulumi Cloud works: the file's
 /// `current` field dictates the API base; the env-var path honors
 /// `PULUMI_BACKEND_URL` (default `https://api.pulumi.com`).
-pub fn resolve_auth() -> std::result::Result<(String, String), String> {
+pub fn resolve_auth() -> std::result::Result<EscAuth, String> {
     if let Ok(token) =
         env::var("FNOX_PULUMI_ACCESS_TOKEN").or_else(|_| env::var("PULUMI_ACCESS_TOKEN"))
     {
         let base =
             std::env::var("PULUMI_BACKEND_URL").unwrap_or_else(|_| DEFAULT_API_BASE.to_string());
-        return Ok((base, token));
+        return Ok(EscAuth { base, token });
     }
     let home = pulumi_home().ok_or_else(|| "Could not locate Pulumi home directory".to_string())?;
     let cred_path = home.join("credentials.json");
@@ -73,16 +81,22 @@ pub fn resolve_auth() -> std::result::Result<(String, String), String> {
                 cred_path.display()
             )
         })?;
-    Ok((current, token))
+    Ok(EscAuth {
+        base: current,
+        token,
+    })
 }
 
 /// Resolve auth honoring an optional config-supplied token, producing a
 /// `FnoxError` tagged with the caller's help URL on failure.
-pub fn resolve_auth_for(config_token: Option<&str>, help_url: &str) -> Result<(String, String)> {
+pub fn resolve_auth_for(config_token: Option<&str>, help_url: &str) -> Result<EscAuth> {
     if let Some(t) = config_token {
         let base =
             std::env::var("PULUMI_BACKEND_URL").unwrap_or_else(|_| DEFAULT_API_BASE.to_string());
-        return Ok((base, t.to_string()));
+        return Ok(EscAuth {
+            base,
+            token: t.to_string(),
+        });
     }
     resolve_auth().map_err(|details| FnoxError::ProviderAuthFailed {
         provider: PROVIDER_NAME.to_string(),
@@ -92,29 +106,45 @@ pub fn resolve_auth_for(config_token: Option<&str>, help_url: &str) -> Result<(S
     })
 }
 
-/// `org/project/env` (modern) or `org/env` (legacy, no project).
+/// `org/project/env` (modern) or `org/env` (legacy, no project). Each segment
+/// is percent-encoded so names containing URL-special chars (`/`, `?`, `#`,
+/// whitespace) can't corrupt the request path. Pulumi Cloud names are typically
+/// `[a-zA-Z0-9-]`, but encoding is cheap insurance.
 pub fn build_env_ref(organization: &str, project: Option<&str>, environment: &str) -> String {
+    let org = urlencoding::encode(organization);
+    let env = urlencoding::encode(environment);
     match project {
-        Some(p) => format!("{organization}/{p}/{environment}"),
-        None => format!("{organization}/{environment}"),
+        Some(p) => format!("{org}/{}/{env}", urlencoding::encode(p)),
+        None => format!("{org}/{env}"),
     }
 }
 
-/// Walk the resolved `properties` tree for a dot-path like `anthropic.api_key`.
-/// Every node is wrapped in `{value, trace}`, so we unwrap `.value` after each
-/// segment. Non-string leaves (bool, number) are coerced to their JSON-string
-/// form so callers can always export them as env vars.
-pub fn lookup(root: &serde_json::Value, path: &str) -> Option<String> {
-    let mut cur = root.pointer("/properties")?;
-    for segment in path.split('.') {
-        cur = cur.get(segment)?.get("value")?;
-    }
-    match cur {
+/// Coerce a `{value, trace}`-wrapped ESC node to its string form. The inner
+/// `.value` is usually a string, but ESC passes booleans and numbers through
+/// verbatim — coerce those to their JSON-string form so callers can always
+/// export them as env vars.
+pub fn coerce_scalar(wrapped: &serde_json::Value) -> Option<String> {
+    match wrapped.get("value")? {
         serde_json::Value::String(s) => Some(s.clone()),
         serde_json::Value::Bool(b) => Some(b.to_string()),
         serde_json::Value::Number(n) => Some(n.to_string()),
         _ => None,
     }
+}
+
+/// Walk the resolved `properties` tree for a dot-path like `anthropic.api_key`.
+/// Every node is wrapped in `{value, trace}`, so we unwrap `.value` to descend
+/// into each intermediate segment, then `coerce_scalar` the final node.
+pub fn lookup(root: &serde_json::Value, path: &str) -> Option<String> {
+    let mut cur = root.pointer("/properties")?;
+    let mut segments = path.split('.').peekable();
+    while let Some(segment) = segments.next() {
+        cur = cur.get(segment)?;
+        if segments.peek().is_some() {
+            cur = cur.get("value")?;
+        }
+    }
+    coerce_scalar(cur)
 }
 
 #[derive(Deserialize)]
@@ -133,7 +163,7 @@ pub struct EscClient {
 impl EscClient {
     /// Construct a client, resolving auth via `resolve_auth_for`.
     pub fn new(config_token: Option<&str>, help_url: &str) -> Result<Self> {
-        let (base, token) = resolve_auth_for(config_token, help_url)?;
+        let EscAuth { base, token } = resolve_auth_for(config_token, help_url)?;
         Ok(Self {
             base: base.trim_end_matches('/').to_string(),
             auth: format!("token {token}"),
@@ -142,23 +172,42 @@ impl EscClient {
         })
     }
 
+    /// Build a `ProviderApiError` tagged with this client's provider name and help URL.
+    fn api_err(&self, details: impl Into<String>, hint: &str) -> FnoxError {
+        FnoxError::ProviderApiError {
+            provider: PROVIDER_NAME.to_string(),
+            details: details.into(),
+            hint: hint.to_string(),
+            url: self.help_url.clone(),
+        }
+    }
+
+    /// Build a `ProviderInvalidResponse` tagged with this client's provider name and help URL.
+    fn invalid_err(&self, details: impl Into<String>, hint: &str) -> FnoxError {
+        FnoxError::ProviderInvalidResponse {
+            provider: PROVIDER_NAME.to_string(),
+            details: details.into(),
+            hint: hint.to_string(),
+            url: self.help_url.clone(),
+        }
+    }
+
     async fn http_error(&self, resp: reqwest::Response) -> FnoxError {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
+        let details = format!("HTTP {status}: {body}");
         if status.as_u16() == 401 || status.as_u16() == 403 {
             FnoxError::ProviderAuthFailed {
                 provider: PROVIDER_NAME.to_string(),
-                details: format!("HTTP {status}: {body}"),
+                details,
                 hint: "Run 'esc login' or check PULUMI_ACCESS_TOKEN".to_string(),
                 url: self.help_url.clone(),
             }
         } else {
-            FnoxError::ProviderApiError {
-                provider: PROVIDER_NAME.to_string(),
-                details: format!("HTTP {status}: {body}"),
-                hint: "Check organization/project/environment in your config".to_string(),
-                url: self.help_url.clone(),
-            }
+            self.api_err(
+                details,
+                "Check organization/project/environment in your config",
+            )
         }
     }
 
@@ -173,24 +222,16 @@ impl EscClient {
             .query(&[("duration", duration_param.as_str())])
             .send()
             .await
-            .map_err(|e| FnoxError::ProviderApiError {
-                provider: PROVIDER_NAME.to_string(),
-                details: e.to_string(),
-                hint: "Failed to reach Pulumi Cloud".to_string(),
-                url: self.help_url.clone(),
-            })?;
+            .map_err(|e| self.api_err(e.to_string(), "Failed to reach Pulumi Cloud"))?;
         if !resp.status().is_success() {
             return Err(self.http_error(resp).await);
         }
-        let open: OpenResponse =
-            resp.json()
-                .await
-                .map_err(|e| FnoxError::ProviderInvalidResponse {
-                    provider: PROVIDER_NAME.to_string(),
-                    details: format!("Failed to parse open response: {e}"),
-                    hint: "Unexpected response from Pulumi ESC 'open' endpoint".to_string(),
-                    url: self.help_url.clone(),
-                })?;
+        let open: OpenResponse = resp.json().await.map_err(|e| {
+            self.invalid_err(
+                format!("Failed to parse open response: {e}"),
+                "Unexpected response from Pulumi ESC 'open' endpoint",
+            )
+        })?;
         Ok(open.id)
     }
 
@@ -206,23 +247,16 @@ impl EscClient {
             .header("Authorization", &self.auth)
             .send()
             .await
-            .map_err(|e| FnoxError::ProviderApiError {
-                provider: PROVIDER_NAME.to_string(),
-                details: e.to_string(),
-                hint: "Failed to read opened ESC environment".to_string(),
-                url: self.help_url.clone(),
-            })?;
+            .map_err(|e| self.api_err(e.to_string(), "Failed to read opened ESC environment"))?;
         if !resp.status().is_success() {
             return Err(self.http_error(resp).await);
         }
-        resp.json()
-            .await
-            .map_err(|e| FnoxError::ProviderInvalidResponse {
-                provider: PROVIDER_NAME.to_string(),
-                details: format!("Failed to parse environment response: {e}"),
-                hint: "Unexpected response from Pulumi ESC".to_string(),
-                url: self.help_url.clone(),
-            })
+        resp.json().await.map_err(|e| {
+            self.invalid_err(
+                format!("Failed to parse environment response: {e}"),
+                "Unexpected response from Pulumi ESC",
+            )
+        })
     }
 
     /// Open + read as one call. Good for batch reads where you want the full tree.
@@ -264,6 +298,32 @@ mod tests {
                 }
             }
         })
+    }
+
+    #[test]
+    fn coerce_scalar_handles_scalar_types() {
+        assert_eq!(
+            coerce_scalar(&serde_json::json!({"value": "hello", "trace": {}})),
+            Some("hello".to_string())
+        );
+        assert_eq!(
+            coerce_scalar(&serde_json::json!({"value": false})),
+            Some("false".to_string())
+        );
+        assert_eq!(
+            coerce_scalar(&serde_json::json!({"value": 42})),
+            Some("42".to_string())
+        );
+        assert_eq!(coerce_scalar(&serde_json::json!({"value": null})), None);
+        assert_eq!(coerce_scalar(&serde_json::json!({"trace": {}})), None);
+    }
+
+    #[test]
+    fn build_env_ref_percent_encodes_segments() {
+        assert_eq!(
+            build_env_ref("my/org", Some("a b"), "dev#1"),
+            "my%2Forg/a%20b/dev%231"
+        );
     }
 
     #[test]
