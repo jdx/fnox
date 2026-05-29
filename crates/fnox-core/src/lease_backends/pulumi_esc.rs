@@ -1,6 +1,6 @@
 use crate::error::{FnoxError, Result};
 use crate::lease_backends::{Lease, LeaseBackend};
-use crate::pulumi_esc_api::{self, EscClient};
+use crate::pulumi_esc_api::{self, EscClient, PROVIDER_NAME};
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use std::time::Duration;
@@ -73,7 +73,7 @@ fn resolve_refs(raw: &str, root: &serde_json::Value, sigil: char) -> Result<Stri
         let end = after_open
             .find('}')
             .ok_or_else(|| FnoxError::ProviderInvalidResponse {
-                provider: "Pulumi ESC".to_string(),
+                provider: PROVIDER_NAME.to_string(),
                 details: format!("Unterminated '{open}' in value: {raw}"),
                 hint: "Add a closing '}' or disable `interpolate` in the lease config".to_string(),
                 url: URL.to_string(),
@@ -81,7 +81,7 @@ fn resolve_refs(raw: &str, root: &serde_json::Value, sigil: char) -> Result<Stri
         let path = &after_open[..end];
         let resolved = pulumi_esc_api::lookup(root, path).ok_or_else(|| {
             FnoxError::ProviderInvalidResponse {
-                provider: "Pulumi ESC".to_string(),
+                provider: PROVIDER_NAME.to_string(),
                 details: format!("Unresolved reference '{open}{path}}}' in value"),
                 hint: "Check the path exists in this environment's `properties` tree".to_string(),
                 url: URL.to_string(),
@@ -92,21 +92,6 @@ fn resolve_refs(raw: &str, root: &serde_json::Value, sigil: char) -> Result<Stri
     }
     out.push_str(rest);
     Ok(out)
-}
-
-/// Unwrap one `{value, trace}` entry from `properties.environmentVariables.value`.
-/// The inner `.value` is usually a string, but ESC passes booleans and numbers
-/// through verbatim — coerce those to their JSON-string form so they can be
-/// exported as env vars.
-fn extract_value(wrapped: Option<&serde_json::Value>) -> Option<String> {
-    let inner = wrapped?.get("value")?;
-    match inner {
-        serde_json::Value::String(s) => Some(s.clone()),
-        serde_json::Value::Bool(b) => Some(b.to_string()),
-        serde_json::Value::Number(n) => Some(n.to_string()),
-        serde_json::Value::Null => None,
-        _ => None,
-    }
 }
 
 #[async_trait]
@@ -127,7 +112,7 @@ impl LeaseBackend for PulumiEscBackend {
             .pointer("/properties/environmentVariables/value")
             .and_then(|v| v.as_object())
             .ok_or_else(|| FnoxError::ProviderInvalidResponse {
-                provider: "Pulumi ESC".to_string(),
+                provider: PROVIDER_NAME.to_string(),
                 details: "Opened environment has no 'environmentVariables' block".to_string(),
                 hint: "Add an environmentVariables block to the ESC environment".to_string(),
                 url: URL.to_string(),
@@ -137,7 +122,10 @@ impl LeaseBackend for PulumiEscBackend {
         match &self.env_vars {
             Some(filter) => {
                 for name in filter {
-                    match extract_value(env_vars_obj.get(name)) {
+                    match env_vars_obj
+                        .get(name)
+                        .and_then(pulumi_esc_api::coerce_scalar)
+                    {
                         Some(val) => {
                             credentials.insert(name.clone(), val);
                         }
@@ -153,7 +141,7 @@ impl LeaseBackend for PulumiEscBackend {
             }
             None => {
                 for (name, wrapped) in env_vars_obj {
-                    if let Some(val) = extract_value(Some(wrapped)) {
+                    if let Some(val) = pulumi_esc_api::coerce_scalar(wrapped) {
                         credentials.insert(name.clone(), val);
                     }
                 }
@@ -162,7 +150,7 @@ impl LeaseBackend for PulumiEscBackend {
 
         if credentials.is_empty() {
             return Err(FnoxError::ProviderInvalidResponse {
-                provider: "Pulumi ESC".to_string(),
+                provider: PROVIDER_NAME.to_string(),
                 details: "No environment variables surfaced from ESC environment".to_string(),
                 hint: "Check the ESC environment defines environmentVariables and that 'env_vars' (if set) matches".to_string(),
                 url: URL.to_string(),
@@ -225,21 +213,6 @@ mod tests {
                 }
             }
         })
-    }
-
-    #[test]
-    fn extract_value_handles_scalar_types() {
-        let s = serde_json::json!({"value": "hello", "trace": {}});
-        assert_eq!(extract_value(Some(&s)), Some("hello".to_string()));
-        let b = serde_json::json!({"value": false});
-        assert_eq!(extract_value(Some(&b)), Some("false".to_string()));
-        let n = serde_json::json!({"value": 42});
-        assert_eq!(extract_value(Some(&n)), Some("42".to_string()));
-        let null = serde_json::json!({"value": null});
-        assert_eq!(extract_value(Some(&null)), None);
-        let missing = serde_json::json!({"trace": {}});
-        assert_eq!(extract_value(Some(&missing)), None);
-        assert_eq!(extract_value(None), None);
     }
 
     #[test]
