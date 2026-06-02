@@ -47,7 +47,8 @@ const isSponsor = (sponsor) =>
   typeof sponsor.name === "string" &&
   typeof sponsor.url === "string" &&
   typeof sponsor.logo === "string" &&
-  isSafeUrl(sponsor.url);
+  isSafeUrl(sponsor.url) &&
+  isSafeUrl(sponsor.logo);
 
 onMounted(async () => {
   try {
@@ -58,7 +59,7 @@ onMounted(async () => {
 
     const payload = await res.json();
     sponsors.value = sponsorItems(payload?.sponsors).filter((sponsor) =>
-      sponsor.kind !== "infrastructure" && isSponsor(sponsor),
+      isSponsor(sponsor) && sponsor.kind !== "infrastructure",
     );
   } catch {
     sponsors.value = [];
