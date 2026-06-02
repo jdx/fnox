@@ -1,6 +1,6 @@
 <template>
   <section
-    v-if="sponsors.length"
+    v-if="sponsors.length || error"
     aria-labelledby="endev-sponsors-title"
     class="EndevSponsors"
   >
@@ -8,7 +8,10 @@
       <p id="endev-sponsors-title" class="EndevSponsorsTitle">
         sponsors
       </p>
-      <div class="EndevSponsorsLogos">
+      <p v-if="error" class="EndevSponsorsError">
+        Sponsor feed unavailable.
+      </p>
+      <div v-else class="EndevSponsorsLogos">
         <a
           v-for="sponsor in sponsors"
           :key="sponsor.url"
@@ -31,7 +34,9 @@
 import { onMounted, ref } from "vue";
 
 const sponsors = ref([]);
+const error = ref(false);
 const footerTiers = new Set(["anchor", "premier", "partner"]);
+const sponsorFeedTimeoutMs = 5000;
 
 const sponsorItems = (items) => (Array.isArray(items) ? items : []);
 const isSafeUrl = (url) => {
@@ -52,18 +57,25 @@ const isSponsor = (sponsor) =>
   isSafeUrl(sponsor.logo);
 
 onMounted(async () => {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), sponsorFeedTimeoutMs);
+
   try {
     const res = await fetch("https://en.dev/sponsors.json", {
       headers: { Accept: "application/json" },
+      signal: controller.signal,
     });
-    if (!res.ok) return;
+    if (!res.ok) throw new Error(`Sponsor feed returned ${res.status}`);
 
     const payload = await res.json();
     sponsors.value = sponsorItems(payload?.sponsors).filter((sponsor) =>
       isSponsor(sponsor) && footerTiers.has(sponsor.tier),
     );
   } catch {
+    error.value = true;
     sponsors.value = [];
+  } finally {
+    window.clearTimeout(timeout);
   }
 });
 </script>
@@ -97,6 +109,13 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 10px;
   justify-content: center;
+}
+
+.EndevSponsorsError {
+  color: var(--vp-c-text-3);
+  font-size: 13px;
+  font-weight: 500;
+  margin: 0;
 }
 
 .EndevSponsorsLogo {
