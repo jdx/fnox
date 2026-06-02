@@ -20,7 +20,7 @@
           <img :alt="sponsor.name" :src="sponsor.logo" loading="lazy" decoding="async" />
         </a>
       </div>
-      <a class="EndevSponsorsCta" href="/sponsors.html">
+      <a class="EndevSponsorsCta" href="https://en.dev/sponsor.html">
         Sponsor the work
       </a>
     </div>
