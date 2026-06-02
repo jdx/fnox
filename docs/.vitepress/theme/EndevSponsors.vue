@@ -69,7 +69,6 @@ onMounted(async () => {
 
 <style scoped>
 .EndevSponsors {
-  border-top: 1px solid var(--vp-c-divider);
   padding: 22px 24px;
 }
 
