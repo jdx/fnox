@@ -67,6 +67,7 @@ Do not merge top-level secrets into the selected profile
 - [`fnox remove [-g --global] [-n --dry-run] <KEY>`](/cli/remove.md)
 - [`fnox scan [FLAGS]`](/cli/scan.md)
 - [`fnox set [FLAGS] <KEY> [VALUE]`](/cli/set.md)
+- [`fnox sponsors`](/cli/sponsors.md)
 - [`fnox sync [FLAGS] [KEYS]…`](/cli/sync.md)
 - [`fnox tui`](/cli/tui.md)
 - [`fnox version`](/cli/version.md)
