@@ -11,14 +11,13 @@
       <div class="EndevSponsorsLogos">
         <a
           v-for="sponsor in sponsors"
-          :key="sponsor.name"
-          :aria-label="sponsor.name"
+          :key="sponsor.url"
           class="EndevSponsorsLogo"
           :href="sponsor.url"
-          rel="noopener noreferrer"
+          rel="noopener noreferrer sponsored"
           target="_blank"
         >
-          <img :alt="sponsor.name" :src="sponsor.logo" />
+          <img :alt="sponsor.name" :src="sponsor.logo" loading="lazy" decoding="async" />
         </a>
       </div>
       <a class="EndevSponsorsCta" href="https://en.dev/#contact">
@@ -33,6 +32,23 @@ import { onMounted, ref } from "vue";
 
 const sponsors = ref([]);
 
+const sponsorItems = (items) => (Array.isArray(items) ? items : []);
+const isSafeUrl = (url) => {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
+};
+const isSponsor = (sponsor) =>
+  sponsor &&
+  typeof sponsor === "object" &&
+  typeof sponsor.name === "string" &&
+  typeof sponsor.url === "string" &&
+  typeof sponsor.logo === "string" &&
+  isSafeUrl(sponsor.url);
+
 onMounted(async () => {
   try {
     const res = await fetch("https://en.dev/sponsors.json", {
@@ -41,13 +57,9 @@ onMounted(async () => {
     if (!res.ok) return;
 
     const payload = await res.json();
-    sponsors.value = (Array.isArray(payload.sponsors) ? payload.sponsors : [])
-      .filter((sponsor) =>
-        sponsor?.kind !== "infrastructure" &&
-        sponsor?.name &&
-        sponsor?.url &&
-        sponsor?.logo
-      );
+    sponsors.value = sponsorItems(payload?.sponsors).filter((sponsor) =>
+      sponsor.kind !== "infrastructure" && isSponsor(sponsor),
+    );
   } catch {
     sponsors.value = [];
   }
