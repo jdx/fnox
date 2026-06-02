@@ -2,7 +2,6 @@
 import { h, onMounted, onUnmounted } from "vue";
 import DefaultTheme from "vitepress/theme";
 import { initBanner } from "./banner.js";
-import EndevFooter from "./EndevFooter.vue";
 import { data as starsData } from "../stars.data";
 import "./style.css";
 
@@ -10,9 +9,7 @@ import "./style.css";
 export default {
   extends: DefaultTheme,
   Layout: () => {
-    return h(DefaultTheme.Layout, null, {
-      "layout-bottom": () => h(EndevFooter),
-    });
+    return h(DefaultTheme.Layout, null);
   },
   enhanceApp({ app, router, siteData }) {
     initBanner();
