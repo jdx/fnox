@@ -5,9 +5,9 @@
     class="EndevSponsors"
   >
     <div class="EndevSponsorsInner">
-      <a id="endev-sponsors-title" class="EndevSponsorsTitle" href="https://en.dev/sponsors.html">
+      <p id="endev-sponsors-title" class="EndevSponsorsTitle">
         sponsors
-      </a>
+      </p>
       <div class="EndevSponsorsLogos">
         <a
           v-for="sponsor in sponsors"
@@ -20,8 +20,8 @@
           <img :alt="sponsor.name" :src="sponsor.logo" loading="lazy" decoding="async" />
         </a>
       </div>
-      <a class="EndevSponsorsCta" href="https://en.dev/sponsor.html">
-        Sponsor the work
+      <a class="EndevSponsorsCta" href="https://en.dev/sponsors.html">
+        View all sponsors
       </a>
     </div>
   </section>
@@ -88,13 +88,7 @@ onMounted(async () => {
   font-size: 13px;
   font-weight: 600;
   margin: 0;
-  text-decoration: none;
   text-transform: uppercase;
-  transition: color 0.2s ease;
-}
-
-.EndevSponsorsTitle:hover {
-  color: var(--vp-c-brand-1);
 }
 
 .EndevSponsorsLogos {
