@@ -62,7 +62,7 @@ export default defineConfig({
           { text: "Installation", link: "/guide/installation" },
           { text: "Quick Start", link: "/guide/quick-start" },
           { text: "How It Works", link: "/guide/how-it-works" },
-          { text: "Sponsors", link: "/sponsors" },
+          { text: "Sponsors", link: "https://en.dev/sponsors.html" },
         ],
       },
       {
