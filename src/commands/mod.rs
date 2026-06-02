@@ -29,6 +29,7 @@ pub mod remove;
 pub mod scan;
 pub mod schema;
 pub mod set;
+pub mod sponsors;
 pub mod sync;
 pub mod tui;
 pub mod usage;
@@ -149,6 +150,9 @@ pub enum Commands {
     /// Set a secret value
     Set(set::SetCommand),
 
+    /// Show the companies sponsoring fnox and the en.dev project family
+    Sponsors(sponsors::SponsorsCommand),
+
     /// Sync secrets from remote providers to a local encryption provider
     Sync(sync::SyncCommand),
 
@@ -171,6 +175,7 @@ impl Commands {
             Commands::Completion(cmd) => cmd.run(cli).await,
             Commands::ConfigFiles(cmd) => cmd.run(cli).await,
             Commands::Schema(cmd) => cmd.run(cli).await,
+            Commands::Sponsors(cmd) => cmd.run(cli).await,
             Commands::Usage(cmd) => cmd.run(cli).await,
             Commands::Activate(cmd) => cmd
                 .run()
