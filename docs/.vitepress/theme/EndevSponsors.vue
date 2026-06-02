@@ -5,9 +5,9 @@
     class="EndevSponsors"
   >
     <div class="EndevSponsorsInner">
-      <p id="endev-sponsors-title" class="EndevSponsorsTitle">
+      <a id="endev-sponsors-title" class="EndevSponsorsTitle" href="https://en.dev/sponsors.html">
         sponsors
-      </p>
+      </a>
       <div class="EndevSponsorsLogos">
         <a
           v-for="sponsor in sponsors"
@@ -31,6 +31,7 @@
 import { onMounted, ref } from "vue";
 
 const sponsors = ref([]);
+const footerTiers = new Set(["anchor", "premier", "partner"]);
 
 const sponsorItems = (items) => (Array.isArray(items) ? items : []);
 const isSafeUrl = (url) => {
@@ -59,7 +60,7 @@ onMounted(async () => {
 
     const payload = await res.json();
     sponsors.value = sponsorItems(payload?.sponsors).filter((sponsor) =>
-      isSponsor(sponsor) && sponsor.kind !== "infrastructure",
+      isSponsor(sponsor) && footerTiers.has(sponsor.tier),
     );
   } catch {
     sponsors.value = [];
@@ -87,7 +88,13 @@ onMounted(async () => {
   font-size: 13px;
   font-weight: 600;
   margin: 0;
+  text-decoration: none;
   text-transform: uppercase;
+  transition: color 0.2s ease;
+}
+
+.EndevSponsorsTitle:hover {
+  color: var(--vp-c-brand-1);
 }
 
 .EndevSponsorsLogos {
