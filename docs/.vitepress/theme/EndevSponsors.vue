@@ -6,7 +6,7 @@
   >
     <div class="EndevSponsorsInner">
       <p id="endev-sponsors-title" class="EndevSponsorsTitle">
-        Company sponsors
+        sponsors
       </p>
       <div class="EndevSponsorsLogos">
         <a
