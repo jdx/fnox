@@ -173,10 +173,7 @@ export default defineConfig({
 
     socialLinks: [{ icon: "github", link: "https://github.com/jdx/fnox" }],
 
-    footer: {
-      message: "Released under the MIT License.",
-      copyright: "Copyright © 2024-present Jeff Dickey",
-    },
+    footer: false,
 
     search: {
       provider: "local",
