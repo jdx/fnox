@@ -1,8 +1,10 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
+use crate::providers::OptionProviderSecretRef;
 use async_trait::async_trait;
 use std::io::Read;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 pub fn env_dependencies() -> &'static [&'static str] {
     &[]
@@ -11,14 +13,72 @@ pub fn env_dependencies() -> &'static [&'static str] {
 pub struct AgeEncryptionProvider {
     recipients: Vec<String>,
     key_file: Option<PathBuf>,
+    identity: OptionProviderSecretRef,
+    config: Option<Arc<crate::config::Config>>,
+    profile: String,
+    provider_name: String,
 }
 
 impl AgeEncryptionProvider {
-    pub fn new(recipients: Vec<String>, key_file: Option<String>) -> Result<Self> {
+    pub fn new(
+        recipients: Vec<String>,
+        key_file: Option<String>,
+        identity: OptionProviderSecretRef,
+    ) -> Result<Self> {
         Ok(Self {
             recipients,
             key_file: key_file.map(|k| PathBuf::from(shellexpand::tilde(&k).to_string())),
+            identity,
+            config: None,
+            profile: "default".to_string(),
+            provider_name: "age".to_string(),
         })
+    }
+
+    pub fn new_with_config(
+        recipients: Vec<String>,
+        key_file: Option<String>,
+        identity: OptionProviderSecretRef,
+        config: Arc<crate::config::Config>,
+        profile: String,
+        provider_name: String,
+    ) -> Result<Self> {
+        Ok(Self {
+            recipients,
+            key_file: key_file.map(|k| PathBuf::from(shellexpand::tilde(&k).to_string())),
+            identity,
+            config: Some(config),
+            profile,
+            provider_name,
+        })
+    }
+
+    async fn resolve_provider_identity(&self) -> Result<Option<String>> {
+        let Some(identity) = self.identity.as_ref() else {
+            return Ok(None);
+        };
+
+        if identity.provider == self.provider_name {
+            return Err(FnoxError::ProviderConfigCycle {
+                provider: self.provider_name.clone(),
+                cycle: format!("{} -> {}", self.provider_name, identity.provider),
+            });
+        }
+
+        let Some(config) = self.config.as_ref() else {
+            return Err(FnoxError::Config(
+                "Cannot resolve age identity provider reference without config context".to_string(),
+            ));
+        };
+
+        let mut ctx = crate::providers::resolver::ResolutionContext::new();
+        crate::providers::resolver::resolve_provider_ref(
+            config,
+            &self.profile,
+            &self.identity,
+            &mut ctx,
+        )
+        .await
     }
 }
 
@@ -111,14 +171,17 @@ impl crate::providers::Provider for AgeEncryptionProvider {
                 }
             };
 
-        // Priority for key file:
+        // Priority for identity:
         // 1. FNOX_AGE_KEY env var (inline key content)
-        // 2. self.key_file (from provider config)
-        // 3. Settings age_key_file (from CLI flag - deprecated)
-        // 4. Default path (~/.config/fnox/age.txt)
+        // 2. self.identity (from provider config, resolved from another provider)
+        // 3. self.key_file (from provider config)
+        // 4. Settings age_key_file (from CLI flag - deprecated)
+        // 5. Default path (~/.config/fnox/age.txt)
         let (identity_content, key_file_path_opt) = if let Some(ref age_key) = *env::FNOX_AGE_KEY {
             // Use the key directly from the environment variable
             (age_key.clone(), None)
+        } else if let Some(identity) = self.resolve_provider_identity().await? {
+            (identity, None)
         } else {
             // Determine which key file to use
             let key_file_path = if let Some(ref config_key_file) = self.key_file {

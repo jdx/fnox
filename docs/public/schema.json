@@ -464,6 +464,17 @@
         }
       ]
     },
+    "OptionProviderSecretRef": {
+      "description": "An optional provider-backed secret reference.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProviderSecretRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "ProfileConfig": {
       "description": "Configuration for a profile",
       "type": "object",
@@ -510,6 +521,9 @@
           "properties": {
             "auth_command": {
               "type": ["string", "null"]
+            },
+            "identity": {
+              "$ref": "#/$defs/OptionProviderSecretRef"
             },
             "key_file": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -1036,6 +1050,20 @@
           "required": ["type", "service"]
         }
       ]
+    },
+    "ProviderSecretRef": {
+      "description": "A reference to a secret stored in a specific provider.\n\nIn TOML, this deserializes from:\n- `field = { provider = \"keychain\", value = \"age-key\" }`",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["provider", "value"]
     },
     "SecretConfig": {
       "description": "Configuration for a single secret",
