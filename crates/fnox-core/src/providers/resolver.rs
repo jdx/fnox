@@ -172,6 +172,22 @@ pub fn resolve_provider_ref<'a>(
     value: &'a OptionProviderSecretRef,
     ctx: &'a mut ResolutionContext,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<String>>> + Send + 'a>> {
+    resolve_provider_ref_with_identity_cycle_guard(
+        config,
+        profile,
+        value,
+        ctx,
+        super::age::AgeIdentityCycleGuard::default(),
+    )
+}
+
+pub fn resolve_provider_ref_with_identity_cycle_guard<'a>(
+    config: &'a Config,
+    profile: &'a str,
+    value: &'a OptionProviderSecretRef,
+    ctx: &'a mut ResolutionContext,
+    identity_cycle_guard: super::age::AgeIdentityCycleGuard,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<String>>> + Send + 'a>> {
     Box::pin(async move {
         let Some(provider_ref) = value.as_ref() else {
             return Ok(None);
@@ -206,11 +222,12 @@ pub fn resolve_provider_ref<'a>(
             ctx,
         )
         .await?;
-        let provider = super::get_provider_from_resolved_with_context(
+        let provider = super::get_provider_from_resolved_with_context_and_identity_cycle_guard(
             config,
             profile,
             &provider_ref.provider,
             &resolved_provider,
+            Some(identity_cycle_guard),
         )?;
 
         provider.get_secret(&provider_ref.value).await.map(Some)

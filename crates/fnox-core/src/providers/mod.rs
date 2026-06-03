@@ -296,6 +296,22 @@ pub(crate) fn get_provider_from_resolved_with_context(
     provider_name: &str,
     resolved: &ResolvedProviderConfig,
 ) -> Result<Box<dyn Provider>> {
+    get_provider_from_resolved_with_context_and_identity_cycle_guard(
+        config,
+        profile,
+        provider_name,
+        resolved,
+        None,
+    )
+}
+
+pub(crate) fn get_provider_from_resolved_with_context_and_identity_cycle_guard(
+    config: &crate::config::Config,
+    profile: &str,
+    provider_name: &str,
+    resolved: &ResolvedProviderConfig,
+    identity_cycle_guard: Option<age::AgeIdentityCycleGuard>,
+) -> Result<Box<dyn Provider>> {
     if let ResolvedProviderConfig::AgeEncryption {
         recipients,
         key_file,
@@ -309,6 +325,7 @@ pub(crate) fn get_provider_from_resolved_with_context(
             std::sync::Arc::new(config.clone()),
             profile.to_string(),
             provider_name.to_string(),
+            identity_cycle_guard,
         )?));
     }
     get_provider_from_resolved(provider_name, resolved)

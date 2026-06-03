@@ -4,7 +4,7 @@ use crate::providers::OptionProviderSecretRef;
 use async_trait::async_trait;
 use std::io::Read;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub fn env_dependencies() -> &'static [&'static str] {
     &[]
@@ -17,6 +17,7 @@ pub struct AgeEncryptionProvider {
     config: Option<Arc<crate::config::Config>>,
     profile: String,
     provider_name: String,
+    identity_cycle_guard: Option<AgeIdentityCycleGuard>,
 }
 
 impl AgeEncryptionProvider {
@@ -32,6 +33,7 @@ impl AgeEncryptionProvider {
             config: None,
             profile: "default".to_string(),
             provider_name: "age".to_string(),
+            identity_cycle_guard: None,
         })
     }
 
@@ -42,6 +44,7 @@ impl AgeEncryptionProvider {
         config: Arc<crate::config::Config>,
         profile: String,
         provider_name: String,
+        identity_cycle_guard: Option<AgeIdentityCycleGuard>,
     ) -> Result<Self> {
         Ok(Self {
             recipients,
@@ -50,6 +53,7 @@ impl AgeEncryptionProvider {
             config: Some(config),
             profile,
             provider_name,
+            identity_cycle_guard,
         })
     }
 
@@ -71,14 +75,65 @@ impl AgeEncryptionProvider {
             ));
         };
 
+        let identity_cycle_guard = self.identity_cycle_guard.clone().unwrap_or_default();
+        let _guard = identity_cycle_guard.enter(&self.provider_name)?;
         let mut ctx = crate::providers::resolver::ResolutionContext::new();
-        crate::providers::resolver::resolve_provider_ref(
+        crate::providers::resolver::resolve_provider_ref_with_identity_cycle_guard(
             config,
             &self.profile,
             &self.identity,
             &mut ctx,
+            identity_cycle_guard,
         )
         .await
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct AgeIdentityCycleGuard {
+    resolving: Arc<Mutex<Vec<String>>>,
+}
+
+impl AgeIdentityCycleGuard {
+    fn enter(&self, provider_name: &str) -> Result<AgeIdentityCycleEntry> {
+        let mut resolving = self
+            .resolving
+            .lock()
+            .map_err(|_| FnoxError::Config("Age identity cycle guard lock poisoned".to_string()))?;
+
+        if let Some(start) = resolving.iter().position(|name| name == provider_name) {
+            let mut cycle = resolving[start..].to_vec();
+            cycle.push(provider_name.to_string());
+            return Err(FnoxError::ProviderConfigCycle {
+                provider: provider_name.to_string(),
+                cycle: cycle.join(" -> "),
+            });
+        }
+
+        resolving.push(provider_name.to_string());
+
+        Ok(AgeIdentityCycleEntry {
+            provider_name: provider_name.to_string(),
+            resolving: self.resolving.clone(),
+        })
+    }
+}
+
+struct AgeIdentityCycleEntry {
+    provider_name: String,
+    resolving: Arc<Mutex<Vec<String>>>,
+}
+
+impl Drop for AgeIdentityCycleEntry {
+    fn drop(&mut self) {
+        if let Ok(mut resolving) = self.resolving.lock() {
+            if let Some(index) = resolving
+                .iter()
+                .rposition(|name| name == &self.provider_name)
+            {
+                resolving.remove(index);
+            }
+        }
     }
 }
 
