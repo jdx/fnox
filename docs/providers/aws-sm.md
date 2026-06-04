@@ -43,7 +43,10 @@ fnox get DATABASE_URL
     {
       "Sid": "ListSecrets",
       "Effect": "Allow",
-      "Action": "secretsmanager:ListSecrets",
+      "Action": [
+        "secretsmanager:ListSecrets",
+        "secretsmanager:BatchGetSecretValue"
+      ],
       "Resource": "*"
     },
     {
@@ -59,8 +62,8 @@ fnox get DATABASE_URL
 }
 ```
 
-::: warning ListSecrets Permission
-The `secretsmanager:ListSecrets` action **must** use `"Resource": "*"` and cannot be scoped to specific ARNs.
+::: warning ListSecrets and BatchGetSecretValue Permissions
+The `secretsmanager:ListSecrets` and `secretsmanager:BatchGetSecretValue` actions **must** use `"Resource": "*"` and cannot be scoped to specific ARNs.
 :::
 
 ### Full Access (For Testing)
@@ -72,7 +75,10 @@ The `secretsmanager:ListSecrets` action **must** use `"Resource": "*"` and canno
     {
       "Sid": "ListSecretsPermission",
       "Effect": "Allow",
-      "Action": "secretsmanager:ListSecrets",
+      "Action": [
+        "secretsmanager:ListSecrets",
+        "secretsmanager:BatchGetSecretValue"
+      ],
       "Resource": "*"
     },
     {

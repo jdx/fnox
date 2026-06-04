@@ -7,6 +7,10 @@
 
 Manage secrets with encryption or cloud providers—or both! fnox gives you a unified interface to work with secrets across development, CI, and production.
 
+## Sponsors
+
+fnox is sponsored by [37signals](https://37signals.com).
+
 ## Quick Start
 
 ```bash
