@@ -1321,6 +1321,20 @@
         "hidden_aliases": [],
         "examples": []
       },
+      "sponsors": {
+        "full_cmd": ["sponsors"],
+        "usage": "sponsors",
+        "subcommands": {},
+        "args": [],
+        "flags": [],
+        "mounts": [],
+        "hide": false,
+        "help": "Show the companies sponsoring fnox and the en.dev project family",
+        "name": "sponsors",
+        "aliases": [],
+        "hidden_aliases": [],
+        "examples": []
+      },
       "sync": {
         "full_cmd": ["sync"],
         "usage": "sync [FLAGS] [KEYS]…",
