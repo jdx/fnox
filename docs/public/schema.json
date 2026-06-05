@@ -453,22 +453,22 @@
       "type": "string",
       "enum": ["get_secret", "exec"]
     },
-    "OptionStringOrSecretRef": {
-      "description": "An optional value that can be a literal string, a secret reference, or absent.\n\nIn TOML, this deserializes from:\n- Field absent: `None`\n- `field = \"literal-value\"`: `Some(Literal(\"literal-value\"))`\n- `field = { secret = \"SECRET_NAME\" }`: `Some(SecretRef { secret: \"SECRET_NAME\" })`",
+    "OptionProviderSecretRef": {
+      "description": "An optional provider-backed secret reference.",
       "anyOf": [
         {
-          "$ref": "#/$defs/StringOrSecretRef"
+          "$ref": "#/$defs/ProviderSecretRef"
         },
         {
           "type": "null"
         }
       ]
     },
-    "OptionProviderSecretRef": {
-      "description": "An optional provider-backed secret reference.",
+    "OptionStringOrSecretRef": {
+      "description": "An optional value that can be a literal string, a secret reference, or absent.\n\nIn TOML, this deserializes from:\n- Field absent: `None`\n- `field = \"literal-value\"`: `Some(Literal(\"literal-value\"))`\n- `field = { secret = \"SECRET_NAME\" }`: `Some(SecretRef { secret: \"SECRET_NAME\" })`",
       "anyOf": [
         {
-          "$ref": "#/$defs/ProviderSecretRef"
+          "$ref": "#/$defs/StringOrSecretRef"
         },
         {
           "type": "null"
