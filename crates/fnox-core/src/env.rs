@@ -30,6 +30,15 @@ pub fn set_var<K: AsRef<OsStr>, V: AsRef<OsStr>>(key: K, val: V) {
     }
 }
 
+/// Remove an environment variable, serializing access via ENV_MUTEX.
+pub fn remove_var<K: AsRef<OsStr>>(key: K) {
+    let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    // SAFETY: remove_var is unsafe in Rust 2024 edition. Access is serialized via ENV_MUTEX.
+    unsafe {
+        std::env::remove_var(key);
+    }
+}
+
 // Directory configuration
 pub static HOME_DIR: LazyLock<PathBuf> = LazyLock::new(|| dirs::home_dir().unwrap_or_default());
 pub static FNOX_CONFIG_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -126,20 +135,18 @@ mod tests {
 
     #[test]
     fn test_var_path() {
-        unsafe {
-            set_var("FNOX_TEST_PATH", "/foo/bar");
-            assert_eq!(
-                var_path("FNOX_TEST_PATH").unwrap(),
-                PathBuf::from("/foo/bar")
-            );
-            // Empty values are treated as unset per XDG spec
-            set_var("FNOX_TEST_PATH", "");
-            assert_eq!(var_path("FNOX_TEST_PATH"), None);
-            // Relative paths are rejected per XDG spec
-            set_var("FNOX_TEST_PATH", "relative/path");
-            assert_eq!(var_path("FNOX_TEST_PATH"), None);
-            remove_var("FNOX_TEST_PATH");
-        }
+        set_var("FNOX_TEST_PATH", "/foo/bar");
+        assert_eq!(
+            var_path("FNOX_TEST_PATH").unwrap(),
+            PathBuf::from("/foo/bar")
+        );
+        // Empty values are treated as unset per XDG spec
+        set_var("FNOX_TEST_PATH", "");
+        assert_eq!(var_path("FNOX_TEST_PATH"), None);
+        // Relative paths are rejected per XDG spec
+        set_var("FNOX_TEST_PATH", "relative/path");
+        assert_eq!(var_path("FNOX_TEST_PATH"), None);
+        remove_var("FNOX_TEST_PATH");
     }
 
     #[test]

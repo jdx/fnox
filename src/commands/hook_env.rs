@@ -446,7 +446,6 @@ mod tests {
         assert_eq!(terminal_width(None), 80);
 
         // No TTY and no COLUMNS: fall back to 80
-        // SAFETY: serialized via ENV_MUTEX, same as set_var above.
         crate::env::remove_var("COLUMNS");
         assert_eq!(terminal_width(None), 80);
     }
