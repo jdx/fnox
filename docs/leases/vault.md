@@ -15,16 +15,16 @@ username = "DB_USER"
 password = "DB_PASSWORD"
 ```
 
-| Field                | Required | Description                                                          |
-| -------------------- | -------- | -------------------------------------------------------------------- |
-| `secret_path`        | Yes      | Vault API path for the dynamic secret                                |
-| `env_map`            | Yes      | Map of Vault response field names to environment variables           |
-| `address`            | No       | Vault server URL (falls back to `VAULT_ADDR`)                        |
-| `token`              | No       | Vault auth token (falls back to `VAULT_TOKEN`)                       |
-| `credential_command` | No       | Shell command that prints a Vault token when no token is configured  |
-| `namespace`          | No       | Vault namespace (for Vault Enterprise / HCP Vault)                   |
-| `duration`           | No       | Requested lease TTL (e.g., `"1h"`, `"30m"`)                          |
-| `method`             | No       | HTTP method: `"get"` (default) or `"post"` (for pki/issue)           |
+| Field                | Required | Description                                                         |
+| -------------------- | -------- | ------------------------------------------------------------------- |
+| `secret_path`        | Yes      | Vault API path for the dynamic secret                               |
+| `env_map`            | Yes      | Map of Vault response field names to environment variables          |
+| `address`            | No       | Vault server URL (falls back to `VAULT_ADDR`)                       |
+| `token`              | No       | Vault auth token (falls back to `VAULT_TOKEN`)                      |
+| `credential_command` | No       | Shell command that prints a Vault token when no token is configured |
+| `namespace`          | No       | Vault namespace (for Vault Enterprise / HCP Vault)                  |
+| `duration`           | No       | Requested lease TTL (e.g., `"1h"`, `"30m"`)                         |
+| `method`             | No       | HTTP method: `"get"` (default) or `"post"` (for pki/issue)          |
 
 ## Prerequisites
 
