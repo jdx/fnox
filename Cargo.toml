@@ -82,6 +82,7 @@ strsim = "0.11"
 strum = { version = "0.28", features = ["derive"] }
 tabled = { version = "0.20", features = ["ansi"] }
 tempfile = "3"
+tera = { version = "1", default-features = false }
 terminal_size = "0.4"
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }

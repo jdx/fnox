@@ -94,6 +94,7 @@ impl AddCommand {
                 path: OptionStringOrSecretRef::literal("secret"),
                 token: OptionStringOrSecretRef::none(),
                 namespace: OptionStringOrSecretRef::none(),
+                credential_command: OptionStringOrSecretRef::none(),
                 auth_command: None,
             },
             ProviderType::Gcp => crate::config::ProviderConfig::GoogleSecretManager {

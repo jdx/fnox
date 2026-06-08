@@ -2449,6 +2449,7 @@ dependencies = [
  "strsim",
  "strum 0.28.0",
  "tempfile",
+ "tera",
  "thiserror 2.0.18",
  "tokio",
  "toml_edit",
