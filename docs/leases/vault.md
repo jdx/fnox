@@ -43,7 +43,7 @@ Vault address not found. Set VAULT_ADDR.
 Vault token not found. Set VAULT_TOKEN.
 ```
 
-When `credential_command` is configured, fnox runs it through the platform shell and uses trimmed stdout as the token. The command is rendered as a Tera template with `address`, `secret_path`, and `namespace`, and fnox sets `VAULT_ADDR` and `VAULT_NAMESPACE` for the command from the lease config. Output is cached for the current fnox process so repeated lease operations do not repeat the login.
+When `credential_command` is configured, fnox runs it through the platform shell and uses trimmed stdout as the token. The command is rendered as a Tera template with `address`, `secret_path`, and `namespace`, and fnox sets `VAULT_ADDR` and `VAULT_NAMESPACE` for the command from the lease config. Output is cached briefly for the current fnox process so repeated lease operations do not repeat the login.
 
 ## Credentials Produced
 

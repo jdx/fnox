@@ -46,7 +46,7 @@ path = "secret/team-a"
 credential_command = "vault login -method=oidc -token-only"
 ```
 
-fnox sets `VAULT_ADDR` and `VAULT_NAMESPACE` for the command from the provider config. The command runs through the platform shell, so shell features like pipes and redirects work. Output is cached for the current fnox process so resolving multiple secrets from the same provider does not repeat the login.
+fnox sets `VAULT_ADDR` and `VAULT_NAMESPACE` for the command from the provider config. The command runs through the platform shell, so shell features like pipes and redirects work. Output is cached briefly for the current fnox process so resolving multiple secrets from the same provider does not repeat the login.
 
 ## Setup
 

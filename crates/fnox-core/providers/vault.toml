@@ -39,3 +39,4 @@ wizard = true
 type = "optional"
 placeholder = "vault login -method=oidc -token-only"
 label = "Credential command (optional):"
+wizard = true

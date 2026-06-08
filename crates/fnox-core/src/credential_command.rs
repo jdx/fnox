@@ -1,15 +1,24 @@
 use crate::error::{FnoxError, Result};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::{LazyLock, Mutex};
-use std::time::Duration;
+use std::sync::{Arc, LazyLock, Mutex};
+use std::time::{Duration, Instant};
 use tera::{Context, Tera};
 use tokio::process::Command;
 
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
+const DEFAULT_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
 
-static CACHE: LazyLock<Mutex<HashMap<String, String>>> =
+type CacheSlot = Arc<tokio::sync::Mutex<Option<CachedToken>>>;
+
+static CACHE: LazyLock<Mutex<HashMap<String, CacheSlot>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
+
+#[derive(Clone)]
+struct CachedToken {
+    token: String,
+    expires_at: Instant,
+}
 
 pub async fn run(
     provider: &str,
@@ -30,18 +39,26 @@ pub async fn run(
         })?;
 
     let cache_key = cache_key(provider, &rendered, envs);
-    if let Some(token) = CACHE
-        .lock()
-        .expect("credential cache lock poisoned")
-        .get(&cache_key)
+    let cache_slot = {
+        let mut cache = CACHE.lock().expect("credential cache lock poisoned");
+        cache
+            .entry(cache_key)
+            .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(None)))
+            .clone()
+    };
+
+    let mut cached = cache_slot.lock().await;
+    if let Some(cached_token) = cached.as_ref()
+        && cached_token.expires_at > Instant::now()
     {
         tracing::debug!("Using cached credential_command output for {provider}");
-        return Ok(token.clone());
+        return Ok(cached_token.token.clone());
     }
 
     tracing::debug!("Running credential_command for {provider}");
 
     let mut cmd = shell_command(&rendered);
+    cmd.kill_on_drop(true);
     for (key, value) in envs {
         cmd.env(key, value);
     }
@@ -88,10 +105,10 @@ pub async fn run(
         });
     }
 
-    CACHE
-        .lock()
-        .expect("credential cache lock poisoned")
-        .insert(cache_key, token.clone());
+    *cached = Some(CachedToken {
+        token: token.clone(),
+        expires_at: Instant::now() + DEFAULT_CACHE_TTL,
+    });
 
     Ok(token)
 }
@@ -133,6 +150,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn credential_command_output_is_cached() {
         let tempdir = tempfile::tempdir().unwrap();
