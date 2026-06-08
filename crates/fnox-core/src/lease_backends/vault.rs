@@ -15,6 +15,7 @@ pub const CONSUMED_ENV_VARS: &[&str] = &[
     "VAULT_TOKEN",
     "FNOX_VAULT_TOKEN",
     "VAULT_NAMESPACE",
+    "FNOX_VAULT_NAMESPACE",
     "VAULT_CACERT",
     "VAULT_CAPATH",
     "VAULT_SKIP_VERIFY",
@@ -117,6 +118,8 @@ impl VaultBackend {
             ));
         }
 
+        let namespace = namespace.or_else(vault_namespace);
+
         Ok(Self {
             address,
             token,
@@ -126,6 +129,22 @@ impl VaultBackend {
             env_map,
             method,
         })
+    }
+
+    fn credential_command_context(&self) -> serde_json::Value {
+        json!({
+            "address": self.address,
+            "secret_path": self.secret_path,
+            "namespace": self.namespace,
+        })
+    }
+
+    fn credential_command_envs(&self) -> Vec<(&str, String)> {
+        let mut envs = vec![("VAULT_ADDR", self.address.clone())];
+        if let Some(namespace) = &self.namespace {
+            envs.push(("VAULT_NAMESPACE", namespace.clone()));
+        }
+        envs
     }
 
     async fn token(&self) -> Result<String> {
@@ -144,24 +163,35 @@ impl VaultBackend {
                     url: URL.to_string(),
                 })?;
 
-        let mut envs = vec![("VAULT_ADDR", self.address.clone())];
-        if let Some(namespace) = &self.namespace {
-            envs.push(("VAULT_NAMESPACE", namespace.clone()));
-        }
+        let envs = self.credential_command_envs();
 
         crate::credential_command::run(
             "Vault",
             command,
-            json!({
-                "address": self.address,
-                "secret_path": self.secret_path,
-                "namespace": self.namespace,
-            }),
+            self.credential_command_context(),
             &envs,
             crate::credential_command::DEFAULT_TIMEOUT,
             URL,
         )
         .await
+    }
+
+    fn invalidate_credential_command(&self) -> Result<()> {
+        if self.token.is_some() {
+            return Ok(());
+        }
+
+        let Some(command) = &self.credential_command else {
+            return Ok(());
+        };
+
+        crate::credential_command::invalidate(
+            "Vault",
+            command,
+            self.credential_command_context(),
+            &self.credential_command_envs(),
+            URL,
+        )
     }
 }
 
@@ -209,6 +239,7 @@ impl LeaseBackend for VaultBackend {
             let status = response.status();
             let body_text = response.text().await.unwrap_or_default();
             if status.as_u16() == 403 || status.as_u16() == 401 {
+                self.invalidate_credential_command()?;
                 return Err(FnoxError::ProviderAuthFailed {
                     provider: "Vault".to_string(),
                     details: body_text,
@@ -347,6 +378,7 @@ impl LeaseBackend for VaultBackend {
             let status = response.status();
             let body_text = response.text().await.unwrap_or_default();
             if status.as_u16() == 403 || status.as_u16() == 401 {
+                self.invalidate_credential_command()?;
                 return Err(FnoxError::ProviderAuthFailed {
                     provider: "Vault".to_string(),
                     details: body_text,
@@ -370,5 +402,44 @@ impl LeaseBackend for VaultBackend {
 
     fn max_lease_duration(&self) -> Duration {
         Duration::from_secs(24 * 3600)
+    }
+}
+
+fn vault_namespace() -> Option<String> {
+    env::var("FNOX_VAULT_NAMESPACE")
+        .or_else(|_| env::var("VAULT_NAMESPACE"))
+        .ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_uses_vault_namespace_env_fallback() {
+        env::set_var("FNOX_VAULT_NAMESPACE", "admin/test");
+        unsafe {
+            env::remove_var("VAULT_NAMESPACE");
+        }
+
+        let mut env_map = IndexMap::new();
+        env_map.insert("access_key".to_string(), "AWS_ACCESS_KEY_ID".to_string());
+
+        let backend = VaultBackend::new(
+            Some("https://vault.example.com".to_string()),
+            Some("token".to_string()),
+            None,
+            "secret/data/fnox".to_string(),
+            None,
+            env_map,
+            "get".to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(backend.namespace.as_deref(), Some("admin/test"));
+
+        unsafe {
+            env::remove_var("FNOX_VAULT_NAMESPACE");
+        }
     }
 }

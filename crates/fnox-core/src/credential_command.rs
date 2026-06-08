@@ -28,15 +28,7 @@ pub async fn run(
     timeout: Duration,
     url: &str,
 ) -> Result<String> {
-    let tera_context =
-        Context::from_value(context).map_err(|e| FnoxError::Config(e.to_string()))?;
-    let rendered =
-        Tera::one_off(command, &tera_context, false).map_err(|e| FnoxError::ProviderCliFailed {
-            provider: provider.to_string(),
-            details: format!("Failed to render credential_command: {e}"),
-            hint: "Check credential_command template syntax".to_string(),
-            url: url.to_string(),
-        })?;
+    let rendered = render_command(provider, command, context, url)?;
 
     let cache_key = cache_key(provider, &rendered, envs);
     let cache_slot = {
@@ -113,6 +105,31 @@ pub async fn run(
     Ok(token)
 }
 
+pub fn invalidate(
+    provider: &str,
+    command: &str,
+    context: Value,
+    envs: &[(&str, String)],
+    url: &str,
+) -> Result<()> {
+    let rendered = render_command(provider, command, context, url)?;
+    let cache_key = cache_key(provider, &rendered, envs);
+    let mut cache = CACHE.lock().expect("credential cache lock poisoned");
+    cache.remove(&cache_key);
+    Ok(())
+}
+
+fn render_command(provider: &str, command: &str, context: Value, url: &str) -> Result<String> {
+    let tera_context =
+        Context::from_value(context).map_err(|e| FnoxError::Config(e.to_string()))?;
+    Tera::one_off(command, &tera_context, false).map_err(|e| FnoxError::ProviderCliFailed {
+        provider: provider.to_string(),
+        details: format!("Failed to render credential_command: {e}"),
+        hint: "Check credential_command template syntax".to_string(),
+        url: url.to_string(),
+    })
+}
+
 fn cache_key(provider: &str, command: &str, envs: &[(&str, String)]) -> String {
     let mut envs = envs.to_vec();
     envs.sort_by(|a, b| a.0.cmp(b.0).then_with(|| a.1.cmp(&b.1)));
@@ -184,5 +201,60 @@ mod tests {
         assert_eq!(first, "token");
         assert_eq!(second, "token");
         assert_eq!(std::fs::read_to_string(count_file).unwrap(), "1");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn credential_command_cache_can_be_invalidated() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let token_file = tempdir.path().join("token");
+        std::fs::write(&token_file, "first").unwrap();
+        let token_path = token_file.display();
+        let command = format!("cat '{token_path}'");
+        let envs = [("VAULT_ADDR", "https://vault.example.com".to_string())];
+
+        let first = run(
+            "TestInvalidate",
+            &command,
+            json!({}),
+            &envs,
+            DEFAULT_TIMEOUT,
+            "https://example.com",
+        )
+        .await
+        .unwrap();
+        std::fs::write(&token_file, "second").unwrap();
+        let cached = run(
+            "TestInvalidate",
+            &command,
+            json!({}),
+            &envs,
+            DEFAULT_TIMEOUT,
+            "https://example.com",
+        )
+        .await
+        .unwrap();
+        invalidate(
+            "TestInvalidate",
+            &command,
+            json!({}),
+            &envs,
+            "https://example.com",
+        )
+        .unwrap();
+        let refreshed = run(
+            "TestInvalidate",
+            &command,
+            json!({}),
+            &envs,
+            DEFAULT_TIMEOUT,
+            "https://example.com",
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(first, "first");
+        assert_eq!(cached, "first");
+        assert_eq!(refreshed, "second");
     }
 }
