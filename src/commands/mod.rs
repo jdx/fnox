@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use crate::error::{FnoxError, Result};
 use clap::{Parser, Subcommand};
 
-use crate::config::Config;
+use crate::config::{Config, IfMissing};
 
 pub mod activate;
 pub mod check;
@@ -59,7 +59,7 @@ pub struct Cli {
 
     /// What to do if a secret is missing (error, warn, ignore)
     #[arg(long, global = true)]
-    pub if_missing: Option<String>,
+    pub if_missing: Option<IfMissing>,
 
     /// Disable colored output
     #[arg(long, global = true)]
