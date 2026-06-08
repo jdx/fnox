@@ -114,6 +114,9 @@ fn cache_key(provider: &str, command: &str, envs: &[(&str, String)]) -> String {
 }
 
 fn shell_command(command: &str) -> Command {
+    // `cfg!` selects the shell for the target binary at compile time, which
+    // matches fnox's native build/release flow. Cross-compiled artifacts should
+    // be built per target so Windows binaries use cmd and Unix binaries use sh.
     if cfg!(target_os = "windows") {
         let mut cmd = Command::new("cmd");
         cmd.args(["/C", command]);

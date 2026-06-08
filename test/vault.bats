@@ -294,7 +294,7 @@ EOF
 [providers.vault]
 type = "vault"
 address = "http://localhost:8200"
-credential_command = "printf '%s' '$VAULT_TOKEN'"
+credential_command = "printf '%s' \"\$TEST_VAULT_TOKEN\""
 
 [secrets.TEST_CREDENTIAL_COMMAND]
 provider = "vault"
@@ -303,7 +303,7 @@ EOF
 
 	vault kv put "secret/credential-command-test" value="credential-command-value" >/dev/null 2>&1
 
-	run env -u VAULT_TOKEN -u FNOX_VAULT_TOKEN "$FNOX_BIN" get TEST_CREDENTIAL_COMMAND
+	run env -u VAULT_TOKEN -u FNOX_VAULT_TOKEN TEST_VAULT_TOKEN="$VAULT_TOKEN" "$FNOX_BIN" get TEST_CREDENTIAL_COMMAND
 	assert_success
 	assert_output "credential-command-value"
 
