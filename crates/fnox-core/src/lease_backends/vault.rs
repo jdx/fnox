@@ -418,9 +418,7 @@ mod tests {
     #[test]
     fn new_uses_vault_namespace_env_fallback() {
         env::set_var("FNOX_VAULT_NAMESPACE", "admin/test");
-        unsafe {
-            env::remove_var("VAULT_NAMESPACE");
-        }
+        env::remove_var("VAULT_NAMESPACE");
 
         let mut env_map = IndexMap::new();
         env_map.insert("access_key".to_string(), "AWS_ACCESS_KEY_ID".to_string());
@@ -438,8 +436,6 @@ mod tests {
 
         assert_eq!(backend.namespace.as_deref(), Some("admin/test"));
 
-        unsafe {
-            env::remove_var("FNOX_VAULT_NAMESPACE");
-        }
+        env::remove_var("FNOX_VAULT_NAMESPACE");
     }
 }
