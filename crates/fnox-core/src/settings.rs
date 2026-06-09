@@ -43,9 +43,13 @@ static INITIALIZED: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
 /// CLI snapshot captured from parsed command-line arguments
 #[derive(Debug, Clone, Default)]
 pub struct CliSnapshot {
+    /// Path to age key file, overrides provider config.
     pub age_key_file: Option<std::path::PathBuf>,
+    /// Active profile name, overrides `FNOX_PROFILE`.
     pub profile: Option<String>,
+    /// Global override for missing-secret behavior.
     pub if_missing: Option<IfMissing>,
+    /// Skip merging top-level secrets into the selected profile.
     pub no_defaults: bool,
 }
 
