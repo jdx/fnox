@@ -126,13 +126,12 @@ struct AgeIdentityCycleEntry {
 
 impl Drop for AgeIdentityCycleEntry {
     fn drop(&mut self) {
-        if let Ok(mut resolving) = self.resolving.lock() {
-            if let Some(index) = resolving
+        if let Ok(mut resolving) = self.resolving.lock()
+            && let Some(index) = resolving
                 .iter()
                 .rposition(|name| name == &self.provider_name)
-            {
-                resolving.remove(index);
-            }
+        {
+            resolving.remove(index);
         }
     }
 }
