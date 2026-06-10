@@ -3,6 +3,7 @@ use crate::error::{FnoxError, Result};
 use crate::lease_backends::{Lease, LeaseBackend};
 use async_trait::async_trait;
 use indexmap::IndexMap;
+use serde_json::json;
 use std::time::Duration;
 
 const URL: &str = "https://fnox.jdx.dev/leases/vault";
@@ -14,6 +15,7 @@ pub const CONSUMED_ENV_VARS: &[&str] = &[
     "VAULT_TOKEN",
     "FNOX_VAULT_TOKEN",
     "VAULT_NAMESPACE",
+    "FNOX_VAULT_NAMESPACE",
     "VAULT_CACERT",
     "VAULT_CAPATH",
     "VAULT_SKIP_VERIFY",
@@ -22,13 +24,18 @@ pub const CONSUMED_ENV_VARS: &[&str] = &[
     "VAULT_TLS_SERVER_NAME",
 ];
 
-pub fn check_prerequisites(address: &Option<String>, token: &Option<String>) -> Option<String> {
+pub fn check_prerequisites(
+    address: &Option<String>,
+    token: &Option<String>,
+    credential_command: &Option<String>,
+) -> Option<String> {
     let has_addr = address.is_some()
         || std::env::var("VAULT_ADDR").is_ok()
         || std::env::var("FNOX_VAULT_ADDR").is_ok();
     let has_token = token.is_some()
         || std::env::var("VAULT_TOKEN").is_ok()
-        || std::env::var("FNOX_VAULT_TOKEN").is_ok();
+        || std::env::var("FNOX_VAULT_TOKEN").is_ok()
+        || credential_command.is_some();
     match (has_addr, has_token) {
         (false, false) => {
             Some("Vault address and token not found. Set VAULT_ADDR and VAULT_TOKEN.".to_string())
@@ -42,6 +49,7 @@ pub fn check_prerequisites(address: &Option<String>, token: &Option<String>) -> 
 pub fn required_env_vars(
     address: &Option<String>,
     token: &Option<String>,
+    credential_command: &Option<String>,
 ) -> Vec<(&'static str, &'static str)> {
     let mut vars = vec![];
     if address.is_none() {
@@ -50,7 +58,7 @@ pub fn required_env_vars(
             "Vault server address (e.g., http://localhost:8200)",
         ));
     }
-    if token.is_none() {
+    if token.is_none() && credential_command.is_none() {
         vars.push(("VAULT_TOKEN", "Vault authentication token"));
     }
     vars
@@ -58,7 +66,8 @@ pub fn required_env_vars(
 
 pub struct VaultBackend {
     address: String,
-    token: String,
+    token: Option<String>,
+    credential_command: Option<String>,
     secret_path: String,
     namespace: Option<String>,
     env_map: IndexMap<String, String>,
@@ -69,6 +78,7 @@ impl VaultBackend {
     pub fn new(
         address: Option<String>,
         token: Option<String>,
+        credential_command: Option<String>,
         secret_path: String,
         namespace: Option<String>,
         env_map: IndexMap<String, String>,
@@ -84,18 +94,21 @@ impl VaultBackend {
                 "Vault address not configured. Set 'address' in lease config or VAULT_ADDR env var.".to_string(),
             ))?;
 
-        let token = token
-            .or_else(|| {
-                env::var("FNOX_VAULT_TOKEN")
-                    .or_else(|_| env::var("VAULT_TOKEN"))
-                    .ok()
-            })
-            .ok_or_else(|| FnoxError::ProviderAuthFailed {
+        let token = token.or_else(|| {
+            env::var("FNOX_VAULT_TOKEN")
+                .or_else(|_| env::var("VAULT_TOKEN"))
+                .ok()
+        });
+
+        if token.is_none() && credential_command.is_none() {
+            return Err(FnoxError::ProviderAuthFailed {
                 provider: "Vault".to_string(),
                 details: "VAULT_TOKEN not set".to_string(),
-                hint: "Set 'token' in lease config or VAULT_TOKEN env var".to_string(),
+                hint: "Set 'token' in lease config, VAULT_TOKEN env var, or credential_command"
+                    .to_string(),
                 url: URL.to_string(),
-            })?;
+            });
+        }
 
         if env_map.is_empty() {
             return Err(FnoxError::Config(
@@ -105,14 +118,80 @@ impl VaultBackend {
             ));
         }
 
+        let namespace = namespace.or_else(vault_namespace);
+
         Ok(Self {
             address,
             token,
+            credential_command,
             secret_path,
             namespace,
             env_map,
             method,
         })
+    }
+
+    fn credential_command_context(&self) -> serde_json::Value {
+        json!({
+            "address": self.address,
+            "secret_path": self.secret_path,
+            "namespace": self.namespace,
+        })
+    }
+
+    fn credential_command_envs(&self) -> Vec<(&str, String)> {
+        let mut envs = vec![("VAULT_ADDR", self.address.clone())];
+        if let Some(namespace) = &self.namespace {
+            envs.push(("VAULT_NAMESPACE", namespace.clone()));
+        }
+        envs
+    }
+
+    async fn token(&self) -> Result<String> {
+        if let Some(token) = &self.token {
+            return Ok(token.clone());
+        }
+
+        let command =
+            self.credential_command
+                .as_ref()
+                .ok_or_else(|| FnoxError::ProviderAuthFailed {
+                    provider: "Vault".to_string(),
+                    details: "VAULT_TOKEN not set".to_string(),
+                    hint: "Set 'token' in lease config, VAULT_TOKEN env var, or credential_command"
+                        .to_string(),
+                    url: URL.to_string(),
+                })?;
+
+        let envs = self.credential_command_envs();
+
+        crate::credential_command::run(
+            "Vault",
+            command,
+            self.credential_command_context(),
+            &envs,
+            crate::credential_command::DEFAULT_TIMEOUT,
+            URL,
+        )
+        .await
+    }
+
+    fn invalidate_credential_command(&self) -> Result<()> {
+        if self.token.is_some() {
+            return Ok(());
+        }
+
+        let Some(command) = &self.credential_command else {
+            return Ok(());
+        };
+
+        crate::credential_command::invalidate(
+            "Vault",
+            command,
+            self.credential_command_context(),
+            &self.credential_command_envs(),
+            URL,
+        )
     }
 }
 
@@ -127,17 +206,18 @@ impl LeaseBackend for VaultBackend {
 
         let client = crate::http::http_client();
         let ttl_value = format!("{}s", duration.as_secs());
+        let token = self.token().await?;
         let mut request = if self.method.eq_ignore_ascii_case("post")
             || self.method.eq_ignore_ascii_case("put")
         {
             client
                 .post(&url)
-                .header("X-Vault-Token", &self.token)
+                .header("X-Vault-Token", &token)
                 .json(&serde_json::json!({ "ttl": ttl_value }))
         } else {
             client
                 .get(&url)
-                .header("X-Vault-Token", &self.token)
+                .header("X-Vault-Token", &token)
                 .query(&[("ttl", &ttl_value)])
         };
 
@@ -159,6 +239,7 @@ impl LeaseBackend for VaultBackend {
             let status = response.status();
             let body_text = response.text().await.unwrap_or_default();
             if status.as_u16() == 403 || status.as_u16() == 401 {
+                self.invalidate_credential_command()?;
                 return Err(FnoxError::ProviderAuthFailed {
                     provider: "Vault".to_string(),
                     details: body_text,
@@ -273,9 +354,10 @@ impl LeaseBackend for VaultBackend {
         );
 
         let client = crate::http::http_client();
+        let token = self.token().await?;
         let mut request = client
             .put(&url)
-            .header("X-Vault-Token", &self.token)
+            .header("X-Vault-Token", &token)
             .json(&serde_json::json!({ "lease_id": lease_id }));
 
         if let Some(ns) = &self.namespace {
@@ -296,6 +378,7 @@ impl LeaseBackend for VaultBackend {
             let status = response.status();
             let body_text = response.text().await.unwrap_or_default();
             if status.as_u16() == 403 || status.as_u16() == 401 {
+                self.invalidate_credential_command()?;
                 return Err(FnoxError::ProviderAuthFailed {
                     provider: "Vault".to_string(),
                     details: body_text,
@@ -319,5 +402,40 @@ impl LeaseBackend for VaultBackend {
 
     fn max_lease_duration(&self) -> Duration {
         Duration::from_secs(24 * 3600)
+    }
+}
+
+fn vault_namespace() -> Option<String> {
+    env::var("FNOX_VAULT_NAMESPACE")
+        .or_else(|_| env::var("VAULT_NAMESPACE"))
+        .ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_uses_vault_namespace_env_fallback() {
+        env::set_var("FNOX_VAULT_NAMESPACE", "admin/test");
+        env::remove_var("VAULT_NAMESPACE");
+
+        let mut env_map = IndexMap::new();
+        env_map.insert("access_key".to_string(), "AWS_ACCESS_KEY_ID".to_string());
+
+        let backend = VaultBackend::new(
+            Some("https://vault.example.com".to_string()),
+            Some("token".to_string()),
+            None,
+            "secret/data/fnox".to_string(),
+            None,
+            env_map,
+            "get".to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(backend.namespace.as_deref(), Some("admin/test"));
+
+        env::remove_var("FNOX_VAULT_NAMESPACE");
     }
 }

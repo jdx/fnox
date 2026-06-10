@@ -34,3 +34,9 @@ type = "optional"
 placeholder = ""
 label = "Namespace (optional, uses env var if not set):"
 wizard = true
+
+[fields.credential_command]
+type = "optional"
+placeholder = "vault login -method=oidc -token-only"
+label = "Credential command (optional):"
+wizard = true

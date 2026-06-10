@@ -148,6 +148,25 @@ EOF
 	assert_output --partial "CUSTOM_KEY_VAR=AKIATEST123"
 }
 
+@test "vault lease: uses credential_command when token is not in environment" {
+	cat >"$FNOX_CONFIG_FILE" <<EOF
+root = true
+
+[leases.test_credential_command]
+type = "vault"
+address = "$VAULT_ADDR"
+credential_command = "printf '%s' \"\$TEST_VAULT_TOKEN\""
+secret_path = "secret/data/fnox-lease-test"
+
+[leases.test_credential_command.env_map]
+access_key = "CUSTOM_KEY_VAR"
+EOF
+
+	run env -u VAULT_TOKEN -u FNOX_VAULT_TOKEN TEST_VAULT_TOKEN="$VAULT_TOKEN" "$FNOX_BIN" exec -- env
+	assert_success
+	assert_output --partial "CUSTOM_KEY_VAR=AKIATEST123"
+}
+
 @test "vault lease: auth failure with bad token" {
 	cat >"$FNOX_CONFIG_FILE" <<EOF
 root = true

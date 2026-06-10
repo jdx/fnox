@@ -289,6 +289,27 @@ EOF
 	vault kv delete "secret/test-secret" >/dev/null 2>&1 || true
 }
 
+@test "Vault provider uses credential_command when token is not in environment" {
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF
+[providers.vault]
+type = "vault"
+address = "http://localhost:8200"
+credential_command = "printf '%s' \"\$TEST_VAULT_TOKEN\""
+
+[secrets.TEST_CREDENTIAL_COMMAND]
+provider = "vault"
+value = "credential-command-test"
+EOF
+
+	vault kv put "secret/credential-command-test" value="credential-command-value" >/dev/null 2>&1
+
+	run env -u VAULT_TOKEN -u FNOX_VAULT_TOKEN TEST_VAULT_TOKEN="$VAULT_TOKEN" "$FNOX_BIN" get TEST_CREDENTIAL_COMMAND
+	assert_success
+	assert_output "credential-command-value"
+
+	vault kv delete "secret/credential-command-test" >/dev/null 2>&1 || true
+}
+
 @test "Vault provider test connection works" {
 	create_vault_config
 

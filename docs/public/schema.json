@@ -213,6 +213,9 @@
             "address": {
               "type": ["string", "null"]
             },
+            "credential_command": {
+              "type": ["string", "null"]
+            },
             "duration": {
               "type": ["string", "null"]
             },
@@ -1011,6 +1014,9 @@
             },
             "auth_command": {
               "type": ["string", "null"]
+            },
+            "credential_command": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "namespace": {
               "$ref": "#/$defs/OptionStringOrSecretRef"

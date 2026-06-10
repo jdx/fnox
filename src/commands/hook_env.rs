@@ -300,6 +300,15 @@ fn cleanup_old_temp_files(
     }
 }
 
+/// Terminal width in columns: the TTY width when available, otherwise the
+/// COLUMNS environment variable (stderr is not a TTY when shell hooks capture
+/// it), otherwise 80.
+fn terminal_width(tty_width: Option<usize>) -> usize {
+    tty_width
+        .or_else(|| crate::env::var("COLUMNS").ok().and_then(|v| v.parse().ok()))
+        .unwrap_or(80)
+}
+
 /// Display a summary of environment changes
 fn display_changes(added: &[(String, String)], removed: &[String], mode: OutputMode) {
     use console::{Style, Term};
@@ -327,7 +336,7 @@ fn display_changes(added: &[(String, String)], removed: &[String], mode: OutputM
         }
     } else {
         // Normal mode: compact single-line summary with keys
-        let term_width = term.size().1 as usize;
+        let term_width = terminal_width(term.size_checked().map(|(_, w)| w as usize));
 
         let mut parts = Vec::new();
 
@@ -416,5 +425,28 @@ fn display_changes(added: &[(String, String)], removed: &[String], mode: OutputM
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_terminal_width_fallback() {
+        // TTY width wins regardless of COLUMNS
+        crate::env::set_var("COLUMNS", "120");
+        assert_eq!(terminal_width(Some(100)), 100);
+
+        // No TTY: fall back to COLUMNS
+        assert_eq!(terminal_width(None), 120);
+
+        // No TTY and unparseable COLUMNS: fall back to 80
+        crate::env::set_var("COLUMNS", "abc");
+        assert_eq!(terminal_width(None), 80);
+
+        // No TTY and no COLUMNS: fall back to 80
+        crate::env::remove_var("COLUMNS");
+        assert_eq!(terminal_width(None), 80);
     }
 }

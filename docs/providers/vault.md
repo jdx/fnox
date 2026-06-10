@@ -30,6 +30,23 @@ vault = { type = "vault", path = "secret/myapp" } # address and token are option
 - **address**: (Optional) The Vault server address. Falls back to `FNOX_VAULT_ADDR` or `VAULT_ADDR`.
 - **path**: (Required) The base path for secrets in Vault (e.g., `secret/myapp`).
 - **token**: (Optional) Vault token. Falls back to `FNOX_VAULT_TOKEN` or `VAULT_TOKEN`.
+- **namespace**: (Optional) Vault namespace. Falls back to `FNOX_VAULT_NAMESPACE` or `VAULT_NAMESPACE`.
+- **credential_command**: (Optional) Shell command that prints a Vault token to stdout when no token is configured. The command is rendered as a Tera template and receives `address`, `path`, and `namespace`.
+
+### Provider-scoped Login
+
+Use `credential_command` when different Vault/OpenBao providers need different tokens:
+
+```toml
+[providers.vault_team_a]
+type = "vault"
+address = "https://vault.example.com"
+namespace = "team-a"
+path = "secret/team-a"
+credential_command = "vault login -method=oidc -token-only"
+```
+
+fnox sets `VAULT_ADDR` and `VAULT_NAMESPACE` for the command from the provider config. The command runs through the platform shell, so shell features like pipes and redirects work. Output is cached briefly for the current fnox process so resolving multiple secrets from the same provider does not repeat the login.
 
 ## Setup
 

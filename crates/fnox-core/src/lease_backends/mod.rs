@@ -135,6 +135,8 @@ pub enum LeaseBackendConfig {
         address: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         token: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        credential_command: Option<String>,
         secret_path: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         namespace: Option<String>,
@@ -231,9 +233,12 @@ impl LeaseBackendConfig {
         match self {
             LeaseBackendConfig::AwsSts { profile, .. } => aws_sts::check_prerequisites(profile),
             LeaseBackendConfig::GcpIam { .. } => gcp_iam::check_prerequisites(),
-            LeaseBackendConfig::Vault { address, token, .. } => {
-                vault::check_prerequisites(address, token)
-            }
+            LeaseBackendConfig::Vault {
+                address,
+                token,
+                credential_command,
+                ..
+            } => vault::check_prerequisites(address, token, credential_command),
             LeaseBackendConfig::AzureToken { .. } => azure_token::check_prerequisites(),
             LeaseBackendConfig::Cloudflare { .. } => cloudflare::check_prerequisites(),
             LeaseBackendConfig::GithubApp {
@@ -251,9 +256,12 @@ impl LeaseBackendConfig {
         match self {
             LeaseBackendConfig::AwsSts { .. } => aws_sts::required_env_vars(),
             LeaseBackendConfig::GcpIam { .. } => gcp_iam::required_env_vars(),
-            LeaseBackendConfig::Vault { address, token, .. } => {
-                vault::required_env_vars(address, token)
-            }
+            LeaseBackendConfig::Vault {
+                address,
+                token,
+                credential_command,
+                ..
+            } => vault::required_env_vars(address, token, credential_command),
             LeaseBackendConfig::AzureToken { .. } => azure_token::required_env_vars(),
             LeaseBackendConfig::Cloudflare { .. } => cloudflare::required_env_vars(),
             LeaseBackendConfig::GithubApp { .. } => github_app::required_env_vars(),
@@ -321,6 +329,7 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::Vault {
                 address,
                 token,
+                credential_command,
                 secret_path,
                 namespace,
                 env_map,
@@ -329,6 +338,7 @@ impl LeaseBackendConfig {
             } => Ok(Box::new(vault::VaultBackend::new(
                 address.clone(),
                 token.clone(),
+                credential_command.clone(),
                 secret_path.clone(),
                 namespace.clone(),
                 env_map.clone(),
