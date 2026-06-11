@@ -2412,6 +2412,7 @@ dependencies = [
  "azure_security_keyvault_secrets",
  "base64 0.22.1",
  "blake3",
+ "bytes",
  "chrono",
  "clap",
  "ctap-hid-fido2",
