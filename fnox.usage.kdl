@@ -206,7 +206,13 @@ cmd set help="Set a secret value" {
         }
     }
     arg <KEY> help="Secret key (environment variable name)"
-    arg "[VALUE]" help="Secret value to store" help_long="Secret value to store.\n\nIf omitted: reads from stdin when piped (`echo \"x\" | fnox set KEY`), or prompts interactively with hidden input.\n\nPassing secrets as arguments exposes them in shell history and `ps` output. For sensitive values, prefer stdin or the interactive prompt." required=#false
+    arg "[VALUE]" help="Secret value to store" help_long=#"""
+Secret value to store.
+
+If omitted: reads from stdin when piped (`echo "x" | fnox set KEY`), or prompts interactively with hidden input.
+
+Passing secrets as arguments exposes them in shell history and `ps` output. For sensitive values, prefer stdin or the interactive prompt.
+"""# required=#false
 }
 cmd sponsors help="Show the companies sponsoring fnox and the en.dev project family"
 cmd sync help="Sync secrets from remote providers to a local encryption provider" {
