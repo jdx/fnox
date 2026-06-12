@@ -218,7 +218,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -229,7 +229,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -740,7 +740,7 @@ dependencies = [
  "http 1.4.0",
  "http-body 0.4.6",
  "hyper 0.14.32",
- "hyper 1.9.0",
+ "hyper 1.10.1",
  "hyper-rustls 0.24.2",
  "hyper-rustls 0.27.9",
  "hyper-util",
@@ -2029,7 +2029,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2164,7 +2164,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2642,7 +2642,7 @@ dependencies = [
  "chrono",
  "http 1.4.0",
  "http-body-util",
- "hyper 1.9.0",
+ "hyper 1.10.1",
  "hyper-rustls 0.27.9",
  "hyper-util",
  "ring",
@@ -2793,15 +2793,15 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-auth"
-version = "1.10.0"
+version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edd4f8c914f230834828771125168eaa39bc6602e32cb0316ceeff2add10d449"
+checksum = "a300d4011cb53573eafe2419630d303ced54aab6c194a6d9e4156de375800372"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
  "bytes",
  "chrono",
- "google-cloud-gax 1.10.0",
+ "google-cloud-gax 1.11.0",
  "hex",
  "hmac 0.13.0",
  "http 1.4.0",
@@ -2836,11 +2836,10 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-gax"
-version = "1.10.0"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83d597e9e4758fc778a60d8c28a8677629675ae40d8652ec000ae5f53f5ae7ec"
+checksum = "4f60f45dd97ff91cedfcb6b2b9f860d3d84739386c3557027687c52cc0e698fd"
 dependencies = [
- "base64 0.22.1",
  "bytes",
  "futures",
  "google-cloud-rpc",
@@ -2856,18 +2855,18 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-gax-internal"
-version = "0.7.13"
+version = "0.7.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e3e4d09e162fb71314e2c91879bdd495c1f8a1f69e71ccbae5767b8b6c833d6"
+checksum = "78e0d5b25e5714321efc3ea48a1457bcd943ba85fe7a0e80e97d989f3c9aea17"
 dependencies = [
  "bytes",
  "futures",
- "google-cloud-auth 1.10.0",
- "google-cloud-gax 1.10.0",
+ "google-cloud-auth 1.13.0",
+ "google-cloud-gax 1.11.0",
  "google-cloud-rpc",
  "http 1.4.0",
  "http-body-util",
- "hyper 1.9.0",
+ "hyper 1.10.1",
  "lazy_static",
  "opentelemetry",
  "opentelemetry-semantic-conventions",
@@ -2898,13 +2897,13 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-iam-v1"
-version = "1.9.0"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eab83affdded409153d2e616174054a780705016c288e43221a0d6a22dd78671"
+checksum = "70a245c548c002e22d1644e88d9b7d6c32183b335e63510a1bb8580045c3282d"
 dependencies = [
  "async-trait",
  "bytes",
- "google-cloud-gax 1.10.0",
+ "google-cloud-gax 1.11.0",
  "google-cloud-gax-internal",
  "google-cloud-type",
  "google-cloud-wkt",
@@ -2933,13 +2932,13 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-location"
-version = "1.9.0"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2dd181e470051464f49e47f00010e08f586ee2def8ade486352978b1312d4b58"
+checksum = "20a6d8ac73bb9d78fff74be261bf5b17dba4a49a12b41cd3b5abbc173c0771e4"
 dependencies = [
  "async-trait",
  "bytes",
- "google-cloud-gax 1.10.0",
+ "google-cloud-gax 1.11.0",
  "google-cloud-gax-internal",
  "google-cloud-wkt",
  "serde",
@@ -2974,13 +2973,13 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-secretmanager-v1"
-version = "1.9.0"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a610ccf84829bb73c391e86a0387c87a1826e53d76fd518de475907bce57b3de"
+checksum = "3d92326f99f56001667b63a773583c85c0fe50b53d6891805630085c1f611770"
 dependencies = [
  "async-trait",
  "bytes",
- "google-cloud-gax 1.10.0",
+ "google-cloud-gax 1.11.0",
  "google-cloud-gax-internal",
  "google-cloud-iam-v1",
  "google-cloud-location",
@@ -3015,9 +3014,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-wkt"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5daa3084991800bcc5333d7e77bb19259a02b34ee35f35c27b49d602732306e"
+checksum = "88e0186e2221bf82c5296500251b4650b111172c324984159a0de9f6bcaa18a5"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -3329,9 +3328,9 @@ dependencies = [
 
 [[package]]
 name = "hyper"
-version = "1.9.0"
+version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6299f016b246a94207e63da54dbe807655bf9e00044f73ded42c3ac5305fbcca"
+checksum = "55281c53a1894c864990125767da440a4e630446785086f52523b20033b74498"
 dependencies = [
  "atomic-waker",
  "bytes",
@@ -3370,7 +3369,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33ca68d021ef39cf6463ab54c1d0f5daf03377b70561305bb89a8f83aab66e0f"
 dependencies = [
  "http 1.4.0",
- "hyper 1.9.0",
+ "hyper 1.10.1",
  "hyper-util",
  "rustls 0.23.40",
  "rustls-native-certs",
@@ -3385,7 +3384,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b90d566bffbce6a75bd8b09a05aa8c2cb1fabb6cb348f8840c9e4c90a0d83b0"
 dependencies = [
- "hyper 1.9.0",
+ "hyper 1.10.1",
  "hyper-util",
  "pin-project-lite",
  "tokio",
@@ -3400,7 +3399,7 @@ checksum = "70206fc6890eaca9fde8a0bf71caa2ddfc9fe045ac9e5c70df101a7dbde866e0"
 dependencies = [
  "bytes",
  "http-body-util",
- "hyper 1.9.0",
+ "hyper 1.10.1",
  "hyper-util",
  "native-tls",
  "tokio",
@@ -3420,12 +3419,12 @@ dependencies = [
  "futures-util",
  "http 1.4.0",
  "http-body 1.0.1",
- "hyper 1.9.0",
+ "hyper 1.10.1",
  "ipnet",
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.3",
+ "socket2 0.5.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -4278,7 +4277,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4561,9 +4560,9 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry"
-version = "0.31.0"
+version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b84bcd6ae87133e903af7ef497404dda70c60d0ea14895fc8a5e6722754fc2a0"
+checksum = "b0142c63252a9e054e68a4c61a5778f7b14f576274d593f8ce883d191a099682"
 dependencies = [
  "futures-core",
  "futures-sink",
@@ -4575,21 +4574,22 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry-semantic-conventions"
-version = "0.31.0"
+version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e62e29dfe041afb8ed2a6c9737ab57db4907285d999ef8ad3a59092a36bdc846"
+checksum = "6ca2f98a0437b427b4b08f19f1caa3c44db885a202bc12cfea13d6c702243d68"
 
 [[package]]
 name = "opentelemetry_sdk"
-version = "0.31.0"
+version = "0.32.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e14ae4f5991976fd48df6d843de219ca6d31b01daaab2dad5af2badeded372bd"
+checksum = "9b59f80e1ac4d5ff7a2db8fb6c80badb7f0f3f858211fba08dd9aaec750894f9"
 dependencies = [
  "futures-channel",
  "futures-executor",
  "futures-util",
  "opentelemetry",
  "percent-encoding",
+ "portable-atomic",
  "rand 0.9.4",
  "thiserror 2.0.18",
 ]
@@ -4616,7 +4616,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5102,7 +5102,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash 2.1.2",
  "rustls 0.23.40",
- "socket2 0.6.3",
+ "socket2 0.5.10",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -5140,7 +5140,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.6.3",
+ "socket2 0.5.10",
  "tracing",
  "windows-sys 0.60.2",
 ]
@@ -5415,7 +5415,7 @@ dependencies = [
  "http 1.4.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.9.0",
+ "hyper 1.10.1",
  "hyper-tls",
  "hyper-util",
  "js-sys",
@@ -5453,7 +5453,7 @@ dependencies = [
  "http 1.4.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.9.0",
+ "hyper 1.10.1",
  "hyper-rustls 0.27.9",
  "hyper-util",
  "js-sys",
@@ -5677,7 +5677,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5757,7 +5757,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6317,7 +6317,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6501,7 +6501,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6542,7 +6542,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
 dependencies = [
  "rustix",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6903,7 +6903,7 @@ dependencies = [
  "http 1.4.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.9.0",
+ "hyper 1.10.1",
  "hyper-timeout",
  "hyper-util",
  "percent-encoding",
@@ -6931,7 +6931,7 @@ dependencies = [
  "http 1.4.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.9.0",
+ "hyper 1.10.1",
  "hyper-timeout",
  "hyper-util",
  "percent-encoding",
@@ -7077,9 +7077,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-opentelemetry"
-version = "0.32.1"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ac28f2d093c6c477eaa76b23525478f38de514fa9aeb1285738d4b97a9552fc"
+checksum = "adbc64cba7137545b8044cb1fe9814f7aacf3c6b5f9b45be8bb5db538befdb26"
 dependencies = [
  "js-sys",
  "opentelemetry",
@@ -7725,7 +7725,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
