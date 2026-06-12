@@ -1,6 +1,69 @@
 # Changelog
 
+## [1.26.0](https://github.com/jdx/fnox/compare/v1.25.1..v1.26.0) - 2026-06-12
+
+### 🚀 Features
+
+- **(age)** support provider-backed identities by [@k35o](https://github.com/k35o) in [#515](https://github.com/jdx/fnox/pull/515)
+- **(gcp-sm)** implement put_secret_value by [@nils-degroot](https://github.com/nils-degroot) in [#530](https://github.com/jdx/fnox/pull/530)
+- **(provider)** add vault credential command by [@jdx](https://github.com/jdx) in [#526](https://github.com/jdx/fnox/pull/526)
+
+### 🐛 Bug Fixes
+
+- **(fido2)** send keep-alive messages to stderr by [@baprx](https://github.com/baprx) in [#506](https://github.com/jdx/fnox/pull/506)
+- Respect $COLUMNS when not connected to a tty by [@davidolrik](https://github.com/davidolrik) in [#523](https://github.com/jdx/fnox/pull/523)
+
+### 📚 Documentation
+
+- document BatchGetSecretValue IAM permission requirement by [@gaffneyc](https://github.com/gaffneyc) in [#513](https://github.com/jdx/fnox/pull/513)
+- add sponsor footer by [@jdx](https://github.com/jdx) in [#510](https://github.com/jdx/fnox/pull/510)
+
+### 🛡️ Security
+
+- **(deps)** update azure-sdk-for-rust monorepo to v1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#499](https://github.com/jdx/fnox/pull/499)
+- **(deps)** update rust crate usage-lib to v3.4.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#539](https://github.com/jdx/fnox/pull/539)
+
+### 🔍 Other Changes
+
+- **(ci)** fix zizmor version comments by [@jdx](https://github.com/jdx) in [#518](https://github.com/jdx/fnox/pull/518)
+- **(ci)** use pr-closer action by [@jdx](https://github.com/jdx) in [#517](https://github.com/jdx/fnox/pull/517)
+- **(release-plz)** drop cargo update from release PR by [@jdx](https://github.com/jdx) in [#496](https://github.com/jdx/fnox/pull/496)
+
+### 📦️ Dependency Updates
+
+- refresh mise lock attestations by [@jdx](https://github.com/jdx) in [#504](https://github.com/jdx/fnox/pull/504)
+- update zizmorcore/zizmor-action action to v0.5.4 by [@renovate[bot]](https://github.com/renovate[bot]) in [#498](https://github.com/jdx/fnox/pull/498)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#503](https://github.com/jdx/fnox/pull/503)
+- update rust crate shlex to v2 by [@renovate[bot]](https://github.com/renovate[bot]) in [#508](https://github.com/jdx/fnox/pull/508)
+- update infisical lock entry by [@jdx](https://github.com/jdx) in [#514](https://github.com/jdx/fnox/pull/514)
+- update rust crate reqwest to v0.13.4 by [@renovate[bot]](https://github.com/renovate[bot]) in [#519](https://github.com/jdx/fnox/pull/519)
+- update rust crate toml_edit to v0.25.12 by [@renovate[bot]](https://github.com/renovate[bot]) in [#520](https://github.com/jdx/fnox/pull/520)
+- update aws-sdk-rust monorepo to v1.108.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#521](https://github.com/jdx/fnox/pull/521)
+- update rust crate keepass to 0.13 by [@renovate[bot]](https://github.com/renovate[bot]) in [#522](https://github.com/jdx/fnox/pull/522)
+- add age macos x64 lock entry by [@jdx](https://github.com/jdx) in [#531](https://github.com/jdx/fnox/pull/531)
+- update actions/checkout action to v6.0.3 by [@renovate[bot]](https://github.com/renovate[bot]) in [#532](https://github.com/jdx/fnox/pull/532)
+- update rust crate chrono to v0.4.45 by [@renovate[bot]](https://github.com/renovate[bot]) in [#534](https://github.com/jdx/fnox/pull/534)
+- update rust crate aws-sdk-sts to v1.106.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#541](https://github.com/jdx/fnox/pull/541)
+- update jdx/mise-action action to v4.1.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#536](https://github.com/jdx/fnox/pull/536)
+- update rust crate tabled to 0.21 by [@renovate[bot]](https://github.com/renovate[bot]) in [#538](https://github.com/jdx/fnox/pull/538)
+- update aws-sdk-rust monorepo to v1.110.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#535](https://github.com/jdx/fnox/pull/535)
+- update rust crate aws-config to v1.8.18 by [@renovate[bot]](https://github.com/renovate[bot]) in [#533](https://github.com/jdx/fnox/pull/533)
+- update rust crate aws-sdk-kms to v1.110.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#540](https://github.com/jdx/fnox/pull/540)
+- update rust crate google-cloud-secretmanager-v1 to v1.10.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#537](https://github.com/jdx/fnox/pull/537)
+- lock file maintenance lockfile maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#524](https://github.com/jdx/fnox/pull/524)
+
+### New Contributors
+
+- @nils-degroot made their first contribution in [#530](https://github.com/jdx/fnox/pull/530)
+- @k35o made their first contribution in [#515](https://github.com/jdx/fnox/pull/515)
+- @gaffneyc made their first contribution in [#513](https://github.com/jdx/fnox/pull/513)
+- @baprx made their first contribution in [#506](https://github.com/jdx/fnox/pull/506)
+
 ## [1.25.1](https://github.com/jdx/fnox/compare/v1.25.0..v1.25.1) - 2026-05-17
+
+### 🐛 Bug Fixes
+
+- **(keychain)** run blocking calls on spawn_blocking; batch serially by [@jdx](https://github.com/jdx) in [#495](https://github.com/jdx/fnox/pull/495)
 
 ### 🔍 Other Changes
 
