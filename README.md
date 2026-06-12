@@ -161,6 +161,51 @@ cd fnox
 cargo install --path .
 ```
 
+## Cargo features
+
+`fnox` and the underlying `fnox-core` crate expose per-provider Cargo
+features. Most users don't need to think about these — the defaults
+enable every provider. Embedders or distributors who want a slimmer
+binary can opt out of providers they don't ship:
+
+```bash
+# Default — every provider included (current behavior).
+cargo install fnox
+
+# Slim build: every gated provider is dropped (today: just KeePass,
+# which removes the `keepass` dependency and its transitives).
+cargo install fnox --no-default-features
+
+# Custom: drop everything but the providers you want.
+cargo install fnox --no-default-features --features keepass
+```
+
+`--no-default-features` disables the `default` feature, which is
+`["all-providers"]`. From there, every `--features <name>` flag
+opts a single provider back in. To keep most providers but drop
+one, list the ones you want explicitly (Cargo doesn't support
+negating a feature).
+
+The feature names match the provider's `serde_rename` (and its
+descriptor file at `crates/fnox-core/providers/<name>.toml`). Features
+currently available:
+
+| Feature        | Provider(s)                       | Enabled by default? |
+| -------------- | --------------------------------- | ------------------- |
+| `keepass`      | KeePass (`.kdbx` files)           | yes                 |
+
+Embedders consuming `fnox-core` as a library should set
+`default-features = false` and select features explicitly:
+
+```toml
+fnox-core = { version = "1", default-features = false, features = ["keepass"] }
+```
+
+(More providers will be feature-gated in follow-up work — Google Cloud
++ Azure + the OS keyring backend would drop several MiB of transitive
+dep weight from a slim build. See PR feedback / issue tracker for
+roadmap.)
+
 ## Development
 
 See [CLAUDE.md](./CLAUDE.md) for development guidelines.

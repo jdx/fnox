@@ -111,8 +111,24 @@ readme = "README.md"
 name = "fnox"
 path = "src/main.rs"
 
+[features]
+# The binary has its own per-provider feature flags that mirror
+# fnox-core's. Each binary feature both enables the corresponding
+# fnox-core feature (so the provider's deps and registration code
+# compile) *and* gates any direct mention of the provider in the
+# binary's own source (the clap `ProviderType` variant + the match
+# arm in `src/commands/provider/add.rs`).
+#
+# Don't shortcut `default = ["fnox-core/all-providers"]`: that
+# enables fnox-core's features but leaves the binary's own per-
+# provider features off, so the binary's `ProviderType::KeePass`
+# variant disappears even though fnox-core compiled it.
+default = ["all-providers"]
+all-providers = ["keepass"]
+keepass = ["fnox-core/keepass"]
+
 [dependencies]
-fnox-core = { path = "crates/fnox-core", version = "1.25.1" }
+fnox-core = { path = "crates/fnox-core", version = "1.25.1", default-features = false }
 
 # Direct dependencies of the CLI binary (commands, MCP server, TUI, hook-env,
 # shell integration). Provider/config/secret-resolver crates are pulled in

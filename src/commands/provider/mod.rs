@@ -72,6 +72,7 @@ pub enum ProviderType {
     #[value(name = "infisical")]
     Infisical,
     /// KeePass
+    #[cfg(feature = "keepass")]
     #[value(name = "keepass")]
     #[strum(serialize = "keepass")]
     KeePass,
@@ -147,6 +148,49 @@ mod tests {
         }
     }
 
+    /// Returns true when the provider whose TOML descriptor sits at
+    /// `path` is currently compiled into this build — either because
+    /// it has no `cargo_feature` (always compiled) or because the
+    /// feature named there is enabled in the current Cargo invocation.
+    ///
+    /// Mirrored against the build-script behavior in
+    /// `crates/fnox-core/build/generate_providers.rs`. Update both
+    /// together when adding a new gated provider.
+    ///
+    /// `cfg!(feature = "<name>")` requires a string literal, so the
+    /// match below has to be updated by hand for every new gated
+    /// provider. The `panic!` arm is the safety net that surfaces
+    /// the requirement loudly if it's forgotten.
+    fn provider_feature_enabled(path: &std::path::Path) -> bool {
+        let Ok(content) = std::fs::read_to_string(path) else {
+            return false;
+        };
+        let cargo_feature = content
+            .parse::<toml_edit::DocumentMut>()
+            .ok()
+            .and_then(|doc| {
+                doc.get("cargo_feature")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_owned)
+            });
+
+        match cargo_feature.as_deref() {
+            None => true,
+            Some("keepass") => cfg!(feature = "keepass"),
+            // When extending this match for a new gated provider,
+            // also wire the matching `#[cfg(feature = "...")]` on
+            // its `ProviderType` variant and on its arm in
+            // `src/commands/provider/add.rs`.
+            Some(other) => panic!(
+                "provider TOML at {} declares cargo_feature = {:?} but \
+                 the drift test doesn't know about it — add a `cfg!` \
+                 branch for it in src/commands/provider/mod.rs::tests",
+                path.display(),
+                other
+            ),
+        }
+    }
+
     #[test]
     fn provider_add_types_match_provider_definitions() {
         let providers_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -158,12 +202,19 @@ mod tests {
             .expect("providers directory should exist")
             .filter_map(|entry| entry.ok().map(|e| e.path()))
             .filter(|path| path.extension().is_some_and(|ext| ext == "toml"))
+            // fido2 is excluded from musl builds — mirror build/generate_providers.rs.
+            .filter(|path| {
+                let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                !(cfg!(target_env = "musl") && name == "fido2")
+            })
+            // Providers gated behind a Cargo feature are only in the CLI
+            // when that feature is enabled; mirror the gating here so
+            // the drift test stays meaningful across feature combos.
+            .filter(|path| provider_feature_enabled(path))
             .filter_map(|path| {
                 path.file_stem()
                     .map(|stem| stem.to_string_lossy().into_owned())
             })
-            // fido2 is excluded from musl builds — mirror build/generate_providers.rs.
-            .filter(|name| !(cfg!(target_env = "musl") && name == "fido2"))
             .map(|provider_type| normalize_provider_type_for_add(&provider_type))
             .collect();
 
