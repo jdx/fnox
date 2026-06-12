@@ -81,14 +81,14 @@ impl GoogleSecretManagerProvider {
                 if let Err(e) = create_secret(&client, &parent, secret_id, &name).await
                     && e.http_status_code() != Some(409)
                 {
-                    return Err(convert_provider_error(e));
+                    return Err(convert_provider_error(e, "secretmanager.secrets.create"));
                 }
 
                 add_secret_version(&client, &name, secret_value)
                     .await
-                    .map_err(convert_provider_error)
+                    .map_err(|e| convert_provider_error(e, "secretmanager.versions.add"))
             }
-            Err(e) => Err(convert_provider_error(e)),
+            Err(e) => Err(convert_provider_error(e, "secretmanager.versions.add")),
         }
     }
 }
@@ -129,7 +129,11 @@ async fn add_secret_version(
     Ok(())
 }
 
-fn convert_secret_error(e: google_cloud_secretmanager_v1::Error, secret_id: &str) -> FnoxError {
+fn convert_secret_error(
+    e: google_cloud_secretmanager_v1::Error,
+    secret_id: &str,
+    permission: &str,
+) -> FnoxError {
     let err_str = e.to_string();
 
     if err_str.contains("NOT_FOUND") || err_str.contains("not found") {
@@ -140,18 +144,18 @@ fn convert_secret_error(e: google_cloud_secretmanager_v1::Error, secret_id: &str
             url: URL.to_string(),
         }
     } else {
-        convert_provider_error(e)
+        convert_provider_error(e, permission)
     }
 }
 
-fn convert_provider_error(e: google_cloud_secretmanager_v1::Error) -> FnoxError {
+fn convert_provider_error(e: google_cloud_secretmanager_v1::Error, permission: &str) -> FnoxError {
     let err_str = e.to_string();
 
     if err_str.contains("PERMISSION_DENIED") || err_str.contains("permission") {
         FnoxError::ProviderAuthFailed {
             provider: PROVIDER_NAME.to_string(),
             details: err_str,
-            hint: "Check IAM permissions for secretmanager.versions.access".to_string(),
+            hint: format!("Check IAM permissions for {permission}"),
             url: URL.to_string(),
         }
     } else {
@@ -179,7 +183,7 @@ impl crate::providers::Provider for GoogleSecretManagerProvider {
             .set_name(secret_name)
             .send()
             .await
-            .map_err(|e| convert_secret_error(e, value))?;
+            .map_err(|e| convert_secret_error(e, value, "secretmanager.versions.access"))?;
 
         // Extract the payload data
         let payload = response
@@ -209,7 +213,27 @@ impl crate::providers::Provider for GoogleSecretManagerProvider {
             .set_parent(format!("projects/{}", self.project))
             .send()
             .await
-            .map_err(convert_provider_error)?;
+            .map_err(|e| {
+                let err_str = e.to_string();
+                if err_str.contains("PERMISSION_DENIED") || err_str.contains("permission") {
+                    FnoxError::ProviderAuthFailed {
+                        provider: "GCP Secret Manager".to_string(),
+                        details: err_str,
+                        hint: "Check IAM permissions for secretmanager.secrets.list".to_string(),
+                        url: URL.to_string(),
+                    }
+                } else {
+                    FnoxError::ProviderApiError {
+                        provider: "GCP Secret Manager".to_string(),
+                        details: format!(
+                            "Failed to access project '{}': {}",
+                            self.project, err_str
+                        ),
+                        hint: "Check that the project exists and you have access".to_string(),
+                        url: URL.to_string(),
+                    }
+                }
+            })?;
 
         Ok(())
     }
