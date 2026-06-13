@@ -61,6 +61,7 @@ export default defineConfig({
           { text: "What is fnox?", link: "/guide/what-is-fnox" },
           { text: "Installation", link: "/guide/installation" },
           { text: "Quick Start", link: "/guide/quick-start" },
+          { text: "Contributing", link: "/contributing" },
           { text: "How It Works", link: "/guide/how-it-works" },
         ],
       },
