@@ -12,6 +12,8 @@ use miette::Result;
 use std::sync::Arc;
 use std::sync::{LazyLock, Mutex};
 
+use crate::config::IfMissing;
+
 // Include generated settings code
 mod generated {
     pub(super) mod settings {
@@ -41,9 +43,13 @@ static INITIALIZED: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
 /// CLI snapshot captured from parsed command-line arguments
 #[derive(Debug, Clone, Default)]
 pub struct CliSnapshot {
+    /// Path to age key file, overrides provider config.
     pub age_key_file: Option<std::path::PathBuf>,
+    /// Active profile name, overrides `FNOX_PROFILE`.
     pub profile: Option<String>,
-    pub if_missing: Option<String>,
+    /// Global override for missing-secret behavior.
+    pub if_missing: Option<IfMissing>,
+    /// Skip merging top-level secrets into the selected profile.
     pub no_defaults: bool,
 }
 
@@ -153,7 +159,13 @@ impl Settings {
             }
 
             if let Some(if_missing) = snapshot.if_missing {
-                map.insert("if_missing", SettingValue::OptionString(Some(if_missing)));
+                let s = match if_missing {
+                    IfMissing::Error => "error",
+                    IfMissing::Warn => "warn",
+                    IfMissing::Ignore => "ignore",
+                }
+                .to_string();
+                map.insert("if_missing", SettingValue::OptionString(Some(s)));
             }
 
             if snapshot.no_defaults {
