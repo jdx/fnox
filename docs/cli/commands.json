@@ -1607,7 +1607,7 @@
   "config": {
     "props": {}
   },
-  "version": "1.26.0",
+  "version": "1.26.1",
   "usage": "Usage: fnox [OPTIONS] <COMMAND>",
   "complete": {
     "key": {
