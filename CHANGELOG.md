@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.26.1](https://github.com/jdx/fnox/compare/v1.26.0..v1.26.1) - 2026-06-14
+
+### 📚 Documentation
+
+- link to all sponsors by [@jdx](https://github.com/jdx) in [#543](https://github.com/jdx/fnox/pull/543)
+- clarify contribution fit by [@jdx](https://github.com/jdx) in [#545](https://github.com/jdx/fnox/pull/545)
+
+### 🔍 Other Changes
+
+- **(ci)** use shared coderabbit config by [@jdx](https://github.com/jdx) in [#546](https://github.com/jdx/fnox/pull/546)
+
 ## [1.26.0](https://github.com/jdx/fnox/compare/v1.25.1..v1.26.0) - 2026-06-12
 
 ### 🚀 Features
