@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
@@ -54,6 +55,15 @@ struct Detector {
 enum Severity {
     High,
     Medium,
+}
+
+impl fmt::Display for Severity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::High => f.write_str("high"),
+            Self::Medium => f.write_str("medium"),
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -152,19 +162,17 @@ impl ScanCommand {
         let ignore_globs = build_ignore_globs(&self.ignore)?;
         let report = scan_directory(&self.dir, ignore_globs.as_ref())?;
 
-        if self.quiet {
-            print_quiet_report(&report);
-        } else {
-            match self.format {
-                ScanFormat::Human => print_human_report(&self.dir, &report),
-                ScanFormat::Json => {
-                    println!("{}", serde_json::to_string_pretty(&report)?);
-                }
+        match (self.quiet, self.format) {
+            (true, ScanFormat::Human) => print_quiet_report(&report),
+            (true, ScanFormat::Json) => print_quiet_json_report(&report)?,
+            (false, ScanFormat::Human) => print_human_report(&self.dir, &report),
+            (false, ScanFormat::Json) => {
+                println!("{}", serde_json::to_string_pretty(&report)?);
             }
         }
 
         if !report.findings.is_empty() {
-            std::process::exit(1);
+            return Err(FnoxError::ScanSecretsFound);
         }
 
         Ok(())
@@ -319,6 +327,13 @@ fn build_ignore_globs(patterns: &[String]) -> Result<Option<GlobSet>> {
 }
 
 fn should_visit_entry(entry: &DirEntry) -> bool {
+    if !entry
+        .file_type()
+        .is_some_and(|file_type| file_type.is_dir())
+    {
+        return true;
+    }
+
     let Some(name) = entry.file_name().to_str() else {
         return true;
     };
@@ -362,7 +377,7 @@ fn print_human_report(dir: &Path, report: &ScanReport) {
     );
     for finding in &report.findings {
         println!(
-            "{}:{}:{} [{} {:?}] {}",
+            "{}:{}:{} [{} {}] {}",
             finding.path,
             finding.line,
             finding.column,
@@ -382,6 +397,19 @@ fn print_quiet_report(report: &ScanReport) {
     {
         println!("{path}");
     }
+}
+
+fn print_quiet_json_report(report: &ScanReport) -> Result<()> {
+    let paths = report
+        .findings
+        .iter()
+        .map(|finding| finding.path.as_str())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+
+    println!("{}", serde_json::to_string_pretty(&paths)?);
+    Ok(())
 }
 
 fn line_column(content: &str, offset: usize) -> (usize, usize) {

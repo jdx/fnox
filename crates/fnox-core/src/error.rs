@@ -520,6 +520,17 @@ pub enum FnoxError {
     ImportProviderUnsupported { provider: String, help: String },
 
     // ========================================================================
+    // Scan Errors
+    // ========================================================================
+    #[error("Potential secrets found during scan")]
+    #[diagnostic(
+        code(fnox::scan::secrets_found),
+        help("Review the findings above and remove or move secrets into a provider"),
+        url("https://fnox.jdx.dev/cli/scan")
+    )]
+    ScanSecretsFound,
+
+    // ========================================================================
     // Sync Errors
     // ========================================================================
     #[error("Provider '{provider}' cannot be used as a sync target")]

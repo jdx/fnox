@@ -36,18 +36,39 @@ teardown() {
 	echo 'token = "ghp_abcdefghijklmnopqrstuvwxyz123456"' >secrets.env
 	echo 'name = "fnox"' >safe.toml
 
-	assert_fnox_failure scan --quiet
+	run bash -c '"$1" scan --quiet 2>/dev/null' _ "$FNOX_BIN"
+	assert_failure
 	assert_output "secrets.env"
+}
+
+@test "fnox scan quiet json prints affected files as json" {
+	echo 'token = "ghp_abcdefghijklmnopqrstuvwxyz123456"' >secrets.env
+	echo 'name = "fnox"' >safe.toml
+
+	run bash -c '"$1" scan --quiet --format json 2>/dev/null' _ "$FNOX_BIN"
+	assert_failure
+	echo "$output" | /usr/bin/python3 -m json.tool >/dev/null
+	assert_output --partial '"secrets.env"'
+	refute_output --partial '"findings"'
 }
 
 @test "fnox scan json emits parseable findings and summary" {
 	echo 'token = "ghp_abcdefghijklmnopqrstuvwxyz123456"' >secrets.env
 
-	assert_fnox_failure scan --format json
+	run bash -c '"$1" scan --format json 2>/dev/null' _ "$FNOX_BIN"
+	assert_failure
 	echo "$output" | /usr/bin/python3 -m json.tool >/dev/null
 	assert_output --partial '"findings"'
 	assert_output --partial '"summary"'
 	assert_output --partial '"detector": "github-token"'
+}
+
+@test "fnox scan human output uses lowercase severity" {
+	echo 'token = "ghp_abcdefghijklmnopqrstuvwxyz123456"' >secrets.env
+
+	assert_fnox_failure scan
+	assert_output --partial "[github-token high]"
+	refute_output --partial "[github-token High]"
 }
 
 @test "fnox scan accepts positional directory" {
@@ -78,4 +99,11 @@ teardown() {
 
 	assert_fnox_success scan
 	assert_output --partial "No potential secrets found"
+}
+
+@test "fnox scan does not skip files named like excluded directories" {
+	echo 'token = "ghp_abcdefghijklmnopqrstuvwxyz123456"' >build
+
+	assert_fnox_failure scan
+	assert_output --partial "build"
 }
