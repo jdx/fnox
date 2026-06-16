@@ -86,9 +86,8 @@ teardown() {
 	assert_output --partial "No potential secrets found"
 }
 
-@test "fnox scan skips hidden vcs build and vendor paths" {
-	mkdir -p .hidden .git target node_modules vendor dist build
-	echo 'token = "ghp_abcdefghijklmnopqrstuvwxyz123456"' >.hidden/secrets.env
+@test "fnox scan skips vcs build and vendor directories" {
+	mkdir -p .git target node_modules vendor dist build
 	echo 'token = "ghp_abcdefghijklmnopqrstuvwxyz123456"' >.git/secrets.env
 	echo 'token = "ghp_abcdefghijklmnopqrstuvwxyz123456"' >target/secrets.env
 	echo 'token = "ghp_abcdefghijklmnopqrstuvwxyz123456"' >node_modules/secrets.env
@@ -99,6 +98,13 @@ teardown() {
 
 	assert_fnox_success scan
 	assert_output --partial "No potential secrets found"
+}
+
+@test "fnox scan includes hidden files" {
+	echo 'token = "ghp_abcdefghijklmnopqrstuvwxyz123456"' >.env
+
+	assert_fnox_failure scan
+	assert_output --partial ".env"
 }
 
 @test "fnox scan does not skip files named like excluded directories" {

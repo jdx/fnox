@@ -186,7 +186,7 @@ fn scan_directory(dir: &Path, ignore_globs: Option<&GlobSet>) -> Result<ScanRepo
     let cwd = std::env::current_dir()?;
 
     let mut walker = WalkBuilder::new(&root);
-    walker.hidden(true);
+    walker.hidden(false);
     walker.git_ignore(true);
     walker.git_exclude(true);
     walker.git_global(true);
