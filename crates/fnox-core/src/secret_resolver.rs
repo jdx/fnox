@@ -172,6 +172,88 @@ fn default_reference_error(key: &str, reference: &str) -> FnoxError {
     ))
 }
 
+fn default_can_be_used_in_batch(
+    config: &Config,
+    profile: &str,
+    secret_config: &SecretConfig,
+) -> bool {
+    if secret_config.sync.is_some() {
+        return false;
+    }
+
+    if secret_config.value().is_none() {
+        return true;
+    }
+
+    secret_config.provider().is_none() && config.get_default_provider(profile).is_err()
+}
+
+fn collect_interpolation_closure(
+    config: &Config,
+    profile: &str,
+    key: &str,
+    secrets: &IndexMap<String, SecretConfig>,
+) -> Result<IndexMap<String, SecretConfig>> {
+    fn visit(
+        config: &Config,
+        profile: &str,
+        key: &str,
+        secrets: &IndexMap<String, SecretConfig>,
+        visiting: &mut HashSet<String>,
+        visited: &mut HashSet<String>,
+        subset: &mut IndexMap<String, SecretConfig>,
+    ) -> Result<()> {
+        if visited.contains(key) {
+            return Ok(());
+        }
+        if !visiting.insert(key.to_string()) {
+            return Err(FnoxError::Config(format!(
+                "Interpolation dependency cycle among secrets: {}",
+                key
+            )));
+        }
+
+        let secret_config = secrets.get(key).ok_or_else(|| {
+            FnoxError::Config(format!(
+                "Secret '{}' is not defined in the active profile",
+                key
+            ))
+        })?;
+
+        if default_can_be_used_in_batch(config, profile, secret_config)
+            && let Some(default) = &secret_config.default
+        {
+            for reference in extract_default_references(default) {
+                if !secrets.contains_key(&reference) {
+                    return Err(default_reference_error(key, &reference));
+                }
+                visit(
+                    config, profile, &reference, secrets, visiting, visited, subset,
+                )?;
+            }
+        }
+
+        visiting.remove(key);
+        visited.insert(key.to_string());
+        subset.insert(key.to_string(), secret_config.clone());
+        Ok(())
+    }
+
+    let mut subset = IndexMap::new();
+    let mut visiting = HashSet::new();
+    let mut visited = HashSet::new();
+    visit(
+        config,
+        profile,
+        key,
+        secrets,
+        &mut visiting,
+        &mut visited,
+        &mut subset,
+    )?;
+    Ok(subset)
+}
+
 /// Creates a ProviderNotConfigured error, using source spans when available for better error display.
 fn create_provider_not_configured_error(
     provider_name: &str,
@@ -308,7 +390,8 @@ pub async fn resolve_secret(
     {
         let secrets = config.get_secrets(profile)?;
         if secrets.contains_key(key) {
-            let mut resolved = resolve_secrets_batch(config, profile, &secrets).await?;
+            let subset = collect_interpolation_closure(config, profile, key, &secrets)?;
+            let mut resolved = resolve_secrets_batch(config, profile, &subset).await?;
             return Ok(resolved.shift_remove(key).flatten());
         }
     }
@@ -1262,9 +1345,10 @@ mod tests {
             "POSTGRES_PASSWORD".to_string(),
             default_secret("dev-password"),
         );
+        let mut secrets = config.secrets.clone();
+        secrets.extend(dev.secrets.clone());
         config.profiles.insert("dev".to_string(), dev);
 
-        let secrets = config.get_secrets("dev").unwrap();
         let resolved = resolve_secrets_batch(&config, "dev", &secrets)
             .await
             .unwrap();
@@ -1376,6 +1460,29 @@ mod tests {
         config
             .secrets
             .insert("POSTGRES_USER".to_string(), default_secret("app"));
+
+        let secret_config = config.secrets.get("DATABASE_URL").unwrap();
+        let resolved = resolve_secret(&config, "default", "DATABASE_URL", secret_config)
+            .await
+            .unwrap();
+
+        assert_eq!(resolved, Some("postgres://app@localhost/fnox".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_secret_interpolation_ignores_unrelated_invalid_default() {
+        let mut config = Config::new();
+        config.secrets.insert(
+            "DATABASE_URL".to_string(),
+            default_secret("postgres://${POSTGRES_USER}@localhost/fnox"),
+        );
+        config
+            .secrets
+            .insert("POSTGRES_USER".to_string(), default_secret("app"));
+        config.secrets.insert(
+            "UNRELATED".to_string(),
+            default_secret("${MISSING_UNRELATED}"),
+        );
 
         let secret_config = config.secrets.get("DATABASE_URL").unwrap();
         let resolved = resolve_secret(&config, "default", "DATABASE_URL", secret_config)
