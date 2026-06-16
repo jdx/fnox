@@ -113,9 +113,6 @@ fnox scan
 
 # Scan specific directory
 fnox scan src/
-
-# Scan and fix (interactive)
-fnox scan --fix
 ```
 
 ## Examples

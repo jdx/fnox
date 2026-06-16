@@ -1095,33 +1095,26 @@
       },
       "scan": {
         "full_cmd": ["scan"],
-        "usage": "scan [FLAGS]",
+        "usage": "scan [FLAGS] [DIR]",
         "subcommands": {},
-        "args": [],
-        "flags": [
+        "args": [
           {
-            "name": "dir",
-            "usage": "-d --dir <DIR>",
+            "name": "DIR",
+            "usage": "[DIR]",
             "help": "Directory to scan (default: current directory)",
             "help_first_line": "Directory to scan (default: current directory)",
-            "short": ["d"],
-            "long": ["dir"],
+            "required": false,
+            "double_dash": "Optional",
             "hide": false,
-            "global": false,
-            "arg": {
-              "name": "DIR",
-              "usage": "<DIR>",
-              "required": true,
-              "double_dash": "Optional",
-              "hide": false
-            },
             "default": ["."]
-          },
+          }
+        ],
+        "flags": [
           {
             "name": "ignore",
             "usage": "-i --ignore… <IGNORE>",
-            "help": "Skip files matching this pattern (can be used multiple times)",
-            "help_first_line": "Skip files matching this pattern (can be used multiple times)",
+            "help": "Skip files matching this glob pattern (can be used multiple times)",
+            "help_first_line": "Skip files matching this glob pattern (can be used multiple times)",
             "short": ["i"],
             "long": ["ignore"],
             "var": true,
@@ -1134,6 +1127,27 @@
               "double_dash": "Optional",
               "hide": false
             }
+          },
+          {
+            "name": "format",
+            "usage": "--format <FORMAT>",
+            "help": "Output format",
+            "help_first_line": "Output format",
+            "short": [],
+            "long": ["format"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "FORMAT",
+              "usage": "<FORMAT>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false,
+              "choices": {
+                "choices": ["human", "json"]
+              }
+            },
+            "default": ["human"]
           },
           {
             "name": "quiet",

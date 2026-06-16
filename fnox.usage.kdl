@@ -174,13 +174,16 @@ cmd remove help="Remove a secret" {
     arg <KEY> help="Secret key to remove"
 }
 cmd scan help="Scan repository for potential secrets" {
-    flag "-d --dir" help="Directory to scan (default: current directory)" default=. {
-        arg <DIR>
-    }
-    flag "-i --ignore" help="Skip files matching this pattern (can be used multiple times)" var=#true {
+    flag "-i --ignore" help="Skip files matching this glob pattern (can be used multiple times)" var=#true {
         arg <IGNORE>
     }
+    flag --format help="Output format" default=human {
+        arg <FORMAT> {
+            choices human json
+        }
+    }
     flag "-q --quiet" help="Show only files with potential secrets"
+    arg "[DIR]" help="Directory to scan (default: current directory)" required=#false default=.
 }
 cmd schema hide=#true help="Generate JSON Schema for fnox configuration"
 cmd set help="Set a secret value" {

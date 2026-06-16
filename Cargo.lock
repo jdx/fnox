@@ -2365,6 +2365,8 @@ dependencies = [
  "data-encoding",
  "demand",
  "fnox-core",
+ "globset",
+ "ignore",
  "indexmap 2.14.0",
  "miette",
  "miniz_oxide 0.9.1",
