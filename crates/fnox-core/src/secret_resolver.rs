@@ -1477,10 +1477,10 @@ mod tests {
         let mut secrets = IndexMap::new();
         let mut user = SecretConfig::new();
         user.if_missing = Some(IfMissing::Ignore);
-        secrets.insert("POSTGRES_USER".to_string(), user);
+        secrets.insert("FNOX_TEST_MISSING_OPTIONAL_REF".to_string(), user);
         secrets.insert(
             "DATABASE_URL".to_string(),
-            default_secret("postgres://${POSTGRES_USER}@localhost/fnox"),
+            default_secret("postgres://${FNOX_TEST_MISSING_OPTIONAL_REF}@localhost/fnox"),
         );
 
         let resolved = resolve_secrets_batch(&config, "default", &secrets)
