@@ -124,6 +124,10 @@ fn extract_default_references(default: &str) -> Vec<String> {
     refs
 }
 
+fn has_default_interpolation(default: &str) -> bool {
+    default.contains("${")
+}
+
 fn render_default_template(
     key: &str,
     default: &str,
@@ -148,16 +152,15 @@ fn render_default_template(
             )));
         }
 
-        let value = resolved
-            .get(name)
-            .and_then(|value| value.as_ref())
-            .ok_or_else(|| {
-                FnoxError::Config(format!(
-                    "Secret '{}' references '{}' in default value, but '{}' did not resolve",
-                    key, name, name
-                ))
-            })?;
-        rendered.push_str(value);
+        let value = resolved.get(name).ok_or_else(|| {
+            FnoxError::Config(format!(
+                "Secret '{}' references '{}' in default value, but '{}' did not resolve",
+                key, name, name
+            ))
+        })?;
+        if let Some(value) = value {
+            rendered.push_str(value);
+        }
         rest = &after_start[end + 1..];
     }
 
@@ -185,7 +188,8 @@ fn default_can_be_used_in_batch(
         return true;
     }
 
-    secret_config.provider().is_none() && config.get_default_provider(profile).is_err()
+    secret_config.provider().is_none()
+        && !matches!(config.get_default_provider(profile), Ok(Some(_)))
 }
 
 fn collect_interpolation_closure(
@@ -386,7 +390,7 @@ pub async fn resolve_secret(
     secret_config: &SecretConfig,
 ) -> Result<Option<String>> {
     if let Some(default) = &secret_config.default
-        && !extract_default_references(default).is_empty()
+        && has_default_interpolation(default)
     {
         let secrets = config.get_secrets(profile)?;
         if secrets.contains_key(key) {
@@ -882,10 +886,10 @@ async fn resolve_no_provider_secret(
 ) -> Result<Option<String>> {
     if let Some(default) = &secret_config.default {
         tracing::debug!("Using default value for secret '{}'", key);
-        let value = if extract_default_references(default).is_empty() {
-            default.clone()
-        } else {
+        let value = if has_default_interpolation(default) {
             render_default_template(key, default, resolved_so_far)?
+        } else {
+            default.clone()
         };
         return Ok(Some(apply_post_processing(value, secret_config)?));
     }
@@ -1451,6 +1455,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_interpolated_default_errors_for_empty_reference() {
+        let config = Config::new();
+        let mut secrets = IndexMap::new();
+        secrets.insert("DATABASE_URL".to_string(), default_secret("${}"));
+
+        let err = resolve_secrets_batch(&config, "default", &secrets)
+            .await
+            .unwrap_err();
+        let msg = format!("{err}");
+
+        assert!(
+            msg.contains("empty interpolation reference"),
+            "unexpected error: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_interpolated_default_renders_missing_allowed_reference_as_empty() {
+        let config = Config::new();
+        let mut secrets = IndexMap::new();
+        let mut user = SecretConfig::new();
+        user.if_missing = Some(IfMissing::Ignore);
+        secrets.insert("POSTGRES_USER".to_string(), user);
+        secrets.insert(
+            "DATABASE_URL".to_string(),
+            default_secret("postgres://${POSTGRES_USER}@localhost/fnox"),
+        );
+
+        let resolved = resolve_secrets_batch(&config, "default", &secrets)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            resolved
+                .get("DATABASE_URL")
+                .and_then(|value| value.as_ref()),
+            Some(&"postgres://@localhost/fnox".to_string())
+        );
+    }
+
+    #[tokio::test]
     async fn test_resolve_secret_resolves_interpolated_default() {
         let mut config = Config::new();
         config.secrets.insert(
@@ -1467,6 +1512,30 @@ mod tests {
             .unwrap();
 
         assert_eq!(resolved, Some("postgres://app@localhost/fnox".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_secret_closure_includes_chained_defaults_without_default_provider() {
+        let mut config = Config::new();
+        config.root = true;
+        let mut database_url = default_secret("${DB_HOST}");
+        database_url.set_value(Some("provider-ref-without-provider".to_string()));
+        config
+            .secrets
+            .insert("DATABASE_URL".to_string(), database_url);
+        config
+            .secrets
+            .insert("DB_HOST".to_string(), default_secret("${HOSTNAME}"));
+        config
+            .secrets
+            .insert("HOSTNAME".to_string(), default_secret("localhost"));
+
+        let secret_config = config.secrets.get("DATABASE_URL").unwrap();
+        let resolved = resolve_secret(&config, "default", "DATABASE_URL", secret_config)
+            .await
+            .unwrap();
+
+        assert_eq!(resolved, Some("localhost".to_string()));
     }
 
     #[tokio::test]
