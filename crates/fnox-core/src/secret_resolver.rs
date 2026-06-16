@@ -198,66 +198,65 @@ fn collect_interpolation_closure(
     key: &str,
     secrets: &IndexMap<String, SecretConfig>,
 ) -> Result<IndexMap<String, SecretConfig>> {
-    fn visit(
-        config: &Config,
-        profile: &str,
-        root_key: &str,
-        key: &str,
-        secrets: &IndexMap<String, SecretConfig>,
-        visiting: &mut HashSet<String>,
-        visited: &mut HashSet<String>,
-        subset: &mut IndexMap<String, SecretConfig>,
-    ) -> Result<()> {
-        if visited.contains(key) {
-            return Ok(());
-        }
-        if !visiting.insert(key.to_string()) {
-            return Err(FnoxError::Config(format!(
-                "Interpolation dependency cycle among secrets: {}",
-                key
-            )));
-        }
-
-        let secret_config = secrets.get(key).ok_or_else(|| {
-            FnoxError::Config(format!(
-                "Secret '{}' is not defined in the active profile",
-                key
-            ))
-        })?;
-
-        if (key == root_key || default_can_be_used_in_batch(config, profile, secret_config))
-            && let Some(default) = &secret_config.default
-        {
-            for reference in extract_default_references(default) {
-                if !secrets.contains_key(&reference) {
-                    return Err(default_reference_error(key, &reference));
-                }
-                visit(
-                    config, profile, root_key, &reference, secrets, visiting, visited, subset,
-                )?;
-            }
-        }
-
-        visiting.remove(key);
-        visited.insert(key.to_string());
-        subset.insert(key.to_string(), secret_config.clone());
-        Ok(())
+    struct ClosureCollector<'a> {
+        config: &'a Config,
+        profile: &'a str,
+        root_key: &'a str,
+        secrets: &'a IndexMap<String, SecretConfig>,
+        visiting: HashSet<String>,
+        visited: HashSet<String>,
+        subset: IndexMap<String, SecretConfig>,
     }
 
-    let mut subset = IndexMap::new();
-    let mut visiting = HashSet::new();
-    let mut visited = HashSet::new();
-    visit(
+    impl ClosureCollector<'_> {
+        fn visit(&mut self, key: &str) -> Result<()> {
+            if self.visited.contains(key) {
+                return Ok(());
+            }
+            if !self.visiting.insert(key.to_string()) {
+                return Err(FnoxError::Config(format!(
+                    "Interpolation dependency cycle among secrets: {}",
+                    key
+                )));
+            }
+
+            let secret_config = self.secrets.get(key).ok_or_else(|| {
+                FnoxError::Config(format!(
+                    "Secret '{}' is not defined in the active profile",
+                    key
+                ))
+            })?;
+
+            if (key == self.root_key
+                || default_can_be_used_in_batch(self.config, self.profile, secret_config))
+                && let Some(default) = &secret_config.default
+            {
+                for reference in extract_default_references(default) {
+                    if !self.secrets.contains_key(&reference) {
+                        return Err(default_reference_error(key, &reference));
+                    }
+                    self.visit(&reference)?;
+                }
+            }
+
+            self.visiting.remove(key);
+            self.visited.insert(key.to_string());
+            self.subset.insert(key.to_string(), secret_config.clone());
+            Ok(())
+        }
+    }
+
+    let mut collector = ClosureCollector {
         config,
         profile,
-        key,
-        key,
+        root_key: key,
         secrets,
-        &mut visiting,
-        &mut visited,
-        &mut subset,
-    )?;
-    Ok(subset)
+        visiting: HashSet::new(),
+        visited: HashSet::new(),
+        subset: IndexMap::new(),
+    };
+    collector.visit(key)?;
+    Ok(collector.subset)
 }
 
 /// Creates a ProviderNotConfigured error, using source spans when available for better error display.
