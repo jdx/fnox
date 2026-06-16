@@ -201,6 +201,7 @@ fn collect_interpolation_closure(
     fn visit(
         config: &Config,
         profile: &str,
+        root_key: &str,
         key: &str,
         secrets: &IndexMap<String, SecretConfig>,
         visiting: &mut HashSet<String>,
@@ -224,7 +225,7 @@ fn collect_interpolation_closure(
             ))
         })?;
 
-        if default_can_be_used_in_batch(config, profile, secret_config)
+        if (key == root_key || default_can_be_used_in_batch(config, profile, secret_config))
             && let Some(default) = &secret_config.default
         {
             for reference in extract_default_references(default) {
@@ -232,7 +233,7 @@ fn collect_interpolation_closure(
                     return Err(default_reference_error(key, &reference));
                 }
                 visit(
-                    config, profile, &reference, secrets, visiting, visited, subset,
+                    config, profile, root_key, &reference, secrets, visiting, visited, subset,
                 )?;
             }
         }
@@ -249,6 +250,7 @@ fn collect_interpolation_closure(
     visit(
         config,
         profile,
+        key,
         key,
         secrets,
         &mut visiting,
@@ -396,7 +398,12 @@ pub async fn resolve_secret(
         if secrets.contains_key(key) {
             let subset = collect_interpolation_closure(config, profile, key, &secrets)?;
             let mut resolved = resolve_secrets_batch(config, profile, &subset).await?;
-            return Ok(resolved.shift_remove(key).flatten());
+            if let Some(Some(value)) = resolved.shift_remove(key) {
+                return Ok(Some(value));
+            }
+            let resolved_context: HashMap<String, Option<String>> = resolved.into_iter().collect();
+            let default = render_default_template(key, default, &resolved_context)?;
+            return Ok(Some(apply_post_processing(default, secret_config)?));
         }
     }
 
@@ -1536,6 +1543,29 @@ mod tests {
             .unwrap();
 
         assert_eq!(resolved, Some("localhost".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_secret_uses_interpolated_default_when_provider_missing_is_allowed() {
+        let mut config = Config::new();
+        config
+            .secrets
+            .insert("HOSTNAME".to_string(), default_secret("localhost"));
+
+        let mut database_url = default_secret("postgres://${HOSTNAME}/fnox");
+        database_url.set_provider(Some("missing-provider".to_string()));
+        database_url.set_value(Some("Database/url".to_string()));
+        database_url.if_missing = Some(IfMissing::Ignore);
+        config
+            .secrets
+            .insert("DATABASE_URL".to_string(), database_url);
+
+        let secret_config = config.secrets.get("DATABASE_URL").unwrap();
+        let resolved = resolve_secret(&config, "default", "DATABASE_URL", secret_config)
+            .await
+            .unwrap();
+
+        assert_eq!(resolved, Some("postgres://localhost/fnox".to_string()));
     }
 
     #[tokio::test]
