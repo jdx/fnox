@@ -29,6 +29,9 @@ features:
   - icon: 🔄
     title: Shell Integration
     details: Automatically load secrets when you cd into a directory with a fnox.toml file.
+  - icon: ⚡
+    title: Per-User Daemon
+    details: Optionally cache resolved secrets in memory for faster repeated reads.
   - icon: 🎯
     title: Multi-Environment Support
     details: Use profiles to manage different secrets for dev, staging, and production.

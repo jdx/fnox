@@ -82,6 +82,14 @@ impl Settings {
     /// Set the CLI snapshot (called after parsing CLI args)
     pub fn set_cli_snapshot(snapshot: CliSnapshot) {
         *CLI_SNAPSHOT.lock().unwrap() = Some(snapshot);
+        if *INITIALIZED.lock().unwrap() {
+            match Self::build_from_all_sources() {
+                Ok(settings) => GLOBAL_SETTINGS.store(Arc::new(settings)),
+                Err(e) => {
+                    tracing::warn!("failed to reload settings after CLI snapshot update: {e}")
+                }
+            }
+        }
     }
 
     /// Build settings by merging all sources

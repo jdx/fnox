@@ -2402,6 +2402,7 @@ dependencies = [
  "globset",
  "ignore",
  "indexmap 2.14.0",
+ "libc",
  "miette",
  "miniz_oxide 0.9.1",
  "nix 0.31.3",

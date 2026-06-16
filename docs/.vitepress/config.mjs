@@ -69,6 +69,7 @@ export default defineConfig({
         text: "Features",
         items: [
           { text: "Shell Integration", link: "/guide/shell-integration" },
+          { text: "Per-User Daemon", link: "/guide/daemon" },
           { text: "Mise Integration", link: "/guide/mise-integration" },
           { text: "TUI Dashboard", link: "/guide/tui" },
           { text: "Profiles", link: "/guide/profiles" },

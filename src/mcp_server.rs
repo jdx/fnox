@@ -12,7 +12,7 @@ use rmcp::{tool, tool_router};
 use tokio::sync::{OnceCell, RwLock};
 
 use crate::config::{Config, McpConfig, McpTool, SecretConfig};
-use crate::secret_resolver::resolve_secrets_batch;
+use crate::daemon::{Purpose, ResolveContext};
 use crate::temp_file_secrets::create_ephemeral_secret_file;
 
 /// Maximum output size (1 MiB) to prevent unbounded memory usage
@@ -52,6 +52,7 @@ pub struct FnoxMcpServer {
     config: Arc<Config>,
     profile: Arc<String>,
     mcp_config: Arc<McpConfig>,
+    daemon_context: Arc<ResolveContext>,
     profile_secrets: Arc<IndexMap<String, SecretConfig>>,
     /// Resolved secret values (raw). None means "resolved but absent".
     /// as_file conversion happens at exec time.
@@ -68,12 +69,14 @@ impl FnoxMcpServer {
         config: Config,
         profile: String,
         mcp_config: McpConfig,
+        daemon_context: ResolveContext,
         profile_secrets: IndexMap<String, SecretConfig>,
     ) -> Self {
         Self {
             config: Arc::new(config),
             profile: Arc::new(profile),
             mcp_config: Arc::new(mcp_config),
+            daemon_context: Arc::new(daemon_context),
             profile_secrets: Arc::new(profile_secrets),
             cache: Arc::new(RwLock::new(HashMap::new())),
             resolved: Arc::new(OnceCell::new()),
@@ -90,6 +93,7 @@ impl FnoxMcpServer {
         let config = self.config.clone();
         let profile = self.profile.clone();
         let profile_secrets = self.profile_secrets.clone();
+        let daemon_context = self.daemon_context.clone();
         let cache = self.cache.clone();
 
         self.resolved
@@ -101,11 +105,18 @@ impl FnoxMcpServer {
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect();
 
-                let resolved = resolve_secrets_batch(&config, &profile, &env_secrets)
-                    .await
-                    .map_err(|e| {
-                        McpError::internal_error(format!("Failed to resolve secrets: {e}"), None)
-                    })?;
+                let resolved = crate::daemon::resolve_batch_with_context(
+                    &daemon_context,
+                    &config,
+                    &profile,
+                    &env_secrets,
+                    Purpose::Mcp,
+                    false,
+                )
+                .await
+                .map_err(|e| {
+                    McpError::internal_error(format!("Failed to resolve secrets: {e}"), None)
+                })?;
 
                 let mut cache = cache.write().await;
                 for (key, value) in resolved {
@@ -141,11 +152,18 @@ impl FnoxMcpServer {
             .into_iter()
             .collect();
 
-        let resolved = resolve_secrets_batch(&self.config, &self.profile, &single)
-            .await
-            .map_err(|e| {
-                McpError::internal_error(format!("Failed to resolve secret '{name}': {e}"), None)
-            })?;
+        let resolved = crate::daemon::resolve_batch_with_context(
+            &self.daemon_context,
+            &self.config,
+            &self.profile,
+            &single,
+            Purpose::Mcp,
+            true,
+        )
+        .await
+        .map_err(|e| {
+            McpError::internal_error(format!("Failed to resolve secret '{name}': {e}"), None)
+        })?;
 
         let value = resolved.into_iter().next().and_then(|(_, v)| v);
 

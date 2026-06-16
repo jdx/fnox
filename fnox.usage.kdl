@@ -18,6 +18,7 @@ flag --if-missing help="What to do if a secret is missing (error, warn, ignore)"
     arg <IF_MISSING>
 }
 flag --no-color help="Disable colored output" global=#true
+flag --no-daemon help="Disable daemon-backed resolution for this invocation" global=#true
 flag --no-defaults help="Do not merge top-level secrets into the selected profile" global=#true
 cmd activate help="Output shell activation code to enable automatic secret loading" {
     flag --no-hook-env help="Don't automatically invoke hook-env (for testing)"
@@ -33,6 +34,13 @@ cmd completion help="Generate shell completions" {
     arg <SHELL> help="Shell type to generate completions for"
 }
 cmd config-files help="List all config files that would be loaded"
+cmd daemon subcommand_required=#true help="Manage the per-user daemon" {
+    cmd clear help="Clear the daemon's in-memory cache"
+    cmd serve hide=#true help="Run the daemon server in the foreground"
+    cmd start help="Start the per-user daemon in the background"
+    cmd status help="Show daemon status"
+    cmd stop help="Stop the daemon"
+}
 cmd deactivate help="Disable fnox shell integration in the current shell session"
 cmd doctor help="Show diagnostic information about the current fnox state" {
     alias dr

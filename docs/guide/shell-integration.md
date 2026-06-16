@@ -123,6 +123,7 @@ eval "$(fnox activate bash)"
 
 ## Next Steps
 
+- [Per-User Daemon](/guide/daemon) - Cache resolved secrets in memory for faster refreshes
 - [Profiles](/guide/profiles) - Manage multiple environments
 - [Hierarchical Config](/guide/hierarchical-config) - Organize secrets across directories
 - [Real-World Example](/guide/real-world-example) - See a complete setup

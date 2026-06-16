@@ -81,6 +81,7 @@ impl AddCommand {
                 account: OptionStringOrSecretRef::none(),
                 token: OptionStringOrSecretRef::none(),
                 auth_command: None,
+                daemon_cache: None,
             },
             ProviderType::Aws => crate::config::ProviderConfig::AwsSecretsManager {
                 region: StringOrSecretRef::from("us-east-1"),
@@ -88,6 +89,7 @@ impl AddCommand {
                 prefix: OptionStringOrSecretRef::none(),
                 endpoint: OptionStringOrSecretRef::none(),
                 auth_command: None,
+                daemon_cache: None,
             },
             ProviderType::Vault => crate::config::ProviderConfig::HashiCorpVault {
                 address: OptionStringOrSecretRef::literal("http://localhost:8200"),
@@ -96,17 +98,20 @@ impl AddCommand {
                 namespace: OptionStringOrSecretRef::none(),
                 credential_command: OptionStringOrSecretRef::none(),
                 auth_command: None,
+                daemon_cache: None,
             },
             ProviderType::Gcp => crate::config::ProviderConfig::GoogleSecretManager {
                 project: StringOrSecretRef::from("my-project"),
                 prefix: OptionStringOrSecretRef::none(),
                 auth_command: None,
+                daemon_cache: None,
             },
             ProviderType::AwsKms => crate::config::ProviderConfig::AwsKms {
                 region: StringOrSecretRef::from("us-east-1"),
                 key_id: StringOrSecretRef::from("alias/my-key"),
                 endpoint: OptionStringOrSecretRef::none(),
                 auth_command: None,
+                daemon_cache: None,
             },
             ProviderType::AwsParameterStore => crate::config::ProviderConfig::AwsParameterStore {
                 region: StringOrSecretRef::from("us-east-1"),
@@ -114,17 +119,20 @@ impl AddCommand {
                 prefix: OptionStringOrSecretRef::literal("/myapp/prod/"),
                 endpoint: OptionStringOrSecretRef::none(),
                 auth_command: None,
+                daemon_cache: None,
             },
             ProviderType::AzureKms => crate::config::ProviderConfig::AzureKms {
                 vault_url: StringOrSecretRef::from("https://my-vault.vault.azure.net/"),
                 key_name: StringOrSecretRef::from("my-key"),
                 auth_command: None,
+                daemon_cache: None,
             },
             ProviderType::AzureSecretsManager => {
                 crate::config::ProviderConfig::AzureSecretsManager {
                     vault_url: StringOrSecretRef::from("https://my-vault.vault.azure.net/"),
                     prefix: OptionStringOrSecretRef::none(),
                     auth_command: None,
+                    daemon_cache: None,
                 }
             }
             ProviderType::GcpKms => crate::config::ProviderConfig::GcpKms {
@@ -133,6 +141,7 @@ impl AddCommand {
                 keyring: StringOrSecretRef::from("my-keyring"),
                 key: StringOrSecretRef::from("my-key"),
                 auth_command: None,
+                daemon_cache: None,
             },
             ProviderType::Bitwarden => crate::config::ProviderConfig::Bitwarden {
                 collection: OptionStringOrSecretRef::none(),
@@ -140,12 +149,14 @@ impl AddCommand {
                 profile: OptionStringOrSecretRef::none(),
                 backend: None,
                 auth_command: None,
+                daemon_cache: None,
             },
             ProviderType::BitwardenSecretsManager => {
                 crate::config::ProviderConfig::BitwardenSecretsManager {
                     project_id: OptionStringOrSecretRef::none(),
                     profile: OptionStringOrSecretRef::none(),
                     auth_command: None,
+                    daemon_cache: None,
                 }
             }
             ProviderType::Age => crate::config::ProviderConfig::AgeEncryption {
@@ -153,6 +164,7 @@ impl AddCommand {
                 key_file: OptionStringOrSecretRef::none(),
                 identity: OptionProviderSecretRef::none(),
                 auth_command: None,
+                daemon_cache: None,
             },
             #[cfg(not(target_env = "musl"))]
             ProviderType::Fido2 => {
@@ -170,6 +182,7 @@ impl AddCommand {
                     rp_id: StringOrSecretRef::from(rp_id.as_str()),
                     pin: OptionStringOrSecretRef::none(),
                     auth_command: None,
+                    daemon_cache: None,
                 }
             }
             ProviderType::Yubikey => {
@@ -183,6 +196,7 @@ impl AddCommand {
                     challenge: StringOrSecretRef::from(challenge_hex.as_str()),
                     slot: StringOrSecretRef::from(slot_str.as_str()),
                     auth_command: None,
+                    daemon_cache: None,
                 }
             }
             ProviderType::Doppler => crate::config::ProviderConfig::Doppler {
@@ -190,6 +204,7 @@ impl AddCommand {
                 config: OptionStringOrSecretRef::literal("prd"),
                 token: OptionStringOrSecretRef::none(),
                 auth_command: None,
+                daemon_cache: None,
             },
             ProviderType::Foks => crate::config::ProviderConfig::Foks {
                 prefix: OptionStringOrSecretRef::literal("/fnox/"),
@@ -198,29 +213,34 @@ impl AddCommand {
                 host: OptionStringOrSecretRef::none(),
                 bot_token: OptionStringOrSecretRef::none(),
                 auth_command: None,
+                daemon_cache: None,
             },
             ProviderType::Infisical => crate::config::ProviderConfig::Infisical {
                 project_id: OptionStringOrSecretRef::literal("your-project-id"),
                 environment: OptionStringOrSecretRef::literal("dev"),
                 path: OptionStringOrSecretRef::literal("/"),
                 auth_command: None,
+                daemon_cache: None,
             },
             ProviderType::KeePass => crate::config::ProviderConfig::KeePass {
                 database: StringOrSecretRef::from("~/secrets.kdbx"),
                 keyfile: OptionStringOrSecretRef::none(),
                 password: OptionStringOrSecretRef::none(),
                 auth_command: None,
+                daemon_cache: None,
             },
             ProviderType::Keychain => crate::config::ProviderConfig::Keychain {
                 service: StringOrSecretRef::from("fnox"),
                 prefix: OptionStringOrSecretRef::none(),
                 auth_command: None,
+                daemon_cache: None,
             },
             ProviderType::PasswordStore => crate::config::ProviderConfig::PasswordStore {
                 prefix: OptionStringOrSecretRef::literal("fnox/"),
                 store_dir: OptionStringOrSecretRef::none(),
                 gpg_opts: OptionStringOrSecretRef::none(),
                 auth_command: None,
+                daemon_cache: None,
             },
             ProviderType::Passwordstate => crate::config::ProviderConfig::Passwordstate {
                 base_url: StringOrSecretRef::from("https://passwordstate.example.com"),
@@ -228,8 +248,12 @@ impl AddCommand {
                 password_list_id: StringOrSecretRef::from("123"),
                 verify_ssl: OptionStringOrSecretRef::none(),
                 auth_command: None,
+                daemon_cache: None,
             },
-            ProviderType::Plain => crate::config::ProviderConfig::Plain { auth_command: None },
+            ProviderType::Plain => crate::config::ProviderConfig::Plain {
+                auth_command: None,
+                daemon_cache: None,
+            },
             ProviderType::ProtonPass => crate::config::ProviderConfig::ProtonPass {
                 vault: self
                     .vault
@@ -238,6 +262,7 @@ impl AddCommand {
                         OptionStringOrSecretRef::literal(vault.clone())
                     }),
                 auth_command: None,
+                daemon_cache: None,
             },
         };
 

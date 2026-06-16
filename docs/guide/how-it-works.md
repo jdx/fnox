@@ -69,8 +69,11 @@ When you run `fnox exec -- <command>`:
 4. Exports all secrets as environment variables
 5. Executes your command with those env vars
 
+If the [per-user daemon](/guide/daemon) is enabled, supported read commands resolve through a same-user Unix socket and can reuse memory-only cached values. Direct resolution remains available with `--no-daemon`.
+
 ## Next Steps
 
 - [Profiles](/guide/profiles) - Manage multiple environments
 - [Providers](/providers/overview) - Choose the right provider for your needs
+- [Per-User Daemon](/guide/daemon) - Speed up repeated provider reads
 - [Shell Integration](/guide/shell-integration) - Auto-load secrets in your shell

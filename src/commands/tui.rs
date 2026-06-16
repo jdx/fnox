@@ -43,7 +43,8 @@ impl TuiCommand {
         let _guard = TerminalGuard;
 
         // Create app state
-        let mut app = App::new(config, profile)?;
+        let daemon_context = crate::daemon::ResolveContext::from_cli(cli);
+        let mut app = App::new(config, profile, daemon_context)?;
 
         // Create event handler
         let mut events = EventHandler::new(Duration::from_millis(250));

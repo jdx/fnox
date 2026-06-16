@@ -77,11 +77,13 @@ impl CheckCommand {
                             }
 
                             // Try to actually resolve the secret from the provider
-                            match secret_resolver::resolve_secret(
+                            match crate::daemon::resolve_one(
+                                cli,
                                 &config,
                                 &profile,
                                 &name,
                                 &secret_config,
+                                crate::daemon::Purpose::Check,
                             )
                             .await
                             {

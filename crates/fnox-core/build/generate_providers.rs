@@ -318,6 +318,10 @@ fn generate_config_variant_fields(provider: &ProviderToml) -> Vec<TokenStream> {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         auth_command: Option<String>
     });
+    fields.push(quote! {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        daemon_cache: Option<bool>
+    });
 
     fields
 }
@@ -357,6 +361,7 @@ fn generate_provider_methods(
     let mut try_to_resolved_arms = Vec::new();
     let mut from_wizard_fields_arms = Vec::new();
     let mut auth_command_arms = Vec::new();
+    let mut daemon_cache_arms = Vec::new();
     let mut env_deps_arms = Vec::new();
     let mut interactive_auth_arms = Vec::new();
 
@@ -398,6 +403,9 @@ fn generate_provider_methods(
                 Some(cmd) => Some(cmd),
                 None => #static_default,
             }
+        });
+        daemon_cache_arms.push(quote! {
+            Self::#variant { daemon_cache, .. } => daemon_cache.unwrap_or(true)
         });
         env_deps_arms.push(quote! {
             Self::#variant { .. } => #module::env_dependencies()
@@ -527,6 +535,12 @@ fn generate_provider_methods(
                     #(#auth_command_arms),*
                 }
             }
+
+            pub fn daemon_cache_enabled(&self) -> bool {
+                match self {
+                    #(#daemon_cache_arms),*
+                }
+            }
         }
     };
 
@@ -601,7 +615,7 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
     let variant = Ident::new(&provider.rust_variant, Span::call_site());
 
     if provider.fields.is_empty() {
-        return quote! { Ok(ProviderConfig::#variant { auth_command: None }) };
+        return quote! { Ok(ProviderConfig::#variant { auth_command: None, daemon_cache: None }) };
     }
 
     // Special handling for age provider
@@ -618,6 +632,7 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
                 key_file: OptionStringOrSecretRef::none(),
                 identity: OptionProviderSecretRef::none(),
                 auth_command: None,
+                daemon_cache: None,
             })
         };
     }
@@ -630,6 +645,7 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
                 keyfile: get_optional("keyfile"),
                 password: OptionStringOrSecretRef::none(),
                 auth_command: None,
+                daemon_cache: None,
             })
         };
     }
@@ -642,6 +658,7 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
                 store_dir: get_optional("store_dir"),
                 gpg_opts: OptionStringOrSecretRef::none(),
                 auth_command: None,
+                daemon_cache: None,
             })
         };
     }
@@ -655,6 +672,7 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
                 profile: get_optional("profile"),
                 backend: None,
                 auth_command: None,
+                daemon_cache: None,
             })
         };
     }
@@ -682,6 +700,7 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
         Ok(ProviderConfig::#variant {
             #(#field_inits,)*
             auth_command: None,
+            daemon_cache: None,
         })
     }
 }

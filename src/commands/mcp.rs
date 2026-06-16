@@ -65,7 +65,9 @@ impl McpCommand {
             ));
         }
 
-        let server = FnoxMcpServer::new(config, profile, mcp_config, profile_secrets);
+        let daemon_context = crate::daemon::ResolveContext::from_cli(cli);
+        let server =
+            FnoxMcpServer::new(config, profile, mcp_config, daemon_context, profile_secrets);
 
         let service: RunningService<RoleServer, FnoxMcpServer> = server
             .serve(rmcp::transport::io::stdio())

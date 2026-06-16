@@ -160,6 +160,24 @@ fnox exec -- ./any-command.sh
 
 ## Shell Integration
 
+### `FNOX_DAEMON`
+
+Enable or disable daemon-backed resolution.
+
+```bash
+export FNOX_DAEMON=on   # enable daemon mode
+export FNOX_DAEMON=off  # force direct resolution
+```
+
+**Values:**
+
+- `on`, `true`, `yes`, `1` - Enable daemon-backed resolution
+- `off`, `false`, `no`, `0` - Disable daemon-backed resolution
+
+When enabled, supported read commands auto-start the per-user daemon and fail closed if the daemon cannot be used. The `--no-daemon` flag disables daemon use for a single invocation.
+
+See [Per-User Daemon](/guide/daemon).
+
 ### `FNOX_SHELL_OUTPUT`
 
 Control shell integration output verbosity.

@@ -32,6 +32,10 @@ What to do if a secret is missing (error, warn, ignore)
 
 Disable colored output
 
+### `--no-daemon`
+
+Disable daemon-backed resolution for this invocation
+
 ### `--no-defaults`
 
 Do not merge top-level secrets into the selected profile
@@ -42,6 +46,11 @@ Do not merge top-level secrets into the selected profile
 - [`fnox check [-a --all]`](/cli/check.md)
 - [`fnox completion <SHELL>`](/cli/completion.md)
 - [`fnox config-files`](/cli/config-files.md)
+- [`fnox daemon <SUBCOMMAND>`](/cli/daemon.md)
+- [`fnox daemon clear`](/cli/daemon/clear.md)
+- [`fnox daemon start`](/cli/daemon/start.md)
+- [`fnox daemon status`](/cli/daemon/status.md)
+- [`fnox daemon stop`](/cli/daemon/stop.md)
 - [`fnox deactivate`](/cli/deactivate.md)
 - [`fnox doctor`](/cli/doctor.md)
 - [`fnox edit`](/cli/edit.md)

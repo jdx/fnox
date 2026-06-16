@@ -109,6 +109,23 @@ import = ["./shared/base.toml", "./envs/dev.toml"]
 - Imported files merged into current config
 - Later imports override earlier ones
 
+### `daemon`
+
+Enable memory-only daemon caching for supported read commands.
+
+```toml
+[daemon]
+enabled = true
+idle_timeout = "8h"
+```
+
+**Fields:**
+
+- `enabled` - Enable daemon-backed resolution. Defaults to `false`.
+- `idle_timeout` - How long the daemon stays alive while idle. Defaults to `"8h"`. Supports values such as `"30m"`, `"8h"`, or `"1d"`.
+
+See [Per-User Daemon](/guide/daemon).
+
 ## Provider Configuration
 
 ```toml
@@ -134,6 +151,17 @@ vault = { type = "vault", address = "https://vault.example.com", auth_command = 
 ```
 
 Setting `auth_command = ""` disables the auth prompt for that provider instance.
+
+### `daemon_cache`
+
+Disable daemon cache reuse for all secrets that use this provider.
+
+```toml
+[providers.op]
+type = "1password"
+vault = "Engineering"
+daemon_cache = false
+```
 
 ### Common Provider Types
 
@@ -256,6 +284,15 @@ DATABASE_URL = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNj
 
 # Remote reference (AWS)
 DATABASE_URL = { provider = "aws", value = "database-url" }  # Secret name in AWS Secrets Manager
+```
+
+#### `daemon_cache`
+
+Disable daemon cache reuse for this secret.
+
+```toml
+[secrets]
+PAYMENT_API_KEY = { provider = "op", value = "Payments/api-key", daemon_cache = false }
 ```
 
 #### `default`

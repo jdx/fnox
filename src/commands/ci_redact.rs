@@ -1,5 +1,5 @@
 use crate::error::{FnoxError, Result};
-use crate::secret_resolver::{handle_provider_error, resolve_if_missing_behavior, resolve_secret};
+use crate::secret_resolver::{handle_provider_error, resolve_if_missing_behavior};
 use crate::{commands::Cli, config::Config};
 use clap::Args;
 
@@ -76,7 +76,16 @@ impl CiRedactCommand {
 
         // Resolve and redact each secret
         for (key, secret_config) in &profile_secrets {
-            match resolve_secret(&config, &profile, key, secret_config).await {
+            match crate::daemon::resolve_one(
+                cli,
+                &config,
+                &profile,
+                key,
+                secret_config,
+                crate::daemon::Purpose::CiRedact,
+            )
+            .await
+            {
                 Ok(Some(value)) => {
                     // Output CI-specific mask command
                     mask_fn(key, &value);

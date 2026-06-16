@@ -12,6 +12,7 @@ pub use fnox_core::{
 
 // CLI-only modules — depend on fnox-core for everything else.
 pub mod commands;
+pub mod daemon;
 pub mod hook_env;
 pub mod mcp_server;
 pub mod shell;

@@ -1,7 +1,6 @@
 use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::Result;
-use crate::secret_resolver::resolve_secrets_batch;
 use clap::Args;
 use indexmap::IndexMap;
 use tabled::settings::{
@@ -114,7 +113,17 @@ impl ListCommand {
 
         // Resolve secrets if values are requested
         let resolved_values = if self.values {
-            Some(resolve_secrets_batch(&config, &profile, &profile_secrets).await?)
+            Some(
+                crate::daemon::resolve_batch(
+                    cli,
+                    &config,
+                    &profile,
+                    &profile_secrets,
+                    crate::daemon::Purpose::ListValues,
+                    true,
+                )
+                .await?,
+            )
         } else {
             None
         };

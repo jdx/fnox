@@ -1414,7 +1414,10 @@ mod tests {
         let mut config = Config::new();
         config.providers.insert(
             "plain".to_string(),
-            ProviderConfig::Plain { auth_command: None },
+            ProviderConfig::Plain {
+                auth_command: None,
+                daemon_cache: None,
+            },
         );
 
         let mut secrets = IndexMap::new();
@@ -1441,7 +1444,10 @@ mod tests {
         let mut config = Config::new();
         config.providers.insert(
             "plain".to_string(),
-            ProviderConfig::Plain { auth_command: None },
+            ProviderConfig::Plain {
+                auth_command: None,
+                daemon_cache: None,
+            },
         );
 
         let mut secret = plain_provider_secret("provider-value");

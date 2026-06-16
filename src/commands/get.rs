@@ -1,7 +1,6 @@
 use crate::config::SecretConfig;
 use crate::error::{FnoxError, Result};
 use crate::lease::{self, LeaseLedger};
-use crate::secret_resolver::resolve_secret;
 use crate::suggest::{find_similar, format_suggestions};
 use crate::temp_file_secrets::create_persistent_secret_file;
 use crate::{commands::Cli, config::Config};
@@ -62,7 +61,16 @@ impl GetCommand {
         })?;
 
         // Resolve the secret using centralized resolver
-        match resolve_secret(&config, &profile, &self.key, secret_config).await {
+        match crate::daemon::resolve_one(
+            cli,
+            &config,
+            &profile,
+            &self.key,
+            secret_config,
+            crate::daemon::Purpose::Get,
+        )
+        .await
+        {
             Ok(Some(value)) => {
                 let value = self.maybe_base64_decode(value)?;
 

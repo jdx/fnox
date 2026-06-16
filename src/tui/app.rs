@@ -8,8 +8,8 @@ use ratatui::layout::Rect;
 use tokio::sync::mpsc;
 
 use crate::config::{Config, SecretConfig};
+use crate::daemon::{Purpose, ResolveContext};
 use crate::error::Result;
-use crate::secret_resolver::resolve_secrets_batch;
 use crate::tui::event::Event;
 
 /// Focus area in the TUI
@@ -80,6 +80,9 @@ pub struct App {
     /// Loaded config
     pub config: Config,
 
+    /// Daemon resolution context from the original CLI invocation
+    pub daemon_context: ResolveContext,
+
     /// Current profile name
     pub profile: String,
 
@@ -142,7 +145,7 @@ pub struct App {
 
 impl App {
     /// Create a new app with the given config and profile
-    pub fn new(config: Config, profile: String) -> Result<Self> {
+    pub fn new(config: Config, profile: String, daemon_context: ResolveContext) -> Result<Self> {
         let providers: Vec<String> = config.get_providers(&profile).keys().cloned().collect();
         let secrets = config.get_secrets(&profile)?;
 
@@ -157,6 +160,7 @@ impl App {
             focus: Focus::Secrets,
             popup: Popup::None,
             config,
+            daemon_context,
             profile,
             available_profiles,
             profile_picker_index: 0,
@@ -239,11 +243,21 @@ impl App {
         self.loading_secrets = self.secrets.keys().cloned().collect();
 
         let config = self.config.clone();
+        let daemon_context = self.daemon_context.clone();
         let profile = self.profile.clone();
         let secrets = self.secrets.clone();
 
         tokio::spawn(async move {
-            match resolve_secrets_batch(&config, &profile, &secrets).await {
+            match crate::daemon::resolve_batch_with_context(
+                &daemon_context,
+                &config,
+                &profile,
+                &secrets,
+                Purpose::Tui,
+                true,
+            )
+            .await
+            {
                 Ok(resolved) => {
                     let _ = tx.send(Event::Message(Message::SecretsResolved {
                         resolution_id,

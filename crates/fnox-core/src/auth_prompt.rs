@@ -84,6 +84,7 @@ mod tests {
             account: OptionStringOrSecretRef::none(),
             token: OptionStringOrSecretRef::none(),
             auth_command: None,
+            daemon_cache: None,
         }
     }
 

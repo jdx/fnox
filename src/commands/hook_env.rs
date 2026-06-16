@@ -1,3 +1,4 @@
+use crate::commands::Cli;
 use crate::config::Config;
 use crate::hook_env::{self, HookEnvSession, PREV_SESSION};
 use crate::settings::Settings;
@@ -43,7 +44,7 @@ pub struct HookEnvCommand {
 }
 
 impl HookEnvCommand {
-    pub async fn run(&self) -> Result<()> {
+    pub async fn run(&self, cli: &Cli) -> Result<()> {
         // Get settings for output mode
         let settings =
             Settings::try_get().map_err(|e| anyhow::anyhow!("Failed to get settings: {}", e))?;
@@ -82,7 +83,7 @@ impl HookEnvCommand {
 
         // Load secrets if config exists
         let loaded_data = if config_path.is_some() {
-            match load_secrets_from_config().await {
+            match load_secrets_from_config(cli).await {
                 Ok(data) => data,
                 Err(e) => {
                     // Log error but don't fail the shell hook
@@ -177,9 +178,7 @@ struct LoadedSecrets {
 }
 
 /// Load all secrets from a fnox.toml config file
-async fn load_secrets_from_config() -> Result<LoadedSecrets> {
-    use crate::secret_resolver::resolve_secrets_batch;
-
+async fn load_secrets_from_config(cli: &Cli) -> Result<LoadedSecrets> {
     // Use load_smart to ensure provider inheritance from parent configs
     // This handles fnox.toml and fnox.local.toml with proper recursion
     let settings =
@@ -223,7 +222,16 @@ async fn load_secrets_from_config() -> Result<LoadedSecrets> {
         .map_err(|e| anyhow::anyhow!("Failed to get secrets: {}", e))?;
 
     // Use batch resolution for better performance
-    let resolved = match resolve_secrets_batch(&config, profile_name, &profile_secrets).await {
+    let resolved = match crate::daemon::resolve_batch(
+        cli,
+        &config,
+        profile_name,
+        &profile_secrets,
+        crate::daemon::Purpose::HookEnv,
+        false,
+    )
+    .await
+    {
         Ok(r) => r,
         Err(e) => {
             // Log error but don't fail the shell hook

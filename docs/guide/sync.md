@@ -159,6 +159,7 @@ cd .. && cd my-api
 
 ## Next Steps
 
+- [Per-User Daemon](/guide/daemon) - Cache resolved secrets in memory for a session
 - [Import/Export](/guide/import-export) - Migrate secrets between formats
 - [Shell Integration](/guide/shell-integration) - Auto-load secrets on `cd`
 - [Hierarchical Config](/guide/hierarchical-config) - Organize configs across directories

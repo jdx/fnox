@@ -264,6 +264,8 @@ jobs:
           fnox ci-redact
           # shellcheck disable=SC2016
           fnox run -- sh -c 'echo MY_UNIMPORTANT_SECRET: $MY_UNIMPORTANT_SECRET'
+      - name: Clean cached Rust build artifacts
+        run: cargo clean
       - name: Run tests
         run: cargo test --workspace
       - name: mise run render

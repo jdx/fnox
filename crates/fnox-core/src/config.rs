@@ -134,6 +134,10 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp: Option<McpConfig>,
 
+    /// Per-user daemon configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub daemon: Option<DaemonConfig>,
+
     /// Track which config file each provider came from (not serialized)
     #[serde(skip)]
     pub provider_sources: HashMap<String, PathBuf>,
@@ -216,6 +220,11 @@ pub struct SecretConfig {
     /// When false, the secret was loaded from a root-level [secrets] section.
     #[serde(skip)]
     pub source_is_profile: bool,
+
+    /// Whether this secret may be cached by the per-user daemon.
+    /// Defaults to true; set false for secrets that should always resolve directly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub daemon_cache: Option<bool>,
 }
 
 /// Configuration for a profile
@@ -294,6 +303,34 @@ pub struct McpConfig {
     /// When None, all profile secrets are available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secrets: Option<Vec<String>>,
+}
+
+/// Per-user daemon configuration
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[derive(Default)]
+pub struct DaemonConfig {
+    /// Enable daemon-backed resolution for supported read commands.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+
+    /// Idle timeout before the daemon exits, such as "8h", "30m", or "300s".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idle_timeout: Option<String>,
+}
+
+impl DaemonConfig {
+    pub const DEFAULT_IDLE_TIMEOUT: &'static str = "8h";
+
+    pub fn enabled(&self) -> bool {
+        self.enabled.unwrap_or(false)
+    }
+
+    pub fn idle_timeout(&self) -> &str {
+        self.idle_timeout
+            .as_deref()
+            .unwrap_or(Self::DEFAULT_IDLE_TIMEOUT)
+    }
 }
 
 impl McpConfig {
@@ -604,6 +641,17 @@ impl Config {
             // re-expose secrets that the base config restricted.
             if overlay_mcp.secrets.is_some() {
                 base_mcp.secrets = overlay_mcp.secrets;
+            }
+        }
+
+        // Merge daemon (overlay takes precedence, field-by-field)
+        if let Some(overlay_daemon) = overlay.daemon {
+            let base_daemon = merged.daemon.get_or_insert_with(DaemonConfig::default);
+            if overlay_daemon.enabled.is_some() {
+                base_daemon.enabled = overlay_daemon.enabled;
+            }
+            if overlay_daemon.idle_timeout.is_some() {
+                base_daemon.idle_timeout = overlay_daemon.idle_timeout;
             }
         }
 
@@ -991,6 +1039,7 @@ impl Config {
             if_missing: None,
             prompt_auth: None,
             mcp: None,
+            daemon: None,
             provider_sources: HashMap::new(),
             secret_sources: HashMap::new(),
             default_provider_source: None,
@@ -1489,6 +1538,7 @@ impl SecretConfig {
             sync: None,
             source_path: None,
             source_is_profile: false,
+            daemon_cache: None,
         }
     }
 
@@ -1545,6 +1595,9 @@ impl SecretConfig {
             sync_table.insert("value", toml_edit::Value::from(sync.value.as_str()));
             sync_table.fmt();
             inline.insert("sync", toml_edit::Value::InlineTable(sync_table));
+        }
+        if let Some(daemon_cache) = self.daemon_cache {
+            inline.insert("daemon_cache", toml_edit::Value::from(daemon_cache));
         }
 
         inline.fmt();
@@ -1606,6 +1659,7 @@ impl SecretConfig {
                 Value::InlineTable(sync_table)
             }),
         );
+        set_or_remove(table, "daemon_cache", self.daemon_cache.map(Value::from));
     }
 
     /// Update a TOML item with this secret config while preserving the
@@ -1768,7 +1822,10 @@ mod tests {
         let mut prod_profile = ProfileConfig::new();
         prod_profile.providers.insert(
             "plain".to_string(),
-            ProviderConfig::Plain { auth_command: None },
+            ProviderConfig::Plain {
+                auth_command: None,
+                daemon_cache: None,
+            },
         );
         let mut secret = SecretConfig::new();
         secret.set_value(Some("test-value".to_string()));

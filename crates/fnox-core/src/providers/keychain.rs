@@ -242,6 +242,14 @@ mod tests {
     async fn test_keychain_set_and_get() {
         let provider = KeychainProvider::new("fnox-unit-test".to_string(), None).unwrap();
 
+        if let Err(err) = provider.test_connection().await {
+            if is_keychain_unavailable(&err) {
+                eprintln!("skipping keychain test: {err}");
+                return;
+            }
+            panic!("Failed to connect to keychain: {err:?}");
+        }
+
         // Set a secret
         let result = provider.put_secret("test_key", "test_value").await;
         assert!(result.is_ok(), "Failed to set secret: {:?}", result.err());
@@ -254,5 +262,9 @@ mod tests {
         // Clean up
         let entry = provider.create_entry("test_key").unwrap();
         let _ = entry.delete_credential();
+    }
+
+    fn is_keychain_unavailable(err: &FnoxError) -> bool {
+        matches!(err, FnoxError::ProviderAuthFailed { .. })
     }
 }

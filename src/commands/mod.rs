@@ -10,6 +10,7 @@ pub mod check;
 pub mod ci_redact;
 pub mod completion;
 pub mod config_files;
+pub mod daemon;
 pub mod deactivate;
 pub mod doctor;
 pub mod edit;
@@ -65,6 +66,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub no_color: bool,
 
+    /// Disable daemon-backed resolution for this invocation
+    #[arg(long, global = true)]
+    pub no_daemon: bool,
+
     /// Do not merge top-level secrets into the selected profile
     #[arg(long, global = true)]
     pub no_defaults: bool,
@@ -90,6 +95,9 @@ pub enum Commands {
 
     /// List all config files that would be loaded
     ConfigFiles(config_files::ConfigFilesCommand),
+
+    /// Manage the per-user daemon
+    Daemon(daemon::DaemonCommand),
 
     /// Disable fnox shell integration in the current shell session
     Deactivate(deactivate::DeactivateCommand),
@@ -174,6 +182,7 @@ impl Commands {
             Commands::Init(cmd) => cmd.run(cli).await,
             Commands::Completion(cmd) => cmd.run(cli).await,
             Commands::ConfigFiles(cmd) => cmd.run(cli).await,
+            Commands::Daemon(cmd) => cmd.run(cli).await,
             Commands::Schema(cmd) => cmd.run(cli).await,
             Commands::Sponsors(cmd) => cmd.run(cli).await,
             Commands::Usage(cmd) => cmd.run(cli).await,
@@ -186,7 +195,7 @@ impl Commands {
                 .await
                 .map_err(|e| FnoxError::Config(e.to_string())),
             Commands::HookEnv(cmd) => cmd
-                .run()
+                .run(cli)
                 .await
                 .map_err(|e| FnoxError::Config(e.to_string())),
 

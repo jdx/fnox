@@ -7,6 +7,17 @@
       "description": "Age encryption key file path (optional, can also be set via env var or CLI flag)",
       "type": ["string", "null"]
     },
+    "daemon": {
+      "description": "Per-user daemon configuration",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DaemonConfig"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "default_provider": {
       "description": "Default provider name for default profile",
       "anyOf": [
@@ -144,6 +155,21 @@
           "const": "account"
         }
       ]
+    },
+    "DaemonConfig": {
+      "description": "Per-user daemon configuration",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Enable daemon-backed resolution for supported read commands.",
+          "type": ["boolean", "null"]
+        },
+        "idle_timeout": {
+          "description": "Idle timeout before the daemon exits, such as \"8h\", \"30m\", or \"300s\".",
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
     },
     "IfMissing": {
       "type": "string",
@@ -525,6 +551,9 @@
             "auth_command": {
               "type": ["string", "null"]
             },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
             "identity": {
               "$ref": "#/$defs/OptionProviderSecretRef"
             },
@@ -554,6 +583,9 @@
             "credential_id": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
             "pin": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -576,6 +608,9 @@
           "properties": {
             "auth_command": {
               "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "database": {
               "$ref": "#/$defs/StringOrSecretRef"
@@ -600,6 +635,9 @@
             "auth_command": {
               "type": ["string", "null"]
             },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
             "gpg_opts": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -623,6 +661,9 @@
             "auth_command": {
               "type": ["string", "null"]
             },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
             "type": {
               "type": "string",
               "const": "plain"
@@ -639,6 +680,9 @@
             },
             "challenge": {
               "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "slot": {
               "$ref": "#/$defs/StringOrSecretRef"
@@ -659,6 +703,9 @@
             },
             "auth_command": {
               "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "token": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -693,6 +740,9 @@
             "collection": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
             "organization_id": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -712,6 +762,9 @@
           "properties": {
             "auth_command": {
               "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "environment": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -742,6 +795,9 @@
             "base_url": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
             "password_list_id": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
@@ -762,6 +818,9 @@
             "auth_command": {
               "type": ["string", "null"]
             },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
             "type": {
               "type": "string",
               "const": "proton-pass"
@@ -778,6 +837,9 @@
           "properties": {
             "auth_command": {
               "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "endpoint": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -802,6 +864,9 @@
             "auth_command": {
               "type": ["string", "null"]
             },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
             "key_name": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
@@ -821,6 +886,9 @@
           "properties": {
             "auth_command": {
               "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "key": {
               "$ref": "#/$defs/StringOrSecretRef"
@@ -848,6 +916,9 @@
             "auth_command": {
               "type": ["string", "null"]
             },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
             "endpoint": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -873,6 +944,9 @@
           "properties": {
             "auth_command": {
               "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "endpoint": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -900,6 +974,9 @@
             "auth_command": {
               "type": ["string", "null"]
             },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -919,6 +996,9 @@
           "properties": {
             "auth_command": {
               "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "profile": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -943,6 +1023,9 @@
             "config": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
             "project": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -965,6 +1048,9 @@
             },
             "bot_token": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "home": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -992,6 +1078,9 @@
             "auth_command": {
               "type": ["string", "null"]
             },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -1018,6 +1107,9 @@
             "credential_command": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
             "namespace": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -1040,6 +1132,9 @@
           "properties": {
             "auth_command": {
               "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -1078,6 +1173,10 @@
         "as_file": {
           "description": "Write secret to a temporary file and set env var to the file path instead of the secret value",
           "type": "boolean"
+        },
+        "daemon_cache": {
+          "description": "Whether this secret may be cached by the per-user daemon.\nDefaults to true; set false for secrets that should always resolve directly.",
+          "type": ["boolean", "null"]
         },
         "default": {
           "description": "Default value to use if provider fails or secret is not found",
