@@ -1,7 +1,7 @@
 min_usage_version "1.3"
 name fnox
 bin fnox
-version "1.25.1"
+version "1.26.0"
 about "A flexible secret management tool by @jdx"
 usage "Usage: fnox [OPTIONS] <COMMAND>"
 flag "-c --config" help="Path to the configuration file (default: fnox.toml, searches parent directories)" global=#true default=fnox.toml {
@@ -209,7 +209,13 @@ cmd set help="Set a secret value" {
         }
     }
     arg <KEY> help="Secret key (environment variable name)"
-    arg "[VALUE]" help="Secret value to store" help_long="Secret value to store.\n\nIf omitted: reads from stdin when piped (`echo \"x\" | fnox set KEY`), or prompts interactively with hidden input.\n\nPassing secrets as arguments exposes them in shell history and `ps` output. For sensitive values, prefer stdin or the interactive prompt." required=#false
+    arg "[VALUE]" help="Secret value to store" help_long=#"""
+Secret value to store.
+
+If omitted: reads from stdin when piped (`echo "x" | fnox set KEY`), or prompts interactively with hidden input.
+
+Passing secrets as arguments exposes them in shell history and `ps` output. For sensitive values, prefer stdin or the interactive prompt.
+"""# required=#false
 }
 cmd sponsors help="Show the companies sponsoring fnox and the en.dev project family"
 cmd sync help="Sync secrets from remote providers to a local encryption provider" {

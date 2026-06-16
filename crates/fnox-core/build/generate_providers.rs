@@ -243,7 +243,7 @@ fn generate_provider_config(
         use schemars::JsonSchema;
         use serde::{Deserialize, Serialize};
         use strum::AsRefStr;
-        use super::super::secret_ref::{OptionStringOrSecretRef, StringOrSecretRef};
+        use super::super::secret_ref::{OptionProviderSecretRef, OptionStringOrSecretRef, StringOrSecretRef};
         use super::super::BitwardenBackend;
 
         fn default_bitwarden_backend() -> Option<BitwardenBackend> {
@@ -303,6 +303,12 @@ fn generate_config_variant_fields(provider: &ProviderToml) -> Vec<TokenStream> {
                     backend: Option<BitwardenBackend>
                 });
             }
+            "provider_ref" => {
+                fields.push(quote! {
+                    #[serde(default, skip_serializing_if = "OptionProviderSecretRef::is_none")]
+                    #field_name: OptionProviderSecretRef
+                });
+            }
             _ => {}
         }
     }
@@ -334,6 +340,9 @@ fn generate_resolved_variant_fields(provider: &ProviderToml) -> Vec<TokenStream>
             }
             "backend_enum" => {
                 fields.push(quote! { backend: Option<BitwardenBackend> });
+            }
+            "provider_ref" => {
+                fields.push(quote! { #field_name: OptionProviderSecretRef });
             }
             _ => {}
         }
@@ -413,7 +422,7 @@ fn generate_provider_methods(
     let output = quote! {
         use crate::error::{FnoxError, Result};
         use super::providers_config::{ProviderConfig, ResolvedProviderConfig};
-        use super::super::secret_ref::{OptionStringOrSecretRef, StringOrSecretRef};
+        use super::super::secret_ref::{OptionProviderSecretRef, OptionStringOrSecretRef, StringOrSecretRef};
         use std::collections::HashMap;
         #(#module_uses)*
 
@@ -574,6 +583,9 @@ fn generate_try_to_resolved_body(provider: &ProviderToml) -> TokenStream {
             "backend_enum" => {
                 field_conversions.push(quote! { backend: *backend });
             }
+            "provider_ref" => {
+                field_conversions.push(quote! { #field_name: #local_ident.clone() });
+            }
             _ => {}
         }
     }
@@ -604,6 +616,7 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
                         .ok_or_else(|| FnoxError::Config("recipient is required".to_string()))?,
                 ],
                 key_file: OptionStringOrSecretRef::none(),
+                identity: OptionProviderSecretRef::none(),
                 auth_command: None,
             })
         };
@@ -814,6 +827,9 @@ fn generate_resolver_fields(provider: &ProviderToml) -> Vec<TokenStream> {
                 }
                 "backend_enum" => {
                     quote! { backend: *backend }
+                }
+                "provider_ref" => {
+                    quote! { #field_name: #local_ident.clone() }
                 }
                 _ => quote! {},
             }

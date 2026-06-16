@@ -3,7 +3,7 @@ members = [".", "crates/fnox-core"]
 resolver = "3"
 
 [workspace.package]
-version = "1.25.1"
+version = "1.26.0"
 edition = "2024"
 authors = ["@jdx"]
 license = "MIT"
@@ -30,6 +30,7 @@ azure_security_keyvault_keys = { version = "1" }
 azure_security_keyvault_secrets = { version = "1" }
 base64 = "0.22"
 blake3 = "1"
+bytes = "1"
 chrono = "0.4"
 ci_info = "0.14"
 clap = { version = "4", features = ["derive", "env"] }
@@ -82,7 +83,7 @@ shlex = "2"
 signal-hook = "0.4"
 strsim = "0.11"
 strum = { version = "0.28", features = ["derive"] }
-tabled = { version = "0.20", features = ["ansi"] }
+tabled = { version = "0.21", features = ["ansi"] }
 tempfile = "3"
 tera = { version = "1", default-features = false }
 terminal_size = "0.4"
@@ -113,7 +114,7 @@ name = "fnox"
 path = "src/main.rs"
 
 [dependencies]
-fnox-core = { path = "crates/fnox-core", version = "1.25.1" }
+fnox-core = { path = "crates/fnox-core", version = "1.26.0" }
 
 # Direct dependencies of the CLI binary (commands, MCP server, TUI, hook-env,
 # shell integration). Provider/config/secret-resolver crates are pulled in

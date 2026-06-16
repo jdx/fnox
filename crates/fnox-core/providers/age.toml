@@ -19,6 +19,10 @@ placeholder = ""
 label = "Key file path (optional):"
 wizard = false
 
+[fields.identity]
+type = "provider_ref"
+wizard = false
+
 # TODO: Remove wizard_fields and have the wizard support vec_string fields directly
 # Currently uses a simplified 'recipient' field (singular) that maps to recipients[0]
 [wizard_fields.recipient]

@@ -35,7 +35,7 @@ pub mod yubikey_usb;
 
 pub use bitwarden::BitwardenBackend;
 pub use resolver::resolve_provider_config;
-pub use secret_ref::{OptionStringOrSecretRef, StringOrSecretRef};
+pub use secret_ref::{OptionProviderSecretRef, OptionStringOrSecretRef, StringOrSecretRef};
 
 /// Provider capabilities - what a provider can do
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -287,5 +287,46 @@ pub async fn get_provider_resolved(
     provider_config: &ProviderConfig,
 ) -> Result<Box<dyn Provider>> {
     let resolved = resolve_provider_config(config, profile, provider_name, provider_config).await?;
-    get_provider_from_resolved(provider_name, &resolved)
+    get_provider_from_resolved_with_context(config, profile, provider_name, &resolved)
+}
+
+pub(crate) fn get_provider_from_resolved_with_context(
+    config: &crate::config::Config,
+    profile: &str,
+    provider_name: &str,
+    resolved: &ResolvedProviderConfig,
+) -> Result<Box<dyn Provider>> {
+    get_provider_from_resolved_with_context_and_identity_cycle_guard(
+        config,
+        profile,
+        provider_name,
+        resolved,
+        None,
+    )
+}
+
+pub(crate) fn get_provider_from_resolved_with_context_and_identity_cycle_guard(
+    config: &crate::config::Config,
+    profile: &str,
+    provider_name: &str,
+    resolved: &ResolvedProviderConfig,
+    identity_cycle_guard: Option<age::AgeIdentityCycleGuard>,
+) -> Result<Box<dyn Provider>> {
+    if let ResolvedProviderConfig::AgeEncryption {
+        recipients,
+        key_file,
+        identity,
+    } = resolved
+    {
+        return Ok(Box::new(age::AgeEncryptionProvider::new_with_config(
+            recipients.clone(),
+            key_file.clone(),
+            identity.clone(),
+            std::sync::Arc::new(config.clone()),
+            profile.to_string(),
+            provider_name.to_string(),
+            identity_cycle_guard,
+        )?));
+    }
+    get_provider_from_resolved(provider_name, resolved)
 }

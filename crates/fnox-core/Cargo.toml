@@ -26,6 +26,7 @@ azure_security_keyvault_keys = { workspace = true }
 azure_security_keyvault_secrets = { workspace = true }
 base64 = { workspace = true }
 blake3 = { workspace = true }
+bytes = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
 demand = { workspace = true }

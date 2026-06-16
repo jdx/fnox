@@ -87,6 +87,14 @@ Or with SSH key:
 age = { type = "age", recipients = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQs8..."] }
 ```
 
+Or store the age identity in another provider, such as the OS keychain:
+
+```toml
+[providers]
+keychain = { type = "keychain", service = "fnox" }
+age = { type = "age", recipients = ["age1..."], identity = { provider = "keychain", value = "age-key" } }
+```
+
 ### Set Decryption Key
 
 #### Using Age Key

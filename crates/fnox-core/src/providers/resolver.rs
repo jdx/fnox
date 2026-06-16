@@ -12,7 +12,7 @@ use crate::error::{FnoxError, Result};
 use crate::suggest::{find_similar, format_suggestions};
 use std::collections::HashSet;
 
-use super::secret_ref::{OptionStringOrSecretRef, StringOrSecretRef};
+use super::secret_ref::{OptionProviderSecretRef, OptionStringOrSecretRef, StringOrSecretRef};
 use super::{ProviderConfig, ResolvedProviderConfig};
 
 /// Context for resolving provider configurations, tracking the resolution stack
@@ -165,6 +165,75 @@ pub fn resolve_option<'a>(
     })
 }
 
+/// Resolve an optional provider-backed secret reference to its actual value.
+pub fn resolve_provider_ref<'a>(
+    config: &'a Config,
+    profile: &'a str,
+    value: &'a OptionProviderSecretRef,
+    ctx: &'a mut ResolutionContext,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<String>>> + Send + 'a>> {
+    resolve_provider_ref_with_identity_cycle_guard(
+        config,
+        profile,
+        value,
+        ctx,
+        super::age::AgeIdentityCycleGuard::default(),
+    )
+}
+
+pub fn resolve_provider_ref_with_identity_cycle_guard<'a>(
+    config: &'a Config,
+    profile: &'a str,
+    value: &'a OptionProviderSecretRef,
+    ctx: &'a mut ResolutionContext,
+    identity_cycle_guard: super::age::AgeIdentityCycleGuard,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<String>>> + Send + 'a>> {
+    Box::pin(async move {
+        let Some(provider_ref) = value.as_ref() else {
+            return Ok(None);
+        };
+
+        let providers = config.get_providers(profile);
+        let Some(provider_config) = providers.get(&provider_ref.provider) else {
+            let available_providers: Vec<_> = providers.keys().map(|s| s.as_str()).collect();
+            let similar = find_similar(&provider_ref.provider, available_providers);
+            let suggestion = format_suggestions(&similar);
+
+            return Err(FnoxError::ProviderNotConfigured {
+                provider: provider_ref.provider.clone(),
+                profile: profile.to_string(),
+                config_path: config.provider_sources.get(&provider_ref.provider).cloned(),
+                suggestion,
+            });
+        };
+
+        if env::is_non_interactive() && provider_config.requires_interactive_auth() {
+            return Err(FnoxError::Provider(format!(
+                "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
+                provider_ref.provider
+            )));
+        }
+
+        let resolved_provider = resolve_provider_config_with_context(
+            config,
+            profile,
+            &provider_ref.provider,
+            provider_config,
+            ctx,
+        )
+        .await?;
+        let provider = super::get_provider_from_resolved_with_context_and_identity_cycle_guard(
+            config,
+            profile,
+            &provider_ref.provider,
+            &resolved_provider,
+            Some(identity_cycle_guard),
+        )?;
+
+        provider.get_secret(&provider_ref.value).await.map(Some)
+    })
+}
+
 /// Resolve a secret reference by name.
 ///
 /// This looks up the secret in config first, then falls back to environment variable.
@@ -209,7 +278,9 @@ fn resolve_secret_ref<'a>(
                     .await?;
 
                     // Create the provider and get the secret
-                    let provider = super::get_provider_from_resolved(
+                    let provider = super::get_provider_from_resolved_with_context(
+                        config,
+                        profile,
                         secret_provider_name,
                         &resolved_provider,
                     )?;

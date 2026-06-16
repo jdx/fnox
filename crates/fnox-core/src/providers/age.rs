@@ -1,8 +1,10 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
+use crate::providers::OptionProviderSecretRef;
 use async_trait::async_trait;
 use std::io::Read;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 pub fn env_dependencies() -> &'static [&'static str] {
     &[]
@@ -11,14 +13,126 @@ pub fn env_dependencies() -> &'static [&'static str] {
 pub struct AgeEncryptionProvider {
     recipients: Vec<String>,
     key_file: Option<PathBuf>,
+    identity: OptionProviderSecretRef,
+    config: Option<Arc<crate::config::Config>>,
+    profile: String,
+    provider_name: String,
+    identity_cycle_guard: Option<AgeIdentityCycleGuard>,
 }
 
 impl AgeEncryptionProvider {
-    pub fn new(recipients: Vec<String>, key_file: Option<String>) -> Result<Self> {
+    pub fn new(
+        recipients: Vec<String>,
+        key_file: Option<String>,
+        identity: OptionProviderSecretRef,
+    ) -> Result<Self> {
         Ok(Self {
             recipients,
             key_file: key_file.map(|k| PathBuf::from(shellexpand::tilde(&k).to_string())),
+            identity,
+            config: None,
+            profile: "default".to_string(),
+            provider_name: "age".to_string(),
+            identity_cycle_guard: None,
         })
+    }
+
+    pub fn new_with_config(
+        recipients: Vec<String>,
+        key_file: Option<String>,
+        identity: OptionProviderSecretRef,
+        config: Arc<crate::config::Config>,
+        profile: String,
+        provider_name: String,
+        identity_cycle_guard: Option<AgeIdentityCycleGuard>,
+    ) -> Result<Self> {
+        Ok(Self {
+            recipients,
+            key_file: key_file.map(|k| PathBuf::from(shellexpand::tilde(&k).to_string())),
+            identity,
+            config: Some(config),
+            profile,
+            provider_name,
+            identity_cycle_guard,
+        })
+    }
+
+    async fn resolve_provider_identity(&self) -> Result<Option<String>> {
+        let Some(identity) = self.identity.as_ref() else {
+            return Ok(None);
+        };
+
+        if identity.provider == self.provider_name {
+            return Err(FnoxError::ProviderConfigCycle {
+                provider: self.provider_name.clone(),
+                cycle: format!("{} -> {}", self.provider_name, identity.provider),
+            });
+        }
+
+        let Some(config) = self.config.as_ref() else {
+            return Err(FnoxError::Config(
+                "Cannot resolve age identity provider reference without config context".to_string(),
+            ));
+        };
+
+        let identity_cycle_guard = self.identity_cycle_guard.clone().unwrap_or_default();
+        let _guard = identity_cycle_guard.enter(&self.provider_name)?;
+        let mut ctx = crate::providers::resolver::ResolutionContext::new();
+        crate::providers::resolver::resolve_provider_ref_with_identity_cycle_guard(
+            config,
+            &self.profile,
+            &self.identity,
+            &mut ctx,
+            identity_cycle_guard,
+        )
+        .await
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct AgeIdentityCycleGuard {
+    resolving: Arc<Mutex<Vec<String>>>,
+}
+
+impl AgeIdentityCycleGuard {
+    fn enter(&self, provider_name: &str) -> Result<AgeIdentityCycleEntry> {
+        let mut resolving = self
+            .resolving
+            .lock()
+            .map_err(|_| FnoxError::Config("Age identity cycle guard lock poisoned".to_string()))?;
+
+        if let Some(start) = resolving.iter().position(|name| name == provider_name) {
+            let mut cycle = resolving[start..].to_vec();
+            cycle.push(provider_name.to_string());
+            return Err(FnoxError::ProviderConfigCycle {
+                provider: provider_name.to_string(),
+                cycle: cycle.join(" -> "),
+            });
+        }
+
+        resolving.push(provider_name.to_string());
+
+        Ok(AgeIdentityCycleEntry {
+            provider_name: provider_name.to_string(),
+            resolving: self.resolving.clone(),
+        })
+    }
+}
+
+struct AgeIdentityCycleEntry {
+    provider_name: String,
+    resolving: Arc<Mutex<Vec<String>>>,
+}
+
+impl Drop for AgeIdentityCycleEntry {
+    fn drop(&mut self) {
+        if let Ok(mut resolving) = self.resolving.lock()
+            && let Some(index) = resolving
+                .iter()
+                .rposition(|name| name == &self.provider_name)
+        {
+            resolving.remove(index);
+        }
     }
 }
 
@@ -111,14 +225,17 @@ impl crate::providers::Provider for AgeEncryptionProvider {
                 }
             };
 
-        // Priority for key file:
+        // Priority for identity:
         // 1. FNOX_AGE_KEY env var (inline key content)
-        // 2. self.key_file (from provider config)
-        // 3. Settings age_key_file (from CLI flag - deprecated)
-        // 4. Default path (~/.config/fnox/age.txt)
+        // 2. self.identity (from provider config, resolved from another provider)
+        // 3. self.key_file (from provider config)
+        // 4. Settings age_key_file (from CLI flag - deprecated)
+        // 5. Default path (~/.config/fnox/age.txt)
         let (identity_content, key_file_path_opt) = if let Some(ref age_key) = *env::FNOX_AGE_KEY {
             // Use the key directly from the environment variable
             (age_key.clone(), None)
+        } else if let Some(identity) = self.resolve_provider_identity().await? {
+            (identity, None)
         } else {
             // Determine which key file to use
             let key_file_path = if let Some(ref config_key_file) = self.key_file {

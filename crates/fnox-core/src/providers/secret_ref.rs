@@ -230,6 +230,61 @@ impl From<&str> for OptionStringOrSecretRef {
     }
 }
 
+/// A reference to a secret stored in a specific provider.
+///
+/// In TOML, this deserializes from:
+/// - `field = { provider = "keychain", value = "age-key" }`
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderSecretRef {
+    pub provider: String,
+    pub value: String,
+}
+
+/// An optional provider-backed secret reference.
+#[derive(Debug, Clone, Default, PartialEq, Eq, JsonSchema)]
+#[schemars(transparent)]
+pub struct OptionProviderSecretRef(pub Option<ProviderSecretRef>);
+
+impl OptionProviderSecretRef {
+    /// Creates a new empty optional provider reference.
+    pub fn none() -> Self {
+        Self(None)
+    }
+
+    /// Returns true if this is None.
+    pub fn is_none(&self) -> bool {
+        self.0.is_none()
+    }
+
+    /// Returns the inner Option.
+    pub fn as_ref(&self) -> Option<&ProviderSecretRef> {
+        self.0.as_ref()
+    }
+}
+
+impl<'de> Deserialize<'de> for OptionProviderSecretRef {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let opt: Option<ProviderSecretRef> = Option::deserialize(deserializer)?;
+        Ok(OptionProviderSecretRef(opt))
+    }
+}
+
+impl Serialize for OptionProviderSecretRef {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match &self.0 {
+            Some(v) => v.serialize(serializer),
+            None => serializer.serialize_none(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -330,6 +385,43 @@ mod tests {
         assert!(parsed.field.is_some());
         assert!(parsed.field.has_secret_ref());
         assert_eq!(parsed.field.secret_name(), Some("SECRET_NAME"));
+    }
+
+    #[test]
+    fn test_option_provider_secret_ref_deser() {
+        let toml_str = r#"field = { provider = "keychain", value = "age-key" }"#;
+        #[derive(Deserialize)]
+        struct Test {
+            #[serde(default)]
+            field: OptionProviderSecretRef,
+        }
+        let parsed: Test = toml_edit::de::from_str(toml_str).unwrap();
+        assert_eq!(
+            parsed.field.as_ref(),
+            Some(&ProviderSecretRef {
+                provider: "keychain".to_string(),
+                value: "age-key".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn test_option_provider_secret_ref_ser() {
+        #[derive(Serialize)]
+        struct Test {
+            field: OptionProviderSecretRef,
+        }
+        let value = Test {
+            field: OptionProviderSecretRef(Some(ProviderSecretRef {
+                provider: "keychain".to_string(),
+                value: "age-key".to_string(),
+            })),
+        };
+        let serialized = toml_edit::ser::to_string(&value).unwrap();
+        assert!(serialized.contains("provider"));
+        assert!(serialized.contains("keychain"));
+        assert!(serialized.contains("value"));
+        assert!(serialized.contains("age-key"));
     }
 
     #[test]

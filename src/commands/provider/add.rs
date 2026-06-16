@@ -1,7 +1,7 @@
 use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
-use crate::providers::{OptionStringOrSecretRef, StringOrSecretRef};
+use crate::providers::{OptionProviderSecretRef, OptionStringOrSecretRef, StringOrSecretRef};
 use clap::Args;
 
 use super::ProviderType;
@@ -151,6 +151,7 @@ impl AddCommand {
             ProviderType::Age => crate::config::ProviderConfig::AgeEncryption {
                 recipients: vec!["age1...".to_string()],
                 key_file: OptionStringOrSecretRef::none(),
+                identity: OptionProviderSecretRef::none(),
                 auth_command: None,
             },
             #[cfg(not(target_env = "musl"))]
