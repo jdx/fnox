@@ -115,7 +115,7 @@ teardown() {
 	assert_success
 
 	# Extract just the variable names in the order they appear
-	keys=$(echo "$output" | grep "^export" | sed 's/export \([^=]*\)=.*/\1/' | tr '\n' ' ')
+	keys=$(echo "$output" | grep "^[A-Z]" | sed 's/\([^=]*\)=.*/\1/' | tr '\n' ' ')
 
 	expected_order="ONE TWO THREE "
 	assert_equal "$keys" "$expected_order"

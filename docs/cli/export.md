@@ -16,6 +16,7 @@ Export format
 **Choices:**
 
 - `env`
+- `shell`
 - `json`
 - `yaml`
 - `toml`

@@ -1,6 +1,7 @@
 use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
+use crate::shell;
 use crate::temp_file_secrets::create_persistent_secret_file;
 use clap::{Args, ValueEnum};
 use console;
@@ -15,6 +16,8 @@ use strum::{Display, EnumString, VariantNames};
 pub enum ExportFormat {
     /// Environment variable format (KEY=value)
     Env,
+    /// POSIX shell format (export KEY=value)
+    Shell,
     /// JSON format
     Json,
     /// YAML format
@@ -114,6 +117,7 @@ impl ExportCommand {
 
         let output = match self.format {
             ExportFormat::Env => self.export_as_env(&export_data),
+            ExportFormat::Shell => self.export_as_shell(&export_data),
             ExportFormat::Json => self.export_as_json(&export_data),
             ExportFormat::Yaml => self.export_as_yaml(&export_data),
             ExportFormat::Toml => self.export_as_toml(&export_data),
@@ -163,7 +167,24 @@ impl ExportCommand {
         }
 
         for (key, value) in &data.secrets {
-            output.push_str(&format!("export {}='{}'\n", key, value));
+            output.push_str(&format!("{}={}\n", key, dotenv_quote(value)));
+        }
+
+        Ok(output)
+    }
+
+    fn export_as_shell(&self, data: &ExportData) -> Result<String> {
+        let mut output = String::new();
+
+        if let Some(metadata) = &data.metadata {
+            output.push_str(&format!("# Exported from profile: {}\n", metadata.profile));
+            output.push_str(&format!("# Exported at: {}\n", metadata.exported_at));
+            output.push_str(&format!("# Total secrets: {}\n", metadata.total_secrets));
+            output.push('\n');
+        }
+
+        for (key, value) in &data.secrets {
+            output.push_str(&format!("export {}={}\n", key, shell::posix_quote(value)));
         }
 
         Ok(output)
@@ -179,5 +200,53 @@ impl ExportCommand {
 
     fn export_as_toml(&self, data: &ExportData) -> Result<String> {
         toml_edit::ser::to_string_pretty(data).map_err(|source| FnoxError::Toml { source })
+    }
+}
+
+fn dotenv_quote(value: &str) -> String {
+    if !value.is_empty()
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | ':'))
+    {
+        return value.to_string();
+    }
+
+    let mut quoted = String::with_capacity(value.len() + 2);
+    quoted.push('"');
+    for c in value.chars() {
+        match c {
+            '\\' => quoted.push_str("\\\\"),
+            '"' => quoted.push_str("\\\""),
+            '$' => quoted.push_str("\\$"),
+            '`' => quoted.push_str("\\`"),
+            '\n' => quoted.push_str("\\n"),
+            '\r' => quoted.push_str("\\r"),
+            '\t' => quoted.push_str("\\t"),
+            _ => quoted.push(c),
+        }
+    }
+    quoted.push('"');
+    quoted
+}
+
+#[cfg(test)]
+mod tests {
+    use super::dotenv_quote;
+
+    #[test]
+    fn dotenv_quote_leaves_simple_values_unquoted() {
+        assert_eq!(dotenv_quote("kek"), "kek");
+        assert_eq!(
+            dotenv_quote("/tmp/fnox-export-FILE_SECRET-abc"),
+            "/tmp/fnox-export-FILE_SECRET-abc"
+        );
+    }
+
+    #[test]
+    fn dotenv_quote_escapes_special_values() {
+        assert_eq!(dotenv_quote("value with spaces"), "\"value with spaces\"");
+        assert_eq!(dotenv_quote("it's \"fine\""), "\"it's \\\"fine\\\"\"");
+        assert_eq!(dotenv_quote("a\nb\t$c`d"), "\"a\\nb\\t\\$c\\`d\"");
     }
 }

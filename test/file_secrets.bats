@@ -396,19 +396,44 @@ EOF
 	run "$FNOX_BIN" export --format env
 	assert_success
 
-	# Output should contain export statements
-	assert_output --partial "export FILE_SECRET="
-	assert_output --partial "export NORMAL_SECRET="
+	# Output should contain dotenv assignments
+	assert_output --partial "FILE_SECRET="
+	assert_output --partial "NORMAL_SECRET="
 
 	# FILE_SECRET should be a file path (contains fnox-export)
-	assert_output --regexp "export FILE_SECRET='.*/fnox-export-FILE_SECRET-.*'"
+	assert_output --regexp "FILE_SECRET=.*/fnox-export-FILE_SECRET-.*"
 
 	# NORMAL_SECRET should be the actual value
-	assert_output --partial "export NORMAL_SECRET='normal-value'"
+	assert_output --partial "NORMAL_SECRET=normal-value"
 
 	# Extract the file path and verify it exists
 	local file_path
-	file_path=$(echo "$output" | grep "export FILE_SECRET=" | sed "s/export FILE_SECRET='//" | sed "s/'//g")
+	file_path=$(echo "$output" | grep "^FILE_SECRET=" | sed "s/FILE_SECRET=//")
+	test -f "$file_path"
+	[ "$(cat "$file_path")" = "file-secret-value" ]
+}
+
+@test "export shell format emits sourceable export statements" {
+	# Create config with file-based secrets
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+FILE_SECRET = { provider = "plain", value = "file-secret-value", as_file = true }
+NORMAL_SECRET = { provider = "plain", value = "normal-value" }
+EOF
+
+	run "$FNOX_BIN" export --format shell
+	assert_success
+	assert_output --partial "export FILE_SECRET="
+	assert_output --partial "export NORMAL_SECRET=normal-value"
+	assert_output --regexp "export FILE_SECRET=.*/fnox-export-FILE_SECRET-.*"
+
+	local file_path
+	file_path=$(echo "$output" | grep "export FILE_SECRET=" | sed -E "s/^export FILE_SECRET=//; s/^'(.*)'\$/\\1/" | head -1)
 	test -f "$file_path"
 	[ "$(cat "$file_path")" = "file-secret-value" ]
 }
@@ -463,12 +488,12 @@ EOF
 
 	# Verify export file exists and contains file paths
 	test -f "$export_file"
-	grep -q "export FILE_SECRET=" "$export_file"
-	grep -q "export NORMAL_SECRET='normal-value'" "$export_file"
+	grep -q "FILE_SECRET=" "$export_file"
+	grep -q "NORMAL_SECRET=normal-value" "$export_file"
 
 	# Extract file path from export file
 	local file_path
-	file_path=$(grep "export FILE_SECRET=" "$export_file" | sed "s/export FILE_SECRET='//" | sed "s/'//g")
+	file_path=$(grep "^FILE_SECRET=" "$export_file" | sed "s/FILE_SECRET=//")
 	test -f "$file_path"
 	[ "$(cat "$file_path")" = "file-value" ]
 }

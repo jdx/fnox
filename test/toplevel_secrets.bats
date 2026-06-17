@@ -220,8 +220,13 @@ EOF
 	# Export from dev profile should include both
 	run "$FNOX_BIN" export --profile dev --format env
 	assert_success
-	assert_output --partial "export SHARED_VAR='shared-value'"
-	assert_output --partial "export DEV_VAR='dev-value'"
+	assert_output --partial "SHARED_VAR=shared-value"
+	assert_output --partial "DEV_VAR=dev-value"
+
+	run "$FNOX_BIN" export --profile dev --format shell
+	assert_success
+	assert_output --partial "export SHARED_VAR=shared-value"
+	assert_output --partial "export DEV_VAR=dev-value"
 }
 
 @test "top-level secrets work with exec command" {

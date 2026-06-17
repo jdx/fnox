@@ -123,6 +123,9 @@ fnox import -i .env \
 # Export as .env format (default)
 fnox export
 
+# Export as sourceable POSIX shell
+fnox export --format shell
+
 # Export as JSON
 fnox export --format json
 
@@ -138,6 +141,7 @@ fnox export --format toml
 ```bash
 # Export to file
 fnox export > .env
+fnox export --format shell > secrets.sh
 fnox export --format json > secrets.json
 fnox export --format yaml > secrets.yaml
 fnox export --format toml > secrets.toml

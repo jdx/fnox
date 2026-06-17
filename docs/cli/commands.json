@@ -292,7 +292,7 @@
               "double_dash": "Optional",
               "hide": false,
               "choices": {
-                "choices": ["env", "json", "yaml", "toml"]
+                "choices": ["env", "shell", "json", "yaml", "toml"]
               }
             },
             "default": ["env"]

@@ -55,7 +55,7 @@ cmd export help="Export secrets in various formats" {
     alias ex
     flag "-f --format" help="Export format" default=env {
         arg <FORMAT> {
-            choices env json yaml toml
+            choices env shell json yaml toml
         }
     }
     flag "-n --dry-run" help="Show what would be exported without writing to file"
