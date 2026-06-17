@@ -438,6 +438,24 @@ EOF
 	[ "$(cat "$file_path")" = "file-secret-value" ]
 }
 
+@test "export env format preserves dotenv literal dollar and backtick values" {
+	cat >fnox.toml <<'EOF'
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+SPECIAL_SECRET = { provider = "plain", value = "secret$value`tick`" }
+QUOTED_SECRET = { provider = "plain", value = "quoted \"value\" with \\ backslash" }
+EOF
+
+	run "$FNOX_BIN" export --format env
+	assert_success
+	assert_output --partial 'SPECIAL_SECRET="secret$value`tick`"'
+	assert_output --partial 'QUOTED_SECRET="quoted \"value\" with \\ backslash"'
+}
+
 @test "export to JSON with file-based secrets" {
 	# Create config with file-based secret
 	cat >fnox.toml <<EOF

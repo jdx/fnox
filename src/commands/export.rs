@@ -159,12 +159,7 @@ impl ExportCommand {
     fn export_as_env(&self, data: &ExportData) -> Result<String> {
         let mut output = String::new();
 
-        if let Some(metadata) = &data.metadata {
-            output.push_str(&format!("# Exported from profile: {}\n", metadata.profile));
-            output.push_str(&format!("# Exported at: {}\n", metadata.exported_at));
-            output.push_str(&format!("# Total secrets: {}\n", metadata.total_secrets));
-            output.push('\n');
-        }
+        append_metadata_header(&mut output, data.metadata.as_ref());
 
         for (key, value) in &data.secrets {
             output.push_str(&format!("{}={}\n", key, dotenv_quote(value)));
@@ -176,12 +171,7 @@ impl ExportCommand {
     fn export_as_shell(&self, data: &ExportData) -> Result<String> {
         let mut output = String::new();
 
-        if let Some(metadata) = &data.metadata {
-            output.push_str(&format!("# Exported from profile: {}\n", metadata.profile));
-            output.push_str(&format!("# Exported at: {}\n", metadata.exported_at));
-            output.push_str(&format!("# Total secrets: {}\n", metadata.total_secrets));
-            output.push('\n');
-        }
+        append_metadata_header(&mut output, data.metadata.as_ref());
 
         for (key, value) in &data.secrets {
             output.push_str(&format!("export {}={}\n", key, shell::posix_quote(value)));
@@ -203,6 +193,15 @@ impl ExportCommand {
     }
 }
 
+fn append_metadata_header(output: &mut String, metadata: Option<&ExportMetadata>) {
+    if let Some(metadata) = metadata {
+        output.push_str(&format!("# Exported from profile: {}\n", metadata.profile));
+        output.push_str(&format!("# Exported at: {}\n", metadata.exported_at));
+        output.push_str(&format!("# Total secrets: {}\n", metadata.total_secrets));
+        output.push('\n');
+    }
+}
+
 fn dotenv_quote(value: &str) -> String {
     if !value.is_empty()
         && value
@@ -218,8 +217,6 @@ fn dotenv_quote(value: &str) -> String {
         match c {
             '\\' => quoted.push_str("\\\\"),
             '"' => quoted.push_str("\\\""),
-            '$' => quoted.push_str("\\$"),
-            '`' => quoted.push_str("\\`"),
             '\n' => quoted.push_str("\\n"),
             '\r' => quoted.push_str("\\r"),
             '\t' => quoted.push_str("\\t"),
@@ -247,6 +244,6 @@ mod tests {
     fn dotenv_quote_escapes_special_values() {
         assert_eq!(dotenv_quote("value with spaces"), "\"value with spaces\"");
         assert_eq!(dotenv_quote("it's \"fine\""), "\"it's \\\"fine\\\"\"");
-        assert_eq!(dotenv_quote("a\nb\t$c`d"), "\"a\\nb\\t\\$c\\`d\"");
+        assert_eq!(dotenv_quote("a\nb\t$c`d"), "\"a\\nb\\t$c`d\"");
     }
 }

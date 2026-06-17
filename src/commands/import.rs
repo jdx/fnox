@@ -317,10 +317,9 @@ impl ImportCommand {
             let key = key.trim();
             let value = value.trim();
 
-            // Handle quoted values
-            let value = if (value.starts_with('"') && value.ends_with('"'))
-                || (value.starts_with('\'') && value.ends_with('\''))
-            {
+            let value = if value.starts_with('"') && value.ends_with('"') {
+                unescape_double_quoted_env_value(&value[1..value.len() - 1])
+            } else if value.starts_with('\'') && value.ends_with('\'') {
                 value[1..value.len() - 1].to_string()
             } else {
                 value.to_string()
@@ -463,5 +462,53 @@ impl ImportCommand {
         }
 
         Ok(secrets)
+    }
+}
+
+fn unescape_double_quoted_env_value(value: &str) -> String {
+    let mut unescaped = String::with_capacity(value.len());
+    let mut chars = value.chars();
+
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            unescaped.push(c);
+            continue;
+        }
+
+        match chars.next() {
+            Some('\\') => unescaped.push('\\'),
+            Some('"') => unescaped.push('"'),
+            Some('n') => unescaped.push('\n'),
+            Some('r') => unescaped.push('\r'),
+            Some('t') => unescaped.push('\t'),
+            Some(other) => {
+                unescaped.push('\\');
+                unescaped.push(other);
+            }
+            None => unescaped.push('\\'),
+        }
+    }
+
+    unescaped
+}
+
+#[cfg(test)]
+mod tests {
+    use super::unescape_double_quoted_env_value;
+
+    #[test]
+    fn unescape_double_quoted_env_value_handles_export_escapes() {
+        assert_eq!(
+            unescape_double_quoted_env_value(r#"line1\nline2\t\"quoted\"\\path"#),
+            "line1\nline2\t\"quoted\"\\path"
+        );
+    }
+
+    #[test]
+    fn unescape_double_quoted_env_value_preserves_unknown_escapes() {
+        assert_eq!(
+            unescape_double_quoted_env_value(r#"secret\$value\`tick"#),
+            r#"secret\$value\`tick"#
+        );
     }
 }

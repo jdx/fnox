@@ -79,9 +79,11 @@ EOF
 	setup_age_provider
 
 	# Create a .env file with quoted values
-	cat >.env <<EOF
+	cat >.env <<'EOF'
 SINGLE_QUOTED='value with spaces'
 DOUBLE_QUOTED="another value with spaces"
+DOUBLE_QUOTED_ESCAPES="quoted \"value\" with \\ backslash and \n newline"
+DOLLAR_AND_BACKTICK="secret$value`tick`"
 UNQUOTED=no_spaces
 EOF
 
@@ -92,6 +94,12 @@ EOF
 
 	assert_fnox_success get DOUBLE_QUOTED --age-key-file key.txt
 	assert_output "another value with spaces"
+
+	assert_fnox_success get DOUBLE_QUOTED_ESCAPES --age-key-file key.txt
+	assert_output $'quoted "value" with \\ backslash and \n newline'
+
+	assert_fnox_success get DOLLAR_AND_BACKTICK --age-key-file key.txt
+	assert_output 'secret$value`tick`'
 
 	assert_fnox_success get UNQUOTED --age-key-file key.txt
 	assert_output "no_spaces"
