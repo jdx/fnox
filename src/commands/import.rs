@@ -317,10 +317,13 @@ impl ImportCommand {
             let key = key.trim();
             let value = value.trim();
 
-            let value = if value.starts_with('"') && value.ends_with('"') {
-                unescape_double_quoted_env_value(&value[1..value.len() - 1])
-            } else if value.starts_with('\'') && value.ends_with('\'') {
-                value[1..value.len() - 1].to_string()
+            let value = if let Some(inner) =
+                value.strip_prefix('"').and_then(|v| v.strip_suffix('"'))
+            {
+                unescape_double_quoted_env_value(inner)
+            } else if let Some(inner) = value.strip_prefix('\'').and_then(|v| v.strip_suffix('\''))
+            {
+                inner.to_string()
             } else {
                 value.to_string()
             };
