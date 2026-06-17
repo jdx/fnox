@@ -61,6 +61,7 @@ Your `fnox.toml` config file either contains encrypted secrets or references to 
 - [**gcp-sm**](https://fnox.jdx.dev/providers/gcp-sm) - Google Cloud Secret Manager
 - [**bitwarden-sm**](https://fnox.jdx.dev/providers/bitwarden-sm) - Bitwarden Secrets Manager
 - [**vault**](https://fnox.jdx.dev/providers/vault) - HashiCorp Vault
+- [**doppler**](https://fnox.jdx.dev/providers/doppler) - Doppler
 
 ### 🔑 Password Managers & Secret Services
 
