@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.27.1](https://github.com/jdx/fnox/compare/v1.27.0..v1.27.1) - 2026-06-17
+
+### 🐛 Bug Fixes
+
+- **(export)** emit dotenv format for env exports by [@jdx](https://github.com/jdx) in [#554](https://github.com/jdx/fnox/pull/554)
+
+### 📚 Documentation
+
+- Add Doppler in Cloud Secret Manager list by [@bowenc](https://github.com/bowenc) in [#552](https://github.com/jdx/fnox/pull/552)
+
+### New Contributors
+
+- @bowenc made their first contribution in [#552](https://github.com/jdx/fnox/pull/552)
+
 ## [1.27.0](https://github.com/jdx/fnox/compare/v1.26.0..v1.27.0) - 2026-06-17
 
 ### 🚀 Features
