@@ -211,6 +211,8 @@ fn dotenv_quote(value: &str) -> String {
         return value.to_string();
     }
 
+    // Dotenv parsers treat `$` and backticks literally; use `--format shell`
+    // for sourceable shell output.
     let mut quoted = String::with_capacity(value.len() + 2);
     quoted.push('"');
     for c in value.chars() {
