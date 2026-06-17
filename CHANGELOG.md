@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.27.0](https://github.com/jdx/fnox/compare/v1.26.0..v1.27.0) - 2026-06-17
+
+### 🚀 Features
+
+- **(config)** add secret default interpolation by [@jdx](https://github.com/jdx) in [#549](https://github.com/jdx/fnox/pull/549)
+- **(daemon)** add per-user secret resolver daemon by [@jdx](https://github.com/jdx) in [#550](https://github.com/jdx/fnox/pull/550)
+- **(scan)** implement fnox scan secret detection by [@jdx](https://github.com/jdx) in [#548](https://github.com/jdx/fnox/pull/548)
+
+### 📚 Documentation
+
+- link to all sponsors by [@jdx](https://github.com/jdx) in [#543](https://github.com/jdx/fnox/pull/543)
+- clarify contribution fit by [@jdx](https://github.com/jdx) in [#545](https://github.com/jdx/fnox/pull/545)
+
+### 🔍 Other Changes
+
+- **(ci)** use shared coderabbit config by [@jdx](https://github.com/jdx) in [#546](https://github.com/jdx/fnox/pull/546)
+
 ## [1.26.0](https://github.com/jdx/fnox/compare/v1.25.1..v1.26.0) - 2026-06-12
 
 ### 🚀 Features
