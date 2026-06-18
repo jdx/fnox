@@ -5,13 +5,17 @@ use crate::secret_resolver::resolve_secrets_batch;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+#[cfg(unix)]
 use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
+#[cfg(unix)]
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+#[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::Mutex;
+#[cfg(unix)]
 use tokio::task::JoinSet;
 
 const SOCKET_NAME: &str = "fnoxd.sock";
@@ -635,6 +639,7 @@ async fn call(_path: PathBuf, _request: Request) -> std::result::Result<Response
     )))
 }
 
+#[cfg(unix)]
 async fn handle_connection(
     stream: UnixStream,
     state: std::sync::Arc<Mutex<DaemonState>>,

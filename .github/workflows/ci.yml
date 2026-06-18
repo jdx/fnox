@@ -207,6 +207,27 @@ jobs:
           max_attempts: 3
           command: mise run test:bats
 
+  windows-check:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
+        with:
+          cache: false
+      # save-if: only saves on main pushes, so PRs cannot poison the cache.
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2 # zizmor: ignore[cache-poisoning]
+        with:
+          shared-key: check-windows
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Check Windows build
+        run: cargo check --workspace
+
   ci-other:
     needs: build
     permissions:
@@ -317,6 +338,7 @@ jobs:
       - ci-bats
       - ci-other
       - msrv
+      - windows-check
     runs-on: ubuntu-latest
     timeout-minutes: 1
     # Run on success or upstream failure but skip when the workflow is cancelled
@@ -327,6 +349,7 @@ jobs:
         if: |
           needs.ci-bats.result != 'success' ||
           needs.ci-other.result != 'success' ||
-          needs.msrv.result != 'success'
+          needs.msrv.result != 'success' ||
+          needs.windows-check.result != 'success'
         run: exit 1
       - run: echo "All CI jobs completed successfully"
