@@ -43,6 +43,12 @@ fn pulumi_home() -> Option<PathBuf> {
         .or_else(|| dirs::home_dir().map(|h| h.join(".pulumi")))
 }
 
+/// API base for token-based auth: `PULUMI_BACKEND_URL` or the default cloud.
+/// (Credential-file auth instead uses the file's `current` account URL.)
+fn backend_base() -> String {
+    env::var("PULUMI_BACKEND_URL").unwrap_or_else(|_| DEFAULT_API_BASE.to_string())
+}
+
 /// Sync credential resolver mirroring the `esc` CLI:
 /// `FNOX_PULUMI_ACCESS_TOKEN`/`PULUMI_ACCESS_TOKEN` env var →
 /// `$PULUMI_HOME/credentials.json` → `~/.pulumi/credentials.json`.
@@ -53,8 +59,10 @@ pub fn resolve_auth() -> std::result::Result<EscAuth, String> {
     if let Ok(token) =
         env::var("FNOX_PULUMI_ACCESS_TOKEN").or_else(|_| env::var("PULUMI_ACCESS_TOKEN"))
     {
-        let base = env::var("PULUMI_BACKEND_URL").unwrap_or_else(|_| DEFAULT_API_BASE.to_string());
-        return Ok(EscAuth { base, token });
+        return Ok(EscAuth {
+            base: backend_base(),
+            token,
+        });
     }
     let home = pulumi_home().ok_or_else(|| "Could not locate Pulumi home directory".to_string())?;
     let cred_path = home.join("credentials.json");
@@ -90,9 +98,8 @@ pub fn resolve_auth() -> std::result::Result<EscAuth, String> {
 /// `FnoxError` tagged with the caller's help URL on failure.
 pub fn resolve_auth_for(config_token: Option<&str>, help_url: &str) -> Result<EscAuth> {
     if let Some(t) = config_token {
-        let base = env::var("PULUMI_BACKEND_URL").unwrap_or_else(|_| DEFAULT_API_BASE.to_string());
         return Ok(EscAuth {
-            base,
+            base: backend_base(),
             token: t.to_string(),
         });
     }
