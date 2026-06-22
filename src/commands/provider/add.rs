@@ -303,6 +303,7 @@ impl AddCommand {
                 environment: StringOrSecretRef::from("dev"),
                 token: OptionStringOrSecretRef::none(),
                 auth_command: None,
+                daemon_cache: None,
             },
         };
 
