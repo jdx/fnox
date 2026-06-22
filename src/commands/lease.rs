@@ -167,7 +167,7 @@ impl LeaseCreateCommand {
         resolved_secrets: &indexmap::IndexMap<String, Option<String>>,
         temp_env_guard: &mut TempEnvGuard,
     ) -> Result<()> {
-        let mut errors: Vec<String> = Vec::new();
+        let mut errors: Vec<(String, FnoxError)> = Vec::new();
 
         for (backend_name, backend_config) in leases {
             match self
@@ -190,21 +190,27 @@ impl LeaseCreateCommand {
                         backend_name,
                         e
                     );
-                    errors.push(format!("{}: {}", backend_name, e));
+                    errors.push((backend_name.clone(), e));
                 }
             }
         }
 
-        if !errors.is_empty() {
-            return Err(FnoxError::Config(format!(
+        match errors.len() {
+            0 => Ok(()),
+            // Single failure: surface the original error so its miette help/url
+            // (e.g. "Run 'esc login'...") survive instead of being flattened away.
+            1 => Err(errors.pop().unwrap().1),
+            n => Err(FnoxError::Config(format!(
                 "{} of {} lease backends failed:\n{}",
-                errors.len(),
+                n,
                 leases.len(),
-                errors.join("\n")
-            )));
+                errors
+                    .iter()
+                    .map(|(name, e)| format!("{name}: {e}"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            ))),
         }
-
-        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
