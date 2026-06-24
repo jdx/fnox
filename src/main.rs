@@ -35,6 +35,7 @@ async fn main() -> miette::Result<()> {
         if_missing: cli.if_missing.clone(),
         no_defaults: cli.no_defaults,
     });
+    fnox::env::set_non_interactive(cli.non_interactive);
 
     // Handle --no-color flag
     if cli.no_color {

@@ -40,6 +40,10 @@ Disable daemon-backed resolution for this invocation
 
 Do not merge top-level secrets into the selected profile
 
+### `--non-interactive`
+
+Disable prompts and browser-based auth flows; use cached/non-interactive auth only
+
 ## Subcommands
 
 - [`fnox activate [--no-hook-env] [SHELL]`](/cli/activate.md)

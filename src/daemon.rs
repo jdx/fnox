@@ -28,6 +28,7 @@ pub struct ResolveContext {
     pub age_key_file: Option<PathBuf>,
     pub if_missing: Option<String>,
     pub no_defaults: bool,
+    pub non_interactive: bool,
     pub no_daemon: bool,
 }
 
@@ -56,6 +57,7 @@ impl ResolveContext {
                 || settings
                     .as_ref()
                     .is_some_and(|settings| settings.no_defaults),
+            non_interactive: cli.non_interactive,
             no_daemon: cli.no_daemon,
         }
     }
@@ -108,6 +110,7 @@ struct ResolveBatchRequest {
     age_key_file: Option<PathBuf>,
     if_missing: Option<String>,
     no_defaults: bool,
+    non_interactive: bool,
     purpose: String,
     keys: Vec<String>,
     include_env_false: bool,
@@ -122,6 +125,7 @@ struct ResolveOneRequest {
     age_key_file: Option<PathBuf>,
     if_missing: Option<String>,
     no_defaults: bool,
+    non_interactive: bool,
     purpose: String,
     key: String,
     env: Vec<(String, String)>,
@@ -232,6 +236,7 @@ pub async fn resolve_batch_with_context(
         age_key_file: ctx.age_key_file.clone(),
         if_missing: ctx.if_missing.clone(),
         no_defaults: ctx.no_defaults,
+        non_interactive: ctx.non_interactive,
         purpose: purpose.as_str().to_string(),
         keys,
         include_env_false,
@@ -286,6 +291,7 @@ pub async fn resolve_one_with_context(
         age_key_file: ctx.age_key_file.clone(),
         if_missing: ctx.if_missing.clone(),
         no_defaults: ctx.no_defaults,
+        non_interactive: ctx.non_interactive,
         purpose: purpose.as_str().to_string(),
         key: key.to_string(),
         env: std::env::vars().collect(),
@@ -361,6 +367,9 @@ async fn start_background_for_context(
         .arg(Config::get_profile(ctx.profile.as_deref()));
     if ctx.no_defaults {
         cmd.arg("--no-defaults");
+    }
+    if ctx.non_interactive {
+        cmd.arg("--non-interactive");
     }
     if let Some(if_missing) = &ctx.if_missing {
         cmd.arg("--if-missing").arg(if_missing);
@@ -710,6 +719,7 @@ async fn process_request(
                 Some(req.profile.clone()),
                 req.if_missing.clone(),
                 req.no_defaults,
+                req.non_interactive,
             );
             let config = Config::load_smart(&req.config)?;
             let all_secrets = config.get_secrets(&req.profile)?;
@@ -730,6 +740,7 @@ async fn process_request(
                 Some(req.profile.clone()),
                 req.if_missing.clone(),
                 req.no_defaults,
+                req.non_interactive,
             );
             let config = Config::load_smart(&req.config)?;
             let Some(secret_config) = config.get_secret(&req.profile, &req.key).cloned() else {
@@ -744,6 +755,7 @@ async fn process_request(
                 age_key_file: req.age_key_file,
                 if_missing: req.if_missing,
                 no_defaults: req.no_defaults,
+                non_interactive: req.non_interactive,
                 purpose: req.purpose,
                 keys: vec![req.key.clone()],
                 include_env_false: true,
@@ -767,6 +779,7 @@ fn apply_request_settings(
     profile: Option<String>,
     if_missing: Option<String>,
     no_defaults: bool,
+    non_interactive: bool,
 ) {
     crate::settings::Settings::set_cli_snapshot(crate::settings::CliSnapshot {
         age_key_file,
@@ -774,6 +787,7 @@ fn apply_request_settings(
         if_missing,
         no_defaults,
     });
+    crate::env::set_non_interactive(non_interactive);
 }
 
 async fn resolve_with_cache(

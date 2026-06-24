@@ -1064,8 +1064,8 @@ impl Config {
             .or(self.prompt_auth)
             .unwrap_or(true);
 
-        // Only prompt if enabled AND we're in a TTY
-        enabled && atty::is(atty::Stream::Stdin)
+        // Only prompt if enabled, not explicitly non-interactive, and we're in a TTY
+        enabled && !env::is_non_interactive() && atty::is(atty::Stream::Stdin)
     }
 
     /// Get secrets for the default profile (mutable)

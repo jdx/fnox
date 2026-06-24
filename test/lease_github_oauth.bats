@@ -109,6 +109,8 @@ PYEOF
 	start_mock_github_oauth
 
 	cat >"$FNOX_CONFIG_FILE" <<EOF
+root = true
+
 [leases.github]
 type = "github-oauth"
 client_id = "Iv1.mockclientid"
@@ -128,6 +130,8 @@ EOF
 	start_mock_github_oauth
 
 	cat >"$FNOX_CONFIG_FILE" <<EOF
+root = true
+
 [leases.github]
 type = "github-oauth"
 client_id = "Iv1.mockclientid"
@@ -143,10 +147,62 @@ EOF
 	assert_line "ghu_mock_user_token_abc123"
 }
 
+@test "github-oauth: non-interactive exec fails before device flow without cached token" {
+	start_mock_github_oauth
+
+	cat >"$FNOX_CONFIG_FILE" <<EOF
+root = true
+
+[leases.github]
+type = "github-oauth"
+client_id = "Iv1.mockclientid"
+scope = "repo"
+keyring_cache = false
+open_browser = false
+auth_base = "http://127.0.0.1:$MOCK_PORT/login/oauth"
+api_base = "http://127.0.0.1:$MOCK_PORT/api"
+EOF
+
+	run fnox --non-interactive exec -- printenv GITHUB_TOKEN
+	assert_failure
+	assert_output --partial "interactive auth required for GitHub"
+	refute_output --partial "ABCD-1234"
+}
+
+@test "github-oauth: non-interactive exec reuses cached lease" {
+	start_mock_github_oauth
+
+	cat >"$FNOX_CONFIG_FILE" <<EOF
+root = true
+
+[leases.github]
+type = "github-oauth"
+client_id = "Iv1.mockclientid"
+scope = "repo"
+keyring_cache = false
+open_browser = false
+auth_base = "http://127.0.0.1:$MOCK_PORT/login/oauth"
+api_base = "http://127.0.0.1:$MOCK_PORT/api"
+EOF
+
+	run fnox lease create github
+	assert_success
+
+	kill "$MOCK_PID" 2>/dev/null || true
+	wait "$MOCK_PID" 2>/dev/null || true
+	unset MOCK_PID
+
+	run fnox --non-interactive exec -- printenv GITHUB_TOKEN
+	assert_success
+	assert_line "ghu_mock_user_token_abc123"
+}
+
 @test "github-oauth: custom env_var" {
 	start_mock_github_oauth
 
 	cat >"$FNOX_CONFIG_FILE" <<EOF
+root = true
+
 [leases.github]
 type = "github-oauth"
 client_id = "Iv1.mockclientid"

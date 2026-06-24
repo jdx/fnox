@@ -341,6 +341,10 @@ impl GitHubOauthBackend {
             }
         }
 
+        if crate::env::is_non_interactive() {
+            return Err(interactive_auth_required());
+        }
+
         let device = self.create_device_code().await?;
         self.print_device_instructions(&device);
         let response = self.poll_access_token(&device).await?;
@@ -397,6 +401,15 @@ fn auth_failed(details: String) -> FnoxError {
         provider: PROVIDER.to_string(),
         details,
         hint: "Run the command again and approve the device authorization prompt".to_string(),
+        url: URL.to_string(),
+    }
+}
+
+fn interactive_auth_required() -> FnoxError {
+    FnoxError::ProviderAuthFailed {
+        provider: PROVIDER.to_string(),
+        details: "interactive auth required for GitHub OAuth device authorization".to_string(),
+        hint: "Run 'fnox lease create <lease-name>' from an interactive terminal to authorize GitHub, then retry in non-interactive mode".to_string(),
         url: URL.to_string(),
     }
 }

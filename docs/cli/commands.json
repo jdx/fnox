@@ -1705,6 +1705,16 @@
         "long": ["no-defaults"],
         "hide": false,
         "global": true
+      },
+      {
+        "name": "non-interactive",
+        "usage": "--non-interactive",
+        "help": "Disable prompts and browser-based auth flows; use cached/non-interactive auth only",
+        "help_first_line": "Disable prompts and browser-based auth flows; use cached/non-interactive auth only",
+        "short": [],
+        "long": ["non-interactive"],
+        "hide": false,
+        "global": true
       }
     ],
     "mounts": [],
