@@ -109,35 +109,33 @@ backend = "github:endevco/aube"
 
 [tools.aube."platforms.linux-arm64"]
 checksum = "sha256:2c882c4228dc44184dd529e1cbd4fd02e7d6d8d326f211f8c51fba9ee100f192"
-url = "https://github.com/endevco/aube/releases/download/v1.0.0-beta.7/aube-v1.0.0-beta.7-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/endevco/aube/releases/assets/400209828"
+url = "https://github.com/jdx/aube/releases/download/v1.0.0-beta.7/aube-v1.0.0-beta.7-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/aube/releases/assets/400209828"
 
 [tools.aube."platforms.linux-arm64-musl"]
 checksum = "sha256:2c882c4228dc44184dd529e1cbd4fd02e7d6d8d326f211f8c51fba9ee100f192"
-url = "https://github.com/endevco/aube/releases/download/v1.0.0-beta.7/aube-v1.0.0-beta.7-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/endevco/aube/releases/assets/400209828"
+url = "https://github.com/jdx/aube/releases/download/v1.0.0-beta.7/aube-v1.0.0-beta.7-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/aube/releases/assets/400209828"
 
 [tools.aube."platforms.linux-x64"]
 checksum = "sha256:38793c58c1479e52bbe0d6a203f20a6ece56a3fee899e454289c719af71d56d8"
-url = "https://github.com/endevco/aube/releases/download/v1.0.0-beta.7/aube-v1.0.0-beta.7-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/endevco/aube/releases/assets/400209774"
-provenance = "github-attestations"
+url = "https://github.com/jdx/aube/releases/download/v1.0.0-beta.7/aube-v1.0.0-beta.7-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/aube/releases/assets/400209774"
 
 [tools.aube."platforms.linux-x64-musl"]
 checksum = "sha256:38793c58c1479e52bbe0d6a203f20a6ece56a3fee899e454289c719af71d56d8"
-url = "https://github.com/endevco/aube/releases/download/v1.0.0-beta.7/aube-v1.0.0-beta.7-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/endevco/aube/releases/assets/400209774"
+url = "https://github.com/jdx/aube/releases/download/v1.0.0-beta.7/aube-v1.0.0-beta.7-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/aube/releases/assets/400209774"
 
 [tools.aube."platforms.macos-arm64"]
 checksum = "sha256:61dfe2ece14a188da9b92510ba8c8c6584b21c865840588b25cb585e62bd23e3"
-url = "https://github.com/endevco/aube/releases/download/v1.0.0-beta.7/aube-v1.0.0-beta.7-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/endevco/aube/releases/assets/400209304"
-provenance = "github-attestations"
+url = "https://github.com/jdx/aube/releases/download/v1.0.0-beta.7/aube-v1.0.0-beta.7-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/jdx/aube/releases/assets/400209304"
 
 [tools.aube."platforms.windows-x64"]
 checksum = "sha256:1a158bc6f0f3e16e43d81bd233ef5652f16244649559487fec08cb1c269456c9"
-url = "https://github.com/endevco/aube/releases/download/v1.0.0-beta.7/aube-v1.0.0-beta.7-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/endevco/aube/releases/assets/400211208"
+url = "https://github.com/jdx/aube/releases/download/v1.0.0-beta.7/aube-v1.0.0-beta.7-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/jdx/aube/releases/assets/400211208"
 
 [[tools.bitwarden]]
 version = "2026.3.0"
@@ -243,11 +241,13 @@ backend = "github:jdx/communique"
 checksum = "sha256:7bb0843207fc3d7b5df2a5c0198bb10539cf13a6b247b4adfbf6b302a68f03de"
 url = "https://github.com/jdx/communique/releases/download/v1.1.2/communique-aarch64-unknown-linux-gnu.tar.gz"
 url_api = "https://api.github.com/repos/jdx/communique/releases/assets/405964161"
+provenance = "github-attestations"
 
 [tools.communique."platforms.linux-arm64-musl"]
 checksum = "sha256:b663407be77a370c209df40307b82e436f56a6bc23d4e423510d62ac6e1fedf4"
 url = "https://github.com/jdx/communique/releases/download/v1.1.2/communique-aarch64-unknown-linux-musl.tar.gz"
 url_api = "https://api.github.com/repos/jdx/communique/releases/assets/405964743"
+provenance = "github-attestations"
 
 [tools.communique."platforms.linux-x64"]
 checksum = "sha256:5e74ead7037f42940c7dba4f6aa4ed968920cbb55a047aa0d291b0c675c65676"
@@ -259,6 +259,7 @@ provenance = "github-attestations"
 checksum = "sha256:01a6a8b49e635a5a209fdaf6c7b2e976374debc2db1c846c033f567fdba0d86c"
 url = "https://github.com/jdx/communique/releases/download/v1.1.2/communique-x86_64-unknown-linux-musl.tar.gz"
 url_api = "https://api.github.com/repos/jdx/communique/releases/assets/405964691"
+provenance = "github-attestations"
 
 [tools.communique."platforms.macos-arm64"]
 checksum = "sha256:459993e31a6c4ccbd09882f5679a2bc1ea5d9068701ecefc411a00fb69ce82e6"
@@ -270,6 +271,7 @@ provenance = "github-attestations"
 checksum = "sha256:3cc0e880ac2168aed3163223627bbd1eee62e07a9901cb85cb507c6c8927bc93"
 url = "https://github.com/jdx/communique/releases/download/v1.1.2/communique-x86_64-pc-windows-msvc.zip"
 url_api = "https://api.github.com/repos/jdx/communique/releases/assets/405964430"
+provenance = "github-attestations"
 
 [[tools.git-cliff]]
 version = "2.12.0"
