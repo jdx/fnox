@@ -2457,7 +2457,6 @@ dependencies = [
  "dbus-secret-service-keyring-store",
  "demand",
  "dirs",
- "fslock",
  "futures",
  "gcp_auth",
  "google-cloud-kms",

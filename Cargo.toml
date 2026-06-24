@@ -41,7 +41,6 @@ data-encoding = "2"
 dbus = { version = "0.9", features = ["vendored"] }
 demand = "2"
 dirs = "6"
-fslock = "0.2"
 futures = "0.3"
 gcp_auth = { version = "0.12" }
 globset = "0.4"

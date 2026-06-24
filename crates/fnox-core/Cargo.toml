@@ -31,7 +31,6 @@ chrono = { workspace = true }
 clap = { workspace = true }
 demand = { workspace = true }
 dirs = { workspace = true }
-fslock = { workspace = true }
 futures = { workspace = true }
 gcp_auth = { workspace = true }
 google-cloud-kms = { workspace = true }

@@ -42,7 +42,7 @@ pub struct LeaseLedger {
 
 /// RAII guard for the ledger file lock. The lock is released when dropped.
 pub struct LedgerLockGuard {
-    _lock: fslock::LockFile,
+    _lock: xx::fslock::LockFile,
 }
 
 /// Determine the project directory for scoping the lease ledger.
