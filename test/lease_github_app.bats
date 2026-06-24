@@ -61,17 +61,33 @@ with open("$TEST_TEMP_DIR/mock_port", "w") as f:
 server.serve_forever()
 PYEOF
 
-	python3 "$TEST_TEMP_DIR/mock_github.py" &
+	local mock_log="$TEST_TEMP_DIR/mock_github.log"
+	python3 "$TEST_TEMP_DIR/mock_github.py" >"$mock_log" 2>&1 &
 	MOCK_PID=$!
 	# Wait for the port file to appear
-	for _ in $(seq 1 30); do
-		if [[ -f "$TEST_TEMP_DIR/mock_port" ]]; then
-			break
+	for _ in $(seq 1 100); do
+		if [[ -s "$TEST_TEMP_DIR/mock_port" ]]; then
+			MOCK_PORT=$(cat "$TEST_TEMP_DIR/mock_port")
+			export MOCK_PORT
+			return 0
+		fi
+		local mock_state
+		mock_state=$(ps -p "$MOCK_PID" -o stat= 2>/dev/null || true)
+		if [[ -z "$mock_state" || $mock_state == *Z* ]]; then
+			wait "$MOCK_PID" 2>/dev/null || true
+			echo "mock GitHub API exited before writing port" >&2
+			if [[ -s "$mock_log" ]]; then
+				cat "$mock_log" >&2
+			fi
+			return 1
 		fi
 		sleep 0.1
 	done
-	MOCK_PORT=$(cat "$TEST_TEMP_DIR/mock_port")
-	export MOCK_PORT
+	echo "timed out waiting for mock GitHub API to write port" >&2
+	if [[ -s "$mock_log" ]]; then
+		cat "$mock_log" >&2
+	fi
+	return 1
 }
 
 @test "github-app: creates installation token with private key file" {
