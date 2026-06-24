@@ -74,7 +74,7 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub no_defaults: bool,
 
-    /// Disable prompts and browser-based auth flows; use cached/non-interactive auth only
+    /// Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)
     #[arg(long, global = true, env = "FNOX_NON_INTERACTIVE")]
     pub non_interactive: bool,
 

@@ -42,7 +42,7 @@ Do not merge top-level secrets into the selected profile
 
 ### `--non-interactive`
 
-Disable prompts and browser-based auth flows; use cached/non-interactive auth only
+Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)
 
 ## Subcommands
 

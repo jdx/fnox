@@ -1709,8 +1709,8 @@
       {
         "name": "non-interactive",
         "usage": "--non-interactive",
-        "help": "Disable prompts and browser-based auth flows; use cached/non-interactive auth only",
-        "help_first_line": "Disable prompts and browser-based auth flows; use cached/non-interactive auth only",
+        "help": "Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)",
+        "help_first_line": "Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)",
         "short": [],
         "long": ["non-interactive"],
         "hide": false,
