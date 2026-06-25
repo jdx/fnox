@@ -377,6 +377,99 @@ pub fn handle_provider_error(
     }
 }
 
+fn log_provider_default_fallback(key: &str, error: &FnoxError) {
+    if matches!(
+        error,
+        FnoxError::ProviderNotConfigured { .. } | FnoxError::ProviderNotConfiguredWithSource { .. }
+    ) {
+        tracing::debug!(
+            "Falling back to default value for secret '{}' after provider resolution failed: {}",
+            key,
+            error
+        );
+    } else {
+        tracing::warn!(
+            "Falling back to default value for secret '{}' after provider resolution failed: {}",
+            key,
+            error
+        );
+    }
+}
+
+fn default_context(
+    resolved_so_far: &HashMap<String, Option<String>>,
+    results: &HashMap<String, Option<String>>,
+) -> HashMap<String, Option<String>> {
+    let mut context = resolved_so_far.clone();
+    context.extend(
+        results
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone())),
+    );
+    context
+}
+
+fn resolve_default_fallbacks(
+    keys: &[String],
+    secrets: &IndexMap<String, SecretConfig>,
+    resolved_so_far: &HashMap<String, Option<String>>,
+    results: &mut HashMap<String, Option<String>>,
+) -> Result<HashSet<String>> {
+    let mut context = default_context(resolved_so_far, results);
+    let mut pending: Vec<String> = keys
+        .iter()
+        .filter(|key| secrets[*key].default.is_some())
+        .cloned()
+        .collect();
+    let mut resolved = HashSet::new();
+
+    while !pending.is_empty() {
+        let pending_set: HashSet<String> = pending.iter().cloned().collect();
+        let mut progressed = false;
+        let mut next_pending = Vec::new();
+
+        for key in pending {
+            let secret_config = &secrets[&key];
+            let refs = secret_config
+                .default
+                .as_deref()
+                .map(extract_default_references)
+                .unwrap_or_default();
+            let unresolved_external_ref = refs.iter().any(|reference| {
+                !context.contains_key(reference) && !pending_set.contains(reference)
+            });
+            if unresolved_external_ref {
+                continue;
+            }
+
+            if refs.iter().any(|reference| {
+                pending_set.contains(reference) && !context.contains_key(reference)
+            }) {
+                next_pending.push(key);
+                continue;
+            }
+
+            if let Some(default) = resolve_default_value(&key, secret_config, &context)? {
+                results.insert(key.clone(), Some(default.clone()));
+                context.insert(key.clone(), Some(default));
+                resolved.insert(key);
+                progressed = true;
+            }
+        }
+
+        if !progressed && !next_pending.is_empty() {
+            return Err(FnoxError::Config(format!(
+                "Interpolation dependency cycle among fallback defaults: {}",
+                next_pending.join(", ")
+            )));
+        }
+
+        pending = next_pending;
+    }
+
+    Ok(resolved)
+}
+
 /// Resolves a secret value using the correct priority order:
 /// 1. Provider (if specified)
 /// 2. Default value (if specified)
@@ -390,23 +483,35 @@ pub async fn resolve_secret(
     key: &str,
     secret_config: &SecretConfig,
 ) -> Result<Option<String>> {
-    if let Some(default) = &secret_config.default
-        && has_default_interpolation(default)
-    {
-        let secrets = config.get_secrets(profile)?;
-        if secrets.contains_key(key) {
-            let subset = collect_interpolation_closure(config, profile, key, &secrets)?;
-            let mut resolved = resolve_secrets_batch(config, profile, &subset).await?;
-            if let Some(Some(value)) = resolved.shift_remove(key) {
-                return Ok(Some(value));
-            }
-            let resolved_context: HashMap<String, Option<String>> = resolved.into_iter().collect();
-            let default = render_default_template(key, default, &resolved_context)?;
-            return Ok(Some(apply_post_processing(default, secret_config)?));
-        }
+    resolve_secret_raw(config, profile, key, secret_config).await
+}
+
+async fn resolve_interpolated_default_value(
+    config: &Config,
+    profile: &str,
+    key: &str,
+    secret_config: &SecretConfig,
+) -> Result<Option<String>> {
+    let Some(default) = &secret_config.default else {
+        return Ok(None);
+    };
+    if !has_default_interpolation(default) {
+        return Ok(None);
     }
 
-    resolve_secret_raw(config, profile, key, secret_config).await
+    let secrets = config.get_secrets(profile)?;
+    if !secrets.contains_key(key) {
+        return Ok(None);
+    }
+
+    let subset = collect_interpolation_closure(config, profile, key, &secrets)?;
+    let mut resolved = resolve_secrets_batch(config, profile, &subset).await?;
+    if let Some(Some(value)) = resolved.shift_remove(key) {
+        return Ok(Some(value));
+    }
+    let resolved_context: HashMap<String, Option<String>> = resolved.into_iter().collect();
+    let default = render_default_template(key, default, &resolved_context)?;
+    Ok(Some(apply_post_processing(default, secret_config)?))
 }
 
 async fn resolve_secret_raw(
@@ -415,22 +520,43 @@ async fn resolve_secret_raw(
     key: &str,
     secret_config: &SecretConfig,
 ) -> Result<Option<String>> {
-    // Try to get a value from any source (provider, default, or env var)
-    let value_to_process =
-        // Priority 1: Provider (if specified and has a value)
-        if let Some(value) = try_resolve_from_provider(config, profile, secret_config).await? {
-            Some(value)
-        // Priority 2: Default value
-        } else if let Some(default) = &secret_config.default {
-            tracing::debug!("Using default value for secret '{}'", key);
-            Some(default.clone())
-        // Priority 3: Environment variable
-        } else if let Ok(env_value) = env::var(key) {
-            tracing::debug!("Found secret '{}' in current environment", key);
-            Some(env_value)
-        } else {
+    // Priority 1: Provider (if specified and has a value)
+    let provider_value = match try_resolve_from_provider(config, profile, secret_config).await {
+        Ok(value) => value,
+        Err(error) if secret_config.default.is_some() => {
+            log_provider_default_fallback(key, &error);
             None
-        };
+        }
+        Err(error) => return Err(error),
+    };
+
+    if let Some(value) = provider_value {
+        let processed = apply_post_processing(value, secret_config)?;
+        return Ok(Some(processed));
+    }
+
+    // Priority 2: Default value
+    if secret_config
+        .default
+        .as_deref()
+        .is_some_and(has_default_interpolation)
+        && let Some(value) =
+            resolve_interpolated_default_value(config, profile, key, secret_config).await?
+    {
+        return Ok(Some(value));
+    }
+
+    if let Some(value) = resolve_default_value(key, secret_config, &HashMap::new())? {
+        return Ok(Some(value));
+    }
+
+    // Priority 3: Environment variable
+    let value_to_process = if let Ok(env_value) = env::var(key) {
+        tracing::debug!("Found secret '{}' in current environment", key);
+        Some(env_value)
+    } else {
+        None
+    };
 
     // Apply post-processing to whatever value we found (e.g., JSON path extraction)
     if let Some(value) = value_to_process {
@@ -572,6 +698,24 @@ fn handle_missing_secret(
     }
 }
 
+fn resolve_default_value(
+    key: &str,
+    secret_config: &SecretConfig,
+    resolved_so_far: &HashMap<String, Option<String>>,
+) -> Result<Option<String>> {
+    let Some(default) = &secret_config.default else {
+        return Ok(None);
+    };
+
+    tracing::debug!("Using default value for secret '{}'", key);
+    let value = if has_default_interpolation(default) {
+        render_default_template(key, default, resolved_so_far)?
+    } else {
+        default.clone()
+    };
+    Ok(Some(apply_post_processing(value, secret_config)?))
+}
+
 /// Resolves multiple secrets efficiently using batch operations when possible.
 ///
 /// Secrets are resolved in dependency order using Kahn's algorithm. If a provider
@@ -595,6 +739,7 @@ pub async fn resolve_secrets_batch(
     let all_keys: Vec<String> = secrets.keys().cloned().collect();
     let secret_keys: HashSet<&str> = all_keys.iter().map(|k| k.as_str()).collect();
     let mut default_deps: HashMap<String, Vec<String>> = HashMap::new();
+    let mut hard_default_deps: HashMap<String, Vec<String>> = HashMap::new();
 
     for (key, secret_config) in secrets {
         // If a sync cache exists, use the sync provider/value
@@ -619,28 +764,39 @@ pub async fn resolve_secrets_batch(
         }
     }
 
-    for key in &no_provider {
-        let secret_config = &secrets[key];
+    let no_provider_set: HashSet<&str> = no_provider.iter().map(|s| s.as_str()).collect();
+    for (key, secret_config) in secrets {
+        let provider_is_unconfigured = secret_provider
+            .get(key)
+            .is_some_and(|(provider_name, _)| !providers.contains_key(provider_name));
+        let hard_default = no_provider_set.contains(key.as_str()) || provider_is_unconfigured;
+
         let Some(default) = &secret_config.default else {
             continue;
         };
 
         let refs = extract_default_references(default);
-        if refs.iter().any(|reference| reference == key) {
+        if hard_default && refs.iter().any(|reference| reference == key) {
             return Err(FnoxError::Config(format!(
                 "Secret '{}' has an interpolation cycle in default value",
                 key
             )));
         }
 
-        for reference in &refs {
-            if !secret_keys.contains(reference.as_str()) {
-                return Err(default_reference_error(key, reference));
+        let mut deps = Vec::new();
+        for reference in refs {
+            if secret_keys.contains(reference.as_str()) {
+                deps.push(reference);
+            } else if hard_default {
+                return Err(default_reference_error(key, &reference));
             }
         }
 
-        if !refs.is_empty() {
-            default_deps.insert(key.clone(), refs);
+        if !deps.is_empty() {
+            default_deps.insert(key.clone(), deps.clone());
+            if hard_default {
+                hard_default_deps.insert(key.clone(), deps);
+            }
         }
     }
 
@@ -672,7 +828,6 @@ pub async fn resolve_secrets_batch(
         }
     }
 
-    let no_provider_set: HashSet<&str> = no_provider.iter().map(|s| s.as_str()).collect();
     let (levels, cycle) = compute_resolution_levels(&all_keys, &deps_for_secret, &no_provider_set);
 
     // Resolve each level in order
@@ -704,7 +859,7 @@ pub async fn resolve_secrets_batch(
     if !cycle.is_empty() {
         let cycle_keys: HashSet<&str> = cycle.iter().map(|key| key.as_str()).collect();
         let has_default_cycle = cycle.iter().any(|key| {
-            default_deps.get(key).is_some_and(|refs| {
+            hard_default_deps.get(key).is_some_and(|refs| {
                 refs.iter()
                     .any(|reference| cycle_keys.contains(reference.as_str()))
             })
@@ -852,7 +1007,15 @@ async fn resolve_level(
     // Resolve provider-backed secrets in parallel by provider
     let provider_results: Vec<_> = stream::iter(by_provider)
         .map(|(provider_name, provider_secrets)| async move {
-            resolve_provider_batch(config, profile, secrets, &provider_name, provider_secrets).await
+            resolve_provider_batch(
+                config,
+                profile,
+                secrets,
+                &provider_name,
+                provider_secrets,
+                resolved_so_far,
+            )
+            .await
         })
         .buffer_unordered(10)
         .collect()
@@ -890,14 +1053,8 @@ async fn resolve_no_provider_secret(
     secret_config: &SecretConfig,
     resolved_so_far: &HashMap<String, Option<String>>,
 ) -> Result<Option<String>> {
-    if let Some(default) = &secret_config.default {
-        tracing::debug!("Using default value for secret '{}'", key);
-        let value = if has_default_interpolation(default) {
-            render_default_template(key, default, resolved_so_far)?
-        } else {
-            default.clone()
-        };
-        return Ok(Some(apply_post_processing(value, secret_config)?));
+    if let Some(value) = resolve_default_value(key, secret_config, resolved_so_far)? {
+        return Ok(Some(value));
     }
 
     resolve_secret_raw(config, profile, key, secret_config).await
@@ -910,6 +1067,7 @@ async fn resolve_provider_batch(
     secrets: &IndexMap<String, SecretConfig>,
     provider_name: &str,
     provider_secrets: Vec<(String, String)>,
+    resolved_so_far: &HashMap<String, Option<String>>,
 ) -> Result<HashMap<String, Option<String>>> {
     let mut results = HashMap::new();
 
@@ -930,7 +1088,26 @@ async fn resolve_provider_batch(
             let suggestion = format_suggestions(&similar);
 
             // Provider not configured, handle errors for all secrets
+            let fallback_keys: Vec<String> = provider_secrets
+                .iter()
+                .map(|(key, _)| key.clone())
+                .collect();
+            let fallback_resolved =
+                resolve_default_fallbacks(&fallback_keys, secrets, resolved_so_far, &mut results)?;
             for (key, _) in &provider_secrets {
+                if fallback_resolved.contains(key) {
+                    log_provider_default_fallback(
+                        key,
+                        &FnoxError::ProviderNotConfigured {
+                            provider: provider_name.to_string(),
+                            profile: profile.to_string(),
+                            config_path: None,
+                            suggestion: suggestion.clone(),
+                        },
+                    );
+                    continue;
+                }
+
                 let secret_config = &secrets[key];
                 let if_missing = resolve_if_missing_behavior(secret_config, config);
                 let error = FnoxError::ProviderNotConfigured {
@@ -953,7 +1130,24 @@ async fn resolve_provider_batch(
     // Handle per-secret if_missing policy (like ProviderNotConfigured above)
     // so other providers at the same resolution level are not affected.
     if crate::env::is_non_interactive() && provider_config.requires_interactive_auth() {
+        let fallback_keys: Vec<String> = provider_secrets
+            .iter()
+            .map(|(key, _)| key.clone())
+            .collect();
+        let fallback_resolved =
+            resolve_default_fallbacks(&fallback_keys, secrets, resolved_so_far, &mut results)?;
         for (key, _) in &provider_secrets {
+            if fallback_resolved.contains(key) {
+                log_provider_default_fallback(
+                    key,
+                    &FnoxError::Provider(format!(
+                        "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
+                        provider_name
+                    )),
+                );
+                continue;
+            }
+
             let secret_config = &secrets[key];
             let if_missing = resolve_if_missing_behavior(secret_config, config);
             let error = FnoxError::Provider(format!(
@@ -968,84 +1162,114 @@ async fn resolve_provider_batch(
         return Ok(results);
     }
 
-    // Try to get secrets with auth retry on failure
-    try_batch_with_auth_retry(
+    let ctx = ProviderBatchContext {
         config,
         profile,
         secrets,
         provider_name,
         provider_config,
-        &provider_secrets,
-        &mut results,
-    )
-    .await
+        resolved_so_far,
+    };
+
+    // Try to get secrets with auth retry on failure
+    try_batch_with_auth_retry(&ctx, &provider_secrets, &mut results).await
+}
+
+struct ProviderBatchContext<'a> {
+    config: &'a Config,
+    profile: &'a str,
+    secrets: &'a IndexMap<String, SecretConfig>,
+    provider_name: &'a str,
+    provider_config: &'a ProviderConfig,
+    resolved_so_far: &'a HashMap<String, Option<String>>,
 }
 
 /// Attempts to resolve secrets in batch with optional auth retry.
 /// If the initial attempt fails and we're in a TTY with auth prompting enabled,
 /// prompts the user to run the auth command and retries once.
 async fn try_batch_with_auth_retry(
-    config: &Config,
-    profile: &str,
-    secrets: &IndexMap<String, SecretConfig>,
-    provider_name: &str,
-    provider_config: &ProviderConfig,
+    ctx: &ProviderBatchContext<'_>,
     provider_secrets: &[(String, String)],
     results: &mut HashMap<String, Option<String>>,
 ) -> Result<HashMap<String, Option<String>>> {
     // Initial batch secret retrieval attempt before any authentication retry logic
-    match try_get_secrets_batch(
-        config,
-        profile,
-        provider_name,
-        provider_config,
-        provider_secrets,
-    )
-    .await
-    {
+    match try_get_secrets_batch(ctx, provider_secrets).await {
         Ok(batch_results) => {
             let auth_error = extract_auth_error_from_batch(&batch_results);
             if let Some(ref auth_err) = auth_error
-                && prompt_and_run_auth(config, provider_config, provider_name, auth_err)?
+                && prompt_and_run_auth(
+                    ctx.config,
+                    ctx.provider_config,
+                    ctx.provider_name,
+                    auth_err,
+                )?
             {
                 // Auth prompt successful, retry the batch operation.
-                let retry_results = try_get_secrets_batch(
-                    config,
-                    profile,
-                    provider_name,
-                    provider_config,
-                    provider_secrets,
-                )
-                .await?;
-                process_batch_results(secrets, config, retry_results, results)?;
-                return Ok(std::mem::take(results));
+                return match try_get_secrets_batch(ctx, provider_secrets).await {
+                    Ok(retry_results) => {
+                        process_batch_results(
+                            ctx.secrets,
+                            ctx.config,
+                            retry_results,
+                            ctx.resolved_so_far,
+                            results,
+                        )?;
+                        Ok(std::mem::take(results))
+                    }
+                    Err(retry_error) => handle_batch_error(
+                        ctx.secrets,
+                        ctx.config,
+                        provider_secrets,
+                        &retry_error,
+                        ctx.resolved_so_far,
+                        results,
+                    ),
+                };
             }
             // No auth error, or user declined auth prompt. Process original results.
-            process_batch_results(secrets, config, batch_results, results)?;
+            process_batch_results(
+                ctx.secrets,
+                ctx.config,
+                batch_results,
+                ctx.resolved_so_far,
+                results,
+            )?;
             Ok(std::mem::take(results))
         }
         Err(error) => {
             // Try auth prompt and retry
-            if prompt_and_run_auth(config, provider_config, provider_name, &error)? {
+            if prompt_and_run_auth(ctx.config, ctx.provider_config, ctx.provider_name, &error)? {
                 // Auth command ran successfully, retry
-                match try_get_secrets_batch(
-                    config,
-                    profile,
-                    provider_name,
-                    provider_config,
-                    provider_secrets,
-                )
-                .await
-                {
+                match try_get_secrets_batch(ctx, provider_secrets).await {
                     Ok(batch_results) => {
-                        process_batch_results(secrets, config, batch_results, results)?;
+                        process_batch_results(
+                            ctx.secrets,
+                            ctx.config,
+                            batch_results,
+                            ctx.resolved_so_far,
+                            results,
+                        )?;
                         Ok(std::mem::take(results))
                     }
-                    Err(retry_error) => Err(retry_error),
+                    Err(retry_error) => handle_batch_error(
+                        ctx.secrets,
+                        ctx.config,
+                        provider_secrets,
+                        &retry_error,
+                        ctx.resolved_so_far,
+                        results,
+                    ),
                 }
             } else {
                 // No auth prompt or user declined - apply if_missing handling per secret
-                handle_batch_error(secrets, config, provider_secrets, &error, results)
+                handle_batch_error(
+                    ctx.secrets,
+                    ctx.config,
+                    provider_secrets,
+                    &error,
+                    ctx.resolved_so_far,
+                    results,
+                )
             }
         }
     }
@@ -1057,9 +1281,21 @@ fn handle_batch_error(
     config: &Config,
     provider_secrets: &[(String, String)],
     error: &FnoxError,
+    resolved_so_far: &HashMap<String, Option<String>>,
     results: &mut HashMap<String, Option<String>>,
 ) -> Result<HashMap<String, Option<String>>> {
+    let fallback_keys: Vec<String> = provider_secrets
+        .iter()
+        .map(|(key, _)| key.clone())
+        .collect();
+    let fallback_resolved =
+        resolve_default_fallbacks(&fallback_keys, secrets, resolved_so_far, results)?;
     for (key, _) in provider_secrets {
+        if fallback_resolved.contains(key) {
+            log_provider_default_fallback(key, error);
+            continue;
+        }
+
         let secret_config = &secrets[key];
         let if_missing = resolve_if_missing_behavior(secret_config, config);
         let provider_error = FnoxError::Provider(error.to_string());
@@ -1096,13 +1332,16 @@ fn extract_auth_error_from_batch(
 /// Helper to get multiple secrets in batch from a provider without auth retry logic.
 /// Creates the provider instance and calls `get_secrets_batch` on it.
 async fn try_get_secrets_batch(
-    config: &Config,
-    profile: &str,
-    provider_name: &str,
-    provider_config: &ProviderConfig,
+    ctx: &ProviderBatchContext<'_>,
     provider_secrets: &[(String, String)],
 ) -> Result<HashMap<String, Result<String>>> {
-    let provider = get_provider_resolved(config, profile, provider_name, provider_config).await?;
+    let provider = get_provider_resolved(
+        ctx.config,
+        ctx.profile,
+        ctx.provider_name,
+        ctx.provider_config,
+    )
+    .await?;
     Ok(provider.get_secrets_batch(provider_secrets).await)
 }
 
@@ -1111,8 +1350,11 @@ fn process_batch_results(
     secrets: &IndexMap<String, SecretConfig>,
     config: &Config,
     batch_results: HashMap<String, Result<String>>,
+    resolved_so_far: &HashMap<String, Option<String>>,
     results: &mut HashMap<String, Option<String>>,
 ) -> Result<()> {
+    let mut failed = Vec::new();
+
     for (key, result) in batch_results {
         let secret_config = &secrets[&key];
         match result {
@@ -1130,15 +1372,30 @@ fn process_batch_results(
                 }
             }
             Err(e) => {
-                let if_missing = resolve_if_missing_behavior(secret_config, config);
-                if let Some(error) = handle_provider_error(&key, e, if_missing, true) {
-                    // Fail fast if if_missing is error
-                    return Err(error);
-                }
-                results.insert(key, None);
+                failed.push((key, e));
             }
         }
     }
+
+    let fallback_keys: Vec<String> = failed.iter().map(|(key, _)| key.clone()).collect();
+    let fallback_resolved =
+        resolve_default_fallbacks(&fallback_keys, secrets, resolved_so_far, results)?;
+
+    for (key, e) in failed {
+        if fallback_resolved.contains(&key) {
+            log_provider_default_fallback(&key, &e);
+            continue;
+        }
+
+        let secret_config = &secrets[&key];
+        let if_missing = resolve_if_missing_behavior(secret_config, config);
+        if let Some(error) = handle_provider_error(&key, e, if_missing, true) {
+            // Fail fast if if_missing is error
+            return Err(error);
+        }
+        results.insert(key, None);
+    }
+
     Ok(())
 }
 
@@ -1178,6 +1435,15 @@ mod tests {
         secret.set_provider(Some("plain".to_string()));
         secret.set_value(Some(value.to_string()));
         secret
+    }
+
+    fn provider_secret_not_found(secret: &str) -> FnoxError {
+        FnoxError::ProviderSecretNotFound {
+            provider: "plain".to_string(),
+            secret: secret.to_string(),
+            hint: String::new(),
+            url: "https://fnox.jdx.dev/providers".to_string(),
+        }
     }
 
     #[test]
@@ -1463,6 +1729,162 @@ mod tests {
         assert_eq!(
             resolved.get("API_KEY").and_then(|value| value.as_ref()),
             Some(&"provider-value".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_resolve_secret_provider_value_wins_over_interpolated_default() {
+        let mut config = Config::new();
+        config.providers.insert(
+            "plain".to_string(),
+            ProviderConfig::Plain {
+                auth_command: None,
+                daemon_cache: None,
+            },
+        );
+
+        let mut secret = plain_provider_secret("provider-value");
+        secret.default = Some("${MISSING_REF}".to_string());
+        config.secrets.insert("API_KEY".to_string(), secret);
+
+        let secret_config = config.secrets.get("API_KEY").unwrap();
+        let resolved = resolve_secret(&config, "default", "API_KEY", secret_config)
+            .await
+            .unwrap();
+
+        assert_eq!(resolved, Some("provider-value".to_string()));
+    }
+
+    #[test]
+    fn test_batch_default_fallback_can_use_same_batch_success() {
+        let config = Config::new();
+        let mut secrets = IndexMap::new();
+        secrets.insert("HOSTNAME".to_string(), SecretConfig::new());
+        secrets.insert(
+            "DATABASE_URL".to_string(),
+            default_secret("postgres://${HOSTNAME}/fnox"),
+        );
+
+        let mut batch_results = HashMap::new();
+        batch_results.insert("HOSTNAME".to_string(), Ok("localhost".to_string()));
+        batch_results.insert(
+            "DATABASE_URL".to_string(),
+            Err(provider_secret_not_found("DATABASE_URL")),
+        );
+
+        let resolved_so_far = HashMap::new();
+        let mut results = HashMap::new();
+        process_batch_results(
+            &secrets,
+            &config,
+            batch_results,
+            &resolved_so_far,
+            &mut results,
+        )
+        .unwrap();
+
+        assert_eq!(
+            results.get("DATABASE_URL").and_then(|value| value.as_ref()),
+            Some(&"postgres://localhost/fnox".to_string())
+        );
+    }
+
+    #[test]
+    fn test_batch_default_fallback_skips_unresolved_reference() {
+        let config = Config::new();
+        let mut secrets = IndexMap::new();
+        let mut host = SecretConfig::new();
+        host.if_missing = Some(IfMissing::Ignore);
+        let mut database_url = default_secret("postgres://${DB_HOST}/fnox");
+        database_url.if_missing = Some(IfMissing::Ignore);
+        secrets.insert("DB_HOST".to_string(), host);
+        secrets.insert("DATABASE_URL".to_string(), database_url);
+
+        let mut batch_results = HashMap::new();
+        batch_results.insert(
+            "DB_HOST".to_string(),
+            Err(provider_secret_not_found("DB_HOST")),
+        );
+        batch_results.insert(
+            "DATABASE_URL".to_string(),
+            Err(provider_secret_not_found("DATABASE_URL")),
+        );
+
+        let resolved_so_far = HashMap::new();
+        let mut results = HashMap::new();
+        process_batch_results(
+            &secrets,
+            &config,
+            batch_results,
+            &resolved_so_far,
+            &mut results,
+        )
+        .unwrap();
+
+        assert_eq!(results.get("DB_HOST"), Some(&None));
+        assert_eq!(results.get("DATABASE_URL"), Some(&None));
+    }
+
+    #[test]
+    fn test_batch_default_fallback_reports_cycle() {
+        let config = Config::new();
+        let mut secrets = IndexMap::new();
+        secrets.insert("A".to_string(), default_secret("${B}"));
+        secrets.insert("B".to_string(), default_secret("${A}"));
+
+        let mut batch_results = HashMap::new();
+        batch_results.insert("A".to_string(), Err(provider_secret_not_found("A")));
+        batch_results.insert("B".to_string(), Err(provider_secret_not_found("B")));
+
+        let resolved_so_far = HashMap::new();
+        let mut results = HashMap::new();
+        let err = process_batch_results(
+            &secrets,
+            &config,
+            batch_results,
+            &resolved_so_far,
+            &mut results,
+        )
+        .unwrap_err();
+        let msg = format!("{err}");
+
+        assert!(
+            msg.contains("Interpolation dependency cycle among fallback defaults"),
+            "unexpected error: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_configured_provider_default_reference_orders_fallback_dependency() {
+        let mut config = Config::new();
+        config.providers.insert(
+            "plain".to_string(),
+            ProviderConfig::Plain {
+                auth_command: None,
+                daemon_cache: None,
+            },
+        );
+
+        let mut database_url = plain_provider_secret("provider-value");
+        database_url.default = Some("postgres://${DB_HOST}/fnox".to_string());
+
+        let mut secrets = IndexMap::new();
+        secrets.insert("DATABASE_URL".to_string(), database_url);
+        secrets.insert("DB_HOST".to_string(), default_secret("localhost"));
+
+        let resolved = resolve_secrets_batch(&config, "default", &secrets)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            resolved
+                .get("DATABASE_URL")
+                .and_then(|value| value.as_ref()),
+            Some(&"provider-value".to_string())
+        );
+        assert_eq!(
+            resolved.get("DB_HOST").and_then(|value| value.as_ref()),
+            Some(&"localhost".to_string())
         );
     }
 

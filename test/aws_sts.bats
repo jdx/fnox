@@ -56,7 +56,9 @@ setup() {
 }
 
 teardown() {
-	_common_teardown
+	if declare -F _common_teardown >/dev/null; then
+		_common_teardown
+	fi
 }
 
 # Helper: create fnox config with STS lease backend

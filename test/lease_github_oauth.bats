@@ -5,6 +5,8 @@
 # These tests verify the GitHub OAuth device-flow lease backend against a mock
 # HTTP server, so no real GitHub credentials or browser interaction are needed.
 
+export BATS_NO_PARALLELIZE_WITHIN_FILE=true
+
 setup() {
 	load 'test_helper/common_setup'
 	_common_setup
@@ -14,6 +16,7 @@ teardown() {
 	if [[ -n ${MOCK_PID:-} ]]; then
 		kill "$MOCK_PID" 2>/dev/null || true
 		wait "$MOCK_PID" 2>/dev/null || true
+		unset MOCK_PID
 	fi
 	_common_teardown
 }
@@ -23,7 +26,7 @@ start_mock_github_oauth() {
 	local expires_in="${2:-28800}"
 
 	cat >"$TEST_TEMP_DIR/mock_github_oauth.py" <<PYEOF
-import http.server, json, urllib.parse
+import http.server, json, os, urllib.parse
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
@@ -90,19 +93,41 @@ class Handler(http.server.BaseHTTPRequestHandler):
 server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
 with open("$TEST_TEMP_DIR/mock_port", "w") as f:
     f.write(str(server.server_address[1]))
+    f.flush()
+    os.fsync(f.fileno())
 server.serve_forever()
 PYEOF
 
-	python3 "$TEST_TEMP_DIR/mock_github_oauth.py" &
+	local mock_log="$TEST_TEMP_DIR/mock_github_oauth.log"
+	python3 -u "$TEST_TEMP_DIR/mock_github_oauth.py" >"$mock_log" 2>&1 &
 	MOCK_PID=$!
-	for _ in $(seq 1 30); do
-		if [[ -f "$TEST_TEMP_DIR/mock_port" ]]; then
-			break
+	for _ in $(seq 1 300); do
+		if [[ -s "$TEST_TEMP_DIR/mock_port" ]]; then
+			MOCK_PORT=$(cat "$TEST_TEMP_DIR/mock_port")
+			export MOCK_PORT
+			return 0
+		fi
+		local mock_state
+		mock_state=$(ps -p "$MOCK_PID" -o stat= 2>/dev/null || true)
+		if [[ -z "$mock_state" || $mock_state == *Z* ]]; then
+			wait "$MOCK_PID" 2>/dev/null || true
+			echo "mock GitHub OAuth server exited before writing port" >&2
+			if [[ -s "$mock_log" ]]; then
+				cat "$mock_log" >&2
+			fi
+			unset MOCK_PID
+			return 1
 		fi
 		sleep 0.1
 	done
-	MOCK_PORT=$(cat "$TEST_TEMP_DIR/mock_port")
-	export MOCK_PORT
+	echo "timed out waiting for mock GitHub OAuth server to write port" >&2
+	if [[ -s "$mock_log" ]]; then
+		cat "$mock_log" >&2
+	fi
+	kill "$MOCK_PID" 2>/dev/null || true
+	wait "$MOCK_PID" 2>/dev/null || true
+	unset MOCK_PID
+	return 1
 }
 
 @test "github-oauth: creates user access token via device flow" {
