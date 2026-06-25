@@ -195,7 +195,7 @@ in its prefix (`age1yubikey1...`, `age1tpm1...`, …):
 ```toml
 [providers.age]
 type = "age"
-recipients = ["age1yubikeyisahci6eesuwaaxoh6quoy9lae2koshah1chit0ceekiel0ohh1bab1eyai3"]
+recipients = ["age1yubikey1qwla8v7cu3mx6mp79asgrh5ad2h52flwln7c66ydcyy50lg5uh0gxh4kmaz"]
 ```
 
 Please refer to the respective plugin docs for detailed setup instructions.

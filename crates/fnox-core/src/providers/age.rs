@@ -377,7 +377,7 @@ mod tests {
     #[tokio::test]
     async fn plugin_recipient_is_not_rejected_as_invalid_hrp() {
         let recipient =
-            "age1yubikeyisahci6eesuwaaxoh6quoy9lae2koshah1chit0ceekiel0ohh1bab1eyai3".to_string();
+            "age1yubikey1qwla8v7cu3mx6mp79asgrh5ad2h52flwln7c66ydcyy50lg5uh0gxh4kmaz".to_string();
         let provider =
             AgeEncryptionProvider::new(vec![recipient], None, OptionProviderSecretRef::none())
                 .expect("provider construction should succeed");
