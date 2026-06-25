@@ -201,9 +201,13 @@ impl crate::providers::Provider for AgeEncryptionProvider {
             parsed_recipients.push(Box::new(plugin));
         }
 
-        if parsed_recipients.is_empty() {
-            return Err(FnoxError::AgeNotConfigured);
-        }
+        // Every recipient is parsed into `parsed_recipients` (directly or via a
+        // plugin driver) or returns early on failure, and the empty-input case
+        // is rejected at the top of the function, so this is always non-empty.
+        debug_assert!(
+            !parsed_recipients.is_empty(),
+            "non-empty recipients must yield at least one parsed recipient"
+        );
 
         // Create encryptor with parsed recipients. With plugin recipients this
         // talks to the plugin binary eagerly, so it can fail for reasons beyond
