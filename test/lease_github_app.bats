@@ -5,6 +5,8 @@
 # These tests verify the GitHub App installation token lease backend.
 # They use a mock HTTP server to avoid requiring real GitHub credentials.
 
+export BATS_NO_PARALLELIZE_WITHIN_FILE=true
+
 setup() {
 	load 'test_helper/common_setup'
 	_common_setup
@@ -15,6 +17,7 @@ teardown() {
 	if [[ -n ${MOCK_PID:-} ]]; then
 		kill "$MOCK_PID" 2>/dev/null || true
 		wait "$MOCK_PID" 2>/dev/null || true
+		unset MOCK_PID
 	fi
 	_common_teardown
 }
@@ -31,7 +34,7 @@ start_mock_github_api() {
 	local expires_at="${2:-2099-01-01T00:00:00Z}"
 
 	cat >"$TEST_TEMP_DIR/mock_github.py" <<PYEOF
-import http.server, json, sys, socket
+import http.server, json, os, sys, socket
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
@@ -58,14 +61,16 @@ port = server.server_address[1]
 # Write the assigned port so the test can read it
 with open("$TEST_TEMP_DIR/mock_port", "w") as f:
     f.write(str(port))
+    f.flush()
+    os.fsync(f.fileno())
 server.serve_forever()
 PYEOF
 
 	local mock_log="$TEST_TEMP_DIR/mock_github.log"
-	python3 "$TEST_TEMP_DIR/mock_github.py" >"$mock_log" 2>&1 &
+	python3 -u "$TEST_TEMP_DIR/mock_github.py" >"$mock_log" 2>&1 &
 	MOCK_PID=$!
 	# Wait for the port file to appear
-	for _ in $(seq 1 100); do
+	for _ in $(seq 1 300); do
 		if [[ -s "$TEST_TEMP_DIR/mock_port" ]]; then
 			MOCK_PORT=$(cat "$TEST_TEMP_DIR/mock_port")
 			export MOCK_PORT
@@ -87,6 +92,9 @@ PYEOF
 	if [[ -s "$mock_log" ]]; then
 		cat "$mock_log" >&2
 	fi
+	kill "$MOCK_PID" 2>/dev/null || true
+	wait "$MOCK_PID" 2>/dev/null || true
+	unset MOCK_PID
 	return 1
 }
 
