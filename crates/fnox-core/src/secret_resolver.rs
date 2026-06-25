@@ -450,12 +450,6 @@ fn resolve_default_fallbacks(
         }
 
         if !progressed {
-            let key = next_pending.first().ok_or_else(|| {
-                FnoxError::Config("Unable to resolve default fallback values".to_string())
-            })?;
-            let secret_config = &secrets[key];
-            let context = default_context(resolved_so_far, results);
-            resolve_default_value(key, secret_config, &context)?;
             return Err(FnoxError::Config(format!(
                 "Interpolation dependency cycle among fallback defaults: {}",
                 next_pending.join(", ")
@@ -481,12 +475,6 @@ pub async fn resolve_secret(
     key: &str,
     secret_config: &SecretConfig,
 ) -> Result<Option<String>> {
-    if let Some(value) =
-        resolve_interpolated_default_value(config, profile, key, secret_config).await?
-    {
-        return Ok(Some(value));
-    }
-
     resolve_secret_raw(config, profile, key, secret_config).await
 }
 
@@ -1204,15 +1192,26 @@ async fn try_batch_with_auth_retry(
                 )?
             {
                 // Auth prompt successful, retry the batch operation.
-                let retry_results = try_get_secrets_batch(ctx, provider_secrets).await?;
-                process_batch_results(
-                    ctx.secrets,
-                    ctx.config,
-                    retry_results,
-                    ctx.resolved_so_far,
-                    results,
-                )?;
-                return Ok(std::mem::take(results));
+                return match try_get_secrets_batch(ctx, provider_secrets).await {
+                    Ok(retry_results) => {
+                        process_batch_results(
+                            ctx.secrets,
+                            ctx.config,
+                            retry_results,
+                            ctx.resolved_so_far,
+                            results,
+                        )?;
+                        Ok(std::mem::take(results))
+                    }
+                    Err(retry_error) => handle_batch_error(
+                        ctx.secrets,
+                        ctx.config,
+                        provider_secrets,
+                        &retry_error,
+                        ctx.resolved_so_far,
+                        results,
+                    ),
+                };
             }
             // No auth error, or user declined auth prompt. Process original results.
             process_batch_results(
@@ -1239,7 +1238,14 @@ async fn try_batch_with_auth_retry(
                         )?;
                         Ok(std::mem::take(results))
                     }
-                    Err(retry_error) => Err(retry_error),
+                    Err(retry_error) => handle_batch_error(
+                        ctx.secrets,
+                        ctx.config,
+                        provider_secrets,
+                        &retry_error,
+                        ctx.resolved_so_far,
+                        results,
+                    ),
                 }
             } else {
                 // No auth prompt or user declined - apply if_missing handling per secret
@@ -1713,6 +1719,29 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn test_resolve_secret_provider_value_wins_over_interpolated_default() {
+        let mut config = Config::new();
+        config.providers.insert(
+            "plain".to_string(),
+            ProviderConfig::Plain {
+                auth_command: None,
+                daemon_cache: None,
+            },
+        );
+
+        let mut secret = plain_provider_secret("provider-value");
+        secret.default = Some("${MISSING_REF}".to_string());
+        config.secrets.insert("API_KEY".to_string(), secret);
+
+        let secret_config = config.secrets.get("API_KEY").unwrap();
+        let resolved = resolve_secret(&config, "default", "API_KEY", secret_config)
+            .await
+            .unwrap();
+
+        assert_eq!(resolved, Some("provider-value".to_string()));
+    }
+
     #[test]
     fn test_batch_default_fallback_can_use_same_batch_success() {
         let config = Config::new();
@@ -1744,6 +1773,35 @@ mod tests {
         assert_eq!(
             results.get("DATABASE_URL").and_then(|value| value.as_ref()),
             Some(&"postgres://localhost/fnox".to_string())
+        );
+    }
+
+    #[test]
+    fn test_batch_default_fallback_reports_cycle() {
+        let config = Config::new();
+        let mut secrets = IndexMap::new();
+        secrets.insert("A".to_string(), default_secret("${B}"));
+        secrets.insert("B".to_string(), default_secret("${A}"));
+
+        let mut batch_results = HashMap::new();
+        batch_results.insert("A".to_string(), Err(provider_secret_not_found("A")));
+        batch_results.insert("B".to_string(), Err(provider_secret_not_found("B")));
+
+        let resolved_so_far = HashMap::new();
+        let mut results = HashMap::new();
+        let err = process_batch_results(
+            &secrets,
+            &config,
+            batch_results,
+            &resolved_so_far,
+            &mut results,
+        )
+        .unwrap_err();
+        let msg = format!("{err}");
+
+        assert!(
+            msg.contains("Interpolation dependency cycle among fallback defaults"),
+            "unexpected error: {msg}"
         );
     }
 
