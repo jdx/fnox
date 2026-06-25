@@ -149,8 +149,9 @@ impl crate::providers::Provider for AgeEncryptionProvider {
             return Err(FnoxError::AgeNotConfigured);
         }
 
-        // Parse recipients - try both SSH and native age formats
+        // Parse recipients - try SSH, native age, then plugin formats
         let mut parsed_recipients: Vec<Box<dyn age::Recipient + Send + Sync>> = Vec::new();
+        let mut plugin_recipients: Vec<age::plugin::Recipient> = Vec::new();
 
         for recipient in &self.recipients {
             // Try parsing as SSH recipient first
@@ -159,11 +160,15 @@ impl crate::providers::Provider for AgeEncryptionProvider {
                 continue;
             }
 
-            // Fall back to native age recipient
-            match recipient.parse::<age::x25519::Recipient>() {
-                Ok(age_recipient) => {
-                    parsed_recipients.push(Box::new(age_recipient));
-                }
+            // Try native age recipient
+            if let Ok(age_recipient) = recipient.parse::<age::x25519::Recipient>() {
+                parsed_recipients.push(Box::new(age_recipient));
+                continue;
+            }
+
+            // Fall back to plugin recipient, e.g. age-plugin-yubikey: age1yubikey1...
+            match recipient.parse::<age::plugin::Recipient>() {
+                Ok(plugin_recipient) => plugin_recipients.push(plugin_recipient),
                 Err(e) => {
                     return Err(FnoxError::AgeEncryptionFailed {
                         details: format!("Failed to parse recipient '{}': {}", recipient, e),
@@ -172,17 +177,45 @@ impl crate::providers::Provider for AgeEncryptionProvider {
             }
         }
 
+        // Build one plugin driver per distinct plugin name. RecipientPluginV1
+        // filters the recipient list by plugin name internally, so we pass the
+        // full list and spawn the matching `age-plugin-*` binary from $PATH.
+        let plugin_names: std::collections::BTreeSet<String> = plugin_recipients
+            .iter()
+            .map(|r| r.plugin().to_string())
+            .collect();
+        for plugin_name in plugin_names {
+            let plugin = age::plugin::RecipientPluginV1::new(
+                &plugin_name,
+                &plugin_recipients,
+                &[],
+                age::cli_common::UiCallbacks,
+            )
+            .map_err(|e| FnoxError::AgeEncryptionFailed {
+                details: format!(
+                    "Failed to initialize age plugin 'age-plugin-{}' \
+                     (is it installed and on your PATH?): {}",
+                    plugin_name, e
+                ),
+            })?;
+            parsed_recipients.push(Box::new(plugin));
+        }
+
         if parsed_recipients.is_empty() {
             return Err(FnoxError::AgeNotConfigured);
         }
 
-        // Create encryptor with parsed recipients
+        // Create encryptor with parsed recipients. With plugin recipients this
+        // talks to the plugin binary eagerly, so it can fail for reasons beyond
+        // an empty recipient list (which we already ruled out above).
         let encryptor = age::Encryptor::with_recipients(
             parsed_recipients
                 .iter()
                 .map(|r| r.as_ref() as &dyn age::Recipient),
         )
-        .expect("we provided at least one recipient");
+        .map_err(|e| FnoxError::AgeEncryptionFailed {
+            details: format!("Failed to initialize age encryptor: {}", e),
+        })?;
 
         // Encrypt the plaintext
         let mut encrypted = vec![];
@@ -287,12 +320,16 @@ impl crate::providers::Provider for AgeEncryptionProvider {
                     vec![Box::new(ssh_identity) as Box<dyn age::Identity>]
                 }
                 Err(_) => {
-                    // Not an SSH identity, try age identity file
+                    // Not an SSH identity, try age identity file. Setting
+                    // callbacks lets `into_identities` construct plugin
+                    // identities (e.g. AGE-PLUGIN-YUBIKEY-1...) by driving the
+                    // matching `age-plugin-*` binary for PIN/touch prompts.
                     cursor.set_position(0);
                     age::IdentityFile::from_buffer(cursor)
                         .map_err(|e| FnoxError::AgeIdentityParseFailed {
                             details: e.to_string(),
                         })?
+                        .with_callbacks(age::cli_common::UiCallbacks)
                         .into_identities()
                         .map_err(|e| FnoxError::AgeIdentityParseFailed {
                             details: e.to_string(),
@@ -323,5 +360,38 @@ impl crate::providers::Provider for AgeEncryptionProvider {
         String::from_utf8(decrypted).map_err(|e| FnoxError::AgeDecryptionFailed {
             details: format!("Failed to decode UTF-8: {}", e),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::providers::Provider;
+
+    /// Regression test for the "incorrect HRP" failure on age plugin recipients
+    /// (e.g. age-plugin-yubikey). A plugin recipient must now be recognized and
+    /// dispatched to the plugin driver instead of being rejected by the native
+    /// x25519 parser. This holds whether or not the plugin binary is installed:
+    /// if it is, wrapping may succeed; if it isn't, the error is about the
+    /// missing plugin binary -- never about an "incorrect HRP" / parse failure.
+    #[tokio::test]
+    async fn plugin_recipient_is_not_rejected_as_invalid_hrp() {
+        let recipient =
+            "age1yubikeyisahci6eesuwaaxoh6quoy9lae2koshah1chit0ceekiel0ohh1bab1eyai3".to_string();
+        let provider =
+            AgeEncryptionProvider::new(vec![recipient], None, OptionProviderSecretRef::none())
+                .expect("provider construction should succeed");
+
+        if let Err(err) = provider.encrypt("plaintext").await {
+            let message = err.to_string();
+            assert!(
+                !message.contains("incorrect HRP"),
+                "plugin recipient should not be rejected by the native parser: {message}"
+            );
+            assert!(
+                !message.contains("Failed to parse recipient"),
+                "plugin recipient should parse successfully: {message}"
+            );
+        }
     }
 }

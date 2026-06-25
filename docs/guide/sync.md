@@ -117,7 +117,7 @@ recipients = ["age1yubikey1q..."]  # YubiKey recipient
 fnox sync --provider age --config fnox.local.toml
 ```
 
-Secrets are encrypted to your YubiKey's age identity. Decryption requires the YubiKey to be plugged in, adding hardware-based security to your local cache.
+Secrets are encrypted to your YubiKey's age identity. Decryption requires the YubiKey to be plugged in, adding hardware-based security to your local cache. See [Age Plugin Support](/providers/age#plugin-support) for details and other plugins (TPM, FIDO2, …).
 
 ## Refreshing the Cache
 
