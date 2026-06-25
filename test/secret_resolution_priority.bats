@@ -230,6 +230,27 @@ EOF
 	assert_output "from-default"
 }
 
+@test "default profile falls back to defaults when provider only exists in named profiles" {
+	cat >fnox.toml <<'EOF'
+root = true
+
+[secrets]
+DB_HOST = { provider = "ps", value = "DB_HOST", default = "127.0.0.1" }
+DB_PORT = { provider = "ps", value = "DB_PORT", default = "5432" }
+
+[profiles.test.providers.ps]
+type = "plain"
+EOF
+
+	run "$FNOX_BIN" get DB_HOST
+	assert_success
+	assert_output "127.0.0.1"
+
+	run "$FNOX_BIN" exec -- sh -c 'printf "%s:%s" "$DB_HOST" "$DB_PORT"'
+	assert_success
+	assert_output "127.0.0.1:5432"
+}
+
 @test "provider value used as provider input, not direct output" {
 	# This tests that the 'value' field is used as input to the provider
 	# not returned directly

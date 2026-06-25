@@ -415,22 +415,37 @@ async fn resolve_secret_raw(
     key: &str,
     secret_config: &SecretConfig,
 ) -> Result<Option<String>> {
-    // Try to get a value from any source (provider, default, or env var)
-    let value_to_process =
-        // Priority 1: Provider (if specified and has a value)
-        if let Some(value) = try_resolve_from_provider(config, profile, secret_config).await? {
-            Some(value)
-        // Priority 2: Default value
-        } else if let Some(default) = &secret_config.default {
-            tracing::debug!("Using default value for secret '{}'", key);
-            Some(default.clone())
-        // Priority 3: Environment variable
-        } else if let Ok(env_value) = env::var(key) {
-            tracing::debug!("Found secret '{}' in current environment", key);
-            Some(env_value)
-        } else {
+    // Priority 1: Provider (if specified and has a value)
+    let provider_value = match try_resolve_from_provider(config, profile, secret_config).await {
+        Ok(value) => value,
+        Err(error) if secret_config.default.is_some() => {
+            tracing::debug!(
+                "Falling back to default value for secret '{}' after provider resolution failed: {}",
+                key,
+                error
+            );
             None
-        };
+        }
+        Err(error) => return Err(error),
+    };
+
+    if let Some(value) = provider_value {
+        let processed = apply_post_processing(value, secret_config)?;
+        return Ok(Some(processed));
+    }
+
+    // Priority 2: Default value
+    if let Some(value) = resolve_default_value(key, secret_config, &HashMap::new())? {
+        return Ok(Some(value));
+    }
+
+    // Priority 3: Environment variable
+    let value_to_process = if let Ok(env_value) = env::var(key) {
+        tracing::debug!("Found secret '{}' in current environment", key);
+        Some(env_value)
+    } else {
+        None
+    };
 
     // Apply post-processing to whatever value we found (e.g., JSON path extraction)
     if let Some(value) = value_to_process {
@@ -572,6 +587,24 @@ fn handle_missing_secret(
     }
 }
 
+fn resolve_default_value(
+    key: &str,
+    secret_config: &SecretConfig,
+    resolved_so_far: &HashMap<String, Option<String>>,
+) -> Result<Option<String>> {
+    let Some(default) = &secret_config.default else {
+        return Ok(None);
+    };
+
+    tracing::debug!("Using default value for secret '{}'", key);
+    let value = if has_default_interpolation(default) {
+        render_default_template(key, default, resolved_so_far)?
+    } else {
+        default.clone()
+    };
+    Ok(Some(apply_post_processing(value, secret_config)?))
+}
+
 /// Resolves multiple secrets efficiently using batch operations when possible.
 ///
 /// Secrets are resolved in dependency order using Kahn's algorithm. If a provider
@@ -619,8 +652,15 @@ pub async fn resolve_secrets_batch(
         }
     }
 
-    for key in &no_provider {
-        let secret_config = &secrets[key];
+    let no_provider_set: HashSet<&str> = no_provider.iter().map(|s| s.as_str()).collect();
+    for (key, secret_config) in secrets {
+        let provider_is_unconfigured = secret_provider
+            .get(key)
+            .is_some_and(|(provider_name, _)| !providers.contains_key(provider_name));
+        if !no_provider_set.contains(key.as_str()) && !provider_is_unconfigured {
+            continue;
+        }
+
         let Some(default) = &secret_config.default else {
             continue;
         };
@@ -672,7 +712,6 @@ pub async fn resolve_secrets_batch(
         }
     }
 
-    let no_provider_set: HashSet<&str> = no_provider.iter().map(|s| s.as_str()).collect();
     let (levels, cycle) = compute_resolution_levels(&all_keys, &deps_for_secret, &no_provider_set);
 
     // Resolve each level in order
@@ -852,7 +891,15 @@ async fn resolve_level(
     // Resolve provider-backed secrets in parallel by provider
     let provider_results: Vec<_> = stream::iter(by_provider)
         .map(|(provider_name, provider_secrets)| async move {
-            resolve_provider_batch(config, profile, secrets, &provider_name, provider_secrets).await
+            resolve_provider_batch(
+                config,
+                profile,
+                secrets,
+                &provider_name,
+                provider_secrets,
+                resolved_so_far,
+            )
+            .await
         })
         .buffer_unordered(10)
         .collect()
@@ -890,14 +937,8 @@ async fn resolve_no_provider_secret(
     secret_config: &SecretConfig,
     resolved_so_far: &HashMap<String, Option<String>>,
 ) -> Result<Option<String>> {
-    if let Some(default) = &secret_config.default {
-        tracing::debug!("Using default value for secret '{}'", key);
-        let value = if has_default_interpolation(default) {
-            render_default_template(key, default, resolved_so_far)?
-        } else {
-            default.clone()
-        };
-        return Ok(Some(apply_post_processing(value, secret_config)?));
+    if let Some(value) = resolve_default_value(key, secret_config, resolved_so_far)? {
+        return Ok(Some(value));
     }
 
     resolve_secret_raw(config, profile, key, secret_config).await
@@ -910,6 +951,7 @@ async fn resolve_provider_batch(
     secrets: &IndexMap<String, SecretConfig>,
     provider_name: &str,
     provider_secrets: Vec<(String, String)>,
+    resolved_so_far: &HashMap<String, Option<String>>,
 ) -> Result<HashMap<String, Option<String>>> {
     let mut results = HashMap::new();
 
@@ -932,6 +974,11 @@ async fn resolve_provider_batch(
             // Provider not configured, handle errors for all secrets
             for (key, _) in &provider_secrets {
                 let secret_config = &secrets[key];
+                if let Some(default) = resolve_default_value(key, secret_config, resolved_so_far)? {
+                    results.insert(key.clone(), Some(default));
+                    continue;
+                }
+
                 let if_missing = resolve_if_missing_behavior(secret_config, config);
                 let error = FnoxError::ProviderNotConfigured {
                     provider: provider_name.to_string(),
@@ -955,6 +1002,11 @@ async fn resolve_provider_batch(
     if crate::env::is_non_interactive() && provider_config.requires_interactive_auth() {
         for (key, _) in &provider_secrets {
             let secret_config = &secrets[key];
+            if let Some(default) = resolve_default_value(key, secret_config, resolved_so_far)? {
+                results.insert(key.clone(), Some(default));
+                continue;
+            }
+
             let if_missing = resolve_if_missing_behavior(secret_config, config);
             let error = FnoxError::Provider(format!(
                 "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
@@ -976,6 +1028,7 @@ async fn resolve_provider_batch(
         provider_name,
         provider_config,
         &provider_secrets,
+        resolved_so_far,
         &mut results,
     )
     .await
@@ -991,6 +1044,7 @@ async fn try_batch_with_auth_retry(
     provider_name: &str,
     provider_config: &ProviderConfig,
     provider_secrets: &[(String, String)],
+    resolved_so_far: &HashMap<String, Option<String>>,
     results: &mut HashMap<String, Option<String>>,
 ) -> Result<HashMap<String, Option<String>>> {
     // Initial batch secret retrieval attempt before any authentication retry logic
@@ -1017,11 +1071,11 @@ async fn try_batch_with_auth_retry(
                     provider_secrets,
                 )
                 .await?;
-                process_batch_results(secrets, config, retry_results, results)?;
+                process_batch_results(secrets, config, retry_results, resolved_so_far, results)?;
                 return Ok(std::mem::take(results));
             }
             // No auth error, or user declined auth prompt. Process original results.
-            process_batch_results(secrets, config, batch_results, results)?;
+            process_batch_results(secrets, config, batch_results, resolved_so_far, results)?;
             Ok(std::mem::take(results))
         }
         Err(error) => {
@@ -1038,14 +1092,27 @@ async fn try_batch_with_auth_retry(
                 .await
                 {
                     Ok(batch_results) => {
-                        process_batch_results(secrets, config, batch_results, results)?;
+                        process_batch_results(
+                            secrets,
+                            config,
+                            batch_results,
+                            resolved_so_far,
+                            results,
+                        )?;
                         Ok(std::mem::take(results))
                     }
                     Err(retry_error) => Err(retry_error),
                 }
             } else {
                 // No auth prompt or user declined - apply if_missing handling per secret
-                handle_batch_error(secrets, config, provider_secrets, &error, results)
+                handle_batch_error(
+                    secrets,
+                    config,
+                    provider_secrets,
+                    &error,
+                    resolved_so_far,
+                    results,
+                )
             }
         }
     }
@@ -1057,10 +1124,16 @@ fn handle_batch_error(
     config: &Config,
     provider_secrets: &[(String, String)],
     error: &FnoxError,
+    resolved_so_far: &HashMap<String, Option<String>>,
     results: &mut HashMap<String, Option<String>>,
 ) -> Result<HashMap<String, Option<String>>> {
     for (key, _) in provider_secrets {
         let secret_config = &secrets[key];
+        if let Some(default) = resolve_default_value(key, secret_config, resolved_so_far)? {
+            results.insert(key.clone(), Some(default));
+            continue;
+        }
+
         let if_missing = resolve_if_missing_behavior(secret_config, config);
         let provider_error = FnoxError::Provider(error.to_string());
         if let Some(err) = handle_provider_error(key, provider_error, if_missing, true) {
@@ -1111,6 +1184,7 @@ fn process_batch_results(
     secrets: &IndexMap<String, SecretConfig>,
     config: &Config,
     batch_results: HashMap<String, Result<String>>,
+    resolved_so_far: &HashMap<String, Option<String>>,
     results: &mut HashMap<String, Option<String>>,
 ) -> Result<()> {
     for (key, result) in batch_results {
@@ -1130,6 +1204,12 @@ fn process_batch_results(
                 }
             }
             Err(e) => {
+                if let Some(default) = resolve_default_value(&key, secret_config, resolved_so_far)?
+                {
+                    results.insert(key, Some(default));
+                    continue;
+                }
+
                 let if_missing = resolve_if_missing_behavior(secret_config, config);
                 if let Some(error) = handle_provider_error(&key, e, if_missing, true) {
                     // Fail fast if if_missing is error
