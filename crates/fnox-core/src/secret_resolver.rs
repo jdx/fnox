@@ -421,22 +421,30 @@ fn resolve_default_fallbacks(
         .filter(|key| secrets[*key].default.is_some())
         .cloned()
         .collect();
-    let pending_set: HashSet<String> = pending.iter().cloned().collect();
     let mut resolved = HashSet::new();
 
     while !pending.is_empty() {
+        let pending_set: HashSet<String> = pending.iter().cloned().collect();
         let mut progressed = false;
         let mut next_pending = Vec::new();
 
         for key in pending {
             let secret_config = &secrets[&key];
-            let missing_pending_ref = secret_config.default.as_deref().is_some_and(|default| {
-                extract_default_references(default).iter().any(|reference| {
-                    pending_set.contains(reference) && !context.contains_key(reference)
-                })
+            let refs = secret_config
+                .default
+                .as_deref()
+                .map(extract_default_references)
+                .unwrap_or_default();
+            let unresolved_external_ref = refs.iter().any(|reference| {
+                !context.contains_key(reference) && !pending_set.contains(reference)
             });
+            if unresolved_external_ref {
+                continue;
+            }
 
-            if missing_pending_ref {
+            if refs.iter().any(|reference| {
+                pending_set.contains(reference) && !context.contains_key(reference)
+            }) {
                 next_pending.push(key);
                 continue;
             }
@@ -449,7 +457,7 @@ fn resolve_default_fallbacks(
             }
         }
 
-        if !progressed {
+        if !progressed && !next_pending.is_empty() {
             return Err(FnoxError::Config(format!(
                 "Interpolation dependency cycle among fallback defaults: {}",
                 next_pending.join(", ")
@@ -731,6 +739,7 @@ pub async fn resolve_secrets_batch(
     let all_keys: Vec<String> = secrets.keys().cloned().collect();
     let secret_keys: HashSet<&str> = all_keys.iter().map(|k| k.as_str()).collect();
     let mut default_deps: HashMap<String, Vec<String>> = HashMap::new();
+    let mut hard_default_deps: HashMap<String, Vec<String>> = HashMap::new();
 
     for (key, secret_config) in secrets {
         // If a sync cache exists, use the sync provider/value
@@ -760,30 +769,34 @@ pub async fn resolve_secrets_batch(
         let provider_is_unconfigured = secret_provider
             .get(key)
             .is_some_and(|(provider_name, _)| !providers.contains_key(provider_name));
-        if !no_provider_set.contains(key.as_str()) && !provider_is_unconfigured {
-            continue;
-        }
+        let hard_default = no_provider_set.contains(key.as_str()) || provider_is_unconfigured;
 
         let Some(default) = &secret_config.default else {
             continue;
         };
 
         let refs = extract_default_references(default);
-        if refs.iter().any(|reference| reference == key) {
+        if hard_default && refs.iter().any(|reference| reference == key) {
             return Err(FnoxError::Config(format!(
                 "Secret '{}' has an interpolation cycle in default value",
                 key
             )));
         }
 
-        for reference in &refs {
-            if !secret_keys.contains(reference.as_str()) {
-                return Err(default_reference_error(key, reference));
+        let mut deps = Vec::new();
+        for reference in refs {
+            if secret_keys.contains(reference.as_str()) {
+                deps.push(reference);
+            } else if hard_default {
+                return Err(default_reference_error(key, &reference));
             }
         }
 
-        if !refs.is_empty() {
-            default_deps.insert(key.clone(), refs);
+        if !deps.is_empty() {
+            default_deps.insert(key.clone(), deps.clone());
+            if hard_default {
+                hard_default_deps.insert(key.clone(), deps);
+            }
         }
     }
 
@@ -846,7 +859,7 @@ pub async fn resolve_secrets_batch(
     if !cycle.is_empty() {
         let cycle_keys: HashSet<&str> = cycle.iter().map(|key| key.as_str()).collect();
         let has_default_cycle = cycle.iter().any(|key| {
-            default_deps.get(key).is_some_and(|refs| {
+            hard_default_deps.get(key).is_some_and(|refs| {
                 refs.iter()
                     .any(|reference| cycle_keys.contains(reference.as_str()))
             })
@@ -1777,6 +1790,42 @@ mod tests {
     }
 
     #[test]
+    fn test_batch_default_fallback_skips_unresolved_reference() {
+        let config = Config::new();
+        let mut secrets = IndexMap::new();
+        let mut host = SecretConfig::new();
+        host.if_missing = Some(IfMissing::Ignore);
+        let mut database_url = default_secret("postgres://${DB_HOST}/fnox");
+        database_url.if_missing = Some(IfMissing::Ignore);
+        secrets.insert("DB_HOST".to_string(), host);
+        secrets.insert("DATABASE_URL".to_string(), database_url);
+
+        let mut batch_results = HashMap::new();
+        batch_results.insert(
+            "DB_HOST".to_string(),
+            Err(provider_secret_not_found("DB_HOST")),
+        );
+        batch_results.insert(
+            "DATABASE_URL".to_string(),
+            Err(provider_secret_not_found("DATABASE_URL")),
+        );
+
+        let resolved_so_far = HashMap::new();
+        let mut results = HashMap::new();
+        process_batch_results(
+            &secrets,
+            &config,
+            batch_results,
+            &resolved_so_far,
+            &mut results,
+        )
+        .unwrap();
+
+        assert_eq!(results.get("DB_HOST"), Some(&None));
+        assert_eq!(results.get("DATABASE_URL"), Some(&None));
+    }
+
+    #[test]
     fn test_batch_default_fallback_reports_cycle() {
         let config = Config::new();
         let mut secrets = IndexMap::new();
@@ -1802,6 +1851,40 @@ mod tests {
         assert!(
             msg.contains("Interpolation dependency cycle among fallback defaults"),
             "unexpected error: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_configured_provider_default_reference_orders_fallback_dependency() {
+        let mut config = Config::new();
+        config.providers.insert(
+            "plain".to_string(),
+            ProviderConfig::Plain {
+                auth_command: None,
+                daemon_cache: None,
+            },
+        );
+
+        let mut database_url = plain_provider_secret("provider-value");
+        database_url.default = Some("postgres://${DB_HOST}/fnox".to_string());
+
+        let mut secrets = IndexMap::new();
+        secrets.insert("DATABASE_URL".to_string(), database_url);
+        secrets.insert("DB_HOST".to_string(), default_secret("localhost"));
+
+        let resolved = resolve_secrets_batch(&config, "default", &secrets)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            resolved
+                .get("DATABASE_URL")
+                .and_then(|value| value.as_ref()),
+            Some(&"provider-value".to_string())
+        );
+        assert_eq!(
+            resolved.get("DB_HOST").and_then(|value| value.as_ref()),
+            Some(&"localhost".to_string())
         );
     }
 
