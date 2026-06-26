@@ -34,7 +34,7 @@ jobs:
         with:
           submodules: recursive
           persist-credentials: false
-      - uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
+      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           cache: false
       # save-if: false — this job never saves to cache, only restores from main's cache.
@@ -74,7 +74,7 @@ jobs:
         with:
           submodules: recursive
           persist-credentials: false
-      - uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
+      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           cache: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -217,7 +217,7 @@ jobs:
         with:
           submodules: recursive
           persist-credentials: false
-      - uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
+      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           cache: false
       # save-if: only saves on main pushes, so PRs cannot poison the cache.
@@ -245,7 +245,7 @@ jobs:
         with:
           submodules: recursive
           persist-credentials: false
-      - uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
+      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           cache: false
       # save-if: only saves on main pushes, so PRs cannot poison the cache.
@@ -323,7 +323,7 @@ jobs:
         with:
           shared-key: msrv
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
+      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           cache: false
       - name: Install system dependencies
