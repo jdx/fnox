@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
 use bytes::Bytes;
+use futures::{FutureExt, StreamExt};
 use google_cloud_secretmanager_v1::{
     client::SecretManagerService,
     model::{Replication, Secret, SecretPayload, replication::Automatic},
@@ -19,6 +22,35 @@ pub struct GoogleSecretManagerProvider {
     prefix: Option<String>,
 }
 
+#[derive(Clone)]
+enum GoogleSecretManagerCreateClientError {
+    ProviderAuthFailed { details: String },
+    ProviderApiFailed { details: String },
+}
+
+impl From<GoogleSecretManagerCreateClientError> for FnoxError {
+    fn from(value: GoogleSecretManagerCreateClientError) -> Self {
+        match value {
+            GoogleSecretManagerCreateClientError::ProviderAuthFailed { details } => {
+                FnoxError::ProviderAuthFailed {
+                    provider: PROVIDER_NAME.to_string(),
+                    details,
+                    hint: "Run 'gcloud auth application-default login' or set GOOGLE_APPLICATION_CREDENTIALS".to_string(),
+                    url: URL.to_string(),
+                }
+            },
+            GoogleSecretManagerCreateClientError::ProviderApiFailed { details } => {
+                FnoxError::ProviderApiError {
+                    provider: PROVIDER_NAME.to_string(),
+                    details,
+                    hint: "Check your GCP project configuration".to_string(),
+                    url: URL.to_string(),
+                }
+            },
+        }
+    }
+}
+
 impl GoogleSecretManagerProvider {
     pub fn new(project: String, prefix: Option<String>) -> Result<Self> {
         Ok(Self { project, prefix })
@@ -34,26 +66,19 @@ impl GoogleSecretManagerProvider {
     }
 
     /// Create a Secret Manager client
-    async fn create_client(&self) -> Result<SecretManagerService> {
+    async fn create_client(
+        &self,
+    ) -> std::result::Result<SecretManagerService, GoogleSecretManagerCreateClientError> {
         SecretManagerService::builder().build().await.map_err(|e| {
-            let err_str = e.to_string();
-            if err_str.contains("credentials")
-                || err_str.contains("authentication")
-                || err_str.contains("GOOGLE_APPLICATION_CREDENTIALS")
+            let details = e.to_string();
+
+            if details.contains("credentials")
+                || details.contains("authentication")
+                || details.contains("GOOGLE_APPLICATION_CREDENTIALS")
             {
-                FnoxError::ProviderAuthFailed {
-                    provider: PROVIDER_NAME.to_string(),
-                    details: err_str,
-                    hint: "Run 'gcloud auth application-default login' or set GOOGLE_APPLICATION_CREDENTIALS".to_string(),
-                    url: URL.to_string(),
-                }
+                GoogleSecretManagerCreateClientError::ProviderAuthFailed { details }
             } else {
-                FnoxError::ProviderApiError {
-                    provider: PROVIDER_NAME.to_string(),
-                    details: err_str,
-                    hint: "Check your GCP project configuration".to_string(),
-                    url: URL.to_string(),
-                }
+                GoogleSecretManagerCreateClientError::ProviderApiFailed { details }
             }
         })
     }
@@ -90,6 +115,40 @@ impl GoogleSecretManagerProvider {
             }
             Err(e) => Err(convert_provider_error(e, "secretmanager.versions.add")),
         }
+    }
+
+    async fn access_secret(
+        &self,
+        client: &SecretManagerService,
+        value: impl AsRef<str>,
+    ) -> Result<String> {
+        let value = value.as_ref();
+        let secret_name = self.build_secret_name(value);
+
+        let response = client
+            .access_secret_version()
+            .set_name(secret_name)
+            .send()
+            .await
+            .map_err(|e| convert_secret_error(e, value, "secretmanager.versions.access"))?;
+
+        // Extract the payload data
+        let payload = response
+            .payload
+            .ok_or_else(|| FnoxError::ProviderInvalidResponse {
+                provider: PROVIDER_NAME.to_string(),
+                details: "Secret has no payload".to_string(),
+                hint: "The secret exists but has no value".to_string(),
+                url: URL.to_string(),
+            })?;
+
+        // Convert bytes to string
+        String::from_utf8(payload.data.to_vec()).map_err(|e| FnoxError::ProviderInvalidResponse {
+            provider: PROVIDER_NAME.to_string(),
+            details: format!("Secret value is not valid UTF-8: {}", e),
+            hint: "The secret contains binary data that cannot be decoded as UTF-8".to_string(),
+            url: URL.to_string(),
+        })
     }
 }
 
@@ -176,32 +235,32 @@ impl crate::providers::Provider for GoogleSecretManagerProvider {
 
     async fn get_secret(&self, value: &str) -> Result<String> {
         let client = self.create_client().await?;
-        let secret_name = self.build_secret_name(value);
+        self.access_secret(&client, value).await
+    }
 
-        let response = client
-            .access_secret_version()
-            .set_name(secret_name)
-            .send()
+    async fn get_secrets_batch(
+        &self,
+        secrets: &[(String, String)],
+    ) -> HashMap<String, Result<String>> {
+        let client = match self.create_client().await {
+            Ok(client) => client,
+            Err(error) => {
+                return secrets
+                    .iter()
+                    .cloned()
+                    .map(|(key, _)| (key, Err(error.clone().into())))
+                    .collect();
+            }
+        };
+
+        futures::stream::iter(secrets.to_vec())
+            .map(|(key, value)| {
+                self.access_secret(&client, value)
+                    .map(|secret| (key, secret))
+            })
+            .buffer_unordered(10)
+            .collect()
             .await
-            .map_err(|e| convert_secret_error(e, value, "secretmanager.versions.access"))?;
-
-        // Extract the payload data
-        let payload = response
-            .payload
-            .ok_or_else(|| FnoxError::ProviderInvalidResponse {
-                provider: PROVIDER_NAME.to_string(),
-                details: "Secret has no payload".to_string(),
-                hint: "The secret exists but has no value".to_string(),
-                url: URL.to_string(),
-            })?;
-
-        // Convert bytes to string
-        String::from_utf8(payload.data.to_vec()).map_err(|e| FnoxError::ProviderInvalidResponse {
-            provider: PROVIDER_NAME.to_string(),
-            details: format!("Secret value is not valid UTF-8: {}", e),
-            hint: "The secret contains binary data that cannot be decoded as UTF-8".to_string(),
-            url: URL.to_string(),
-        })
     }
 
     async fn test_connection(&self) -> Result<()> {
