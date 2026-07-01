@@ -1,9 +1,1 @@
-summarize [https://github.com/jdx/fnox/discussions/577](https://github.com/jdx/fnox/discussions/577)
-
----
-
-i think it should clear all profiles, is that hard?
-
----
-
 ok make a pr to fix, reply to discussion
