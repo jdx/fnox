@@ -3,23 +3,9 @@
   "checkpoint_id": "3c7aecb0ec0e",
   "strategy": "manual-commit",
   "branch": "codex/fix-pass-store-dir-relative",
-  "checkpoints_count": 4,
+  "checkpoints_count": 1,
   "files_touched": [
-    "crates/fnox-core/src/config.rs",
-    "crates/fnox-core/src/config_path.rs",
-    "crates/fnox-core/src/lib.rs",
-    "crates/fnox-core/src/providers/age.rs",
-    "crates/fnox-core/src/providers/keepass.rs",
-    "crates/fnox-core/src/providers/mod.rs",
-    "docs/providers/age.md",
-    "docs/providers/foks.md",
-    "docs/providers/keepass.md",
-    "docs/providers/password-store.md",
-    "docs/reference/configuration.md",
-    "src/commands/config_files.rs",
-    "src/lib.rs",
-    "test/age.bats",
-    "test/keepass.bats"
+    "crates/fnox-core/src/providers/mod.rs"
   ],
   "sessions": [
     {
@@ -30,10 +16,10 @@
     }
   ],
   "token_usage": {
-    "input_tokens": 154826,
+    "input_tokens": 123518,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 7095424,
-    "output_tokens": 18218,
-    "api_call_count": 39
+    "cache_read_tokens": 546560,
+    "output_tokens": 3365,
+    "api_call_count": 15
   }
 }
