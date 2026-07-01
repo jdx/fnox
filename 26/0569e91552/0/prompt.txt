@@ -1,0 +1,5 @@
+explain [https://github.com/jdx/fnox/discussions/579](https://github.com/jdx/fnox/discussions/579)
+
+---
+
+ok fix it in a new branch/pr and reply to discussion
