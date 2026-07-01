@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.29.0](https://github.com/jdx/fnox/compare/v1.28.0..v1.29.0) - 2026-07-01
+
+### 🚀 Features
+
+- **(age)** support age plugin recipients and identities by [@nightvisi0n](https://github.com/nightvisi0n) in [#569](https://github.com/jdx/fnox/pull/569)
+
+### 🐛 Bug Fixes
+
+- **(config)** fall back to defaults for inactive providers by [@jdx](https://github.com/jdx) in [#572](https://github.com/jdx/fnox/pull/572)
+- **(config)** resolve relative provider paths from config file by [@jdx](https://github.com/jdx) in [#582](https://github.com/jdx/fnox/pull/582)
+- **(daemon)** clear all profile caches by [@jdx](https://github.com/jdx) in [#581](https://github.com/jdx/fnox/pull/581)
+
+### 🚜 Refactor
+
+- **(gcp-sm)** implement get_secrets_batch to improve performance by [@nils-degroot](https://github.com/nils-degroot) in [#580](https://github.com/jdx/fnox/pull/580)
+
+### 🔍 Other Changes
+
+- Enable Entire for Codex by [@jdx](https://github.com/jdx) in [#573](https://github.com/jdx/fnox/pull/573)
+
+### 📦️ Dependency Updates
+
+- update rust-lang/crates-io-auth-action action to v1.0.5 by [@renovate[bot]](https://github.com/renovate[bot]) in [#574](https://github.com/jdx/fnox/pull/574)
+- update jdx/mise-action action to v4.2.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#575](https://github.com/jdx/fnox/pull/575)
+- update actions/checkout action to v7 by [@renovate[bot]](https://github.com/renovate[bot]) in [#576](https://github.com/jdx/fnox/pull/576)
+
+### New Contributors
+
+- @nightvisi0n made their first contribution in [#569](https://github.com/jdx/fnox/pull/569)
+
 ## [1.28.0](https://github.com/jdx/fnox/compare/v1.27.1..v1.28.0) - 2026-06-24
 
 ### 🚀 Features
