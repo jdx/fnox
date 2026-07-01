@@ -28,7 +28,7 @@ impl AgeEncryptionProvider {
     ) -> Result<Self> {
         Ok(Self {
             recipients,
-            key_file: key_file.map(|k| PathBuf::from(shellexpand::tilde(&k).to_string())),
+            key_file: key_file.map(|k| crate::config_path::resolve_relative_to_file(&k, None)),
             identity,
             config: None,
             profile: "default".to_string(),
@@ -48,7 +48,7 @@ impl AgeEncryptionProvider {
     ) -> Result<Self> {
         Ok(Self {
             recipients,
-            key_file: key_file.map(|k| PathBuf::from(shellexpand::tilde(&k).to_string())),
+            key_file: key_file.map(|k| crate::config_path::resolve_relative_to_file(&k, None)),
             identity,
             config: Some(config),
             profile,

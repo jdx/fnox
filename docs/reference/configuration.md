@@ -109,6 +109,21 @@ import = ["./shared/base.toml", "./envs/dev.toml"]
 - Imported files merged into current config
 - Later imports override earlier ones
 
+### Path Values
+
+Paths declared in config files are resolved relative to the config file that declares them. This applies to imports and provider filesystem paths such as `age.key_file`, `keepass.database`, `keepass.keyfile`, `password-store.store_dir`, and `foks.home`.
+
+```toml
+# project/fnox.toml
+import = ["./shared/secrets.toml"] # project/shared/secrets.toml
+
+[providers.keepass]
+type = "keepass"
+database = "./secrets.kdbx" # project/secrets.kdbx
+```
+
+Paths beginning with `~` expand to your home directory. Absolute paths are used unchanged. CLI path arguments remain relative to the current working directory, and environment variable paths keep their existing environment-specific behavior.
+
 ### `daemon`
 
 Enable memory-only daemon caching for supported read commands.

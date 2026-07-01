@@ -1,6 +1,7 @@
 use crate::error::Result;
 use async_trait::async_trait;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 // Provider implementation modules
 pub mod age;
@@ -318,9 +319,13 @@ pub(crate) fn get_provider_from_resolved_with_context_and_identity_cycle_guard(
         identity,
     } = resolved
     {
+        let provider_source = provider_source_path(config, profile, provider_name);
         return Ok(Box::new(age::AgeEncryptionProvider::new_with_config(
             recipients.clone(),
-            key_file.clone(),
+            crate::config_path::resolve_optional_string_relative_to_file(
+                key_file.clone(),
+                provider_source.as_deref(),
+            ),
             identity.clone(),
             std::sync::Arc::new(config.clone()),
             profile.to_string(),
@@ -328,5 +333,149 @@ pub(crate) fn get_provider_from_resolved_with_context_and_identity_cycle_guard(
             identity_cycle_guard,
         )?));
     }
+    if let ResolvedProviderConfig::KeePass {
+        database,
+        keyfile,
+        password,
+    } = resolved
+    {
+        let provider_source = provider_source_path(config, profile, provider_name);
+        let resolved = ResolvedProviderConfig::KeePass {
+            database: crate::config_path::resolve_string_relative_to_file(
+                database.clone(),
+                provider_source.as_deref(),
+            ),
+            keyfile: crate::config_path::resolve_optional_string_relative_to_file(
+                keyfile.clone(),
+                provider_source.as_deref(),
+            ),
+            password: password.clone(),
+        };
+        return get_provider_from_resolved(provider_name, &resolved);
+    }
+    if let ResolvedProviderConfig::PasswordStore {
+        prefix,
+        store_dir,
+        gpg_opts,
+    } = resolved
+    {
+        let provider_source = provider_source_path(config, profile, provider_name);
+        let resolved = ResolvedProviderConfig::PasswordStore {
+            prefix: prefix.clone(),
+            store_dir: crate::config_path::resolve_optional_string_relative_to_file(
+                store_dir.clone(),
+                provider_source.as_deref(),
+            ),
+            gpg_opts: gpg_opts.clone(),
+        };
+        return get_provider_from_resolved(provider_name, &resolved);
+    }
+    if let ResolvedProviderConfig::Foks {
+        prefix,
+        team,
+        home,
+        host,
+        bot_token,
+    } = resolved
+    {
+        let provider_source = provider_source_path(config, profile, provider_name);
+        let resolved = ResolvedProviderConfig::Foks {
+            prefix: prefix.clone(),
+            team: team.clone(),
+            home: crate::config_path::resolve_optional_string_relative_to_file(
+                home.clone(),
+                provider_source.as_deref(),
+            ),
+            host: host.clone(),
+            bot_token: bot_token.clone(),
+        };
+        return get_provider_from_resolved(provider_name, &resolved);
+    }
     get_provider_from_resolved(provider_name, resolved)
+}
+
+fn provider_source_path(
+    config: &crate::config::Config,
+    profile: &str,
+    provider_name: &str,
+) -> Option<PathBuf> {
+    if profile != "default"
+        && let Some(profile_config) = config.profiles.get(profile)
+        && profile_config.providers.contains_key(provider_name)
+    {
+        return profile_config.provider_sources.get(provider_name).cloned();
+    }
+
+    config.provider_sources.get(provider_name).cloned()
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{Config, ProfileConfig, ProviderConfig};
+
+    #[test]
+    fn provider_source_path_prefers_profile_provider_source() {
+        let mut config = Config::new();
+        config.provider_sources.insert(
+            "pass".to_string(),
+            PathBuf::from("/home/user/project/fnox.toml"),
+        );
+
+        let mut profile = ProfileConfig::new();
+        profile.providers.insert(
+            "pass".to_string(),
+            ProviderConfig::Plain {
+                auth_command: None,
+                daemon_cache: None,
+            },
+        );
+        profile.provider_sources.insert(
+            "pass".to_string(),
+            PathBuf::from("/home/user/project/fnox.prod.toml"),
+        );
+        config.profiles.insert("prod".to_string(), profile);
+
+        assert_eq!(
+            provider_source_path(&config, "prod", "pass"),
+            Some(PathBuf::from("/home/user/project/fnox.prod.toml")),
+        );
+    }
+
+    #[test]
+    fn provider_source_path_does_not_fall_back_for_profile_provider_override() {
+        let mut config = Config::new();
+        config.provider_sources.insert(
+            "pass".to_string(),
+            PathBuf::from("/home/user/project/fnox.toml"),
+        );
+
+        let mut profile = ProfileConfig::new();
+        profile.providers.insert(
+            "pass".to_string(),
+            ProviderConfig::Plain {
+                auth_command: None,
+                daemon_cache: None,
+            },
+        );
+        config.profiles.insert("prod".to_string(), profile);
+
+        assert_eq!(provider_source_path(&config, "prod", "pass"), None);
+    }
+
+    #[test]
+    fn provider_source_path_falls_back_to_top_level_provider_source() {
+        let mut config = Config::new();
+        config.provider_sources.insert(
+            "pass".to_string(),
+            PathBuf::from("/home/user/project/fnox.toml"),
+        );
+        config
+            .profiles
+            .insert("prod".to_string(), ProfileConfig::new());
+
+        assert_eq!(
+            provider_source_path(&config, "prod", "pass"),
+            Some(PathBuf::from("/home/user/project/fnox.toml")),
+        );
+    }
 }

@@ -100,7 +100,7 @@ foks = { type = "foks", prefix = "/fnox/" }
 
 - `prefix` — Path prefix prepended to every key (must be absolute, e.g. `/fnox/` or `/apps/myapp/`). FOKS rejects relative paths; if you forget the leading `/`, the provider adds it for you.
 - `team` — A FOKS team name. When set, fnox passes `--team <name>` to every `foks kv` invocation, so secrets read and write to that team's namespace instead of your personal one.
-- `home` — A custom FOKS home directory, passed through as `--home`. Falls back to `FNOX_FOKS_HOME` / `FOKS_HOME` if not set.
+- `home` — A custom FOKS home directory, passed through as `--home`. Relative paths are resolved from the config file that declares the provider. Falls back to `FNOX_FOKS_HOME` / `FOKS_HOME` if not set.
 - `host` — The FOKS server hostname (e.g. `foks.app` or your self-hosted server). Required for non-interactive bot-token auth (see [CI/CD](#cicd)). Falls back to `FNOX_FOKS_HOST` / `FOKS_HOST`.
 - `bot_token` — A FOKS bot token for non-interactive auth (CI). Almost always you want to leave this unset and supply it via the `FOKS_BOT_TOKEN` env var instead, so it isn't checked into your config. Also accepts `FNOX_FOKS_BOT_TOKEN`.
 

@@ -139,8 +139,10 @@ pass = { type = "password-store", prefix = "fnox/" }
 [providers.pass]
 type = "password-store"
 prefix = "fnox/"  # Optional: prepend to all secret paths (default: none)
-store_dir = "/custom/path"  # Optional: custom store location (default: ~/.password-store)
+store_dir = "./password-store"  # Optional: custom store location (default: ~/.password-store)
 ```
+
+Relative `store_dir` paths are resolved from the config file that declares the provider. Paths beginning with `~` expand to your home directory, and absolute paths are used unchanged.
 
 ## How It Works
 

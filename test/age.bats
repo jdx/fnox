@@ -87,6 +87,40 @@ EOF
 	assert_output "secret-value"
 }
 
+@test "decrypts using relative key_file from declaring config" {
+	# Skip if age not installed
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	mkdir -p project/services/worker
+
+	local keygen_output
+	keygen_output=$(age-keygen -o project/age.txt 2>&1)
+	local public_key
+	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+
+	cat >project/fnox.toml <<EOF
+[providers.age]
+type = "age"
+recipients = ["$public_key"]
+key_file = "./age.txt"
+EOF
+
+	cat >project/services/worker/fnox.toml <<EOF
+[secrets]
+API_KEY = { provider = "age", value = "test" }
+EOF
+
+	cd project/services/worker
+	run "$FNOX_BIN" set API_KEY "relative-age-value" --provider age
+	assert_success
+
+	run "$FNOX_BIN" get API_KEY
+	assert_success
+	assert_output "relative-age-value"
+}
+
 @test "decrypts multiple provider-backed identity secrets in exec" {
 	# Skip if age not installed
 	if ! command -v age-keygen >/dev/null 2>&1; then

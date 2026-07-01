@@ -146,6 +146,29 @@ track_secret_path() {
 	assert_output "test-value-123"
 }
 
+@test "password-store provider resolves relative store_dir from declaring config" {
+	mkdir -p project/services/worker project/password-store
+
+	PASSWORD_STORE_DIR="$PWD/project/password-store" pass init "$GPG_KEY_ID" >/dev/null 2>&1
+	printf '%s\n' "relative-store-value" | PASSWORD_STORE_DIR="$PWD/project/password-store" pass insert -m -f api-key >/dev/null 2>&1
+
+	cat >project/fnox.toml <<EOF
+[providers.pass]
+type = "password-store"
+store_dir = "./password-store"
+EOF
+
+	cat >project/services/worker/fnox.toml <<EOF
+[secrets]
+API_KEY = { provider = "pass", value = "api-key" }
+EOF
+
+	cd project/services/worker
+	run "$FNOX_BIN" get API_KEY
+	assert_success
+	assert_output "relative-store-value"
+}
+
 @test "fnox set and get with prefix" {
 	create_pass_config "work/"
 

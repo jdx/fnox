@@ -33,12 +33,12 @@ keepass = { type = "keepass", database = "~/secrets.kdbx", keyfile = "~/keyfile.
 
 ### Database Path
 
-The `database` field specifies the path to your `.kdbx` file. Shell expansion is supported:
+The `database` field specifies the path to your `.kdbx` file. Relative paths are resolved from the config file that declares the provider, and `~` expands to your home directory:
 
 ```toml
 [providers]
 keepass = { database = "~/secrets.kdbx" }           # Home directory
-keepass = { database = "./secrets/vault.kdbx" }     # Relative path
+keepass = { database = "./secrets/vault.kdbx" }     # Relative to this config file
 keepass = { database = "/opt/secrets/shared.kdbx" } # Absolute path
 ```
 
@@ -50,6 +50,8 @@ For additional security, use a keyfile alongside the password:
 [providers]
 keepass = { database = "~/secrets.kdbx", keyfile = "~/keyfile.key" }
 ```
+
+Relative `keyfile` paths follow the same config-relative rule as `database`.
 
 ## Authentication
 

@@ -83,6 +83,32 @@ track_entry_name() {
 	assert_output "test-value-123"
 }
 
+@test "keepass provider resolves relative database from declaring config" {
+	mkdir -p project/services/worker project/secrets
+	local project_dir="$PWD/project"
+
+	cat >project/fnox.toml <<EOF
+[providers.keepass]
+type = "keepass"
+database = "./secrets/test.kdbx"
+EOF
+
+	cat >project/services/worker/fnox.toml <<EOF
+[secrets]
+API_KEY = { provider = "keepass", value = "api-key" }
+EOF
+
+	cd project/services/worker
+	run "$FNOX_BIN" set API_KEY "relative-keepass-value" --provider keepass
+	assert_success
+
+	[ -f "$project_dir/secrets/test.kdbx" ]
+
+	run "$FNOX_BIN" get API_KEY
+	assert_success
+	assert_output "relative-keepass-value"
+}
+
 @test "fnox set and get with username field" {
 	create_keepass_config
 
