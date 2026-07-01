@@ -4,4 +4,4 @@
 
 - **Usage**: `fnox daemon clear`
 
-Clear the daemon's in-memory cache
+Clear all running daemon caches

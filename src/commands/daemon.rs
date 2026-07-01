@@ -12,7 +12,7 @@ pub struct DaemonCommand {
 
 #[derive(Debug, Subcommand)]
 enum DaemonSubcommand {
-    /// Clear the daemon's in-memory cache
+    /// Clear all running daemon caches
     Clear,
     /// Run the daemon server in the foreground
     #[command(hide = true)]
