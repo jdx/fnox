@@ -57,7 +57,7 @@ The daemon cache is memory-only. Secret values are not written to disk by the da
 
 Cached values are discarded when:
 
-- You run `fnox daemon clear`
+- You run `fnox daemon clear`, which clears all running profile-scoped daemon caches
 - You run `fnox daemon stop`
 - The daemon exits after its idle timeout
 - Config files, profile settings, provider references, post-processing options, or relevant `FNOX_*` and provider environment variables change

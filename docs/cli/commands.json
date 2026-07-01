@@ -129,7 +129,7 @@
             "flags": [],
             "mounts": [],
             "hide": false,
-            "help": "Clear the daemon's in-memory cache",
+            "help": "Clear all running daemon caches",
             "name": "clear",
             "aliases": [],
             "hidden_aliases": [],

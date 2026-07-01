@@ -326,14 +326,68 @@ async fn status_for_context(ctx: &ResolveContext) -> Result<Option<(u32, usize)>
 }
 
 pub async fn clear(cli: &Cli) -> Result<()> {
-    match call(socket_path(cli)?, Request::Clear).await {
-        Ok(Response::Ok) => Ok(()),
+    let paths = daemon_socket_paths()?;
+    if paths.is_empty() {
+        clear_socket(socket_path(cli)?, false).await?;
+        return Ok(());
+    }
+
+    let mut cleared = false;
+    for path in paths {
+        cleared |= clear_socket(path, true).await?;
+    }
+
+    if !cleared {
+        clear_socket(socket_path(cli)?, false).await?;
+    }
+    Ok(())
+}
+
+async fn clear_socket(path: PathBuf, ignore_missing: bool) -> Result<bool> {
+    match call(path, Request::Clear).await {
+        Ok(Response::Ok) => Ok(true),
         Ok(Response::Error { message }) => Err(FnoxError::Config(message)),
         Ok(_) => Err(FnoxError::Config(
             "Invalid daemon response for Clear".to_string(),
         )),
+        Err(e) if ignore_missing && e.is_socket_missing() => Ok(false),
         Err(e) => Err(e.into_fnox_error()),
     }
+}
+
+fn daemon_socket_paths() -> Result<Vec<PathBuf>> {
+    let dir = runtime_dir()?;
+    let entries = match std::fs::read_dir(&dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => {
+            return Err(FnoxError::Config(format!(
+                "Failed to read daemon runtime dir {}: {e}",
+                dir.display()
+            )));
+        }
+    };
+
+    let suffix = format!("-{SOCKET_NAME}");
+    let expected_len = 16 + suffix.len();
+    let mut paths = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|e| {
+            FnoxError::Config(format!(
+                "Failed to read daemon runtime dir {}: {e}",
+                dir.display()
+            ))
+        })?;
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if name.len() == expected_len && name.ends_with(&suffix) {
+            paths.push(path);
+        }
+    }
+    paths.sort();
+    Ok(paths)
 }
 
 pub async fn shutdown(cli: &Cli) -> Result<()> {

@@ -36,7 +36,7 @@ cmd completion help="Generate shell completions" {
 }
 cmd config-files help="List all config files that would be loaded"
 cmd daemon subcommand_required=#true help="Manage the per-user daemon" {
-    cmd clear help="Clear the daemon's in-memory cache"
+    cmd clear help="Clear all running daemon caches"
     cmd serve hide=#true help="Run the daemon server in the foreground"
     cmd start help="Start the per-user daemon in the background"
     cmd status help="Show daemon status"

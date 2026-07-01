@@ -9,6 +9,9 @@ setup() {
 
 teardown() {
 	"$FNOX_BIN" daemon stop >/dev/null 2>&1 || true
+	"$FNOX_BIN" --profile dev daemon stop >/dev/null 2>&1 || true
+	"$FNOX_BIN" --profile staging daemon stop >/dev/null 2>&1 || true
+	"$FNOX_BIN" --profile staging --no-defaults daemon stop >/dev/null 2>&1 || true
 	_common_teardown
 }
 
@@ -54,6 +57,54 @@ EOF
 	run "$FNOX_BIN" daemon status
 	assert_success
 	assert_output --partial "cached_entries: 0"
+}
+
+@test "daemon clear removes cached entries for all profiles" {
+	cat >fnox.toml <<'EOF'
+root = true
+
+[daemon]
+enabled = true
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+FOO = { provider = "plain", value = "default" }
+
+[profiles.dev.secrets]
+FOO = { provider = "plain", value = "dev" }
+EOF
+
+	run "$FNOX_BIN" get FOO
+	assert_success
+	assert_output "default"
+
+	run "$FNOX_BIN" --profile dev get FOO
+	assert_success
+	assert_output "dev"
+
+	run "$FNOX_BIN" daemon status
+	assert_success
+	assert_output --partial "cached_entries: 1"
+
+	run "$FNOX_BIN" --profile dev daemon status
+	assert_success
+	assert_output --partial "cached_entries: 1"
+
+	run "$FNOX_BIN" daemon clear
+	assert_success
+
+	run "$FNOX_BIN" daemon status
+	assert_success
+	assert_output --partial "cached_entries: 0"
+
+	run "$FNOX_BIN" --profile dev daemon status
+	assert_success
+	assert_output --partial "cached_entries: 0"
+
+	run "$FNOX_BIN" --profile dev daemon stop
+	assert_success
 }
 
 @test "no-daemon bypass does not start daemon" {
