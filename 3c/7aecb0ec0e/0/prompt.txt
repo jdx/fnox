@@ -1,0 +1,17 @@
+ok fix it in a new branch/pr and reply to discussion
+
+---
+
+do we already have some logic for other relative paths in the config?
+
+---
+
+i feel like we should be doing some code sharing here, what do you think?
+
+---
+
+should we unify the dx here?
+
+---
+
+ok edit the pr and modify the pr title/desc too
