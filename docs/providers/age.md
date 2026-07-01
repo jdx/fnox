@@ -87,6 +87,15 @@ Or with SSH key:
 age = { type = "age", recipients = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQs8..."] }
 ```
 
+Or with an explicit identity file:
+
+```toml
+[providers]
+age = { type = "age", recipients = ["age1..."], key_file = "./age.txt" }
+```
+
+Relative `key_file` paths are resolved from the config file that declares the provider. Paths beginning with `~` expand to your home directory, and absolute paths are used unchanged.
+
 Or store the age identity in another provider, such as the OS keychain:
 
 ```toml

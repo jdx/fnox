@@ -56,11 +56,8 @@ impl ConfigFilesCommand {
                 {
                     // Print imported config files
                     for import_path in &partial.import {
-                        let import = if Path::new(import_path).is_absolute() {
-                            PathBuf::from(import_path)
-                        } else {
-                            dir.join(import_path)
-                        };
+                        let import =
+                            crate::config_path::resolve_relative_to_dir(import_path, Some(dir));
                         if import.exists() && printed.insert(import.clone()) {
                             println!("{}", import.display());
                         }

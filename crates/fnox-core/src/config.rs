@@ -576,14 +576,8 @@ impl Config {
 
     /// Load an imported config file
     fn load_import(import_path: &str, base_dir: &Path) -> Result<Self> {
-        let path = PathBuf::from(import_path);
-
-        // Handle relative paths - they're relative to the base config's directory
-        let absolute_path = if path.is_absolute() {
-            path
-        } else {
-            base_dir.join(path)
-        };
+        let absolute_path =
+            crate::config_path::resolve_relative_to_dir(import_path, Some(base_dir));
 
         if !absolute_path.exists() {
             return Err(FnoxError::Config(format!(

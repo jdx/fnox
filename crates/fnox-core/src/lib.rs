@@ -10,6 +10,7 @@
 
 pub mod auth_prompt;
 pub mod config;
+pub mod config_path;
 pub(crate) mod credential_command;
 pub mod env;
 pub mod error;

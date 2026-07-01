@@ -22,8 +22,8 @@ impl KeePassProvider {
         password: Option<String>,
     ) -> Result<Self> {
         Ok(Self {
-            database_path: PathBuf::from(shellexpand::tilde(&database).to_string()),
-            keyfile_path: keyfile.map(|k| PathBuf::from(shellexpand::tilde(&k).to_string())),
+            database_path: crate::config_path::resolve_relative_to_file(&database, None),
+            keyfile_path: keyfile.map(|k| crate::config_path::resolve_relative_to_file(&k, None)),
             password,
         })
     }
