@@ -41,3 +41,6 @@ mise.local.toml
 node_modules/
 docs/.vitepress/dist
 docs/.vitepress/cache
+
+# Nix
+result
