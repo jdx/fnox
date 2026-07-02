@@ -4,4 +4,4 @@
 
 - **Usage**: `fnox sponsors`
 
-Show the companies sponsoring fnox and the en.dev project family
+Show the companies sponsoring fnox and the jdx.dev open source tools

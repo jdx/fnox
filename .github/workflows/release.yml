@@ -142,7 +142,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           INPUTS_VERSION: ${{ inputs.version }}
-      - name: Append en.dev sponsor blurb
+      - name: Append jdx.dev sponsor blurb
         env:
           GH_TOKEN: ${{ secrets.FNOX_GH_TOKEN }}
           INPUTS_VERSION: ${{ inputs.version }}
@@ -166,8 +166,8 @@ jobs:
 
           ## 💚 Sponsor fnox
 
-          fnox is maintained by [@jdx](https://github.com/jdx) under [**en.dev**](https://en.dev) — a small independent studio building developer tooling like [mise](https://mise.jdx.dev/), [aube](https://aube.en.dev/), hk, and more. Keeping fnox secure, maintained, and free is funded by sponsors.
+          fnox is maintained by [@jdx](https://github.com/jdx), an open source developer for [**entire.io**](https://entire.io), the title sponsor of the [jdx.dev](https://jdx.dev) open source tools including [mise](https://mise.jdx.dev/), [aube](https://aube.jdx.dev/), hk, and more. Keeping fnox secure, maintained, and free is funded by sponsors.
 
-          If fnox is handling secrets or config for you or your team, please consider [sponsoring at en.dev](https://en.dev). Sponsorships are what let fnox stay independent and the project keep moving.
+          If fnox is handling secrets or config for you or your team, please consider [sponsoring at jdx.dev](https://jdx.dev/sponsors.html). Sponsorships are what let fnox stay independent and the project keep moving.
           EOF
           gh release edit "$TAG_NAME" --notes-file /tmp/release-notes.md
