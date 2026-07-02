@@ -9,7 +9,7 @@ Manage secrets with encryption or cloud providers—or both! fnox gives you a un
 
 ## Sponsors
 
-fnox is sponsored by [entire.io](https://entire.io), [37signals](https://37signals.com), [CodeRabbit](https://coderabbit.link/mise), and [Supabase](https://supabase.com).
+fnox is sponsored by [entire.io](https://entire.io), [37signals](https://37signals.com), and [CodeRabbit](https://coderabbit.link/mise).
 
 [View all sponsors](https://jdx.dev/sponsors.html).
 
