@@ -162,7 +162,7 @@ pub enum Commands {
     /// Set a secret value
     Set(set::SetCommand),
 
-    /// Show the companies sponsoring fnox and the en.dev project family
+    /// Show the companies sponsoring fnox and the jdx.dev open source tools
     Sponsors(sponsors::SponsorsCommand),
 
     /// Sync secrets from remote providers to a local encryption provider

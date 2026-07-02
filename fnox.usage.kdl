@@ -226,7 +226,7 @@ If omitted: reads from stdin when piped (`echo "x" | fnox set KEY`), or prompts 
 Passing secrets as arguments exposes them in shell history and `ps` output. For sensitive values, prefer stdin or the interactive prompt.
 """# required=#false
 }
-cmd sponsors help="Show the companies sponsoring fnox and the en.dev project family"
+cmd sponsors help="Show the companies sponsoring fnox and the jdx.dev open source tools"
 cmd sync help="Sync secrets from remote providers to a local encryption provider" {
     flag "-f --force" help="Skip confirmation prompt"
     flag "-g --global" help="Write to global config (~/.config/fnox/config.toml)"

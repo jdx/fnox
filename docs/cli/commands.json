@@ -1429,7 +1429,7 @@
         "flags": [],
         "mounts": [],
         "hide": false,
-        "help": "Show the companies sponsoring fnox and the en.dev project family",
+        "help": "Show the companies sponsoring fnox and the jdx.dev open source tools",
         "name": "sponsors",
         "aliases": [],
         "hidden_aliases": [],
