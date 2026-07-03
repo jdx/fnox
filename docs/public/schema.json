@@ -1140,6 +1140,9 @@
             "auth_command": {
               "type": ["string", "null"]
             },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
             "environment": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
