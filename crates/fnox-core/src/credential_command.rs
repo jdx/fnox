@@ -121,7 +121,7 @@ pub fn invalidate(
 
 fn render_command(provider: &str, command: &str, context: Value, url: &str) -> Result<String> {
     let tera_context =
-        Context::from_value(context).map_err(|e| FnoxError::Config(e.to_string()))?;
+        Context::from_serialize(&context).map_err(|e| FnoxError::Config(e.to_string()))?;
     Tera::one_off(command, &tera_context, false).map_err(|e| FnoxError::ProviderCliFailed {
         provider: provider.to_string(),
         details: format!("Failed to render credential_command: {e}"),
