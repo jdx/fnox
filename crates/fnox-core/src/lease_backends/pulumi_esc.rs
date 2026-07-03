@@ -14,11 +14,17 @@ pub const CONSUMED_ENV_VARS: &[&str] = &[
     "PULUMI_HOME",
 ];
 
-pub fn check_prerequisites() -> Option<String> {
+pub fn check_prerequisites(token: &Option<String>) -> Option<String> {
+    if token.is_some() {
+        return None;
+    }
     pulumi_esc_api::resolve_auth().err()
 }
 
-pub fn required_env_vars() -> Vec<(&'static str, &'static str)> {
+pub fn required_env_vars(token: &Option<String>) -> Vec<(&'static str, &'static str)> {
+    if token.is_some() {
+        return vec![];
+    }
     vec![("PULUMI_ACCESS_TOKEN", "Pulumi Cloud access token")]
 }
 
@@ -74,7 +80,7 @@ fn resolve_refs(raw: &str, root: &serde_json::Value, sigil: char) -> Result<Stri
             .find('}')
             .ok_or_else(|| FnoxError::ProviderInvalidResponse {
                 provider: PROVIDER_NAME.to_string(),
-                details: format!("Unterminated '{open}' in value: {raw}"),
+                details: format!("Unterminated '{open}' in credential value"),
                 hint: "Add a closing '}' or disable `interpolate` in the lease config".to_string(),
                 url: URL.to_string(),
             })?;
