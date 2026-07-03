@@ -269,7 +269,7 @@ impl LeaseBackendConfig {
                 private_key_file, ..
             } => github_app::check_prerequisites(private_key_file),
             LeaseBackendConfig::GithubOauth { .. } => github_oauth::check_prerequisites(),
-            LeaseBackendConfig::PulumiEsc { .. } => pulumi_esc::check_prerequisites(),
+            LeaseBackendConfig::PulumiEsc { token, .. } => pulumi_esc::check_prerequisites(token),
             LeaseBackendConfig::Command { .. } => command::check_prerequisites(),
         }
     }
@@ -291,7 +291,7 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::Cloudflare { .. } => cloudflare::required_env_vars(),
             LeaseBackendConfig::GithubApp { .. } => github_app::required_env_vars(),
             LeaseBackendConfig::GithubOauth { .. } => github_oauth::required_env_vars(),
-            LeaseBackendConfig::PulumiEsc { .. } => pulumi_esc::required_env_vars(),
+            LeaseBackendConfig::PulumiEsc { token, .. } => pulumi_esc::required_env_vars(token),
             LeaseBackendConfig::Command { .. } => command::required_env_vars(),
         }
     }
