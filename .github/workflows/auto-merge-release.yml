@@ -10,6 +10,7 @@ jobs:
   merge:
     if: github.repository == 'jdx/fnox'
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
       - name: Merge release into main
         run: |
@@ -22,7 +23,7 @@ jobs:
           BODY=$(gh pr view "$PR_NUMBER" -R jdx/fnox --json body --jq '.body // ""')
           TRIMMED_BODY=$(echo "$BODY" | tr -d '[:space:]')
           if [ -z "$TRIMMED_BODY" ]; then
-            echo "PR #$PR_NUMBER has no description, never merging"
+            echo "Skipping merge: PR #$PR_NUMBER has an empty body; will retry on the next scheduled run"
             exit 0
           fi
 
