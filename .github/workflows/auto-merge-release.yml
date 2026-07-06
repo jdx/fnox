@@ -6,11 +6,16 @@ on:
     - cron: "0 10 * * 1"
   workflow_dispatch:
 
+permissions: {}
+
+concurrency:
+  group: auto-merge-release
+  cancel-in-progress: false
+
 jobs:
   merge:
     if: github.repository == 'jdx/fnox'
     runs-on: ubuntu-latest
-    permissions: {}
     steps:
       - name: Merge release into main
         run: |
@@ -28,10 +33,6 @@ jobs:
           fi
 
           echo "PR #$PR_NUMBER is ready for the Monday morning release window"
-
-          gh pr merge "$PR_NUMBER" -R jdx/fnox --squash --auto || {
-            echo "Merge failed or PR not ready, will retry on the next run"
-            exit 0
-          }
+          gh pr merge "$PR_NUMBER" -R jdx/fnox --squash --auto
         env:
           GH_TOKEN: ${{ secrets.FNOX_GH_TOKEN }}
