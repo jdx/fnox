@@ -1,32 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
-  <!-- Vault door background circle -->
-  <circle cx="100" cy="100" r="90" fill="#2c3e50" stroke="#34495e" stroke-width="4"/>
-
-  <!-- Vault door outer ring -->
-  <circle cx="100" cy="100" r="75" fill="none" stroke="#95a5a6" stroke-width="3"/>
-
-  <!-- Vault door spokes -->
-  <line x1="100" y1="25" x2="100" y2="45" stroke="#95a5a6" stroke-width="3"/>
-  <line x1="100" y1="155" x2="100" y2="175" stroke="#95a5a6" stroke-width="3"/>
-  <line x1="25" y1="100" x2="45" y2="100" stroke="#95a5a6" stroke-width="3"/>
-  <line x1="155" y1="100" x2="175" y2="100" stroke="#95a5a6" stroke-width="3"/>
-
-  <!-- Diagonal spokes -->
-  <line x1="46" y1="46" x2="60" y2="60" stroke="#95a5a6" stroke-width="3"/>
-  <line x1="140" y1="140" x2="154" y2="154" stroke="#95a5a6" stroke-width="3"/>
-  <line x1="154" y1="46" x2="140" y2="60" stroke="#95a5a6" stroke-width="3"/>
-  <line x1="60" y1="140" x2="46" y2="154" stroke="#95a5a6" stroke-width="3"/>
-
-  <!-- Center lock mechanism -->
-  <circle cx="100" cy="100" r="35" fill="#34495e" stroke="#95a5a6" stroke-width="3"/>
-
-  <!-- Lock keyhole -->
-  <circle cx="100" cy="95" r="8" fill="#e74c3c"/>
-  <rect x="96" y="95" width="8" height="18" fill="#e74c3c" rx="1"/>
-
-  <!-- Combination dial markings -->
-  <circle cx="100" cy="100" r="50" fill="none" stroke="#7f8c8d" stroke-width="1" stroke-dasharray="2,8"/>
-
-  <!-- Handle bolt on the right -->
-  <rect x="170" y="95" width="15" height="10" fill="#7f8c8d" stroke="#95a5a6" stroke-width="1" rx="2"/>
+  <!-- fnox: fox head with keyhole cutout — Fort Knox gold on navy, matching docs theme -->
+  <circle cx="100" cy="100" r="96" fill="#0a0e1a"/>
+  <circle cx="100" cy="100" r="89" fill="none" stroke="#d4af37" stroke-width="5"/>
+  <!-- fox head silhouette; second subpath is the keyhole cutout (evenodd) -->
+  <path fill="#d4af37" fill-rule="evenodd" d="
+    M44,34
+    L82,58
+    L118,58
+    L156,34
+    L150,100
+    L100,170
+    L50,100
+    Z
+    M88.5,100.6
+    A17,17 0 1 1 111.5,100.6
+    L116,140
+    L84,140
+    Z"/>
+  <!-- eyes -->
+  <path fill="#0a0e1a" d="M62,80 L78,86 L68,94 Z"/>
+  <path fill="#0a0e1a" d="M138,80 L122,86 L132,94 Z"/>
 </svg>
