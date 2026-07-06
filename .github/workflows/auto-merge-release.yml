@@ -1,0 +1,36 @@
+name: auto-merge-release
+
+on:
+  schedule:
+    # 10:00 UTC = 4am CST (winter) / 5am CDT (summer)
+    - cron: "0 10 * * 1"
+  workflow_dispatch:
+
+jobs:
+  merge:
+    if: github.repository == 'jdx/fnox'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge release into main
+        run: |
+          PR_NUMBER=$(gh pr list -R jdx/fnox --base main --head release --state open --json number --jq '.[0].number // empty')
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No open PR from release to main"
+            exit 0
+          fi
+
+          BODY=$(gh pr view "$PR_NUMBER" -R jdx/fnox --json body --jq '.body // ""')
+          TRIMMED_BODY=$(echo "$BODY" | tr -d '[:space:]')
+          if [ -z "$TRIMMED_BODY" ]; then
+            echo "PR #$PR_NUMBER has no description, never merging"
+            exit 0
+          fi
+
+          echo "PR #$PR_NUMBER is ready for the Monday morning release window"
+
+          gh pr merge "$PR_NUMBER" -R jdx/fnox --squash --auto || {
+            echo "Merge failed or PR not ready, will retry on the next run"
+            exit 0
+          }
+        env:
+          GH_TOKEN: ${{ secrets.FNOX_GH_TOKEN }}
