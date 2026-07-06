@@ -404,41 +404,41 @@ checksum = "sha256:c59c6bf1c45157903ce58a5572257a959ca5e3895b6b9cbfb808a744d4858
 url = "https://github.com/jdx/hk/releases/download/v1.44.3/hk-x86_64-pc-windows-msvc.zip"
 url_api = "https://api.github.com/repos/jdx/hk/releases/assets/409190419"
 
-[[tools.infisical]]
+[[tools."github:Infisical/cli"]]
 version = "0.43.101"
 backend = "github:Infisical/cli"
 
-[tools.infisical."platforms.linux-arm64"]
+[tools."github:Infisical/cli"."platforms.linux-arm64"]
 checksum = "sha256:ccedd6ecb748a1fade5980c6f372808691faa34b72b0f780863aa00803d572d9"
 url = "https://github.com/Infisical/cli/releases/download/v0.43.101/cli_0.43.101_linux_arm64.tar.gz"
 url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/468262655"
 
-[tools.infisical."platforms.linux-arm64-musl"]
+[tools."github:Infisical/cli"."platforms.linux-arm64-musl"]
 checksum = "sha256:ccedd6ecb748a1fade5980c6f372808691faa34b72b0f780863aa00803d572d9"
 url = "https://github.com/Infisical/cli/releases/download/v0.43.101/cli_0.43.101_linux_arm64.tar.gz"
 url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/468262655"
 
-[tools.infisical."platforms.linux-x64"]
+[tools."github:Infisical/cli"."platforms.linux-x64"]
 checksum = "sha256:f28ff76f6965ad278e2b54076887a751a0ad9633a43d6fc8e5a18ab8c4e399bb"
 url = "https://github.com/Infisical/cli/releases/download/v0.43.101/cli_0.43.101_linux_amd64.tar.gz"
 url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/468262656"
 
-[tools.infisical."platforms.linux-x64-musl"]
+[tools."github:Infisical/cli"."platforms.linux-x64-musl"]
 checksum = "sha256:f28ff76f6965ad278e2b54076887a751a0ad9633a43d6fc8e5a18ab8c4e399bb"
 url = "https://github.com/Infisical/cli/releases/download/v0.43.101/cli_0.43.101_linux_amd64.tar.gz"
 url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/468262656"
 
-[tools.infisical."platforms.macos-arm64"]
+[tools."github:Infisical/cli"."platforms.macos-arm64"]
 checksum = "sha256:6ecf234fc4786bb492cdb862e1f51eb7a9f2bf6aeb491b265f2ea9d119867d17"
 url = "https://github.com/Infisical/cli/releases/download/v0.43.101/cli_0.43.101_darwin_arm64.tar.gz"
 url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/468257735"
 
-[tools.infisical."platforms.macos-x64"]
+[tools."github:Infisical/cli"."platforms.macos-x64"]
 checksum = "sha256:98aa4ed9013b8076308ee0cd01dff125f2b6cddcc6700e666707807f0338f6ec"
 url = "https://github.com/Infisical/cli/releases/download/v0.43.101/cli_0.43.101_darwin_amd64.tar.gz"
 url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/468257734"
 
-[tools.infisical."platforms.windows-x64"]
+[tools."github:Infisical/cli"."platforms.windows-x64"]
 checksum = "sha256:7937eb799778fa3b99ebbd9ed719a541651b6a9f32c5247dcad0fa941b266309"
 url = "https://github.com/Infisical/cli/releases/download/v0.43.101/cli_0.43.101_windows_amd64.zip"
 url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/468262698"
