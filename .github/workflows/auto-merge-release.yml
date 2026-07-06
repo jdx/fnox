@@ -19,7 +19,10 @@ jobs:
     steps:
       - name: Merge release into main
         run: |
-          PR_NUMBER=$(gh pr list -R jdx/fnox --base main --head release --state open --json number --jq '.[0].number // empty')
+          set -euo pipefail
+
+          PR_NUMBER=$(gh pr list -R jdx/fnox --base main --head release --state open --limit 100 --json number,headRefName,headRepositoryOwner \
+            --jq '[.[] | select(.headRefName == "release") | select(.headRepositoryOwner.login == "jdx")][0].number // empty')
           if [ -z "$PR_NUMBER" ]; then
             echo "No open PR from release to main"
             exit 0
