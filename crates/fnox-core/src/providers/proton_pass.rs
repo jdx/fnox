@@ -3,6 +3,8 @@ use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
 use tokio::process::Command;
 
+const MAX_AGENT_REASON_CHARS: usize = 300;
+
 pub fn env_dependencies() -> &'static [&'static str] {
     &[
         "PROTON_PASS_PASSWORD",
@@ -39,10 +41,39 @@ pub struct ProtonPassProvider {
 
 impl ProtonPassProvider {
     pub fn new(vault: Option<String>, agent_reason: Option<String>) -> Result<Self> {
+        let agent_reason = agent_reason.map(Self::validate_agent_reason).transpose()?;
+
         Ok(Self {
             vault,
             agent_reason,
         })
+    }
+
+    fn validate_agent_reason(reason: String) -> Result<String> {
+        let reason = reason.trim().to_string();
+
+        if reason.is_empty() {
+            return Err(FnoxError::ProviderInvalidResponse {
+                provider: "Proton Pass".to_string(),
+                details: "agent_reason cannot be empty".to_string(),
+                hint: "Remove providers.<name>.agent_reason, or set it to a non-empty reason for audited agent access".to_string(),
+                url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
+            });
+        }
+
+        if reason.chars().count() > MAX_AGENT_REASON_CHARS {
+            return Err(FnoxError::ProviderInvalidResponse {
+                provider: "Proton Pass".to_string(),
+                details: format!(
+                    "agent_reason must be at most {} characters",
+                    MAX_AGENT_REASON_CHARS
+                ),
+                hint: "Shorten providers.<name>.agent_reason to match the Proton Pass CLI agent reason limit".to_string(),
+                url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
+            });
+        }
+
+        Ok(reason)
     }
 
     /// Convert a value to a pass:// reference
@@ -514,15 +545,49 @@ mod tests {
     }
 
     #[test]
-    fn test_pass_cli_env_vars_ignores_empty_provider_agent_reason() {
+    fn test_pass_cli_env_vars_trims_provider_agent_reason() {
         with_clean_proton_pass_env(|| {
-            let provider = ProtonPassProvider::new(None, Some(String::new())).unwrap();
+            let provider =
+                ProtonPassProvider::new(None, Some("  fnox secret retrieval  ".to_string()))
+                    .unwrap();
             let env_vars = provider.pass_cli_env_vars();
 
             assert_eq!(
                 mapped_env_value(&env_vars, "PROTON_PASS_AGENT_REASON"),
-                None
+                Some("fnox secret retrieval")
             );
+        });
+    }
+
+    #[test]
+    fn test_provider_agent_reason_rejects_blank_provider_config() {
+        with_clean_proton_pass_env(|| {
+            let err = match ProtonPassProvider::new(None, Some(" \t\n".to_string())) {
+                Ok(_) => panic!("expected blank agent reason to fail"),
+                Err(err) => err,
+            };
+
+            assert!(matches!(
+                err,
+                FnoxError::ProviderInvalidResponse { details, .. }
+                    if details.contains("cannot be empty")
+            ));
+        });
+    }
+
+    #[test]
+    fn test_provider_agent_reason_rejects_overlong_provider_config() {
+        with_clean_proton_pass_env(|| {
+            let err = match ProtonPassProvider::new(None, Some("x".repeat(301))) {
+                Ok(_) => panic!("expected overlong agent reason to fail"),
+                Err(err) => err,
+            };
+
+            assert!(matches!(
+                err,
+                FnoxError::ProviderInvalidResponse { details, .. }
+                    if details.contains("at most 300 characters")
+            ));
         });
     }
 

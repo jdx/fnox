@@ -71,7 +71,9 @@ Run `pass-cli info` after login to verify the session. `fnox` also accepts `FNOX
 
 ## Agent Tokens
 
-Some `pass-cli` builds and token policies may ask for an agent reason when reading items. `fnox` can pass that value through with either environment or provider config:
+Proton Pass agent tokens are personal access tokens with dedicated access logging. Current `pass-cli` releases require `PROTON_PASS_AGENT_REASON` for audited agent operations, including item reads performed by `fnox`.
+
+Set the reason with either environment or provider config:
 
 ```bash
 export FNOX_PROTON_PASS_AGENT_REASON="fnox secret retrieval"
@@ -85,7 +87,7 @@ vault = "Personal"
 agent_reason = "fnox secret retrieval"
 ```
 
-Environment values take priority over provider config. This is compatibility pass-through; the current official `pass-cli` PAT documentation does not list `PROTON_PASS_AGENT_REASON` as a general login requirement.
+Environment values take priority over provider config. Provider `agent_reason` values are trimmed, must be non-empty, and must be at most 300 characters to match the `pass-cli` agent reason limit.
 
 ## Session and Key Storage
 
