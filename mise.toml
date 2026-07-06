@@ -4,7 +4,7 @@ _.path = ["target/debug", "test/bats/bin"]
 [tools]
 aube = "latest"
 age = "latest"
-"cargo:cargo-msrv" = "latest"
+"github:foresterre/cargo-msrv" = "latest"
 cargo-binstall = "latest"
 communique = "latest"
 "cargo:cargo-edit" = "latest"
