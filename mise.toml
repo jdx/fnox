@@ -19,7 +19,7 @@ actionlint = "latest"
 bitwarden = "latest"
 bitwarden-secrets-manager = "latest"
 vault = "latest"
-infisical = "latest"
+"github:Infisical/cli" = "latest"
 node = "24"
 usage = "latest"
 
