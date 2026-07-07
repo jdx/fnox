@@ -68,6 +68,7 @@ Your `fnox.toml` config file either contains encrypted secrets or references to 
 - [**1password**](https://fnox.jdx.dev/providers/1password) - 1Password CLI
 - [**bitwarden**](https://fnox.jdx.dev/providers/bitwarden) - Bitwarden/Vaultwarden
 - [**infisical**](https://fnox.jdx.dev/providers/infisical) - Infisical secrets management
+- [**proton-pass**](https://fnox.jdx.dev/providers/proton-pass) - Proton Pass CLI
 
 ### 💻 Local Storage
 

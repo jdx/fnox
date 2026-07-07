@@ -1,8 +1,9 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
-use std::sync::LazyLock;
 use tokio::process::Command;
+
+const MAX_AGENT_REASON_CHARS: usize = 300;
 
 pub fn env_dependencies() -> &'static [&'static str] {
     &[
@@ -18,16 +19,53 @@ pub fn env_dependencies() -> &'static [&'static str] {
         "FNOX_PROTON_PASS_TOTP_FILE",
         "PROTON_PASS_EXTRA_PASSWORD_FILE",
         "FNOX_PROTON_PASS_EXTRA_PASSWORD_FILE",
+        "PROTON_PASS_PERSONAL_ACCESS_TOKEN",
+        "FNOX_PROTON_PASS_PERSONAL_ACCESS_TOKEN",
+        "PROTON_PASS_AGENT_REASON",
+        "FNOX_PROTON_PASS_AGENT_REASON",
+        "PROTON_PASS_SESSION_DIR",
+        "FNOX_PROTON_PASS_SESSION_DIR",
+        "PROTON_PASS_KEY_PROVIDER",
+        "FNOX_PROTON_PASS_KEY_PROVIDER",
+        "PROTON_PASS_ENCRYPTION_KEY",
+        "FNOX_PROTON_PASS_ENCRYPTION_KEY",
+        "PROTON_PASS_LINUX_KEYRING",
+        "FNOX_PROTON_PASS_LINUX_KEYRING",
     ]
 }
 
 pub struct ProtonPassProvider {
     vault: Option<String>,
+    agent_reason: Option<String>,
 }
 
 impl ProtonPassProvider {
-    pub fn new(vault: Option<String>) -> Result<Self> {
-        Ok(Self { vault })
+    pub fn new(vault: Option<String>, agent_reason: Option<String>) -> Result<Self> {
+        let agent_reason = agent_reason.map(Self::validate_agent_reason).transpose()?;
+
+        Ok(Self {
+            vault,
+            agent_reason,
+        })
+    }
+
+    fn validate_agent_reason(reason: String) -> Result<String> {
+        let reason = reason.trim().to_string();
+
+        if reason.is_empty() {
+            return Err(FnoxError::Config(
+                "Proton Pass provider agent_reason cannot be empty".to_string(),
+            ));
+        }
+
+        if reason.chars().count() > MAX_AGENT_REASON_CHARS {
+            return Err(FnoxError::Config(format!(
+                "Proton Pass provider agent_reason must be at most {} characters",
+                MAX_AGENT_REASON_CHARS
+            )));
+        }
+
+        Ok(reason)
     }
 
     /// Convert a value to a pass:// reference
@@ -123,22 +161,8 @@ impl ProtonPassProvider {
         let mut cmd = Command::new("pass-cli");
         cmd.args(args);
 
-        // Pass through Proton Pass environment variables for non-interactive auth
-        let env_vars_to_pass = [
-            ("PROTON_PASS_PASSWORD", &*PROTON_PASS_PASSWORD),
-            ("PROTON_PASS_PASSWORD_FILE", &*PROTON_PASS_PASSWORD_FILE),
-            ("PROTON_PASS_TOTP", &*PROTON_PASS_TOTP),
-            ("PROTON_PASS_TOTP_FILE", &*PROTON_PASS_TOTP_FILE),
-            ("PROTON_PASS_EXTRA_PASSWORD", &*PROTON_PASS_EXTRA_PASSWORD),
-            (
-                "PROTON_PASS_EXTRA_PASSWORD_FILE",
-                &*PROTON_PASS_EXTRA_PASSWORD_FILE,
-            ),
-        ];
-        for (name, value) in env_vars_to_pass {
-            if let Some(v) = value {
-                cmd.env(name, v);
-            }
+        for (name, value) in self.pass_cli_env_vars() {
+            cmd.env(name, value);
         }
 
         let output = cmd.output().await.map_err(|e| {
@@ -166,17 +190,39 @@ impl ProtonPassProvider {
             let stderr = String::from_utf8_lossy(&output.stderr);
             let stderr_lower = stderr.to_lowercase();
 
-            // Check for authentication-related errors (using CLI-specific patterns)
-            if stderr_lower.contains("not logged in")
-                || stderr_lower.contains("session expired")
-                || stderr_lower.contains("login required")
-                || stderr_lower.contains("could not get local key from keyring")
-                || stderr_lower.contains("failed to get encryption key")
+            if stderr_lower.contains("proton_pass_agent_reason")
+                || stderr_lower.contains("agent reason")
+                || stderr_lower.contains("reason must be provided")
             {
                 return Err(FnoxError::ProviderAuthFailed {
                     provider: "Proton Pass".to_string(),
                     details: stderr.trim().to_string(),
-                    hint: "Run 'pass-cli login --interactive' to authenticate".to_string(),
+                    hint: "Set PROTON_PASS_AGENT_REASON, FNOX_PROTON_PASS_AGENT_REASON, or providers.<name>.agent_reason for audited agent access".to_string(),
+                    url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
+                });
+            }
+
+            if stderr_lower.contains("could not get local key from keyring")
+                || stderr_lower.contains("failed to get encryption key")
+                || stderr_lower.contains("key provider")
+            {
+                return Err(FnoxError::ProviderAuthFailed {
+                    provider: "Proton Pass".to_string(),
+                    details: stderr.trim().to_string(),
+                    hint: "Check Proton Pass session/key storage: PROTON_PASS_SESSION_DIR, PROTON_PASS_KEY_PROVIDER=fs|env|keyring, and PROTON_PASS_ENCRYPTION_KEY".to_string(),
+                    url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
+                });
+            }
+
+            // Check for authentication-related errors (using CLI-specific patterns)
+            if stderr_lower.contains("not logged in")
+                || stderr_lower.contains("session expired")
+                || stderr_lower.contains("login required")
+            {
+                return Err(FnoxError::ProviderAuthFailed {
+                    provider: "Proton Pass".to_string(),
+                    details: stderr.trim().to_string(),
+                    hint: "Run 'pass-cli login', or set PROTON_PASS_PERSONAL_ACCESS_TOKEN and run 'pass-cli login' for PAT/agent access".to_string(),
                     url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
                 });
             }
@@ -218,6 +264,26 @@ impl ProtonPassProvider {
             })?;
 
         Ok(stdout.trim().to_string())
+    }
+
+    fn pass_cli_env_vars(&self) -> Vec<(&'static str, String)> {
+        let mut env_vars = Vec::new();
+
+        for (target, fnox_name, native_name) in PROTON_PASS_ENV_MAPPINGS {
+            if let Some(value) = env_value(fnox_name, native_name) {
+                env_vars.push((*target, value));
+            }
+        }
+
+        if !env_vars
+            .iter()
+            .any(|(name, _)| *name == "PROTON_PASS_AGENT_REASON")
+            && let Some(reason) = self.agent_reason.as_ref()
+        {
+            env_vars.push(("PROTON_PASS_AGENT_REASON", reason.clone()));
+        }
+
+        env_vars
     }
 }
 
@@ -286,52 +352,238 @@ impl crate::providers::Provider for ProtonPassProvider {
     }
 }
 
-// Environment variables for Proton Pass authentication
-// Pattern: FNOX_* prefix takes priority, fallback to native
+// Environment variables for Proton Pass authentication.
+// Pattern: FNOX_* prefix takes priority, fallback to native pass-cli variables.
+const PROTON_PASS_ENV_MAPPINGS: &[(&str, &str, &str)] = &[
+    (
+        "PROTON_PASS_PASSWORD",
+        "FNOX_PROTON_PASS_PASSWORD",
+        "PROTON_PASS_PASSWORD",
+    ),
+    (
+        "PROTON_PASS_PASSWORD_FILE",
+        "FNOX_PROTON_PASS_PASSWORD_FILE",
+        "PROTON_PASS_PASSWORD_FILE",
+    ),
+    (
+        "PROTON_PASS_TOTP",
+        "FNOX_PROTON_PASS_TOTP",
+        "PROTON_PASS_TOTP",
+    ),
+    (
+        "PROTON_PASS_TOTP_FILE",
+        "FNOX_PROTON_PASS_TOTP_FILE",
+        "PROTON_PASS_TOTP_FILE",
+    ),
+    (
+        "PROTON_PASS_EXTRA_PASSWORD",
+        "FNOX_PROTON_PASS_EXTRA_PASSWORD",
+        "PROTON_PASS_EXTRA_PASSWORD",
+    ),
+    (
+        "PROTON_PASS_EXTRA_PASSWORD_FILE",
+        "FNOX_PROTON_PASS_EXTRA_PASSWORD_FILE",
+        "PROTON_PASS_EXTRA_PASSWORD_FILE",
+    ),
+    (
+        "PROTON_PASS_PERSONAL_ACCESS_TOKEN",
+        "FNOX_PROTON_PASS_PERSONAL_ACCESS_TOKEN",
+        "PROTON_PASS_PERSONAL_ACCESS_TOKEN",
+    ),
+    (
+        "PROTON_PASS_AGENT_REASON",
+        "FNOX_PROTON_PASS_AGENT_REASON",
+        "PROTON_PASS_AGENT_REASON",
+    ),
+    (
+        "PROTON_PASS_SESSION_DIR",
+        "FNOX_PROTON_PASS_SESSION_DIR",
+        "PROTON_PASS_SESSION_DIR",
+    ),
+    (
+        "PROTON_PASS_KEY_PROVIDER",
+        "FNOX_PROTON_PASS_KEY_PROVIDER",
+        "PROTON_PASS_KEY_PROVIDER",
+    ),
+    (
+        "PROTON_PASS_ENCRYPTION_KEY",
+        "FNOX_PROTON_PASS_ENCRYPTION_KEY",
+        "PROTON_PASS_ENCRYPTION_KEY",
+    ),
+    (
+        "PROTON_PASS_LINUX_KEYRING",
+        "FNOX_PROTON_PASS_LINUX_KEYRING",
+        "PROTON_PASS_LINUX_KEYRING",
+    ),
+];
 
-static PROTON_PASS_PASSWORD: LazyLock<Option<String>> = LazyLock::new(|| {
-    env::var("FNOX_PROTON_PASS_PASSWORD")
-        .or_else(|_| env::var("PROTON_PASS_PASSWORD"))
+fn env_value(fnox_name: &str, native_name: &str) -> Option<String> {
+    env::var(fnox_name)
+        .or_else(|_| env::var(native_name))
         .ok()
-});
-
-static PROTON_PASS_PASSWORD_FILE: LazyLock<Option<String>> = LazyLock::new(|| {
-    env::var("FNOX_PROTON_PASS_PASSWORD_FILE")
-        .or_else(|_| env::var("PROTON_PASS_PASSWORD_FILE"))
-        .ok()
-});
-
-static PROTON_PASS_TOTP: LazyLock<Option<String>> = LazyLock::new(|| {
-    env::var("FNOX_PROTON_PASS_TOTP")
-        .or_else(|_| env::var("PROTON_PASS_TOTP"))
-        .ok()
-});
-
-static PROTON_PASS_TOTP_FILE: LazyLock<Option<String>> = LazyLock::new(|| {
-    env::var("FNOX_PROTON_PASS_TOTP_FILE")
-        .or_else(|_| env::var("PROTON_PASS_TOTP_FILE"))
-        .ok()
-});
-
-static PROTON_PASS_EXTRA_PASSWORD: LazyLock<Option<String>> = LazyLock::new(|| {
-    env::var("FNOX_PROTON_PASS_EXTRA_PASSWORD")
-        .or_else(|_| env::var("PROTON_PASS_EXTRA_PASSWORD"))
-        .ok()
-});
-
-static PROTON_PASS_EXTRA_PASSWORD_FILE: LazyLock<Option<String>> = LazyLock::new(|| {
-    env::var("FNOX_PROTON_PASS_EXTRA_PASSWORD_FILE")
-        .or_else(|_| env::var("PROTON_PASS_EXTRA_PASSWORD_FILE"))
-        .ok()
-});
+        .filter(|value| !value.is_empty())
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    static PROTON_PASS_ENV_TEST_LOCK: std::sync::LazyLock<std::sync::Mutex<()>> =
+        std::sync::LazyLock::new(|| std::sync::Mutex::new(()));
+
+    const PROTON_PASS_TEST_ENV_NAMES: &[&str] = &[
+        "FNOX_PROTON_PASS_PERSONAL_ACCESS_TOKEN",
+        "PROTON_PASS_PERSONAL_ACCESS_TOKEN",
+        "FNOX_PROTON_PASS_AGENT_REASON",
+        "PROTON_PASS_AGENT_REASON",
+    ];
+
+    fn with_clean_proton_pass_env<T>(test: impl FnOnce() -> T) -> T {
+        let _lock = PROTON_PASS_ENV_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        clear_proton_pass_test_env();
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(test));
+
+        clear_proton_pass_test_env();
+
+        match result {
+            Ok(value) => value,
+            Err(payload) => std::panic::resume_unwind(payload),
+        }
+    }
+
+    fn clear_proton_pass_test_env() {
+        for name in PROTON_PASS_TEST_ENV_NAMES {
+            env::remove_var(name);
+        }
+    }
+
+    fn mapped_env_value<'a>(env_vars: &'a [(&'static str, String)], name: &str) -> Option<&'a str> {
+        env_vars
+            .iter()
+            .find_map(|(env_name, value)| (*env_name == name).then_some(value.as_str()))
+    }
+
+    #[test]
+    fn test_provider_metadata_uses_token_aware_login_command() {
+        let metadata = include_str!("../../providers/proton-pass.toml");
+
+        assert!(metadata.contains("auth_command = \"pass-cli login\""));
+        assert!(!metadata.contains("auth_command = \"pass-cli login --interactive\""));
+    }
+
+    #[test]
+    fn test_env_value_prefers_fnox_alias_over_native_env() {
+        with_clean_proton_pass_env(|| {
+            env::set_var("FNOX_PROTON_PASS_PERSONAL_ACCESS_TOKEN", "fnox-token");
+            env::set_var("PROTON_PASS_PERSONAL_ACCESS_TOKEN", "native-token");
+
+            assert_eq!(
+                env_value(
+                    "FNOX_PROTON_PASS_PERSONAL_ACCESS_TOKEN",
+                    "PROTON_PASS_PERSONAL_ACCESS_TOKEN",
+                )
+                .as_deref(),
+                Some("fnox-token")
+            );
+        });
+    }
+
+    #[test]
+    fn test_pass_cli_env_vars_maps_fnox_pat_to_native_env() {
+        with_clean_proton_pass_env(|| {
+            env::set_var("FNOX_PROTON_PASS_PERSONAL_ACCESS_TOKEN", "pst_test::key");
+
+            let provider = ProtonPassProvider::new(None, None).unwrap();
+            let env_vars = provider.pass_cli_env_vars();
+
+            assert_eq!(
+                mapped_env_value(&env_vars, "PROTON_PASS_PERSONAL_ACCESS_TOKEN"),
+                Some("pst_test::key")
+            );
+        });
+    }
+
+    #[test]
+    fn test_pass_cli_env_vars_uses_provider_agent_reason_when_env_absent() {
+        with_clean_proton_pass_env(|| {
+            let provider =
+                ProtonPassProvider::new(None, Some("fnox secret retrieval".to_string())).unwrap();
+            let env_vars = provider.pass_cli_env_vars();
+
+            assert_eq!(
+                mapped_env_value(&env_vars, "PROTON_PASS_AGENT_REASON"),
+                Some("fnox secret retrieval")
+            );
+        });
+    }
+
+    #[test]
+    fn test_pass_cli_env_vars_prefers_env_agent_reason_over_provider_config() {
+        with_clean_proton_pass_env(|| {
+            env::set_var("FNOX_PROTON_PASS_AGENT_REASON", "env reason");
+
+            let provider =
+                ProtonPassProvider::new(None, Some("provider reason".to_string())).unwrap();
+            let env_vars = provider.pass_cli_env_vars();
+
+            assert_eq!(
+                mapped_env_value(&env_vars, "PROTON_PASS_AGENT_REASON"),
+                Some("env reason")
+            );
+        });
+    }
+
+    #[test]
+    fn test_pass_cli_env_vars_trims_provider_agent_reason() {
+        with_clean_proton_pass_env(|| {
+            let provider =
+                ProtonPassProvider::new(None, Some("  fnox secret retrieval  ".to_string()))
+                    .unwrap();
+            let env_vars = provider.pass_cli_env_vars();
+
+            assert_eq!(
+                mapped_env_value(&env_vars, "PROTON_PASS_AGENT_REASON"),
+                Some("fnox secret retrieval")
+            );
+        });
+    }
+
+    #[test]
+    fn test_provider_agent_reason_rejects_blank_provider_config() {
+        with_clean_proton_pass_env(|| {
+            let err = match ProtonPassProvider::new(None, Some(" \t\n".to_string())) {
+                Ok(_) => panic!("expected blank agent reason to fail"),
+                Err(err) => err,
+            };
+
+            assert!(matches!(
+                err,
+                FnoxError::Config(message) if message.contains("cannot be empty")
+            ));
+        });
+    }
+
+    #[test]
+    fn test_provider_agent_reason_rejects_overlong_provider_config() {
+        with_clean_proton_pass_env(|| {
+            let err = match ProtonPassProvider::new(None, Some("x".repeat(301))) {
+                Ok(_) => panic!("expected overlong agent reason to fail"),
+                Err(err) => err,
+            };
+
+            assert!(matches!(
+                err,
+                FnoxError::Config(message) if message.contains("at most 300 characters")
+            ));
+        });
+    }
+
     #[test]
     fn test_value_to_reference_passthrough() {
-        let provider = ProtonPassProvider::new(Some("vault".to_string())).unwrap();
+        let provider = ProtonPassProvider::new(Some("vault".to_string()), None).unwrap();
         let result = provider
             .value_to_reference("pass://MyVault/item/password")
             .unwrap();
@@ -340,28 +592,28 @@ mod tests {
 
     #[test]
     fn test_value_to_reference_single_part_with_vault() {
-        let provider = ProtonPassProvider::new(Some("TestVault".to_string())).unwrap();
+        let provider = ProtonPassProvider::new(Some("TestVault".to_string()), None).unwrap();
         let result = provider.value_to_reference("my-item").unwrap();
         assert_eq!(result, "pass://TestVault/my-item/password");
     }
 
     #[test]
     fn test_value_to_reference_single_part_without_vault() {
-        let provider = ProtonPassProvider::new(None).unwrap();
+        let provider = ProtonPassProvider::new(None, None).unwrap();
         let result = provider.value_to_reference("my-item");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_value_to_reference_two_parts_with_vault() {
-        let provider = ProtonPassProvider::new(Some("TestVault".to_string())).unwrap();
+        let provider = ProtonPassProvider::new(Some("TestVault".to_string()), None).unwrap();
         let result = provider.value_to_reference("my-item/username").unwrap();
         assert_eq!(result, "pass://TestVault/my-item/username");
     }
 
     #[test]
     fn test_value_to_reference_three_parts() {
-        let provider = ProtonPassProvider::new(None).unwrap();
+        let provider = ProtonPassProvider::new(None, None).unwrap();
         let result = provider
             .value_to_reference("OtherVault/item/field")
             .unwrap();
@@ -370,42 +622,42 @@ mod tests {
 
     #[test]
     fn test_value_to_reference_too_many_parts() {
-        let provider = ProtonPassProvider::new(Some("vault".to_string())).unwrap();
+        let provider = ProtonPassProvider::new(Some("vault".to_string()), None).unwrap();
         let result = provider.value_to_reference("a/b/c/d");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_value_to_reference_empty() {
-        let provider = ProtonPassProvider::new(Some("vault".to_string())).unwrap();
+        let provider = ProtonPassProvider::new(Some("vault".to_string()), None).unwrap();
         let result = provider.value_to_reference("");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_value_to_reference_whitespace_only() {
-        let provider = ProtonPassProvider::new(Some("vault".to_string())).unwrap();
+        let provider = ProtonPassProvider::new(Some("vault".to_string()), None).unwrap();
         let result = provider.value_to_reference("   ");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_value_to_reference_invalid_pass_uri_too_few_parts() {
-        let provider = ProtonPassProvider::new(None).unwrap();
+        let provider = ProtonPassProvider::new(None, None).unwrap();
         let result = provider.value_to_reference("pass://vault");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_value_to_reference_invalid_pass_uri_empty_parts() {
-        let provider = ProtonPassProvider::new(None).unwrap();
+        let provider = ProtonPassProvider::new(None, None).unwrap();
         let result = provider.value_to_reference("pass://vault//field");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_value_to_reference_invalid_pass_uri_vault_item_only() {
-        let provider = ProtonPassProvider::new(None).unwrap();
+        let provider = ProtonPassProvider::new(None, None).unwrap();
         let result = provider.value_to_reference("pass://vault/item");
         assert!(result.is_err());
     }

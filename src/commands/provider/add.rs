@@ -261,6 +261,7 @@ impl AddCommand {
                     .map_or_else(OptionStringOrSecretRef::none, |vault| {
                         OptionStringOrSecretRef::literal(vault.clone())
                     }),
+                agent_reason: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
             },

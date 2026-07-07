@@ -975,6 +975,18 @@ fn provider_env_key(key: &str) -> bool {
             | "INFISICAL_TOKEN"
             | "KEEPASS_PASSWORD"
             | "PASSWORDSTATE_API_KEY"
+            | "PROTON_PASS_PASSWORD"
+            | "PROTON_PASS_TOTP"
+            | "PROTON_PASS_EXTRA_PASSWORD"
+            | "PROTON_PASS_PASSWORD_FILE"
+            | "PROTON_PASS_TOTP_FILE"
+            | "PROTON_PASS_EXTRA_PASSWORD_FILE"
+            | "PROTON_PASS_PERSONAL_ACCESS_TOKEN"
+            | "PROTON_PASS_AGENT_REASON"
+            | "PROTON_PASS_SESSION_DIR"
+            | "PROTON_PASS_KEY_PROVIDER"
+            | "PROTON_PASS_ENCRYPTION_KEY"
+            | "PROTON_PASS_LINUX_KEYRING"
     )
 }
 
@@ -1278,7 +1290,8 @@ pub fn parse_duration(value: &str) -> Result<Duration> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_duration;
+    use super::{config_fingerprint, parse_duration};
+    use fnox_core::config::Config;
 
     #[test]
     fn parse_duration_accepts_combined_values() {
@@ -1290,5 +1303,51 @@ mod tests {
     fn parse_duration_rejects_zero_and_overflow() {
         assert!(parse_duration("0s").is_err());
         assert!(parse_duration("18446744073709551615d").is_err());
+    }
+
+    #[test]
+    fn config_fingerprint_tracks_proton_pass_native_pat() {
+        let config = Config::default();
+        let first = config_fingerprint(
+            &config,
+            &[(
+                "PROTON_PASS_PERSONAL_ACCESS_TOKEN".to_string(),
+                "pst_first".to_string(),
+            )],
+        )
+        .unwrap();
+        let second = config_fingerprint(
+            &config,
+            &[(
+                "PROTON_PASS_PERSONAL_ACCESS_TOKEN".to_string(),
+                "pst_second".to_string(),
+            )],
+        )
+        .unwrap();
+
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn config_fingerprint_tracks_proton_pass_session_env() {
+        let config = Config::default();
+        let first = config_fingerprint(
+            &config,
+            &[(
+                "PROTON_PASS_SESSION_DIR".to_string(),
+                "/tmp/proton-pass-first".to_string(),
+            )],
+        )
+        .unwrap();
+        let second = config_fingerprint(
+            &config,
+            &[(
+                "PROTON_PASS_SESSION_DIR".to_string(),
+                "/tmp/proton-pass-second".to_string(),
+            )],
+        )
+        .unwrap();
+
+        assert_ne!(first, second);
     }
 }

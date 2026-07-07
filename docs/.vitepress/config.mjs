@@ -141,6 +141,7 @@ export default defineConfig({
               { text: "1Password", link: "/providers/1password" },
               { text: "Bitwarden", link: "/providers/bitwarden" },
               { text: "Infisical", link: "/providers/infisical" },
+              { text: "Proton Pass", link: "/providers/proton-pass" },
             ],
           },
           {
