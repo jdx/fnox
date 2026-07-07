@@ -1,5 +1,5 @@
 use crate::commands::Cli;
-use crate::config::{Config, SecretConfig};
+use crate::config::{Config, ProviderConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
 use crate::secret_resolver::resolve_secrets_batch;
 use indexmap::IndexMap;
@@ -853,6 +853,7 @@ async fn resolve_with_cache(
 ) -> Result<IndexMap<String, Option<String>>> {
     let fingerprint = config_fingerprint(config, &req.env)?;
     let providers = config.get_providers(profile);
+    let default_provider = cache_policy_default_provider(config, profile, &providers);
     let mut results = IndexMap::new();
     let mut misses = IndexMap::new();
     let mut miss_keys = HashMap::new();
@@ -862,10 +863,7 @@ async fn resolve_with_cache(
         for (key, secret) in &secrets {
             let cacheable = req.purpose != Purpose::Check.as_str()
                 && secret.daemon_cache.unwrap_or(true)
-                && secret
-                    .provider()
-                    .and_then(|p| providers.get(p))
-                    .is_none_or(|p| p.daemon_cache_enabled());
+                && provider_daemon_cache_enabled(&providers, default_provider, secret);
             if cacheable {
                 let cache_key = cache_key(&fingerprint, profile, key, secret, req);
                 if let Some(value) = state.cache.get(&cache_key) {
@@ -896,6 +894,45 @@ async fn resolve_with_cache(
         }
     }
     Ok(ordered)
+}
+
+fn cache_policy_default_provider<'a>(
+    config: &'a Config,
+    profile: &str,
+    providers: &'a IndexMap<String, ProviderConfig>,
+) -> Option<&'a str> {
+    if profile != "default"
+        && let Some(profile_config) = config.profiles.get(profile)
+        && let Some(default_provider) = profile_config.default_provider()
+    {
+        return Some(default_provider);
+    }
+
+    config.default_provider().or_else(|| {
+        if providers.len() == 1 {
+            providers.keys().next().map(String::as_str)
+        } else {
+            None
+        }
+    })
+}
+
+fn provider_daemon_cache_enabled(
+    providers: &IndexMap<String, ProviderConfig>,
+    default_provider: Option<&str>,
+    secret: &SecretConfig,
+) -> bool {
+    let provider_name = if let Some(provider_name) = secret.provider() {
+        Some(provider_name)
+    } else if secret.value().is_some() {
+        default_provider
+    } else {
+        None
+    };
+
+    provider_name
+        .and_then(|provider_name| providers.get(provider_name))
+        .is_none_or(|provider| provider.daemon_cache_enabled())
 }
 
 fn cache_key(
@@ -1290,8 +1327,14 @@ pub fn parse_duration(value: &str) -> Result<Duration> {
 
 #[cfg(test)]
 mod tests {
-    use super::{config_fingerprint, parse_duration};
-    use fnox_core::config::Config;
+    use super::{
+        CacheKey, DaemonState, Purpose, ResolveBatchRequest, cache_key, config_fingerprint,
+        parse_duration, resolve_with_cache,
+    };
+    use fnox_core::config::{Config, ProviderConfig, SecretConfig};
+    use indexmap::IndexMap;
+    use std::{path::PathBuf, sync::Arc};
+    use tokio::sync::Mutex;
 
     #[test]
     fn parse_duration_accepts_combined_values() {
@@ -1349,5 +1392,226 @@ mod tests {
         .unwrap();
 
         assert_ne!(first, second);
+    }
+
+    fn plain_provider_config(daemon_cache: Option<bool>) -> ProviderConfig {
+        ProviderConfig::Plain {
+            auth_command: None,
+            daemon_cache,
+        }
+    }
+
+    fn plain_secret(value: &str) -> SecretConfig {
+        let mut secret = SecretConfig::new();
+        secret.set_provider(Some("plain".to_string()));
+        secret.set_value(Some(value.to_string()));
+        secret
+    }
+
+    fn default_provider_secret(value: &str) -> SecretConfig {
+        let mut secret = SecretConfig::new();
+        secret.set_value(Some(value.to_string()));
+        secret
+    }
+
+    fn test_batch_request() -> ResolveBatchRequest {
+        ResolveBatchRequest {
+            cwd: PathBuf::from("."),
+            config: PathBuf::from("fnox.toml"),
+            profile: "default".to_string(),
+            age_key_file: None,
+            if_missing: None,
+            no_defaults: false,
+            non_interactive: true,
+            purpose: Purpose::Get.as_str().to_string(),
+            keys: vec!["API_KEY".to_string()],
+            include_env_false: true,
+            env: Vec::new(),
+        }
+    }
+
+    fn state_with_cached_secret(
+        config: &Config,
+        secret: &SecretConfig,
+        req: &ResolveBatchRequest,
+    ) -> Arc<Mutex<DaemonState>> {
+        let fingerprint = config_fingerprint(config, &req.env).unwrap();
+        let key = cache_key(&fingerprint, &req.profile, "API_KEY", secret, req);
+        let mut cache = std::collections::HashMap::<CacheKey, Option<String>>::new();
+        cache.insert(key, Some("cached".to_string()));
+        Arc::new(Mutex::new(DaemonState { cache }))
+    }
+
+    #[tokio::test]
+    async fn resolve_with_cache_skips_explicit_provider_when_provider_daemon_cache_disabled() {
+        let mut config = Config::new();
+        config
+            .providers
+            .insert("plain".to_string(), plain_provider_config(Some(false)));
+        let secret = plain_secret("fresh");
+        let req = test_batch_request();
+        let state = state_with_cached_secret(&config, &secret, &req);
+
+        let resolved = resolve_with_cache(
+            &config,
+            &req.profile,
+            IndexMap::from([("API_KEY".to_string(), secret)]),
+            &req,
+            state,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            resolved.get("API_KEY").and_then(|value| value.as_deref()),
+            Some("fresh")
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_with_cache_skips_default_provider_when_provider_daemon_cache_disabled() {
+        let mut config = Config::new();
+        config
+            .providers
+            .insert("plain".to_string(), plain_provider_config(Some(false)));
+        config.set_default_provider(Some("plain".to_string()));
+        let secret = default_provider_secret("fresh");
+        let req = test_batch_request();
+        let state = state_with_cached_secret(&config, &secret, &req);
+
+        let resolved = resolve_with_cache(
+            &config,
+            &req.profile,
+            IndexMap::from([("API_KEY".to_string(), secret)]),
+            &req,
+            state,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            resolved.get("API_KEY").and_then(|value| value.as_deref()),
+            Some("fresh")
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_with_cache_skips_profile_default_provider_when_provider_daemon_cache_disabled()
+    {
+        let config: Config = toml_edit::de::from_str(
+            r#"
+root = true
+
+[providers.global]
+type = "plain"
+
+[profiles.prod]
+default_provider = "plain"
+
+[profiles.prod.providers.plain]
+type = "plain"
+daemon_cache = false
+"#,
+        )
+        .unwrap();
+        let secret = default_provider_secret("fresh");
+        let mut req = test_batch_request();
+        req.profile = "prod".to_string();
+        let state = state_with_cached_secret(&config, &secret, &req);
+
+        let resolved = resolve_with_cache(
+            &config,
+            &req.profile,
+            IndexMap::from([("API_KEY".to_string(), secret)]),
+            &req,
+            state,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            resolved.get("API_KEY").and_then(|value| value.as_deref()),
+            Some("fresh")
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_with_cache_skips_auto_selected_provider_when_provider_daemon_cache_disabled() {
+        let mut config = Config::new();
+        config
+            .providers
+            .insert("plain".to_string(), plain_provider_config(Some(false)));
+        let secret = default_provider_secret("fresh");
+        let req = test_batch_request();
+        let state = state_with_cached_secret(&config, &secret, &req);
+
+        let resolved = resolve_with_cache(
+            &config,
+            &req.profile,
+            IndexMap::from([("API_KEY".to_string(), secret)]),
+            &req,
+            state,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            resolved.get("API_KEY").and_then(|value| value.as_deref()),
+            Some("fresh")
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_with_cache_uses_cache_for_default_provider_when_daemon_cache_is_default() {
+        let mut config = Config::new();
+        config
+            .providers
+            .insert("plain".to_string(), plain_provider_config(None));
+        config.set_default_provider(Some("plain".to_string()));
+        let secret = default_provider_secret("fresh");
+        let req = test_batch_request();
+        let state = state_with_cached_secret(&config, &secret, &req);
+
+        let resolved = resolve_with_cache(
+            &config,
+            &req.profile,
+            IndexMap::from([("API_KEY".to_string(), secret)]),
+            &req,
+            state,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            resolved.get("API_KEY").and_then(|value| value.as_deref()),
+            Some("cached")
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_with_cache_uses_cache_when_default_provider_config_is_invalid() {
+        let mut config = Config::new();
+        config
+            .providers
+            .insert("plain".to_string(), plain_provider_config(None));
+        config.set_default_provider(Some("missing".to_string()));
+        let secret = default_provider_secret("fresh");
+        let req = test_batch_request();
+        let state = state_with_cached_secret(&config, &secret, &req);
+
+        let resolved = resolve_with_cache(
+            &config,
+            &req.profile,
+            IndexMap::from([("API_KEY".to_string(), secret)]),
+            &req,
+            state,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            resolved.get("API_KEY").and_then(|value| value.as_deref()),
+            Some("cached")
+        );
     }
 }
