@@ -11,8 +11,6 @@ on:
     branches:
       - main
       - release-plz
-  schedule:
-    - cron: "0 0 * * *"
 
 concurrency:
   group: release-plz
@@ -21,47 +19,7 @@ env:
   DRY_RUN: 0
 
 jobs:
-  pending-release:
-    runs-on: ubuntu-latest
-    outputs:
-      has_release_commits: ${{ steps.commits.outputs.has_release_commits }}
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          fetch-depth: 0
-      - name: Check release age and fix/feat commits
-        id: commits
-        run: |
-          set -euo pipefail
-
-          latest_tag=$(git tag --list 'v[0-9]*' --sort=-v:refname | head -1 || true)
-          if [ -n "$latest_tag" ]; then
-            range="${latest_tag}..HEAD"
-            echo "Checking pending commits since ${latest_tag}"
-            tag_time=$(git log -1 --format=%ct "$latest_tag")
-            now=$(date +%s)
-            min_age=$((7 * 24 * 60 * 60))
-            age=$((now - tag_time))
-            if [ "$age" -lt "$min_age" ]; then
-              echo "Latest release ${latest_tag} is less than 7 days old; skipping autorelease."
-              echo "has_release_commits=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-          else
-            range="HEAD"
-            echo "No v* release tag found; checking all commits"
-          fi
-
-          if git log --format=%s "$range" | grep -Eq '^(fix|feat)(\([^)]+\))?!?: '; then
-            echo "has_release_commits=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No pending fix/feat commits; skipping autorelease."
-            echo "has_release_commits=false" >> "$GITHUB_OUTPUT"
-          fi
-
   release-plz:
-    needs: pending-release
-    if: needs.pending-release.outputs.has_release_commits == 'true'
     runs-on: ubuntu-latest
     steps:
       # release-plz pushes tags and the release branch via `git push`, which needs the scoped
