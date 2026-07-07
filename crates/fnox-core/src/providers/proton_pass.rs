@@ -53,24 +53,16 @@ impl ProtonPassProvider {
         let reason = reason.trim().to_string();
 
         if reason.is_empty() {
-            return Err(FnoxError::ProviderInvalidResponse {
-                provider: "Proton Pass".to_string(),
-                details: "agent_reason cannot be empty".to_string(),
-                hint: "Remove providers.<name>.agent_reason, or set it to a non-empty reason for audited agent access".to_string(),
-                url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
-            });
+            return Err(FnoxError::Config(
+                "Proton Pass provider agent_reason cannot be empty".to_string(),
+            ));
         }
 
         if reason.chars().count() > MAX_AGENT_REASON_CHARS {
-            return Err(FnoxError::ProviderInvalidResponse {
-                provider: "Proton Pass".to_string(),
-                details: format!(
-                    "agent_reason must be at most {} characters",
-                    MAX_AGENT_REASON_CHARS
-                ),
-                hint: "Shorten providers.<name>.agent_reason to match the Proton Pass CLI agent reason limit".to_string(),
-                url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
-            });
+            return Err(FnoxError::Config(format!(
+                "Proton Pass provider agent_reason must be at most {} characters",
+                MAX_AGENT_REASON_CHARS
+            )));
         }
 
         Ok(reason)
@@ -286,7 +278,7 @@ impl ProtonPassProvider {
         if !env_vars
             .iter()
             .any(|(name, _)| *name == "PROTON_PASS_AGENT_REASON")
-            && let Some(reason) = self.agent_reason.as_ref().filter(|value| !value.is_empty())
+            && let Some(reason) = self.agent_reason.as_ref()
         {
             env_vars.push(("PROTON_PASS_AGENT_REASON", reason.clone()));
         }
@@ -569,8 +561,7 @@ mod tests {
 
             assert!(matches!(
                 err,
-                FnoxError::ProviderInvalidResponse { details, .. }
-                    if details.contains("cannot be empty")
+                FnoxError::Config(message) if message.contains("cannot be empty")
             ));
         });
     }
@@ -585,8 +576,7 @@ mod tests {
 
             assert!(matches!(
                 err,
-                FnoxError::ProviderInvalidResponse { details, .. }
-                    if details.contains("at most 300 characters")
+                FnoxError::Config(message) if message.contains("at most 300 characters")
             ));
         });
     }
