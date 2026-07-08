@@ -41,6 +41,10 @@ pub struct ExportCommand {
     /// Output file (default: stdout)
     #[arg(short = 'o', long)]
     output: Option<PathBuf>,
+
+    /// Include metadata comments in env and shell output
+    #[arg(long)]
+    header: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -159,7 +163,9 @@ impl ExportCommand {
     fn export_as_env(&self, data: &ExportData) -> Result<String> {
         let mut output = String::new();
 
-        append_metadata_header(&mut output, data.metadata.as_ref());
+        if self.header {
+            append_metadata_header(&mut output, data.metadata.as_ref());
+        }
 
         for (key, value) in &data.secrets {
             output.push_str(&format!("{}={}\n", key, dotenv_quote(value)));
@@ -171,7 +177,9 @@ impl ExportCommand {
     fn export_as_shell(&self, data: &ExportData) -> Result<String> {
         let mut output = String::new();
 
-        append_metadata_header(&mut output, data.metadata.as_ref());
+        if self.header {
+            append_metadata_header(&mut output, data.metadata.as_ref());
+        }
 
         for (key, value) in &data.secrets {
             output.push_str(&format!("export {}={}\n", key, shell::posix_quote(value)));

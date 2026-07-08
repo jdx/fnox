@@ -323,6 +323,16 @@
               "double_dash": "Optional",
               "hide": false
             }
+          },
+          {
+            "name": "header",
+            "usage": "--header",
+            "help": "Include metadata comments in env and shell output",
+            "help_first_line": "Include metadata comments in env and shell output",
+            "short": [],
+            "long": ["header"],
+            "hide": false,
+            "global": false
           }
         ],
         "mounts": [],

@@ -63,6 +63,7 @@ cmd export help="Export secrets in various formats" {
     flag "-o --output" help="Output file (default: stdout)" {
         arg <OUTPUT>
     }
+    flag --header help="Include metadata comments in env and shell output"
 }
 cmd get help="Get a secret value" {
     flag --base64-decode help="Base64 decode the secret"
