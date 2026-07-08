@@ -220,7 +220,7 @@ pub async fn resolve_batch_with_context(
         } else {
             secrets
                 .iter()
-                .filter(|(_, secret)| secret.env)
+                .filter(|(_, secret)| secret.env_mode().in_shell())
                 .map(|(key, secret)| (key.clone(), secret.clone()))
                 .collect()
         };
@@ -780,7 +780,9 @@ async fn process_request(
             let requested = req.keys.iter().cloned().collect::<HashSet<_>>();
             let secrets: IndexMap<String, SecretConfig> = all_secrets
                 .into_iter()
-                .filter(|(key, sc)| requested.contains(key) && (req.include_env_false || sc.env))
+                .filter(|(key, sc)| {
+                    requested.contains(key) && (req.include_env_false || sc.env_mode().in_shell())
+                })
                 .collect();
             let values = resolve_with_cache(&config, &req.profile, secrets, &req, state).await?;
             Ok(Response::Resolved { values })

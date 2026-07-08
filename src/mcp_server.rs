@@ -84,11 +84,13 @@ impl FnoxMcpServer {
         }
     }
 
-    /// Ensure env=true secrets are resolved and cached. First call resolves
-    /// the batch (amortizes yubikey/SSO cost); subsequent calls are no-ops.
+    /// Ensure env-injectable secrets are resolved and cached. First call
+    /// resolves the batch (amortizes yubikey/SSO cost); subsequent calls are
+    /// no-ops.
     ///
     /// env=false secrets are NOT resolved here — they are more sensitive and
     /// resolved on-demand by `get_secret` to avoid unnecessary auth prompts.
+    /// env="exec" secrets ARE resolved: the exec tool needs them in cache.
     async fn ensure_resolved(&self) -> Result<(), McpError> {
         let config = self.config.clone();
         let profile = self.profile.clone();
@@ -98,20 +100,23 @@ impl FnoxMcpServer {
 
         self.resolved
             .get_or_try_init(|| async {
-                // Only batch-resolve env=true secrets; env=false are deferred
+                // Only batch-resolve env-injectable secrets; env=false are deferred
                 let env_secrets: IndexMap<String, SecretConfig> = profile_secrets
                     .iter()
-                    .filter(|(_, sc)| sc.env)
+                    .filter(|(_, sc)| sc.env_mode().in_exec())
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect();
 
+                // include_env_false=true: the map above is already filtered,
+                // and env="exec" secrets would otherwise be dropped by the
+                // shell-only filter in resolve_batch.
                 let resolved = crate::daemon::resolve_batch_with_context(
                     &daemon_context,
                     &config,
                     &profile,
                     &env_secrets,
                     Purpose::Mcp,
-                    false,
+                    true,
                 )
                 .await
                 .map_err(|e| {
@@ -251,7 +256,7 @@ impl FnoxMcpServer {
         // Not in cache — check if it's a configured secret
         if let Some(secret_config) = self.profile_secrets.get(&params.name) {
             // env=false secrets are deferred; try on-demand resolution
-            if !secret_config.env {
+            if !secret_config.env_mode().in_exec() {
                 return match self.resolve_single(&params.name).await? {
                     Some(value) => Ok(CallToolResult::success(vec![Content::text(value)])),
                     None => Err(McpError::invalid_request(
@@ -301,8 +306,10 @@ impl FnoxMcpServer {
 
         self.ensure_resolved().await?;
 
-        // Snapshot env vars from cache, filtering out env=false and absent secrets.
-        // This releases the read lock before the potentially long subprocess.
+        // Snapshot env vars from cache, filtering out env=false and absent
+        // secrets (env="exec" is injected: exec subprocesses are its intended
+        // destination). This releases the read lock before the potentially
+        // long subprocess.
         let env_vars: Vec<(String, String)> = {
             let cache = self.cache.read().await;
             cache
@@ -310,7 +317,7 @@ impl FnoxMcpServer {
                 .filter(|(key, _)| {
                     self.profile_secrets
                         .get(key.as_str())
-                        .is_some_and(|sc| sc.env)
+                        .is_some_and(|sc| sc.env_mode().in_exec())
                 })
                 .filter_map(|(k, v)| v.as_ref().map(|val| (k.clone(), val.clone())))
                 .collect()
@@ -348,7 +355,7 @@ impl FnoxMcpServer {
         // Strip env=false secrets that resolve_secrets_batch may have set
         // as process env vars (side effect of dependency resolution).
         for (key, secret_config) in self.profile_secrets.iter() {
-            if !secret_config.env {
+            if !secret_config.env_mode().in_exec() {
                 cmd.env_remove(key);
             }
         }

@@ -64,6 +64,7 @@ cmd export help="Export secrets in various formats" {
         arg <OUTPUT>
     }
     flag --header help="Include metadata comments in env and shell output"
+    flag --all help="Include secrets with env = false or env = \"exec\" (excluded by default)"
 }
 cmd get help="Get a secret value" {
     flag --base64-decode help="Base64 decode the secret"

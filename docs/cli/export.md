@@ -34,3 +34,7 @@ Output file (default: stdout)
 ### `--header`
 
 Include metadata comments in env and shell output
+
+### `--all`
+
+Include secrets with env = false or env = "exec" (excluded by default)

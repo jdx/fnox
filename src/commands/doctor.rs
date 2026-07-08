@@ -89,6 +89,21 @@ impl DoctorCommand {
             println!("  FNOX_PROFILE: (not set)");
         }
 
+        // A top-level env = "exec" / env = false posture is meant to keep
+        // secrets out of the interactive shell — but an exported FNOX_AGE_KEY
+        // is itself a shell-visible master credential that undermines it.
+        if let Some(env_default) = config.env
+            && !env_default.in_shell()
+            && env::FNOX_AGE_KEY.is_some()
+        {
+            println!(
+                "  ⚠ FNOX_AGE_KEY is exported in this shell while the top-level `env` \
+                 default keeps secrets out of it."
+            );
+            println!("    Anything running in this shell can decrypt your secrets with that key.");
+            println!("    Consider `age_key_file` or an OS keychain instead.");
+        }
+
         // Test providers
         if !providers.is_empty() {
             println!();

@@ -87,7 +87,7 @@ Executes a command with all secrets injected as environment variables. The agent
 ## How It Works
 
 1. The MCP server starts in non-interactive mode (no stdin prompts)
-2. On the **first tool call**, all `env = true` profile secrets are resolved in a single batch — this amortizes the cost of yubikey taps or SSO prompts. Secrets configured with `env = false` are resolved on-demand when individually requested via `get_secret`.
+2. On the **first tool call**, all env-injectable profile secrets (`env = true` or `env = "exec"`) are resolved in a single batch — this amortizes the cost of yubikey taps or SSO prompts. Secrets configured with `env = false` are resolved on-demand when individually requested via `get_secret`.
 3. Resolved secrets are cached in process memory for the session
 4. Subsequent tool calls use the cache
 5. When the agent disconnects (EOF), the process exits and all secrets are cleared from memory
@@ -101,3 +101,4 @@ Executes a command with all secrets injected as environment variables. The agent
 - With `tools = ["exec"]` and redaction enabled (default), agents cannot retrieve raw secret values through either `get_secret` or subprocess output
 - Use `mcp.secrets` to limit which secrets the agent can access — unlisted secrets are never resolved or injected
 - Disabled tools are not advertised in `tools/list` — agents only see tools they can actually call
+- The MCP allowlist only controls the MCP channel — secrets injected into your shell by shell integration are still visible to any agent running there. Set the top-level `env = "exec"` default (see the [configuration reference](/reference/configuration#env)) to keep secrets out of the interactive shell entirely; they remain available through `fnox exec` and the MCP tools
