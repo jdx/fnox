@@ -113,7 +113,14 @@ struct ResolveBatchRequest {
     non_interactive: bool,
     purpose: String,
     keys: Vec<String>,
-    include_env_false: bool,
+    /// When true, resolve secrets of every env mode. When false, the resolve
+    /// layer keeps only shell-injectable secrets (`env = true`), dropping
+    /// `env = "exec"` and `env = false`; callers that pre-filter pass true.
+    ///
+    /// The wire key stays `include_env_false` for cross-version daemon
+    /// compatibility (a stale daemon must still deserialize new requests).
+    #[serde(rename = "include_env_false")]
+    include_all_modes: bool,
     env: Vec<(String, String)>,
 }
 
@@ -193,7 +200,7 @@ pub async fn resolve_batch(
     profile: &str,
     secrets: &IndexMap<String, SecretConfig>,
     purpose: Purpose,
-    include_env_false: bool,
+    include_all_modes: bool,
 ) -> Result<IndexMap<String, Option<String>>> {
     resolve_batch_with_context(
         &ResolveContext::from_cli(cli),
@@ -201,7 +208,7 @@ pub async fn resolve_batch(
         profile,
         secrets,
         purpose,
-        include_env_false,
+        include_all_modes,
     )
     .await
 }
@@ -212,10 +219,10 @@ pub async fn resolve_batch_with_context(
     profile: &str,
     secrets: &IndexMap<String, SecretConfig>,
     purpose: Purpose,
-    include_env_false: bool,
+    include_all_modes: bool,
 ) -> Result<IndexMap<String, Option<String>>> {
     if !should_use_daemon(ctx, config) {
-        let secrets = if include_env_false {
+        let secrets = if include_all_modes {
             secrets.clone()
         } else {
             secrets
@@ -239,7 +246,7 @@ pub async fn resolve_batch_with_context(
         non_interactive: ctx.non_interactive,
         purpose: purpose.as_str().to_string(),
         keys,
-        include_env_false,
+        include_all_modes,
         env: std::env::vars().collect(),
     });
 
@@ -781,7 +788,7 @@ async fn process_request(
             let secrets: IndexMap<String, SecretConfig> = all_secrets
                 .into_iter()
                 .filter(|(key, sc)| {
-                    requested.contains(key) && (req.include_env_false || sc.env_mode().in_shell())
+                    requested.contains(key) && (req.include_all_modes || sc.env_mode().in_shell())
                 })
                 .collect();
             let values = resolve_with_cache(&config, &req.profile, secrets, &req, state).await?;
@@ -814,7 +821,7 @@ async fn process_request(
                 non_interactive: req.non_interactive,
                 purpose: req.purpose,
                 keys: vec![req.key.clone()],
-                include_env_false: true,
+                include_all_modes: true,
                 env: req.env,
             };
             let values = resolve_with_cache(
@@ -1344,6 +1351,24 @@ mod tests {
         assert_eq!(parse_duration("1d2h3m4s").unwrap().as_secs(), 93784);
     }
 
+    // The `include_all_modes` field serializes as `include_env_false` on the
+    // wire so a stale daemon from an older fnox version can still deserialize
+    // requests from a newer client (and vice versa) across an upgrade. Guard
+    // that key name against accidental churn.
+    #[test]
+    fn resolve_batch_request_wire_key_is_stable() {
+        let req = test_batch_request();
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(
+            json.contains("\"include_env_false\":true"),
+            "wire key changed, breaking cross-version daemon IPC: {json}"
+        );
+        assert!(!json.contains("include_all_modes"));
+
+        let decoded: ResolveBatchRequest = serde_json::from_str(&json).unwrap();
+        assert!(decoded.include_all_modes);
+    }
+
     #[test]
     fn parse_duration_rejects_zero_and_overflow() {
         assert!(parse_duration("0s").is_err());
@@ -1427,7 +1452,7 @@ mod tests {
             non_interactive: true,
             purpose: Purpose::Get.as_str().to_string(),
             keys: vec!["API_KEY".to_string()],
-            include_env_false: true,
+            include_all_modes: true,
             env: Vec::new(),
         }
     }

@@ -107,7 +107,7 @@ impl FnoxMcpServer {
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect();
 
-                // include_env_false=true: the map above is already filtered,
+                // include_all_modes=true: the map above is already filtered,
                 // and env="exec" secrets would otherwise be dropped by the
                 // shell-only filter in resolve_batch.
                 let resolved = crate::daemon::resolve_batch_with_context(
@@ -203,9 +203,9 @@ impl FnoxMcpServer {
 
     /// Retrieve a single secret by name.
     ///
-    /// env=true secrets are resolved eagerly in the first batch. env=false
-    /// secrets are resolved on-demand here (may trigger auth) and cached for
-    /// subsequent calls.
+    /// env=true and env="exec" secrets are resolved eagerly in the first
+    /// batch. env=false secrets are resolved on-demand here (may trigger auth)
+    /// and cached for subsequent calls.
     #[tool(description = "Get a secret value by name from the fnox configuration")]
     async fn get_secret(
         &self,
@@ -232,10 +232,11 @@ impl FnoxMcpServer {
             ));
         }
 
-        // Ensure env=true secrets are batch-resolved
+        // Ensure env-injectable secrets (env=true / env="exec") are batch-resolved
         self.ensure_resolved().await?;
 
-        // Check cache (covers env=true secrets and previously resolved env=false).
+        // Check cache (covers env=true/env="exec" secrets and previously
+        // resolved env=false).
         // Some(Some(v)) = present, Some(None) = known absent, None = not yet resolved.
         {
             let cache = self.cache.read().await;
@@ -268,8 +269,8 @@ impl FnoxMcpServer {
                     )),
                 };
             }
-            // env=true but not in cache — should not happen after ensure_resolved,
-            // but handle gracefully
+            // env=true or env="exec" but not in cache — should not happen
+            // after ensure_resolved, but handle gracefully
             Err(McpError::invalid_request(
                 format!(
                     "Secret '{}' has no value (it may be optional and absent)",

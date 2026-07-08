@@ -42,13 +42,13 @@ pub struct ExportCommand {
     #[arg(short = 'o', long)]
     output: Option<PathBuf>,
 
-    /// Include metadata comments in env and shell output
-    #[arg(long)]
-    header: bool,
-
     /// Include secrets with env = false or env = "exec" (excluded by default)
     #[arg(long)]
     all: bool,
+
+    /// Include metadata comments in env and shell output
+    #[arg(long)]
+    header: bool,
 }
 
 #[derive(Serialize, Deserialize)]
