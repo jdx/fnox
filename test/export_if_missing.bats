@@ -44,10 +44,10 @@ TOML
 	# Set invalid age key to trigger error
 	export FNOX_AGE_KEY="/tmp/nonexistent-age-key.txt"
 
-	run "$FNOX_BIN" export
+	run bash -c '"$1" export 2>/dev/null' _ "$FNOX_BIN"
 	assert_success
-	# Should output env format even though secret failed to resolve
-	assert_output --partial "# Exported from profile: default"
+	# Should output clean env format even though secret failed to resolve
+	assert_output ""
 }
 
 @test "fnox export with default if_missing (warn) continues on missing secret" {
@@ -66,10 +66,10 @@ TOML
 	# Set invalid age key to trigger error
 	export FNOX_AGE_KEY="/tmp/nonexistent-age-key.txt"
 
-	run "$FNOX_BIN" export
+	run bash -c '"$1" export 2>/dev/null' _ "$FNOX_BIN"
 	assert_success
-	# Should output env format even though secret failed to resolve
-	assert_output --partial "# Exported from profile: default"
+	# Should output clean env format even though secret failed to resolve
+	assert_output ""
 }
 
 @test "fnox export with if_missing=ignore silently continues on missing secret" {
@@ -89,8 +89,8 @@ TOML
 	# Set invalid age key to trigger error
 	export FNOX_AGE_KEY="/tmp/nonexistent-age-key.txt"
 
-	run "$FNOX_BIN" export
+	run bash -c '"$1" export 2>/dev/null' _ "$FNOX_BIN"
 	assert_success
-	# Should output env format even though secret failed to resolve
-	assert_output --partial "# Exported from profile: default"
+	# Should output clean env format even though secret failed to resolve
+	assert_output ""
 }

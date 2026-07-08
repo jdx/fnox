@@ -134,6 +134,9 @@ fnox export --format yaml
 
 # Export as TOML
 fnox export --format toml
+
+# Include metadata comments in env/shell output
+fnox export --header
 ```
 
 ### Save to File
