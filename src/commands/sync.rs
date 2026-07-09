@@ -47,7 +47,7 @@ pub struct SyncCommand {
 impl SyncCommand {
     pub async fn run(&self, cli: &Cli, merged_config: Config) -> Result<()> {
         let profile = Config::get_profiles(cli.profile.as_slice());
-        let write_profile = Config::write_profile(&profile);
+        let write_profile = Config::resolve_write_profile(&profile, cli.write_profile.as_deref())?;
         tracing::debug!("Syncing secrets for profile '{}'", write_profile);
 
         let effective_config_path =
@@ -55,7 +55,8 @@ impl SyncCommand {
                 let current_dir = std::env::current_dir().map_err(|e| {
                     FnoxError::Config(format!("Failed to get current directory: {}", e))
                 })?;
-                let candidate = config::find_local_config(&current_dir, &profile);
+                let candidate =
+                    config::find_local_config(&current_dir, std::slice::from_ref(&write_profile));
                 if local_override_filename(&candidate).is_some() {
                     candidate
                 } else {
@@ -179,7 +180,7 @@ impl SyncCommand {
         // Dry-run mode: show what would be done and exit
         if self.dry_run {
             let dry_run_label = console::style("[dry-run]").yellow().bold();
-            let styled_profile = console::style(write_profile).magenta();
+            let styled_profile = console::style(&write_profile).magenta();
             let styled_provider = console::style(&target_provider_name).green();
 
             println!(
@@ -303,7 +304,7 @@ impl SyncCommand {
         }
 
         // Save to config
-        Config::save_secrets_to_source(&synced_secrets, write_profile, &target_path)?;
+        Config::save_secrets_to_source(&synced_secrets, &write_profile, &target_path)?;
 
         println!(
             "Synced {} secrets to provider '{}'{}",

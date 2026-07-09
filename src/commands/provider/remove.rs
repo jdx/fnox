@@ -20,7 +20,7 @@ impl RemoveCommand {
         // Provider remove only respects explicit CLI --profile flags, matching
         // provider add's behavior (see add.rs).
         let profiles = Config::normalize_profiles(&cli.profile);
-        let write_profile = Config::write_profile(&profiles);
+        let write_profile = Config::resolve_write_profile(&profiles, cli.write_profile.as_deref())?;
 
         // Determine the target config file
         let target_path = if self.global {
@@ -30,7 +30,7 @@ impl RemoveCommand {
                 FnoxError::Config(format!("Failed to get current directory: {}", e))
             })?;
             if cli.config == std::path::Path::new(crate::config::DEFAULT_CONFIG_FILENAME) {
-                crate::config::find_local_config(&current_dir, &profiles)
+                crate::config::find_local_config(&current_dir, std::slice::from_ref(&write_profile))
             } else {
                 current_dir.join(&cli.config)
             }
@@ -51,7 +51,7 @@ impl RemoveCommand {
         } else {
             config
                 .profiles
-                .get_mut(write_profile)
+                .get_mut(&write_profile)
                 .and_then(|profile| profile.providers.shift_remove(&self.provider))
                 .is_some()
         };

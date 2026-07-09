@@ -76,8 +76,17 @@ fnox -P aws,prod exec -- ./app
 export FNOX_PROFILE=aws,prod
 ```
 
-When multiple profiles are active, write commands target the last active
-profile by default.
+When multiple profiles are active, write commands (`set`, `remove`,
+`import`, `sync`, `provider add/remove`) require an explicit
+`--write-profile <NAME>` to choose the write target:
+
+```bash
+# Reads from aws + prod overlay, writes to prod
+fnox -P aws -P prod --write-profile prod set DATABASE_URL "value"
+```
+
+With a single active profile, the write target defaults to that profile
+and `--write-profile` is not needed.
 
 ### When to Use Composition
 

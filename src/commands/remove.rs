@@ -21,7 +21,7 @@ pub struct RemoveCommand {
 impl RemoveCommand {
     pub async fn run(&self, cli: &Cli) -> Result<()> {
         let profile = Config::get_profiles(cli.profile.as_slice());
-        let write_profile = Config::write_profile(&profile);
+        let write_profile = Config::resolve_write_profile(&profile, cli.write_profile.as_deref())?;
         tracing::debug!(
             "Removing secret '{}' from profile '{}'",
             self.key,
@@ -53,13 +53,13 @@ impl RemoveCommand {
             if !config.secrets.contains_key(&self.key) {
                 return Err(FnoxError::SecretNotFound {
                     key: self.key.clone(),
-                    profile: write_profile.to_string(),
+                    profile: write_profile.clone(),
                     config_path: Some(target_path),
                     suggestion: None,
                 });
             }
         } else {
-            let Some(profile_config) = config.profiles.get(write_profile) else {
+            let Some(profile_config) = config.profiles.get(&write_profile) else {
                 return Err(FnoxError::Config(format!(
                     "Profile '{}' is not defined in '{}'",
                     write_profile,
@@ -69,7 +69,7 @@ impl RemoveCommand {
             if !profile_config.secrets.contains_key(&self.key) {
                 return Err(FnoxError::SecretNotFound {
                     key: self.key.clone(),
-                    profile: write_profile.to_string(),
+                    profile: write_profile.clone(),
                     config_path: Some(target_path),
                     suggestion: None,
                 });
@@ -79,7 +79,7 @@ impl RemoveCommand {
         if self.dry_run {
             let dry_run_label = console::style("[dry-run]").yellow().bold();
             let styled_key = console::style(&self.key).cyan();
-            let styled_profile = console::style(write_profile).magenta();
+            let styled_profile = console::style(&write_profile).magenta();
             let styled_path = console::style(target_path.display()).dim();
             let global_suffix = if self.global { " (global)" } else { "" };
             if write_profile == "default" {
@@ -94,7 +94,7 @@ impl RemoveCommand {
         } else {
             // Remove secret directly from the TOML document, preserving comments
             let removed =
-                Config::remove_secret_from_source(&self.key, write_profile, &target_path)?;
+                Config::remove_secret_from_source(&self.key, &write_profile, &target_path)?;
             if !removed {
                 return Err(FnoxError::SecretNotFound {
                     key: self.key.clone(),
@@ -105,7 +105,7 @@ impl RemoveCommand {
             }
             let check = console::style("✓").green();
             let styled_key = console::style(&self.key).cyan();
-            let styled_profile = console::style(write_profile).magenta();
+            let styled_profile = console::style(&write_profile).magenta();
             let global_suffix = if self.global { " (global)" } else { "" };
             if write_profile == "default" {
                 println!("{check} Removed secret {styled_key}{global_suffix}");

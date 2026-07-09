@@ -965,8 +965,21 @@ impl Config {
             DocumentMut::new()
         };
 
-        // Get or create the secrets table
-        let secrets_table = if profile == "default" {
+        // Get or create the secrets table.
+        // When writing to a profile-specific file (fnox.<profile>.toml),
+        // the top-level [secrets] section already represents that profile's
+        // secrets — no need to nest under [profiles.<profile>].
+        let is_profile_file = target_file
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|name| {
+                name.starts_with("fnox.")
+                    && name.ends_with(".toml")
+                    && name != "fnox.toml"
+                    && name != "fnox.local.toml"
+            });
+
+        let secrets_table = if profile == "default" || is_profile_file {
             if doc.get("secrets").is_none() {
                 doc["secrets"] = Item::Table(toml_edit::Table::new());
             }
@@ -1199,6 +1212,31 @@ impl Config {
             "default".to_string()
         } else {
             profiles.join(",")
+        }
+    }
+
+    /// Resolve the write-target profile.
+    ///
+    /// - If `explicit` is set, use it (validated against profile name rules).
+    /// - If exactly one profile is active, use it.
+    /// - If multiple profiles are active without `--write-profile`, return an error.
+    pub fn resolve_write_profile(profiles: &[String], explicit: Option<&str>) -> Result<String> {
+        if let Some(name) = explicit {
+            if !env::is_valid_profile_name(name) {
+                return Err(FnoxError::Config(format!(
+                    "Invalid --write-profile name: '{name}'"
+                )));
+            }
+            return Ok(name.to_string());
+        }
+
+        match profiles.len() {
+            0 => Ok("default".to_string()),
+            1 => Ok(profiles[0].clone()),
+            _ => Err(FnoxError::Config(format!(
+                "Multiple profiles are active ({}). Specify --write-profile <NAME> to choose the write target.",
+                profiles.join(",")
+            ))),
         }
     }
 

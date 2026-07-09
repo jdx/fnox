@@ -246,7 +246,7 @@ EOF
 	assert_output --partial "LOCAL_OVERRIDE"
 }
 
-@test "fnox set with multiple active profiles writes to last profile file" {
+@test "fnox set with multiple profiles requires --write-profile" {
 	cat >fnox.toml <<EOF
 [providers.plain]
 type = "plain"
@@ -260,11 +260,16 @@ EOF
 STAGING_EXISTING = { default = "staging" }
 EOF
 
-	# With two active profiles, set should write to the last (staging)
-	run "$FNOX_BIN" -P staging set NEW_SECRET "new-value"
+	# Multiple profiles without --write-profile should error
+	run "$FNOX_BIN" -P staging -P extra set NEW_SECRET "new-value"
+	assert_failure
+	assert_output --partial "Multiple profiles are active"
+	assert_output --partial "--write-profile"
+
+	# With --write-profile staging, the secret lands in staging
+	run "$FNOX_BIN" -P staging -P extra --write-profile staging set NEW_SECRET "new-value"
 	assert_success
 
-	# Secret lands in the staging profile file
 	run cat fnox.staging.toml
 	assert_success
 	assert_output --partial "NEW_SECRET"

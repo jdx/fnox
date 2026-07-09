@@ -43,7 +43,7 @@ impl AddCommand {
         // FNOX_PROFILE env or Settings, so the default behavior (writing to
         // top-level [providers]) stays unchanged unless the user opts in.
         let profiles = Config::normalize_profiles(&cli.profile);
-        let write_profile = Config::write_profile(&profiles);
+        let write_profile = Config::resolve_write_profile(&profiles, cli.write_profile.as_deref())?;
 
         // Determine the target config file
         let target_path = if self.global {
@@ -64,7 +64,7 @@ impl AddCommand {
                 FnoxError::Config(format!("Failed to get current directory: {}", e))
             })?;
             if cli.config == std::path::Path::new(crate::config::DEFAULT_CONFIG_FILENAME) {
-                crate::config::find_local_config(&current_dir, &profiles)
+                crate::config::find_local_config(&current_dir, std::slice::from_ref(&write_profile))
             } else {
                 current_dir.join(&cli.config)
             }
@@ -87,7 +87,7 @@ impl AddCommand {
         } else {
             if config
                 .profiles
-                .get(write_profile)
+                .get(&write_profile)
                 .is_some_and(|p| p.providers.contains_key(&self.provider))
             {
                 return Err(FnoxError::Config(format!(
@@ -299,7 +299,7 @@ impl AddCommand {
         } else {
             config
                 .profiles
-                .entry(write_profile.to_string())
+                .entry(write_profile.clone())
                 .or_default()
                 .providers
                 .insert(self.provider.clone(), provider_config);
