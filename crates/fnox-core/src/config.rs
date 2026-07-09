@@ -91,6 +91,22 @@ pub fn find_local_config(dir: &Path, profiles: &[String]) -> PathBuf {
     dir.join(DEFAULT_CONFIG_FILENAME)
 }
 
+/// Check whether a file is a profile-specific config file (e.g.
+/// `fnox.prod.toml` or `.fnox.prod.toml`). Such files use top-level
+/// `[secrets]` to represent the profile's secrets, rather than nesting
+/// under `[profiles.<name>.secrets]`.
+pub fn is_profile_file(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|name| {
+            let name = name.strip_prefix('.').unwrap_or(name);
+            name.starts_with("fnox.")
+                && name.ends_with(".toml")
+                && name != "fnox.toml"
+                && name != "fnox.local.toml"
+        })
+}
+
 // Re-export ProviderConfig from providers module
 pub use crate::providers::ProviderConfig;
 
@@ -970,19 +986,7 @@ impl Config {
         // .fnox.<profile>.toml), the top-level [secrets] section already
         // represents that profile's secrets — no need to nest under
         // [profiles.<profile>].
-        let is_profile_file = target_file
-            .file_name()
-            .and_then(|n| n.to_str())
-            .is_some_and(|name| {
-                // Strip leading dot for dotfile variants (.fnox.prod.toml)
-                let name = name.strip_prefix('.').unwrap_or(name);
-                name.starts_with("fnox.")
-                    && name.ends_with(".toml")
-                    && name != "fnox.toml"
-                    && name != "fnox.local.toml"
-            });
-
-        let secrets_table = if profile == "default" || is_profile_file {
+        let secrets_table = if profile == "default" || is_profile_file(&target_file) {
             if doc.get("secrets").is_none() {
                 doc["secrets"] = Item::Table(toml_edit::Table::new());
             }
@@ -1053,7 +1057,7 @@ impl Config {
         })?;
 
         // Navigate to the secrets table
-        let removed = if profile == "default" {
+        let removed = if profile == "default" || is_profile_file(target_file) {
             doc.get_mut("secrets")
                 .and_then(|s| s.as_table_mut())
                 .map(|t| t.remove(secret_name).is_some())
@@ -1110,7 +1114,7 @@ impl Config {
         };
 
         // Get or create the secrets table
-        let secrets_table = if profile == "default" {
+        let secrets_table = if profile == "default" || is_profile_file(target_file) {
             if doc.get("secrets").is_none() {
                 doc["secrets"] = Item::Table(toml_edit::Table::new());
             }

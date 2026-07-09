@@ -1038,8 +1038,14 @@ fn socket_path(cli: &Cli) -> Result<PathBuf> {
     socket_path_for_context(&ResolveContext::from_cli(cli))
 }
 
+/// Wire-protocol version tag included in the socket path hash.
+/// Incrementing this ensures new clients don't connect to stale daemons
+/// running an incompatible wire format.
+const WIRE_VERSION: u8 = 2;
+
 fn socket_path_for_context(ctx: &ResolveContext) -> Result<PathBuf> {
     let mut hasher = blake3::Hasher::new();
+    hasher.update(&[WIRE_VERSION]);
     let profile_str = ctx.profile.join(",");
     hasher.update(profile_str.as_bytes());
     hasher.update(ctx.no_defaults.to_string().as_bytes());

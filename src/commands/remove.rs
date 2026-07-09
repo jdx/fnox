@@ -53,33 +53,27 @@ impl RemoveCommand {
 
         let config = Config::load(&target_path)?;
 
-        // Check existence in the write-target profile only, since removal
-        // also targets that specific profile — not the merged stack.
-        if write_profile == "default" {
-            if !config.secrets.contains_key(&self.key) {
-                return Err(FnoxError::SecretNotFound {
-                    key: self.key.clone(),
-                    profile: write_profile.clone(),
-                    config_path: Some(target_path),
-                    suggestion: None,
-                });
-            }
+        // Check existence in the write-target profile. For profile-specific
+        // files (fnox.<profile>.toml), secrets are at top-level [secrets].
+        let has_profile_section =
+            write_profile != "default" && !crate::config::is_profile_file(&target_path);
+
+        let found = if has_profile_section {
+            config
+                .profiles
+                .get(&write_profile)
+                .is_some_and(|p| p.secrets.contains_key(&self.key))
         } else {
-            let Some(profile_config) = config.profiles.get(&write_profile) else {
-                return Err(FnoxError::Config(format!(
-                    "Profile '{}' is not defined in '{}'",
-                    write_profile,
-                    target_path.display()
-                )));
-            };
-            if !profile_config.secrets.contains_key(&self.key) {
-                return Err(FnoxError::SecretNotFound {
-                    key: self.key.clone(),
-                    profile: write_profile.clone(),
-                    config_path: Some(target_path),
-                    suggestion: None,
-                });
-            }
+            config.secrets.contains_key(&self.key)
+        };
+
+        if !found {
+            return Err(FnoxError::SecretNotFound {
+                key: self.key.clone(),
+                profile: write_profile.clone(),
+                config_path: Some(target_path),
+                suggestion: None,
+            });
         }
 
         if self.dry_run {
