@@ -325,6 +325,16 @@
             }
           },
           {
+            "name": "all",
+            "usage": "--all",
+            "help": "Include secrets with env = false or env = \"exec\" (excluded by default)",
+            "help_first_line": "Include secrets with env = false or env = \"exec\" (excluded by default)",
+            "short": [],
+            "long": ["all"],
+            "hide": false,
+            "global": false
+          },
+          {
             "name": "header",
             "usage": "--header",
             "help": "Include metadata comments in env and shell output",

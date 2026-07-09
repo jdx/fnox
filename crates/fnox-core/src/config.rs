@@ -126,6 +126,13 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub if_missing: Option<IfMissing>,
 
+    /// Default env injection mode for all secrets in this config.
+    /// Set `env = "exec"` to keep every secret out of the interactive shell
+    /// (secrets are still injected into `fnox exec` subprocesses) unless a
+    /// secret explicitly opts back in with `env = true`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub env: Option<EnvMode>,
+
     /// Whether to prompt for authentication when provider auth fails (default: true in TTY)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_auth: Option<bool>,
@@ -187,10 +194,14 @@ pub struct SecretConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     value: Option<SpannedValue<String>>,
 
-    /// Whether to inject this secret into env vars (default: true)
-    /// When false, the secret is only accessible via `fnox get`
-    #[serde(default = "default_true", skip_serializing_if = "is_true")]
-    pub env: bool,
+    /// Where to inject this secret as an environment variable:
+    /// - `true` — shell integration and `fnox exec` (default)
+    /// - `"exec"` — only `fnox exec` subprocesses, never the interactive shell
+    /// - `false` — never injected; only accessible via `fnox get`
+    ///
+    /// When unset, inherits the top-level `env` default (which itself defaults to `true`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<EnvMode>,
 
     /// Write secret to a temporary file and set env var to the file path instead of the secret value
     #[serde(default, skip_serializing_if = "is_false")]
@@ -386,6 +397,102 @@ pub enum IfMissing {
     Error,
     Warn,
     Ignore,
+}
+
+/// Controls where a secret's value is injected as an environment variable.
+///
+/// Serialized in TOML as `true` (Shell), `"exec"` (Exec), or `false` (Never).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum EnvMode {
+    /// Injected by shell integration (hook-env) and `fnox exec` (TOML: `true`)
+    #[default]
+    Shell,
+    /// Only injected into `fnox exec` subprocesses, never the interactive shell (TOML: `"exec"`)
+    Exec,
+    /// Never injected as an env var; only accessible via `fnox get` (TOML: `false`)
+    Never,
+}
+
+impl EnvMode {
+    /// Whether shell integration (hook-env / export) should inject this secret
+    pub fn in_shell(self) -> bool {
+        matches!(self, Self::Shell)
+    }
+
+    /// Whether `fnox exec` subprocesses should receive this secret
+    pub fn in_exec(self) -> bool {
+        matches!(self, Self::Shell | Self::Exec)
+    }
+
+    /// TOML representation for config-file editing
+    pub fn to_toml_value(self) -> toml_edit::Value {
+        match self {
+            Self::Shell => toml_edit::Value::from(true),
+            Self::Exec => toml_edit::Value::from("exec"),
+            Self::Never => toml_edit::Value::from(false),
+        }
+    }
+}
+
+impl Serialize for EnvMode {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        match self {
+            Self::Shell => serializer.serialize_bool(true),
+            Self::Exec => serializer.serialize_str("exec"),
+            Self::Never => serializer.serialize_bool(false),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for EnvMode {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        struct EnvModeVisitor;
+
+        impl serde::de::Visitor<'_> for EnvModeVisitor {
+            type Value = EnvMode;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("true, false, or \"exec\"")
+            }
+
+            fn visit_bool<E: serde::de::Error>(self, v: bool) -> std::result::Result<EnvMode, E> {
+                Ok(if v { EnvMode::Shell } else { EnvMode::Never })
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> std::result::Result<EnvMode, E> {
+                match v {
+                    "exec" => Ok(EnvMode::Exec),
+                    other => Err(E::invalid_value(
+                        serde::de::Unexpected::Str(other),
+                        &"true, false, or \"exec\"",
+                    )),
+                }
+            }
+        }
+
+        deserializer.deserialize_any(EnvModeVisitor)
+    }
+}
+
+impl JsonSchema for EnvMode {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "EnvMode".into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "Where to inject the secret as an env var: true = shell + fnox exec (default), \"exec\" = fnox exec subprocesses only, false = never (fnox get only)",
+            "anyOf": [
+                { "type": "boolean" },
+                { "type": "string", "enum": ["exec"] }
+            ]
+        })
+    }
 }
 
 impl Config {
@@ -611,6 +718,11 @@ impl Config {
         // Merge if_missing (overlay takes precedence)
         if overlay.if_missing.is_some() {
             merged.if_missing = overlay.if_missing;
+        }
+
+        // Merge env default (overlay takes precedence)
+        if overlay.env.is_some() {
+            merged.env = overlay.env;
         }
 
         // Merge prompt_auth (overlay takes precedence)
@@ -1031,6 +1143,7 @@ impl Config {
             profiles: IndexMap::new(),
             age_key_file: None,
             if_missing: None,
+            env: None,
             prompt_auth: None,
             mcp: None,
             daemon: None,
@@ -1086,25 +1199,36 @@ impl Config {
     /// Note: If a profile doesn't exist in [profiles], it's treated as "default".
     /// This allows fnox.$FNOX_PROFILE.toml files to work without requiring a [profiles] section.
     pub fn get_secrets(&self, profile: &str) -> Result<IndexMap<String, SecretConfig>> {
-        if profile == "default" {
-            return Ok(self.secrets.clone());
-        }
-
-        let mut secrets = if Settings::get().no_defaults {
-            // Profile-only mode: do not merge top-level secrets.
-            IndexMap::new()
-        } else {
-            // Start with top-level secrets as base
+        let mut secrets = if profile == "default" {
             self.secrets.clone()
+        } else {
+            let mut secrets = if Settings::get().no_defaults {
+                // Profile-only mode: do not merge top-level secrets.
+                IndexMap::new()
+            } else {
+                // Start with top-level secrets as base
+                self.secrets.clone()
+            };
+
+            // Get profile-specific secrets and merge/override (if profile exists)
+            if let Some(profile_config) = self.profiles.get(profile) {
+                // Profile-specific secrets override top-level ones
+                secrets.extend(profile_config.secrets.clone());
+            }
+            // If profile doesn't exist in [profiles], that's OK - just use top-level secrets
+            // This allows fnox.$FNOX_PROFILE.toml to work without requiring [profiles.xxx]
+            secrets
         };
 
-        // Get profile-specific secrets and merge/override (if profile exists)
-        if let Some(profile_config) = self.profiles.get(profile) {
-            // Profile-specific secrets override top-level ones
-            secrets.extend(profile_config.secrets.clone());
+        // Secrets that don't set `env` themselves inherit the top-level default
+        if self.env.is_some() {
+            for secret in secrets.values_mut() {
+                if secret.env.is_none() {
+                    secret.env = self.env;
+                }
+            }
         }
-        // If profile doesn't exist in [profiles], that's OK - just use top-level secrets
-        // This allows fnox.$FNOX_PROFILE.toml to work without requiring [profiles.xxx]
+
         Ok(secrets)
     }
 
@@ -1525,7 +1649,7 @@ impl SecretConfig {
             default: None,
             provider: None,
             value: None,
-            env: true,
+            env: None,
             as_file: false,
             json_path: None,
             line: None,
@@ -1534,6 +1658,16 @@ impl SecretConfig {
             source_is_profile: false,
             daemon_cache: None,
         }
+    }
+
+    /// Effective env injection mode for this secret.
+    ///
+    /// Note: [`Config::get_secrets`] stamps the top-level `env` default into
+    /// secrets that don't set it, so on maps obtained from `get_secrets` this
+    /// is the fully-resolved mode. On a raw `SecretConfig` an unset `env`
+    /// falls back to [`EnvMode::Shell`].
+    pub fn env_mode(&self) -> EnvMode {
+        self.env.unwrap_or_default()
     }
 
     /// Return a copy that will resolve to the original provider value,
@@ -1577,8 +1711,8 @@ impl SecretConfig {
             };
             inline.insert("if_missing", toml_edit::Value::from(if_missing_str));
         }
-        if !self.env {
-            inline.insert("env", toml_edit::Value::from(false));
+        if let Some(env) = self.env {
+            inline.insert("env", env.to_toml_value());
         }
         if self.as_file {
             inline.insert("as_file", toml_edit::Value::from(true));
@@ -1640,7 +1774,7 @@ impl SecretConfig {
                 })
             }),
         );
-        set_or_remove(table, "env", (!self.env).then(|| Value::from(false)));
+        set_or_remove(table, "env", self.env.map(EnvMode::to_toml_value));
         set_or_remove(table, "as_file", self.as_file.then(|| Value::from(true)));
         set_or_remove(
             table,
@@ -1758,14 +1892,6 @@ impl Default for ProfileConfig {
 
 fn is_false(value: &bool) -> bool {
     !value
-}
-
-fn is_true(value: &bool) -> bool {
-    *value
-}
-
-fn default_true() -> bool {
-    true
 }
 
 #[cfg(test)]
@@ -2182,13 +2308,95 @@ USERNAME = { provider = "pass", value = "master", line = 2 }
     }
 
     #[test]
+    fn test_env_mode_parsing() {
+        let toml_input = r#"
+[secrets]
+SHELL_DEFAULT = { provider = "plain", value = "a" }
+SHELL_EXPLICIT = { provider = "plain", value = "b", env = true }
+EXEC_ONLY = { provider = "plain", value = "c", env = "exec" }
+HIDDEN = { provider = "plain", value = "d", env = false }
+"#;
+        let parsed: Config = toml_edit::de::from_str(toml_input).unwrap();
+        assert_eq!(parsed.secrets["SHELL_DEFAULT"].env, None);
+        assert_eq!(parsed.secrets["SHELL_EXPLICIT"].env, Some(EnvMode::Shell));
+        assert_eq!(parsed.secrets["EXEC_ONLY"].env, Some(EnvMode::Exec));
+        assert_eq!(parsed.secrets["HIDDEN"].env, Some(EnvMode::Never));
+
+        assert!(parsed.secrets["SHELL_DEFAULT"].env_mode().in_shell());
+        assert!(parsed.secrets["EXEC_ONLY"].env_mode().in_exec());
+        assert!(!parsed.secrets["EXEC_ONLY"].env_mode().in_shell());
+        assert!(!parsed.secrets["HIDDEN"].env_mode().in_exec());
+    }
+
+    #[test]
+    fn test_env_mode_rejects_unknown_string() {
+        let toml_input = r#"
+[secrets]
+BAD = { provider = "plain", value = "a", env = "sometimes" }
+"#;
+        assert!(toml_edit::de::from_str::<Config>(toml_input).is_err());
+    }
+
+    #[test]
+    fn test_env_mode_top_level_default_inheritance() {
+        let toml_input = r#"
+env = "exec"
+
+[secrets]
+INHERITED = { provider = "plain", value = "a" }
+OPTED_IN = { provider = "plain", value = "b", env = true }
+HIDDEN = { provider = "plain", value = "c", env = false }
+
+[profiles.dev.secrets]
+DEV_INHERITED = { provider = "plain", value = "d" }
+"#;
+        let parsed: Config = toml_edit::de::from_str(toml_input).unwrap();
+        assert_eq!(parsed.env, Some(EnvMode::Exec));
+
+        let secrets = parsed.get_secrets("default").unwrap();
+        assert_eq!(secrets["INHERITED"].env_mode(), EnvMode::Exec);
+        assert_eq!(secrets["OPTED_IN"].env_mode(), EnvMode::Shell);
+        assert_eq!(secrets["HIDDEN"].env_mode(), EnvMode::Never);
+
+        // Only assert on the profile-level secret here: merging top-level
+        // secrets into profiles depends on the global no_defaults setting,
+        // which other tests mutate concurrently.
+        let dev_secrets = parsed.get_secrets("dev").unwrap();
+        assert_eq!(dev_secrets["DEV_INHERITED"].env_mode(), EnvMode::Exec);
+    }
+
+    #[test]
+    fn test_env_mode_serialization_roundtrip() {
+        let mut secret = SecretConfig::new();
+        secret.set_provider(Some("plain".to_string()));
+        secret.set_value(Some("v".to_string()));
+
+        secret.env = Some(EnvMode::Exec);
+        assert!(
+            secret
+                .to_inline_table()
+                .to_string()
+                .contains("env = \"exec\"")
+        );
+
+        secret.env = Some(EnvMode::Never);
+        assert!(secret.to_inline_table().to_string().contains("env = false"));
+
+        secret.env = Some(EnvMode::Shell);
+        assert!(secret.to_inline_table().to_string().contains("env = true"));
+
+        secret.env = None;
+        assert!(!secret.to_inline_table().to_string().contains("env"));
+    }
+
+    #[test]
     fn test_for_raw_resolve_preserves_non_post_processing_fields() {
         let mut secret = SecretConfig::new();
         secret.set_provider(Some("plain".to_string()));
         secret.set_value(Some("my-secret".to_string()));
         secret.description = Some("A test secret".to_string());
         secret.if_missing = Some(IfMissing::Warn);
-        secret.env = false;
+        secret.env = Some(EnvMode::Never);
         secret.as_file = true;
         secret.source_path = Some(PathBuf::from("/tmp/fnox.toml"));
         secret.source_is_profile = true;
@@ -2205,7 +2413,7 @@ USERNAME = { provider = "pass", value = "master", line = 2 }
         assert_eq!(raw.value(), Some("my-secret"));
         assert_eq!(raw.description.as_deref(), Some("A test secret"));
         assert_eq!(raw.if_missing, Some(IfMissing::Warn));
-        assert!(!raw.env);
+        assert_eq!(raw.env, Some(EnvMode::Never));
         assert!(raw.as_file);
         assert_eq!(
             raw.source_path.as_deref(),

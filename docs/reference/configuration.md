@@ -95,6 +95,32 @@ if_missing = "error"  # or "warn", "ignore"
 
 **Priority:** Lowest (overridden by secret-level, env vars, CLI flags).
 
+### `env`
+
+Default injection mode for all secrets in the config. Secrets that don't set their own `env` inherit this value.
+
+```toml
+env = "exec"  # or true, false
+```
+
+**Values:**
+
+- `true` - Inject into the shell (via shell integration / `fnox export`) and `fnox exec` subprocesses (default)
+- `"exec"` - Only inject into `fnox exec` subprocesses; never the interactive shell
+- `false` - Never inject; secrets are only accessible via `fnox get`
+
+Setting `env = "exec"` at the top level keeps every secret out of the interactive shell by default — useful when AI coding agents or other tools run in your shell and would otherwise inherit all injected secrets. Applications still receive secrets when launched through `fnox exec -- <command>`, and individual secrets can opt back in with `env = true`:
+
+```toml
+env = "exec"  # nothing enters the interactive shell...
+
+[secrets]
+DATABASE_URL = { provider = "age", value = "..." }              # exec-only (inherited)
+HOMEBREW_GITHUB_API_TOKEN = { provider = "age", value = "...", env = true }  # ...except this
+```
+
+Note that this limits _ambient_ exposure: processes in your shell no longer see secret values in their environment. Anyone who can run commands in your shell can still invoke `fnox get` or `fnox exec` themselves — for a hard boundary, combine this with the [MCP server allowlist](/guide/mcp) and OS-level sandboxing.
+
 ### `imports`
 
 List of config files to import.
@@ -338,6 +364,54 @@ ANALYTICS_KEY = { provider = "aws", value = "analytics-key", if_missing = "ignor
 **Values:** `"error"`, `"warn"`, `"ignore"`
 
 **Priority:** Overrides top-level `if_missing`, but overridden by env vars and CLI flags.
+
+#### `env`
+
+Where the secret is injected as an environment variable.
+
+```toml
+[secrets]
+GITHUB_TOKEN = { provider = "age", value = "..." }                    # true (default): shell + fnox exec
+DATABASE_URL = { provider = "age", value = "...", env = "exec" }      # only fnox exec subprocesses
+SIGNING_KEY  = { provider = "age", value = "...", env = false }       # never injected; fnox get only
+```
+
+**Values:**
+
+- `true` - Injected by shell integration and `fnox exec` (default)
+- `"exec"` - Only injected into `fnox exec` subprocesses, never the interactive shell
+- `false` - Never injected as an env var; retrieve explicitly with `fnox get`
+
+**Priority:** Overrides the top-level `env` default.
+
+`fnox export` follows shell semantics: `env = "exec"` and `env = false` secrets are excluded unless `--all` is passed.
+
+#### `as_file`
+
+Write the secret to an ephemeral temp file and set the env var to the file path instead of the value.
+
+```toml
+[secrets]
+GOOGLE_APPLICATION_CREDENTIALS = { provider = "op", value = "GCP Service Account/key file", as_file = true }
+```
+
+#### `json_path`
+
+Extract a field from a JSON secret value (dot notation for nesting).
+
+```toml
+[secrets]
+DB_PASSWORD = { provider = "aws", value = "db-credentials", json_path = "credentials.password" }
+```
+
+#### `line`
+
+Extract the Nth line (1-indexed) from a multi-line secret value. Useful for providers that pack several related values into one entry. Mutually exclusive with `json_path`.
+
+```toml
+[secrets]
+USERNAME = { provider = "pass", value = "master", line = 2 }
+```
 
 #### `description`
 

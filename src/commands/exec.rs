@@ -131,8 +131,10 @@ impl ExecCommand {
             }
             // Strip env=false secrets from child environment regardless of whether
             // resolution succeeded — a stale inherited env var must not leak through.
+            // env="exec" secrets ARE injected here: exec subprocesses are their
+            // intended destination.
             if let Some(secret_config) = profile_secrets.get(&key)
-                && !secret_config.env
+                && !secret_config.env_mode().in_exec()
             {
                 cmd.env_remove(&key);
                 continue;

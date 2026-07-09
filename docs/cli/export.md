@@ -31,6 +31,10 @@ Show what would be exported without writing to file
 
 Output file (default: stdout)
 
+### `--all`
+
+Include secrets with env = false or env = "exec" (excluded by default)
+
 ### `--header`
 
 Include metadata comments in env and shell output
