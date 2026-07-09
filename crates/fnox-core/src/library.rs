@@ -47,9 +47,14 @@ pub const CONFIG_FILENAME: &str = "fnox.toml";
 pub struct Fnox {
     config: Arc<Config>,
     profile: String,
+    profiles: Vec<String>,
 }
 
 impl Fnox {
+    fn env_profiles() -> Vec<String> {
+        Config::normalize_profiles(&crate::env::FNOX_PROFILE)
+    }
+
     /// Walk up from the current directory looking for `fnox.toml`
     /// AND merge in the parent / local-override / global config chain
     /// — same exact behavior as the binary when invoked without an
@@ -66,10 +71,12 @@ impl Fnox {
         // parent + local + global merging that load(absolute) would
         // bypass. Per AGENTS.md "Loading order".
         let config = Config::load_smart(CONFIG_FILENAME)?;
-        let profile = Config::get_profile(None);
+        let profiles = Self::env_profiles();
+        let profile = Config::display_profiles(&profiles);
         Ok(Self {
             config: Arc::new(config),
             profile,
+            profiles,
         })
     }
 
@@ -94,17 +101,25 @@ impl Fnox {
             path_ref.to_path_buf()
         };
         let config = Config::load(resolved)?;
-        let profile = Config::get_profile(None);
+        let profiles = Self::env_profiles();
+        let profile = Config::display_profiles(&profiles);
         Ok(Self {
             config: Arc::new(config),
             profile,
+            profiles,
         })
     }
 
     /// Use a specific profile instead of whatever
     /// [`Config::get_profile`] resolved. Builder-style.
-    pub fn with_profile(mut self, profile: impl Into<String>) -> Self {
-        self.profile = profile.into();
+    pub fn with_profile(self, profile: impl Into<String>) -> Self {
+        self.with_profiles([profile.into()])
+    }
+
+    /// Use a specific ordered profile stack.
+    pub fn with_profiles(mut self, profiles: impl IntoIterator<Item = String>) -> Self {
+        self.profiles = Config::normalize_profiles(&profiles.into_iter().collect::<Vec<_>>());
+        self.profile = Config::display_profiles(&self.profiles);
         self
     }
 
@@ -133,10 +148,13 @@ impl Fnox {
     pub async fn get(&self, key: &str) -> Result<Option<String>> {
         // get_secret returns Option<&SecretConfig> without cloning the
         // whole IndexMap — preferred over get_secrets(profile)?.get(key).
-        if let Some(secret_config) = self.config.get_secret(&self.profile, key) {
+        if let Some(secret_config) = self
+            .config
+            .get_secret_with_no_defaults(&self.profiles, key, false)
+        {
             return crate::secret_resolver::resolve_secret(
                 &self.config,
-                &self.profile,
+                &self.profiles,
                 key,
                 secret_config,
             )
@@ -163,7 +181,7 @@ impl Fnox {
     /// configs), not necessarily the set of secrets that currently
     /// have a resolvable value.
     pub fn list(&self) -> Result<Vec<String>> {
-        let secrets = self.config.get_secrets(&self.profile)?;
+        let secrets = self.config.get_secrets_with_no_defaults(&self.profiles, false)?;
         Ok(secrets.keys().cloned().collect())
     }
 }

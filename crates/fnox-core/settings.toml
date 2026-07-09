@@ -32,8 +32,8 @@ examples = [
 since = "0.1.0"
 
 [profile]
-type = "string"
-default = "\"default\""
+type = "vec_string"
+default = '["default"]'
 sources.cli = ["--profile", "-p"]
 sources.env = ["FNOX_PROFILE"]
 docs = """

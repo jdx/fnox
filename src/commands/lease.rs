@@ -104,7 +104,7 @@ impl LeaseCommand {
 
 impl LeaseCreateCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
-        let profile = Config::get_profile(cli.profile.as_deref());
+        let profile = Config::get_profiles(cli.profile.as_slice());
         let project_dir = lease::project_dir_from_config(&config, &cli.config);
         let leases = config.get_leases(&profile);
 
@@ -161,7 +161,7 @@ impl LeaseCreateCommand {
         &self,
         _cli: &Cli,
         config: &Config,
-        profile: &str,
+        profile: &[String],
         project_dir: &std::path::Path,
         leases: &IndexMap<String, crate::lease_backends::LeaseBackendConfig>,
         resolved_secrets: &indexmap::IndexMap<String, Option<String>>,
@@ -213,7 +213,7 @@ impl LeaseCreateCommand {
         backend_name: &str,
         backend_config: &crate::lease_backends::LeaseBackendConfig,
         config: &Config,
-        profile: &str,
+        profile: &[String],
         project_dir: &std::path::Path,
         resolved_secrets: &indexmap::IndexMap<String, Option<String>>,
         temp_env_guard: &mut TempEnvGuard,
@@ -434,7 +434,7 @@ impl LeaseRevokeCommand {
         let backend_name = record.backend_name.clone();
         let cached_credentials = record.cached_credentials.clone();
         let encryption_provider_name = record.encryption_provider.clone();
-        let profile = Config::get_profile(cli.profile.as_deref());
+        let profile = Config::get_profiles(cli.profile.as_slice());
         let leases = config.get_leases(&profile);
 
         // Decrypt cached credentials (if encrypted) so backends can use
@@ -527,7 +527,7 @@ impl LeaseCleanupCommand {
             return Ok(());
         }
 
-        let profile = Config::get_profile(cli.profile.as_deref());
+        let profile = Config::get_profiles(cli.profile.as_slice());
         let leases = config.get_leases(&profile);
         let mut cleaned = 0;
 

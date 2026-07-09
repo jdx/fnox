@@ -212,8 +212,8 @@ fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
     let mut current = start_dir.to_path_buf();
 
     // Get profile name using Settings system which respects: CLI flag > Env var > Default
-    let profile_name = crate::settings::Settings::get().profile.clone();
-    let filenames = crate::config::all_config_filenames(Some(&profile_name));
+    let profile_name = crate::config::Config::get_profiles(&[]);
+    let filenames = crate::config::all_config_filenames(&profile_name);
 
     loop {
         // Check all config filenames (fnox.toml, .fnox.toml, fnox.$PROFILE.toml, etc.)
@@ -287,8 +287,8 @@ fn hash_fnox_env_vars() -> String {
 pub fn find_config() -> Option<PathBuf> {
     use crate::config::{Config, all_config_filenames};
 
-    let profile = crate::settings::Settings::get().profile.clone();
-    let filenames = all_config_filenames(Some(&profile));
+    let profile = crate::config::Config::get_profiles(&[]);
+    let filenames = all_config_filenames(&profile);
 
     let mut current = std::env::current_dir().ok()?;
 

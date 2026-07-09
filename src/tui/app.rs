@@ -86,6 +86,9 @@ pub struct App {
     /// Current profile name
     pub profile: String,
 
+    /// Active profile overlay stack used for secret resolution.
+    pub profile_stack: Vec<String>,
+
     /// Available profiles
     pub available_profiles: Vec<String>,
 
@@ -145,9 +148,10 @@ pub struct App {
 
 impl App {
     /// Create a new app with the given config and profile
-    pub fn new(config: Config, profile: String, daemon_context: ResolveContext) -> Result<Self> {
-        let providers: Vec<String> = config.get_providers(&profile).keys().cloned().collect();
-        let secrets = config.get_secrets(&profile)?;
+    pub fn new(config: Config, profile_stack: Vec<String>, daemon_context: ResolveContext) -> Result<Self> {
+        let profile = Config::display_profiles(&profile_stack);
+        let providers: Vec<String> = config.get_providers(&profile_stack).keys().cloned().collect();
+        let secrets = config.get_secrets(&profile_stack)?;
 
         // Build list of available profiles
         let mut available_profiles = vec!["default".to_string()];
@@ -162,6 +166,7 @@ impl App {
             config,
             daemon_context,
             profile,
+            profile_stack,
             available_profiles,
             profile_picker_index: 0,
             providers,
@@ -244,14 +249,14 @@ impl App {
 
         let config = self.config.clone();
         let daemon_context = self.daemon_context.clone();
-        let profile = self.profile.clone();
+        let profile_stack = self.profile_stack.clone();
         let secrets = self.secrets.clone();
 
         tokio::spawn(async move {
             match crate::daemon::resolve_batch_with_context(
                 &daemon_context,
                 &config,
-                &profile,
+                &profile_stack,
                 &secrets,
                 Purpose::Tui,
                 true,
@@ -796,13 +801,15 @@ impl App {
         }
 
         // Try to load secrets first before committing to the change
-        match self.config.get_secrets(&new_profile) {
+        let profile_stack = vec![new_profile.clone()];
+        match self.config.get_secrets(&profile_stack) {
             Ok(secrets) => {
                 // Success - now update all state
                 self.profile = new_profile;
+                self.profile_stack = profile_stack.clone();
                 self.providers = self
                     .config
-                    .get_providers(&self.profile)
+                    .get_providers(&profile_stack)
                     .keys()
                     .cloned()
                     .collect();

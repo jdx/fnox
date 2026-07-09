@@ -46,9 +46,10 @@ pub struct Cli {
     #[arg(short, long, default_value = crate::config::DEFAULT_CONFIG_FILENAME, global = true)]
     pub config: PathBuf,
 
-    /// Profile to use (default: default, or FNOX_PROFILE env var)
-    #[arg(short = 'P', long, global = true)]
-    pub profile: Option<String>,
+    /// Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple
+    /// profiles separated by commas or repeated flags; later profiles overlay earlier ones.
+    #[arg(short = 'P', long, action = clap::ArgAction::Append, global = true)]
+    pub profile: Vec<String>,
 
     /// Enable verbose logging
     #[arg(short, long, global = true)]

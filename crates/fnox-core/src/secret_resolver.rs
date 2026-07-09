@@ -177,7 +177,7 @@ fn default_reference_error(key: &str, reference: &str) -> FnoxError {
 
 fn default_can_be_used_in_batch(
     config: &Config,
-    profile: &str,
+    profile: &[String],
     secret_config: &SecretConfig,
 ) -> bool {
     if secret_config.sync.is_some() {
@@ -194,13 +194,13 @@ fn default_can_be_used_in_batch(
 
 fn collect_interpolation_closure(
     config: &Config,
-    profile: &str,
+    profile: &[String],
     key: &str,
     secrets: &IndexMap<String, SecretConfig>,
 ) -> Result<IndexMap<String, SecretConfig>> {
     struct ClosureCollector<'a> {
         config: &'a Config,
-        profile: &'a str,
+        profile: &'a [String],
         root_key: &'a str,
         secrets: &'a IndexMap<String, SecretConfig>,
         visiting: HashSet<String>,
@@ -262,7 +262,7 @@ fn collect_interpolation_closure(
 /// Creates a ProviderNotConfigured error, using source spans when available for better error display.
 fn create_provider_not_configured_error(
     provider_name: &str,
-    profile: &str,
+    profile: &[String],
     secret_config: &SecretConfig,
     config: &Config,
 ) -> FnoxError {
@@ -278,7 +278,7 @@ fn create_provider_not_configured_error(
     {
         return FnoxError::ProviderNotConfiguredWithSource {
             provider: provider_name.to_string(),
-            profile: profile.to_string(),
+            profile: profile.join(","),
             suggestion,
             src,
             span: SourceSpan::new(span.start.into(), span.end - span.start),
@@ -288,7 +288,7 @@ fn create_provider_not_configured_error(
     // Fall back to the basic error without source highlighting
     FnoxError::ProviderNotConfigured {
         provider: provider_name.to_string(),
-        profile: profile.to_string(),
+        profile: profile.join(","),
         config_path: secret_config.source_path.clone(),
         suggestion,
     }
@@ -479,7 +479,7 @@ fn resolve_default_fallbacks(
 /// Post-processing (e.g., JSON path extraction) is applied to all sources consistently.
 pub async fn resolve_secret(
     config: &Config,
-    profile: &str,
+    profile: &[String],
     key: &str,
     secret_config: &SecretConfig,
 ) -> Result<Option<String>> {
@@ -488,7 +488,7 @@ pub async fn resolve_secret(
 
 async fn resolve_interpolated_default_value(
     config: &Config,
-    profile: &str,
+    profile: &[String],
     key: &str,
     secret_config: &SecretConfig,
 ) -> Result<Option<String>> {
@@ -516,7 +516,7 @@ async fn resolve_interpolated_default_value(
 
 async fn resolve_secret_raw(
     config: &Config,
-    profile: &str,
+    profile: &[String],
     key: &str,
     secret_config: &SecretConfig,
 ) -> Result<Option<String>> {
@@ -570,7 +570,7 @@ async fn resolve_secret_raw(
 
 async fn try_resolve_from_provider(
     config: &Config,
-    profile: &str,
+    profile: &[String],
     secret_config: &SecretConfig,
 ) -> Result<Option<String>> {
     // If a sync cache exists, resolve from the sync provider/value instead
@@ -618,7 +618,7 @@ async fn try_resolve_from_provider(
 /// prompts the user to run the auth command and retries once.
 async fn try_resolve_with_auth_retry(
     config: &Config,
-    profile: &str,
+    profile: &[String],
     provider_name: &str,
     provider_config: &ProviderConfig,
     provider_value: &str,
@@ -659,7 +659,7 @@ async fn try_resolve_with_auth_retry(
 /// Creates the provider instance and calls `get_secret`.
 async fn try_get_secret(
     config: &Config,
-    profile: &str,
+    profile: &[String],
     provider_name: &str,
     provider_config: &ProviderConfig,
     provider_value: &str,
@@ -728,7 +728,7 @@ fn resolve_default_value(
 /// Returns an error immediately if any secret with `if_missing = "error"` fails to resolve.
 pub async fn resolve_secrets_batch(
     config: &Config,
-    profile: &str,
+    profile: &[String],
     secrets: &IndexMap<String, SecretConfig>,
 ) -> Result<IndexMap<String, Option<String>>> {
     // Classify each secret: provider-backed vs no-provider
@@ -978,7 +978,7 @@ fn compute_resolution_levels(
 /// Resolve a single level of secrets (all can be resolved in parallel).
 async fn resolve_level(
     config: &Config,
-    profile: &str,
+    profile: &[String],
     secrets: &IndexMap<String, SecretConfig>,
     secret_provider: &HashMap<String, (String, String)>,
     no_provider: &[String],
@@ -1048,7 +1048,7 @@ async fn resolve_level(
 
 async fn resolve_no_provider_secret(
     config: &Config,
-    profile: &str,
+    profile: &[String],
     key: &str,
     secret_config: &SecretConfig,
     resolved_so_far: &HashMap<String, Option<String>>,
@@ -1063,7 +1063,7 @@ async fn resolve_no_provider_secret(
 /// Resolve all secrets for a single provider using batch operations
 async fn resolve_provider_batch(
     config: &Config,
-    profile: &str,
+    profile: &[String],
     secrets: &IndexMap<String, SecretConfig>,
     provider_name: &str,
     provider_secrets: Vec<(String, String)>,
@@ -1100,7 +1100,7 @@ async fn resolve_provider_batch(
                         key,
                         &FnoxError::ProviderNotConfigured {
                             provider: provider_name.to_string(),
-                            profile: profile.to_string(),
+                            profile: profile.join(","),
                             config_path: None,
                             suggestion: suggestion.clone(),
                         },
@@ -1112,7 +1112,7 @@ async fn resolve_provider_batch(
                 let if_missing = resolve_if_missing_behavior(secret_config, config);
                 let error = FnoxError::ProviderNotConfigured {
                     provider: provider_name.to_string(),
-                    profile: profile.to_string(),
+                    profile: profile.join(","),
                     config_path: config.provider_sources.get(provider_name).cloned(),
                     suggestion: suggestion.clone(),
                 };
@@ -1177,7 +1177,7 @@ async fn resolve_provider_batch(
 
 struct ProviderBatchContext<'a> {
     config: &'a Config,
-    profile: &'a str,
+    profile: &'a [String],
     secrets: &'a IndexMap<String, SecretConfig>,
     provider_name: &'a str,
     provider_config: &'a ProviderConfig,
@@ -1430,6 +1430,10 @@ mod tests {
         secret
     }
 
+    fn profile(name: &str) -> Vec<String> {
+        vec![name.to_string()]
+    }
+
     fn plain_provider_secret(value: &str) -> SecretConfig {
         let mut secret = SecretConfig::new();
         secret.set_provider(Some("plain".to_string()));
@@ -1587,7 +1591,7 @@ mod tests {
         secrets.insert("POSTGRES_HOST".to_string(), default_secret("localhost"));
         secrets.insert("POSTGRES_PORT".to_string(), default_secret("5432"));
 
-        let resolved = resolve_secrets_batch(&config, "default", &secrets)
+        let resolved = resolve_secrets_batch(&config, &profile("default"), &secrets)
             .await
             .unwrap();
 
@@ -1625,7 +1629,7 @@ mod tests {
         secrets.extend(dev.secrets.clone());
         config.profiles.insert("dev".to_string(), dev);
 
-        let resolved = resolve_secrets_batch(&config, "dev", &secrets)
+        let resolved = resolve_secrets_batch(&config, &profile("dev"), &secrets)
             .await
             .unwrap();
 
@@ -1646,7 +1650,7 @@ mod tests {
             default_secret("postgres://${POSTGRES_USER}@localhost/fnox"),
         );
 
-        let err = resolve_secrets_batch(&config, "default", &secrets)
+        let err = resolve_secrets_batch(&config, &profile("default"), &secrets)
             .await
             .unwrap_err();
         let msg = format!("{err}");
@@ -1664,7 +1668,7 @@ mod tests {
         secrets.insert("A".to_string(), default_secret("${B}"));
         secrets.insert("B".to_string(), default_secret("${A}"));
 
-        let err = resolve_secrets_batch(&config, "default", &secrets)
+        let err = resolve_secrets_batch(&config, &profile("default"), &secrets)
             .await
             .unwrap_err();
         let msg = format!("{err}");
@@ -1693,7 +1697,7 @@ mod tests {
             default_secret("postgres://${POSTGRES_USER}@localhost/fnox"),
         );
 
-        let resolved = resolve_secrets_batch(&config, "default", &secrets)
+        let resolved = resolve_secrets_batch(&config, &profile("default"), &secrets)
             .await
             .unwrap();
 
@@ -1722,7 +1726,7 @@ mod tests {
         let mut secrets = IndexMap::new();
         secrets.insert("API_KEY".to_string(), secret);
 
-        let resolved = resolve_secrets_batch(&config, "default", &secrets)
+        let resolved = resolve_secrets_batch(&config, &profile("default"), &secrets)
             .await
             .unwrap();
 
@@ -1748,7 +1752,7 @@ mod tests {
         config.secrets.insert("API_KEY".to_string(), secret);
 
         let secret_config = config.secrets.get("API_KEY").unwrap();
-        let resolved = resolve_secret(&config, "default", "API_KEY", secret_config)
+        let resolved = resolve_secret(&config, &profile("default"), "API_KEY", secret_config)
             .await
             .unwrap();
 
@@ -1872,7 +1876,7 @@ mod tests {
         secrets.insert("DATABASE_URL".to_string(), database_url);
         secrets.insert("DB_HOST".to_string(), default_secret("localhost"));
 
-        let resolved = resolve_secrets_batch(&config, "default", &secrets)
+        let resolved = resolve_secrets_batch(&config, &profile("default"), &secrets)
             .await
             .unwrap();
 
@@ -1894,7 +1898,7 @@ mod tests {
         let mut secrets = IndexMap::new();
         secrets.insert("DATABASE_URL".to_string(), default_secret("${}"));
 
-        let err = resolve_secrets_batch(&config, "default", &secrets)
+        let err = resolve_secrets_batch(&config, &profile("default"), &secrets)
             .await
             .unwrap_err();
         let msg = format!("{err}");
@@ -1917,7 +1921,7 @@ mod tests {
             default_secret("postgres://${FNOX_TEST_MISSING_OPTIONAL_REF}@localhost/fnox"),
         );
 
-        let resolved = resolve_secrets_batch(&config, "default", &secrets)
+        let resolved = resolve_secrets_batch(&config, &profile("default"), &secrets)
             .await
             .unwrap();
 
@@ -1941,7 +1945,7 @@ mod tests {
             .insert("POSTGRES_USER".to_string(), default_secret("app"));
 
         let secret_config = config.secrets.get("DATABASE_URL").unwrap();
-        let resolved = resolve_secret(&config, "default", "DATABASE_URL", secret_config)
+        let resolved = resolve_secret(&config, &profile("default"), "DATABASE_URL", secret_config)
             .await
             .unwrap();
 
@@ -1965,7 +1969,7 @@ mod tests {
             .insert("HOSTNAME".to_string(), default_secret("localhost"));
 
         let secret_config = config.secrets.get("DATABASE_URL").unwrap();
-        let resolved = resolve_secret(&config, "default", "DATABASE_URL", secret_config)
+        let resolved = resolve_secret(&config, &profile("default"), "DATABASE_URL", secret_config)
             .await
             .unwrap();
 
@@ -1988,7 +1992,7 @@ mod tests {
             .insert("DATABASE_URL".to_string(), database_url);
 
         let secret_config = config.secrets.get("DATABASE_URL").unwrap();
-        let resolved = resolve_secret(&config, "default", "DATABASE_URL", secret_config)
+        let resolved = resolve_secret(&config, &profile("default"), "DATABASE_URL", secret_config)
             .await
             .unwrap();
 
@@ -2011,7 +2015,7 @@ mod tests {
         );
 
         let secret_config = config.secrets.get("DATABASE_URL").unwrap();
-        let resolved = resolve_secret(&config, "default", "DATABASE_URL", secret_config)
+        let resolved = resolve_secret(&config, &profile("default"), "DATABASE_URL", secret_config)
             .await
             .unwrap();
 

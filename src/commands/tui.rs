@@ -26,7 +26,7 @@ pub struct TuiCommand;
 
 impl TuiCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
-        let profile = Config::get_profile(cli.profile.as_deref());
+        let profile = Config::get_profiles(cli.profile.as_slice());
 
         // Mark as non-interactive so providers that need physical interaction are skipped
         crate::env::set_non_interactive(true);

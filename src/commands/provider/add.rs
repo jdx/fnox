@@ -39,6 +39,12 @@ impl AddCommand {
             ));
         }
 
+        // Provider add only respects explicit CLI --profile flags, not
+        // FNOX_PROFILE env or Settings, so the default behavior (writing to
+        // top-level [providers]) stays unchanged unless the user opts in.
+        let profiles = Config::normalize_profiles(&cli.profile);
+        let write_profile = Config::write_profile(&profiles);
+
         // Determine the target config file
         let target_path = if self.global {
             let global_path = Config::global_config_path();
@@ -57,7 +63,11 @@ impl AddCommand {
             let current_dir = std::env::current_dir().map_err(|e| {
                 FnoxError::Config(format!("Failed to get current directory: {}", e))
             })?;
-            current_dir.join(&cli.config)
+            if cli.config == std::path::Path::new(crate::config::DEFAULT_CONFIG_FILENAME) {
+                crate::config::find_local_config(&current_dir, &profiles)
+            } else {
+                current_dir.join(&cli.config)
+            }
         };
 
         // Load the target config file (or create new if it doesn't exist)
@@ -67,7 +77,17 @@ impl AddCommand {
             Config::new()
         };
 
-        if config.providers.contains_key(&self.provider) {
+        let target_providers = if self.global || write_profile == "default" {
+            &mut config.providers
+        } else {
+            &mut config
+                .profiles
+                .entry(write_profile.to_string())
+                .or_default()
+                .providers
+        };
+
+        if target_providers.contains_key(&self.provider) {
             return Err(FnoxError::Config(format!(
                 "Provider '{}' already exists",
                 self.provider
@@ -267,9 +287,7 @@ impl AddCommand {
             },
         };
 
-        config
-            .providers
-            .insert(self.provider.clone(), provider_config);
+        target_providers.insert(self.provider.clone(), provider_config);
         config.save(&target_path)?;
 
         let global_suffix = if self.global { " (global)" } else { "" };

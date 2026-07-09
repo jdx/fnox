@@ -11,7 +11,8 @@ pub struct DoctorCommand {}
 
 impl DoctorCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
-        let profile = Config::get_profile(cli.profile.as_deref());
+        let profile = Config::get_profiles(cli.profile.as_slice());
+        let profile_display = Config::display_profiles(&profile);
 
         println!("🏥 Fnox Doctor Report");
         println!("====================");
@@ -20,7 +21,7 @@ impl DoctorCommand {
         // Config file info
         println!("📄 Configuration:");
         println!("  File: fnox.toml");
-        println!("  Profile: {}", profile);
+        println!("  Profile: {}", profile_display);
 
         config.validate()?;
         println!("  Status: ✓ Loaded successfully");
@@ -83,8 +84,11 @@ impl DoctorCommand {
 
         // Environment info
         println!("🌍 Environment:");
-        if let Some(env_profile) = (*env::FNOX_PROFILE).clone() {
-            println!("  FNOX_PROFILE: {}", env_profile);
+        if !env::FNOX_PROFILE.is_empty() {
+            println!(
+                "  FNOX_PROFILE: {}",
+                Config::display_profiles(&env::FNOX_PROFILE)
+            );
         } else {
             println!("  FNOX_PROFILE: (not set)");
         }

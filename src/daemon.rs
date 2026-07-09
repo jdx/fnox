@@ -24,7 +24,7 @@ const SHUTDOWN_GRACE_PERIOD: Duration = Duration::from_secs(30);
 #[derive(Debug, Clone)]
 pub struct ResolveContext {
     pub config: PathBuf,
-    pub profile: Option<String>,
+    pub profile: Vec<String>,
     pub age_key_file: Option<PathBuf>,
     pub if_missing: Option<String>,
     pub no_defaults: bool,
@@ -37,12 +37,7 @@ impl ResolveContext {
         let settings = crate::settings::Settings::try_get().ok();
         Self {
             config: cli.config.clone(),
-            profile: cli.profile.clone().or_else(|| {
-                settings
-                    .as_ref()
-                    .map(|settings| settings.profile.clone())
-                    .filter(|profile| profile != "default")
-            }),
+            profile: Config::get_profiles(cli.profile.as_slice()),
             age_key_file: cli.age_key_file.clone().or_else(|| {
                 settings
                     .as_ref()
@@ -106,7 +101,7 @@ enum Request {
 struct ResolveBatchRequest {
     cwd: PathBuf,
     config: PathBuf,
-    profile: String,
+    profile: Vec<String>,
     age_key_file: Option<PathBuf>,
     if_missing: Option<String>,
     no_defaults: bool,
@@ -128,7 +123,7 @@ struct ResolveBatchRequest {
 struct ResolveOneRequest {
     cwd: PathBuf,
     config: PathBuf,
-    profile: String,
+    profile: Vec<String>,
     age_key_file: Option<PathBuf>,
     if_missing: Option<String>,
     no_defaults: bool,
@@ -197,7 +192,7 @@ struct DaemonState {
 pub async fn resolve_batch(
     cli: &Cli,
     config: &Config,
-    profile: &str,
+    profile: &[String],
     secrets: &IndexMap<String, SecretConfig>,
     purpose: Purpose,
     include_all_modes: bool,
@@ -216,7 +211,7 @@ pub async fn resolve_batch(
 pub async fn resolve_batch_with_context(
     ctx: &ResolveContext,
     config: &Config,
-    profile: &str,
+    profile: &[String],
     secrets: &IndexMap<String, SecretConfig>,
     purpose: Purpose,
     include_all_modes: bool,
@@ -239,7 +234,7 @@ pub async fn resolve_batch_with_context(
         cwd: std::env::current_dir()
             .map_err(|e| FnoxError::Config(format!("Failed to get current directory: {e}")))?,
         config: ctx.config.clone(),
-        profile: profile.to_string(),
+        profile: profile.to_vec(),
         age_key_file: ctx.age_key_file.clone(),
         if_missing: ctx.if_missing.clone(),
         no_defaults: ctx.no_defaults,
@@ -262,7 +257,7 @@ pub async fn resolve_batch_with_context(
 pub async fn resolve_one(
     cli: &Cli,
     config: &Config,
-    profile: &str,
+    profile: &[String],
     key: &str,
     secret_config: &SecretConfig,
     purpose: Purpose,
@@ -281,7 +276,7 @@ pub async fn resolve_one(
 pub async fn resolve_one_with_context(
     ctx: &ResolveContext,
     config: &Config,
-    profile: &str,
+    profile: &[String],
     key: &str,
     secret_config: &SecretConfig,
     purpose: Purpose,
@@ -294,7 +289,7 @@ pub async fn resolve_one_with_context(
         cwd: std::env::current_dir()
             .map_err(|e| FnoxError::Config(format!("Failed to get current directory: {e}")))?,
         config: ctx.config.clone(),
-        profile: profile.to_string(),
+        profile: profile.to_vec(),
         age_key_file: ctx.age_key_file.clone(),
         if_missing: ctx.if_missing.clone(),
         no_defaults: ctx.no_defaults,
@@ -424,8 +419,9 @@ async fn start_background_for_context(
     let exe = std::env::current_exe()
         .map_err(|e| FnoxError::Config(format!("Failed to locate fnox executable: {e}")))?;
     let mut cmd = std::process::Command::new(exe);
-    cmd.arg("--profile")
-        .arg(Config::get_profile(ctx.profile.as_deref()));
+    for p in &ctx.profile {
+        cmd.arg("--profile").arg(p);
+    }
     if ctx.no_defaults {
         cmd.arg("--no-defaults");
     }
@@ -777,7 +773,7 @@ async fn process_request(
             let _cwd = CwdGuard::change_to(&req.cwd)?;
             apply_request_settings(
                 req.age_key_file.clone(),
-                Some(req.profile.clone()),
+                req.profile.clone(),
                 req.if_missing.clone(),
                 req.no_defaults,
                 req.non_interactive,
@@ -800,7 +796,7 @@ async fn process_request(
             let _cwd = CwdGuard::change_to(&req.cwd)?;
             apply_request_settings(
                 req.age_key_file.clone(),
-                Some(req.profile.clone()),
+                req.profile.clone(),
                 req.if_missing.clone(),
                 req.no_defaults,
                 req.non_interactive,
@@ -839,7 +835,7 @@ async fn process_request(
 
 fn apply_request_settings(
     age_key_file: Option<PathBuf>,
-    profile: Option<String>,
+    profile: Vec<String>,
     if_missing: Option<String>,
     no_defaults: bool,
     non_interactive: bool,
@@ -855,7 +851,7 @@ fn apply_request_settings(
 
 async fn resolve_with_cache(
     config: &Config,
-    profile: &str,
+    profile: &[String],
     secrets: IndexMap<String, SecretConfig>,
     req: &ResolveBatchRequest,
     state: std::sync::Arc<Mutex<DaemonState>>,
@@ -907,14 +903,15 @@ async fn resolve_with_cache(
 
 fn cache_policy_default_provider<'a>(
     config: &'a Config,
-    profile: &str,
+    profile: &[String],
     providers: &'a IndexMap<String, ProviderConfig>,
 ) -> Option<&'a str> {
-    if profile != "default"
-        && let Some(profile_config) = config.profiles.get(profile)
-        && let Some(default_provider) = profile_config.default_provider()
-    {
-        return Some(default_provider);
+    for p in profile.iter().filter(|p| *p != "default").rev() {
+        if let Some(profile_config) = config.profiles.get(p) {
+            if let Some(default_provider) = profile_config.default_provider() {
+                return Some(default_provider);
+            }
+        }
     }
 
     config.default_provider().or_else(|| {
@@ -946,14 +943,15 @@ fn provider_daemon_cache_enabled(
 
 fn cache_key(
     fingerprint: &str,
-    profile: &str,
+    profile: &[String],
     key: &str,
     secret: &SecretConfig,
     req: &ResolveBatchRequest,
 ) -> CacheKey {
     let mut hasher = blake3::Hasher::new();
+    let profile_str = profile.join(",");
     hasher.update(fingerprint.as_bytes());
-    hasher.update(profile.as_bytes());
+    hasher.update(profile_str.as_bytes());
     hasher.update(req.no_defaults.to_string().as_bytes());
     hasher.update(key.as_bytes());
     hasher.update(req.purpose.as_bytes());
@@ -974,7 +972,7 @@ fn config_fingerprint(config: &Config, env: &[(String, String)]) -> Result<Strin
         paths.insert(path.clone());
     }
     if let Some(project_dir) = &config.project_dir {
-        for name in crate::config::all_config_filenames(None) {
+        for name in crate::config::all_config_filenames(&[]) {
             let path = project_dir.join(name);
             if path.exists() {
                 paths.insert(path);
@@ -1042,8 +1040,8 @@ fn socket_path(cli: &Cli) -> Result<PathBuf> {
 
 fn socket_path_for_context(ctx: &ResolveContext) -> Result<PathBuf> {
     let mut hasher = blake3::Hasher::new();
-    let profile = Config::get_profile(ctx.profile.as_deref());
-    hasher.update(profile.as_bytes());
+    let profile_str = ctx.profile.join(",");
+    hasher.update(profile_str.as_bytes());
     hasher.update(ctx.no_defaults.to_string().as_bytes());
     if let Some(if_missing) = &ctx.if_missing {
         hasher.update(if_missing.as_bytes());
@@ -1445,7 +1443,7 @@ mod tests {
         ResolveBatchRequest {
             cwd: PathBuf::from("."),
             config: PathBuf::from("fnox.toml"),
-            profile: "default".to_string(),
+            profile: vec!["default".to_string()],
             age_key_file: None,
             if_missing: None,
             no_defaults: false,
@@ -1543,7 +1541,7 @@ daemon_cache = false
         .unwrap();
         let secret = default_provider_secret("fresh");
         let mut req = test_batch_request();
-        req.profile = "prod".to_string();
+        req.profile = vec!["prod".to_string()];
         let state = state_with_cached_secret(&config, &secret, &req);
 
         let resolved = resolve_with_cache(

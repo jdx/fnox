@@ -50,7 +50,7 @@ pub struct ExecParams {
 #[derive(Clone)]
 pub struct FnoxMcpServer {
     config: Arc<Config>,
-    profile: Arc<String>,
+    profile: Arc<Vec<String>>,
     mcp_config: Arc<McpConfig>,
     daemon_context: Arc<ResolveContext>,
     profile_secrets: Arc<IndexMap<String, SecretConfig>>,
@@ -67,7 +67,7 @@ pub struct FnoxMcpServer {
 impl FnoxMcpServer {
     pub fn new(
         config: Config,
-        profile: String,
+        profile: Vec<String>,
         mcp_config: McpConfig,
         daemon_context: ResolveContext,
         profile_secrets: IndexMap<String, SecretConfig>,

@@ -115,6 +115,7 @@ fn generate_merge_types(_settings: &SettingsToml) -> Result<String, Box<dyn std:
             Path(PathBuf),
             OptionPath(Option<PathBuf>),
             Bool(bool),
+            VecString(Vec<String>),
         }
 
         pub type SourceMap = IndexMap<&'static str, SettingValue>;
@@ -210,6 +211,7 @@ fn parse_type(typ: &str) -> Result<TokenStream, Box<dyn std::error::Error>> {
         "option<string>" => quote! { Option<String> },
         "path" => quote! { PathBuf },
         "option<path>" => quote! { Option<PathBuf> },
+        "vec_string" => quote! { Vec<String> },
         "bool" => quote! { bool },
         _ => return Err(format!("Unsupported type: {}", typ).into()),
     })
@@ -253,6 +255,20 @@ fn parse_default(default: &str, typ: &str) -> Result<TokenStream, Box<dyn std::e
             "false" => quote! { false },
             _ => return Err(format!("Invalid bool default: {}", default).into()),
         },
+        "vec_string" => {
+            let trimmed = default.trim();
+            let inner = trimmed
+                .strip_prefix('[')
+                .and_then(|s| s.strip_suffix(']'))
+                .ok_or_else(|| format!("Invalid vec_string default: {default}"))?;
+            let arr: Vec<String> = inner
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(|s| s.trim_matches('"').to_string())
+                .collect();
+            quote! { vec![#(#arr.to_string()),*] }
+        }
         _ => return Err(format!("Unsupported type for default: {}", typ).into()),
     })
 }

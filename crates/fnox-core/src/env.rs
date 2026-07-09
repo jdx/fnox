@@ -68,15 +68,12 @@ pub static FNOX_STATE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
 });
 
 // Profile configuration
-pub static FNOX_PROFILE: LazyLock<Option<String>> = LazyLock::new(|| {
-    var("FNOX_PROFILE").ok().and_then(|profile| {
-        if is_valid_profile_name(&profile) {
-            Some(profile)
-        } else {
-            eprintln!("Warning: Invalid FNOX_PROFILE value '{}' ignored (contains path separators or invalid characters)", profile);
-            None
-        }
-    })
+pub static FNOX_PROFILE: LazyLock<Vec<String>> = LazyLock::new(|| {
+    var("FNOX_PROFILE")
+        .ok()
+        .map(|profiles| parse_profile_list(&profiles))
+        .filter(|profiles| !profiles.is_empty())
+        .unwrap_or_default()
 });
 
 // Age encryption key configuration
@@ -98,9 +95,18 @@ fn var_path(name: &str) -> Option<PathBuf> {
         .filter(|p| p.is_absolute())
 }
 
-/// Validates that a profile name is safe to use in file paths
-/// Rejects names containing path separators or other dangerous characters
-fn is_valid_profile_name(name: &str) -> bool {
+/// Parse a comma-separated profile list, skipping invalid/empty entries.
+pub fn parse_profile_list(profiles: &str) -> Vec<String> {
+    profiles
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .filter(|s| is_valid_profile_name(s))
+        .collect()
+}
+/// Validates that a profile name is safe to use in file paths.
+/// Rejects names containing path separators or other dangerous characters.
+pub fn is_valid_profile_name(name: &str) -> bool {
     // Profile names must be non-empty
     if name.is_empty() {
         return false;

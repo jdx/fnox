@@ -64,11 +64,12 @@ pub struct ImportCommand {
 
 impl ImportCommand {
     pub async fn run(&self, cli: &Cli, merged_config: Config) -> Result<()> {
-        let profile = Config::get_profile(cli.profile.as_deref());
+        let profile = Config::get_profiles(cli.profile.as_slice());
+        let write_profile = Config::write_profile(&profile);
         tracing::debug!(
             "Importing secrets in {} format into profile '{}'",
             self.format,
-            profile
+            write_profile
         );
 
         let input = self.read_input()?;
@@ -112,7 +113,7 @@ impl ImportCommand {
                 .get(&self.provider)
                 .ok_or_else(|| FnoxError::ProviderNotConfigured {
                     provider: self.provider.clone(),
-                    profile: profile.to_string(),
+                    profile: Config::display_profiles(&profile),
                     config_path: None,
                     suggestion: None,
                 })?;
@@ -150,7 +151,7 @@ impl ImportCommand {
         // (provider and capability validation above ensures dry-run fails on invalid provider)
         if self.dry_run {
             let dry_run_label = console::style("[dry-run]").yellow().bold();
-            let styled_profile = console::style(&profile).magenta();
+            let styled_profile = console::style(write_profile).magenta();
             let styled_provider = console::style(&self.provider).green();
             let global_suffix = if self.global { " (global)" } else { "" };
 
@@ -169,7 +170,7 @@ impl ImportCommand {
             println!(
                 "\nReady to import {} secrets into profile '{}':",
                 secrets.len(),
-                profile
+                write_profile
             );
             for key in secrets.keys().take(10) {
                 println!("  {}", key);
@@ -245,12 +246,12 @@ impl ImportCommand {
         }
 
         // Save secrets directly to the TOML document, preserving comments
-        Config::save_secrets_to_source(&import_secrets, &profile, &target_path)?;
+        Config::save_secrets_to_source(&import_secrets, write_profile, &target_path)?;
 
         let global_suffix = if self.global { " (global)" } else { "" };
         println!(
             "✓ Imported {} secrets into profile '{}' using provider '{}'{}",
-            total_secrets, profile, self.provider, global_suffix
+            total_secrets, write_profile, self.provider, global_suffix
         );
 
         Ok(())

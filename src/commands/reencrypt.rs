@@ -40,8 +40,13 @@ pub struct ReencryptCommand {
 
 impl ReencryptCommand {
     pub async fn run(&self, cli: &Cli, merged_config: Config) -> Result<()> {
-        let profile = Config::get_profile(cli.profile.as_deref());
-        tracing::debug!("Re-encrypting secrets for profile '{}'", profile);
+        let profile = Config::get_profiles(cli.profile.as_slice());
+        tracing::debug!(
+            "Re-encrypting secrets for profiles '{}'",
+            Config::display_profiles(&profile)
+        );
+
+        let profile_display = Config::display_profiles(&profile);
 
         let providers = merged_config.get_providers(&profile);
         let all_secrets = merged_config.get_secrets(&profile)?;
@@ -143,7 +148,7 @@ impl ReencryptCommand {
             if !secrets_to_reencrypt.contains_key(key) {
                 return Err(FnoxError::SecretNotFound {
                     key: key.clone(),
-                    profile: profile.to_string(),
+                    profile: profile_display.clone(),
                     config_path: None,
                     suggestion: Some(format!(
                         "The key was not found, does not use an encryption provider, or was excluded by filters{}{}",
@@ -168,7 +173,7 @@ impl ReencryptCommand {
         // Dry-run mode
         if self.dry_run {
             let dry_run_label = console::style("[dry-run]").yellow().bold();
-            let styled_profile = console::style(&profile).magenta();
+            let styled_profile = console::style(&profile_display).magenta();
 
             println!(
                 "{dry_run_label} Would re-encrypt {} secrets in profile {styled_profile}:",
@@ -189,7 +194,7 @@ impl ReencryptCommand {
             println!(
                 "\nReady to re-encrypt {} secrets in profile '{}':",
                 secrets_to_reencrypt.len(),
-                profile
+                profile_display
             );
             for (key, (provider_name, _)) in secrets_to_reencrypt.iter().take(10) {
                 println!("  {} ({})", key, provider_name);
@@ -262,7 +267,7 @@ impl ReencryptCommand {
             let provider = provider_cache.get(provider_name.as_str()).ok_or_else(|| {
                 FnoxError::ProviderNotConfigured {
                     provider: provider_name.clone(),
-                    profile: profile.to_string(),
+                    profile: profile_display.clone(),
                     config_path: None,
                     suggestion: None,
                 }
@@ -282,14 +287,13 @@ impl ReencryptCommand {
                             ))
                         })?;
 
-                    // Use source_is_profile to determine the correct TOML section.
+                    // Use source_profile to determine the correct TOML section.
                     // Secrets loaded from root [secrets] must be saved back there,
                     // not to [profiles.X.secrets].
-                    let save_profile = if secret_config.source_is_profile {
-                        profile.clone()
-                    } else {
-                        "default".to_string()
-                    };
+                    let save_profile = secret_config
+                        .source_profile
+                        .clone()
+                        .unwrap_or_else(|| "default".to_string());
 
                     by_source
                         .entry((source_path, save_profile))
