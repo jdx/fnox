@@ -77,21 +77,24 @@ impl AddCommand {
             Config::new()
         };
 
-        let target_providers = if self.global || write_profile == "default" {
-            &mut config.providers
+        if self.global || write_profile == "default" {
+            if config.providers.contains_key(&self.provider) {
+                return Err(FnoxError::Config(format!(
+                    "Provider '{}' already exists",
+                    self.provider
+                )));
+            }
         } else {
-            &mut config
+            if config
                 .profiles
-                .entry(write_profile.to_string())
-                .or_default()
-                .providers
-        };
-
-        if target_providers.contains_key(&self.provider) {
-            return Err(FnoxError::Config(format!(
-                "Provider '{}' already exists",
-                self.provider
-            )));
+                .get(write_profile)
+                .is_some_and(|p| p.providers.contains_key(&self.provider))
+            {
+                return Err(FnoxError::Config(format!(
+                    "Provider '{}' already exists",
+                    self.provider
+                )));
+            }
         }
 
         // Create a template provider config based on type
@@ -287,7 +290,20 @@ impl AddCommand {
             },
         };
 
-        target_providers.insert(self.provider.clone(), provider_config);
+        // Insert into the appropriate section — after the match so no
+        // mutable borrow is held across the (potentially async) match.
+        if self.global || write_profile == "default" {
+            config
+                .providers
+                .insert(self.provider.clone(), provider_config);
+        } else {
+            config
+                .profiles
+                .entry(write_profile.to_string())
+                .or_default()
+                .providers
+                .insert(self.provider.clone(), provider_config);
+        }
         config.save(&target_path)?;
 
         let global_suffix = if self.global { " (global)" } else { "" };

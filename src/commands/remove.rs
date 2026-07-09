@@ -49,23 +49,31 @@ impl RemoveCommand {
 
         // Check existence in the write-target profile only, since removal
         // also targets that specific profile — not the merged stack.
-        let write_profile_secrets = if write_profile == "default" {
-            &config.secrets
+        if write_profile == "default" {
+            if !config.secrets.contains_key(&self.key) {
+                return Err(FnoxError::SecretNotFound {
+                    key: self.key.clone(),
+                    profile: write_profile.to_string(),
+                    config_path: Some(target_path),
+                    suggestion: None,
+                });
+            }
         } else {
-            config
-                .profiles
-                .get(write_profile)
-                .map(|p| &p.secrets)
-                .unwrap_or(&config.secrets)
-        };
-
-        if !write_profile_secrets.contains_key(&self.key) {
-            return Err(FnoxError::SecretNotFound {
-                key: self.key.clone(),
-                profile: write_profile.to_string(),
-                config_path: Some(target_path),
-                suggestion: None,
-            });
+            let Some(profile_config) = config.profiles.get(write_profile) else {
+                return Err(FnoxError::Config(format!(
+                    "Profile '{}' is not defined in '{}'",
+                    write_profile,
+                    target_path.display()
+                )));
+            };
+            if !profile_config.secrets.contains_key(&self.key) {
+                return Err(FnoxError::SecretNotFound {
+                    key: self.key.clone(),
+                    profile: write_profile.to_string(),
+                    config_path: Some(target_path),
+                    suggestion: None,
+                });
+            }
         }
 
         if self.dry_run {
