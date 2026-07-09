@@ -1,14 +1,48 @@
 # Changelog
 
+## [1.30.0](https://github.com/jdx/fnox/compare/v1.29.0..v1.30.0) - 2026-07-09
+
+### 🚀 Features
+
+- **(config)** add exec-only env mode and top-level env default by [@jdx](https://github.com/jdx) in [#604](https://github.com/jdx/fnox/pull/604)
+- **(proton-pass)** support agent and PAT auth by [@TyceHerrman](https://github.com/TyceHerrman) in [#598](https://github.com/jdx/fnox/pull/598)
+
+### 🐛 Bug Fixes
+
+- **(daemon)** respect default provider daemon cache setting by [@TyceHerrman](https://github.com/TyceHerrman) in [#599](https://github.com/jdx/fnox/pull/599)
+- **(export)** omit metadata header by default by [@jdx](https://github.com/jdx) in [#603](https://github.com/jdx/fnox/pull/603)
+- **(release-plz)** install claude cli from lockfile by [@jdx](https://github.com/jdx) in [#592](https://github.com/jdx/fnox/pull/592)
+
+### 📚 Documentation
+
+- redesign logo with fox-in-keyhole mark matching site theme by [@jdx](https://github.com/jdx) in [#595](https://github.com/jdx/fnox/pull/595)
+
+### 🔍 Other Changes
+
+- **(release)** skip ai reviews for release prs by [@jdx](https://github.com/jdx) in [#606](https://github.com/jdx/fnox/pull/606)
+- Update sponsor references for jdx.dev by [@jdx](https://github.com/jdx) in [#585](https://github.com/jdx/fnox/pull/585)
+- use release backends for cargo tools by [@jdx](https://github.com/jdx) in [#593](https://github.com/jdx/fnox/pull/593)
+- schedule releases for Monday morning by [@jdx](https://github.com/jdx) in [#597](https://github.com/jdx/fnox/pull/597)
+- gate autorelease on fix and feat commits by [@jdx](https://github.com/jdx) in [#600](https://github.com/jdx/fnox/pull/600)
+
+### 📦️ Dependency Updates
+
+- update rust crate anyhow to v1.0.103 by [@renovate[bot]](https://github.com/renovate[bot]) in [#586](https://github.com/jdx/fnox/pull/586)
+- update zizmorcore/zizmor-action action to v0.5.7 by [@renovate[bot]](https://github.com/renovate[bot]) in [#587](https://github.com/jdx/fnox/pull/587)
+- update rust crate tera to v2 by [@renovate[bot]](https://github.com/renovate[bot]) in [#588](https://github.com/jdx/fnox/pull/588)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#591](https://github.com/jdx/fnox/pull/591)
+
 ## [1.29.0](https://github.com/jdx/fnox/compare/v1.28.0..v1.29.0) - 2026-07-01
 
 ### 🚀 Features
 
 - **(age)** support age plugin recipients and identities by [@nightvisi0n](https://github.com/nightvisi0n) in [#569](https://github.com/jdx/fnox/pull/569)
+- nix flake packaging by [@o-az](https://github.com/o-az) in [#583](https://github.com/jdx/fnox/pull/583)
 
 ### 🐛 Bug Fixes
 
 - **(config)** fall back to defaults for inactive providers by [@jdx](https://github.com/jdx) in [#572](https://github.com/jdx/fnox/pull/572)
+- **(config)** resolve relative provider paths from config file by [@jdx](https://github.com/jdx) in [#582](https://github.com/jdx/fnox/pull/582)
 - **(daemon)** clear all profile caches by [@jdx](https://github.com/jdx) in [#581](https://github.com/jdx/fnox/pull/581)
 
 ### 🚜 Refactor
@@ -27,6 +61,7 @@
 
 ### New Contributors
 
+- @o-az made their first contribution in [#583](https://github.com/jdx/fnox/pull/583)
 - @nightvisi0n made their first contribution in [#569](https://github.com/jdx/fnox/pull/569)
 
 ## [1.28.0](https://github.com/jdx/fnox/compare/v1.27.1..v1.28.0) - 2026-06-24
