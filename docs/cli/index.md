@@ -18,7 +18,9 @@ Path to the configuration file (default: fnox.toml, searches parent directories)
 
 ### `-P --profile <PROFILE>`
 
-Profile to use (default: default, or FNOX_PROFILE env var)
+Profile to use (default: default, or FNOX_PROFILE env var). Supports
+multiple profiles as an ordered overlay: repeat the flag or use
+comma-separated values. Later profiles override earlier ones.
 
 ### `-v --verbose`
 

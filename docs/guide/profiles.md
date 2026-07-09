@@ -61,6 +61,90 @@ export FNOX_PROFILE=staging
 # fnox detects the change on the next prompt automatically
 ```
 
+## Composing Multiple Profiles
+
+You can activate multiple profiles at the same time as an ordered overlay
+stack. Later profiles override earlier ones on key conflicts, with the
+top-level config as the base.
+
+### Via Command Line
+
+```bash
+# Repeatable flags
+fnox -P aws -P prod exec -- ./app
+
+# Comma-separated
+fnox -P aws,prod exec -- ./app
+```
+
+### Via Environment Variable
+
+```bash
+export FNOX_PROFILE=aws,prod
+fnox exec -- ./app
+```
+
+### How Overlay Works
+
+The effective configuration is built as:
+
+```
+top-level config
++ profiles.aws
++ profiles.prod
+```
+
+Each layer contributes its own providers, secrets, leases, and
+`default_provider`. When a key exists in multiple layers, the **last**
+profile wins.
+
+```toml
+# Top-level base
+[providers.base]
+type = "plain"
+
+[secrets]
+SHARED = { default = "base-value" }
+BASE_ONLY = { default = "base-only" }
+
+# aws profile: adds a provider, overrides SHARED
+[profiles.aws.providers.aws_plain]
+type = "plain"
+
+[profiles.aws.secrets]
+SHARED = { default = "aws-value" }
+AWS_ONLY = { default = "aws-only" }
+
+# prod profile: overrides SHARED again, adds prod-only secret
+[profiles.prod.secrets]
+SHARED = { default = "prod-value" }
+PROD_ONLY = { default = "prod-only" }
+```
+
+With `fnox -P aws -P prod get SHARED`, the resolved value is `prod-value`
+(the last profile wins). `AWS_ONLY` and `PROD_ONLY` are both visible, and
+`BASE_ONLY` is inherited from the top level.
+
+### Where Writes Go
+
+When multiple profiles are active, write commands (`set`, `remove`,
+`import`, `sync`, `provider add`) target the **last** active profile by
+default. For example:
+
+```bash
+# Writes to fnox.prod.toml (or [profiles.prod] section)
+fnox -P aws -P prod set NEW_SECRET "value"
+```
+
+### When to Use Composition
+
+Composition is useful when concerns are split across profiles:
+
+- `aws` provides cloud provider configuration
+- `prod` provides production secret mappings
+- `ci` adds CI-only secrets
+- `local` overrides a few values for local development
+
 ## Profile Inheritance
 
 Profiles automatically inherit secrets from the top level:
