@@ -58,7 +58,10 @@ pub fn find_local_config(dir: &Path, profiles: &[String]) -> PathBuf {
 
     // If the write profile is non-default, prefer its config file first
     if write_profile != "default" {
-        for name in [format!("fnox.{write_profile}.toml"), format!(".fnox.{write_profile}.toml")] {
+        for name in [
+            format!("fnox.{write_profile}.toml"),
+            format!(".fnox.{write_profile}.toml"),
+        ] {
             let path = dir.join(&name);
             if path.exists() {
                 return path;
@@ -1293,10 +1296,10 @@ impl Config {
         let has_non_default = profiles.iter().any(|p| p != "default");
 
         for profile in profiles.iter().filter(|p| *p != "default").rev() {
-            if let Some(profile_config) = self.profiles.get(profile) {
-                if let Some(secret) = profile_config.secrets.get(key) {
-                    return Some(secret);
-                }
+            if let Some(profile_config) = self.profiles.get(profile)
+                && let Some(secret) = profile_config.secrets.get(key)
+            {
+                return Some(secret);
             }
         }
 
@@ -1383,11 +1386,11 @@ impl Config {
             default_provider_name = Some(name);
         }
         for profile in profiles.iter().filter(|p| *p != "default") {
-            if let Some(profile_config) = self.profiles.get(profile) {
-                if let Some(name) = profile_config.default_provider() {
-                    winning_profile = Some(profile.as_str());
-                    default_provider_name = Some(name);
-                }
+            if let Some(profile_config) = self.profiles.get(profile)
+                && let Some(name) = profile_config.default_provider()
+            {
+                winning_profile = Some(profile.as_str());
+                default_provider_name = Some(name);
             }
         }
 
@@ -2308,7 +2311,10 @@ value = "prod"
         );
 
         let secrets = config.get_secrets(&profiles).unwrap();
-        assert_eq!(secrets.get("SHARED").and_then(SecretConfig::value), Some("prod"));
+        assert_eq!(
+            secrets.get("SHARED").and_then(SecretConfig::value),
+            Some("prod")
+        );
         assert_eq!(
             secrets.get("AWS_ONLY").and_then(SecretConfig::value),
             Some("aws")

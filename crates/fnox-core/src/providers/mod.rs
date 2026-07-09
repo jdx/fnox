@@ -400,10 +400,10 @@ fn provider_source_path(
     provider_name: &str,
 ) -> Option<PathBuf> {
     for profile in profiles.iter().filter(|p| *p != "default").rev() {
-        if let Some(profile_config) = config.profiles.get(profile) {
-            if profile_config.providers.contains_key(provider_name) {
-                return profile_config.provider_sources.get(provider_name).cloned();
-            }
+        if let Some(profile_config) = config.profiles.get(profile)
+            && profile_config.providers.contains_key(provider_name)
+        {
+            return profile_config.provider_sources.get(provider_name).cloned();
         }
     }
 
@@ -460,7 +460,10 @@ mod tests {
         );
         config.profiles.insert("prod".to_string(), profile);
 
-        assert_eq!(provider_source_path(&config, &["prod".to_string()], "pass"), None);
+        assert_eq!(
+            provider_source_path(&config, &["prod".to_string()], "pass"),
+            None
+        );
     }
 
     #[test]

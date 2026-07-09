@@ -148,9 +148,9 @@ impl Fnox {
     pub async fn get(&self, key: &str) -> Result<Option<String>> {
         // get_secret returns Option<&SecretConfig> without cloning the
         // whole IndexMap — preferred over get_secrets(profile)?.get(key).
-        if let Some(secret_config) = self
-            .config
-            .get_secret_with_no_defaults(&self.profiles, key, false)
+        if let Some(secret_config) =
+            self.config
+                .get_secret_with_no_defaults(&self.profiles, key, false)
         {
             return crate::secret_resolver::resolve_secret(
                 &self.config,
@@ -181,7 +181,9 @@ impl Fnox {
     /// configs), not necessarily the set of secrets that currently
     /// have a resolvable value.
     pub fn list(&self) -> Result<Vec<String>> {
-        let secrets = self.config.get_secrets_with_no_defaults(&self.profiles, false)?;
+        let secrets = self
+            .config
+            .get_secrets_with_no_defaults(&self.profiles, false)?;
         Ok(secrets.keys().cloned().collect())
     }
 }

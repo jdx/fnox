@@ -148,9 +148,17 @@ pub struct App {
 
 impl App {
     /// Create a new app with the given config and profile
-    pub fn new(config: Config, profile_stack: Vec<String>, daemon_context: ResolveContext) -> Result<Self> {
+    pub fn new(
+        config: Config,
+        profile_stack: Vec<String>,
+        daemon_context: ResolveContext,
+    ) -> Result<Self> {
         let profile = Config::display_profiles(&profile_stack);
-        let providers: Vec<String> = config.get_providers(&profile_stack).keys().cloned().collect();
+        let providers: Vec<String> = config
+            .get_providers(&profile_stack)
+            .keys()
+            .cloned()
+            .collect();
         let secrets = config.get_secrets(&profile_stack)?;
 
         // Build list of available profiles

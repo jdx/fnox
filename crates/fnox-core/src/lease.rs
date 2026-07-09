@@ -334,7 +334,10 @@ pub enum EncryptionProviderResult {
 }
 
 /// Find an encryption provider if one is configured (default_provider with Encryption capability)
-pub async fn find_encryption_provider(config: &Config, profile: &[String]) -> EncryptionProviderResult {
+pub async fn find_encryption_provider(
+    config: &Config,
+    profile: &[String],
+) -> EncryptionProviderResult {
     let provider_name = match config.get_default_provider(profile) {
         Ok(Some(name)) => name,
         _ => return EncryptionProviderResult::NotConfigured,

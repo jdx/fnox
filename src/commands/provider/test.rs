@@ -61,7 +61,12 @@ impl TestCommand {
         Ok(())
     }
 
-    async fn test_all_providers(&self, cli: &Cli, config: &Config, profile: &[String]) -> Result<()> {
+    async fn test_all_providers(
+        &self,
+        cli: &Cli,
+        config: &Config,
+        profile: &[String],
+    ) -> Result<()> {
         let providers = config.get_providers(profile);
 
         if providers.is_empty() {

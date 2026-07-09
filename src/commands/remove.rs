@@ -75,7 +75,8 @@ impl RemoveCommand {
             }
         } else {
             // Remove secret directly from the TOML document, preserving comments
-            let removed = Config::remove_secret_from_source(&self.key, write_profile, &target_path)?;
+            let removed =
+                Config::remove_secret_from_source(&self.key, write_profile, &target_path)?;
             if !removed {
                 return Err(FnoxError::SecretNotFound {
                     key: self.key.clone(),

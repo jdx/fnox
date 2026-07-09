@@ -907,10 +907,10 @@ fn cache_policy_default_provider<'a>(
     providers: &'a IndexMap<String, ProviderConfig>,
 ) -> Option<&'a str> {
     for p in profile.iter().filter(|p| *p != "default").rev() {
-        if let Some(profile_config) = config.profiles.get(p) {
-            if let Some(default_provider) = profile_config.default_provider() {
-                return Some(default_provider);
-            }
+        if let Some(profile_config) = config.profiles.get(p)
+            && let Some(default_provider) = profile_config.default_provider()
+        {
+            return Some(default_provider);
         }
     }
 

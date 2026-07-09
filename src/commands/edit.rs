@@ -212,7 +212,8 @@ impl EditCommand {
                 let providers = config.get_providers(&profile_stack);
                 if let Some(provider_config) = providers.get(prov_name) {
                     let provider =
-                        get_provider_resolved(config, &profile_stack, prov_name, provider_config).await?;
+                        get_provider_resolved(config, &profile_stack, prov_name, provider_config)
+                            .await?;
                     let capabilities = provider.capabilities();
                     let is_read_only = capabilities.contains(&ProviderCapability::RemoteRead)
                         && !capabilities.contains(&ProviderCapability::Encryption)
