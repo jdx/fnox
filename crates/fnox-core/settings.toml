@@ -32,7 +32,7 @@ examples = [
 since = "0.1.0"
 
 [profile]
-type = "vec_string"
+type = "vec<string>"
 default = '["default"]'
 sources.cli = ["--profile", "-p"]
 sources.env = ["FNOX_PROFILE"]

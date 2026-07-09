@@ -211,7 +211,7 @@ fn parse_type(typ: &str) -> Result<TokenStream, Box<dyn std::error::Error>> {
         "option<string>" => quote! { Option<String> },
         "path" => quote! { PathBuf },
         "option<path>" => quote! { Option<PathBuf> },
-        "vec_string" => quote! { Vec<String> },
+        "vec<string>" => quote! { Vec<String> },
         "bool" => quote! { bool },
         _ => return Err(format!("Unsupported type: {}", typ).into()),
     })
@@ -255,7 +255,7 @@ fn parse_default(default: &str, typ: &str) -> Result<TokenStream, Box<dyn std::e
             "false" => quote! { false },
             _ => return Err(format!("Invalid bool default: {}", default).into()),
         },
-        "vec_string" => {
+        "vec<string>" => {
             let trimmed = default.trim();
             let inner = trimmed
                 .strip_prefix('[')

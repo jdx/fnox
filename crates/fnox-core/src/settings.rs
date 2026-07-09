@@ -135,7 +135,7 @@ impl Settings {
                                 matches!(val.to_lowercase().as_str(), "true" | "1" | "yes" | "on");
                             map.insert(setting_name, SettingValue::Bool(bool_val));
                         }
-                        "vec_string" => {
+                        "vec<string>" => {
                             map.insert(
                                 setting_name,
                                 SettingValue::VecString(crate::env::parse_profile_list(&val)),
