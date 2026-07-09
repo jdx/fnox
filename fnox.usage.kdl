@@ -20,6 +20,9 @@ flag --if-missing help="What to do if a secret is missing (error, warn, ignore)"
 flag --no-color help="Disable colored output" global=#true
 flag --no-daemon help="Disable daemon-backed resolution for this invocation" global=#true
 flag --no-defaults help="Do not merge top-level secrets into the selected profile" global=#true
+flag --write-profile help="Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise" global=#true {
+    arg <WRITE_PROFILE>
+}
 flag --non-interactive help="Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)" global=#true
 cmd activate help="Output shell activation code to enable automatic secret loading" {
     flag --no-hook-env help="Don't automatically invoke hook-env (for testing)"

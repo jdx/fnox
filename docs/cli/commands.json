@@ -1728,6 +1728,23 @@
         "global": true
       },
       {
+        "name": "write-profile",
+        "usage": "--write-profile <WRITE_PROFILE>",
+        "help": "Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise",
+        "help_first_line": "Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise",
+        "short": [],
+        "long": ["write-profile"],
+        "hide": false,
+        "global": true,
+        "arg": {
+          "name": "WRITE_PROFILE",
+          "usage": "<WRITE_PROFILE>",
+          "required": true,
+          "double_dash": "Optional",
+          "hide": false
+        }
+      },
+      {
         "name": "non-interactive",
         "usage": "--non-interactive",
         "help": "Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)",

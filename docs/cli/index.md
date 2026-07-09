@@ -42,7 +42,7 @@ Do not merge top-level secrets into the selected profile
 
 ### `--write-profile <WRITE_PROFILE>`
 
-Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise.
+Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise
 
 ### `--non-interactive`
 
