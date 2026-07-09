@@ -136,6 +136,10 @@ pub fn is_valid_profile_name(name: &str) -> bool {
         match ch {
             // Path separators
             '/' | '\\' => return false,
+            // Comma — used as delimiter in multi-profile lists (FNOX_PROFILE=a,b)
+            // and in socket-path/cache-key joins. Allowing it would cause
+            // collisions: "a,b" as one name vs "a" + "b" as two names.
+            ',' => return false,
             // Null byte (could truncate paths)
             '\0' => return false,
             // Control characters
@@ -202,5 +206,11 @@ mod tests {
         assert!(!is_valid_profile_name("prod\0uction")); // null byte
         assert!(!is_valid_profile_name("prod\ntest")); // newline
         assert!(!is_valid_profile_name("prod\rtest")); // carriage return
+
+        // Comma — used as multi-profile delimiter, must be rejected
+        // to prevent cache-key/socket-path collisions.
+        assert!(!is_valid_profile_name("a,b"));
+        assert!(!is_valid_profile_name("prod,"));
+        assert!(!is_valid_profile_name(",prod"));
     }
 }
