@@ -48,11 +48,18 @@ pub struct Fnox {
     config: Arc<Config>,
     profile: String,
     profiles: Vec<String>,
+    no_defaults: bool,
 }
 
 impl Fnox {
     fn env_profiles() -> Vec<String> {
         Config::normalize_profiles(&crate::env::FNOX_PROFILE)
+    }
+
+    fn env_no_defaults() -> bool {
+        crate::settings::Settings::try_get()
+            .map(|s| s.no_defaults)
+            .unwrap_or(false)
     }
 
     /// Walk up from the current directory looking for `fnox.toml`
@@ -73,10 +80,12 @@ impl Fnox {
         let config = Config::load_smart(CONFIG_FILENAME)?;
         let profiles = Self::env_profiles();
         let profile = Config::display_profiles(&profiles);
+        let no_defaults = Self::env_no_defaults();
         Ok(Self {
             config: Arc::new(config),
             profile,
             profiles,
+            no_defaults,
         })
     }
 
@@ -103,10 +112,13 @@ impl Fnox {
         let config = Config::load(resolved)?;
         let profiles = Self::env_profiles();
         let profile = Config::display_profiles(&profiles);
+        // open() does not walk the config chain, so it should not read
+        // global Settings either — defaults to no_defaults = false.
         Ok(Self {
             config: Arc::new(config),
             profile,
             profiles,
+            no_defaults: false,
         })
     }
 
@@ -120,6 +132,13 @@ impl Fnox {
     pub fn with_profiles(mut self, profiles: impl IntoIterator<Item = String>) -> Self {
         self.profiles = Config::normalize_profiles(&profiles.into_iter().collect::<Vec<_>>());
         self.profile = Config::display_profiles(&self.profiles);
+        self
+    }
+
+    /// Override the no-defaults behavior. When true, top-level secrets
+    /// are not merged into non-default profiles.
+    pub fn with_no_defaults(mut self, no_defaults: bool) -> Self {
+        self.no_defaults = no_defaults;
         self
     }
 
@@ -150,7 +169,7 @@ impl Fnox {
         // whole IndexMap — preferred over get_secrets(profile)?.get(key).
         if let Some(secret_config) =
             self.config
-                .get_secret_with_no_defaults(&self.profiles, key, false)
+                .get_secret_with_no_defaults(&self.profiles, key, self.no_defaults)
         {
             return crate::secret_resolver::resolve_secret(
                 &self.config,
@@ -183,7 +202,7 @@ impl Fnox {
     pub fn list(&self) -> Result<Vec<String>> {
         let secrets = self
             .config
-            .get_secrets_with_no_defaults(&self.profiles, false)?;
+            .get_secrets_with_no_defaults(&self.profiles, self.no_defaults)?;
         Ok(secrets.keys().cloned().collect())
     }
 }

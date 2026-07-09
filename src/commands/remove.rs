@@ -52,7 +52,7 @@ impl RemoveCommand {
         let write_profile_secrets = if write_profile == "default" {
             &config.secrets
         } else {
-            &config
+            config
                 .profiles
                 .get(write_profile)
                 .map(|p| &p.secrets)
