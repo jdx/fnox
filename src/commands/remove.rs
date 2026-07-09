@@ -45,14 +45,24 @@ impl RemoveCommand {
             });
         }
 
-        // Check the secret exists before attempting removal
         let config = Config::load(&target_path)?;
-        let profile_secrets = config.get_secrets(&profile)?;
 
-        if !profile_secrets.contains_key(&self.key) {
+        // Check existence in the write-target profile only, since removal
+        // also targets that specific profile — not the merged stack.
+        let write_profile_secrets = if write_profile == "default" {
+            &config.secrets
+        } else {
+            &config
+                .profiles
+                .get(write_profile)
+                .map(|p| &p.secrets)
+                .unwrap_or(&config.secrets)
+        };
+
+        if !write_profile_secrets.contains_key(&self.key) {
             return Err(FnoxError::SecretNotFound {
                 key: self.key.clone(),
-                profile: Config::display_profiles(&profile),
+                profile: write_profile.to_string(),
                 config_path: Some(target_path),
                 suggestion: None,
             });

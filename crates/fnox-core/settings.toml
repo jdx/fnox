@@ -34,7 +34,7 @@ since = "0.1.0"
 [profile]
 type = "vec<string>"
 default = '["default"]'
-sources.cli = ["--profile", "-p"]
+sources.cli = ["--profile", "-P"]
 sources.env = ["FNOX_PROFILE"]
 docs = """
 Configuration profile to use for secrets retrieval.

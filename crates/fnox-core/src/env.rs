@@ -96,12 +96,25 @@ fn var_path(name: &str) -> Option<PathBuf> {
 }
 
 /// Parse a comma-separated profile list, skipping invalid/empty entries.
+/// Warns on stderr when an entry is rejected so misconfigured environments
+/// are not silently ignored.
 pub fn parse_profile_list(profiles: &str) -> Vec<String> {
     profiles
         .split(',')
         .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .filter(|s| is_valid_profile_name(s))
+        .filter(|s| {
+            if s.is_empty() {
+                return false;
+            }
+            if !is_valid_profile_name(s) {
+                eprintln!(
+                    "Warning: Invalid profile name '{}' in FNOX_PROFILE ignored (contains path separators or invalid characters)",
+                    s
+                );
+                return false;
+            }
+            true
+        })
         .collect()
 }
 /// Validates that a profile name is safe to use in file paths.
