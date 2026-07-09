@@ -28,7 +28,7 @@ impl ProfilesCommand {
             println!("Available profiles:");
             for name in profile_names {
                 let secret_count = config
-                    .get_secrets(&[name.clone()])
+                    .get_secrets(std::slice::from_ref(&name))
                     .map(|s| s.len())
                     .unwrap_or(0);
                 println!("  {} ({} secrets)", name, secret_count);
