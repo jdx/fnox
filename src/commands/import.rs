@@ -1,5 +1,5 @@
 use crate::commands::Cli;
-use crate::config::Config;
+use crate::config::{self, Config};
 use crate::error::{FnoxError, Result};
 use clap::{Args, ValueEnum};
 use console;
@@ -203,7 +203,16 @@ impl ImportCommand {
             }
             global_path
         } else {
-            cli.config.clone()
+            // Match set.rs: use find_local_config when --config is the default,
+            // so profile-specific files (fnox.<profile>.toml) are found.
+            if cli.config == std::path::Path::new(config::DEFAULT_CONFIG_FILENAME) {
+                let current_dir = std::env::current_dir().map_err(|e| {
+                    FnoxError::Config(format!("Failed to get current directory: {}", e))
+                })?;
+                config::find_local_config(&current_dir, std::slice::from_ref(&write_profile))
+            } else {
+                cli.config.clone()
+            }
         };
 
         // Load existing target config to preserve metadata on re-import

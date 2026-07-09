@@ -55,13 +55,7 @@ impl SyncCommand {
                 let current_dir = std::env::current_dir().map_err(|e| {
                     FnoxError::Config(format!("Failed to get current directory: {}", e))
                 })?;
-                let candidate =
-                    config::find_local_config(&current_dir, std::slice::from_ref(&write_profile));
-                if local_override_filename(&candidate).is_some() {
-                    candidate
-                } else {
-                    cli.config.clone()
-                }
+                config::find_local_config(&current_dir, std::slice::from_ref(&write_profile))
             } else {
                 cli.config.clone()
             };
