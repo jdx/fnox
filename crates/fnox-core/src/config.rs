@@ -966,13 +966,16 @@ impl Config {
         };
 
         // Get or create the secrets table.
-        // When writing to a profile-specific file (fnox.<profile>.toml),
-        // the top-level [secrets] section already represents that profile's
-        // secrets — no need to nest under [profiles.<profile>].
+        // When writing to a profile-specific file (fnox.<profile>.toml or
+        // .fnox.<profile>.toml), the top-level [secrets] section already
+        // represents that profile's secrets — no need to nest under
+        // [profiles.<profile>].
         let is_profile_file = target_file
             .file_name()
             .and_then(|n| n.to_str())
             .is_some_and(|name| {
+                // Strip leading dot for dotfile variants (.fnox.prod.toml)
+                let name = name.strip_prefix('.').unwrap_or(name);
                 name.starts_with("fnox.")
                     && name.ends_with(".toml")
                     && name != "fnox.toml"

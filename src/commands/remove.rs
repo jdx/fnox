@@ -35,7 +35,13 @@ impl RemoveCommand {
             let current_dir = std::env::current_dir().map_err(|e| {
                 FnoxError::Config(format!("Failed to get current directory: {}", e))
             })?;
-            current_dir.join(&cli.config)
+            // Match set.rs: use find_local_config when --config is the default,
+            // so profile-specific files (fnox.<profile>.toml) are found.
+            if cli.config == std::path::Path::new(crate::config::DEFAULT_CONFIG_FILENAME) {
+                crate::config::find_local_config(&current_dir, std::slice::from_ref(&write_profile))
+            } else {
+                current_dir.join(&cli.config)
+            }
         };
 
         // Load the target config file directly (not the merged config)
