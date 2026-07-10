@@ -40,13 +40,13 @@ Disable daemon-backed resolution for this invocation
 
 Do not merge top-level secrets into the selected profile
 
-### `--write-profile <WRITE_PROFILE>`
-
-Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise
-
 ### `--non-interactive`
 
 Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)
+
+### `--write-profile <WRITE_PROFILE>`
+
+Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise
 
 ## Subcommands
 
