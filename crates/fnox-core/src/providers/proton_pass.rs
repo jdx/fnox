@@ -188,71 +188,7 @@ impl ProtonPassProvider {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            let stderr_lower = stderr.to_lowercase();
-
-            if stderr_lower.contains("proton_pass_agent_reason")
-                || stderr_lower.contains("agent reason")
-                || stderr_lower.contains("reason must be provided")
-            {
-                return Err(FnoxError::ProviderAuthFailed {
-                    provider: "Proton Pass".to_string(),
-                    details: stderr.trim().to_string(),
-                    hint: "Set PROTON_PASS_AGENT_REASON, FNOX_PROTON_PASS_AGENT_REASON, or providers.<name>.agent_reason for audited agent access".to_string(),
-                    url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
-                });
-            }
-
-            if stderr_lower.contains("could not get local key from keyring")
-                || stderr_lower.contains("failed to get encryption key")
-                || stderr_lower.contains("key provider")
-            {
-                return Err(FnoxError::ProviderAuthFailed {
-                    provider: "Proton Pass".to_string(),
-                    details: stderr.trim().to_string(),
-                    hint: "Check Proton Pass session/key storage: PROTON_PASS_SESSION_DIR, PROTON_PASS_KEY_PROVIDER=fs|env|keyring, and PROTON_PASS_ENCRYPTION_KEY".to_string(),
-                    url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
-                });
-            }
-
-            // Check for authentication-related errors (using CLI-specific patterns)
-            if stderr_lower.contains("not logged in")
-                || stderr_lower.contains("session expired")
-                || stderr_lower.contains("login required")
-            {
-                return Err(FnoxError::ProviderAuthFailed {
-                    provider: "Proton Pass".to_string(),
-                    details: stderr.trim().to_string(),
-                    hint: "Run 'pass-cli login', or set PROTON_PASS_PERSONAL_ACCESS_TOKEN and run 'pass-cli login' for PAT/agent access".to_string(),
-                    url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
-                });
-            }
-
-            // Check for field not found (e.g., requesting "password" on an alias item)
-            if stderr_lower.contains("field does not exist") {
-                return Err(FnoxError::ProviderSecretNotFound {
-                    provider: "Proton Pass".to_string(),
-                    secret: secret_ref.unwrap_or("<unknown>").to_string(),
-                    hint: "This item may not have the requested field. Try specifying a different field with 'item/field' syntax".to_string(),
-                    url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
-                });
-            }
-
-            // Check for not found errors
-            if stderr_lower.contains("not found") || stderr_lower.contains("does not exist") {
-                return Err(FnoxError::ProviderSecretNotFound {
-                    provider: "Proton Pass".to_string(),
-                    secret: secret_ref.unwrap_or("<unknown>").to_string(),
-                    hint: "Check that the vault and item exist in Proton Pass".to_string(),
-                    url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
-                });
-            }
-
-            return Err(FnoxError::ProviderCliFailed {
-                provider: "Proton Pass".to_string(),
-                details: stderr.trim().to_string(),
-                hint: "Check your Proton Pass configuration and authentication".to_string(),
-                url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
-            });
+            return Err(classify_cli_error(&stderr, secret_ref));
         }
 
         let stdout =
@@ -284,6 +220,85 @@ impl ProtonPassProvider {
         }
 
         env_vars
+    }
+}
+
+fn classify_cli_error(stderr: &str, secret_ref: Option<&str>) -> FnoxError {
+    let stderr_lower = stderr.to_lowercase();
+
+    if stderr_lower.contains("session is locked") {
+        // ProviderAuthFailed triggers the configured login command, but locked sessions
+        // require the distinct unlock command.
+        return FnoxError::ProviderCliFailed {
+            provider: "Proton Pass".to_string(),
+            details: stderr.trim().to_string(),
+            hint: "Run 'pass-cli session unlock' to unlock your Proton Pass session".to_string(),
+            url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
+        };
+    }
+
+    if stderr_lower.contains("proton_pass_agent_reason")
+        || stderr_lower.contains("agent reason")
+        || stderr_lower.contains("reason must be provided")
+    {
+        return FnoxError::ProviderAuthFailed {
+            provider: "Proton Pass".to_string(),
+            details: stderr.trim().to_string(),
+            hint: "Set PROTON_PASS_AGENT_REASON, FNOX_PROTON_PASS_AGENT_REASON, or providers.<name>.agent_reason for audited agent access".to_string(),
+            url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
+        };
+    }
+
+    if stderr_lower.contains("could not get local key from keyring")
+        || stderr_lower.contains("failed to get encryption key")
+        || stderr_lower.contains("key provider")
+    {
+        return FnoxError::ProviderAuthFailed {
+            provider: "Proton Pass".to_string(),
+            details: stderr.trim().to_string(),
+            hint: "Check Proton Pass session/key storage: PROTON_PASS_SESSION_DIR, PROTON_PASS_KEY_PROVIDER=fs|env|keyring, and PROTON_PASS_ENCRYPTION_KEY".to_string(),
+            url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
+        };
+    }
+
+    // Check for authentication-related errors (using CLI-specific patterns)
+    if stderr_lower.contains("not logged in")
+        || stderr_lower.contains("session expired")
+        || stderr_lower.contains("login required")
+    {
+        return FnoxError::ProviderAuthFailed {
+            provider: "Proton Pass".to_string(),
+            details: stderr.trim().to_string(),
+            hint: "Run 'pass-cli login', or set PROTON_PASS_PERSONAL_ACCESS_TOKEN and run 'pass-cli login' for PAT/agent access".to_string(),
+            url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
+        };
+    }
+
+    // Check for field not found (e.g., requesting "password" on an alias item)
+    if stderr_lower.contains("field does not exist") {
+        return FnoxError::ProviderSecretNotFound {
+            provider: "Proton Pass".to_string(),
+            secret: secret_ref.unwrap_or("<unknown>").to_string(),
+            hint: "This item may not have the requested field. Try specifying a different field with 'item/field' syntax".to_string(),
+            url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
+        };
+    }
+
+    // Check for not found errors
+    if stderr_lower.contains("not found") || stderr_lower.contains("does not exist") {
+        return FnoxError::ProviderSecretNotFound {
+            provider: "Proton Pass".to_string(),
+            secret: secret_ref.unwrap_or("<unknown>").to_string(),
+            hint: "Check that the vault and item exist in Proton Pass".to_string(),
+            url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
+        };
+    }
+
+    FnoxError::ProviderCliFailed {
+        provider: "Proton Pass".to_string(),
+        details: stderr.trim().to_string(),
+        hint: "Check your Proton Pass configuration and authentication".to_string(),
+        url: "https://fnox.jdx.dev/providers/proton-pass".to_string(),
     }
 }
 
@@ -660,6 +675,47 @@ mod tests {
         let provider = ProtonPassProvider::new(None, None).unwrap();
         let result = provider.value_to_reference("pass://vault/item");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_classify_cli_error_locked_session() {
+        let stderr = "Session is locked. Please unlock your session and try again.";
+        let error = classify_cli_error(stderr, Some("pass://vault/item/password"));
+
+        match error {
+            FnoxError::ProviderCliFailed { details, hint, .. } => {
+                assert_eq!(details, stderr);
+                assert_eq!(
+                    hint,
+                    "Run 'pass-cli session unlock' to unlock your Proton Pass session"
+                );
+            }
+            other => panic!("Expected ProviderCliFailed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_classify_cli_error_unauthenticated() {
+        let error = classify_cli_error("Not logged in", None);
+
+        assert!(matches!(error, FnoxError::ProviderAuthFailed { .. }));
+    }
+
+    #[test]
+    fn test_classify_cli_error_unknown() {
+        let stderr = "Unexpected CLI failure";
+        let error = classify_cli_error(stderr, None);
+
+        match error {
+            FnoxError::ProviderCliFailed { details, hint, .. } => {
+                assert_eq!(details, stderr);
+                assert_eq!(
+                    hint,
+                    "Check your Proton Pass configuration and authentication"
+                );
+            }
+            other => panic!("Expected ProviderCliFailed, got {other:?}"),
+        }
     }
 
     // id: references are handled in get_secret, not value_to_reference.
