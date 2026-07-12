@@ -16,7 +16,7 @@ impl McpCommand {
         // corrupt the JSON-RPC stream on stdout.
         env::set_non_interactive(true);
 
-        let profile = Config::get_profile(cli.profile.as_deref());
+        let profile = Config::get_profiles(cli.profile.as_slice());
         let mcp_config = config.mcp.clone().unwrap_or_default();
 
         // Warn about allowlist entries that don't match any configured secret

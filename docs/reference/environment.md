@@ -6,10 +6,15 @@ fnox uses environment variables for configuration and runtime behavior.
 
 ### `FNOX_PROFILE`
 
-Active profile name.
+Active profile name. Supports multiple profiles as a comma-separated
+list for ordered overlay composition.
 
 ```bash
+# Single profile
 export FNOX_PROFILE=production
+
+# Multiple profiles (later ones override earlier ones)
+export FNOX_PROFILE=aws,prod
 ```
 
 **Default:** `default`
@@ -21,6 +26,10 @@ export FNOX_PROFILE=production
 export FNOX_PROFILE=production
 fnox get DATABASE_URL
 fnox exec -- ./deploy.sh
+
+# Compose aws + prod profiles
+export FNOX_PROFILE=aws,prod
+fnox exec -- ./app
 ```
 
 ### `FNOX_NO_DEFAULTS`

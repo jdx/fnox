@@ -66,8 +66,11 @@ struct ExportMetadata {
 
 impl ExportCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
-        let profile = Config::get_profile(cli.profile.as_deref());
-        tracing::debug!("Exporting secrets from profile '{}'", profile);
+        let profile = Config::get_profiles(cli.profile.as_slice());
+        tracing::debug!(
+            "Exporting secrets from profiles '{}'",
+            Config::display_profiles(&profile)
+        );
 
         let mut profile_secrets = config.get_secrets(&profile)?;
 
@@ -123,7 +126,7 @@ impl ExportCommand {
         }
 
         let metadata = Some(ExportMetadata {
-            profile: profile.clone(),
+            profile: Config::display_profiles(&profile),
             exported_at: chrono::Utc::now().to_rfc3339(),
             total_secrets: secrets.len(),
         });

@@ -47,8 +47,11 @@ struct SecretEntry {
 
 impl EditCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
-        let profile = Config::get_profile(cli.profile.as_deref());
-        tracing::debug!("Starting enhanced edit with profile: {}", profile);
+        let profile = Config::get_profiles(cli.profile.as_slice());
+        tracing::debug!(
+            "Starting enhanced edit with profile: {}",
+            Config::display_profiles(&profile)
+        );
 
         // Step 1: Load raw TOML with toml_edit to preserve formatting
         let toml_content =
@@ -99,8 +102,9 @@ impl EditCommand {
         let mut resolved_by_profile: IndexMap<String, IndexMap<String, Option<String>>> =
             IndexMap::new();
         for (profile_name, secrets) in secrets_by_profile {
+            let profile_stack = vec![profile_name.clone()];
             let resolved =
-                secret_resolver::resolve_secrets_batch(&config, &profile_name, &secrets).await?;
+                secret_resolver::resolve_secrets_batch(&config, &profile_stack, &secrets).await?;
             resolved_by_profile.insert(profile_name, resolved);
         }
 
@@ -194,20 +198,22 @@ impl EditCommand {
         secrets: &IndexMap<String, SecretConfig>,
         all_secrets: &mut Vec<SecretEntry>,
     ) -> Result<()> {
+        let profile_stack = vec![profile.to_string()];
         for (key, secret_config) in secrets {
             // Determine provider and check if read-only
             let provider_name = if let Some(prov) = secret_config.provider() {
                 Some(prov.to_string())
             } else {
-                config.get_default_provider(profile)?
+                config.get_default_provider(&profile_stack)?
             };
 
             let (is_read_only, resolved_provider_name) = if let Some(ref prov_name) = provider_name
             {
-                let providers = config.get_providers(profile);
+                let providers = config.get_providers(&profile_stack);
                 if let Some(provider_config) = providers.get(prov_name) {
                     let provider =
-                        get_provider_resolved(config, profile, prov_name, provider_config).await?;
+                        get_provider_resolved(config, &profile_stack, prov_name, provider_config)
+                            .await?;
                     let capabilities = provider.capabilities();
                     let is_read_only = capabilities.contains(&ProviderCapability::RemoteRead)
                         && !capabilities.contains(&ProviderCapability::Encryption)
@@ -397,6 +403,7 @@ impl EditCommand {
         secret_profile: &str,
         secrets_map: &HashMap<(String, String), &SecretEntry>,
     ) -> Result<()> {
+        let profile_stack = vec![secret_profile.to_string()];
         // Collect keys first to avoid borrow issues when mutating
         let keys: Vec<_> = secrets_table.iter().map(|(k, _)| k.to_string()).collect();
 
@@ -469,14 +476,14 @@ impl EditCommand {
                 let provider_to_use = if let Some(ref prov) = explicit_provider {
                     Some(prov.clone())
                 } else {
-                    config.get_default_provider(secret_profile)?
+                    config.get_default_provider(&profile_stack)?
                 };
                 let encrypted_value = if let Some(provider_name) = provider_to_use {
-                    let providers = config.get_providers(secret_profile);
+                    let providers = config.get_providers(&profile_stack);
                     if let Some(provider_config) = providers.get(&provider_name) {
                         let provider = get_provider_resolved(
                             config,
-                            secret_profile,
+                            &profile_stack,
                             &provider_name,
                             provider_config,
                         )
@@ -497,7 +504,7 @@ impl EditCommand {
                 // Determine provider to use (from this secret's profile)
                 let provider_name = if let Some(prov) = explicit_provider {
                     prov
-                } else if let Some(default_prov) = config.get_default_provider(secret_profile)? {
+                } else if let Some(default_prov) = config.get_default_provider(&profile_stack)? {
                     default_prov
                 } else {
                     // No provider - keep as plaintext
@@ -509,7 +516,7 @@ impl EditCommand {
                 };
 
                 // Encrypt with the provider from this secret's profile
-                let providers = config.get_providers(secret_profile);
+                let providers = config.get_providers(&profile_stack);
                 let Some(provider_config) = providers.get(&provider_name) else {
                     return Err(FnoxError::Config(format!(
                         "Provider '{}' not found for new secret '{}'",
@@ -518,7 +525,7 @@ impl EditCommand {
                 };
 
                 let provider =
-                    get_provider_resolved(config, secret_profile, &provider_name, provider_config)
+                    get_provider_resolved(config, &profile_stack, &provider_name, provider_config)
                         .await?;
                 let encrypted_value = provider.put_secret(&key_str, plaintext).await?;
 

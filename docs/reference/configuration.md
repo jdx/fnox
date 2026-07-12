@@ -529,7 +529,9 @@ fnox.local.toml
 
 ## Profile-Specific Config Files
 
-You can create environment-specific config files that load based on the `FNOX_PROFILE` environment variable:
+You can create environment-specific config files that load based on the active
+profile(s). When multiple profiles are active, each profile's config file is
+loaded in order:
 
 ```bash
 # Directory structure
@@ -552,14 +554,18 @@ FNOX_PROFILE=production fnox exec -- ./deploy.sh
 
 # Use staging config (fnox.toml + fnox.staging.toml)
 FNOX_PROFILE=staging fnox exec -- ./deploy.sh
+
+# Compose multiple profiles (fnox.toml + fnox.aws.toml + fnox.prod.toml)
+FNOX_PROFILE=aws,prod fnox exec -- ./app
 ```
 
 **Key differences:**
 
-- `fnox.$FNOX_PROFILE.toml` files are **committed to git** (environment-specific, but shared with team)
+- `fnox.<profile>.toml` files are **committed to git** (environment-specific, but shared with team)
 - `fnox.local.toml` is **gitignored** (machine-specific, personal overrides)
 - Profile-specific files work with the default profile's secrets, not `[profiles.xxx]` sections
 - `fnox.default.toml` is **not loaded** (use `fnox.toml` instead)
+- With multiple active profiles, config files are loaded in profile order (later profiles override earlier)
 
 ## Hierarchical Configuration
 
@@ -577,10 +583,10 @@ Merge order (lowest to highest priority):
 
 1. **Global config** (`~/.config/fnox/config.toml`)
 2. Root `fnox.toml`
-3. Root `fnox.$FNOX_PROFILE.toml` (if `FNOX_PROFILE` is set and not "default")
+3. Root `fnox.<profile>.toml` for each active profile (in profile order)
 4. Root `fnox.local.toml`
 5. Child `fnox.toml`
-6. Child `fnox.$FNOX_PROFILE.toml` (if `FNOX_PROFILE` is set and not "default")
+6. Child `fnox.<profile>.toml` for each active profile (in profile order)
 7. Child `fnox.local.toml`
 
 **Note**: Global config is always loaded, even when `root = true` stops parent directory recursion.

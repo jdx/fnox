@@ -87,15 +87,21 @@ struct SecretRowWithValuesAndSources {
 
 impl ListCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
-        let profile = Config::get_profile(cli.profile.as_deref());
-        tracing::debug!("Listing secrets in profile '{}'", profile);
+        let profile = Config::get_profiles(cli.profile.as_slice());
+        tracing::debug!(
+            "Listing secrets in profiles '{}'",
+            Config::display_profiles(&profile)
+        );
 
         // Get the profile secrets
         let profile_secrets = config.get_secrets(&profile)?;
 
         if profile_secrets.is_empty() {
             if !self.complete {
-                println!("No secrets defined in profile '{}'", profile);
+                println!(
+                    "No secrets defined in profiles '{}'",
+                    Config::display_profiles(&profile)
+                );
             }
             return Ok(());
         }

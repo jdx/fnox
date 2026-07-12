@@ -334,6 +334,104 @@ EOF
 	assert_output --partial "not found"
 }
 
+@test 'multiple active profiles overlay in order' {
+	# Base config with a shared secret and a base-only secret
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.base]
+type = "plain"
+
+[secrets]
+SHARED = { default = "base-value" }
+BASE_ONLY = { default = "base-only" }
+EOF
+
+	# aws profile: adds a provider + an aws-only secret, overrides SHARED
+	cat >fnox.aws.toml <<EOF
+[providers.aws_plain]
+type = "plain"
+
+[secrets]
+SHARED = { default = "aws-value" }
+AWS_ONLY = { default = "aws-only" }
+EOF
+
+	# prod profile: overrides SHARED again, adds a prod-only secret
+	cat >fnox.prod.toml <<EOF
+[secrets]
+SHARED = { default = "prod-value" }
+PROD_ONLY = { default = "prod-only" }
+EOF
+
+	# Two profiles via repeated --profile: later wins
+	run "$FNOX_BIN" -P aws -P prod get SHARED
+	assert_success
+	assert_output --partial "prod-value"
+
+	# Both profile-only secrets are visible
+	run "$FNOX_BIN" -P aws -P prod get AWS_ONLY
+	assert_success
+	assert_output --partial "aws-only"
+
+	run "$FNOX_BIN" -P aws -P prod get PROD_ONLY
+	assert_success
+	assert_output --partial "prod-only"
+
+	# Base secret still visible (top-level merged)
+	run "$FNOX_BIN" -P aws -P prod get BASE_ONLY
+	assert_success
+	assert_output --partial "base-only"
+
+	# Comma-separated form should behave identically
+	run "$FNOX_BIN" -P aws,prod get SHARED
+	assert_success
+	assert_output --partial "prod-value"
+
+	# FNOX_PROFILE env var with comma also works
+	run env FNOX_PROFILE=aws,prod "$FNOX_BIN" get SHARED
+	assert_success
+	assert_output --partial "prod-value"
+
+	# list shows all merged secrets
+	run "$FNOX_BIN" -P aws -P prod list --complete
+	assert_success
+	assert_output --partial "SHARED"
+	assert_output --partial "AWS_ONLY"
+	assert_output --partial "PROD_ONLY"
+	assert_output --partial "BASE_ONLY"
+}
+
+@test 'multiple active profiles compose providers' {
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.base]
+type = "plain"
+
+[secrets]
+S1 = { default = "v1" }
+EOF
+
+	cat >fnox.extra.toml <<EOF
+[providers.extra]
+type = "plain"
+
+[secrets]
+S2 = { provider = "extra", default = "v2" }
+EOF
+
+	# Without extra profile: S2 references unknown provider
+	run "$FNOX_BIN" -P extra get S2
+	assert_success
+	assert_output --partial "v2"
+
+	# With both base + extra: both providers available
+	run "$FNOX_BIN" -P extra get S1
+	assert_success
+	assert_output --partial "v1"
+}
+
 @test 'fnox.$FNOX_PROFILE.toml can override default_provider' {
 	# Create main config with default provider (use plain to avoid encryption)
 	cat >fnox.toml <<EOF

@@ -78,7 +78,7 @@ impl Default for ResolutionContext {
 /// A `ResolvedProviderConfig` with all secret references replaced with actual values.
 pub async fn resolve_provider_config(
     config: &Config,
-    profile: &str,
+    profile: &[String],
     provider_name: &str,
     provider_config: &ProviderConfig,
 ) -> Result<ResolvedProviderConfig> {
@@ -90,7 +90,7 @@ pub async fn resolve_provider_config(
 /// Internal function that carries the resolution context for cycle detection.
 pub fn resolve_provider_config_with_context<'a>(
     config: &'a Config,
-    profile: &'a str,
+    profile: &'a [String],
     provider_name: &'a str,
     provider_config: &'a ProviderConfig,
     ctx: &'a mut ResolutionContext,
@@ -128,7 +128,7 @@ pub fn resolve_provider_config_with_context<'a>(
 /// Resolve a required `StringOrSecretRef` field to its actual string value.
 pub fn resolve_required<'a>(
     config: &'a Config,
-    profile: &'a str,
+    profile: &'a [String],
     provider_name: &'a str,
     _field_name: &'a str,
     value: &'a StringOrSecretRef,
@@ -147,7 +147,7 @@ pub fn resolve_required<'a>(
 /// Resolve an optional `OptionStringOrSecretRef` field to its actual value.
 pub fn resolve_option<'a>(
     config: &'a Config,
-    profile: &'a str,
+    profile: &'a [String],
     provider_name: &'a str,
     value: &'a OptionStringOrSecretRef,
     ctx: &'a mut ResolutionContext,
@@ -168,7 +168,7 @@ pub fn resolve_option<'a>(
 /// Resolve an optional provider-backed secret reference to its actual value.
 pub fn resolve_provider_ref<'a>(
     config: &'a Config,
-    profile: &'a str,
+    profile: &'a [String],
     value: &'a OptionProviderSecretRef,
     ctx: &'a mut ResolutionContext,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<String>>> + Send + 'a>> {
@@ -183,7 +183,7 @@ pub fn resolve_provider_ref<'a>(
 
 pub fn resolve_provider_ref_with_identity_cycle_guard<'a>(
     config: &'a Config,
-    profile: &'a str,
+    profile: &'a [String],
     value: &'a OptionProviderSecretRef,
     ctx: &'a mut ResolutionContext,
     identity_cycle_guard: super::age::AgeIdentityCycleGuard,
@@ -201,7 +201,7 @@ pub fn resolve_provider_ref_with_identity_cycle_guard<'a>(
 
             return Err(FnoxError::ProviderNotConfigured {
                 provider: provider_ref.provider.clone(),
-                profile: profile.to_string(),
+                profile: profile.join(","),
                 config_path: config.provider_sources.get(&provider_ref.provider).cloned(),
                 suggestion,
             });
@@ -241,7 +241,7 @@ pub fn resolve_provider_ref_with_identity_cycle_guard<'a>(
 /// config will also be resolved recursively.
 fn resolve_secret_ref<'a>(
     config: &'a Config,
-    profile: &'a str,
+    profile: &'a [String],
     provider_name: &'a str,
     secret_name: &'a str,
     ctx: &'a mut ResolutionContext,
@@ -294,7 +294,7 @@ fn resolve_secret_ref<'a>(
 
                     return Err(FnoxError::ProviderNotConfigured {
                         provider: secret_provider_name.to_string(),
-                        profile: profile.to_string(),
+                        profile: profile.join(","),
                         config_path: config.provider_sources.get(secret_provider_name).cloned(),
                         suggestion,
                     });

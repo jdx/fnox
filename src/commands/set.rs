@@ -54,8 +54,13 @@ pub struct SetCommand {
 
 impl SetCommand {
     pub async fn run(&self, cli: &Cli, mut config: Config) -> Result<()> {
-        let profile = Config::get_profile(cli.profile.as_deref());
-        tracing::debug!("Setting secret '{}' in profile '{}'", self.key, profile);
+        let profile = Config::get_profiles(cli.profile.as_slice());
+        let write_profile = Config::resolve_write_profile(&profile, cli.write_profile.as_deref())?;
+        tracing::debug!(
+            "Setting secret '{}' in profile '{}'",
+            self.key,
+            write_profile
+        );
 
         // Check if we're only setting metadata (no actual secret value)
         let has_metadata =
@@ -190,8 +195,10 @@ impl SetCommand {
             (None, None)
         };
 
-        // Now update the config
-        let profile_secrets = config.get_secrets_mut(&profile);
+        // Now update the config — use the resolved write_profile, not the
+        // full stack, so the secret lands in the correct TOML section.
+        let write_profile_stack = vec![write_profile.clone()];
+        let profile_secrets = config.get_secrets_mut(&write_profile_stack);
 
         // Get or create the secret config
         let secret_config = profile_secrets.entry(self.key.clone()).or_default();
@@ -263,7 +270,7 @@ impl SetCommand {
             // Only use auto-detection when --config is the clap default ("fnox.toml").
             // Any other value means the user explicitly chose a config file.
             if cli.config == std::path::Path::new(config::DEFAULT_CONFIG_FILENAME) {
-                config::find_local_config(&current_dir, Some(&profile))
+                config::find_local_config(&current_dir, std::slice::from_ref(&write_profile))
             } else {
                 current_dir.join(&cli.config)
             }
@@ -273,11 +280,11 @@ impl SetCommand {
             // Show what would be done
             let dry_run_label = console::style("[dry-run]").yellow().bold();
             let styled_key = console::style(&self.key).cyan();
-            let styled_profile = console::style(&profile).magenta();
+            let styled_profile = console::style(&write_profile).magenta();
             let styled_path = console::style(target_path.display()).dim();
             let global_suffix = if self.global { " (global)" } else { "" };
 
-            if profile == "default" {
+            if write_profile == "default" {
                 println!(
                     "{dry_run_label} Would set secret {styled_key}{global_suffix} in {styled_path}"
                 );
@@ -313,13 +320,18 @@ impl SetCommand {
                 );
             }
         } else {
-            config.save_secret_to_source(&self.key, &secret_config, &profile, &target_path)?;
+            config.save_secret_to_source(
+                &self.key,
+                &secret_config,
+                &write_profile,
+                &target_path,
+            )?;
 
             let check = console::style("✓").green();
             let styled_key = console::style(&self.key).cyan();
-            let styled_profile = console::style(&profile).magenta();
+            let styled_profile = console::style(&write_profile).magenta();
             let global_suffix = if self.global { " (global)" } else { "" };
-            if profile == "default" {
+            if write_profile == "default" {
                 println!("{check} Set secret {styled_key}{global_suffix}");
             } else {
                 println!(

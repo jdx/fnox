@@ -807,7 +807,7 @@ fn generate_provider_resolver(
         /// This is the generated match statement for resolving provider configs.
         pub async fn resolve_provider_config_match(
             config: &Config,
-            profile: &str,
+            profile: &[String],
             provider_name: &str,
             provider_config: &ProviderConfig,
             ctx: &mut super::super::resolver::ResolutionContext,

@@ -183,7 +183,8 @@ async fn load_secrets_from_config(cli: &Cli) -> Result<LoadedSecrets> {
     // This handles fnox.toml and fnox.local.toml with proper recursion
     let settings =
         Settings::try_get().map_err(|e| anyhow::anyhow!("Failed to get settings: {}", e))?;
-    let filenames = crate::config::all_config_filenames(Some(&settings.profile));
+    let profiles = Config::get_profiles(&[]);
+    let filenames = crate::config::all_config_filenames(&profiles);
     let mut last_error = None;
     let mut config = None;
     for filename in &filenames {

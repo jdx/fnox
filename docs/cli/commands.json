@@ -1637,11 +1637,12 @@
       },
       {
         "name": "profile",
-        "usage": "-P --profile <PROFILE>",
-        "help": "Profile to use (default: default, or FNOX_PROFILE env var)",
-        "help_first_line": "Profile to use (default: default, or FNOX_PROFILE env var)",
+        "usage": "-P --profile… <PROFILE>",
+        "help": "Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones",
+        "help_first_line": "Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones",
         "short": ["P"],
         "long": ["profile"],
+        "var": true,
         "hide": false,
         "global": true,
         "arg": {
@@ -1735,6 +1736,23 @@
         "long": ["non-interactive"],
         "hide": false,
         "global": true
+      },
+      {
+        "name": "write-profile",
+        "usage": "--write-profile <WRITE_PROFILE>",
+        "help": "Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise",
+        "help_first_line": "Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise",
+        "short": [],
+        "long": ["write-profile"],
+        "hide": false,
+        "global": true,
+        "arg": {
+          "name": "WRITE_PROFILE",
+          "usage": "<WRITE_PROFILE>",
+          "required": true,
+          "double_dash": "Optional",
+          "hide": false
+        }
       }
     ],
     "mounts": [],

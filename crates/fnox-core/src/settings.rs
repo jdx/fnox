@@ -42,7 +42,7 @@ static INITIALIZED: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
 #[derive(Debug, Clone, Default)]
 pub struct CliSnapshot {
     pub age_key_file: Option<std::path::PathBuf>,
-    pub profile: Option<String>,
+    pub profile: Vec<String>,
     pub if_missing: Option<String>,
     pub no_defaults: bool,
 }
@@ -135,6 +135,12 @@ impl Settings {
                                 matches!(val.to_lowercase().as_str(), "true" | "1" | "yes" | "on");
                             map.insert(setting_name, SettingValue::Bool(bool_val));
                         }
+                        "vec<string>" => {
+                            map.insert(
+                                setting_name,
+                                SettingValue::VecString(crate::env::parse_profile_list(&val)),
+                            );
+                        }
                         _ => {
                             // Ignore unknown types
                         }
@@ -156,8 +162,8 @@ impl Settings {
                 map.insert("age_key_file", SettingValue::OptionPath(Some(age_key_file)));
             }
 
-            if let Some(profile) = snapshot.profile {
-                map.insert("profile", SettingValue::String(profile));
+            if !snapshot.profile.is_empty() {
+                map.insert("profile", SettingValue::VecString(snapshot.profile.clone()));
             }
 
             if let Some(if_missing) = snapshot.if_missing {
@@ -192,6 +198,7 @@ impl Settings {
                     serde_json::json!(opt.as_ref().map(|p| p.display().to_string()))
                 }
                 SettingValue::Bool(b) => serde_json::json!(b),
+                SettingValue::VecString(v) => serde_json::json!(v),
             };
 
             if let Some(obj) = val.as_object_mut() {
@@ -232,7 +239,7 @@ mod tests {
     #[test]
     fn test_default_settings() {
         let settings = GeneratedSettings::default();
-        assert_eq!(settings.profile, "default");
+        assert_eq!(settings.profile, vec!["default".to_string()]);
         assert_eq!(settings.age_key_file, None);
         assert!(!settings.no_defaults);
     }
@@ -241,7 +248,7 @@ mod tests {
     fn test_settings_merge_precedence() {
         let defaults = GeneratedSettings {
             age_key_file: None,
-            profile: "default".to_string(),
+            profile: vec!["default".to_string()],
             no_defaults: false,
             shell_integration_output: "normal".to_string(),
             if_missing: None,
@@ -274,7 +281,7 @@ mod tests {
     fn test_settings_merge_partial() {
         let defaults = GeneratedSettings {
             age_key_file: None,
-            profile: "default".to_string(),
+            profile: vec!["default".to_string()],
             no_defaults: false,
             shell_integration_output: "normal".to_string(),
             if_missing: None,
@@ -298,7 +305,7 @@ mod tests {
             Some(std::path::PathBuf::from("/env/key.txt"))
         );
         // Default profile should remain
-        assert_eq!(merged.profile, "default");
+        assert_eq!(merged.profile, vec!["default".to_string()]);
     }
 
     #[test]

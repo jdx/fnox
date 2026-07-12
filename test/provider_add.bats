@@ -76,11 +76,64 @@ vault|vault|vault"
 	assert_output --partial 'vault = "MyVault"'
 }
 
-@test "fnox provider add --vault fails for non-proton provider types" {
+@test "fnox provider add writes to top-level without --profile" {
+	# Clear any inherited FNOX_PROFILE so provider add targets the top-level
+	unset FNOX_PROFILE
+
 	run "$FNOX_BIN" init --skip-wizard
 	assert_success
 
-	run "$FNOX_BIN" provider add myage age --vault "bad-vault"
-	assert_failure
-	assert_output --partial "--vault is only supported for provider type"
+	run "$FNOX_BIN" provider add myage age
+	assert_success
+
+	run cat "$FNOX_CONFIG_FILE"
+	assert_success
+	assert_output --partial "[providers.myage]"
+}
+
+@test "fnox provider add with --profile writes to profile section" {
+	run "$FNOX_BIN" init --skip-wizard
+	assert_success
+
+	# Add a provider scoped to the prod profile
+	run "$FNOX_BIN" -P prod provider add scoped age
+	assert_success
+	assert_output --partial "Added provider 'scoped'"
+
+	# Provider should appear under [profiles.prod.providers.scoped]
+	run cat "$FNOX_CONFIG_FILE"
+	assert_success
+	assert_output --partial "[profiles.prod.providers.scoped]"
+	assert_output --partial 'type = "age"'
+
+	# It should NOT be in the top-level [providers] section
+	refute_output --partial "[providers.scoped]"
+}
+
+@test "fnox provider list shows composed providers from multiple profiles" {
+	# Clear any inherited FNOX_PROFILE so the "no profile" case is deterministic
+	unset FNOX_PROFILE
+
+	run "$FNOX_BIN" init --skip-wizard
+	assert_success
+
+	# Top-level provider
+	run "$FNOX_BIN" provider add base age
+	assert_success
+
+	# Profile-scoped provider
+	run "$FNOX_BIN" -P extra provider add extra age
+	assert_success
+
+	# Without profile: only base visible
+	run "$FNOX_BIN" provider list
+	assert_success
+	assert_output --partial "base"
+	refute_output --partial "extra"
+
+	# With extra profile: both visible
+	run "$FNOX_BIN" -P extra provider list
+	assert_success
+	assert_output --partial "base"
+	assert_output --partial "extra"
 }

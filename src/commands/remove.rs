@@ -20,8 +20,13 @@ pub struct RemoveCommand {
 
 impl RemoveCommand {
     pub async fn run(&self, cli: &Cli) -> Result<()> {
-        let profile = Config::get_profile(cli.profile.as_deref());
-        tracing::debug!("Removing secret '{}' from profile '{}'", self.key, profile);
+        let profile = Config::get_profiles(cli.profile.as_slice());
+        let write_profile = Config::resolve_write_profile(&profile, cli.write_profile.as_deref())?;
+        tracing::debug!(
+            "Removing secret '{}' from profile '{}'",
+            self.key,
+            write_profile
+        );
 
         // Determine the target config file
         let target_path = if self.global {
@@ -30,7 +35,13 @@ impl RemoveCommand {
             let current_dir = std::env::current_dir().map_err(|e| {
                 FnoxError::Config(format!("Failed to get current directory: {}", e))
             })?;
-            current_dir.join(&cli.config)
+            // Match set.rs: use find_local_config when --config is the default,
+            // so profile-specific files (fnox.<profile>.toml) are found.
+            if cli.config == std::path::Path::new(crate::config::DEFAULT_CONFIG_FILENAME) {
+                crate::config::find_local_config(&current_dir, std::slice::from_ref(&write_profile))
+            } else {
+                current_dir.join(&cli.config)
+            }
         };
 
         // Load the target config file directly (not the merged config)
@@ -40,14 +51,26 @@ impl RemoveCommand {
             });
         }
 
-        // Check the secret exists before attempting removal
         let config = Config::load(&target_path)?;
-        let profile_secrets = config.get_secrets(&profile)?;
 
-        if !profile_secrets.contains_key(&self.key) {
+        // Check existence in the write-target profile. For profile-specific
+        // files (fnox.<profile>.toml), secrets are at top-level [secrets].
+        let has_profile_section =
+            write_profile != "default" && !crate::config::is_profile_file(&target_path);
+
+        let found = if has_profile_section {
+            config
+                .profiles
+                .get(&write_profile)
+                .is_some_and(|p| p.secrets.contains_key(&self.key))
+        } else {
+            config.secrets.contains_key(&self.key)
+        };
+
+        if !found {
             return Err(FnoxError::SecretNotFound {
                 key: self.key.clone(),
-                profile: profile.to_string(),
+                profile: write_profile.clone(),
                 config_path: Some(target_path),
                 suggestion: None,
             });
@@ -56,10 +79,10 @@ impl RemoveCommand {
         if self.dry_run {
             let dry_run_label = console::style("[dry-run]").yellow().bold();
             let styled_key = console::style(&self.key).cyan();
-            let styled_profile = console::style(&profile).magenta();
+            let styled_profile = console::style(&write_profile).magenta();
             let styled_path = console::style(target_path.display()).dim();
             let global_suffix = if self.global { " (global)" } else { "" };
-            if profile == "default" {
+            if write_profile == "default" {
                 println!(
                     "{dry_run_label} Would remove secret {styled_key}{global_suffix} from {styled_path}"
                 );
@@ -70,20 +93,21 @@ impl RemoveCommand {
             }
         } else {
             // Remove secret directly from the TOML document, preserving comments
-            let removed = Config::remove_secret_from_source(&self.key, &profile, &target_path)?;
+            let removed =
+                Config::remove_secret_from_source(&self.key, &write_profile, &target_path)?;
             if !removed {
                 return Err(FnoxError::SecretNotFound {
                     key: self.key.clone(),
-                    profile: profile.to_string(),
+                    profile: Config::display_profiles(&profile),
                     config_path: Some(target_path),
                     suggestion: None,
                 });
             }
             let check = console::style("✓").green();
             let styled_key = console::style(&self.key).cyan();
-            let styled_profile = console::style(&profile).magenta();
+            let styled_profile = console::style(&write_profile).magenta();
             let global_suffix = if self.global { " (global)" } else { "" };
-            if profile == "default" {
+            if write_profile == "default" {
                 println!("{check} Removed secret {styled_key}{global_suffix}");
             } else {
                 println!(
