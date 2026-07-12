@@ -69,7 +69,7 @@ rand = "0.10"
 ratatui = "0.30"
 regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
-rmcp = { version = "1", features = ["server", "transport-io", "macros"] }
+rmcp = { version = "2", features = ["server", "transport-io", "macros"] }
 rmp-serde = "1"
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std"] }
 schemars = { version = "1", features = ["indexmap2"] }

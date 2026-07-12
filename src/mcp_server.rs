@@ -242,7 +242,9 @@ impl FnoxMcpServer {
             let cache = self.cache.read().await;
             if let Some(cached) = cache.get(&params.name) {
                 return match cached {
-                    Some(value) => Ok(CallToolResult::success(vec![Content::text(value.clone())])),
+                    Some(value) => Ok(CallToolResult::success(vec![ContentBlock::text(
+                        value.clone(),
+                    )])),
                     None => Err(McpError::invalid_request(
                         format!(
                             "Secret '{}' has no value (it may be optional and absent)",
@@ -259,7 +261,7 @@ impl FnoxMcpServer {
             // env=false secrets are deferred; try on-demand resolution
             if !secret_config.env_mode().in_exec() {
                 return match self.resolve_single(&params.name).await? {
-                    Some(value) => Ok(CallToolResult::success(vec![Content::text(value)])),
+                    Some(value) => Ok(CallToolResult::success(vec![ContentBlock::text(value)])),
                     None => Err(McpError::invalid_request(
                         format!(
                             "Secret '{}' has no value (it may be optional and absent)",
@@ -494,9 +496,9 @@ impl FnoxMcpServer {
 
         let text = parts.join("\n");
         if status.success() {
-            Ok(CallToolResult::success(vec![Content::text(text)]))
+            Ok(CallToolResult::success(vec![ContentBlock::text(text)]))
         } else {
-            Ok(CallToolResult::error(vec![Content::text(text)]))
+            Ok(CallToolResult::error(vec![ContentBlock::text(text)]))
         }
     }
 }
