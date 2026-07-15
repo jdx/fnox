@@ -142,7 +142,7 @@ if [ ! -f ~/.config/fnox/age.txt ]; then
 fi
 export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)
 
-# 3. Add age provider to your local config, replacing the recipient with your public key from step 3
+# 3. Add age provider to your local config, replacing the recipient with your public key from step 2
 cat >fnox.local.toml << EOF
 [providers.age]
 type = "age"
