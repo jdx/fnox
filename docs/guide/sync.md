@@ -143,11 +143,14 @@ fi
 export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)
 
 # 3. Add age provider to your local config, replacing the recipient with your public key from step 2
-cat >fnox.local.toml << EOF
+recipient=$(grep 'public key:' ~/.config/fnox/age.txt | awk '{print $NF}')
+if ! [ -f fnox.local.toml ] && ! grep -qF "$recipient" fnox.local.toml; then
+	cat >fnox.local.toml <<EOF
 [providers.age]
 type = "age"
-recipients = ["$(grep 'public key:' ~/.config/fnox/age.txt | awk '{print $NF}')"]
+recipients = ["$recipient"]
 EOF
+fi
 
 # 4. Sync all 1Password secrets to local age encryption
 fnox sync --provider age --config fnox.local.toml --force
