@@ -1688,7 +1688,7 @@ impl Config {
 
         // Validate each profile
         for (profile_name, profile_config) in &self.profiles {
-            let providers = self.get_providers(&[profile_name.to_string()]);
+            let providers = self.get_providers(std::slice::from_ref(profile_name));
 
             // Check for profile secrets with empty values (likely a mistake, but allowed for plain provider)
             for (key, secret) in &profile_config.secrets {

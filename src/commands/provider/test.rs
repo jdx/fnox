@@ -156,7 +156,7 @@ impl TestCommand {
                 "{} provider{} failed",
                 failed,
                 if failed == 1 { "" } else { "s" }
-            )))?;
+            )));
         }
 
         Ok(())
