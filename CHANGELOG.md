@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.31.0](https://github.com/jdx/fnox/compare/v1.30.0..v1.31.0) - 2026-07-16
+
+### 🚀 Features
+
+- **(config)** support composing multiple active profiles by [@gaojunran](https://github.com/gaojunran) in [#605](https://github.com/jdx/fnox/pull/605)
+
+### 🐛 Bug Fixes
+
+- **(config)** satisfy clippy profile slice lint by [@jdx](https://github.com/jdx) in [#616](https://github.com/jdx/fnox/pull/616)
+- **(proton-pass)** suggest unlocking locked sessions by [@TyceHerrman](https://github.com/TyceHerrman) in [#612](https://github.com/jdx/fnox/pull/612)
+
+### 🛡️ Security
+
+- **(deps)** update node.js to v24.18.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#609](https://github.com/jdx/fnox/pull/609)
+
+### 🔍 Other Changes
+
+- Update sync workflow example by [@syhol](https://github.com/syhol) in [#614](https://github.com/jdx/fnox/pull/614)
+
+### 📦️ Dependency Updates
+
+- update rust crate usage-lib to v3.5.4 by [@renovate[bot]](https://github.com/renovate[bot]) in [#608](https://github.com/jdx/fnox/pull/608)
+- update rust crate demand to v2.0.3 by [@renovate[bot]](https://github.com/renovate[bot]) in [#607](https://github.com/jdx/fnox/pull/607)
+- update rust crate rmcp to v2 by [@renovate[bot]](https://github.com/renovate[bot]) in [#610](https://github.com/jdx/fnox/pull/610)
+- bump communique to 1.2.3 by [@jdx](https://github.com/jdx) in [#613](https://github.com/jdx/fnox/pull/613)
+
+### New Contributors
+
+- @syhol made their first contribution in [#614](https://github.com/jdx/fnox/pull/614)
+- @gaojunran made their first contribution in [#605](https://github.com/jdx/fnox/pull/605)
+
 ## [1.30.0](https://github.com/jdx/fnox/compare/v1.29.0..v1.30.0) - 2026-07-09
 
 ### 🚀 Features
