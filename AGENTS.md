@@ -10,6 +10,20 @@ Format: `<type>(<scope>): <description>` (lowercase, imperative mood)
 
 Examples: `fix(aws-sm): handle pagination for large secret lists`, `feat(exec): add --no-inherit flag`
 
+## Minimum Supported Rust Version (MSRV)
+
+`rust-version` in the workspace `Cargo.toml` is kept **behind** the latest stable
+Rust on purpose. fnox is built from source by packagers that provide their own,
+often older, rustc — Linux distro packages (`cargo install` against a
+distro-provided toolchain) and nixpkgs (one shared, conservative rustc for the
+whole tree). Raising the MSRV can make fnox unbuildable there.
+
+**Do not raise the MSRV to satisfy a dependency.** If a dependency bump requires
+a newer rustc than our declared MSRV (the `msrv` CI job, `cargo msrv verify`,
+will fail), pin that dependency to its last MSRV-compatible version instead.
+`.cargo/config.toml` sets `resolver.incompatible-rust-versions = "fallback"` so
+`cargo update`/`cargo add` prefer MSRV-compatible versions automatically.
+
 ## Build & Test
 
 ```bash

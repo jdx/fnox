@@ -1,0 +1,9 @@
+# During dependency resolution, prefer versions compatible with the MSRV
+# declared in Cargo.toml (`rust-version`) instead of pulling in versions that
+# require a newer rustc. This keeps `cargo update`/`cargo add` from silently
+# raising the compiler fnox needs, which would break source-build packagers
+# (distro-provided rustc, nixpkgs) that build against an older Rust.
+#
+# See: https://doc.rust-lang.org/cargo/reference/config.html#resolverincompatible-rust-versions
+[resolver]
+incompatible-rust-versions = "fallback"
