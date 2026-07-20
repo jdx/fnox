@@ -1,4 +1,19 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["local>jdx/renovate-config"]
+  "extends": ["local>jdx/renovate-config"],
+  "packageRules": [
+    {
+      "description": "AWS SDK crates track near-latest-stable rustc, and their minor/major bumps regularly outrun fnox's MSRV (see AGENTS.md), auto-opening PRs that can only pass by raising rust-version. Disable minor/major updates for them; bump these by hand when we're ready to raise the MSRV too. Patch updates (which don't move MSRV) still flow. Scoped to the SDK crates only — the aws-lc-rs crypto backend is intentionally not held.",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": [
+        "aws-config",
+        "aws-sdk-kms",
+        "aws-sdk-secretsmanager",
+        "aws-sdk-ssm",
+        "aws-sdk-sts"
+      ],
+      "matchUpdateTypes": ["major", "minor"],
+      "enabled": false
+    }
+  ]
 }
