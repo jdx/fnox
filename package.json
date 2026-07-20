@@ -15,15 +15,14 @@
   "pnpm": {
     "supportedArchitectures": {
       "os": [
-        "current",
-        "linux"
+        "linux",
+        "darwin"
       ],
       "cpu": [
-        "current",
-        "x64"
+        "x64",
+        "arm64"
       ],
       "libc": [
-        "current",
         "glibc"
       ]
     },
