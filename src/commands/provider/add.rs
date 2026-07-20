@@ -39,6 +39,12 @@ impl AddCommand {
             ));
         }
 
+        // Provider add only respects explicit CLI --profile flags, not
+        // FNOX_PROFILE env or Settings, so the default behavior (writing to
+        // top-level [providers]) stays unchanged unless the user opts in.
+        let profiles = Config::normalize_profiles(&cli.profile);
+        let write_profile = Config::resolve_write_profile(&profiles, cli.write_profile.as_deref())?;
+
         // Determine the target config file
         let target_path = if self.global {
             let global_path = Config::global_config_path();
@@ -57,7 +63,11 @@ impl AddCommand {
             let current_dir = std::env::current_dir().map_err(|e| {
                 FnoxError::Config(format!("Failed to get current directory: {}", e))
             })?;
-            current_dir.join(&cli.config)
+            if cli.config == std::path::Path::new(crate::config::DEFAULT_CONFIG_FILENAME) {
+                crate::config::find_local_config(&current_dir, std::slice::from_ref(&write_profile))
+            } else {
+                current_dir.join(&cli.config)
+            }
         };
 
         // Load the target config file (or create new if it doesn't exist)
@@ -67,11 +77,24 @@ impl AddCommand {
             Config::new()
         };
 
-        if config.providers.contains_key(&self.provider) {
-            return Err(FnoxError::Config(format!(
-                "Provider '{}' already exists",
-                self.provider
-            )));
+        if self.global || write_profile == "default" {
+            if config.providers.contains_key(&self.provider) {
+                return Err(FnoxError::Config(format!(
+                    "Provider '{}' already exists",
+                    self.provider
+                )));
+            }
+        } else {
+            if config
+                .profiles
+                .get(&write_profile)
+                .is_some_and(|p| p.providers.contains_key(&self.provider))
+            {
+                return Err(FnoxError::Config(format!(
+                    "Provider '{}' already exists",
+                    self.provider
+                )));
+            }
         }
 
         // Create a template provider config based on type
@@ -261,14 +284,26 @@ impl AddCommand {
                     .map_or_else(OptionStringOrSecretRef::none, |vault| {
                         OptionStringOrSecretRef::literal(vault.clone())
                     }),
+                agent_reason: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
             },
         };
 
-        config
-            .providers
-            .insert(self.provider.clone(), provider_config);
+        // Insert into the appropriate section — after the match so no
+        // mutable borrow is held across the (potentially async) match.
+        if self.global || write_profile == "default" {
+            config
+                .providers
+                .insert(self.provider.clone(), provider_config);
+        } else {
+            config
+                .profiles
+                .entry(write_profile.clone())
+                .or_default()
+                .providers
+                .insert(self.provider.clone(), provider_config);
+        }
         config.save(&target_path)?;
 
         let global_suffix = if self.global { " (global)" } else { "" };

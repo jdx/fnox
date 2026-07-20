@@ -399,6 +399,7 @@ EOF
 	# Output should contain dotenv assignments
 	assert_output --partial "FILE_SECRET="
 	assert_output --partial "NORMAL_SECRET="
+	refute_output --partial "# Exported from profile:"
 
 	# FILE_SECRET should be a file path (contains fnox-export)
 	assert_output --regexp "FILE_SECRET=.*/fnox-export-FILE_SECRET-.*"
@@ -431,6 +432,7 @@ EOF
 	assert_output --partial "export FILE_SECRET="
 	assert_output --partial "export NORMAL_SECRET=normal-value"
 	assert_output --regexp "export FILE_SECRET=.*/fnox-export-FILE_SECRET-.*"
+	refute_output --partial "# Exported from profile:"
 
 	local file_path
 	file_path=$(echo "$output" | grep "export FILE_SECRET=" | sed -E "s/^export FILE_SECRET=//; s/^'(.*)'\$/\\1/" | head -1)
@@ -454,6 +456,42 @@ EOF
 	assert_success
 	assert_output --partial 'SPECIAL_SECRET="secret$value`tick`"'
 	assert_output --partial 'QUOTED_SECRET="quoted \"value\" with \\ backslash"'
+}
+
+@test "export env format can include metadata header" {
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+NORMAL_SECRET = { provider = "plain", value = "normal-value" }
+EOF
+
+	run "$FNOX_BIN" export --format env --header
+	assert_success
+	assert_line --index 0 "# Exported from profile: default"
+	assert_output --partial "# Total secrets: 1"
+	assert_output --partial "NORMAL_SECRET=normal-value"
+}
+
+@test "export shell format can include metadata header" {
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+NORMAL_SECRET = { provider = "plain", value = "normal-value" }
+EOF
+
+	run "$FNOX_BIN" export --format shell --header
+	assert_success
+	assert_line --index 0 "# Exported from profile: default"
+	assert_output --partial "# Total secrets: 1"
+	assert_output --partial "export NORMAL_SECRET=normal-value"
 }
 
 @test "export to JSON with file-based secrets" {
@@ -508,6 +546,7 @@ EOF
 	test -f "$export_file"
 	grep -q "FILE_SECRET=" "$export_file"
 	grep -q "NORMAL_SECRET=normal-value" "$export_file"
+	refute grep -q "^# Exported from profile:" "$export_file"
 
 	# Extract file path from export file
 	local file_path

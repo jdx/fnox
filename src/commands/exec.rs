@@ -21,8 +21,11 @@ impl ExecCommand {
             return Err(FnoxError::CommandNotSpecified);
         }
 
-        let profile = Config::get_profile(cli.profile.as_deref());
-        tracing::debug!("Running command with secrets from profile '{}'", profile);
+        let profile = Config::get_profiles(cli.profile.as_slice());
+        tracing::debug!(
+            "Running command with secrets from profiles '{}'",
+            Config::display_profiles(&profile)
+        );
 
         // Get the profile secrets
         let profile_secrets = config.get_secrets(&profile)?;
@@ -131,8 +134,10 @@ impl ExecCommand {
             }
             // Strip env=false secrets from child environment regardless of whether
             // resolution succeeded — a stale inherited env var must not leak through.
+            // env="exec" secrets ARE injected here: exec subprocesses are their
+            // intended destination.
             if let Some(secret_config) = profile_secrets.get(&key)
-                && !secret_config.env
+                && !secret_config.env_mode().in_exec()
             {
                 cmd.env_remove(&key);
                 continue;

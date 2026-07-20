@@ -32,9 +32,9 @@ examples = [
 since = "0.1.0"
 
 [profile]
-type = "string"
-default = "\"default\""
-sources.cli = ["--profile", "-p"]
+type = "vec<string>"
+default = '["default"]'
+sources.cli = ["--profile", "-P"]
 sources.env = ["FNOX_PROFILE"]
 docs = """
 Configuration profile to use for secrets retrieval.

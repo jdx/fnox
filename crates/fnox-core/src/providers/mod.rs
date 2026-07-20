@@ -283,7 +283,7 @@ impl ProviderConfig {
 /// `get_provider_from_resolved` directly with a resolved config.
 pub async fn get_provider_resolved(
     config: &crate::config::Config,
-    profile: &str,
+    profile: &[String],
     provider_name: &str,
     provider_config: &ProviderConfig,
 ) -> Result<Box<dyn Provider>> {
@@ -293,7 +293,7 @@ pub async fn get_provider_resolved(
 
 pub(crate) fn get_provider_from_resolved_with_context(
     config: &crate::config::Config,
-    profile: &str,
+    profile: &[String],
     provider_name: &str,
     resolved: &ResolvedProviderConfig,
 ) -> Result<Box<dyn Provider>> {
@@ -308,7 +308,7 @@ pub(crate) fn get_provider_from_resolved_with_context(
 
 pub(crate) fn get_provider_from_resolved_with_context_and_identity_cycle_guard(
     config: &crate::config::Config,
-    profile: &str,
+    profile: &[String],
     provider_name: &str,
     resolved: &ResolvedProviderConfig,
     identity_cycle_guard: Option<age::AgeIdentityCycleGuard>,
@@ -328,7 +328,7 @@ pub(crate) fn get_provider_from_resolved_with_context_and_identity_cycle_guard(
             ),
             identity.clone(),
             std::sync::Arc::new(config.clone()),
-            profile.to_string(),
+            profile.to_vec(),
             provider_name.to_string(),
             identity_cycle_guard,
         )?));
@@ -396,14 +396,15 @@ pub(crate) fn get_provider_from_resolved_with_context_and_identity_cycle_guard(
 
 fn provider_source_path(
     config: &crate::config::Config,
-    profile: &str,
+    profiles: &[String],
     provider_name: &str,
 ) -> Option<PathBuf> {
-    if profile != "default"
-        && let Some(profile_config) = config.profiles.get(profile)
-        && profile_config.providers.contains_key(provider_name)
-    {
-        return profile_config.provider_sources.get(provider_name).cloned();
+    for profile in profiles.iter().filter(|p| *p != "default").rev() {
+        if let Some(profile_config) = config.profiles.get(profile)
+            && profile_config.providers.contains_key(provider_name)
+        {
+            return profile_config.provider_sources.get(provider_name).cloned();
+        }
     }
 
     config.provider_sources.get(provider_name).cloned()
@@ -436,7 +437,7 @@ mod tests {
         config.profiles.insert("prod".to_string(), profile);
 
         assert_eq!(
-            provider_source_path(&config, "prod", "pass"),
+            provider_source_path(&config, &["prod".to_string()], "pass"),
             Some(PathBuf::from("/home/user/project/fnox.prod.toml")),
         );
     }
@@ -459,7 +460,10 @@ mod tests {
         );
         config.profiles.insert("prod".to_string(), profile);
 
-        assert_eq!(provider_source_path(&config, "prod", "pass"), None);
+        assert_eq!(
+            provider_source_path(&config, &["prod".to_string()], "pass"),
+            None
+        );
     }
 
     #[test]
@@ -474,7 +478,7 @@ mod tests {
             .insert("prod".to_string(), ProfileConfig::new());
 
         assert_eq!(
-            provider_source_path(&config, "prod", "pass"),
+            provider_source_path(&config, &["prod".to_string()], "pass"),
             Some(PathBuf::from("/home/user/project/fnox.toml")),
         );
     }

@@ -16,10 +16,11 @@ pub struct CheckCommand {
 impl CheckCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
         config.validate()?;
-        let profile = Config::get_profile(cli.profile.as_deref());
+        let profile = Config::get_profiles(cli.profile.as_slice());
+        let profile_display = Config::display_profiles(&profile);
 
         // Load config
-        println!("Checking configuration for profile: {}", profile);
+        println!("Checking configuration for profile(s): {}", profile_display);
 
         let mut issues = Vec::new();
         let mut warnings = Vec::new();
@@ -27,9 +28,9 @@ impl CheckCommand {
         // Check secrets
         if let Ok(secrets) = config.get_secrets(&profile) {
             if secrets.is_empty() {
-                warnings.push("No secrets defined in profile".to_string());
+                warnings.push("No secrets defined in profile(s)".to_string());
             } else {
-                println!("Found {} secret(s) in profile", secrets.len());
+                println!("Found {} secret(s) in profile(s)", secrets.len());
 
                 for (name, secret_config) in secrets {
                     // Check if secret has a value source
@@ -136,7 +137,7 @@ impl CheckCommand {
                 }
             }
         } else {
-            issues.push(format!("Profile '{}' not found", profile));
+            issues.push(format!("Profile(s) '{}' not found", profile_display));
         }
 
         // Check providers

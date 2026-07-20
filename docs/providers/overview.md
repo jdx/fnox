@@ -34,11 +34,12 @@ Store secrets remotely in cloud providers. Your `fnox.toml` contains only refere
 
 Integrate with password managers and secret services you already use.
 
-| Provider                          | Description               | Best For                              |
-| --------------------------------- | ------------------------- | ------------------------------------- |
-| [1Password](/providers/1password) | 1Password CLI integration | Teams already using 1Password         |
-| [Bitwarden](/providers/bitwarden) | Bitwarden/Vaultwarden     | Open source preference, self-hosting  |
-| [Infisical](/providers/infisical) | Infisical secrets         | Modern secret management, open source |
+| Provider                              | Description                 | Best For                                |
+| ------------------------------------- | --------------------------- | --------------------------------------- |
+| [1Password](/providers/1password)     | 1Password CLI integration   | Teams already using 1Password           |
+| [Bitwarden](/providers/bitwarden)     | Bitwarden/Vaultwarden       | Open source preference, self-hosting    |
+| [Infisical](/providers/infisical)     | Infisical secrets           | Modern secret management, open source   |
+| [Proton Pass](/providers/proton-pass) | Proton Pass CLI integration | Teams using Proton Pass or agent tokens |
 
 ### 💻 Local Storage
 

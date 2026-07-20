@@ -12,15 +12,17 @@ pub struct ListCommand {
 }
 
 impl ListCommand {
-    pub async fn run(&self, _cli: &Cli, config: Config) -> Result<()> {
+    pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
         tracing::debug!("Listing providers");
+        let profiles = Config::get_profiles(cli.profile.as_slice());
+        let providers = config.get_providers(&profiles);
 
-        if config.providers.is_empty() {
+        if providers.is_empty() {
             return Ok(());
         }
 
         // Always just output provider names, one per line
-        let mut names: Vec<_> = config.providers.keys().collect();
+        let mut names: Vec<_> = providers.keys().collect();
         names.sort();
         for name in names {
             println!("{}", name);

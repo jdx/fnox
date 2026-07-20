@@ -334,7 +334,10 @@ pub enum EncryptionProviderResult {
 }
 
 /// Find an encryption provider if one is configured (default_provider with Encryption capability)
-pub async fn find_encryption_provider(config: &Config, profile: &str) -> EncryptionProviderResult {
+pub async fn find_encryption_provider(
+    config: &Config,
+    profile: &[String],
+) -> EncryptionProviderResult {
     let provider_name = match config.get_default_provider(profile) {
         Ok(Some(name)) => name,
         _ => return EncryptionProviderResult::NotConfigured,
@@ -412,7 +415,7 @@ pub async fn create_and_record_lease(
     duration: std::time::Duration,
     config_hash: String,
     config: &Config,
-    profile: &str,
+    profile: &[String],
     ledger: &mut LeaseLedger,
     project_dir: &Path,
 ) -> Result<crate::lease_backends::Lease> {
@@ -496,7 +499,7 @@ pub async fn decrypt_credentials(
 /// plaintext if no encryption provider is configured.
 pub async fn cache_credentials(
     config: &Config,
-    profile: &str,
+    profile: &[String],
     credentials: &IndexMap<String, String>,
     lease_id: &str,
 ) -> (Option<IndexMap<String, String>>, Option<String>) {
@@ -569,7 +572,7 @@ pub fn find_cached_entry(
 pub async fn resolve_cached_entry(
     entry: CachedEntry,
     config: &Config,
-    profile: &str,
+    profile: &[String],
     backend_name: &str,
 ) -> Option<IndexMap<String, String>> {
     if let Some(ref enc_provider_name) = entry.encryption_provider {
@@ -596,7 +599,7 @@ pub async fn resolve_cached_entry(
 /// Returns `None` if the provider is unavailable or decryption fails.
 pub async fn try_decrypt_cached(
     config: &Config,
-    profile: &str,
+    profile: &[String],
     enc_provider_name: &str,
     cached_creds: &IndexMap<String, String>,
     lease_id: &str,
@@ -655,7 +658,7 @@ pub async fn resolve_lease(
     name: &str,
     lease_config: &crate::lease_backends::LeaseBackendConfig,
     config: &Config,
-    profile: &str,
+    profile: &[String],
     project_dir: &Path,
     prereq_missing: Option<&str>,
     label_prefix: &str,

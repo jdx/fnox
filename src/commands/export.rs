@@ -41,6 +41,14 @@ pub struct ExportCommand {
     /// Output file (default: stdout)
     #[arg(short = 'o', long)]
     output: Option<PathBuf>,
+
+    /// Include secrets with env = false or env = "exec" (excluded by default)
+    #[arg(long)]
+    all: bool,
+
+    /// Include metadata comments in env and shell output
+    #[arg(long)]
+    header: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -58,10 +66,20 @@ struct ExportMetadata {
 
 impl ExportCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
-        let profile = Config::get_profile(cli.profile.as_deref());
-        tracing::debug!("Exporting secrets from profile '{}'", profile);
+        let profile = Config::get_profiles(cli.profile.as_slice());
+        tracing::debug!(
+            "Exporting secrets from profiles '{}'",
+            Config::display_profiles(&profile)
+        );
 
-        let profile_secrets = config.get_secrets(&profile)?;
+        let mut profile_secrets = config.get_secrets(&profile)?;
+
+        // Export is a shell-injection surface (the mise plugin evaluates it),
+        // so exclude secrets not meant for the shell unless --all is passed.
+        // Filtering before resolution avoids auth prompts for hidden secrets.
+        if !self.all {
+            profile_secrets.retain(|_, sc| sc.env_mode().in_shell());
+        }
 
         // Resolve secrets using batch resolution for better performance
         let resolved_secrets = crate::daemon::resolve_batch(
@@ -108,7 +126,7 @@ impl ExportCommand {
         }
 
         let metadata = Some(ExportMetadata {
-            profile: profile.clone(),
+            profile: Config::display_profiles(&profile),
             exported_at: chrono::Utc::now().to_rfc3339(),
             total_secrets: secrets.len(),
         });
@@ -159,7 +177,9 @@ impl ExportCommand {
     fn export_as_env(&self, data: &ExportData) -> Result<String> {
         let mut output = String::new();
 
-        append_metadata_header(&mut output, data.metadata.as_ref());
+        if self.header {
+            append_metadata_header(&mut output, data.metadata.as_ref());
+        }
 
         for (key, value) in &data.secrets {
             output.push_str(&format!("{}={}\n", key, dotenv_quote(value)));
@@ -171,7 +191,9 @@ impl ExportCommand {
     fn export_as_shell(&self, data: &ExportData) -> Result<String> {
         let mut output = String::new();
 
-        append_metadata_header(&mut output, data.metadata.as_ref());
+        if self.header {
+            append_metadata_header(&mut output, data.metadata.as_ref());
+        }
 
         for (key, value) in &data.secrets {
             output.push_str(&format!("export {}={}\n", key, shell::posix_quote(value)));

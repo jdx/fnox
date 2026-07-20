@@ -29,6 +29,17 @@
         }
       ]
     },
+    "env": {
+      "description": "Default env injection mode for all secrets in this config.\nSet `env = \"exec\"` to keep every secret out of the interactive shell\n(secrets are still injected into `fnox exec` subprocesses) unless a\nsecret explicitly opts back in with `env = true`.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EnvMode"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "if_missing": {
       "description": "Default if_missing behavior for all secrets in this config",
       "anyOf": [
@@ -170,6 +181,18 @@
         }
       },
       "additionalProperties": false
+    },
+    "EnvMode": {
+      "description": "Where to inject the secret as an env var: true = shell + fnox exec (default), \"exec\" = fnox exec subprocesses only, false = never (fnox get only)",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string",
+          "enum": ["exec"]
+        }
+      ]
     },
     "IfMissing": {
       "type": "string",
@@ -815,6 +838,9 @@
         {
           "type": "object",
           "properties": {
+            "agent_reason": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "auth_command": {
               "type": ["string", "null"]
             },
@@ -1187,8 +1213,15 @@
           "type": ["string", "null"]
         },
         "env": {
-          "description": "Whether to inject this secret into env vars (default: true)\nWhen false, the secret is only accessible via `fnox get`",
-          "type": "boolean"
+          "description": "Where to inject this secret as an environment variable:\n- `true` — shell integration and `fnox exec` (default)\n- `\"exec\"` — only `fnox exec` subprocesses, never the interactive shell\n- `false` — never injected; only accessible via `fnox get`\n\nWhen unset, inherits the top-level `env` default (which itself defaults to `true`).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EnvMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "if_missing": {
           "description": "What to do if the secret is missing (error, warn, or ignore)",

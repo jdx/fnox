@@ -11,7 +11,8 @@ pub struct DoctorCommand {}
 
 impl DoctorCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
-        let profile = Config::get_profile(cli.profile.as_deref());
+        let profile = Config::get_profiles(cli.profile.as_slice());
+        let profile_display = Config::display_profiles(&profile);
 
         println!("🏥 Fnox Doctor Report");
         println!("====================");
@@ -20,7 +21,7 @@ impl DoctorCommand {
         // Config file info
         println!("📄 Configuration:");
         println!("  File: fnox.toml");
-        println!("  Profile: {}", profile);
+        println!("  Profile: {}", profile_display);
 
         config.validate()?;
         println!("  Status: ✓ Loaded successfully");
@@ -83,10 +84,28 @@ impl DoctorCommand {
 
         // Environment info
         println!("🌍 Environment:");
-        if let Some(env_profile) = (*env::FNOX_PROFILE).clone() {
-            println!("  FNOX_PROFILE: {}", env_profile);
+        if !env::FNOX_PROFILE.is_empty() {
+            println!(
+                "  FNOX_PROFILE: {}",
+                Config::display_profiles(&env::FNOX_PROFILE)
+            );
         } else {
             println!("  FNOX_PROFILE: (not set)");
+        }
+
+        // A top-level env = "exec" / env = false posture is meant to keep
+        // secrets out of the interactive shell — but an exported FNOX_AGE_KEY
+        // is itself a shell-visible master credential that undermines it.
+        if let Some(env_default) = config.env
+            && !env_default.in_shell()
+            && env::FNOX_AGE_KEY.is_some()
+        {
+            println!(
+                "  ⚠ FNOX_AGE_KEY is exported in this shell while the top-level `env` \
+                 default keeps secrets out of it."
+            );
+            println!("    Anything running in this shell can decrypt your secrets with that key.");
+            println!("    Consider `age_key_file` or an OS keychain instead.");
         }
 
         // Test providers

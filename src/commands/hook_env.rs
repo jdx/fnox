@@ -183,7 +183,8 @@ async fn load_secrets_from_config(cli: &Cli) -> Result<LoadedSecrets> {
     // This handles fnox.toml and fnox.local.toml with proper recursion
     let settings =
         Settings::try_get().map_err(|e| anyhow::anyhow!("Failed to get settings: {}", e))?;
-    let filenames = crate::config::all_config_filenames(Some(&settings.profile));
+    let profiles = Config::get_profiles(&[]);
+    let filenames = crate::config::all_config_filenames(&profiles);
     let mut last_error = None;
     let mut config = None;
     for filename in &filenames {
@@ -248,10 +249,11 @@ async fn load_secrets_from_config(cli: &Cli) -> Result<LoadedSecrets> {
     let mut temp_files = HashMap::new();
 
     for (key, value_opt) in resolved {
-        // Skip secrets with env = false regardless of resolution result —
-        // they must never appear in shell integration output.
+        // Skip secrets unless their env mode allows shell injection —
+        // env=false and env="exec" secrets must never appear in shell
+        // integration output.
         if let Some(secret_config) = profile_secrets.get(&key)
-            && !secret_config.env
+            && !secret_config.env_mode().in_shell()
         {
             continue;
         }

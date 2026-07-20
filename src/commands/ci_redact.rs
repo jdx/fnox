@@ -10,8 +10,11 @@ pub struct CiRedactCommand {}
 
 impl CiRedactCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
-        let profile = Config::get_profile(cli.profile.as_deref());
-        tracing::debug!("Redacting secrets from profile '{}'", profile);
+        let profile = Config::get_profiles(cli.profile.as_slice());
+        tracing::debug!(
+            "Redacting secrets from profile '{}'",
+            Config::display_profiles(&profile)
+        );
 
         // Check if we're in CI and get the vendor
         let ci_info = ci_info::get();

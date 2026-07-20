@@ -135,24 +135,27 @@ The `--force` flag skips the confirmation prompt. fnox re-fetches from the origi
 # 1. Clone a project with 1Password secrets in fnox.toml
 git clone https://github.com/myorg/my-api && cd my-api
 
-# 2. Make sure fnox.local.toml is gitignored
-echo "fnox.local.toml" >> .gitignore
-
-# 3. Set up your age key (one-time) — note the public key printed to your terminal
-age-keygen -o ~/.config/fnox/age.txt
+# 2. Set up your age key (if it doesn't already exist) — note the public key printed to your terminal
+mkdir -p ~/.config/fnox
+if [ ! -f ~/.config/fnox/age.txt ]; then
+	age-keygen -o ~/.config/fnox/age.txt
+fi
 export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)
 
-# 4. Add age provider to your config, replacing the recipient with your public key from step 3
-cat >> fnox.toml << EOF
+# 3. Add age provider to your local config, replacing the recipient with your public key from step 2
+recipient=$(grep 'public key:' ~/.config/fnox/age.txt | awk '{print $NF}')
+if [ ! -f fnox.local.toml ] || ! grep -qF "$recipient" fnox.local.toml; then
+	cat >fnox.local.toml <<EOF
 [providers.age]
 type = "age"
-recipients = ["$(grep 'public key:' ~/.config/fnox/age.txt | awk '{print $NF}')"]
+recipients = ["$recipient"]
 EOF
+fi
 
-# 5. Sync all 1Password secrets to local age encryption
-fnox sync --provider age --config fnox.local.toml
+# 4. Sync all 1Password secrets to local age encryption
+fnox sync --provider age --config fnox.local.toml --force
 
-# 6. Done — entering the directory is now instant
+# 5. Done — entering the directory is now instant
 cd .. && cd my-api
 # Secrets load from local age cache, no 1Password calls
 ```

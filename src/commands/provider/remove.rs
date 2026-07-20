@@ -17,6 +17,10 @@ pub struct RemoveCommand {
 impl RemoveCommand {
     pub async fn run(&self, cli: &Cli) -> Result<()> {
         tracing::debug!("Removing provider '{}'", self.provider);
+        // Provider remove only respects explicit CLI --profile flags, matching
+        // provider add's behavior (see add.rs).
+        let profiles = Config::normalize_profiles(&cli.profile);
+        let write_profile = Config::resolve_write_profile(&profiles, cli.write_profile.as_deref())?;
 
         // Determine the target config file
         let target_path = if self.global {
@@ -25,7 +29,11 @@ impl RemoveCommand {
             let current_dir = std::env::current_dir().map_err(|e| {
                 FnoxError::Config(format!("Failed to get current directory: {}", e))
             })?;
-            current_dir.join(&cli.config)
+            if cli.config == std::path::Path::new(crate::config::DEFAULT_CONFIG_FILENAME) {
+                crate::config::find_local_config(&current_dir, std::slice::from_ref(&write_profile))
+            } else {
+                current_dir.join(&cli.config)
+            }
         };
 
         // Load the target config file directly
@@ -38,7 +46,17 @@ impl RemoveCommand {
 
         let mut config = Config::load(&target_path)?;
 
-        if config.providers.shift_remove(&self.provider).is_some() {
+        let removed = if self.global || write_profile == "default" {
+            config.providers.shift_remove(&self.provider).is_some()
+        } else {
+            config
+                .profiles
+                .get_mut(&write_profile)
+                .and_then(|profile| profile.providers.shift_remove(&self.provider))
+                .is_some()
+        };
+
+        if removed {
             config.save(&target_path)?;
             let global_suffix = if self.global { " (global)" } else { "" };
             println!("✓ Removed provider '{}'{}", self.provider, global_suffix);

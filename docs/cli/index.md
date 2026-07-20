@@ -4,7 +4,7 @@
 
 **Usage**: `fnox [FLAGS] <SUBCOMMAND>`
 
-**Version**: 1.29.0
+**Version**: 1.31.0
 
 - **Usage**: `fnox [FLAGS] <SUBCOMMAND>`
 
@@ -16,9 +16,9 @@ Path to the configuration file (default: fnox.toml, searches parent directories)
 
 **Default:** `fnox.toml`
 
-### `-P --profile <PROFILE>`
+### `-P --profile… <PROFILE>`
 
-Profile to use (default: default, or FNOX_PROFILE env var)
+Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones
 
 ### `-v --verbose`
 
@@ -43,6 +43,10 @@ Do not merge top-level secrets into the selected profile
 ### `--non-interactive`
 
 Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)
+
+### `--write-profile <WRITE_PROFILE>`
+
+Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise
 
 ## Subcommands
 

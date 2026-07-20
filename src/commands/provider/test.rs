@@ -16,7 +16,7 @@ pub struct TestCommand {
 
 impl TestCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
-        let profile = Config::get_profile(cli.profile.as_deref());
+        let profile = Config::get_profiles(cli.profile.as_slice());
 
         if self.all {
             self.test_all_providers(cli, &config, &profile).await
@@ -33,13 +33,13 @@ impl TestCommand {
     async fn test_single_provider(
         &self,
         config: &Config,
-        profile: &str,
+        profile: &[String],
         provider_name: &str,
     ) -> Result<()> {
         tracing::debug!("Testing provider '{}'", provider_name);
 
-        let provider_config = config
-            .providers
+        let providers = config.get_providers(profile);
+        let provider_config = providers
             .get(provider_name)
             .ok_or_else(|| FnoxError::Config(format!("Provider '{}' not found", provider_name)))?;
 
@@ -61,7 +61,12 @@ impl TestCommand {
         Ok(())
     }
 
-    async fn test_all_providers(&self, cli: &Cli, config: &Config, profile: &str) -> Result<()> {
+    async fn test_all_providers(
+        &self,
+        cli: &Cli,
+        config: &Config,
+        profile: &[String],
+    ) -> Result<()> {
         let providers = config.get_providers(profile);
 
         if providers.is_empty() {
@@ -151,7 +156,7 @@ impl TestCommand {
                 "{} provider{} failed",
                 failed,
                 if failed == 1 { "" } else { "s" }
-            )))?;
+            )));
         }
 
         Ok(())

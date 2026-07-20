@@ -323,6 +323,26 @@
               "double_dash": "Optional",
               "hide": false
             }
+          },
+          {
+            "name": "all",
+            "usage": "--all",
+            "help": "Include secrets with env = false or env = \"exec\" (excluded by default)",
+            "help_first_line": "Include secrets with env = false or env = \"exec\" (excluded by default)",
+            "short": [],
+            "long": ["all"],
+            "hide": false,
+            "global": false
+          },
+          {
+            "name": "header",
+            "usage": "--header",
+            "help": "Include metadata comments in env and shell output",
+            "help_first_line": "Include metadata comments in env and shell output",
+            "short": [],
+            "long": ["header"],
+            "hide": false,
+            "global": false
           }
         ],
         "mounts": [],
@@ -1617,11 +1637,12 @@
       },
       {
         "name": "profile",
-        "usage": "-P --profile <PROFILE>",
-        "help": "Profile to use (default: default, or FNOX_PROFILE env var)",
-        "help_first_line": "Profile to use (default: default, or FNOX_PROFILE env var)",
+        "usage": "-P --profile… <PROFILE>",
+        "help": "Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones",
+        "help_first_line": "Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones",
         "short": ["P"],
         "long": ["profile"],
+        "var": true,
         "hide": false,
         "global": true,
         "arg": {
@@ -1715,6 +1736,23 @@
         "long": ["non-interactive"],
         "hide": false,
         "global": true
+      },
+      {
+        "name": "write-profile",
+        "usage": "--write-profile <WRITE_PROFILE>",
+        "help": "Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise",
+        "help_first_line": "Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise",
+        "short": [],
+        "long": ["write-profile"],
+        "hide": false,
+        "global": true,
+        "arg": {
+          "name": "WRITE_PROFILE",
+          "usage": "<WRITE_PROFILE>",
+          "required": true,
+          "double_dash": "Optional",
+          "hide": false
+        }
       }
     ],
     "mounts": [],
@@ -1727,7 +1765,7 @@
   "config": {
     "props": {}
   },
-  "version": "1.29.0",
+  "version": "1.31.0",
   "usage": "Usage: fnox [OPTIONS] <COMMAND>",
   "complete": {
     "key": {

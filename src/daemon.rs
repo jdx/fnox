@@ -1,5 +1,5 @@
 use crate::commands::Cli;
-use crate::config::{Config, SecretConfig};
+use crate::config::{Config, ProviderConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
 use crate::secret_resolver::resolve_secrets_batch;
 use indexmap::IndexMap;
@@ -24,7 +24,7 @@ const SHUTDOWN_GRACE_PERIOD: Duration = Duration::from_secs(30);
 #[derive(Debug, Clone)]
 pub struct ResolveContext {
     pub config: PathBuf,
-    pub profile: Option<String>,
+    pub profile: Vec<String>,
     pub age_key_file: Option<PathBuf>,
     pub if_missing: Option<String>,
     pub no_defaults: bool,
@@ -37,12 +37,7 @@ impl ResolveContext {
         let settings = crate::settings::Settings::try_get().ok();
         Self {
             config: cli.config.clone(),
-            profile: cli.profile.clone().or_else(|| {
-                settings
-                    .as_ref()
-                    .map(|settings| settings.profile.clone())
-                    .filter(|profile| profile != "default")
-            }),
+            profile: Config::get_profiles(cli.profile.as_slice()),
             age_key_file: cli.age_key_file.clone().or_else(|| {
                 settings
                     .as_ref()
@@ -106,14 +101,21 @@ enum Request {
 struct ResolveBatchRequest {
     cwd: PathBuf,
     config: PathBuf,
-    profile: String,
+    profile: Vec<String>,
     age_key_file: Option<PathBuf>,
     if_missing: Option<String>,
     no_defaults: bool,
     non_interactive: bool,
     purpose: String,
     keys: Vec<String>,
-    include_env_false: bool,
+    /// When true, resolve secrets of every env mode. When false, the resolve
+    /// layer keeps only shell-injectable secrets (`env = true`), dropping
+    /// `env = "exec"` and `env = false`; callers that pre-filter pass true.
+    ///
+    /// The wire key stays `include_env_false` for cross-version daemon
+    /// compatibility (a stale daemon must still deserialize new requests).
+    #[serde(rename = "include_env_false")]
+    include_all_modes: bool,
     env: Vec<(String, String)>,
 }
 
@@ -121,7 +123,7 @@ struct ResolveBatchRequest {
 struct ResolveOneRequest {
     cwd: PathBuf,
     config: PathBuf,
-    profile: String,
+    profile: Vec<String>,
     age_key_file: Option<PathBuf>,
     if_missing: Option<String>,
     no_defaults: bool,
@@ -190,10 +192,10 @@ struct DaemonState {
 pub async fn resolve_batch(
     cli: &Cli,
     config: &Config,
-    profile: &str,
+    profile: &[String],
     secrets: &IndexMap<String, SecretConfig>,
     purpose: Purpose,
-    include_env_false: bool,
+    include_all_modes: bool,
 ) -> Result<IndexMap<String, Option<String>>> {
     resolve_batch_with_context(
         &ResolveContext::from_cli(cli),
@@ -201,7 +203,7 @@ pub async fn resolve_batch(
         profile,
         secrets,
         purpose,
-        include_env_false,
+        include_all_modes,
     )
     .await
 }
@@ -209,18 +211,18 @@ pub async fn resolve_batch(
 pub async fn resolve_batch_with_context(
     ctx: &ResolveContext,
     config: &Config,
-    profile: &str,
+    profile: &[String],
     secrets: &IndexMap<String, SecretConfig>,
     purpose: Purpose,
-    include_env_false: bool,
+    include_all_modes: bool,
 ) -> Result<IndexMap<String, Option<String>>> {
     if !should_use_daemon(ctx, config) {
-        let secrets = if include_env_false {
+        let secrets = if include_all_modes {
             secrets.clone()
         } else {
             secrets
                 .iter()
-                .filter(|(_, secret)| secret.env)
+                .filter(|(_, secret)| secret.env_mode().in_shell())
                 .map(|(key, secret)| (key.clone(), secret.clone()))
                 .collect()
         };
@@ -232,14 +234,14 @@ pub async fn resolve_batch_with_context(
         cwd: std::env::current_dir()
             .map_err(|e| FnoxError::Config(format!("Failed to get current directory: {e}")))?,
         config: ctx.config.clone(),
-        profile: profile.to_string(),
+        profile: profile.to_vec(),
         age_key_file: ctx.age_key_file.clone(),
         if_missing: ctx.if_missing.clone(),
         no_defaults: ctx.no_defaults,
         non_interactive: ctx.non_interactive,
         purpose: purpose.as_str().to_string(),
         keys,
-        include_env_false,
+        include_all_modes,
         env: std::env::vars().collect(),
     });
 
@@ -255,7 +257,7 @@ pub async fn resolve_batch_with_context(
 pub async fn resolve_one(
     cli: &Cli,
     config: &Config,
-    profile: &str,
+    profile: &[String],
     key: &str,
     secret_config: &SecretConfig,
     purpose: Purpose,
@@ -274,7 +276,7 @@ pub async fn resolve_one(
 pub async fn resolve_one_with_context(
     ctx: &ResolveContext,
     config: &Config,
-    profile: &str,
+    profile: &[String],
     key: &str,
     secret_config: &SecretConfig,
     purpose: Purpose,
@@ -287,7 +289,7 @@ pub async fn resolve_one_with_context(
         cwd: std::env::current_dir()
             .map_err(|e| FnoxError::Config(format!("Failed to get current directory: {e}")))?,
         config: ctx.config.clone(),
-        profile: profile.to_string(),
+        profile: profile.to_vec(),
         age_key_file: ctx.age_key_file.clone(),
         if_missing: ctx.if_missing.clone(),
         no_defaults: ctx.no_defaults,
@@ -417,8 +419,9 @@ async fn start_background_for_context(
     let exe = std::env::current_exe()
         .map_err(|e| FnoxError::Config(format!("Failed to locate fnox executable: {e}")))?;
     let mut cmd = std::process::Command::new(exe);
-    cmd.arg("--profile")
-        .arg(Config::get_profile(ctx.profile.as_deref()));
+    for p in &ctx.profile {
+        cmd.arg("--profile").arg(p);
+    }
     if ctx.no_defaults {
         cmd.arg("--no-defaults");
     }
@@ -770,7 +773,7 @@ async fn process_request(
             let _cwd = CwdGuard::change_to(&req.cwd)?;
             apply_request_settings(
                 req.age_key_file.clone(),
-                Some(req.profile.clone()),
+                req.profile.clone(),
                 req.if_missing.clone(),
                 req.no_defaults,
                 req.non_interactive,
@@ -780,7 +783,9 @@ async fn process_request(
             let requested = req.keys.iter().cloned().collect::<HashSet<_>>();
             let secrets: IndexMap<String, SecretConfig> = all_secrets
                 .into_iter()
-                .filter(|(key, sc)| requested.contains(key) && (req.include_env_false || sc.env))
+                .filter(|(key, sc)| {
+                    requested.contains(key) && (req.include_all_modes || sc.env_mode().in_shell())
+                })
                 .collect();
             let values = resolve_with_cache(&config, &req.profile, secrets, &req, state).await?;
             Ok(Response::Resolved { values })
@@ -791,7 +796,7 @@ async fn process_request(
             let _cwd = CwdGuard::change_to(&req.cwd)?;
             apply_request_settings(
                 req.age_key_file.clone(),
-                Some(req.profile.clone()),
+                req.profile.clone(),
                 req.if_missing.clone(),
                 req.no_defaults,
                 req.non_interactive,
@@ -812,7 +817,7 @@ async fn process_request(
                 non_interactive: req.non_interactive,
                 purpose: req.purpose,
                 keys: vec![req.key.clone()],
-                include_env_false: true,
+                include_all_modes: true,
                 env: req.env,
             };
             let values = resolve_with_cache(
@@ -830,7 +835,7 @@ async fn process_request(
 
 fn apply_request_settings(
     age_key_file: Option<PathBuf>,
-    profile: Option<String>,
+    profile: Vec<String>,
     if_missing: Option<String>,
     no_defaults: bool,
     non_interactive: bool,
@@ -846,13 +851,14 @@ fn apply_request_settings(
 
 async fn resolve_with_cache(
     config: &Config,
-    profile: &str,
+    profile: &[String],
     secrets: IndexMap<String, SecretConfig>,
     req: &ResolveBatchRequest,
     state: std::sync::Arc<Mutex<DaemonState>>,
 ) -> Result<IndexMap<String, Option<String>>> {
     let fingerprint = config_fingerprint(config, &req.env)?;
     let providers = config.get_providers(profile);
+    let default_provider = cache_policy_default_provider(config, profile, &providers);
     let mut results = IndexMap::new();
     let mut misses = IndexMap::new();
     let mut miss_keys = HashMap::new();
@@ -862,10 +868,7 @@ async fn resolve_with_cache(
         for (key, secret) in &secrets {
             let cacheable = req.purpose != Purpose::Check.as_str()
                 && secret.daemon_cache.unwrap_or(true)
-                && secret
-                    .provider()
-                    .and_then(|p| providers.get(p))
-                    .is_none_or(|p| p.daemon_cache_enabled());
+                && provider_daemon_cache_enabled(&providers, default_provider, secret);
             if cacheable {
                 let cache_key = cache_key(&fingerprint, profile, key, secret, req);
                 if let Some(value) = state.cache.get(&cache_key) {
@@ -898,16 +901,57 @@ async fn resolve_with_cache(
     Ok(ordered)
 }
 
+fn cache_policy_default_provider<'a>(
+    config: &'a Config,
+    profile: &[String],
+    providers: &'a IndexMap<String, ProviderConfig>,
+) -> Option<&'a str> {
+    for p in profile.iter().filter(|p| *p != "default").rev() {
+        if let Some(profile_config) = config.profiles.get(p)
+            && let Some(default_provider) = profile_config.default_provider()
+        {
+            return Some(default_provider);
+        }
+    }
+
+    config.default_provider().or_else(|| {
+        if providers.len() == 1 {
+            providers.keys().next().map(String::as_str)
+        } else {
+            None
+        }
+    })
+}
+
+fn provider_daemon_cache_enabled(
+    providers: &IndexMap<String, ProviderConfig>,
+    default_provider: Option<&str>,
+    secret: &SecretConfig,
+) -> bool {
+    let provider_name = if let Some(provider_name) = secret.provider() {
+        Some(provider_name)
+    } else if secret.value().is_some() {
+        default_provider
+    } else {
+        None
+    };
+
+    provider_name
+        .and_then(|provider_name| providers.get(provider_name))
+        .is_none_or(|provider| provider.daemon_cache_enabled())
+}
+
 fn cache_key(
     fingerprint: &str,
-    profile: &str,
+    profile: &[String],
     key: &str,
     secret: &SecretConfig,
     req: &ResolveBatchRequest,
 ) -> CacheKey {
     let mut hasher = blake3::Hasher::new();
+    let profile_str = profile.join(",");
     hasher.update(fingerprint.as_bytes());
-    hasher.update(profile.as_bytes());
+    hasher.update(profile_str.as_bytes());
     hasher.update(req.no_defaults.to_string().as_bytes());
     hasher.update(key.as_bytes());
     hasher.update(req.purpose.as_bytes());
@@ -928,7 +972,7 @@ fn config_fingerprint(config: &Config, env: &[(String, String)]) -> Result<Strin
         paths.insert(path.clone());
     }
     if let Some(project_dir) = &config.project_dir {
-        for name in crate::config::all_config_filenames(None) {
+        for name in crate::config::all_config_filenames(&[]) {
             let path = project_dir.join(name);
             if path.exists() {
                 paths.insert(path);
@@ -975,6 +1019,18 @@ fn provider_env_key(key: &str) -> bool {
             | "INFISICAL_TOKEN"
             | "KEEPASS_PASSWORD"
             | "PASSWORDSTATE_API_KEY"
+            | "PROTON_PASS_PASSWORD"
+            | "PROTON_PASS_TOTP"
+            | "PROTON_PASS_EXTRA_PASSWORD"
+            | "PROTON_PASS_PASSWORD_FILE"
+            | "PROTON_PASS_TOTP_FILE"
+            | "PROTON_PASS_EXTRA_PASSWORD_FILE"
+            | "PROTON_PASS_PERSONAL_ACCESS_TOKEN"
+            | "PROTON_PASS_AGENT_REASON"
+            | "PROTON_PASS_SESSION_DIR"
+            | "PROTON_PASS_KEY_PROVIDER"
+            | "PROTON_PASS_ENCRYPTION_KEY"
+            | "PROTON_PASS_LINUX_KEYRING"
     )
 }
 
@@ -982,10 +1038,16 @@ fn socket_path(cli: &Cli) -> Result<PathBuf> {
     socket_path_for_context(&ResolveContext::from_cli(cli))
 }
 
+/// Wire-protocol version tag included in the socket path hash.
+/// Incrementing this ensures new clients don't connect to stale daemons
+/// running an incompatible wire format.
+const WIRE_VERSION: u8 = 2;
+
 fn socket_path_for_context(ctx: &ResolveContext) -> Result<PathBuf> {
     let mut hasher = blake3::Hasher::new();
-    let profile = Config::get_profile(ctx.profile.as_deref());
-    hasher.update(profile.as_bytes());
+    hasher.update(&[WIRE_VERSION]);
+    let profile_str = ctx.profile.join(",");
+    hasher.update(profile_str.as_bytes());
     hasher.update(ctx.no_defaults.to_string().as_bytes());
     if let Some(if_missing) = &ctx.if_missing {
         hasher.update(if_missing.as_bytes());
@@ -1278,7 +1340,14 @@ pub fn parse_duration(value: &str) -> Result<Duration> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_duration;
+    use super::{
+        CacheKey, DaemonState, Purpose, ResolveBatchRequest, cache_key, config_fingerprint,
+        parse_duration, resolve_with_cache,
+    };
+    use fnox_core::config::{Config, ProviderConfig, SecretConfig};
+    use indexmap::IndexMap;
+    use std::{path::PathBuf, sync::Arc};
+    use tokio::sync::Mutex;
 
     #[test]
     fn parse_duration_accepts_combined_values() {
@@ -1286,9 +1355,294 @@ mod tests {
         assert_eq!(parse_duration("1d2h3m4s").unwrap().as_secs(), 93784);
     }
 
+    // The `include_all_modes` field serializes as `include_env_false` on the
+    // wire so a stale daemon from an older fnox version can still deserialize
+    // requests from a newer client (and vice versa) across an upgrade. Guard
+    // that key name against accidental churn.
+    #[test]
+    fn resolve_batch_request_wire_key_is_stable() {
+        let req = test_batch_request();
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(
+            json.contains("\"include_env_false\":true"),
+            "wire key changed, breaking cross-version daemon IPC: {json}"
+        );
+        assert!(!json.contains("include_all_modes"));
+
+        let decoded: ResolveBatchRequest = serde_json::from_str(&json).unwrap();
+        assert!(decoded.include_all_modes);
+    }
+
     #[test]
     fn parse_duration_rejects_zero_and_overflow() {
         assert!(parse_duration("0s").is_err());
         assert!(parse_duration("18446744073709551615d").is_err());
+    }
+
+    #[test]
+    fn config_fingerprint_tracks_proton_pass_native_pat() {
+        let config = Config::default();
+        let first = config_fingerprint(
+            &config,
+            &[(
+                "PROTON_PASS_PERSONAL_ACCESS_TOKEN".to_string(),
+                "pst_first".to_string(),
+            )],
+        )
+        .unwrap();
+        let second = config_fingerprint(
+            &config,
+            &[(
+                "PROTON_PASS_PERSONAL_ACCESS_TOKEN".to_string(),
+                "pst_second".to_string(),
+            )],
+        )
+        .unwrap();
+
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn config_fingerprint_tracks_proton_pass_session_env() {
+        let config = Config::default();
+        let first = config_fingerprint(
+            &config,
+            &[(
+                "PROTON_PASS_SESSION_DIR".to_string(),
+                "/tmp/proton-pass-first".to_string(),
+            )],
+        )
+        .unwrap();
+        let second = config_fingerprint(
+            &config,
+            &[(
+                "PROTON_PASS_SESSION_DIR".to_string(),
+                "/tmp/proton-pass-second".to_string(),
+            )],
+        )
+        .unwrap();
+
+        assert_ne!(first, second);
+    }
+
+    fn plain_provider_config(daemon_cache: Option<bool>) -> ProviderConfig {
+        ProviderConfig::Plain {
+            auth_command: None,
+            daemon_cache,
+        }
+    }
+
+    fn plain_secret(value: &str) -> SecretConfig {
+        let mut secret = SecretConfig::new();
+        secret.set_provider(Some("plain".to_string()));
+        secret.set_value(Some(value.to_string()));
+        secret
+    }
+
+    fn default_provider_secret(value: &str) -> SecretConfig {
+        let mut secret = SecretConfig::new();
+        secret.set_value(Some(value.to_string()));
+        secret
+    }
+
+    fn test_batch_request() -> ResolveBatchRequest {
+        ResolveBatchRequest {
+            cwd: PathBuf::from("."),
+            config: PathBuf::from("fnox.toml"),
+            profile: vec!["default".to_string()],
+            age_key_file: None,
+            if_missing: None,
+            no_defaults: false,
+            non_interactive: true,
+            purpose: Purpose::Get.as_str().to_string(),
+            keys: vec!["API_KEY".to_string()],
+            include_all_modes: true,
+            env: Vec::new(),
+        }
+    }
+
+    fn state_with_cached_secret(
+        config: &Config,
+        secret: &SecretConfig,
+        req: &ResolveBatchRequest,
+    ) -> Arc<Mutex<DaemonState>> {
+        let fingerprint = config_fingerprint(config, &req.env).unwrap();
+        let key = cache_key(&fingerprint, &req.profile, "API_KEY", secret, req);
+        let mut cache = std::collections::HashMap::<CacheKey, Option<String>>::new();
+        cache.insert(key, Some("cached".to_string()));
+        Arc::new(Mutex::new(DaemonState { cache }))
+    }
+
+    #[tokio::test]
+    async fn resolve_with_cache_skips_explicit_provider_when_provider_daemon_cache_disabled() {
+        let mut config = Config::new();
+        config
+            .providers
+            .insert("plain".to_string(), plain_provider_config(Some(false)));
+        let secret = plain_secret("fresh");
+        let req = test_batch_request();
+        let state = state_with_cached_secret(&config, &secret, &req);
+
+        let resolved = resolve_with_cache(
+            &config,
+            &req.profile,
+            IndexMap::from([("API_KEY".to_string(), secret)]),
+            &req,
+            state,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            resolved.get("API_KEY").and_then(|value| value.as_deref()),
+            Some("fresh")
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_with_cache_skips_default_provider_when_provider_daemon_cache_disabled() {
+        let mut config = Config::new();
+        config
+            .providers
+            .insert("plain".to_string(), plain_provider_config(Some(false)));
+        config.set_default_provider(Some("plain".to_string()));
+        let secret = default_provider_secret("fresh");
+        let req = test_batch_request();
+        let state = state_with_cached_secret(&config, &secret, &req);
+
+        let resolved = resolve_with_cache(
+            &config,
+            &req.profile,
+            IndexMap::from([("API_KEY".to_string(), secret)]),
+            &req,
+            state,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            resolved.get("API_KEY").and_then(|value| value.as_deref()),
+            Some("fresh")
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_with_cache_skips_profile_default_provider_when_provider_daemon_cache_disabled()
+    {
+        let config: Config = toml_edit::de::from_str(
+            r#"
+root = true
+
+[providers.global]
+type = "plain"
+
+[profiles.prod]
+default_provider = "plain"
+
+[profiles.prod.providers.plain]
+type = "plain"
+daemon_cache = false
+"#,
+        )
+        .unwrap();
+        let secret = default_provider_secret("fresh");
+        let mut req = test_batch_request();
+        req.profile = vec!["prod".to_string()];
+        let state = state_with_cached_secret(&config, &secret, &req);
+
+        let resolved = resolve_with_cache(
+            &config,
+            &req.profile,
+            IndexMap::from([("API_KEY".to_string(), secret)]),
+            &req,
+            state,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            resolved.get("API_KEY").and_then(|value| value.as_deref()),
+            Some("fresh")
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_with_cache_skips_auto_selected_provider_when_provider_daemon_cache_disabled() {
+        let mut config = Config::new();
+        config
+            .providers
+            .insert("plain".to_string(), plain_provider_config(Some(false)));
+        let secret = default_provider_secret("fresh");
+        let req = test_batch_request();
+        let state = state_with_cached_secret(&config, &secret, &req);
+
+        let resolved = resolve_with_cache(
+            &config,
+            &req.profile,
+            IndexMap::from([("API_KEY".to_string(), secret)]),
+            &req,
+            state,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            resolved.get("API_KEY").and_then(|value| value.as_deref()),
+            Some("fresh")
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_with_cache_uses_cache_for_default_provider_when_daemon_cache_is_default() {
+        let mut config = Config::new();
+        config
+            .providers
+            .insert("plain".to_string(), plain_provider_config(None));
+        config.set_default_provider(Some("plain".to_string()));
+        let secret = default_provider_secret("fresh");
+        let req = test_batch_request();
+        let state = state_with_cached_secret(&config, &secret, &req);
+
+        let resolved = resolve_with_cache(
+            &config,
+            &req.profile,
+            IndexMap::from([("API_KEY".to_string(), secret)]),
+            &req,
+            state,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            resolved.get("API_KEY").and_then(|value| value.as_deref()),
+            Some("cached")
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_with_cache_uses_cache_when_default_provider_config_is_invalid() {
+        let mut config = Config::new();
+        config
+            .providers
+            .insert("plain".to_string(), plain_provider_config(None));
+        config.set_default_provider(Some("missing".to_string()));
+        let secret = default_provider_secret("fresh");
+        let req = test_batch_request();
+        let state = state_with_cached_secret(&config, &secret, &req);
+
+        let resolved = resolve_with_cache(
+            &config,
+            &req.profile,
+            IndexMap::from([("API_KEY".to_string(), secret)]),
+            &req,
+            state,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            resolved.get("API_KEY").and_then(|value| value.as_deref()),
+            Some("cached")
+        );
     }
 }

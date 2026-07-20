@@ -246,6 +246,63 @@ EOF
 	assert_output --partial "LOCAL_OVERRIDE"
 }
 
+@test "fnox set with multiple profiles requires --write-profile" {
+	cat >fnox.toml <<EOF
+[providers.plain]
+type = "plain"
+
+[secrets]
+BASE = { default = "base" }
+EOF
+
+	cat >fnox.staging.toml <<EOF
+[secrets]
+STAGING_EXISTING = { default = "staging" }
+EOF
+
+	# Multiple profiles without --write-profile should error
+	run "$FNOX_BIN" -P staging -P extra set NEW_SECRET "new-value"
+	assert_failure
+	assert_output --partial "Multiple profiles are active"
+	assert_output --partial "--write-profile"
+
+	# With --write-profile staging, the secret lands in staging
+	run "$FNOX_BIN" -P staging -P extra --write-profile staging set NEW_SECRET "new-value"
+	assert_success
+
+	run cat fnox.staging.toml
+	assert_success
+	assert_output --partial "NEW_SECRET"
+	assert_output --partial "STAGING_EXISTING"
+
+	# Base file is untouched
+	run cat fnox.toml
+	assert_success
+	refute_output --partial "NEW_SECRET"
+	assert_output --partial "BASE"
+}
+
+@test "fnox set with comma-separated profiles writes to last profile file" {
+	cat >fnox.toml <<EOF
+[providers.plain]
+type = "plain"
+EOF
+
+	cat >fnox.dev.toml <<EOF
+[secrets]
+DEV = { default = "dev" }
+EOF
+
+	# Comma-separated: last profile is the write target
+	run "$FNOX_BIN" -P dev set SHARED "val"
+	assert_success
+
+	run cat fnox.dev.toml
+	assert_success
+	assert_output --partial "SHARED"
+	assert_output --partial "DEV"
+}
+
 @test "fnox set --profile staging writes to fnox.staging.toml when it exists alongside fnox.toml" {
 	cat >fnox.toml <<EOF
 [providers.plain]

@@ -19,8 +19,12 @@ pub struct GetCommand {
 
 impl GetCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
-        let profile = Config::get_profile(cli.profile.as_deref());
-        tracing::debug!("Getting secret '{}' from profile '{}'", self.key, profile);
+        let profile = Config::get_profiles(cli.profile.as_slice());
+        tracing::debug!(
+            "Getting secret '{}' from profiles '{}'",
+            self.key,
+            Config::display_profiles(&profile)
+        );
 
         // Validate the configuration first
         config.validate()?;
@@ -54,7 +58,7 @@ impl GetCommand {
 
             FnoxError::SecretNotFound {
                 key: self.key.clone(),
-                profile: profile.clone(),
+                profile: Config::display_profiles(&profile),
                 config_path: config.secret_sources.get(&self.key).cloned(),
                 suggestion,
             }
@@ -115,7 +119,7 @@ impl GetCommand {
         &self,
         cli: &Cli,
         config: &Config,
-        profile: &str,
+        profile: &[String],
     ) -> Result<Option<(String, IndexMap<String, SecretConfig>)>> {
         let leases = config.get_leases(profile);
 

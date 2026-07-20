@@ -19,14 +19,14 @@ pub const DEFAULT_CONFIG_FILENAME: &str = "fnox.toml";
 
 /// Returns all config filenames in load order (first = lowest priority, last = highest priority).
 ///
-/// Order: main configs → profile configs → local configs
+/// Order: main configs → profile configs (in the order given) → local configs
 /// Within each group, non-dotfiles come first (lower priority); dotfiles follow (higher priority).
-pub fn all_config_filenames(profile: Option<&str>) -> Vec<String> {
+pub fn all_config_filenames(profiles: &[String]) -> Vec<String> {
     let mut files = vec![
         DEFAULT_CONFIG_FILENAME.to_string(),
         ".fnox.toml".to_string(),
     ];
-    if let Some(p) = profile.filter(|p| *p != "default") {
+    for p in profiles.iter().filter(|p| *p != "default") {
         files.push(format!("fnox.{p}.toml"));
         files.push(format!(".fnox.{p}.toml"));
     }
@@ -48,14 +48,20 @@ pub fn local_override_filename(path: &Path) -> Option<&'static str> {
 
 /// Find the most appropriate existing config file in `dir` for writing.
 ///
-/// When a non-default profile is active, prefers the profile-specific file
-/// (e.g. `fnox.staging.toml`) if it exists, so secrets stay scoped to that
-/// profile. Otherwise falls back to the lowest-priority existing file.
-/// If no config files exist yet, returns `fnox.toml`.
-pub fn find_local_config(dir: &Path, profile: Option<&str>) -> PathBuf {
-    // If a non-default profile is specified, prefer its config file first
-    if let Some(p) = profile.filter(|p| *p != "default") {
-        for name in [format!("fnox.{p}.toml"), format!(".fnox.{p}.toml")] {
+/// When non-default profiles are active, the last profile is the write target. Its
+/// profile-specific file (e.g. `fnox.staging.toml`) is preferred if it exists, so
+/// secrets stay scoped to that profile. Otherwise falls back to the lowest-priority
+/// existing file. If no config files exist yet, returns `fnox.toml`.
+pub fn find_local_config(dir: &Path, profiles: &[String]) -> PathBuf {
+    // The last profile is the write target.
+    let write_profile = Config::write_profile(profiles);
+
+    // If the write profile is non-default, prefer its config file first
+    if write_profile != "default" {
+        for name in [
+            format!("fnox.{write_profile}.toml"),
+            format!(".fnox.{write_profile}.toml"),
+        ] {
             let path = dir.join(&name);
             if path.exists() {
                 return path;
@@ -64,9 +70,10 @@ pub fn find_local_config(dir: &Path, profile: Option<&str>) -> PathBuf {
     }
 
     // Fall back to lowest-priority existing base file.
-    // When a profile is active, exclude local files (fnox.local.toml, .fnox.local.toml)
-    // to avoid silently routing profile-scoped secrets into a gitignored local-override file.
-    let is_profiled = profile.is_some_and(|p| p != "default");
+    // When a non-default profile is active, exclude local files
+    // (fnox.local.toml, .fnox.local.toml) to avoid silently routing profile-scoped
+    // secrets into a gitignored local-override file.
+    let is_profiled = profiles.iter().any(|p| p != "default");
     for name in &["fnox.toml", ".fnox.toml"] {
         let path = dir.join(name);
         if path.exists() {
@@ -82,6 +89,22 @@ pub fn find_local_config(dir: &Path, profile: Option<&str>) -> PathBuf {
         }
     }
     dir.join(DEFAULT_CONFIG_FILENAME)
+}
+
+/// Check whether a file is a profile-specific config file (e.g.
+/// `fnox.prod.toml` or `.fnox.prod.toml`). Such files use top-level
+/// `[secrets]` to represent the profile's secrets, rather than nesting
+/// under `[profiles.<name>.secrets]`.
+pub fn is_profile_file(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|name| {
+            let name = name.strip_prefix('.').unwrap_or(name);
+            name.starts_with("fnox.")
+                && name.ends_with(".toml")
+                && name != "fnox.toml"
+                && name != "fnox.local.toml"
+        })
 }
 
 // Re-export ProviderConfig from providers module
@@ -125,6 +148,13 @@ pub struct Config {
     /// Default if_missing behavior for all secrets in this config
     #[serde(skip_serializing_if = "Option::is_none")]
     pub if_missing: Option<IfMissing>,
+
+    /// Default env injection mode for all secrets in this config.
+    /// Set `env = "exec"` to keep every secret out of the interactive shell
+    /// (secrets are still injected into `fnox exec` subprocesses) unless a
+    /// secret explicitly opts back in with `env = true`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub env: Option<EnvMode>,
 
     /// Whether to prompt for authentication when provider auth fails (default: true in TTY)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -187,10 +217,14 @@ pub struct SecretConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     value: Option<SpannedValue<String>>,
 
-    /// Whether to inject this secret into env vars (default: true)
-    /// When false, the secret is only accessible via `fnox get`
-    #[serde(default = "default_true", skip_serializing_if = "is_true")]
-    pub env: bool,
+    /// Where to inject this secret as an environment variable:
+    /// - `true` — shell integration and `fnox exec` (default)
+    /// - `"exec"` — only `fnox exec` subprocesses, never the interactive shell
+    /// - `false` — never injected; only accessible via `fnox get`
+    ///
+    /// When unset, inherits the top-level `env` default (which itself defaults to `true`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<EnvMode>,
 
     /// Write secret to a temporary file and set env var to the file path instead of the secret value
     #[serde(default, skip_serializing_if = "is_false")]
@@ -220,6 +254,10 @@ pub struct SecretConfig {
     /// When false, the secret was loaded from a root-level [secrets] section.
     #[serde(skip)]
     pub source_is_profile: bool,
+
+    /// The profile name this secret was loaded from, if any (not serialized).
+    #[serde(skip)]
+    pub source_profile: Option<String>,
 
     /// Whether this secret may be cached by the per-user daemon.
     /// Defaults to true; set false for secrets that should always resolve directly.
@@ -388,13 +426,109 @@ pub enum IfMissing {
     Ignore,
 }
 
+/// Controls where a secret's value is injected as an environment variable.
+///
+/// Serialized in TOML as `true` (Shell), `"exec"` (Exec), or `false` (Never).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum EnvMode {
+    /// Injected by shell integration (hook-env) and `fnox exec` (TOML: `true`)
+    #[default]
+    Shell,
+    /// Only injected into `fnox exec` subprocesses, never the interactive shell (TOML: `"exec"`)
+    Exec,
+    /// Never injected as an env var; only accessible via `fnox get` (TOML: `false`)
+    Never,
+}
+
+impl EnvMode {
+    /// Whether shell integration (hook-env / export) should inject this secret
+    pub fn in_shell(self) -> bool {
+        matches!(self, Self::Shell)
+    }
+
+    /// Whether `fnox exec` subprocesses should receive this secret
+    pub fn in_exec(self) -> bool {
+        matches!(self, Self::Shell | Self::Exec)
+    }
+
+    /// TOML representation for config-file editing
+    pub fn to_toml_value(self) -> toml_edit::Value {
+        match self {
+            Self::Shell => toml_edit::Value::from(true),
+            Self::Exec => toml_edit::Value::from("exec"),
+            Self::Never => toml_edit::Value::from(false),
+        }
+    }
+}
+
+impl Serialize for EnvMode {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        match self {
+            Self::Shell => serializer.serialize_bool(true),
+            Self::Exec => serializer.serialize_str("exec"),
+            Self::Never => serializer.serialize_bool(false),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for EnvMode {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        struct EnvModeVisitor;
+
+        impl serde::de::Visitor<'_> for EnvModeVisitor {
+            type Value = EnvMode;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("true, false, or \"exec\"")
+            }
+
+            fn visit_bool<E: serde::de::Error>(self, v: bool) -> std::result::Result<EnvMode, E> {
+                Ok(if v { EnvMode::Shell } else { EnvMode::Never })
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> std::result::Result<EnvMode, E> {
+                match v {
+                    "exec" => Ok(EnvMode::Exec),
+                    other => Err(E::invalid_value(
+                        serde::de::Unexpected::Str(other),
+                        &"true, false, or \"exec\"",
+                    )),
+                }
+            }
+        }
+
+        deserializer.deserialize_any(EnvModeVisitor)
+    }
+}
+
+impl JsonSchema for EnvMode {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "EnvMode".into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "Where to inject the secret as an env var: true = shell + fnox exec (default), \"exec\" = fnox exec subprocesses only, false = never (fnox get only)",
+            "anyOf": [
+                { "type": "boolean" },
+                { "type": "string", "enum": ["exec"] }
+            ]
+        })
+    }
+}
+
 impl Config {
     /// Load configuration using the appropriate strategy
     pub fn load_smart<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path_ref = path.as_ref();
 
         // If the path is one of the default config filenames, use recursive loading
-        let default_filenames = all_config_filenames(None);
+        let default_filenames = all_config_filenames(&[]);
         if default_filenames.iter().any(|f| path_ref == Path::new(f)) {
             Self::load_with_recursion(path_ref)
         } else {
@@ -479,9 +613,9 @@ impl Config {
     /// Recursively search for fnox.toml files and merge them
     /// Returns (config, found_any) where found_any indicates if any config file was found
     fn load_recursive(dir: &Path, found_any: bool) -> Result<(Self, bool)> {
-        // Get current profile from Settings (respects: CLI flag > Env var > Default)
-        let profile = crate::settings::Settings::get().profile.clone();
-        let filenames = all_config_filenames(Some(&profile));
+        // Get active profiles from Settings (respects: CLI flag > Env var > Default)
+        let profiles = Self::get_profiles(&[]);
+        let filenames = all_config_filenames(&profiles);
 
         // Load all existing config files in order (later files override earlier ones)
         let mut config = Self::new();
@@ -538,8 +672,8 @@ impl Config {
     /// Find the nearest directory to `start` that contains a config file.
     /// Walks upward from `start` and returns the first match.
     fn find_project_dir(start: &Path) -> Option<PathBuf> {
-        let profile = crate::settings::Settings::get().profile.clone();
-        let filenames = all_config_filenames(Some(&profile));
+        let profiles = Self::get_profiles(&[]);
+        let filenames = all_config_filenames(&profiles);
         let mut dir = Some(start);
         while let Some(d) = dir {
             for filename in &filenames {
@@ -611,6 +745,11 @@ impl Config {
         // Merge if_missing (overlay takes precedence)
         if overlay.if_missing.is_some() {
             merged.if_missing = overlay.if_missing;
+        }
+
+        // Merge env default (overlay takes precedence)
+        if overlay.env.is_some() {
+            merged.env = overlay.env;
         }
 
         // Merge prompt_auth (overlay takes precedence)
@@ -842,8 +981,12 @@ impl Config {
             DocumentMut::new()
         };
 
-        // Get or create the secrets table
-        let secrets_table = if profile == "default" {
+        // Get or create the secrets table.
+        // When writing to a profile-specific file (fnox.<profile>.toml or
+        // .fnox.<profile>.toml), the top-level [secrets] section already
+        // represents that profile's secrets — no need to nest under
+        // [profiles.<profile>].
+        let secrets_table = if profile == "default" || is_profile_file(&target_file) {
             if doc.get("secrets").is_none() {
                 doc["secrets"] = Item::Table(toml_edit::Table::new());
             }
@@ -914,7 +1057,7 @@ impl Config {
         })?;
 
         // Navigate to the secrets table
-        let removed = if profile == "default" {
+        let removed = if profile == "default" || is_profile_file(target_file) {
             doc.get_mut("secrets")
                 .and_then(|s| s.as_table_mut())
                 .map(|t| t.remove(secret_name).is_some())
@@ -971,7 +1114,7 @@ impl Config {
         };
 
         // Get or create the secrets table
-        let secrets_table = if profile == "default" {
+        let secrets_table = if profile == "default" || is_profile_file(target_file) {
             if doc.get("secrets").is_none() {
                 doc["secrets"] = Item::Table(toml_edit::Table::new());
             }
@@ -1031,6 +1174,7 @@ impl Config {
             profiles: IndexMap::new(),
             age_key_file: None,
             if_missing: None,
+            env: None,
             prompt_auth: None,
             mcp: None,
             daemon: None,
@@ -1041,12 +1185,71 @@ impl Config {
         }
     }
 
-    /// Get the profile to use (from flag or env var, defaulting to "default")
-    pub fn get_profile(profile_flag: Option<&str>) -> String {
-        profile_flag
-            .map(String::from)
-            .or_else(|| (*env::FNOX_PROFILE).clone())
-            .unwrap_or_else(|| "default".to_string())
+    /// Resolve the ordered list of active profiles.
+    ///
+    /// Precedence: CLI flags > FNOX_PROFILE env > settings default. If all are
+    /// empty, returns `["default"]`. The `default` profile name represents the
+    /// top-level config; no `[profiles.default]` lookup is performed.
+    pub fn get_profiles(cli_profiles: &[String]) -> Vec<String> {
+        if !cli_profiles.is_empty() {
+            return Self::normalize_profiles(cli_profiles);
+        }
+        Self::normalize_profiles(&Settings::get().profile)
+    }
+
+    /// Normalize a profile list: split comma-separated entries, trim whitespace,
+    /// drop invalid names, and remove empty entries. Order is preserved.
+    pub fn normalize_profiles(input: &[String]) -> Vec<String> {
+        let profiles: Vec<String> = input
+            .iter()
+            .flat_map(|s| s.split(','))
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty() && env::is_valid_profile_name(s))
+            .collect();
+        if profiles.is_empty() {
+            vec!["default".to_string()]
+        } else {
+            profiles
+        }
+    }
+
+    /// Format a profile list for display.
+    pub fn display_profiles(profiles: &[String]) -> String {
+        if profiles.is_empty() {
+            "default".to_string()
+        } else {
+            profiles.join(",")
+        }
+    }
+
+    /// Resolve the write-target profile.
+    ///
+    /// - If `explicit` is set, use it (validated against profile name rules).
+    /// - If exactly one profile is active, use it.
+    /// - If multiple profiles are active without `--write-profile`, return an error.
+    pub fn resolve_write_profile(profiles: &[String], explicit: Option<&str>) -> Result<String> {
+        if let Some(name) = explicit {
+            if !env::is_valid_profile_name(name) {
+                return Err(FnoxError::Config(format!(
+                    "Invalid --write-profile name: '{name}'"
+                )));
+            }
+            return Ok(name.to_string());
+        }
+
+        match profiles.len() {
+            0 => Ok("default".to_string()),
+            1 => Ok(profiles[0].clone()),
+            _ => Err(FnoxError::Config(format!(
+                "Multiple profiles are active ({}). Specify --write-profile <NAME> to choose the write target.",
+                profiles.join(",")
+            ))),
+        }
+    }
+
+    /// Return the profile that write operations should target.
+    pub fn write_profile(profiles: &[String]) -> &str {
+        profiles.last().map(String::as_str).unwrap_or("default")
     }
 
     /// Determine if we should prompt for authentication when provider auth fails.
@@ -1079,97 +1282,134 @@ impl Config {
             .secrets
     }
 
-    /// Get effective secrets (default or profile)
-    /// For non-default profiles, this merges top-level secrets with profile-specific secrets,
-    /// with profile secrets taking precedence.
+    /// Get effective secrets for the active profile stack.
     ///
-    /// Note: If a profile doesn't exist in [profiles], it's treated as "default".
-    /// This allows fnox.$FNOX_PROFILE.toml files to work without requiring a [profiles] section.
-    pub fn get_secrets(&self, profile: &str) -> Result<IndexMap<String, SecretConfig>> {
-        if profile == "default" {
-            return Ok(self.secrets.clone());
-        }
+    /// Top-level secrets form the base (unless `no_defaults` is set and at least one
+    /// non-default profile is active). Profile-specific secrets are overlaid in order,
+    /// with later profiles taking precedence.
+    pub fn get_secrets(&self, profiles: &[String]) -> Result<IndexMap<String, SecretConfig>> {
+        self.get_secrets_with_no_defaults(profiles, Settings::get().no_defaults)
+    }
 
-        let mut secrets = if Settings::get().no_defaults {
-            // Profile-only mode: do not merge top-level secrets.
-            IndexMap::new()
-        } else {
-            // Start with top-level secrets as base
+    /// Get effective secrets with an explicit no-defaults setting.
+    pub fn get_secrets_with_no_defaults(
+        &self,
+        profiles: &[String],
+        no_defaults: bool,
+    ) -> Result<IndexMap<String, SecretConfig>> {
+        let has_non_default = profiles.iter().any(|p| p != "default");
+        let mut secrets = if !has_non_default || !no_defaults {
             self.secrets.clone()
+        } else {
+            IndexMap::new()
         };
 
-        // Get profile-specific secrets and merge/override (if profile exists)
-        if let Some(profile_config) = self.profiles.get(profile) {
-            // Profile-specific secrets override top-level ones
-            secrets.extend(profile_config.secrets.clone());
+        for profile in profiles.iter().filter(|p| *p != "default") {
+            if let Some(profile_config) = self.profiles.get(profile) {
+                secrets.extend(profile_config.secrets.clone());
+            }
         }
-        // If profile doesn't exist in [profiles], that's OK - just use top-level secrets
-        // This allows fnox.$FNOX_PROFILE.toml to work without requiring [profiles.xxx]
+
+        // Secrets that don't set `env` themselves inherit the top-level default
+        if self.env.is_some() {
+            for secret in secrets.values_mut() {
+                if secret.env.is_none() {
+                    secret.env = self.env;
+                }
+            }
+        }
+
         Ok(secrets)
     }
 
     /// Look up a single secret by key without cloning the secrets map.
     ///
-    /// Mirrors the precedence used by [`Self::get_secrets`]: profile-specific
-    /// secrets take precedence, falling back to top-level secrets unless
-    /// `no_defaults` is set.
-    pub fn get_secret(&self, profile: &str, key: &str) -> Option<&SecretConfig> {
-        if profile != "default"
-            && let Some(profile_config) = self.profiles.get(profile)
-            && let Some(secret) = profile_config.secrets.get(key)
-        {
-            return Some(secret);
+    /// Mirrors the precedence used by [`Self::get_secrets`]: later profiles take
+    /// precedence, falling back to top-level secrets unless `no_defaults` is set
+    /// and at least one non-default profile is active.
+    pub fn get_secret(&self, profiles: &[String], key: &str) -> Option<&SecretConfig> {
+        self.get_secret_with_no_defaults(profiles, key, Settings::get().no_defaults)
+    }
+
+    /// Look up a single secret with an explicit no-defaults setting.
+    pub fn get_secret_with_no_defaults(
+        &self,
+        profiles: &[String],
+        key: &str,
+        no_defaults: bool,
+    ) -> Option<&SecretConfig> {
+        let has_non_default = profiles.iter().any(|p| p != "default");
+
+        for profile in profiles.iter().filter(|p| *p != "default").rev() {
+            if let Some(profile_config) = self.profiles.get(profile)
+                && let Some(secret) = profile_config.secrets.get(key)
+            {
+                return Some(secret);
+            }
         }
 
-        if profile != "default" && Settings::get().no_defaults {
+        if has_non_default && no_defaults {
             return None;
         }
 
         self.secrets.get(key)
     }
 
-    /// Get effective secrets (default or profile, mutable)
-    pub fn get_secrets_mut(&mut self, profile: &str) -> &mut IndexMap<String, SecretConfig> {
-        if profile == "default" {
+    /// Get effective secrets (mutable) for the write target profile.
+    ///
+    /// The write target is the last active profile. If it is `default` (or the
+    /// list is empty), the top-level secrets map is returned.
+    pub fn get_secrets_mut(&mut self, profiles: &[String]) -> &mut IndexMap<String, SecretConfig> {
+        let write_profile = Self::write_profile(profiles);
+        if write_profile == "default" {
             self.get_default_secrets_mut()
         } else {
-            self.get_profile_secrets_mut(profile)
+            self.get_profile_secrets_mut(write_profile)
         }
     }
 
-    /// Get effective lease backends for a profile
+    /// Get effective lease backends for the active profile stack.
+    ///
+    /// Top-level leases form the base. Profile-specific leases are overlaid in
+    /// order, with later profiles taking precedence.
     pub fn get_leases(
         &self,
-        profile: &str,
+        profiles: &[String],
     ) -> IndexMap<String, crate::lease_backends::LeaseBackendConfig> {
         let mut leases = self.leases.clone();
 
-        if profile != "default"
-            && let Some(profile_config) = self.profiles.get(profile)
-        {
-            leases.extend(profile_config.leases.clone());
+        for profile in profiles.iter().filter(|p| *p != "default") {
+            if let Some(profile_config) = self.profiles.get(profile) {
+                leases.extend(profile_config.leases.clone());
+            }
         }
 
         leases
     }
 
-    /// Get effective providers for a profile
-    pub fn get_providers(&self, profile: &str) -> IndexMap<String, ProviderConfig> {
-        let mut providers = self.providers.clone(); // Start with global providers
+    /// Get effective providers for the active profile stack.
+    ///
+    /// Top-level providers form the base. Profile-specific providers are overlaid
+    /// in order, with later profiles taking precedence.
+    pub fn get_providers(&self, profiles: &[String]) -> IndexMap<String, ProviderConfig> {
+        let mut providers = self.providers.clone();
 
-        if profile != "default"
-            && let Some(profile_config) = self.profiles.get(profile)
-        {
-            providers.extend(profile_config.providers.clone());
+        for profile in profiles.iter().filter(|p| *p != "default") {
+            if let Some(profile_config) = self.profiles.get(profile) {
+                providers.extend(profile_config.providers.clone());
+            }
         }
 
         providers
     }
 
-    /// Get the default provider for a profile
-    /// Returns the configured default_provider, or auto-selects if there's only one provider
-    pub fn get_default_provider(&self, profile: &str) -> Result<Option<String>> {
-        let providers = self.get_providers(profile);
+    /// Get the default provider for the active profile stack.
+    ///
+    /// Returns the configured default_provider (last profile that sets one wins),
+    /// or auto-selects if there's only one provider. Top-level default_provider
+    /// is used when no profile overrides it.
+    pub fn get_default_provider(&self, profiles: &[String]) -> Result<Option<String>> {
+        let providers = self.get_providers(profiles);
 
         // If no providers configured and this is a root config, return None
         if providers.is_empty() && self.root {
@@ -1183,59 +1423,51 @@ impl Config {
             ));
         }
 
-        // Check for profile-specific default provider
-        if profile != "default"
-            && let Some(profile_config) = self.profiles.get(profile)
-            && let Some(default_provider_name) = profile_config.default_provider()
-        {
+        // Find the winning default_provider: last profile that sets one wins.
+        let mut winning_profile = None;
+        let mut default_provider_name: Option<&str> = None;
+        if let Some(name) = self.default_provider() {
+            winning_profile = Some("default");
+            default_provider_name = Some(name);
+        }
+        for profile in profiles.iter().filter(|p| *p != "default") {
+            if let Some(profile_config) = self.profiles.get(profile)
+                && let Some(name) = profile_config.default_provider()
+            {
+                winning_profile = Some(profile.as_str());
+                default_provider_name = Some(name);
+            }
+        }
+
+        if let Some(name) = default_provider_name {
             // Validate that the default provider exists
-            if !providers.contains_key(default_provider_name) {
-                // Try to get source info for better error reporting
-                if let Some(source_path) = &profile_config.default_provider_source
-                    && let (Some(src), Some(span)) = (
-                        source_registry::get_named_source(source_path),
-                        profile_config.default_provider_span(),
-                    )
-                {
-                    return Err(FnoxError::DefaultProviderNotFoundWithSource {
-                        provider: default_provider_name.to_string(),
-                        profile: profile.to_string(),
-                        src,
-                        span: span.into(),
-                    });
+            if !providers.contains_key(name) {
+                let profile = winning_profile.unwrap_or("default");
+                if let Some(source_path) = self.default_provider_source_for(profile) {
+                    let span = self.default_provider_span_for(profile);
+                    if let (Some(src), Some(span)) =
+                        (source_registry::get_named_source(&source_path), span)
+                    {
+                        return Err(FnoxError::DefaultProviderNotFoundWithSource {
+                            provider: name.to_string(),
+                            profile: profile.to_string(),
+                            src,
+                            span: span.into(),
+                        });
+                    }
+                }
+                if profile == "default" {
+                    return Err(FnoxError::Config(format!(
+                        "Default provider '{}' not found in configuration",
+                        name
+                    )));
                 }
                 return Err(FnoxError::Config(format!(
                     "Default provider '{}' not found in profile '{}'",
-                    default_provider_name, profile
+                    name, profile
                 )));
             }
-            return Ok(Some(default_provider_name.to_string()));
-        }
-
-        // Check for global default provider (for default profile or as fallback)
-        if let Some(default_provider_name) = self.default_provider() {
-            // Validate that the default provider exists
-            if !providers.contains_key(default_provider_name) {
-                // Try to get source info for better error reporting
-                if let Some(source_path) = &self.default_provider_source
-                    && let (Some(src), Some(span)) = (
-                        source_registry::get_named_source(source_path),
-                        self.default_provider_span(),
-                    )
-                {
-                    return Err(FnoxError::DefaultProviderNotFoundWithSource {
-                        provider: default_provider_name.to_string(),
-                        profile: profile.to_string(),
-                        src,
-                        span: span.into(),
-                    });
-                }
-                return Err(FnoxError::Config(format!(
-                    "Default provider '{}' not found in configuration",
-                    default_provider_name
-                )));
-            }
-            return Ok(Some(default_provider_name.to_string()));
+            return Ok(Some(name.to_string()));
         }
 
         // If there's exactly one provider, auto-select it
@@ -1252,11 +1484,35 @@ impl Config {
         Ok(None)
     }
 
+    /// Source path for the effective default_provider of a given profile name.
+    fn default_provider_source_for(&self, profile: &str) -> Option<PathBuf> {
+        if profile == "default" {
+            self.default_provider_source.clone()
+        } else {
+            self.profiles
+                .get(profile)
+                .and_then(|p| p.default_provider_source.clone())
+        }
+    }
+
+    /// Source span for the effective default_provider of a given profile name.
+    fn default_provider_span_for(&self, profile: &str) -> Option<Range<usize>> {
+        if profile == "default" {
+            self.default_provider_span()
+        } else {
+            self.profiles
+                .get(profile)
+                .and_then(|p| p.default_provider_span())
+        }
+    }
+
     /// Set source paths for all secrets and providers in this config
     fn set_source_paths(&mut self, path: &Path) {
         // Set source paths for default profile secrets
         for (key, secret) in self.secrets.iter_mut() {
             secret.source_path = Some(path.to_path_buf());
+            secret.source_is_profile = false;
+            secret.source_profile = None;
             self.secret_sources.insert(key.clone(), path.to_path_buf());
         }
 
@@ -1272,10 +1528,11 @@ impl Config {
         }
 
         // Set source paths for named profiles
-        for (_profile_name, profile) in self.profiles.iter_mut() {
+        for (profile_name, profile) in self.profiles.iter_mut() {
             for (key, secret) in profile.secrets.iter_mut() {
                 secret.source_path = Some(path.to_path_buf());
                 secret.source_is_profile = true;
+                secret.source_profile = Some(profile_name.clone());
                 profile
                     .secret_sources
                     .insert(key.clone(), path.to_path_buf());
@@ -1333,7 +1590,7 @@ impl Config {
     /// Returns true if the provider is "plain" type.
     fn is_plain_provider(&self, secret_provider: Option<&str>, profile: &str) -> bool {
         // Get providers for this profile first (needed for auto-selection)
-        let providers = self.get_providers(profile);
+        let providers = self.get_providers(&[profile.to_string()]);
 
         // Determine which provider name to use
         let provider_name = secret_provider
@@ -1431,7 +1688,7 @@ impl Config {
 
         // Validate each profile
         for (profile_name, profile_config) in &self.profiles {
-            let providers = self.get_providers(profile_name);
+            let providers = self.get_providers(std::slice::from_ref(profile_name));
 
             // Check for profile secrets with empty values (likely a mistake, but allowed for plain provider)
             for (key, secret) in &profile_config.secrets {
@@ -1525,15 +1782,26 @@ impl SecretConfig {
             default: None,
             provider: None,
             value: None,
-            env: true,
+            env: None,
             as_file: false,
             json_path: None,
             line: None,
             sync: None,
             source_path: None,
             source_is_profile: false,
+            source_profile: None,
             daemon_cache: None,
         }
+    }
+
+    /// Effective env injection mode for this secret.
+    ///
+    /// Note: [`Config::get_secrets`] stamps the top-level `env` default into
+    /// secrets that don't set it, so on maps obtained from `get_secrets` this
+    /// is the fully-resolved mode. On a raw `SecretConfig` an unset `env`
+    /// falls back to [`EnvMode::Shell`].
+    pub fn env_mode(&self) -> EnvMode {
+        self.env.unwrap_or_default()
     }
 
     /// Return a copy that will resolve to the original provider value,
@@ -1577,8 +1845,8 @@ impl SecretConfig {
             };
             inline.insert("if_missing", toml_edit::Value::from(if_missing_str));
         }
-        if !self.env {
-            inline.insert("env", toml_edit::Value::from(false));
+        if let Some(env) = self.env {
+            inline.insert("env", env.to_toml_value());
         }
         if self.as_file {
             inline.insert("as_file", toml_edit::Value::from(true));
@@ -1640,7 +1908,7 @@ impl SecretConfig {
                 })
             }),
         );
-        set_or_remove(table, "env", (!self.env).then(|| Value::from(false)));
+        set_or_remove(table, "env", self.env.map(EnvMode::to_toml_value));
         set_or_remove(table, "as_file", self.as_file.then(|| Value::from(true)));
         set_or_remove(
             table,
@@ -1758,14 +2026,6 @@ impl Default for ProfileConfig {
 
 fn is_false(value: &bool) -> bool {
     !value
-}
-
-fn is_true(value: &bool) -> bool {
-    *value
-}
-
-fn default_true() -> bool {
-    true
 }
 
 #[cfg(test)]
@@ -1911,7 +2171,7 @@ mod tests {
         crate::settings::Settings::reset_for_tests();
         crate::settings::Settings::set_cli_snapshot(crate::settings::CliSnapshot {
             age_key_file: None,
-            profile: Some("prod".to_string()),
+            profile: vec!["prod".to_string()],
             if_missing: None,
             no_defaults: true,
         });
@@ -1927,7 +2187,7 @@ mod tests {
             .insert("PROD_ONLY".to_string(), SecretConfig::new());
         config.profiles.insert("prod".to_string(), prod_profile);
 
-        let secrets = config.get_secrets("prod").unwrap();
+        let secrets = config.get_secrets(&["prod".to_string()]).unwrap();
         assert!(secrets.contains_key("PROD_ONLY"));
         assert!(!secrets.contains_key("DEFAULT_ONLY"));
     }
@@ -1937,7 +2197,7 @@ mod tests {
         crate::settings::Settings::reset_for_tests();
         crate::settings::Settings::set_cli_snapshot(crate::settings::CliSnapshot {
             age_key_file: None,
-            profile: Some("prod".to_string()),
+            profile: vec!["prod".to_string()],
             if_missing: None,
             no_defaults: true,
         });
@@ -1947,14 +2207,14 @@ mod tests {
             .secrets
             .insert("DEFAULT_ONLY".to_string(), SecretConfig::new());
 
-        let secrets = config.get_secrets("prod").unwrap();
+        let secrets = config.get_secrets(&["prod".to_string()]).unwrap();
         assert!(secrets.is_empty());
     }
 
     #[test]
     fn test_find_local_config_no_files() {
         let dir = tempfile::tempdir().unwrap();
-        let result = super::find_local_config(dir.path(), None);
+        let result = super::find_local_config(dir.path(), &[]);
         assert_eq!(result, dir.path().join("fnox.toml"));
     }
 
@@ -1962,7 +2222,7 @@ mod tests {
     fn test_find_local_config_only_fnox_toml() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
-        let result = super::find_local_config(dir.path(), None);
+        let result = super::find_local_config(dir.path(), &[]);
         assert_eq!(result, dir.path().join("fnox.toml"));
     }
 
@@ -1970,7 +2230,7 @@ mod tests {
     fn test_find_local_config_only_local_toml() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("fnox.local.toml"), "").unwrap();
-        let result = super::find_local_config(dir.path(), None);
+        let result = super::find_local_config(dir.path(), &[]);
         assert_eq!(result, dir.path().join("fnox.local.toml"));
     }
 
@@ -1979,7 +2239,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
         std::fs::write(dir.path().join("fnox.local.toml"), "").unwrap();
-        let result = super::find_local_config(dir.path(), None);
+        let result = super::find_local_config(dir.path(), &[]);
         // Should pick fnox.toml (lowest priority)
         assert_eq!(result, dir.path().join("fnox.toml"));
     }
@@ -1988,7 +2248,7 @@ mod tests {
     fn test_find_local_config_only_dotfile() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join(".fnox.toml"), "").unwrap();
-        let result = super::find_local_config(dir.path(), None);
+        let result = super::find_local_config(dir.path(), &[]);
         assert_eq!(result, dir.path().join(".fnox.toml"));
     }
 
@@ -1996,7 +2256,7 @@ mod tests {
     fn test_find_local_config_profile() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("fnox.staging.toml"), "").unwrap();
-        let result = super::find_local_config(dir.path(), Some("staging"));
+        let result = super::find_local_config(dir.path(), &["staging".to_string()]);
         assert_eq!(result, dir.path().join("fnox.staging.toml"));
     }
 
@@ -2005,7 +2265,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
         std::fs::write(dir.path().join("fnox.staging.toml"), "").unwrap();
-        let result = super::find_local_config(dir.path(), Some("staging"));
+        let result = super::find_local_config(dir.path(), &["staging".to_string()]);
         // Profile-specific file is preferred when profile is active
         assert_eq!(result, dir.path().join("fnox.staging.toml"));
     }
@@ -2016,7 +2276,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
         std::fs::write(dir.path().join("fnox.local.toml"), "").unwrap();
-        let result = super::find_local_config(dir.path(), Some("default"));
+        let result = super::find_local_config(dir.path(), &["default".to_string()]);
         assert_eq!(result, dir.path().join("fnox.toml"));
     }
 
@@ -2025,7 +2285,7 @@ mod tests {
         // Profile specified but only base config exists — fall back to it
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
-        let result = super::find_local_config(dir.path(), Some("staging"));
+        let result = super::find_local_config(dir.path(), &["staging".to_string()]);
         assert_eq!(result, dir.path().join("fnox.toml"));
     }
 
@@ -2035,7 +2295,7 @@ mod tests {
         // should NOT write there — fall through to creating fnox.toml
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("fnox.local.toml"), "").unwrap();
-        let result = super::find_local_config(dir.path(), Some("staging"));
+        let result = super::find_local_config(dir.path(), &["staging".to_string()]);
         assert_eq!(result, dir.path().join("fnox.toml"));
     }
 
@@ -2044,8 +2304,70 @@ mod tests {
         // Without a profile, fnox.local.toml is a valid write target
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("fnox.local.toml"), "").unwrap();
-        let result = super::find_local_config(dir.path(), None);
+        let result = super::find_local_config(dir.path(), &[]);
         assert_eq!(result, dir.path().join("fnox.local.toml"));
+    }
+
+    #[test]
+    fn test_profile_stack_overlays_in_order() {
+        let config: Config = toml_edit::de::from_str(
+            r#"
+[providers.base]
+type = "plain"
+
+[secrets.SHARED]
+value = "base"
+
+[profiles.aws]
+default_provider = "aws_plain"
+
+[profiles.aws.providers.aws_plain]
+type = "plain"
+
+[profiles.aws.secrets.AWS_ONLY]
+value = "aws"
+
+[profiles.aws.secrets.SHARED]
+value = "aws"
+
+[profiles.prod]
+default_provider = "prod_plain"
+
+[profiles.prod.providers.prod_plain]
+type = "plain"
+
+[profiles.prod.secrets.PROD_ONLY]
+value = "prod"
+
+[profiles.prod.secrets.SHARED]
+value = "prod"
+"#,
+        )
+        .unwrap();
+
+        let profiles = vec!["aws".to_string(), "prod".to_string()];
+        let providers = config.get_providers(&profiles);
+        assert!(providers.contains_key("base"));
+        assert!(providers.contains_key("aws_plain"));
+        assert!(providers.contains_key("prod_plain"));
+        assert_eq!(
+            config.get_default_provider(&profiles).unwrap(),
+            Some("prod_plain".to_string())
+        );
+
+        let secrets = config.get_secrets(&profiles).unwrap();
+        assert_eq!(
+            secrets.get("SHARED").and_then(SecretConfig::value),
+            Some("prod")
+        );
+        assert_eq!(
+            secrets.get("AWS_ONLY").and_then(SecretConfig::value),
+            Some("aws")
+        );
+        assert_eq!(
+            secrets.get("PROD_ONLY").and_then(SecretConfig::value),
+            Some("prod")
+        );
     }
 
     #[test]
@@ -2182,13 +2504,95 @@ USERNAME = { provider = "pass", value = "master", line = 2 }
     }
 
     #[test]
+    fn test_env_mode_parsing() {
+        let toml_input = r#"
+[secrets]
+SHELL_DEFAULT = { provider = "plain", value = "a" }
+SHELL_EXPLICIT = { provider = "plain", value = "b", env = true }
+EXEC_ONLY = { provider = "plain", value = "c", env = "exec" }
+HIDDEN = { provider = "plain", value = "d", env = false }
+"#;
+        let parsed: Config = toml_edit::de::from_str(toml_input).unwrap();
+        assert_eq!(parsed.secrets["SHELL_DEFAULT"].env, None);
+        assert_eq!(parsed.secrets["SHELL_EXPLICIT"].env, Some(EnvMode::Shell));
+        assert_eq!(parsed.secrets["EXEC_ONLY"].env, Some(EnvMode::Exec));
+        assert_eq!(parsed.secrets["HIDDEN"].env, Some(EnvMode::Never));
+
+        assert!(parsed.secrets["SHELL_DEFAULT"].env_mode().in_shell());
+        assert!(parsed.secrets["EXEC_ONLY"].env_mode().in_exec());
+        assert!(!parsed.secrets["EXEC_ONLY"].env_mode().in_shell());
+        assert!(!parsed.secrets["HIDDEN"].env_mode().in_exec());
+    }
+
+    #[test]
+    fn test_env_mode_rejects_unknown_string() {
+        let toml_input = r#"
+[secrets]
+BAD = { provider = "plain", value = "a", env = "sometimes" }
+"#;
+        assert!(toml_edit::de::from_str::<Config>(toml_input).is_err());
+    }
+
+    #[test]
+    fn test_env_mode_top_level_default_inheritance() {
+        let toml_input = r#"
+env = "exec"
+
+[secrets]
+INHERITED = { provider = "plain", value = "a" }
+OPTED_IN = { provider = "plain", value = "b", env = true }
+HIDDEN = { provider = "plain", value = "c", env = false }
+
+[profiles.dev.secrets]
+DEV_INHERITED = { provider = "plain", value = "d" }
+"#;
+        let parsed: Config = toml_edit::de::from_str(toml_input).unwrap();
+        assert_eq!(parsed.env, Some(EnvMode::Exec));
+
+        let secrets = parsed.get_secrets(&["default".to_string()]).unwrap();
+        assert_eq!(secrets["INHERITED"].env_mode(), EnvMode::Exec);
+        assert_eq!(secrets["OPTED_IN"].env_mode(), EnvMode::Shell);
+        assert_eq!(secrets["HIDDEN"].env_mode(), EnvMode::Never);
+
+        // Only assert on the profile-level secret here: merging top-level
+        // secrets into profiles depends on the global no_defaults setting,
+        // which other tests mutate concurrently.
+        let dev_secrets = parsed.get_secrets(&["dev".to_string()]).unwrap();
+        assert_eq!(dev_secrets["DEV_INHERITED"].env_mode(), EnvMode::Exec);
+    }
+
+    #[test]
+    fn test_env_mode_serialization_roundtrip() {
+        let mut secret = SecretConfig::new();
+        secret.set_provider(Some("plain".to_string()));
+        secret.set_value(Some("v".to_string()));
+
+        secret.env = Some(EnvMode::Exec);
+        assert!(
+            secret
+                .to_inline_table()
+                .to_string()
+                .contains("env = \"exec\"")
+        );
+
+        secret.env = Some(EnvMode::Never);
+        assert!(secret.to_inline_table().to_string().contains("env = false"));
+
+        secret.env = Some(EnvMode::Shell);
+        assert!(secret.to_inline_table().to_string().contains("env = true"));
+
+        secret.env = None;
+        assert!(!secret.to_inline_table().to_string().contains("env"));
+    }
+
+    #[test]
     fn test_for_raw_resolve_preserves_non_post_processing_fields() {
         let mut secret = SecretConfig::new();
         secret.set_provider(Some("plain".to_string()));
         secret.set_value(Some("my-secret".to_string()));
         secret.description = Some("A test secret".to_string());
         secret.if_missing = Some(IfMissing::Warn);
-        secret.env = false;
+        secret.env = Some(EnvMode::Never);
         secret.as_file = true;
         secret.source_path = Some(PathBuf::from("/tmp/fnox.toml"));
         secret.source_is_profile = true;
@@ -2205,7 +2609,7 @@ USERNAME = { provider = "pass", value = "master", line = 2 }
         assert_eq!(raw.value(), Some("my-secret"));
         assert_eq!(raw.description.as_deref(), Some("A test secret"));
         assert_eq!(raw.if_missing, Some(IfMissing::Warn));
-        assert!(!raw.env);
+        assert_eq!(raw.env, Some(EnvMode::Never));
         assert!(raw.as_file);
         assert_eq!(
             raw.source_path.as_deref(),

@@ -68,15 +68,12 @@ pub static FNOX_STATE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
 });
 
 // Profile configuration
-pub static FNOX_PROFILE: LazyLock<Option<String>> = LazyLock::new(|| {
-    var("FNOX_PROFILE").ok().and_then(|profile| {
-        if is_valid_profile_name(&profile) {
-            Some(profile)
-        } else {
-            eprintln!("Warning: Invalid FNOX_PROFILE value '{}' ignored (contains path separators or invalid characters)", profile);
-            None
-        }
-    })
+pub static FNOX_PROFILE: LazyLock<Vec<String>> = LazyLock::new(|| {
+    var("FNOX_PROFILE")
+        .ok()
+        .map(|profiles| parse_profile_list(&profiles))
+        .filter(|profiles| !profiles.is_empty())
+        .unwrap_or_default()
 });
 
 // Age encryption key configuration
@@ -98,9 +95,31 @@ fn var_path(name: &str) -> Option<PathBuf> {
         .filter(|p| p.is_absolute())
 }
 
-/// Validates that a profile name is safe to use in file paths
-/// Rejects names containing path separators or other dangerous characters
-fn is_valid_profile_name(name: &str) -> bool {
+/// Parse a comma-separated profile list, skipping invalid/empty entries.
+/// Warns on stderr when an entry is rejected so misconfigured environments
+/// are not silently ignored.
+pub fn parse_profile_list(profiles: &str) -> Vec<String> {
+    profiles
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| {
+            if s.is_empty() {
+                return false;
+            }
+            if !is_valid_profile_name(s) {
+                eprintln!(
+                    "Warning: Invalid profile name '{}' in FNOX_PROFILE ignored (contains path separators or invalid characters)",
+                    s
+                );
+                return false;
+            }
+            true
+        })
+        .collect()
+}
+/// Validates that a profile name is safe to use in file paths.
+/// Rejects names containing path separators or other dangerous characters.
+pub fn is_valid_profile_name(name: &str) -> bool {
     // Profile names must be non-empty
     if name.is_empty() {
         return false;
@@ -117,6 +136,10 @@ fn is_valid_profile_name(name: &str) -> bool {
         match ch {
             // Path separators
             '/' | '\\' => return false,
+            // Comma — used as delimiter in multi-profile lists (FNOX_PROFILE=a,b)
+            // and in socket-path/cache-key joins. Allowing it would cause
+            // collisions: "a,b" as one name vs "a" + "b" as two names.
+            ',' => return false,
             // Null byte (could truncate paths)
             '\0' => return false,
             // Control characters
@@ -183,5 +206,11 @@ mod tests {
         assert!(!is_valid_profile_name("prod\0uction")); // null byte
         assert!(!is_valid_profile_name("prod\ntest")); // newline
         assert!(!is_valid_profile_name("prod\rtest")); // carriage return
+
+        // Comma — used as multi-profile delimiter, must be rejected
+        // to prevent cache-key/socket-path collisions.
+        assert!(!is_valid_profile_name("a,b"));
+        assert!(!is_valid_profile_name("prod,"));
+        assert!(!is_valid_profile_name(",prod"));
     }
 }

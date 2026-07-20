@@ -19,8 +19,8 @@ pub struct ConfigFilesCommand;
 
 impl ConfigFilesCommand {
     pub async fn run(&self, _cli: &Cli) -> Result<()> {
-        let profile = crate::settings::Settings::get().profile.clone();
-        let filenames = all_config_filenames(Some(&profile));
+        let profile = Config::get_profiles(&[]);
+        let filenames = all_config_filenames(&profile);
 
         let current_dir = env::current_dir().map_err(|e| {
             crate::error::FnoxError::Config(format!("Failed to get current directory: {}", e))

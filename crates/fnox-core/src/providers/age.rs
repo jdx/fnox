@@ -15,7 +15,7 @@ pub struct AgeEncryptionProvider {
     key_file: Option<PathBuf>,
     identity: OptionProviderSecretRef,
     config: Option<Arc<crate::config::Config>>,
-    profile: String,
+    profile: Vec<String>,
     provider_name: String,
     identity_cycle_guard: Option<AgeIdentityCycleGuard>,
 }
@@ -31,7 +31,7 @@ impl AgeEncryptionProvider {
             key_file: key_file.map(|k| crate::config_path::resolve_relative_to_file(&k, None)),
             identity,
             config: None,
-            profile: "default".to_string(),
+            profile: vec!["default".to_string()],
             provider_name: "age".to_string(),
             identity_cycle_guard: None,
         })
@@ -42,7 +42,7 @@ impl AgeEncryptionProvider {
         key_file: Option<String>,
         identity: OptionProviderSecretRef,
         config: Arc<crate::config::Config>,
-        profile: String,
+        profile: Vec<String>,
         provider_name: String,
         identity_cycle_guard: Option<AgeIdentityCycleGuard>,
     ) -> Result<Self> {

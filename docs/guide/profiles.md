@@ -61,6 +61,42 @@ export FNOX_PROFILE=staging
 # fnox detects the change on the next prompt automatically
 ```
 
+## Composing Multiple Profiles
+
+You can activate multiple profiles at the same time as an ordered overlay
+stack. Later profiles override earlier ones on key conflicts, with the
+top-level config as the base.
+
+```bash
+# Repeatable flags or comma-separated
+fnox -P aws -P prod exec -- ./app
+fnox -P aws,prod exec -- ./app
+
+# Via environment variable
+export FNOX_PROFILE=aws,prod
+```
+
+When multiple profiles are active, write commands (`set`, `remove`,
+`import`, `sync`, `provider add/remove`) require an explicit
+`--write-profile <NAME>` to choose the write target:
+
+```bash
+# Reads from aws + prod overlay, writes to prod
+fnox -P aws -P prod --write-profile prod set DATABASE_URL "value"
+```
+
+With a single active profile, the write target defaults to that profile
+and `--write-profile` is not needed.
+
+### When to Use Composition
+
+Composition is useful when concerns are split across profiles:
+
+- `aws` provides cloud provider configuration
+- `prod` provides production secret mappings
+- `ci` adds CI-only secrets
+- `local` overrides a few values for local development
+
 ## Profile Inheritance
 
 Profiles automatically inherit secrets from the top level:
