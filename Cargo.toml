@@ -8,6 +8,10 @@ edition = "2024"
 authors = ["@jdx"]
 license = "MIT"
 repository = "https://github.com/jdx/fnox"
+# MSRV is kept deliberately behind latest-stable so fnox stays buildable from
+# source by distro/nixpkgs packagers that provide an older, shared rustc. Do
+# NOT raise this just to satisfy a dependency (e.g. an aws-sdk bump) — pin the
+# dependency to an MSRV-compatible version instead. See AGENTS.md.
 rust-version = "1.91.1"
 
 [workspace.dependencies]
