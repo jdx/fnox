@@ -321,7 +321,7 @@ impl crate::providers::Provider for AgeEncryptionProvider {
             ) {
                 Ok(ssh_identity) => {
                     // SSH identity parsed successfully
-                    vec![Box::new(ssh_identity) as Box<dyn age::Identity>]
+                    vec![Box::new(ssh_identity) as Box<dyn age::Identity + Send + Sync>]
                 }
                 Err(_) => {
                     // Not an SSH identity, try age identity file. Setting
