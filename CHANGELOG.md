@@ -1,6 +1,29 @@
 # Changelog
 
-## [1.31.0](https://github.com/jdx/fnox/compare/v1.30.0..v1.31.0) - 2026-07-16
+## [1.31.1](https://github.com/jdx/fnox/compare/v1.31.0..v1.31.1) - 2026-07-24
+
+### 🛡️ Security
+
+- **(deps)** update dependency @anthropic-ai/claude-code to v2.1.207 by [@renovate[bot]](https://github.com/renovate[bot]) in [#625](https://github.com/jdx/fnox/pull/625)
+
+### 🔍 Other Changes
+
+- regenerate aube-lock.yaml on renovate branches by [@jdx](https://github.com/jdx) in [#626](https://github.com/jdx/fnox/pull/626)
+- exclude aube-lock.yaml from prettier by [@jdx](https://github.com/jdx) in [#629](https://github.com/jdx/fnox/pull/629)
+
+### 📦️ Dependency Updates
+
+- update rust crate bytes to v1.12.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#617](https://github.com/jdx/fnox/pull/617)
+- update rust crate usage-lib to v3.5.5 by [@renovate[bot]](https://github.com/renovate[bot]) in [#620](https://github.com/jdx/fnox/pull/620)
+- update dependency @anthropic-ai/claude-code to v2.1.206 by [@renovate[bot]](https://github.com/renovate[bot]) in [#621](https://github.com/jdx/fnox/pull/621)
+- update rust crate keepass to v0.13.16 by [@renovate[bot]](https://github.com/renovate[bot]) in [#619](https://github.com/jdx/fnox/pull/619)
+- update rust crate ignore to v0.4.28 by [@renovate[bot]](https://github.com/renovate[bot]) in [#618](https://github.com/jdx/fnox/pull/618)
+- update rust crate regex to v1.13.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#623](https://github.com/jdx/fnox/pull/623)
+- enable MSRV-aware resolution and document MSRV policy by [@jdx](https://github.com/jdx) in [#627](https://github.com/jdx/fnox/pull/627)
+- update rust crate globset to v0.4.19 by [@renovate[bot]](https://github.com/renovate[bot]) in [#636](https://github.com/jdx/fnox/pull/636)
+- update rust crate clap to v4.6.2 by [@renovate[bot]](https://github.com/renovate[bot]) in [#635](https://github.com/jdx/fnox/pull/635)
+
+## [1.31.0](https://github.com/jdx/fnox/compare/v1.30.0..v1.31.0) - 2026-07-17
 
 ### 🚀 Features
 
