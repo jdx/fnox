@@ -81,7 +81,10 @@ jobs:
         with:
           name: fnox-${{ matrix.os }}
           path: target/debug
-      - run: chmod +x target/debug/fnox
+      - name: Add fnox to PATH
+        run: |
+          chmod +x target/debug/fnox
+          echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
       - name: Setup age key for fnox
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         run: mkdir -p ~/.config/fnox && echo "${{ secrets.AGE_SECRET }}" > ~/.config/fnox/age.txt
@@ -275,7 +278,10 @@ jobs:
         with:
           name: fnox-${{ matrix.os }}
           path: target/debug
-      - run: chmod +x target/debug/fnox
+      - name: Add fnox to PATH
+        run: |
+          chmod +x target/debug/fnox
+          echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
       - name: Setup age key for fnox
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         run: mkdir -p ~/.config/fnox && echo "${{ secrets.AGE_SECRET }}" > ~/.config/fnox/age.txt
