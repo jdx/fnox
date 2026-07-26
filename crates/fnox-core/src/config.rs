@@ -35,6 +35,18 @@ pub fn all_config_filenames(profiles: &[String]) -> Vec<String> {
     files
 }
 
+/// Whether a `--config` value triggers the upward directory search.
+///
+/// Only the bare default filenames do; anything else (including
+/// `./fnox.toml` or an absolute path to a `fnox.toml`) is treated as an
+/// explicit path and loads just that file, its imports, and the global
+/// config.
+pub fn uses_config_discovery(path: &Path) -> bool {
+    all_config_filenames(&[])
+        .iter()
+        .any(|f| path == Path::new(f))
+}
+
 /// Returns the local override filename for a supported config basename.
 ///
 /// Only `fnox.toml` and `.fnox.toml` have corresponding local override files.
@@ -528,8 +540,7 @@ impl Config {
         let path_ref = path.as_ref();
 
         // If the path is one of the default config filenames, use recursive loading
-        let default_filenames = all_config_filenames(&[]);
-        if default_filenames.iter().any(|f| path_ref == Path::new(f)) {
+        if uses_config_discovery(path_ref) {
             Self::load_with_recursion(path_ref)
         } else {
             // For explicit paths, resolve relative paths against current directory first
@@ -542,9 +553,39 @@ impl Config {
             } else {
                 path_ref.to_path_buf()
             };
-            // For explicit paths, use direct loading
-            Self::load(resolved_path)
+            Self::load_explicit(&resolved_path)
         }
+    }
+
+    /// Load an explicitly specified config file.
+    ///
+    /// Unlike [`Self::load_with_recursion`] this does not search parent
+    /// directories, but the file's own imports and the global config are
+    /// still layered underneath it — the global config is the base for
+    /// every project, and `root = true` doesn't disable it either.
+    fn load_explicit(path: &Path) -> Result<Self> {
+        let mut config = Self::load(path)?;
+
+        // Imports are resolved relative to the config file's directory and
+        // are overridden by the file that imports them.
+        let dir = path.parent().unwrap_or_else(|| Path::new(""));
+        for import_path in &config.import.clone() {
+            let import_config = Self::load_import(import_path, dir)?;
+            config = Self::merge_configs(import_config, config)?;
+        }
+
+        // Nothing to layer under the global config when it *is* the
+        // explicitly requested file.
+        if path == Self::global_config_path() {
+            return Ok(config);
+        }
+
+        let (global_config, global_found) = Self::load_global()?;
+        if global_found {
+            config = Self::merge_configs(global_config, config)?;
+        }
+
+        Ok(config)
     }
 
     /// Load configuration from a file
@@ -2105,6 +2146,22 @@ mod tests {
             !toml.contains("[profiles]\n"),
             "Should not have standalone [profiles] header"
         );
+    }
+
+    #[test]
+    fn test_uses_config_discovery() {
+        // Bare default filenames trigger the upward search
+        assert!(uses_config_discovery(Path::new("fnox.toml")));
+        assert!(uses_config_discovery(Path::new(".fnox.toml")));
+        assert!(uses_config_discovery(Path::new("fnox.local.toml")));
+
+        // Anything with a directory component, or a non-default name, is an
+        // explicit path
+        assert!(!uses_config_discovery(Path::new("./fnox.toml")));
+        assert!(!uses_config_discovery(Path::new("../fnox.toml")));
+        assert!(!uses_config_discovery(Path::new("/etc/fnox.toml")));
+        assert!(!uses_config_discovery(Path::new("custom.toml")));
+        assert!(!uses_config_discovery(Path::new("fnox.prod.toml")));
     }
 
     #[test]

@@ -75,7 +75,7 @@ impl Fnox {
     pub fn discover() -> Result<Self> {
         // CONFIG_FILENAME is bare (no directory prefix) so load_smart
         // takes its upward-recursion path — this is what unlocks the
-        // parent + local + global merging that load(absolute) would
+        // parent + local-override merging that an explicit path would
         // bypass. Per AGENTS.md "Loading order".
         let config = Config::load_smart(CONFIG_FILENAME)?;
         let profiles = Self::env_profiles();

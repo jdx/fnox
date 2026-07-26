@@ -83,6 +83,9 @@ src/env.rs          # Centralized env var handling (LazyLock, FNOX_* prefix)
 4. `fnox.$FNOX_PROFILE.toml` (profile-specific, if not "default")
 5. `fnox.local.toml` (local overrides, gitignored)
 
+An explicit `-c/--config` path skips steps 2-5 (no directory recursion, no local
+overrides) but still loads the global config and the file's own `import`s.
+
 **Secret options:**
 
 - `if_missing`: `"error"` | `"warn"` (default) | `"ignore"`

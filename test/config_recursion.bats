@@ -259,7 +259,7 @@ EOF
 	# Change to child directory and test explicit path
 	cd parent/child
 
-	# Use explicit path - should only load that file
+	# Use explicit path - should not walk the directory tree
 	run "$FNOX_BIN" -c ../fnox.toml get PARENT_SECRET
 	assert_success
 	assert_output --partial "parent-value"
@@ -268,4 +268,37 @@ EOF
 	run "$FNOX_BIN" -c ../fnox.toml get CHILD_SECRET
 	assert_failure
 	assert_output --partial "not found"
+}
+
+@test "explicit config path still loads imports" {
+	cat >imported.toml <<EOF
+[secrets]
+IMPORTED_SECRET = { description = "Imported secret", default = "imported-value" }
+SHARED_SECRET = { description = "Imported version", default = "imported-override-me" }
+EOF
+
+	cat >custom.toml <<EOF
+import = ["./imported.toml"]
+
+[providers.test]
+type = "age"
+recipients = ["age1test"]
+
+[secrets]
+CUSTOM_SECRET = { description = "Custom secret", default = "custom-value" }
+SHARED_SECRET = { description = "Custom version", default = "custom-wins" }
+EOF
+
+	run "$FNOX_BIN" -c custom.toml get IMPORTED_SECRET
+	assert_success
+	assert_output --partial "imported-value"
+
+	run "$FNOX_BIN" -c custom.toml get CUSTOM_SECRET
+	assert_success
+	assert_output --partial "custom-value"
+
+	# The importing file wins over what it imports
+	run "$FNOX_BIN" -c custom.toml get SHARED_SECRET
+	assert_success
+	assert_output --partial "custom-wins"
 }
