@@ -38,6 +38,18 @@ impl ConfigFilesCommand {
             } else {
                 cli.config.clone()
             };
+            // Loading fails outright on a missing explicit config, before the
+            // global layer is reached — don't report a load order that can't
+            // happen.
+            if !explicit.exists() {
+                return Err(crate::error::FnoxError::ConfigReadFailed {
+                    path: explicit,
+                    source: std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "No such file or directory",
+                    ),
+                });
+            }
             self.collect_file(&explicit, &mut printed)?;
         }
 

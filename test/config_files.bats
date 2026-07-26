@@ -86,15 +86,17 @@ EOF
 	assert_output --partial "imported.toml"
 }
 
-@test "config-files omits a missing explicit --config file" {
+@test "config-files fails on a missing explicit --config file" {
 	mkdir -p "$HOME/.config/fnox"
 	cat >"$HOME/.config/fnox/config.toml" <<EOF
 [secrets]
 GLOBAL_SECRET = { default = "global-value" }
 EOF
 
+	# Loading would fail before reaching the global layer, so listing the
+	# global config here would describe a load that cannot happen
 	run "$FNOX_BIN" -c missing.toml config-files
-	assert_success
-	refute_output --partial "missing.toml"
-	assert_output --partial ".config/fnox/config.toml"
+	assert_failure
+	assert_output --partial "Failed to read configuration file"
+	refute_output --partial ".config/fnox/config.toml"
 }
