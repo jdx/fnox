@@ -62,7 +62,7 @@ Target profile for write commands (set, remove, import, sync, provider add/remov
 - [`fnox deactivate`](/cli/deactivate.md)
 - [`fnox doctor`](/cli/doctor.md)
 - [`fnox edit`](/cli/edit.md)
-- [`fnox exec [COMMAND]…`](/cli/exec.md)
+- [`fnox exec [--replace] [COMMAND]…`](/cli/exec.md)
 - [`fnox export [FLAGS]`](/cli/export.md)
 - [`fnox get [--base64-decode] <KEY>`](/cli/get.md)
 - [`fnox import <FLAGS> [FORMAT]`](/cli/import.md)
