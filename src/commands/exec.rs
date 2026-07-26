@@ -10,6 +10,14 @@ use tempfile::NamedTempFile;
 #[derive(Debug, Args)]
 #[command(visible_alias = "x", alias = "run")]
 pub struct ExecCommand {
+    /// Run the command in fnox's process, keeping the same PID and receiving signals
+    /// directly; supports environment-only secrets without leases and does not inherit
+    /// ambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux,
+    /// macOS, and other Unix-like systems
+    #[cfg(unix)]
+    #[arg(long)]
+    pub replace: bool,
+
     /// Command to run
     #[arg(trailing_var_arg = true, allow_hyphen_values = true, value_hint = ValueHint::CommandWithArguments)]
     pub command: Vec<String>,
@@ -21,6 +29,11 @@ impl ExecCommand {
             return Err(FnoxError::CommandNotSpecified);
         }
 
+        #[cfg(unix)]
+        if self.replace {
+            install_replace_signal_handlers()?;
+        }
+
         let profile = Config::get_profiles(cli.profile.as_slice());
         tracing::debug!(
             "Running command with secrets from profiles '{}'",
@@ -29,6 +42,24 @@ impl ExecCommand {
 
         // Get the profile secrets
         let profile_secrets = config.get_secrets(&profile)?;
+        let leases = config.get_leases(&profile);
+
+        #[cfg(unix)]
+        if self.replace {
+            let file_secrets = profile_secrets
+                .iter()
+                .filter(|(_, secret)| secret.as_file && secret.env_mode().in_exec())
+                .map(|(key, _)| key.as_str())
+                .collect::<Vec<_>>();
+            if !file_secrets.is_empty() {
+                return Err(FnoxError::ExecReplaceFileSecrets {
+                    secrets: file_secrets.join(", "),
+                });
+            }
+            if !leases.is_empty() {
+                return Err(FnoxError::ExecReplaceLeases);
+            }
+        }
 
         let cmd_name = &self.command[0];
 
@@ -65,7 +96,6 @@ impl ExecCommand {
         // Temporarily set resolved secrets as process env vars so lease backend
         // SDKs (AWS, GCP, Azure) can find master credentials during lease creation.
         // The TempEnvGuard ensures cleanup on all exit paths (including errors).
-        let leases = config.get_leases(&profile);
         let mut _temp_env_guard = lease::TempEnvGuard::default();
         if !leases.is_empty() {
             _temp_files.extend(lease::set_secrets_as_env(
@@ -119,6 +149,15 @@ impl ExecCommand {
                     cmd.env(cred_key, cred_value);
                 }
             }
+        }
+
+        // The target should receive resolved secrets, not the age identity that
+        // decrypts other values in the configuration. Explicitly configured
+        // secrets with these names are added back by the loop below.
+        #[cfg(unix)]
+        if self.replace {
+            cmd.env_remove("FNOX_AGE_KEY");
+            cmd.env_remove("FNOX_AGE_KEY_FILE");
         }
 
         // Add resolved secrets as environment variables
@@ -176,6 +215,17 @@ impl ExecCommand {
         // from the parent process environment so the child doesn't inherit them.
         drop(_temp_env_guard);
 
+        #[cfg(unix)]
+        if self.replace {
+            use std::os::unix::process::CommandExt;
+
+            let source = cmd.exec();
+            return Err(FnoxError::CommandExecutionFailed {
+                command: self.command.join(" "),
+                source,
+            });
+        }
+
         let mut child = cmd.spawn().map_err(|e| FnoxError::CommandExecutionFailed {
             command: self.command.join(" "),
             source: e,
@@ -224,4 +274,31 @@ impl ExecCommand {
 
         Ok(())
     }
+}
+
+#[cfg(unix)]
+/// Installs temporary SIGINT and SIGTERM handlers while fnox resolves secrets before replacement.
+fn install_replace_signal_handlers() -> Result<()> {
+    for signal in [signal_hook::consts::SIGINT, signal_hook::consts::SIGTERM] {
+        if !signal_uses_default_action(signal)? {
+            continue;
+        }
+        unsafe { signal_hook::low_level::register(signal, move || libc::_exit(128 + signal)) }
+            .map_err(|source| FnoxError::ExecReplaceSignalSetup { source })?;
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+/// Reports whether a signal currently uses its default disposition.
+fn signal_uses_default_action(signal: libc::c_int) -> Result<bool> {
+    let mut action = std::mem::MaybeUninit::<libc::sigaction>::uninit();
+    if unsafe { libc::sigaction(signal, std::ptr::null(), action.as_mut_ptr()) } == -1 {
+        return Err(FnoxError::ExecReplaceSignalSetup {
+            source: std::io::Error::last_os_error(),
+        });
+    }
+
+    Ok(unsafe { action.assume_init() }.sa_sigaction == libc::SIG_DFL)
 }

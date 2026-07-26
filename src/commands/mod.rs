@@ -248,4 +248,15 @@ mod tests {
         // using the published clap-sort crate.
         clap_sort::assert_sorted(&Cli::command());
     }
+
+    #[test]
+    fn exec_replace_flag_matches_platform() {
+        let command = Cli::command();
+        let exec = command.find_subcommand("exec").unwrap();
+        let has_replace = exec
+            .get_arguments()
+            .any(|argument| argument.get_long() == Some("replace"));
+
+        assert_eq!(has_replace, cfg!(unix));
+    }
 }

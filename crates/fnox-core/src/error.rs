@@ -448,6 +448,29 @@ pub enum FnoxError {
         source: std::io::Error,
     },
 
+    #[error("--replace cannot be used with file-based secrets: {secrets}")]
+    #[diagnostic(
+        code(fnox::command::replace_with_file_secrets),
+        help(
+            "Run without --replace so fnox can remove temporary secret files after the command exits"
+        )
+    )]
+    ExecReplaceFileSecrets { secrets: String },
+
+    #[error("--replace cannot be used with credential leases")]
+    #[diagnostic(
+        code(fnox::command::replace_with_leases),
+        help("Run without --replace so fnox can manage the lease lifecycle")
+    )]
+    ExecReplaceLeases,
+
+    #[error("Failed to configure signal handling for --replace")]
+    #[diagnostic(code(fnox::command::replace_signal_setup))]
+    ExecReplaceSignalSetup {
+        #[source]
+        source: std::io::Error,
+    },
+
     // ========================================================================
     // Import Errors
     // ========================================================================
