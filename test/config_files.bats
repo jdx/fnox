@@ -137,5 +137,11 @@ EOF
 
 	run "$FNOX_BIN" -c broken.toml config-files
 	assert_failure
+	assert_output --partial "fnox::config::invalid_toml"
 	refute_output --partial ".config/fnox/config.toml"
+
+	# Same failure the loader gives
+	run "$FNOX_BIN" -c broken.toml get ANY_SECRET
+	assert_failure
+	assert_output --partial "fnox::config::invalid_toml"
 }
