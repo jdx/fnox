@@ -38,13 +38,22 @@ impl ConfigFilesCommand {
             } else {
                 cli.config.clone()
             };
-            // A missing or unparseable explicit config makes loading fail
-            // before the global layer is reached, so surface the same error
-            // rather than reporting a load order that can't happen.
+            // A missing or unparseable explicit config — or import of one —
+            // makes loading fail before the global layer is reached, so
+            // surface the same errors rather than reporting a load order
+            // that can't happen.
             let config = Config::load(&explicit)?;
             println!("{}", explicit.display());
             printed.insert(explicit.clone());
-            self.collect_imports(&explicit, &config.import, &mut printed);
+
+            let dir = explicit.parent().unwrap_or_else(|| Path::new(""));
+            for import_path in &config.import {
+                Config::load_import(import_path, dir)?;
+                let import = crate::config_path::resolve_relative_to_dir(import_path, Some(dir));
+                if printed.insert(import.clone()) {
+                    println!("{}", import.display());
+                }
+            }
         }
 
         // Global config is always checked
@@ -101,6 +110,9 @@ impl ConfigFilesCommand {
     }
 
     /// Print the files `path` imports, resolved relative to its directory.
+    ///
+    /// Tolerant of missing imports, matching how the discovery walk has
+    /// always reported them.
     fn collect_imports(&self, path: &Path, imports: &[String], printed: &mut HashSet<PathBuf>) {
         let dir = path.parent().unwrap_or_else(|| Path::new(""));
         for import_path in imports {

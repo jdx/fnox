@@ -101,6 +101,31 @@ EOF
 	refute_output --partial ".config/fnox/config.toml"
 }
 
+@test "config-files fails when an explicit --config imports a missing file" {
+	mkdir -p "$HOME/.config/fnox"
+	cat >"$HOME/.config/fnox/config.toml" <<EOF
+[secrets]
+GLOBAL_SECRET = { default = "global-value" }
+EOF
+
+	cat >custom.toml <<EOF
+import = ["./missing.toml"]
+
+[secrets]
+CUSTOM_SECRET = { default = "custom-value" }
+EOF
+
+	run "$FNOX_BIN" -c custom.toml config-files
+	assert_failure
+	assert_output --partial "Import file not found"
+	refute_output --partial ".config/fnox/config.toml"
+
+	# Same failure the loader gives
+	run "$FNOX_BIN" -c custom.toml get CUSTOM_SECRET
+	assert_failure
+	assert_output --partial "Import file not found"
+}
+
 @test "config-files fails on an unparseable explicit --config file" {
 	mkdir -p "$HOME/.config/fnox"
 	cat >"$HOME/.config/fnox/config.toml" <<EOF

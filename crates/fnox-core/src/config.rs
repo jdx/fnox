@@ -749,8 +749,11 @@ impl Config {
         }
     }
 
-    /// Load an imported config file
-    fn load_import(import_path: &str, base_dir: &Path) -> Result<Self> {
+    /// Load an imported config file.
+    ///
+    /// Public so `fnox config-files` can report the same errors loading
+    /// would hit instead of reimplementing the resolve-and-read rules.
+    pub fn load_import(import_path: &str, base_dir: &Path) -> Result<Self> {
         let absolute_path =
             crate::config_path::resolve_relative_to_dir(import_path, Some(base_dir));
 
