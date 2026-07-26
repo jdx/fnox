@@ -137,7 +137,7 @@ EOF
 
 - Always add `fnox.local.toml` to `.gitignore`
 - Provide a `fnox.local.toml.example` (committed) for team guidance
-- Use explicit paths to bypass local overrides: `fnox -c ./fnox.toml get SECRET`
+- Use explicit paths to bypass parent configs and local overrides: `fnox -c ./fnox.toml get SECRET` (the file's own `import`s and the global config are still loaded)
 - `fnox sync --local-file` only supports `fnox.toml` and `.fnox.toml`. Other config filenames are rejected because adjacent local override files are not loaded.
 
 ## Global Configuration
@@ -164,7 +164,7 @@ fnox provider add age age --global
 - Machine-specific credentials
 - Default encryption provider available everywhere
 
-**Note**: Global config is always loaded, even when `root = true` stops parent directory recursion.
+**Note**: Global config is always loaded, even when `root = true` stops parent directory recursion or `-c/--config` points at an explicit file.
 
 ## Tips
 

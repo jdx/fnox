@@ -32,7 +32,25 @@ fnox looks for configuration files in this order (lowest to highest priority):
 3. `fnox.toml` in current directory
 4. `fnox.$FNOX_PROFILE.toml` alongside each `fnox.toml` (profile-specific)
 5. `fnox.local.toml` alongside each `fnox.toml` (for local overrides)
-6. Path specified via `-c, --config` flag
+6. Path specified via `-c, --config` flag — for non-default filenames this replaces steps 2-5 instead of stacking on top of them, see [Explicit Config Paths](#explicit-config-paths)
+
+### Explicit Config Paths
+
+Passing `-c, --config` with anything other than the bare default filename turns
+off the hierarchical search: fnox loads that one file plus any files it
+`import`s, and skips parent directories and their local overrides. The global
+config is still loaded as the base layer, the same way `root = true` stops
+recursion without disabling it.
+
+To load a config in complete isolation, point `FNOX_CONFIG_DIR` at a directory
+with no `config.toml`:
+
+```bash
+FNOX_CONFIG_DIR=/nonexistent fnox -c ./ci.toml get MY_SECRET
+```
+
+Use `fnox config-files` to see exactly which files a given directory and set of
+flags will load.
 
 ### Global Configuration
 

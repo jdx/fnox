@@ -1,4 +1,4 @@
-use crate::config::{Config, all_config_filenames};
+use crate::config::{Config, all_config_filenames, uses_config_discovery};
 use crate::env;
 use crate::error::Result;
 use std::collections::HashSet;
@@ -18,7 +18,7 @@ struct PartialConfig {
 pub struct ConfigFilesCommand;
 
 impl ConfigFilesCommand {
-    pub async fn run(&self, _cli: &Cli) -> Result<()> {
+    pub async fn run(&self, cli: &Cli) -> Result<()> {
         let profile = Config::get_profiles(&[]);
         let filenames = all_config_filenames(&profile);
 
@@ -27,7 +27,34 @@ impl ConfigFilesCommand {
         })?;
 
         let mut printed = HashSet::new();
-        self.collect_recursive(&current_dir, &filenames, &mut printed)?;
+
+        // An explicit --config path skips the upward search entirely, so
+        // list only that file (plus its imports) and the global config.
+        if uses_config_discovery(&cli.config) {
+            self.collect_recursive(&current_dir, &filenames, &mut printed)?;
+        } else {
+            let explicit = if cli.config.is_relative() {
+                current_dir.join(&cli.config)
+            } else {
+                cli.config.clone()
+            };
+            // A missing or unparseable explicit config — or import of one —
+            // makes loading fail before the global layer is reached, so
+            // surface the same errors rather than reporting a load order
+            // that can't happen.
+            let config = Config::load(&explicit)?;
+            println!("{}", explicit.display());
+            printed.insert(explicit.clone());
+
+            let dir = explicit.parent().unwrap_or_else(|| Path::new(""));
+            for import_path in &config.import {
+                Config::load_import(import_path, dir)?;
+                let import = crate::config_path::resolve_relative_to_dir(import_path, Some(dir));
+                if printed.insert(import.clone()) {
+                    println!("{}", import.display());
+                }
+            }
+        }
 
         // Global config is always checked
         let global = Config::global_config_path();
@@ -47,26 +74,8 @@ impl ConfigFilesCommand {
         let mut found_root = false;
 
         for filename in filenames {
-            let path = dir.join(filename);
-            if path.exists() && printed.insert(path.clone()) {
-                println!("{}", path.display());
-
-                if let Ok(content) = std::fs::read_to_string(&path)
-                    && let Ok(partial) = toml_edit::de::from_str::<PartialConfig>(&content)
-                {
-                    // Print imported config files
-                    for import_path in &partial.import {
-                        let import =
-                            crate::config_path::resolve_relative_to_dir(import_path, Some(dir));
-                        if import.exists() && printed.insert(import.clone()) {
-                            println!("{}", import.display());
-                        }
-                    }
-
-                    if partial.root {
-                        found_root = true;
-                    }
-                }
+            if self.collect_file(&dir.join(filename), printed)? {
+                found_root = true;
             }
         }
 
@@ -79,5 +88,38 @@ impl ConfigFilesCommand {
         }
 
         Ok(())
+    }
+
+    /// Print `path` and any files it imports. Returns whether it sets `root = true`.
+    fn collect_file(&self, path: &Path, printed: &mut HashSet<PathBuf>) -> Result<bool> {
+        if !path.exists() || !printed.insert(path.to_path_buf()) {
+            return Ok(false);
+        }
+        println!("{}", path.display());
+
+        let Ok(content) = std::fs::read_to_string(path) else {
+            return Ok(false);
+        };
+        let Ok(partial) = toml_edit::de::from_str::<PartialConfig>(&content) else {
+            return Ok(false);
+        };
+
+        self.collect_imports(path, &partial.import, printed);
+
+        Ok(partial.root)
+    }
+
+    /// Print the files `path` imports, resolved relative to its directory.
+    ///
+    /// Tolerant of missing imports, matching how the discovery walk has
+    /// always reported them.
+    fn collect_imports(&self, path: &Path, imports: &[String], printed: &mut HashSet<PathBuf>) {
+        let dir = path.parent().unwrap_or_else(|| Path::new(""));
+        for import_path in imports {
+            let import = crate::config_path::resolve_relative_to_dir(import_path, Some(dir));
+            if import.exists() && printed.insert(import.clone()) {
+                println!("{}", import.display());
+            }
+        }
     }
 }

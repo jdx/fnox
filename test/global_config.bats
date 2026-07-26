@@ -258,6 +258,60 @@ EOF
 	assert_output --partial "not found"
 }
 
+@test "explicit --config still loads global config" {
+	mkdir -p "$HOME/.config/fnox"
+	cat >"$HOME/.config/fnox/config.toml" <<EOF
+[providers.global]
+type = "age"
+recipients = ["age1global"]
+
+[secrets]
+GLOBAL_SECRET = { description = "Global secret", default = "global-value" }
+SHARED_SECRET = { description = "Global version", default = "global-loses" }
+EOF
+
+	cat >custom.toml <<EOF
+[secrets]
+CUSTOM_SECRET = { description = "Custom secret", default = "custom-value" }
+SHARED_SECRET = { description = "Custom version", default = "custom-wins" }
+EOF
+
+	# Global secrets and providers are the base layer for explicit configs too
+	run "$FNOX_BIN" -c custom.toml get GLOBAL_SECRET
+	assert_success
+	assert_output --partial "global-value"
+
+	run "$FNOX_BIN" -c custom.toml get CUSTOM_SECRET
+	assert_success
+	assert_output --partial "custom-value"
+
+	# The explicit config still wins over global
+	run "$FNOX_BIN" -c custom.toml get SHARED_SECRET
+	assert_success
+	assert_output --partial "custom-wins"
+
+	# Providers defined globally are usable from an explicit config
+	run "$FNOX_BIN" -c custom.toml provider list
+	assert_success
+	assert_output --partial "global"
+}
+
+@test "explicit --config pointing at the global config works" {
+	mkdir -p "$HOME/.config/fnox"
+	cat >"$HOME/.config/fnox/config.toml" <<EOF
+[providers.global]
+type = "age"
+recipients = ["age1global"]
+
+[secrets]
+GLOBAL_SECRET = { description = "Global secret", default = "global-value" }
+EOF
+
+	run "$FNOX_BIN" -c "$HOME/.config/fnox/config.toml" get GLOBAL_SECRET
+	assert_success
+	assert_output --partial "global-value"
+}
+
 @test "no global config works fine" {
 	# Don't create any global config
 	# Create project config
