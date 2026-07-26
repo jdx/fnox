@@ -210,6 +210,12 @@ SCRIPT
 	TARGET_PID=$(cat "$PID_FILE")
 	[ "$TARGET_PID" -eq "$REPLACEMENT_PID" ]
 	# Confirm replacement completed before checking the inherited dispositions.
+	for _ in $(seq 1 50); do
+		if [ "$(ps -p "$REPLACEMENT_PID" -o comm= 2>/dev/null)" = "sleep" ]; then
+			break
+		fi
+		sleep 0.1
+	done
 	[ "$(ps -p "$REPLACEMENT_PID" -o comm= 2>/dev/null)" = "sleep" ]
 	assert_process_survives_signal "$REPLACEMENT_PID" INT
 	assert_process_survives_signal "$REPLACEMENT_PID" TERM

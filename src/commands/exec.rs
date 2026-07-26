@@ -277,6 +277,7 @@ impl ExecCommand {
 }
 
 #[cfg(unix)]
+/// Installs temporary SIGINT and SIGTERM handlers while fnox resolves secrets before replacement.
 fn install_replace_signal_handlers() -> Result<()> {
     for signal in [signal_hook::consts::SIGINT, signal_hook::consts::SIGTERM] {
         if !signal_uses_default_action(signal)? {
@@ -290,6 +291,7 @@ fn install_replace_signal_handlers() -> Result<()> {
 }
 
 #[cfg(unix)]
+/// Reports whether a signal currently uses its default disposition.
 fn signal_uses_default_action(signal: libc::c_int) -> Result<bool> {
     let mut action = std::mem::MaybeUninit::<libc::sigaction>::uninit();
     if unsafe { libc::sigaction(signal, std::ptr::null(), action.as_mut_ptr()) } == -1 {
