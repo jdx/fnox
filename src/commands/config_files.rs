@@ -38,19 +38,13 @@ impl ConfigFilesCommand {
             } else {
                 cli.config.clone()
             };
-            // Loading fails outright on a missing explicit config, before the
-            // global layer is reached — don't report a load order that can't
-            // happen.
-            if !explicit.exists() {
-                return Err(crate::error::FnoxError::ConfigReadFailed {
-                    path: explicit,
-                    source: std::io::Error::new(
-                        std::io::ErrorKind::NotFound,
-                        "No such file or directory",
-                    ),
-                });
-            }
-            self.collect_file(&explicit, &mut printed)?;
+            // A missing or unparseable explicit config makes loading fail
+            // before the global layer is reached, so surface the same error
+            // rather than reporting a load order that can't happen.
+            let config = Config::load(&explicit)?;
+            println!("{}", explicit.display());
+            printed.insert(explicit.clone());
+            self.collect_imports(&explicit, &config.import, &mut printed);
         }
 
         // Global config is always checked
@@ -101,15 +95,19 @@ impl ConfigFilesCommand {
             return Ok(false);
         };
 
-        // Print imported config files
+        self.collect_imports(path, &partial.import, printed);
+
+        Ok(partial.root)
+    }
+
+    /// Print the files `path` imports, resolved relative to its directory.
+    fn collect_imports(&self, path: &Path, imports: &[String], printed: &mut HashSet<PathBuf>) {
         let dir = path.parent().unwrap_or_else(|| Path::new(""));
-        for import_path in &partial.import {
+        for import_path in imports {
             let import = crate::config_path::resolve_relative_to_dir(import_path, Some(dir));
             if import.exists() && printed.insert(import.clone()) {
                 println!("{}", import.display());
             }
         }
-
-        Ok(partial.root)
     }
 }

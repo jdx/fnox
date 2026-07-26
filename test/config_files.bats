@@ -100,3 +100,17 @@ EOF
 	assert_output --partial "Failed to read configuration file"
 	refute_output --partial ".config/fnox/config.toml"
 }
+
+@test "config-files fails on an unparseable explicit --config file" {
+	mkdir -p "$HOME/.config/fnox"
+	cat >"$HOME/.config/fnox/config.toml" <<EOF
+[secrets]
+GLOBAL_SECRET = { default = "global-value" }
+EOF
+
+	echo "this is not valid toml {{{" >broken.toml
+
+	run "$FNOX_BIN" -c broken.toml config-files
+	assert_failure
+	refute_output --partial ".config/fnox/config.toml"
+}

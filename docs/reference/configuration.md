@@ -32,7 +32,7 @@ fnox looks for configuration files in this order (lowest to highest priority):
 3. `fnox.toml` in current directory
 4. `fnox.$FNOX_PROFILE.toml` alongside each `fnox.toml` (profile-specific)
 5. `fnox.local.toml` alongside each `fnox.toml` (for local overrides)
-6. Path specified via `-c, --config` flag
+6. Path specified via `-c, --config` flag — for non-default filenames this replaces steps 2-5 instead of stacking on top of them, see [Explicit Config Paths](#explicit-config-paths)
 
 ### Explicit Config Paths
 
