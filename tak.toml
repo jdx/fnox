@@ -1,0 +1,24 @@
+# Instruction-counted benchmarks, measured by tak (https://github.com/jdx/tak).
+#
+# Pure CPU against fnox's own definitions: no network, no secrets, no provider,
+# no repository state. Hermeticity was checked by running each with the proxy
+# pointed at a dead port; both succeed unchanged and both outputs are
+# byte-identical run to run.
+#
+# `--version` is deliberately absent. It measures clap rather than fnox, and a
+# subject that can reach the network retires a different number of instructions
+# depending on conditions unrelated to the code under test.
+
+# The whole command tree, walked and serialised to ~12KB of KDL. This is also
+# the closest thing fnox has to a pure startup measurement: a subcommand added
+# with an expensive default shows up here first, and every invocation pays the
+# clap construction it measures.
+[bench.usage]
+cmd = ["./target/release/fnox", "usage"]
+
+# The settings schema, ~43KB of JSON. A different serialisation path over a
+# different tree, and the larger of the two — reading them together separates a
+# change in the command definitions from one in the settings.
+[bench.schema]
+cmd = ["./target/release/fnox", "schema"]
+runs = 10

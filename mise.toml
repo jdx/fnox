@@ -2,6 +2,10 @@
 _.path = ["target/debug", "test/bats/bin"]
 
 [tools]
+# Pinned rather than "latest" because tak is the measuring instrument: an
+# upgrade that changes how it samples would land in the series as a step change
+# in fnox's numbers, indistinguishable from a real regression. Bump deliberately.
+"github:jdx/tak" = "0.0.4"
 aube = "latest"
 age = "latest"
 "github:foresterre/cargo-msrv" = "latest"
@@ -91,3 +95,17 @@ run = [
   "usage g json -f fnox.usage.kdl > docs/cli/commands.json",
   "prettier --write docs/cli",
 ]
+
+# Instruction-counted benchmarks (see tak.toml). Needs valgrind for the counts;
+# without it tak reports wall clock only and says so, so this still works on
+# macOS where there is no usable cachegrind.
+[tasks.perf]
+dir = "{{config_root}}"
+run = ["cargo build --release", "tak run"]
+
+# Same measurement, appended to refs/notes/tak for this commit. Run by the
+# `perf` workflow on every push to main; the notes are the history. Safe to run
+# locally — nothing leaves the machine until `tak push`.
+[tasks."perf:record"]
+dir = "{{config_root}}"
+run = ["cargo build --release", "tak run --record"]
