@@ -155,6 +155,16 @@ url_api = "https://api.github.com/repos/jdx/aube/releases/assets/400211208"
 version = "2026.3.0"
 backend = "aqua:bitwarden/clients"
 
+[tools.bitwarden."platforms.linux-arm64"]
+checksum = "sha256:5826f3c4f0c5ff16151c9dccf0a8b245224b943a86c51f1125070bcdcaec1436"
+url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.3.0/bw-linux-arm64-2026.3.0.zip"
+url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/387161538"
+
+[tools.bitwarden."platforms.linux-arm64-musl"]
+checksum = "sha256:5826f3c4f0c5ff16151c9dccf0a8b245224b943a86c51f1125070bcdcaec1436"
+url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.3.0/bw-linux-arm64-2026.3.0.zip"
+url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/387161538"
+
 [tools.bitwarden."platforms.linux-x64"]
 checksum = "sha256:0bdf85cfa1ad1e3c4f6cd2ae23d0de1af136939405f1f395b6836b7f43479ed2"
 url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.3.0/bw-linux-2026.3.0.zip"
@@ -166,9 +176,9 @@ url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.3.0/bw-l
 url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/387161482"
 
 [tools.bitwarden."platforms.macos-arm64"]
-checksum = "sha256:015ed86b1f9e23a366e0c7937a5b5cfcd26348505608e5e446890cd83a00b1d2"
-url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.3.0/bw-macos-2026.3.0.zip"
-url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/387161325"
+checksum = "sha256:d935e9885ed215ecb0de9a7e7251487012b007a74fedbaaec6074d299fef3e02"
+url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.3.0/bw-macos-arm64-2026.3.0.zip"
+url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/387161354"
 
 [tools.bitwarden."platforms.macos-x64"]
 checksum = "sha256:015ed86b1f9e23a366e0c7937a5b5cfcd26348505608e5e446890cd83a00b1d2"
@@ -283,6 +293,7 @@ checksum = "sha256:180f970282986f27f7fa9ee216e4971e8dec3624869d4222f22f3e2535fcc
 url = "https://github.com/jdx/communique/releases/download/v1.2.3/communique-x86_64-unknown-linux-gnu.tar.gz"
 url_api = "https://api.github.com/repos/jdx/communique/releases/assets/477186105"
 provenance = "github-attestations"
+provenance_verified = true
 
 [tools.communique."platforms.linux-x64-musl"]
 checksum = "sha256:23010d19c9dc0bb09fefc43916b03b7b16f0d07761980bb54166170ce85d9112"
