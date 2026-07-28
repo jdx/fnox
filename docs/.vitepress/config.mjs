@@ -123,6 +123,7 @@ export default defineConfig({
             items: [
               { text: "AWS Parameter Store", link: "/providers/aws-ps" },
               { text: "AWS Secrets Manager", link: "/providers/aws-sm" },
+              { text: "Azure App Configuration", link: "/providers/azure-ac" },
               { text: "Azure Key Vault Secrets", link: "/providers/azure-sm" },
               { text: "Doppler", link: "/providers/doppler" },
               { text: "FOKS", link: "/providers/foks" },

@@ -23,6 +23,7 @@ Store secrets remotely in cloud providers. Your `fnox.toml` contains only refere
 | ---------------------------------------------------- | ----------------------------------- | ---------------------------------------- |
 | [AWS Parameter Store](/providers/aws-ps)             | AWS SSM Parameter Store             | Config values, simple secrets            |
 | [AWS Secrets Manager](/providers/aws-sm)             | AWS centralized secrets             | Production AWS workloads                 |
+| [Azure App Configuration](/providers/azure-ac)       | Azure non-secret configuration      | Endpoints and toggles owned by Azure IaC |
 | [Azure Key Vault Secrets](/providers/azure-sm)       | Azure secret storage                | Production Azure workloads               |
 | [GCP Secret Manager](/providers/gcp-sm)              | Google Cloud secrets                | Production GCP workloads                 |
 | [Bitwarden Secrets Manager](/providers/bitwarden-sm) | Bitwarden Secrets Manager (bws CLI) | Teams using Bitwarden for DevOps secrets |

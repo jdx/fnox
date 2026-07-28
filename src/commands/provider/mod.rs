@@ -36,6 +36,10 @@ pub enum ProviderType {
     #[value(name = "aws-ps")]
     #[strum(serialize = "aws-ps")]
     AwsParameterStore,
+    /// Azure App Configuration
+    #[value(name = "azure-ac")]
+    #[strum(serialize = "azure-ac")]
+    AzureAppConfiguration,
     /// Azure Key Vault KMS
     #[value(name = "azure-kms")]
     #[strum(serialize = "azure-kms")]

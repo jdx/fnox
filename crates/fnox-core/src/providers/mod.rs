@@ -8,6 +8,7 @@ pub mod age;
 pub mod aws_kms;
 pub mod aws_ps;
 pub mod aws_sm;
+pub mod azure_ac;
 pub mod azure_kms;
 pub mod azure_sm;
 pub mod bitwarden;
@@ -143,9 +144,9 @@ mod generated {
         #[cfg(not(target_env = "musl"))]
         use super::super::fido2;
         use super::super::{
-            age, aws_kms, aws_ps, aws_sm, azure_kms, azure_sm, bitwarden, bitwarden_sm, doppler,
-            foks, gcp_kms, gcp_sm, infisical, keepass, keychain, onepassword, password_store,
-            passwordstate, plain, proton_pass, vault, yubikey,
+            age, aws_kms, aws_ps, aws_sm, azure_ac, azure_kms, azure_sm, bitwarden, bitwarden_sm,
+            doppler, foks, gcp_kms, gcp_sm, infisical, keepass, keychain, onepassword,
+            password_store, passwordstate, plain, proton_pass, vault, yubikey,
         };
         include!(concat!(
             env!("OUT_DIR"),
