@@ -69,6 +69,8 @@ appconfig = { type = "azure-ac", endpoint = "https://myapp-config.azconfig.io", 
 
 Without `label`, the key-value with no label is returned.
 
+The Entra audience follows the endpoint, so Azure Government (`*.azconfig.azure.us`) and Azure China (`*.azconfig.azure.cn`) stores work without extra configuration.
+
 ## Pros
 
 - ✅ Keeps non-secret configuration out of Key Vault

@@ -6,8 +6,20 @@ use serde::Deserialize;
 
 const PROVIDER_NAME: &str = "Azure App Configuration";
 const PROVIDER_URL: &str = "https://fnox.jdx.dev/providers/azure-ac";
-const SCOPE: &str = "https://appconfig.azure.com/.default";
 const API_VERSION: &str = "2023-11-01";
+
+/// Sovereign clouds have their own audience, keyed off the endpoint suffix as
+/// the Azure SDKs do. Public cloud stores are `*.azconfig.io`.
+fn scope_for(endpoint: &str) -> &'static str {
+    let endpoint = endpoint.to_ascii_lowercase();
+    if endpoint.ends_with("azconfig.azure.us") || endpoint.ends_with("appconfig.azure.us") {
+        "https://appconfig.azure.us/.default"
+    } else if endpoint.ends_with("azconfig.azure.cn") || endpoint.ends_with("appconfig.azure.cn") {
+        "https://appconfig.azure.cn/.default"
+    } else {
+        "https://appconfig.azure.com/.default"
+    }
+}
 
 pub fn env_dependencies() -> &'static [&'static str] {
     &[]
@@ -94,16 +106,15 @@ impl AzureAppConfigurationProvider {
             }
         })?;
 
-        let token =
-            credential
-                .get_token(&[SCOPE], None)
-                .await
-                .map_err(|e: azure_core::Error| FnoxError::ProviderAuthFailed {
-                    provider: PROVIDER_NAME.to_string(),
-                    details: e.to_string(),
-                    hint: "Run 'az login' to authenticate with Azure".to_string(),
-                    url: PROVIDER_URL.to_string(),
-                })?;
+        let token = credential
+            .get_token(&[scope_for(&self.endpoint)], None)
+            .await
+            .map_err(|e: azure_core::Error| FnoxError::ProviderAuthFailed {
+                provider: PROVIDER_NAME.to_string(),
+                details: e.to_string(),
+                hint: "Run 'az login' to authenticate with Azure".to_string(),
+                url: PROVIDER_URL.to_string(),
+            })?;
 
         Ok(token.token.secret().to_string())
     }
@@ -210,6 +221,22 @@ mod tests {
         let provider = provider(Some(""), Some(""));
         assert_eq!(provider.label, None);
         assert_eq!(provider.prefix, None);
+    }
+
+    #[test]
+    fn scope_follows_the_endpoint_cloud() {
+        assert_eq!(
+            scope_for("https://store.azconfig.io"),
+            "https://appconfig.azure.com/.default"
+        );
+        assert_eq!(
+            scope_for("https://store.azconfig.azure.us"),
+            "https://appconfig.azure.us/.default"
+        );
+        assert_eq!(
+            scope_for("https://STORE.APPCONFIG.AZURE.CN"),
+            "https://appconfig.azure.cn/.default"
+        );
     }
 
     #[test]
