@@ -69,7 +69,7 @@ appconfig = { type = "azure-ac", endpoint = "https://myapp-config.azconfig.io", 
 
 Without `label`, the key-value with no label is returned.
 
-The Entra audience follows the endpoint, so Azure Government (`*.azconfig.azure.us`) and Azure China (`*.azconfig.azure.cn`) stores work without extra configuration.
+The `endpoint` must be an HTTPS App Configuration domain: `*.azconfig.io`, or `*.azconfig.azure.us` and `*.azconfig.azure.cn` for Azure Government and Azure China. Anything else is rejected, since the endpoint is where fnox sends your Entra token. The audience follows the domain, so sovereign stores work without extra configuration.
 
 ## Pros
 

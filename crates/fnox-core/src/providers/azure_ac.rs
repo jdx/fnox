@@ -2,23 +2,44 @@ use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
 use azure_core::credentials::TokenCredential;
 use azure_identity::DeveloperToolsCredential;
+use reqwest::Url;
 use serde::Deserialize;
 
 const PROVIDER_NAME: &str = "Azure App Configuration";
 const PROVIDER_URL: &str = "https://fnox.jdx.dev/providers/azure-ac";
 const API_VERSION: &str = "2023-11-01";
 
-/// Sovereign clouds have their own audience, keyed off the endpoint suffix as
-/// the Azure SDKs do. Public cloud stores are `*.azconfig.io`.
-fn scope_for(endpoint: &str) -> &'static str {
-    let endpoint = endpoint.to_ascii_lowercase();
-    if endpoint.ends_with("azconfig.azure.us") || endpoint.ends_with("appconfig.azure.us") {
-        "https://appconfig.azure.us/.default"
-    } else if endpoint.ends_with("azconfig.azure.cn") || endpoint.ends_with("appconfig.azure.cn") {
-        "https://appconfig.azure.cn/.default"
-    } else {
-        "https://appconfig.azure.com/.default"
-    }
+/// App Configuration domains and the Entra audience each cloud expects. Sending
+/// a token anywhere else would hand it to whoever the endpoint points at, so an
+/// unlisted domain is rejected rather than defaulted.
+const CLOUDS: &[(&str, &str)] = &[
+    ("azconfig.io", "https://appconfig.azure.com/.default"),
+    (
+        "appconfig.azure.com",
+        "https://appconfig.azure.com/.default",
+    ),
+    ("azconfig.azure.us", "https://appconfig.azure.us/.default"),
+    ("appconfig.azure.us", "https://appconfig.azure.us/.default"),
+    ("azconfig.azure.cn", "https://appconfig.azure.cn/.default"),
+    ("appconfig.azure.cn", "https://appconfig.azure.cn/.default"),
+];
+
+/// The audience for a store host, or None if the host is not an App Configuration domain.
+fn scope_for(host: &str) -> Option<&'static str> {
+    let host = host.to_ascii_lowercase();
+    CLOUDS.iter().find_map(|(domain, scope)| {
+        // Require a label boundary so evilazconfig.io does not pass as azconfig.io.
+        host.strip_suffix(domain)
+            .is_some_and(|store| store.ends_with('.'))
+            .then_some(*scope)
+    })
+}
+
+fn invalid_endpoint(endpoint: &str, reason: &str) -> FnoxError {
+    FnoxError::Config(format!(
+        "{PROVIDER_NAME}: endpoint '{endpoint}' {reason}. \
+         Expected an App Configuration store such as https://my-store.azconfig.io"
+    ))
 }
 
 pub fn env_dependencies() -> &'static [&'static str] {
@@ -34,15 +55,28 @@ pub struct AzureAppConfigurationProvider {
     endpoint: String,
     label: Option<String>,
     prefix: Option<String>,
+    scope: &'static str,
 }
 
 impl AzureAppConfigurationProvider {
     pub fn new(endpoint: String, label: Option<String>, prefix: Option<String>) -> Result<Self> {
+        let url = Url::parse(&endpoint).map_err(|e| invalid_endpoint(&endpoint, &e.to_string()))?;
+        if url.scheme() != "https" {
+            return Err(invalid_endpoint(&endpoint, "must use https"));
+        }
+        // host_str() ignores userinfo, so https://store.azconfig.io@example.com is example.com.
+        let scope = url
+            .host_str()
+            .and_then(scope_for)
+            .ok_or_else(|| invalid_endpoint(&endpoint, "is not an App Configuration domain"))?;
+
         // App Configuration has no empty label: the unlabelled key-value is the \0 label.
         Ok(Self {
-            endpoint: endpoint.trim_end_matches('/').to_string(),
+            // The origin drops any path, query or fragment the endpoint carried.
+            endpoint: url.origin().ascii_serialization(),
             label: label.filter(|l| !l.is_empty()),
             prefix: prefix.filter(|p| !p.is_empty()),
+            scope,
         })
     }
 
@@ -106,15 +140,16 @@ impl AzureAppConfigurationProvider {
             }
         })?;
 
-        let token = credential
-            .get_token(&[scope_for(&self.endpoint)], None)
-            .await
-            .map_err(|e: azure_core::Error| FnoxError::ProviderAuthFailed {
-                provider: PROVIDER_NAME.to_string(),
-                details: e.to_string(),
-                hint: "Run 'az login' to authenticate with Azure".to_string(),
-                url: PROVIDER_URL.to_string(),
-            })?;
+        let token =
+            credential
+                .get_token(&[self.scope], None)
+                .await
+                .map_err(|e: azure_core::Error| FnoxError::ProviderAuthFailed {
+                    provider: PROVIDER_NAME.to_string(),
+                    details: e.to_string(),
+                    hint: "Run 'az login' to authenticate with Azure".to_string(),
+                    url: PROVIDER_URL.to_string(),
+                })?;
 
         Ok(token.token.secret().to_string())
     }
@@ -226,21 +261,50 @@ mod tests {
     #[test]
     fn scope_follows_the_endpoint_cloud() {
         assert_eq!(
-            scope_for("https://store.azconfig.io"),
-            "https://appconfig.azure.com/.default"
+            scope_for("store.azconfig.io"),
+            Some("https://appconfig.azure.com/.default")
         );
         assert_eq!(
-            scope_for("https://store.azconfig.azure.us"),
-            "https://appconfig.azure.us/.default"
+            scope_for("store.azconfig.azure.us"),
+            Some("https://appconfig.azure.us/.default")
         );
         assert_eq!(
-            scope_for("https://STORE.APPCONFIG.AZURE.CN"),
-            "https://appconfig.azure.cn/.default"
+            scope_for("STORE.APPCONFIG.AZURE.CN"),
+            Some("https://appconfig.azure.cn/.default")
         );
     }
 
     #[test]
-    fn trailing_slash_is_stripped_from_the_endpoint() {
+    fn endpoint_is_reduced_to_its_origin() {
         assert_eq!(provider(None, None).endpoint, "https://store.azconfig.io");
+
+        let with_path = AzureAppConfigurationProvider::new(
+            "https://store.azconfig.io/some/path?q=1#frag".to_string(),
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(with_path.endpoint, "https://store.azconfig.io");
+    }
+
+    /// The token is only ever sent to the endpoint, so anything that is not a real
+    /// App Configuration host has to be refused before a token is acquired.
+    #[test]
+    fn untrusted_endpoints_are_rejected() {
+        for endpoint in [
+            "http://store.azconfig.io",              // not https
+            "https://example.com",                   // arbitrary host
+            "https://evilazconfig.io",               // no label boundary
+            "https://azconfig.io",                   // bare domain, no store
+            "https://store.azconfig.io@example.com", // userinfo, host is example.com
+            "https://example.com/store.azconfig.io", // domain hidden in the path
+            "https://example.com/?x=store.azconfig.io",
+            "not a url",
+        ] {
+            assert!(
+                AzureAppConfigurationProvider::new(endpoint.to_string(), None, None).is_err(),
+                "expected {endpoint} to be rejected"
+            );
+        }
     }
 }
