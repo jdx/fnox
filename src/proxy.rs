@@ -1,6 +1,6 @@
 use crate::config::{ProxyConfig, ProxyEgress};
 use crate::error::{FnoxError, Result};
-use globset::{Glob, GlobSet, GlobSetBuilder};
+use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use indexmap::IndexMap;
 use rcgen::{BasicConstraints, Certificate, CertificateParams, IsCa, Issuer, KeyPair};
 use reqwest::Method;
@@ -48,6 +48,7 @@ struct ProxyPolicy {
     egress: ProxyEgress,
     audit: bool,
     rules: Vec<PreparedRule>,
+    client: reqwest::Client,
 }
 
 impl ProxyPolicy {
@@ -83,29 +84,44 @@ impl ProxyPolicy {
         }
 
         let mut injected = Vec::new();
-        for (header_name, header_value) in headers.iter_mut() {
-            for rule in &domain_rules {
-                let occurrences = header_value.matches(&rule.placeholder).count();
-                if occurrences == 0 {
-                    continue;
-                }
-                if !rule.route_matches(method, path)
-                    || !header_name.eq_ignore_ascii_case(&rule.header)
-                {
-                    return Err(proxy_error(format!(
-                        "placeholder for '{}' appeared outside its allowed route or header",
-                        rule.secret
-                    )));
-                }
-                if occurrences > 1 {
-                    return Err(proxy_error(format!(
-                        "placeholder for '{}' appeared more than once",
-                        rule.secret
-                    )));
-                }
-                *header_value = header_value.replacen(&rule.placeholder, &rule.value, 1);
-                injected.push(rule.secret.clone());
+        let mut checked = HashSet::new();
+        for rule in &domain_rules {
+            if !checked.insert(rule.placeholder.as_str()) {
+                continue;
             }
+
+            let occurrences: usize = headers
+                .iter()
+                .map(|(_, value)| value.matches(&rule.placeholder).count())
+                .sum();
+            if occurrences == 0 {
+                continue;
+            }
+            if occurrences > 1 {
+                return Err(proxy_error(format!(
+                    "placeholder for '{}' appeared more than once",
+                    rule.secret
+                )));
+            }
+
+            let (header_name, header_value) = headers
+                .iter_mut()
+                .find(|(_, value)| value.contains(&rule.placeholder))
+                .expect("placeholder occurrence was counted");
+            let allowed = domain_rules.iter().any(|candidate| {
+                candidate.placeholder == rule.placeholder
+                    && candidate.route_matches(method, path)
+                    && header_name.eq_ignore_ascii_case(&candidate.header)
+            });
+            if !allowed {
+                return Err(proxy_error(format!(
+                    "placeholder for '{}' appeared outside its allowed route or header",
+                    rule.secret
+                )));
+            }
+
+            *header_value = header_value.replacen(&rule.placeholder, &rule.value, 1);
+            injected.push(rule.secret.clone());
         }
         Ok(injected)
     }
@@ -231,6 +247,14 @@ impl ProxyPlan {
                 egress: config.egress,
                 audit: config.audit,
                 rules: prepared,
+                client: reqwest::Client::builder()
+                    .http1_only()
+                    .no_proxy()
+                    .redirect(reqwest::redirect::Policy::none())
+                    .build()
+                    .map_err(|error| {
+                        proxy_error(format!("failed to build upstream client: {error}"))
+                    })?,
             }),
             child_env: env_values,
         })
@@ -287,7 +311,9 @@ fn compile_paths(paths: &[String]) -> Result<Option<GlobSet>> {
             )));
         }
         builder.add(
-            Glob::new(path)
+            GlobBuilder::new(path)
+                .literal_separator(true)
+                .build()
                 .map_err(|error| proxy_error(format!("invalid path pattern '{path}': {error}")))?,
         );
     }
@@ -388,8 +414,13 @@ impl RunningProxy {
                 tokio::select! {
                     _ = &mut shutdown_rx => break,
                     accepted = listener.accept() => {
-                        let Ok((stream, peer)) = accepted else {
-                            break;
+                        let (stream, peer) = match accepted {
+                            Ok(accepted) => accepted,
+                            Err(error) => {
+                                tracing::warn!("proxy accept failed: {error}");
+                                tokio::task::yield_now().await;
+                                continue;
+                            }
                         };
                         if !peer.ip().is_loopback() {
                             tracing::warn!("rejected non-loopback proxy client: {peer}");
@@ -485,7 +516,16 @@ async fn handle_connection(
         .accept(stream)
         .await
         .map_err(|error| proxy_error(format!("client TLS handshake failed: {error}")))?;
-    proxy_http_request(&mut tls, &domain, &policy).await
+    let result = proxy_http_request(&mut tls, &domain, &policy).await;
+    if let Err(error) = tls.shutdown().await {
+        if result.is_ok() {
+            return Err(proxy_error(format!(
+                "failed to shut down client TLS connection: {error}"
+            )));
+        }
+        tracing::debug!("failed to shut down client TLS connection: {error}");
+    }
+    result
 }
 
 fn parse_connect_target(target: &str) -> Result<(String, u16)> {
@@ -547,12 +587,8 @@ where
 
     let method = Method::from_bytes(request.method.as_bytes())
         .map_err(|_| proxy_error("request used an invalid HTTP method"))?;
-    let client = reqwest::Client::builder()
-        .http1_only()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|error| proxy_error(format!("failed to build upstream client: {error}")))?;
-    let mut outbound = client
+    let mut outbound = policy
+        .client
         .request(method, url)
         .header("accept-encoding", "identity")
         .body(request.body);
@@ -562,7 +598,7 @@ where
         }
         outbound = outbound.header(&name, &value);
     }
-    let response = outbound
+    let mut response = outbound
         .send()
         .await
         .map_err(|error| proxy_error(format!("upstream request failed: {error}")))?;
@@ -580,14 +616,17 @@ where
         .await?;
         return Ok(());
     }
-    let mut body = response
-        .bytes()
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
         .await
         .map_err(|error| proxy_error(format!("failed to read upstream response: {error}")))?
-        .to_vec();
-    if body.len() > MAX_BODY_BYTES {
-        write_error(stream, 502, "upstream response exceeded proxy limit").await?;
-        return Ok(());
+    {
+        if chunk.len() > MAX_BODY_BYTES.saturating_sub(body.len()) {
+            write_error(stream, 502, "upstream response exceeded proxy limit").await?;
+            return Ok(());
+        }
+        body.extend_from_slice(&chunk);
     }
     redact_values(&mut body, &policy.rules);
 
@@ -632,6 +671,7 @@ fn has_ambiguous_path_encoding(target: &str) -> bool {
         || path.contains("%2e")
         || path.contains("%2f")
         || path.contains("%5c")
+        || path.contains("%25")
         || path
             .split('/')
             .any(|segment| segment == "." || segment == "..")
@@ -699,18 +739,30 @@ where
     if remaining == 0 {
         return Err(proxy_error("HTTP headers exceeded proxy limit"));
     }
-    let mut line = String::new();
-    let read = reader
-        .read_line(&mut line)
-        .await
-        .map_err(|error| proxy_error(format!("failed to read HTTP request: {error}")))?;
-    if read == 0 {
-        return Err(proxy_error("connection closed while reading HTTP request"));
+    let mut line = Vec::with_capacity(remaining.min(1024));
+    loop {
+        let available = reader
+            .fill_buf()
+            .await
+            .map_err(|error| proxy_error(format!("failed to read HTTP request: {error}")))?;
+        if available.is_empty() {
+            return Err(proxy_error("connection closed while reading HTTP request"));
+        }
+        let consumed = available
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .map_or(available.len(), |position| position + 1);
+        if consumed > remaining.saturating_sub(line.len()) {
+            return Err(proxy_error("HTTP headers exceeded proxy limit"));
+        }
+        let complete = available[consumed - 1] == b'\n';
+        line.extend_from_slice(&available[..consumed]);
+        reader.consume(consumed);
+        if complete {
+            break;
+        }
     }
-    if read > remaining {
-        return Err(proxy_error("HTTP headers exceeded proxy limit"));
-    }
-    Ok(line)
+    String::from_utf8(line).map_err(|_| proxy_error("HTTP request headers are not valid UTF-8"))
 }
 
 fn is_hop_by_hop_header(name: &str) -> bool {
@@ -880,7 +932,57 @@ mod tests {
         assert!(has_ambiguous_path_encoding(
             "/repos/example/%2e%2e/another/private"
         ));
+        assert!(has_ambiguous_path_encoding(
+            "/repos/example/%252e%252e/another/private"
+        ));
         assert!(!has_ambiguous_path_encoding("/repos/example/fnox?dot=.."));
+    }
+
+    #[test]
+    fn sibling_rules_allow_any_matching_route() {
+        let mut config = config();
+        config.rules[0].paths = vec!["/repos/example/issues/**".to_string()];
+        config.rules.push(ProxyRule {
+            secret: "GITHUB_TOKEN".to_string(),
+            domain: "api.github.com".to_string(),
+            env: None,
+            header: "authorization".to_string(),
+            methods: vec!["GET".to_string()],
+            paths: vec!["/repos/example/pulls/**".to_string()],
+            placeholder: Some("ghp_placeholder".to_string()),
+        });
+        let plan = ProxyPlan::new(
+            &config,
+            &[("GITHUB_TOKEN".to_string(), "real-token".to_string())]
+                .into_iter()
+                .collect(),
+        )
+        .unwrap();
+        let mut headers = vec![(
+            "Authorization".to_string(),
+            "Bearer ghp_placeholder".to_string(),
+        )];
+
+        plan.policy
+            .authorize(
+                "api.github.com",
+                "GET",
+                "/repos/example/pulls/1",
+                &mut headers,
+            )
+            .unwrap();
+
+        assert_eq!(headers[0].1, "Bearer real-token");
+    }
+
+    #[test]
+    fn single_star_path_does_not_cross_directory_boundaries() {
+        let paths = compile_paths(&["/repos/example/*".to_string()])
+            .unwrap()
+            .unwrap();
+
+        assert!(paths.is_match("/repos/example/fnox"));
+        assert!(!paths.is_match("/repos/example/team/fnox"));
     }
 
     #[test]

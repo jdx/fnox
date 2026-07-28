@@ -1,5 +1,5 @@
 use crate::commands::Cli;
-use crate::config::{Config, ProxyConfig};
+use crate::config::{Config, ProxyConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
 use crate::proxy::{ProxyPlan, RunningProxy};
 use clap::{Args, Subcommand, ValueHint};
@@ -70,6 +70,64 @@ fn show_rules(proxy: &ProxyConfig) -> Result<()> {
     Ok(())
 }
 
+fn collect_requested_secrets(
+    config: &Config,
+    profile: &[String],
+    proxy: &ProxyConfig,
+    all_secrets: &IndexMap<String, SecretConfig>,
+) -> Result<IndexMap<String, SecretConfig>> {
+    let providers = config.get_providers(profile);
+    let default_provider = config.get_default_provider(profile)?;
+    let mut requested = IndexMap::new();
+
+    for rule in &proxy.rules {
+        let secret = all_secrets.get(&rule.secret).ok_or_else(|| {
+            FnoxError::Config(format!(
+                "Proxy rule references unknown secret '{}'",
+                rule.secret
+            ))
+        })?;
+        requested.insert(rule.secret.clone(), secret.clone());
+    }
+
+    loop {
+        let mut added = false;
+        let keys: Vec<_> = requested.keys().cloned().collect();
+        for key in keys {
+            let secret = &requested[&key];
+            let provider_name = secret
+                .sync
+                .as_ref()
+                .map(|sync| sync.provider.as_str())
+                .or_else(|| secret.provider())
+                .or_else(|| {
+                    secret
+                        .value()
+                        .is_some()
+                        .then_some(default_provider.as_deref())
+                        .flatten()
+                });
+            let Some(provider) = provider_name.and_then(|name| providers.get(name)) else {
+                continue;
+            };
+            for dependency in provider.env_dependencies() {
+                if requested.contains_key(*dependency) {
+                    continue;
+                }
+                if let Some(secret) = all_secrets.get(*dependency) {
+                    requested.insert((*dependency).to_string(), secret.clone());
+                    added = true;
+                }
+            }
+        }
+        if !added {
+            break;
+        }
+    }
+
+    Ok(requested)
+}
+
 impl ProxyRunCommand {
     async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
         if self.command.is_empty() {
@@ -82,16 +140,7 @@ impl ProxyRunCommand {
         crate::proxy::validate_config(proxy_config)?;
         let profile = Config::get_profiles(&cli.profile);
         let all_secrets = config.get_secrets(&profile)?;
-        let mut requested = IndexMap::new();
-        for rule in &proxy_config.rules {
-            let secret = all_secrets.get(&rule.secret).ok_or_else(|| {
-                FnoxError::Config(format!(
-                    "Proxy rule references unknown secret '{}'",
-                    rule.secret
-                ))
-            })?;
-            requested.insert(rule.secret.clone(), secret.clone());
-        }
+        let requested = collect_requested_secrets(&config, &profile, proxy_config, &all_secrets)?;
         let resolved = crate::daemon::resolve_batch(
             cli,
             &config,
@@ -102,11 +151,15 @@ impl ProxyRunCommand {
         )
         .await?;
         let mut values = IndexMap::new();
-        for (key, value) in resolved {
-            let value = value.ok_or_else(|| {
-                FnoxError::Config(format!("Proxy secret '{key}' did not resolve"))
-            })?;
-            values.insert(key, value);
+        for rule in &proxy_config.rules {
+            let value = resolved
+                .get(&rule.secret)
+                .cloned()
+                .flatten()
+                .ok_or_else(|| {
+                    FnoxError::Config(format!("Proxy secret '{}' did not resolve", rule.secret))
+                })?;
+            values.insert(rule.secret.clone(), value);
         }
 
         let plan = ProxyPlan::new(proxy_config, &values)?;
@@ -140,6 +193,12 @@ impl ProxyRunCommand {
             "VAULT_TOKEN",
             "INFISICAL_TOKEN",
             "KEEPASS_PASSWORD",
+            "DOPPLER_TOKEN",
+            "FNOX_DOPPLER_TOKEN",
+            "FOKS_BOT_TOKEN",
+            "FNOX_FOKS_BOT_TOKEN",
+            "PROTON_PASS_PERSONAL_ACCESS_TOKEN",
+            "FNOX_PROTON_PASS_PERSONAL_ACCESS_TOKEN",
             "AWS_ACCESS_KEY_ID",
             "AWS_SECRET_ACCESS_KEY",
             "AWS_SESSION_TOKEN",
@@ -147,6 +206,11 @@ impl ProxyRunCommand {
             "GOOGLE_APPLICATION_CREDENTIALS",
         ] {
             command.env_remove(key);
+        }
+        for provider in config.get_providers(&profile).values() {
+            for dependency in provider.env_dependencies() {
+                command.env_remove(dependency);
+            }
         }
         command.env("FNOX_DAEMON", "off");
         command.env("FNOX_NON_INTERACTIVE", "1");
@@ -178,15 +242,12 @@ impl ProxyRunCommand {
             command.env(key, &ca_path);
         }
 
-        let status =
-            command
-                .status()
-                .await
-                .map_err(|source| FnoxError::CommandExecutionFailed {
-                    command: self.command.join(" "),
-                    source,
-                })?;
+        let status = command.status().await;
         running.shutdown().await;
+        let status = status.map_err(|source| FnoxError::CommandExecutionFailed {
+            command: self.command.join(" "),
+            source,
+        })?;
 
         if !status.success() {
             #[cfg(unix)]
@@ -199,5 +260,46 @@ impl ProxyRunCommand {
             std::process::exit(status.code().unwrap_or(1));
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn requested_secrets_include_provider_dependencies() {
+        let config: Config = toml_edit::de::from_str(
+            r#"
+[providers.doppler]
+type = "doppler"
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+DOPPLER_TOKEN = { provider = "plain", value = "provider-token" }
+API_TOKEN = { provider = "doppler", value = "api-token" }
+
+[proxy]
+[[proxy.rules]]
+secret = "API_TOKEN"
+domain = "api.example.com"
+"#,
+        )
+        .unwrap();
+        let profile = vec!["default".to_string()];
+        let all_secrets = config.get_secrets(&profile).unwrap();
+
+        let requested = collect_requested_secrets(
+            &config,
+            &profile,
+            config.proxy.as_ref().unwrap(),
+            &all_secrets,
+        )
+        .unwrap();
+
+        assert!(requested.contains_key("API_TOKEN"));
+        assert!(requested.contains_key("DOPPLER_TOKEN"));
     }
 }

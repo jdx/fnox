@@ -2613,6 +2613,65 @@ value = "prod"
         assert_eq!(merged.mcp.unwrap().secrets, Some(vec!["A".into()]));
     }
 
+    fn proxy_rule(secret: &str, domain: &str) -> ProxyRule {
+        ProxyRule {
+            secret: secret.into(),
+            domain: domain.into(),
+            env: None,
+            header: default_proxy_header(),
+            methods: Vec::new(),
+            paths: Vec::new(),
+            placeholder: None,
+        }
+    }
+
+    #[test]
+    fn proxy_overlay_replaces_base_rules_not_appends() {
+        let base = Config {
+            proxy: Some(ProxyConfig {
+                rules: vec![proxy_rule("A", "a.example.com")],
+                ..ProxyConfig::default()
+            }),
+            ..Config::new()
+        };
+        let overlay = Config {
+            proxy: Some(ProxyConfig {
+                rules: vec![proxy_rule("B", "b.example.com")],
+                ..ProxyConfig::default()
+            }),
+            ..Config::new()
+        };
+
+        let rules = Config::merge_configs(base, overlay)
+            .unwrap()
+            .proxy
+            .unwrap()
+            .rules;
+
+        assert_eq!(rules.len(), 1, "overlay must replace the base rules");
+        assert_eq!(rules[0].secret, "B");
+    }
+
+    #[test]
+    fn proxy_overlay_without_proxy_preserves_base() {
+        let base = Config {
+            proxy: Some(ProxyConfig {
+                rules: vec![proxy_rule("A", "a.example.com")],
+                ..ProxyConfig::default()
+            }),
+            ..Config::new()
+        };
+
+        let rules = Config::merge_configs(base, Config::new())
+            .unwrap()
+            .proxy
+            .unwrap()
+            .rules;
+
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].secret, "A");
+    }
+
     #[test]
     fn test_for_raw_resolve_strips_post_processing_fields() {
         let mut secret = SecretConfig::new();

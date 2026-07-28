@@ -50,8 +50,9 @@ fnox proxy run -- node agent.js
 
 Fnox:
 
-1. Resolves only secrets referenced by proxy rules.
-2. Starts a loopback-only HTTP/HTTPS proxy with an ephemeral certificate
+1. Resolves secrets referenced by proxy rules and any provider authentication
+   secrets they depend on.
+2. Starts a loopback-only HTTPS (CONNECT) proxy with an ephemeral certificate
    authority.
 3. Passes placeholders and standard proxy/CA environment variables to the
    child.
@@ -83,6 +84,7 @@ Strict mode is recommended for agent workloads.
 This first version intentionally has a narrow protocol surface:
 
 - Credential substitution is supported in HTTP headers.
+- Plain `http://` proxy requests are rejected.
 - Matched destinations must use HTTPS on port 443.
 - Intercepted traffic uses HTTP/1.1.
 - Request bodies must use `Content-Length`; chunked request bodies are rejected.
