@@ -26,7 +26,7 @@ pub struct AzureAppConfigurationProvider {
 
 impl AzureAppConfigurationProvider {
     pub fn new(endpoint: String, label: Option<String>, prefix: Option<String>) -> Result<Self> {
-        // An empty label is a distinct label in App Configuration, not the absence of one.
+        // App Configuration has no empty label: the unlabelled key-value is the \0 label.
         Ok(Self {
             endpoint: endpoint.trim_end_matches('/').to_string(),
             label: label.filter(|l| !l.is_empty()),
@@ -167,7 +167,18 @@ impl crate::providers::Provider for AzureAppConfigurationProvider {
 
         // Filtered list: proves the store is reachable and the token is accepted
         // without depending on any particular key existing.
-        self.get("/kv", &[("key", "fnox-connection-test")]).await?;
+        let response = self.get("/kv", &[("key", "fnox-connection-test")]).await?;
+
+        // get() passes 404 through for get_secret; on the list endpoint it means
+        // the endpoint is not an App Configuration store.
+        if !response.status().is_success() {
+            return Err(FnoxError::ProviderApiError {
+                provider: PROVIDER_NAME.to_string(),
+                details: format!("HTTP {}", response.status()),
+                hint: "Check the store endpoint".to_string(),
+                url: PROVIDER_URL.to_string(),
+            });
+        }
         Ok(())
     }
 }
