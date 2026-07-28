@@ -37,10 +37,10 @@ time:
   '@iconify-json/simple-icons@1.2.92': 2026-07-26T05:15:26.984Z
   '@iconify/types@2.0.0': 2022-09-08T06:23:03.369Z
   '@jridgewell/sourcemap-codec@1.5.5': 2025-08-12T06:43:59.139Z
-  '@rollup/rollup-darwin-arm64@4.62.2': 2026-06-19T14:55:38.979Z
-  '@rollup/rollup-darwin-x64@4.62.2': 2026-06-19T14:56:49.247Z
-  '@rollup/rollup-linux-arm64-gnu@4.62.2': 2026-06-19T14:55:55.211Z
-  '@rollup/rollup-linux-x64-gnu@4.62.2': 2026-06-19T14:57:06.038Z
+  '@rollup/rollup-darwin-arm64@4.62.3': 2026-07-26T14:58:51.114Z
+  '@rollup/rollup-darwin-x64@4.62.3': 2026-07-26T14:59:56.853Z
+  '@rollup/rollup-linux-arm64-gnu@4.62.3': 2026-07-26T14:59:06.848Z
+  '@rollup/rollup-linux-x64-gnu@4.62.3': 2026-07-26T15:00:13.243Z
   '@shikijs/core@2.5.0': 2025-02-18T09:10:12.142Z
   '@shikijs/engine-javascript@2.5.0': 2025-02-18T09:09:26.369Z
   '@shikijs/engine-oniguruma@2.5.0': 2025-02-18T09:09:33.593Z
@@ -117,7 +117,7 @@ time:
   regex-utilities@2.3.0: 2024-08-31T18:40:34.903Z
   regex@6.1.0: 2025-12-09T01:33:47.153Z
   rfdc@1.4.1: 2024-06-12T10:18:29.594Z
-  rollup@4.62.2: 2026-06-19T14:57:23.529Z
+  rollup@4.62.3: 2026-07-26T15:00:28.695Z
   search-insights@2.17.3: 2024-11-18T02:06:21.689Z
   shiki@2.5.0: 2025-02-18T09:10:30.900Z
   source-map-js@1.2.1: 2024-09-08T16:22:55.645Z
@@ -328,22 +328,22 @@ packages:
   '@jridgewell/sourcemap-codec@1.5.5':
     resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
 
-  '@rollup/rollup-darwin-arm64@4.62.2':
-    resolution: {integrity: sha512-v39RCCvj4He82I9sFmk+M1VZ0PLM9sfsLVikjfx2hYBNALhrrOR2D3JjQA6AhlaSOgcR+RzrKY7e1+bT6SUO/A==}
+  '@rollup/rollup-darwin-arm64@4.62.3':
+    resolution: {integrity: sha512-Pch2pFNOxxz1hTjypIdPyRTR6riiwRl84+VcN9djS680fw+Co1nAJINrdpqp7KV0NvyuU8ilZXZCjd7ykJl1GQ==}
     os:
     - darwin
     cpu:
     - arm64
 
-  '@rollup/rollup-darwin-x64@4.62.2':
-    resolution: {integrity: sha512-yl0y2vq3S3lHeuXhEdss6TWfKW8vkujImO12tn4ZkG/4oghr09LvdYm2RElVjokTQiUvDUGXLGsYeLqUMCKpGA==}
+  '@rollup/rollup-darwin-x64@4.62.3':
+    resolution: {integrity: sha512-LEuncFUHFiF8t4yZVZvvZA1wk0pjAscRnsrn1EfTEmN4HXotBi2YtcnLRyaK6UbuczW7xZS5ES+81Rdz8Z0T6g==}
     os:
     - darwin
     cpu:
     - x64
 
-  '@rollup/rollup-linux-arm64-gnu@4.62.2':
-    resolution: {integrity: sha512-wnFJkogWvN4jm/hQRF2UBaeUmk20j5+DmHvoyWii2b8HJDyvz1MF2OU/6ynXt2KR63rbZLWkFpoytpdc/yBuSA==}
+  '@rollup/rollup-linux-arm64-gnu@4.62.3':
+    resolution: {integrity: sha512-LLLFZKt4/Nraf9rxDkhiU8QVgLF4WmCkfr0L4fj0fPfIZFBib0DeiFk1hhaYKd03LFAFJcxHslhDFlNJLylf5Q==}
     os:
     - linux
     cpu:
@@ -351,8 +351,8 @@ packages:
     libc:
     - glibc
 
-  '@rollup/rollup-linux-x64-gnu@4.62.2':
-    resolution: {integrity: sha512-5BqxR/pshjey51iliyzTD5Xi3EN0aLmQ2lZ3lvefVV9c82BvrLo2/6OT55iifpWBufs6kdwWbuOKS841DrmK9A==}
+  '@rollup/rollup-linux-x64-gnu@4.62.3':
+    resolution: {integrity: sha512-V4KtWtQfAFMU7+9/A/VDps/VI8CHd3cYz0L8sgJzz8qK7eY7wI4ruFD82UYIYvW9Z4DtlTfhQcsl4XyPHW5uSg==}
     os:
     - linux
     cpu:
@@ -648,8 +648,8 @@ packages:
   rfdc@1.4.1:
     resolution: {integrity: sha512-q1b3N5QkRUWUl7iyylaaj3kOpIT0N2i9MqIEQXP73GVsN9cw3fdx8X63cEmWhJGi2PPCF23Ijp7ktmd39rawIA==}
 
-  rollup@4.62.2:
-    resolution: {integrity: sha512-RFnrW4lhXA3s3eqHDZvN654g8OTjzRfqpIRJYczCGB6HzphckVAi/Qh4tbPUbRuDi7s1Llv8g/NspLkttY3gTA==}
+  rollup@4.62.3:
+    resolution: {integrity: sha512-Gu0c0iH9FzgX1L1t7ByIbbS3Vmdz+6KHm/EsqmmC71gUQ82yvZRkTK6XzrFObSka91WUVdynqp6nsfilzr5k6Q==}
     engines: {node: '>=18.0.0', npm: '>=8.0.0'}
     hasBin: true
 
@@ -909,13 +909,13 @@ snapshots:
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
 
-  '@rollup/rollup-darwin-arm64@4.62.2': {}
+  '@rollup/rollup-darwin-arm64@4.62.3': {}
 
-  '@rollup/rollup-darwin-x64@4.62.2': {}
+  '@rollup/rollup-darwin-x64@4.62.3': {}
 
-  '@rollup/rollup-linux-arm64-gnu@4.62.2': {}
+  '@rollup/rollup-linux-arm64-gnu@4.62.3': {}
 
-  '@rollup/rollup-linux-x64-gnu@4.62.2': {}
+  '@rollup/rollup-linux-x64-gnu@4.62.3': {}
 
   '@shikijs/core@2.5.0':
     dependencies:
@@ -1234,14 +1234,14 @@ snapshots:
 
   rfdc@1.4.1: {}
 
-  rollup@4.62.2:
+  rollup@4.62.3:
     dependencies:
       '@types/estree': 1.0.9
     optionalDependencies:
-      '@rollup/rollup-darwin-arm64': 4.62.2
-      '@rollup/rollup-darwin-x64': 4.62.2
-      '@rollup/rollup-linux-arm64-gnu': 4.62.2
-      '@rollup/rollup-linux-x64-gnu': 4.62.2
+      '@rollup/rollup-darwin-arm64': 4.62.3
+      '@rollup/rollup-darwin-x64': 4.62.3
+      '@rollup/rollup-linux-arm64-gnu': 4.62.3
+      '@rollup/rollup-linux-x64-gnu': 4.62.3
       fsevents: 2.3.3
 
   search-insights@2.17.3: {}
@@ -1313,7 +1313,7 @@ snapshots:
     dependencies:
       esbuild: 0.21.5
       postcss: 8.5.23
-      rollup: 4.62.2
+      rollup: 4.62.3
     optionalDependencies:
       fsevents: 2.3.3
 
