@@ -25,6 +25,7 @@ pub mod list;
 pub mod mcp;
 pub mod profiles;
 pub mod provider;
+pub mod proxy;
 pub mod reencrypt;
 pub mod remove;
 pub mod scan;
@@ -152,6 +153,9 @@ pub enum Commands {
     /// Manage providers (defaults to list)
     Provider(provider::ProviderCommand),
 
+    /// Broker credentials into destination-scoped HTTPS requests
+    Proxy(proxy::ProxyCommand),
+
     /// Re-encrypt secrets with current provider configuration
     Reencrypt(reencrypt::ReencryptCommand),
 
@@ -222,6 +226,7 @@ impl Commands {
             Commands::Mcp(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Profiles(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Provider(cmd) => cmd.run(cli, self.load_config(cli)?).await,
+            Commands::Proxy(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Reencrypt(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Remove(cmd) => cmd.run(cli).await,
             Commands::Exec(cmd) => cmd.run(cli, self.load_config(cli)?).await,

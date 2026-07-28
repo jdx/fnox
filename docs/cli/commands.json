@@ -1085,6 +1085,61 @@
         "hidden_aliases": [],
         "examples": []
       },
+      "proxy": {
+        "full_cmd": ["proxy"],
+        "usage": "proxy <SUBCOMMAND>",
+        "subcommands": {
+          "rules": {
+            "full_cmd": ["proxy", "rules"],
+            "usage": "proxy rules",
+            "subcommands": {},
+            "args": [],
+            "flags": [],
+            "mounts": [],
+            "hide": false,
+            "help": "Show the effective credential proxy rules",
+            "name": "rules",
+            "aliases": [],
+            "hidden_aliases": [],
+            "examples": []
+          },
+          "run": {
+            "full_cmd": ["proxy", "run"],
+            "usage": "proxy run [COMMAND]…",
+            "subcommands": {},
+            "args": [
+              {
+                "name": "COMMAND",
+                "usage": "[COMMAND]…",
+                "help": "Command to run",
+                "help_first_line": "Command to run",
+                "required": false,
+                "double_dash": "Automatic",
+                "var": true,
+                "hide": false
+              }
+            ],
+            "flags": [],
+            "mounts": [],
+            "hide": false,
+            "help": "Run a command with placeholder credentials through the local proxy",
+            "name": "run",
+            "aliases": [],
+            "hidden_aliases": [],
+            "examples": []
+          }
+        },
+        "args": [],
+        "flags": [],
+        "mounts": [],
+        "hide": false,
+        "subcommand_required": true,
+        "help": "Broker credentials into destination-scoped HTTPS requests",
+        "name": "proxy",
+        "aliases": [],
+        "hidden_aliases": [],
+        "examples": []
+      },
       "reencrypt": {
         "full_cmd": ["reencrypt"],
         "usage": "reencrypt [FLAGS] [KEYS]…",

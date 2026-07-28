@@ -71,9 +71,14 @@ When you run `fnox exec -- <command>`:
 
 If the [per-user daemon](/guide/daemon) is enabled, supported read commands resolve through a same-user Unix socket and can reuse memory-only cached values. Direct resolution remains available with `--no-daemon`.
 
+For agent workloads, the [credential proxy](/guide/proxy) can pass placeholders
+to a child and inject real credentials only into destination-scoped HTTPS
+requests.
+
 ## Next Steps
 
 - [Profiles](/guide/profiles) - Manage multiple environments
 - [Providers](/providers/overview) - Choose the right provider for your needs
 - [Per-User Daemon](/guide/daemon) - Speed up repeated provider reads
+- [Credential Proxy](/guide/proxy) - Broker credentials for agent workloads
 - [Shell Integration](/guide/shell-integration) - Auto-load secrets in your shell

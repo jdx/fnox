@@ -94,6 +94,17 @@
         "$ref": "#/$defs/ProviderConfig"
       }
     },
+    "proxy": {
+      "description": "Credential proxy configuration",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProxyConfig"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "root": {
       "description": "Root configuration - stops recursion at this level",
       "type": "boolean"
@@ -1191,6 +1202,91 @@
       },
       "additionalProperties": false,
       "required": ["provider", "value"]
+    },
+    "ProxyConfig": {
+      "description": "Credential proxy configuration.",
+      "type": "object",
+      "properties": {
+        "audit": {
+          "description": "Emit request metadata through tracing. Headers, bodies, and secret\nvalues are never logged.",
+          "type": "boolean",
+          "default": true
+        },
+        "egress": {
+          "description": "What to do with destinations that have no matching proxy rule.",
+          "$ref": "#/$defs/ProxyEgress",
+          "default": "strict"
+        },
+        "rules": {
+          "description": "Destination-scoped credential substitution rules.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProxyRule"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ProxyEgress": {
+      "description": "Behavior for destinations not covered by a proxy rule.",
+      "oneOf": [
+        {
+          "description": "Reject unmatched destinations.",
+          "type": "string",
+          "const": "strict"
+        },
+        {
+          "description": "Tunnel unmatched destinations without injecting credentials.",
+          "type": "string",
+          "const": "permissive"
+        }
+      ]
+    },
+    "ProxyRule": {
+      "description": "Substitute one configured secret into requests for an approved destination.",
+      "type": "object",
+      "properties": {
+        "domain": {
+          "description": "Exact TLS server name to which the secret may be sent.",
+          "type": "string"
+        },
+        "env": {
+          "description": "Environment variable exposed to the child. Defaults to `secret`.",
+          "type": ["string", "null"]
+        },
+        "header": {
+          "description": "Case-insensitive HTTP header in which placeholder substitution is allowed.",
+          "type": "string",
+          "default": "authorization"
+        },
+        "methods": {
+          "description": "Allowed HTTP methods. An empty list allows every method.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "paths": {
+          "description": "Allowed URL path globs. An empty list allows every path.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "placeholder": {
+          "description": "Placeholder passed to the child. A unique value is generated when omitted.",
+          "type": ["string", "null"]
+        },
+        "secret": {
+          "description": "Secret name from the active fnox profile.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["secret", "domain"]
     },
     "SecretConfig": {
       "description": "Configuration for a single secret",
