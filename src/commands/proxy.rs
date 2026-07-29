@@ -6,6 +6,95 @@ use clap::{Args, Subcommand, ValueHint};
 use indexmap::IndexMap;
 use std::process::Stdio;
 
+const AMBIENT_CREDENTIAL_ENV_VARS: &[&str] = &[
+    "FNOX_AGE_KEY",
+    "FNOX_AGE_KEY_FILE",
+    "OP_SERVICE_ACCOUNT_TOKEN",
+    "BW_SESSION",
+    "BWS_ACCESS_TOKEN",
+    "INFISICAL_TOKEN",
+    "KEEPASS_PASSWORD",
+    "PASSWORDSTATE_API_KEY",
+    "DOPPLER_TOKEN",
+    "FNOX_DOPPLER_TOKEN",
+    "FOKS_BOT_TOKEN",
+    "FNOX_FOKS_BOT_TOKEN",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    // AWS SDK credential-chain inputs, including selectors and alternate
+    // credential sources that can bypass explicitly brokered placeholders.
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
+    "AWS_PROFILE",
+    "AWS_DEFAULT_PROFILE",
+    "AWS_REGION",
+    "AWS_DEFAULT_REGION",
+    "AWS_SHARED_CREDENTIALS_FILE",
+    "AWS_CONFIG_FILE",
+    "AWS_WEB_IDENTITY_TOKEN_FILE",
+    "AWS_ROLE_ARN",
+    "AWS_ROLE_SESSION_NAME",
+    "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+    "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+    "AWS_CONTAINER_AUTHORIZATION_TOKEN",
+    "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE",
+    "AWS_EC2_METADATA_SERVICE_ENDPOINT",
+    "AWS_EC2_METADATA_SERVICE_ENDPOINT_MODE",
+    "AWS_SDK_LOAD_CONFIG",
+    // Vault configuration can point a child at an authenticated local agent or
+    // supply enough TLS context to use credentials outside the proxy policy.
+    "VAULT_TOKEN",
+    "VAULT_ADDR",
+    "VAULT_AGENT_ADDR",
+    "VAULT_NAMESPACE",
+    "VAULT_CLIENT_CERT",
+    "VAULT_CLIENT_KEY",
+    "VAULT_CACERT",
+    "VAULT_CAPATH",
+    "VAULT_TLS_SERVER_NAME",
+    "VAULT_SKIP_VERIFY",
+    "FNOX_VAULT_TOKEN",
+    "FNOX_VAULT_ADDR",
+    // Azure Identity treats these as credential-chain inputs rather than only
+    // secret values, so remove the complete environment credential shape.
+    "AZURE_CLIENT_ID",
+    "AZURE_CLIENT_SECRET",
+    "AZURE_TENANT_ID",
+    "AZURE_CLIENT_CERTIFICATE_PATH",
+    "AZURE_CLIENT_CERTIFICATE_PASSWORD",
+    "AZURE_USERNAME",
+    "AZURE_PASSWORD",
+    "AZURE_FEDERATED_TOKEN_FILE",
+    "AZURE_AUTHORITY_HOST",
+    "AZURE_CONFIG_DIR",
+    "AZURE_ACCESS_TOKEN",
+    // pass-cli accepts both native and fnox-prefixed login/session controls.
+    "PROTON_PASS_PASSWORD",
+    "PROTON_PASS_TOTP",
+    "PROTON_PASS_EXTRA_PASSWORD",
+    "PROTON_PASS_PASSWORD_FILE",
+    "PROTON_PASS_TOTP_FILE",
+    "PROTON_PASS_EXTRA_PASSWORD_FILE",
+    "PROTON_PASS_PERSONAL_ACCESS_TOKEN",
+    "PROTON_PASS_AGENT_REASON",
+    "PROTON_PASS_SESSION_DIR",
+    "PROTON_PASS_KEY_PROVIDER",
+    "PROTON_PASS_ENCRYPTION_KEY",
+    "PROTON_PASS_LINUX_KEYRING",
+    "FNOX_PROTON_PASS_PASSWORD",
+    "FNOX_PROTON_PASS_TOTP",
+    "FNOX_PROTON_PASS_EXTRA_PASSWORD",
+    "FNOX_PROTON_PASS_PASSWORD_FILE",
+    "FNOX_PROTON_PASS_TOTP_FILE",
+    "FNOX_PROTON_PASS_EXTRA_PASSWORD_FILE",
+    "FNOX_PROTON_PASS_PERSONAL_ACCESS_TOKEN",
+    "FNOX_PROTON_PASS_AGENT_REASON",
+    "FNOX_PROTON_PASS_SESSION_DIR",
+    "FNOX_PROTON_PASS_KEY_PROVIDER",
+    "FNOX_PROTON_PASS_ENCRYPTION_KEY",
+    "FNOX_PROTON_PASS_LINUX_KEYRING",
+];
+
 #[derive(Debug, Args)]
 pub struct ProxyCommand {
     #[command(subcommand)]
@@ -184,27 +273,7 @@ impl ProxyRunCommand {
         for key in all_secrets.keys() {
             command.env_remove(key);
         }
-        for key in [
-            "FNOX_AGE_KEY",
-            "FNOX_AGE_KEY_FILE",
-            "OP_SERVICE_ACCOUNT_TOKEN",
-            "BW_SESSION",
-            "BWS_ACCESS_TOKEN",
-            "VAULT_TOKEN",
-            "INFISICAL_TOKEN",
-            "KEEPASS_PASSWORD",
-            "DOPPLER_TOKEN",
-            "FNOX_DOPPLER_TOKEN",
-            "FOKS_BOT_TOKEN",
-            "FNOX_FOKS_BOT_TOKEN",
-            "PROTON_PASS_PERSONAL_ACCESS_TOKEN",
-            "FNOX_PROTON_PASS_PERSONAL_ACCESS_TOKEN",
-            "AWS_ACCESS_KEY_ID",
-            "AWS_SECRET_ACCESS_KEY",
-            "AWS_SESSION_TOKEN",
-            "AZURE_CLIENT_SECRET",
-            "GOOGLE_APPLICATION_CREDENTIALS",
-        ] {
+        for key in AMBIENT_CREDENTIAL_ENV_VARS {
             command.env_remove(key);
         }
         for provider in config.get_providers(&profile).values() {
@@ -301,5 +370,27 @@ domain = "api.example.com"
 
         assert!(requested.contains_key("API_TOKEN"));
         assert!(requested.contains_key("DOPPLER_TOKEN"));
+    }
+
+    #[test]
+    fn ambient_credential_scrub_covers_provider_chains() {
+        for key in [
+            "AWS_PROFILE",
+            "AWS_REGION",
+            "AWS_WEB_IDENTITY_TOKEN_FILE",
+            "VAULT_ADDR",
+            "VAULT_AGENT_ADDR",
+            "AZURE_CLIENT_ID",
+            "AZURE_TENANT_ID",
+            "AZURE_FEDERATED_TOKEN_FILE",
+            "PROTON_PASS_PASSWORD",
+            "PROTON_PASS_SESSION_DIR",
+            "FNOX_PROTON_PASS_ENCRYPTION_KEY",
+        ] {
+            assert!(
+                AMBIENT_CREDENTIAL_ENV_VARS.contains(&key),
+                "{key} must be removed from proxy children"
+            );
+        }
     }
 }
