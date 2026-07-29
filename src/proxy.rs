@@ -604,13 +604,29 @@ async fn proxy_http_request<S>(stream: &mut S, domain: &str, policy: &ProxyPolic
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    let request = read_http_request(stream).await?;
+    let request = match read_http_request(stream).await {
+        Ok(request) => request,
+        Err(error) => {
+            write_error(stream, 400, &error.to_string()).await?;
+            return Ok(());
+        }
+    };
     if has_ambiguous_path_encoding(&request.target) {
         write_error(stream, 403, "request path contains an ambiguous encoding").await?;
         return Ok(());
     }
-    let url = reqwest::Url::parse(&format!("https://{domain}{}", request.target))
-        .map_err(|error| proxy_error(format!("request used an invalid URL: {error}")))?;
+    let url = match reqwest::Url::parse(&format!("https://{domain}{}", request.target)) {
+        Ok(url) => url,
+        Err(error) => {
+            write_error(
+                stream,
+                400,
+                &format!("request used an invalid URL: {error}"),
+            )
+            .await?;
+            return Ok(());
+        }
+    };
     if url.host_str() != Some(domain) {
         write_error(stream, 403, "request URL changed the approved destination").await?;
         return Ok(());
@@ -636,8 +652,13 @@ where
         );
     }
 
-    let method = Method::from_bytes(request.method.as_bytes())
-        .map_err(|_| proxy_error("request used an invalid HTTP method"))?;
+    let method = match Method::from_bytes(request.method.as_bytes()) {
+        Ok(method) => method,
+        Err(_) => {
+            write_error(stream, 400, "request used an invalid HTTP method").await?;
+            return Ok(());
+        }
+    };
     let mut outbound = policy
         .client
         .request(method, url)
@@ -649,10 +670,14 @@ where
         }
         outbound = outbound.header(&name, &value);
     }
-    let mut response = outbound
-        .send()
-        .await
-        .map_err(|error| proxy_error(format!("upstream request failed: {error}")))?;
+    let mut response = match outbound.send().await {
+        Ok(response) => response,
+        Err(error) => {
+            tracing::debug!("upstream request failed: {error}");
+            write_error(stream, 502, "upstream request failed").await?;
+            return Ok(());
+        }
+    };
     let status = response.status();
     let response_headers = response.headers().clone();
     if response_headers
@@ -668,11 +693,16 @@ where
         return Ok(());
     }
     let mut body = Vec::new();
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|error| proxy_error(format!("failed to read upstream response: {error}")))?
-    {
+    loop {
+        let chunk = match response.chunk().await {
+            Ok(Some(chunk)) => chunk,
+            Ok(None) => break,
+            Err(error) => {
+                tracing::debug!("failed to read upstream response: {error}");
+                write_error(stream, 502, "failed to read upstream response").await?;
+                return Ok(());
+            }
+        };
         if chunk.len() > MAX_BODY_BYTES.saturating_sub(body.len()) {
             write_error(stream, 502, "upstream response exceeded proxy limit").await?;
             return Ok(());
@@ -932,6 +962,29 @@ mod tests {
         );
 
         running.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn malformed_tls_request_receives_http_error() {
+        let (mut client, mut server) = tokio::io::duplex(1024);
+        let policy = policy().policy;
+        let task = tokio::spawn(async move {
+            proxy_http_request(&mut server, "api.github.com", &policy).await
+        });
+
+        client
+            .write_all(b"not an HTTP request\r\n\r\n")
+            .await
+            .unwrap();
+        client.shutdown().await.unwrap();
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).await.unwrap();
+
+        task.await.unwrap().unwrap();
+        assert!(
+            response.starts_with(b"HTTP/1.1 400 Bad Request\r\n"),
+            "malformed requests should receive a usable HTTP error"
+        );
     }
 
     #[test]
