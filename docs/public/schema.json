@@ -1014,6 +1014,32 @@
             "daemon_cache": {
               "type": ["boolean", "null"]
             },
+            "endpoint": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "label": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "prefix": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "azure-ac"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "endpoint"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },

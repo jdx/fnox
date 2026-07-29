@@ -91,6 +91,7 @@ API_KEY = { default = "dev-key-12345" }  # ← plain default value for local dev
 
 - **aws-ps** - AWS Parameter Store
 - **aws-sm** - AWS Secrets Manager
+- **azure-ac** - Azure App Configuration
 - **azure-sm** - Azure Key Vault Secrets
 - **gcp-sm** - Google Cloud Secret Manager
 - **bitwarden-sm** - Bitwarden Secrets Manager

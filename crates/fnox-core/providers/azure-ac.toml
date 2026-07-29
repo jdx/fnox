@@ -1,0 +1,30 @@
+# Azure App Configuration provider - remote key-value configuration, read-only
+display_name = "Azure App Configuration"
+serde_rename = "azure-ac"
+rust_variant = "AzureAppConfiguration"
+category = "CloudSecretsManager"
+description = "Azure App Configuration key-values"
+default_name = "azure-ac"
+auth_command = "az login"
+setup_instructions = """
+Reads key-values from an Azure App Configuration store.
+Requires Azure credentials configured.
+Login: az login"""
+
+[fields.endpoint]
+type = "required"
+placeholder = "https://my-store.azconfig.io"
+label = "Store endpoint:"
+wizard = true
+
+[fields.label]
+type = "optional"
+placeholder = ""
+label = "Label (optional):"
+wizard = true
+
+[fields.prefix]
+type = "optional"
+placeholder = ""
+label = "Key prefix (optional):"
+wizard = true

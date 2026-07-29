@@ -144,6 +144,15 @@ impl AddCommand {
                 auth_command: None,
                 daemon_cache: None,
             },
+            ProviderType::AzureAppConfiguration => {
+                crate::config::ProviderConfig::AzureAppConfiguration {
+                    endpoint: StringOrSecretRef::from("https://my-store.azconfig.io"),
+                    label: OptionStringOrSecretRef::none(),
+                    prefix: OptionStringOrSecretRef::none(),
+                    auth_command: None,
+                    daemon_cache: None,
+                }
+            }
             ProviderType::AzureKms => crate::config::ProviderConfig::AzureKms {
                 vault_url: StringOrSecretRef::from("https://my-vault.vault.azure.net/"),
                 key_name: StringOrSecretRef::from("my-key"),

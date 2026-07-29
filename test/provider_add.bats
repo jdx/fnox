@@ -17,6 +17,7 @@ agep|age|age
 awssm|aws|aws-sm
 awskms|aws-kms|aws-kms
 awsps|aws-ps|aws-ps
+azureac|azure-ac|azure-ac
 azurekms|azure-kms|azure-kms
 azuresm|azure-sm|azure-sm
 gcpsm|gcp|gcp-sm
