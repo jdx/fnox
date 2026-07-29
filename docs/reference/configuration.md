@@ -219,6 +219,11 @@ placeholder = "ghp_000000000000000000000000000000000000"
 - `rules[].paths` - Allowed path globs. Empty allows all paths.
 - `rules[].placeholder` - Optional placeholder passed to the child.
 
+Proxy policy is replaced as a unit during configuration layering. If a nearer,
+profile-specific, or local config defines `[proxy]`, it must restate every rule
+it intends to allow; fields and rules are not inherited from an earlier
+`[proxy]` table. This keeps partial overlays from silently combining authority.
+
 See [Credential Proxy](/guide/proxy).
 
 ## Provider Configuration
