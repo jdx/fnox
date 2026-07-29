@@ -27,15 +27,17 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
+  RUSTUP_TOOLCHAIN: "1.91.1"
+  # Changing the measuring environment starts a new series rather than
+  # comparing incompatible counts with the old ubuntu-latest baseline.
+  TAK_RUNNER: gha-ubuntu-24.04-x64-rust-1.91.1-tokio1
 
 jobs:
   measure:
     name: Compare instruction counts
-    # Same runner class as perf.yml and perf-backfill.yml. Absolute counts shift
-    # between machine types by more than a real regression does, so a comparison
-    # across runner classes is not a comparison — tak refuses to make one, and
-    # the report would say "nothing was compared" instead of anything useful.
-    runs-on: ubuntu-latest
+    # Same pinned environment as perf.yml. Absolute counts shift when the
+    # runner image or compiler changes, even within one GitHub runner class.
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
       # Read only. This job builds and runs code from the pull request, so it
@@ -54,6 +56,9 @@ jobs:
           # which walks twenty commits of trunk history.
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Install benchmark Rust toolchain
+        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
 
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 

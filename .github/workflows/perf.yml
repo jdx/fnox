@@ -27,14 +27,17 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
+  RUSTUP_TOOLCHAIN: "1.91.1"
+  # This is a new measurement series: the compiler, runner image and Tokio
+  # worker count are part of the benchmark environment, not incidental details.
+  TAK_RUNNER: gha-ubuntu-24.04-x64-rust-1.91.1-tokio1
 
 jobs:
   measure:
     name: Measure
-    # Pinned to one runner class on purpose. Absolute instruction counts shift
-    # between machine types by more than a real regression does, so a series
-    # that wanders between runners is unreadable.
-    runs-on: ubuntu-latest
+    # Pin the image as well as tak and Rust. Absolute instruction counts shift
+    # when any part of the measuring environment moves.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: write # pushing refs/notes/tak is a write to this repository
@@ -42,6 +45,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Install benchmark Rust toolchain
+        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
 
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
