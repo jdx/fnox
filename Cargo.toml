@@ -73,9 +73,11 @@ rand = "0.10"
 ratatui = "0.30"
 regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
+rcgen = { version = "0.14", default-features = false, features = ["aws_lc_rs", "pem"] }
 rmcp = { version = "2", features = ["server", "transport-io", "macros"] }
 rmp-serde = "1"
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std"] }
+rustls-native-certs = "0.8"
 schemars = { version = "1", features = ["indexmap2"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -93,6 +95,7 @@ tera = { version = "2", default-features = false }
 terminal_size = "0.4"
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
+tokio-rustls = "0.26"
 toml_edit = { version = "0.25", features = ["serde"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -145,9 +148,12 @@ miniz_oxide = { workspace = true }
 nix = { workspace = true }
 ratatui = { workspace = true }
 regex = { workspace = true }
+reqwest = { workspace = true }
+rcgen = { workspace = true }
 rmcp = { workspace = true }
 rmp-serde = { workspace = true }
 rustls = { workspace = true }
+rustls-native-certs = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -158,6 +164,7 @@ strum = { workspace = true }
 tabled = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+tokio-rustls = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

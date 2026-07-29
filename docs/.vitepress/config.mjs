@@ -70,6 +70,7 @@ export default defineConfig({
         items: [
           { text: "Shell Integration", link: "/guide/shell-integration" },
           { text: "Per-User Daemon", link: "/guide/daemon" },
+          { text: "Credential Proxy", link: "/guide/proxy" },
           { text: "Mise Integration", link: "/guide/mise-integration" },
           { text: "TUI Dashboard", link: "/guide/tui" },
           { text: "Profiles", link: "/guide/profiles" },

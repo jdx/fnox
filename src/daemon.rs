@@ -68,6 +68,7 @@ pub enum Purpose {
     Check,
     Tui,
     Mcp,
+    Proxy,
     CiRedact,
 }
 
@@ -82,6 +83,7 @@ impl Purpose {
             Self::Check => "check",
             Self::Tui => "tui",
             Self::Mcp => "mcp",
+            Self::Proxy => "proxy",
             Self::CiRedact => "ci-redact",
         }
     }

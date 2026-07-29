@@ -180,6 +180,10 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub daemon: Option<DaemonConfig>,
 
+    /// Credential proxy configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proxy: Option<ProxyConfig>,
+
     /// Track which config file each provider came from (not serialized)
     #[serde(skip)]
     pub provider_sources: HashMap<String, PathBuf>,
@@ -367,6 +371,84 @@ pub struct DaemonConfig {
     /// Idle timeout before the daemon exits, such as "8h", "30m", or "300s".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idle_timeout: Option<String>,
+}
+
+/// Credential proxy configuration.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ProxyConfig {
+    /// What to do with destinations that have no matching proxy rule.
+    #[serde(default)]
+    pub egress: ProxyEgress,
+
+    /// Emit request metadata through tracing. Headers, bodies, and secret
+    /// values are never logged.
+    #[serde(default = "default_true")]
+    pub audit: bool,
+
+    /// Destination-scoped credential substitution rules.
+    #[serde(default)]
+    pub rules: Vec<ProxyRule>,
+}
+
+impl Default for ProxyConfig {
+    fn default() -> Self {
+        Self {
+            egress: ProxyEgress::Strict,
+            audit: true,
+            rules: Vec::new(),
+        }
+    }
+}
+
+/// Behavior for destinations not covered by a proxy rule.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ProxyEgress {
+    /// Reject unmatched destinations.
+    #[default]
+    Strict,
+    /// Tunnel unmatched destinations without injecting credentials.
+    Permissive,
+}
+
+/// Substitute one configured secret into requests for an approved destination.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ProxyRule {
+    /// Secret name from the active fnox profile.
+    pub secret: String,
+
+    /// Exact TLS server name to which the secret may be sent.
+    pub domain: String,
+
+    /// Environment variable exposed to the child. Defaults to `secret`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub env: Option<String>,
+
+    /// Case-insensitive HTTP header in which placeholder substitution is allowed.
+    #[serde(default = "default_proxy_header")]
+    pub header: String,
+
+    /// Allowed HTTP methods. An empty list allows every method.
+    #[serde(default)]
+    pub methods: Vec<String>,
+
+    /// Allowed URL path globs. An empty list allows every path.
+    #[serde(default)]
+    pub paths: Vec<String>,
+
+    /// Placeholder passed to the child. A unique value is generated when omitted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub placeholder: Option<String>,
+}
+
+fn default_proxy_header() -> String {
+    "authorization".to_string()
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl DaemonConfig {
@@ -832,6 +914,12 @@ impl Config {
             }
         }
 
+        // Replace proxy policy as a unit. Combining rules across config layers
+        // can silently broaden an agent's authority.
+        if overlay.proxy.is_some() {
+            merged.proxy = overlay.proxy;
+        }
+
         // Merge default_provider and its source (overlay takes precedence)
         if overlay.default_provider.is_some() {
             merged.default_provider = overlay.default_provider;
@@ -1222,6 +1310,7 @@ impl Config {
             prompt_auth: None,
             mcp: None,
             daemon: None,
+            proxy: None,
             provider_sources: HashMap::new(),
             secret_sources: HashMap::new(),
             default_provider_source: None,
@@ -2524,6 +2613,65 @@ value = "prod"
         assert_eq!(merged.mcp.unwrap().secrets, Some(vec!["A".into()]));
     }
 
+    fn proxy_rule(secret: &str, domain: &str) -> ProxyRule {
+        ProxyRule {
+            secret: secret.into(),
+            domain: domain.into(),
+            env: None,
+            header: default_proxy_header(),
+            methods: Vec::new(),
+            paths: Vec::new(),
+            placeholder: None,
+        }
+    }
+
+    #[test]
+    fn proxy_overlay_replaces_base_rules_not_appends() {
+        let base = Config {
+            proxy: Some(ProxyConfig {
+                rules: vec![proxy_rule("A", "a.example.com")],
+                ..ProxyConfig::default()
+            }),
+            ..Config::new()
+        };
+        let overlay = Config {
+            proxy: Some(ProxyConfig {
+                rules: vec![proxy_rule("B", "b.example.com")],
+                ..ProxyConfig::default()
+            }),
+            ..Config::new()
+        };
+
+        let rules = Config::merge_configs(base, overlay)
+            .unwrap()
+            .proxy
+            .unwrap()
+            .rules;
+
+        assert_eq!(rules.len(), 1, "overlay must replace the base rules");
+        assert_eq!(rules[0].secret, "B");
+    }
+
+    #[test]
+    fn proxy_overlay_without_proxy_preserves_base() {
+        let base = Config {
+            proxy: Some(ProxyConfig {
+                rules: vec![proxy_rule("A", "a.example.com")],
+                ..ProxyConfig::default()
+            }),
+            ..Config::new()
+        };
+
+        let rules = Config::merge_configs(base, Config::new())
+            .unwrap()
+            .proxy
+            .unwrap()
+            .rules;
+
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].secret, "A");
+    }
+
     #[test]
     fn test_for_raw_resolve_strips_post_processing_fields() {
         let mut secret = SecretConfig::new();
@@ -2691,5 +2839,32 @@ DEV_INHERITED = { provider = "plain", value = "d" }
         assert!(raw.default.is_none());
         assert!(raw.json_path.is_none());
         assert!(raw.sync.is_none());
+    }
+
+    #[test]
+    fn test_proxy_config_parsing() {
+        let config: Config = toml_edit::de::from_str(
+            r#"
+[proxy]
+egress = "strict"
+
+[[proxy.rules]]
+secret = "GITHUB_TOKEN"
+domain = "api.github.com"
+header = "authorization"
+methods = ["GET", "POST"]
+paths = ["/repos/example/**"]
+placeholder = "ghp_placeholder"
+"#,
+        )
+        .unwrap();
+
+        let proxy = config.proxy.unwrap();
+        assert_eq!(proxy.egress, ProxyEgress::Strict);
+        assert!(proxy.audit);
+        assert_eq!(proxy.rules.len(), 1);
+        assert_eq!(proxy.rules[0].secret, "GITHUB_TOKEN");
+        assert_eq!(proxy.rules[0].domain, "api.github.com");
+        assert_eq!(proxy.rules[0].methods, ["GET", "POST"]);
     }
 }

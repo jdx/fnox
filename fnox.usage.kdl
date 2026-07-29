@@ -171,6 +171,12 @@ cmd provider help="Manage providers (defaults to list)" {
         arg "[PROVIDER]" help="Provider name (optional when using --all)" required=#false
     }
 }
+cmd proxy subcommand_required=#true help="Broker credentials into destination-scoped HTTPS requests" {
+    cmd rules help="Show the effective credential proxy rules"
+    cmd run help="Run a command with placeholder credentials through the local proxy" {
+        arg "[COMMAND]…" help="Command to run" required=#false double_dash=automatic var=#true
+    }
+}
 cmd reencrypt help="Re-encrypt secrets with current provider configuration" {
     flag "-f --force" help="Skip confirmation prompt"
     flag "-n --dry-run" help="Show what would be done without making changes"

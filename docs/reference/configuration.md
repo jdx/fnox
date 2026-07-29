@@ -185,6 +185,47 @@ idle_timeout = "8h"
 
 See [Per-User Daemon](/guide/daemon).
 
+### `proxy`
+
+Broker credentials into destination-scoped HTTPS requests without exposing real
+secret values to the child process.
+
+```toml
+[proxy]
+egress = "strict"
+audit = true
+
+[[proxy.rules]]
+secret = "GITHUB_TOKEN"
+domain = "api.github.com"
+header = "authorization"
+methods = ["GET", "POST"]
+paths = ["/repos/example/**"]
+placeholder = "ghp_000000000000000000000000000000000000"
+```
+
+**Fields:**
+
+- `egress` - Behavior for destinations without rules: `"strict"` (default) or
+  `"permissive"`.
+- `audit` - Log safe request metadata. Defaults to `true`.
+- `rules` - Credential substitution rules.
+- `rules[].secret` - Secret name in the active profile.
+- `rules[].domain` - Exact TLS server name.
+- `rules[].env` - Child environment variable name. Defaults to the secret name.
+- `rules[].header` - Header in which substitution is allowed. Defaults to
+  `"authorization"`.
+- `rules[].methods` - Allowed HTTP methods. Empty allows all methods.
+- `rules[].paths` - Allowed path globs. Empty allows all paths.
+- `rules[].placeholder` - Optional placeholder passed to the child.
+
+Proxy policy is replaced as a unit during configuration layering. If a nearer,
+profile-specific, or local config defines `[proxy]`, it must restate every rule
+it intends to allow; fields and rules are not inherited from an earlier
+`[proxy]` table. This keeps partial overlays from silently combining authority.
+
+See [Credential Proxy](/guide/proxy).
+
 ## Provider Configuration
 
 ```toml
