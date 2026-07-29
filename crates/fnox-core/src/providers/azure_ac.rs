@@ -51,6 +51,25 @@ struct KeyValue {
     value: Option<String>,
 }
 
+/// A store always answers the list endpoint with an `items` array, so a 200 that
+/// does not deserialise came from something that is not App Configuration.
+fn validate_kv_list(body: &str) -> Result<()> {
+    #[derive(Deserialize)]
+    struct KeyValueList {
+        #[allow(dead_code)]
+        items: Vec<serde::de::IgnoredAny>,
+    }
+
+    serde_json::from_str::<KeyValueList>(body)
+        .map(|_| ())
+        .map_err(|e| FnoxError::ProviderInvalidResponse {
+            provider: PROVIDER_NAME.to_string(),
+            details: format!("Endpoint did not return a key-value list: {}", e),
+            hint: "Check that the endpoint is your App Configuration store".to_string(),
+            url: PROVIDER_URL.to_string(),
+        })
+}
+
 pub struct AzureAppConfigurationProvider {
     endpoint: String,
     label: Option<String>,
@@ -225,7 +244,17 @@ impl crate::providers::Provider for AzureAppConfigurationProvider {
                 url: PROVIDER_URL.to_string(),
             });
         }
-        Ok(())
+
+        let body = response
+            .text()
+            .await
+            .map_err(|e| FnoxError::ProviderInvalidResponse {
+                provider: PROVIDER_NAME.to_string(),
+                details: format!("Failed to read the key-value list: {}", e),
+                hint: "Check that the endpoint is your App Configuration store".to_string(),
+                url: PROVIDER_URL.to_string(),
+            })?;
+        validate_kv_list(&body)
     }
 }
 
@@ -304,6 +333,26 @@ mod tests {
             assert!(
                 AzureAppConfigurationProvider::new(endpoint.to_string(), None, None).is_err(),
                 "expected {endpoint} to be rejected"
+            );
+        }
+    }
+
+    /// A 200 alone does not prove the endpoint is a store, so the connection test
+    /// has to recognise the list payload itself.
+    #[test]
+    fn connection_test_requires_a_key_value_list() {
+        assert!(validate_kv_list(r#"{"items":[]}"#).is_ok());
+        assert!(validate_kv_list(r#"{"items":[{"key":"a","value":"b"}]}"#).is_ok());
+
+        for body in [
+            r#"<html><body>Sign in to continue</body></html>"#,
+            r#"{"ok":true}"#,
+            r#"{"items":{}}"#,
+            "",
+        ] {
+            assert!(
+                validate_kv_list(body).is_err(),
+                "expected {body:?} to be rejected"
             );
         }
     }
