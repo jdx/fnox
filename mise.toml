@@ -101,6 +101,7 @@ run = [
 # macOS where there is no usable cachegrind.
 [tasks.perf]
 dir = "{{config_root}}"
+env = { TOKIO_WORKER_THREADS = "1" }
 run = ["cargo build --release", "tak run"]
 
 # Same measurement, appended to refs/notes/tak for this commit. Run by the
@@ -108,4 +109,5 @@ run = ["cargo build --release", "tak run"]
 # locally — nothing leaves the machine until `tak push`.
 [tasks."perf:record"]
 dir = "{{config_root}}"
+env = { TOKIO_WORKER_THREADS = "1" }
 run = ["cargo build --release", "tak run --record"]

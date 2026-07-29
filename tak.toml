@@ -9,6 +9,11 @@
 # subject that can reach the network retires a different number of instructions
 # depending on conditions unrelated to the code under test.
 
+# A provider intentionally expands the generated configuration schema. Keep
+# enough room for that expected work while still catching larger regressions.
+[gate]
+pct = 1.25
+
 # The whole command tree, walked and serialised to ~12KB of KDL. This is also
 # the closest thing fnox has to a pure startup measurement: a subcommand added
 # with an expensive default shows up here first, and every invocation pays the
