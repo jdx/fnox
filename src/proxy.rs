@@ -48,7 +48,14 @@ struct ProxyPolicy {
     egress: ProxyEgress,
     audit: bool,
     rules: Vec<PreparedRule>,
+    redactions: Vec<Redaction>,
     client: reqwest::Client,
+}
+
+#[derive(Debug)]
+struct Redaction {
+    value: Vec<u8>,
+    placeholder: Vec<u8>,
 }
 
 impl ProxyPolicy {
@@ -242,11 +249,23 @@ impl ProxyPlan {
             }
         }
 
+        let mut seen_values = HashSet::new();
+        let mut redactions: Vec<_> = prepared
+            .iter()
+            .filter(|rule| seen_values.insert(rule.value.clone()))
+            .map(|rule| Redaction {
+                value: rule.value.as_bytes().to_vec(),
+                placeholder: rule.placeholder.as_bytes().to_vec(),
+            })
+            .collect();
+        redactions.sort_by_key(|redaction| std::cmp::Reverse(redaction.value.len()));
+
         Ok(Self {
             policy: Arc::new(ProxyPolicy {
                 egress: config.egress,
                 audit: config.audit,
                 rules: prepared,
+                redactions,
                 client: reqwest::Client::builder()
                     .http1_only()
                     .no_proxy()
@@ -628,7 +647,7 @@ where
         }
         body.extend_from_slice(&chunk);
     }
-    redact_values(&mut body, &policy.rules);
+    redact_values(&mut body, &policy.redactions);
 
     let reason = status.canonical_reason().unwrap_or("");
     let mut head = format!("HTTP/1.1 {} {}\r\n", status.as_u16(), reason);
@@ -639,7 +658,7 @@ where
             continue;
         }
         if let Ok(value) = value.to_str() {
-            let value = redact_string(value, &policy.rules);
+            let value = redact_string(value, &policy.redactions);
             head.push_str(name.as_str());
             head.push_str(": ");
             head.push_str(&value);
@@ -782,41 +801,30 @@ fn is_hop_by_hop_header(name: &str) -> bool {
     )
 }
 
-fn redact_values(body: &mut Vec<u8>, rules: &[PreparedRule]) {
-    for rule in rules {
-        if rule.value.is_empty() {
-            continue;
-        }
-        *body = replace_bytes(body, rule.value.as_bytes(), rule.placeholder.as_bytes());
-    }
+fn redact_values(body: &mut Vec<u8>, redactions: &[Redaction]) {
+    *body = redact_bytes(body, redactions);
 }
 
-fn redact_string(value: &str, rules: &[PreparedRule]) -> String {
-    let mut value = value.to_string();
-    for rule in rules {
-        if !rule.value.is_empty() {
-            value = value.replace(&rule.value, &rule.placeholder);
-        }
-    }
-    value
+fn redact_string(value: &str, redactions: &[Redaction]) -> String {
+    String::from_utf8(redact_bytes(value.as_bytes(), redactions))
+        .expect("redacting UTF-8 values with UTF-8 placeholders preserves UTF-8")
 }
 
-fn replace_bytes(input: &[u8], needle: &[u8], replacement: &[u8]) -> Vec<u8> {
-    if needle.is_empty() {
-        return input.to_vec();
-    }
+fn redact_bytes(input: &[u8], redactions: &[Redaction]) -> Vec<u8> {
     let mut output = Vec::with_capacity(input.len());
     let mut offset = 0;
-    while let Some(position) = input[offset..]
-        .windows(needle.len())
-        .position(|window| window == needle)
-    {
-        let position = offset + position;
-        output.extend_from_slice(&input[offset..position]);
-        output.extend_from_slice(replacement);
-        offset = position + needle.len();
+    while offset < input.len() {
+        if let Some(redaction) = redactions
+            .iter()
+            .find(|redaction| input[offset..].starts_with(&redaction.value))
+        {
+            output.extend_from_slice(&redaction.placeholder);
+            offset += redaction.value.len();
+        } else {
+            output.push(input[offset]);
+            offset += 1;
+        }
     }
-    output.extend_from_slice(&input[offset..]);
     output
 }
 
@@ -920,8 +928,38 @@ mod tests {
     #[test]
     fn redacts_reflected_values() {
         let mut body = b"token=real-token".to_vec();
-        redact_values(&mut body, &policy().policy.rules);
+        redact_values(&mut body, &policy().policy.redactions);
         assert_eq!(body, b"token=ghp_placeholder");
+    }
+
+    #[test]
+    fn redacts_overlapping_values_without_scanning_placeholders() {
+        let mut config = config();
+        config.rules[0].placeholder = Some("placeholder-with-token".to_string());
+        config.rules.push(ProxyRule {
+            secret: "SHORT_TOKEN".to_string(),
+            domain: "api.github.com".to_string(),
+            env: None,
+            header: "x-api-key".to_string(),
+            methods: vec![],
+            paths: vec![],
+            placeholder: Some("short-placeholder".to_string()),
+        });
+        let values = [
+            ("GITHUB_TOKEN".to_string(), "real-token".to_string()),
+            ("SHORT_TOKEN".to_string(), "token".to_string()),
+        ]
+        .into_iter()
+        .collect();
+        let plan = ProxyPlan::new(&config, &values).unwrap();
+        let mut body = b"real-token token".to_vec();
+
+        redact_values(&mut body, &plan.policy.redactions);
+
+        assert_eq!(
+            body, b"placeholder-with-token short-placeholder",
+            "the longer value must match first and replacements must not be rescanned"
+        );
     }
 
     #[test]
