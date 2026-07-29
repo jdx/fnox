@@ -712,7 +712,7 @@ where
 
     let mut headers = Vec::new();
     let mut header_bytes = request_line.len();
-    let mut content_length = 0usize;
+    let mut content_length = None;
     loop {
         let line = read_line_limited(&mut reader, MAX_HEADER_BYTES - header_bytes).await?;
         header_bytes += line.len();
@@ -724,9 +724,12 @@ where
             .ok_or_else(|| proxy_error("invalid HTTP header"))?;
         let value = value.trim().to_string();
         if name.eq_ignore_ascii_case("content-length") {
-            content_length = value
+            let length = value
                 .parse()
                 .map_err(|_| proxy_error("invalid content-length"))?;
+            if content_length.replace(length).is_some() {
+                return Err(proxy_error("duplicate content-length"));
+            }
         }
         if name.eq_ignore_ascii_case("transfer-encoding") {
             return Err(proxy_error(
@@ -735,6 +738,12 @@ where
         }
         headers.push((name.trim().to_string(), value));
     }
+    if content_length.is_none() && matches!(method.as_str(), "POST" | "PUT" | "PATCH") {
+        return Err(proxy_error(format!(
+            "{method} requests must include content-length"
+        )));
+    }
+    let content_length = content_length.unwrap_or(0);
     if content_length > MAX_BODY_BYTES {
         return Err(proxy_error("request body exceeded proxy limit"));
     }
@@ -1021,6 +1030,36 @@ mod tests {
 
         assert!(paths.is_match("/repos/example/fnox"));
         assert!(!paths.is_match("/repos/example/team/fnox"));
+    }
+
+    #[tokio::test]
+    async fn body_bearing_methods_require_content_length() {
+        let (mut client, mut server) = tokio::io::duplex(1024);
+        client
+            .write_all(b"POST /repos/example/fnox HTTP/1.1\r\nhost: api.github.com\r\n\r\nbody")
+            .await
+            .unwrap();
+        drop(client);
+
+        let error = read_http_request(&mut server).await.err().unwrap();
+
+        assert!(error.to_string().contains("must include content-length"));
+    }
+
+    #[tokio::test]
+    async fn explicit_empty_request_body_is_allowed() {
+        let (mut client, mut server) = tokio::io::duplex(1024);
+        client
+            .write_all(
+                b"POST /repos/example/fnox HTTP/1.1\r\nhost: api.github.com\r\ncontent-length: 0\r\n\r\n",
+            )
+            .await
+            .unwrap();
+        drop(client);
+
+        let request = read_http_request(&mut server).await.unwrap();
+
+        assert!(request.body.is_empty());
     }
 
     #[test]
