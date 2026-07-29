@@ -2411,6 +2411,7 @@ dependencies = [
  "rmcp",
  "rmp-serde",
  "rustls 0.23.42",
+ "rustls-native-certs",
  "schemars 1.2.1",
  "serde",
  "serde_json",

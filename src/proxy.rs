@@ -1,5 +1,6 @@
 use crate::config::{ProxyConfig, ProxyEgress};
 use crate::error::{FnoxError, Result};
+use base64::Engine;
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use indexmap::IndexMap;
 use rcgen::{BasicConstraints, Certificate, CertificateParams, IsCa, Issuer, KeyPair};
@@ -413,9 +414,7 @@ impl RunningProxy {
             .suffix(".pem")
             .tempfile()
             .map_err(|error| proxy_error(format!("failed to create CA file: {error}")))?;
-        ca_file
-            .write_all(authority.certificate.pem().as_bytes())
-            .map_err(|error| proxy_error(format!("failed to write CA file: {error}")))?;
+        write_trust_bundle(&mut ca_file, &authority.certificate)?;
         ca_file
             .flush()
             .map_err(|error| proxy_error(format!("failed to flush CA file: {error}")))?;
@@ -475,6 +474,39 @@ impl RunningProxy {
         }
         let _ = self.task.await;
     }
+}
+
+fn write_trust_bundle(file: &mut impl Write, authority: &Certificate) -> Result<()> {
+    let native = rustls_native_certs::load_native_certs();
+    if native.certs.is_empty() {
+        return Err(proxy_error(format!(
+            "failed to load native TLS roots for proxy trust bundle{}",
+            native
+                .errors
+                .first()
+                .map(|error| format!(": {error}"))
+                .unwrap_or_default()
+        )));
+    }
+    for error in native.errors {
+        tracing::warn!("failed to load a native TLS root: {error}");
+    }
+    for certificate in native.certs {
+        write_pem_certificate(file, certificate.as_ref())
+            .map_err(|error| proxy_error(format!("failed to write native CA: {error}")))?;
+    }
+    file.write_all(authority.pem().as_bytes())
+        .map_err(|error| proxy_error(format!("failed to write proxy CA: {error}")))
+}
+
+fn write_pem_certificate(file: &mut impl Write, der: &[u8]) -> std::io::Result<()> {
+    writeln!(file, "-----BEGIN CERTIFICATE-----")?;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(der);
+    for line in encoded.as_bytes().chunks(64) {
+        file.write_all(line)?;
+        file.write_all(b"\n")?;
+    }
+    writeln!(file, "-----END CERTIFICATE-----")
 }
 
 async fn handle_connection(
@@ -887,6 +919,19 @@ mod tests {
                 .collect(),
         )
         .unwrap()
+    }
+
+    #[tokio::test]
+    async fn proxy_trust_bundle_includes_native_roots_and_session_ca() {
+        let running = RunningProxy::start(policy()).await.unwrap();
+        let bundle = std::fs::read_to_string(running.ca_path()).unwrap();
+
+        assert!(
+            bundle.matches("-----BEGIN CERTIFICATE-----").count() > 1,
+            "trust bundle must preserve native roots and append the proxy CA"
+        );
+
+        running.shutdown().await;
     }
 
     #[test]
