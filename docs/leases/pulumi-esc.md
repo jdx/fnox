@@ -16,15 +16,15 @@ env_vars = ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"]
 duration = "1h"
 ```
 
-| Field          | Required | Description                                                                                                                 |
-| -------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `organization` | Yes      | Pulumi organization name                                                                                                    |
-| `environment`  | Yes      | ESC environment name                                                                                                        |
-| `project`      | No       | ESC project name (omit for legacy `<org>/<env>` envs)                                                                       |
-| `token`        | No       | Pulumi access token (falls back to `FNOX_PULUMI_ACCESS_TOKEN` / `PULUMI_ACCESS_TOKEN` / `~/.pulumi/credentials.json`)       |
-| `env_vars`     | No       | Filter: only surface these keys from `environmentVariables`. Required for auto-routing individual env vars via `[secrets]`. |
-| `interpolate`  | No       | Single char sigil (e.g. `"%"`) to enable `<sigil>{path}` reference resolution. See [Interpolation](#interpolation) below.   |
-| `duration`     | No       | Advisory lease TTL (e.g. `"1h"`)                                                                                            |
+| Field          | Required | Description                                                                                                               |
+| -------------- | -------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `organization` | Yes      | Pulumi organization name                                                                                                  |
+| `environment`  | Yes      | ESC environment name                                                                                                      |
+| `project`      | No       | ESC project name (omit for legacy `<org>/<env>` envs)                                                                     |
+| `token`        | No       | Pulumi access token (falls back to `FNOX_PULUMI_ACCESS_TOKEN` / `PULUMI_ACCESS_TOKEN` / `~/.pulumi/credentials.json`)     |
+| `env_vars`     | No       | Filter: only surface these keys from `environmentVariables`. Required for auto-routing individual env vars to this lease. |
+| `interpolate`  | No       | Single char sigil (e.g. `"%"`) to enable `<sigil>{path}` reference resolution. See [Interpolation](#interpolation) below. |
+| `duration`     | No       | Advisory lease TTL (e.g. `"1h"`)                                                                                          |
 
 ## Prerequisites
 
@@ -73,13 +73,9 @@ project = "infra"
 environment = "aws-dev"
 env_vars = ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_REGION"]
 duration = "1h"
-
-[secrets]
-AWS_ACCESS_KEY_ID     = { lease = "aws" }
-AWS_SECRET_ACCESS_KEY = { lease = "aws" }
-AWS_SESSION_TOKEN     = { lease = "aws" }
-AWS_REGION            = { lease = "aws" }
 ```
+
+Listing the keys in `env_vars` is all the routing there is — no `[secrets]` entries needed.
 
 ```bash
 fnox exec -- aws s3 ls

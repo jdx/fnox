@@ -91,12 +91,9 @@ project = "my-project"
 environment = "aws-dev"
 env_vars = ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"]
 duration = "1h"
-
-[secrets]
-AWS_ACCESS_KEY_ID     = { lease = "aws-dev" }
-AWS_SECRET_ACCESS_KEY = { lease = "aws-dev" }
-AWS_SESSION_TOKEN     = { lease = "aws-dev" }
 ```
+
+The keys listed in `env_vars` are what fnox routes through this lease; they need no `[secrets]` entries.
 
 When fnox needs an env var backed by this lease, it opens the ESC environment once, caches the resulting credentials in the lease ledger, and reuses them until the configured duration elapses.
 
