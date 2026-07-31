@@ -140,13 +140,27 @@ aws = { type = "aws-sm", region = "us-east-1" }  # minimal config
 aws = { type = "aws-sm", region = "us-east-1", profile = "my-aws-profile", prefix = "myapp/" }
 ```
 
-| Field     | Required | Description                                                                                       |
-| --------- | -------- | ------------------------------------------------------------------------------------------------- |
-| `region`  | Yes      | AWS region (e.g. `us-east-1`)                                                                     |
-| `profile` | No       | AWS CLI profile name from `~/.aws/config`. Falls back to the default credential chain if omitted. |
-| `prefix`  | No       | Prepended to all secret names                                                                     |
+| Field      | Required | Description                                                                                       |
+| ---------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `region`   | Yes      | AWS region (e.g. `us-east-1`)                                                                     |
+| `profile`  | No       | AWS CLI profile name from `~/.aws/config`. Falls back to the default credential chain if omitted. |
+| `role_arn` | No       | IAM role to assume before reading secrets                                                         |
+| `prefix`   | No       | Prepended to all secret names                                                                     |
 
 The `profile` field is useful when you have multiple AWS accounts or roles configured and want to pin a provider to a specific one without relying on `AWS_PROFILE` in the environment.
+
+### Assuming a Role
+
+Set `role_arn` to have fnox call `sts:AssumeRole` and use the resulting credentials for every request. The credentials from `profile` (or the default chain) are the source credentials for that call, so an SSO profile plus a cross-account role works in one step:
+
+```toml
+[providers]
+aws = { type = "aws-sm", region = "eu-west-1", profile = "sso-dev", role_arn = "arn:aws:iam::123456789012:role/secrets-reader" }
+```
+
+This mirrors the `role` option in SOPS. If your `~/.aws/config` profile already declares `role_arn` and `source_profile`, the AWS SDK assumes that role on its own and you do not need this field.
+
+The session name is always `fnox`, and the role must trust the source identity for `sts:AssumeRole`.
 
 ## Creating Secrets
 

@@ -7,6 +7,7 @@ use std::path::PathBuf;
 pub mod age;
 pub mod aws_kms;
 pub mod aws_ps;
+mod aws_shared;
 pub mod aws_sm;
 pub mod azure_ac;
 pub mod azure_kms;

@@ -1,6 +1,5 @@
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
-use aws_config::BehaviorVersion;
 use aws_sdk_secretsmanager::Client;
 use std::collections::HashMap;
 
@@ -148,6 +147,7 @@ fn extract_name_from_arn(arn_or_name: &str) -> String {
 pub struct AwsSecretsManagerProvider {
     region: String,
     profile: Option<String>,
+    role_arn: Option<String>,
     prefix: Option<String>,
     endpoint: Option<String>,
 }
@@ -156,12 +156,14 @@ impl AwsSecretsManagerProvider {
     pub fn new(
         region: String,
         profile: Option<String>,
+        role_arn: Option<String>,
         prefix: Option<String>,
         endpoint: Option<String>,
     ) -> Result<Self> {
         Ok(Self {
             region,
             profile,
+            role_arn,
             prefix,
             endpoint,
         })
@@ -176,15 +178,13 @@ impl AwsSecretsManagerProvider {
 
     /// Create an AWS Secrets Manager client
     async fn create_client(&self) -> Result<Client> {
-        let mut builder = aws_config::defaults(BehaviorVersion::latest()).region(
-            aws_sdk_secretsmanager::config::Region::new(self.region.clone()),
-        );
-
-        if let Some(profile) = &self.profile {
-            builder = builder.profile_name(profile);
-        }
-
-        let config = builder.load().await;
+        let config = super::aws_shared::load_sdk_config(
+            &self.region,
+            self.profile.as_deref(),
+            self.role_arn.as_deref(),
+            self.endpoint.as_deref(),
+        )
+        .await?;
 
         let mut sm_config_builder = aws_sdk_secretsmanager::config::Builder::from(&config);
         if let Some(endpoint) = &self.endpoint {
