@@ -22,6 +22,12 @@ placeholder = "my-aws-profile"
 label = "AWS profile (optional):"
 wizard = true
 
+[fields.role_arn]
+type = "optional"
+placeholder = "arn:aws:iam::123456789012:role/my-role"
+label = "IAM role to assume (optional):"
+wizard = true
+
 [fields.prefix]
 type = "optional"
 placeholder = "/myapp/prod/"

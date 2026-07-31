@@ -95,6 +95,24 @@ The `key_id` can be:
 - Key ID: `12345678-1234-1234-1234-123456789012`
 - Alias: `alias/my-key`
 
+### Credentials
+
+| Field      | Required | Description                                                                                       |
+| ---------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `profile`  | No       | AWS CLI profile name from `~/.aws/config`. Falls back to the default credential chain if omitted. |
+| `role_arn` | No       | IAM role to assume before calling KMS                                                             |
+
+With `role_arn` set, fnox calls `sts:AssumeRole` and uses the resulting credentials for encrypt and decrypt. The credentials from `profile` (or the default chain) are the source credentials for that call, which covers the SOPS pattern of an SSO profile plus a key-holding role in another account:
+
+```toml
+[providers.kms]
+type = "aws-kms"
+key_id = "alias/my-key"
+region = "eu-west-1"
+profile = "sso-dev"
+role_arn = "arn:aws:iam::123456789012:role/kms-user"
+```
+
 ## Usage
 
 ### Encrypt and Store

@@ -884,8 +884,14 @@
             "key_id": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
+            "profile": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "region": {
               "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "role_arn": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "type": {
               "type": "string",
@@ -968,6 +974,9 @@
             "region": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
+            "role_arn": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "type": {
               "type": "string",
               "const": "aws-ps"
@@ -996,6 +1005,9 @@
             },
             "region": {
               "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "role_arn": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "type": {
               "type": "string",

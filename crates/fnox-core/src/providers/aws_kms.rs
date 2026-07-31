@@ -1,6 +1,5 @@
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
-use aws_config::BehaviorVersion;
 use aws_sdk_kms::Client;
 use aws_sdk_kms::primitives::Blob;
 
@@ -121,25 +120,36 @@ where
 pub struct AwsKmsProvider {
     key_id: String,
     region: String,
+    profile: Option<String>,
+    role_arn: Option<String>,
     endpoint: Option<String>,
 }
 
 impl AwsKmsProvider {
-    pub fn new(key_id: String, region: String, endpoint: Option<String>) -> Result<Self> {
+    pub fn new(
+        key_id: String,
+        region: String,
+        profile: Option<String>,
+        role_arn: Option<String>,
+        endpoint: Option<String>,
+    ) -> Result<Self> {
         Ok(Self {
             key_id,
             region,
+            profile,
+            role_arn,
             endpoint,
         })
     }
 
     /// Create an AWS KMS client
     async fn create_client(&self) -> Result<Client> {
-        // Load AWS config with the specified region
-        let config = aws_config::defaults(BehaviorVersion::latest())
-            .region(aws_sdk_kms::config::Region::new(self.region.clone()))
-            .load()
-            .await;
+        let config = super::aws_shared::load_sdk_config(
+            &self.region,
+            self.profile.as_deref(),
+            self.role_arn.as_deref(),
+        )
+        .await?;
 
         let mut kms_config_builder = aws_sdk_kms::config::Builder::from(&config);
         if let Some(endpoint) = &self.endpoint {

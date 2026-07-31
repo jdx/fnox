@@ -109,6 +109,7 @@ impl AddCommand {
             ProviderType::Aws => crate::config::ProviderConfig::AwsSecretsManager {
                 region: StringOrSecretRef::from("us-east-1"),
                 profile: OptionStringOrSecretRef::none(),
+                role_arn: OptionStringOrSecretRef::none(),
                 prefix: OptionStringOrSecretRef::none(),
                 endpoint: OptionStringOrSecretRef::none(),
                 auth_command: None,
@@ -132,6 +133,8 @@ impl AddCommand {
             ProviderType::AwsKms => crate::config::ProviderConfig::AwsKms {
                 region: StringOrSecretRef::from("us-east-1"),
                 key_id: StringOrSecretRef::from("alias/my-key"),
+                profile: OptionStringOrSecretRef::none(),
+                role_arn: OptionStringOrSecretRef::none(),
                 endpoint: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
@@ -139,6 +142,7 @@ impl AddCommand {
             ProviderType::AwsParameterStore => crate::config::ProviderConfig::AwsParameterStore {
                 region: StringOrSecretRef::from("us-east-1"),
                 profile: OptionStringOrSecretRef::none(),
+                role_arn: OptionStringOrSecretRef::none(),
                 prefix: OptionStringOrSecretRef::literal("/myapp/prod/"),
                 endpoint: OptionStringOrSecretRef::none(),
                 auth_command: None,
