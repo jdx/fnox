@@ -228,6 +228,29 @@ EOF
 	assert_output "$SHARED_SECRET_VALUE"
 }
 
+@test "fnox get assumes the configured role" {
+	local secret_suffix="${SHARED_SECRET_NAME#fnox-test/}"
+
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF
+root = true
+
+[providers.sm]
+type = "aws-sm"
+region = "us-east-1"
+prefix = "fnox-test/"
+role_arn = "arn:aws:iam::123456789012:role/fnox-test-role"
+endpoint = "$LOCALSTACK_ENDPOINT"
+
+[secrets.ASSUMED_SECRET]
+provider = "sm"
+value = "${secret_suffix}"
+EOF
+
+	run "$FNOX_BIN" get ASSUMED_SECRET
+	assert_success
+	assert_output "$SHARED_SECRET_VALUE"
+}
+
 @test "AWS Secrets Manager works with existing fnox/test-secret" {
 	create_sm_config "us-east-1" "fnox/"
 

@@ -182,6 +182,7 @@ impl AwsSecretsManagerProvider {
             &self.region,
             self.profile.as_deref(),
             self.role_arn.as_deref(),
+            self.endpoint.as_deref(),
         )
         .await?;
 
