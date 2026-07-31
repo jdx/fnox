@@ -231,6 +231,9 @@ EOF
 @test "fnox get assumes the configured role" {
 	local secret_suffix="${SHARED_SECRET_NAME#fnox-test/}"
 
+	# LocalStack scopes resources per account, so the role has to live in the default
+	# account for the secret created in setup_file to be visible after AssumeRole.
+
 	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF
 root = true
 
@@ -238,7 +241,7 @@ root = true
 type = "aws-sm"
 region = "us-east-1"
 prefix = "fnox-test/"
-role_arn = "arn:aws:iam::123456789012:role/fnox-test-role"
+role_arn = "arn:aws:iam::000000000000:role/fnox-test-role"
 endpoint = "$LOCALSTACK_ENDPOINT"
 
 [secrets.ASSUMED_SECRET]
