@@ -27,8 +27,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
-  TAK_RUNNER: bamboo-v1-ubuntu24.04-x64-rust1.91.1-tokio1
-  RUSTUP_TOOLCHAIN: "1.91.1"
+  TAK_RUNNER: bamboo-v1-ubuntu24.04-x64-rust1.97.1-tokio1
   # Changing the measuring environment starts a new series rather than
   # comparing incompatible counts with the old hosted-runner baseline.
 
@@ -56,9 +55,6 @@ jobs:
           # which walks twenty commits of trunk history.
           fetch-depth: 0
           persist-credentials: false
-
-      - name: Install benchmark Rust toolchain
-        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
 
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
