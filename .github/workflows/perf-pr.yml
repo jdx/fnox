@@ -34,6 +34,7 @@ env:
 jobs:
   measure:
     name: Compare instruction counts
+    if: github.event.pull_request.user.login == 'jdx'
     # Same pinned environment as perf.yml. Absolute counts shift when the
     # runner image or compiler changes, even within one GitHub runner class.
     runs-on: bamboo-perf
@@ -141,7 +142,7 @@ jobs:
   report:
     name: Report and gate
     needs: measure
-    if: always()
+    if: always() && github.event.pull_request.user.login == 'jdx'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
