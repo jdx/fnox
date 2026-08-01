@@ -27,17 +27,17 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
+  TAK_RUNNER: bamboo-v1-ubuntu24.04-x64-rust1.91.1-tokio1
   RUSTUP_TOOLCHAIN: "1.91.1"
   # Changing the measuring environment starts a new series rather than
-  # comparing incompatible counts with the old ubuntu-latest baseline.
-  TAK_RUNNER: gha-ubuntu-24.04-x64-rust-1.91.1-tokio1
+  # comparing incompatible counts with the old hosted-runner baseline.
 
 jobs:
   measure:
     name: Compare instruction counts
     # Same pinned environment as perf.yml. Absolute counts shift when the
     # runner image or compiler changes, even within one GitHub runner class.
-    runs-on: ubuntu-24.04
+    runs-on: bamboo-perf
     timeout-minutes: 40
     permissions:
       # Read only. This job builds and runs code from the pull request, so it
