@@ -27,8 +27,8 @@ services:
       retries: 5
 
   infisical:
-    # Pin the multi-architecture image: an unannounced `latest` API change
-    # broke both Linux BATS shards at project creation.
+    # Pin the multi-architecture image so upstream API changes cannot silently
+    # break both Linux BATS shards.
     image: infisical/infisical@sha256:bcb31ccb2a3784315ad9d9e180a9c53c6423f0daf3087c3bb158093de99617f2
     container_name: fnox-infisical
     depends_on:
@@ -44,6 +44,10 @@ services:
       - REDIS_URL=redis://redis:6379
       - SITE_URL=http://localhost:8081
       - TELEMETRY_ENABLED=false
+      # The bootstrap CLI currently returns a legacy token without an `exp`
+      # claim. Keep it valid in this ephemeral test instance after Infisical's
+      # 2026-08-02 default legacy-token cutoff.
+      - MAX_MACHINE_IDENTITY_TOKEN_AGE=36500d
       - SMTP_HOST=
       - SMTP_FROM_NAME=Infisical
       - INVITE_ONLY_SIGNUP=false
