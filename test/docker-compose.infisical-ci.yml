@@ -27,7 +27,9 @@ services:
       retries: 5
 
   infisical:
-    image: infisical/infisical:latest
+    # Pin the multi-architecture image: an unannounced `latest` API change
+    # broke both Linux BATS shards at project creation.
+    image: infisical/infisical@sha256:bcb31ccb2a3784315ad9d9e180a9c53c6423f0daf3087c3bb158093de99617f2
     container_name: fnox-infisical
     depends_on:
       postgres:
