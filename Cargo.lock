@@ -1052,6 +1052,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "base64"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b25655df2c3cdd83c5e5b293b88acd880332b2ddadd7c30ac43144fdc0033da9"
+
+[[package]]
 name = "base64-simd"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2386,7 +2392,7 @@ dependencies = [
  "anyhow",
  "arboard",
  "atty",
- "base64 0.22.1",
+ "base64 0.23.0",
  "blake3",
  "chrono",
  "ci_info",
@@ -2449,7 +2455,7 @@ dependencies = [
  "azure_identity",
  "azure_security_keyvault_keys",
  "azure_security_keyvault_secrets",
- "base64 0.22.1",
+ "base64 0.23.0",
  "blake3",
  "bytes",
  "chrono",
@@ -6653,7 +6659,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
