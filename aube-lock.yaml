@@ -107,7 +107,7 @@ time:
   micromark-util-types@2.0.2: 2025-02-27T13:55:27.982Z
   minisearch@7.2.0: 2025-09-16T12:42:12.453Z
   mitt@3.0.1: 2023-07-04T17:31:47.638Z
-  nanoid@3.3.16: 2026-07-12T08:23:40.690Z
+  nanoid@3.3.17: 2026-08-03T10:39:22.487Z
   oniguruma-to-es@3.1.1: 2025-02-20T16:19:37.749Z
   perfect-debounce@1.0.0: 2023-05-03T23:17:12.783Z
   picocolors@1.1.1: 2024-10-16T18:20:03.921Z
@@ -618,8 +618,8 @@ packages:
   mitt@3.0.1:
     resolution: {integrity: sha512-vKivATfr97l2/QBCYAkXYDbrIWPM2IIKEl7YPhjCvKlG3kE2gm+uBo6nEXK3M5/Ffh/FLpKExzOQ3JJoJGFKBw==}
 
-  nanoid@3.3.16:
-    resolution: {integrity: sha512-bzlKTyNJ7+LdGIIwy8ijFpIqEQIvafahV7eYykJ8Cvh42EdJeODoJ6gUJXpQJvej1BddH8OqTXZNE/KfbWAu8Q==}
+  nanoid@3.3.17:
+    resolution: {integrity: sha512-xQLf0A3HOMlgHq0n247/LRuAOYmB7dXJ/DvAxGvsSBij45XtBSmQycu+F8ODbHwns/XyFZagyL1+J0Offw1E0g==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
@@ -1213,7 +1213,7 @@ snapshots:
 
   mitt@3.0.1: {}
 
-  nanoid@3.3.16: {}
+  nanoid@3.3.17: {}
 
   oniguruma-to-es@3.1.1:
     dependencies:
@@ -1227,7 +1227,7 @@ snapshots:
 
   postcss@8.5.25:
     dependencies:
-      nanoid: 3.3.16
+      nanoid: 3.3.17
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
