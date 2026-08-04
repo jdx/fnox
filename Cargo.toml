@@ -32,7 +32,7 @@ azure_core = { version = "1" }
 azure_identity = { version = "1" }
 azure_security_keyvault_keys = { version = "1" }
 azure_security_keyvault_secrets = { version = "1" }
-base64 = "0.22"
+base64 = "0.23"
 blake3 = "1"
 bytes = "1"
 chrono = "0.4"
