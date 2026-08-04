@@ -54,7 +54,7 @@ hex = "0.4"
 hkdf = "0.13"
 ignore = "0.4"
 indexmap = { version = "2", features = ["serde"] }
-jsonwebtoken = { version = "10", features = ["aws_lc_rs"] }
+jsonwebtoken = { version = "11", features = ["aws_lc_rs"] }
 keepass = { version = "0.13", features = ["save_kdbx4"] }
 keyring-core = "1"
 apple-native-keyring-store = { version = "1", features = ["keychain"] }
