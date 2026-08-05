@@ -583,11 +583,7 @@ impl ServerHandler for FnoxMcpServer {
             .into_iter()
             .filter(|t| enabled.contains(&t.name.as_ref()))
             .collect();
-        Ok(ListToolsResult {
-            tools: filtered,
-            meta: None,
-            next_cursor: None,
-        })
+        Ok(ListToolsResult::with_all_items(filtered))
     }
 
     fn get_tool(&self, name: &str) -> Option<Tool> {
@@ -603,7 +599,7 @@ impl ServerHandler for FnoxMcpServer {
         &self,
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
-    ) -> Result<CallToolResult, McpError> {
+    ) -> Result<CallToolResponse, McpError> {
         let tools = self.mcp_config.tools();
         let enabled: Vec<&str> = tools.iter().map(|t| t.tool_name()).collect();
         if !enabled.contains(&request.name.as_ref()) {

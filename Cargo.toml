@@ -74,7 +74,7 @@ ratatui = "0.30"
 regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
 rcgen = { version = "0.14", default-features = false, features = ["aws_lc_rs", "pem"] }
-rmcp = { version = "2", features = ["server", "transport-io", "macros"] }
+rmcp = { version = "3", features = ["server", "transport-io", "macros"] }
 rmp-serde = "1"
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std"] }
 rustls-native-certs = "0.8"
