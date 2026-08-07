@@ -164,13 +164,12 @@ MY_SECRET = { provider = "bitwarden", value = "My Item" }  # → Gets the 'passw
 USERNAME = { provider = "bitwarden", value = "Database/username" }
 PASSWORD = { provider = "bitwarden", value = "Database/password" }
 TOTP = { provider = "bitwarden", value = "Database/totp" }
+API_KEY = { provider = "bitwarden", value = "Database/API Key" }
 ```
 
-Supported fields: `username`, `password`, `notes`, `uri`, `totp`
-
-::: info Custom Fields
-Custom field extraction is not yet implemented. Use standard fields for now.
-:::
+Supported standard fields are `username`, `password`, `notes`, `uri`, and
+`totp`. Any other field name is resolved as a custom field. Custom field names
+are case-sensitive when using the default `bw` backend.
 
 ## Usage
 

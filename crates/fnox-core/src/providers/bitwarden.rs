@@ -20,6 +20,18 @@ pub enum BitwardenBackend {
     Rbw,
 }
 
+#[derive(Debug, Deserialize)]
+struct BitwardenItem {
+    #[serde(default)]
+    fields: Vec<BitwardenField>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BitwardenField {
+    name: Option<String>,
+    value: Option<String>,
+}
+
 impl fmt::Display for BitwardenBackend {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -78,7 +90,6 @@ impl BitwardenProvider {
                 // For custom fields, we need the full item JSON
                 cmd.arg("item");
                 cmd.arg(item_name);
-                cmd.args(["--output", "json"]);
                 None // Special case handled, no field type needed
             }
         };
@@ -172,9 +183,8 @@ impl BitwardenProvider {
                 // rbw uses a separate subcommand for TOTP
                 cmd.args(["code", item_name]);
             }
-            Some(_) => {
-                // custom field path: fetch full JSON; later code can still error out
-                cmd.args(["get", item_name, "--raw"]);
+            Some(field) => {
+                cmd.args(["get", item_name, "--field", field]);
             }
         }
 
@@ -257,6 +267,47 @@ impl BitwardenProvider {
 
         Ok(stdout.trim().to_string())
     }
+
+    fn extract_custom_field(
+        &self,
+        item_name: &str,
+        field_name: &str,
+        json: &str,
+    ) -> Result<String> {
+        let item: BitwardenItem =
+            serde_json::from_str(json).map_err(|e| FnoxError::ProviderInvalidResponse {
+                provider: "Bitwarden".to_string(),
+                details: format!("Failed to parse item '{}': {}", item_name, e),
+                hint: "Check that the Bitwarden CLI returned a valid item".to_string(),
+                url: "https://fnox.jdx.dev/providers/bitwarden".to_string(),
+            })?;
+
+        let field = item
+            .fields
+            .into_iter()
+            .find(|field| field.name.as_deref() == Some(field_name))
+            .ok_or_else(|| FnoxError::ProviderInvalidResponse {
+                provider: "Bitwarden".to_string(),
+                details: format!(
+                    "Custom field '{}' not found in item '{}'",
+                    field_name, item_name
+                ),
+                hint: "Check the custom field name and capitalization".to_string(),
+                url: "https://fnox.jdx.dev/providers/bitwarden".to_string(),
+            })?;
+
+        field
+            .value
+            .ok_or_else(|| FnoxError::ProviderInvalidResponse {
+                provider: "Bitwarden".to_string(),
+                details: format!(
+                    "Custom field '{}' in item '{}' has no value",
+                    field_name, item_name
+                ),
+                hint: "Set a value for the custom field in Bitwarden".to_string(),
+                url: "https://fnox.jdx.dev/providers/bitwarden".to_string(),
+            })
+    }
 }
 
 #[async_trait]
@@ -287,8 +338,18 @@ impl crate::providers::Provider for BitwardenProvider {
             field_name
         );
 
+        let is_custom_field = !matches!(
+            field_name,
+            "password" | "username" | "notes" | "uri" | "url" | "totp"
+        );
         let mut cmd = self.build_command(Some(field_name), item_name)?;
-        self.execute_command(&mut cmd).await
+        let output = self.execute_command(&mut cmd).await?;
+
+        if is_custom_field && self.backend == BitwardenBackend::Bw {
+            self.extract_custom_field(item_name, field_name, &output)
+        } else {
+            Ok(output)
+        }
     }
 }
 
@@ -300,4 +361,52 @@ fn bw_session_token() -> Option<String> {
     env::var("FNOX_BW_SESSION")
         .or_else(|_| env::var("BW_SESSION"))
         .ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn provider(backend: BitwardenBackend) -> BitwardenProvider {
+        BitwardenProvider::new(None, None, None, Some(backend)).unwrap()
+    }
+
+    #[test]
+    fn extracts_custom_field_from_bw_item() {
+        let json = r#"{
+            "fields": [
+                {"name": "API Key", "value": "secret-value", "type": 1},
+                {"name": "Region", "value": "us-east-1", "type": 0}
+            ]
+        }"#;
+
+        let value = provider(BitwardenBackend::Bw)
+            .extract_custom_field("Database", "API Key", json)
+            .unwrap();
+
+        assert_eq!(value, "secret-value");
+    }
+
+    #[test]
+    fn errors_when_custom_field_is_missing() {
+        let error = provider(BitwardenBackend::Bw)
+            .extract_custom_field("Database", "Missing", r#"{"fields": []}"#)
+            .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("Custom field 'Missing' not found")
+        );
+    }
+
+    #[test]
+    fn rbw_uses_field_flag_for_custom_fields() {
+        let command = provider(BitwardenBackend::Rbw)
+            .build_rbw_command(Some("API Key"), "Database")
+            .unwrap();
+        let args: Vec<_> = command.as_std().get_args().collect();
+
+        assert_eq!(args, ["get", "Database", "--field", "API Key"]);
+    }
 }
