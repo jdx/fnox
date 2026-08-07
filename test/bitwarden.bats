@@ -91,7 +91,14 @@ create_test_bw_item() {
     "username": "$username",
     "password": "$password",
     "totp": null
-  }
+  },
+  "fields": [
+    {
+      "name": "API Key",
+      "value": "custom-secret-value-${BATS_TEST_NUMBER:-0}",
+      "type": 1
+    }
+  ]
 }
 EOF
 	)
@@ -179,6 +186,27 @@ EOF
 	assert_output --partial "test-secret-value-"
 
 	# Cleanup
+	delete_test_bw_item "$item_id"
+}
+
+@test "fnox get retrieves custom field from Bitwarden item" {
+	create_bitwarden_config
+
+	item_info=$(create_test_bw_item)
+	item_id=$(echo "$item_info" | cut -d'|' -f1)
+	item_name=$(echo "$item_info" | cut -d'|' -f2)
+
+	cat >>"${FNOX_CONFIG_FILE}" <<EOF
+
+[secrets.TEST_CUSTOM_FIELD]
+provider = "bitwarden"
+value = "$item_name/API Key"
+EOF
+
+	run "$FNOX_BIN" get TEST_CUSTOM_FIELD
+	assert_success
+	assert_output "custom-secret-value-${BATS_TEST_NUMBER:-0}"
+
 	delete_test_bw_item "$item_id"
 }
 
