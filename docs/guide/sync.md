@@ -105,9 +105,30 @@ type = "age"
 recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
 
 [secrets]
-DATABASE_URL = { provider = "op", value = "Database/url", sync = { provider = "sync-age", value = "YWdlLWVuY3J5cHRpb24..." } }
-STRIPE_KEY = { provider = "op", value = "Stripe/secret-key", sync = { provider = "sync-age", value = "YWdlLWVuY3J5cHRpb24..." } }
-SENDGRID_KEY = { provider = "op", value = "SendGrid/api-key", sync = { provider = "sync-age", value = "YWdlLWVuY3J5cHRpb24..." } }
+DATABASE_URL = {
+  provider = "op",
+  value = "Database/url",
+  sync = {
+    provider = "sync-age",
+    value = "YWdlLWVuY3J5cHRpb24...",
+  },
+}
+STRIPE_KEY = {
+  provider = "op",
+  value = "Stripe/secret-key",
+  sync = {
+    provider = "sync-age",
+    value = "YWdlLWVuY3J5cHRpb24...",
+  },
+}
+SENDGRID_KEY = {
+  provider = "op",
+  value = "SendGrid/api-key",
+  sync = {
+    provider = "sync-age",
+    value = "YWdlLWVuY3J5cHRpb24...",
+  },
+}
 ```
 
 When you `cd` into the project, fnox sees the `sync` field and decrypts with age locally — no 1Password calls.
