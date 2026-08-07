@@ -118,7 +118,8 @@ A sync cache is personal: its recipient belongs in the global config or
 
 For age-encrypted secrets committed to git, commit a separate provider whose
 recipients include the whole team and CI. After changing that list, run
-`fnox reencrypt --provider age` to update the committed ciphertext.
+`fnox reencrypt --provider <team-provider-name>` to update the committed
+ciphertext.
 
 Provider definitions are replaced as a unit when configs are merged. A local
 `[providers.age]` does not deep-merge with a committed provider of the same
@@ -164,21 +165,22 @@ if [ ! -f ~/.config/fnox/age.txt ]; then
 fi
 export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)
 
-# 3. Add a personal age provider to your local config, replacing the recipient with your public key from step 2
-recipient=$(grep 'public key:' ~/.config/fnox/age.txt | awk '{print $NF}')
-if ! grep -q '^\[providers\.sync-age\]$' fnox.local.toml 2>/dev/null; then
-	cat >>fnox.local.toml <<EOF
-
-[providers.sync-age]
-type = "age"
-recipients = ["$recipient"]
-EOF
+# 3. Read the recipient, failing before changing any config if the key is invalid
+recipient=$(age-keygen -y ~/.config/fnox/age.txt 2>/dev/null)
+if [ -z "$recipient" ]; then
+	echo "Could not find an age public key in ~/.config/fnox/age.txt" >&2
+	exit 1
 fi
 
-# 4. Sync all 1Password secrets to local age encryption
+# 4. Add a machine-wide provider once, then replace its age1... placeholder
+# with $recipient in the file opened by the second command
+fnox provider add sync-age age --global
+"${EDITOR:-vi}" "${FNOX_CONFIG_DIR:-$HOME/.config/fnox}/config.toml"
+
+# 5. Sync all 1Password secrets to local age encryption
 fnox sync --provider sync-age --local-file --force
 
-# 5. Done — entering the directory is now instant
+# 6. Done — entering the directory is now instant
 cd .. && cd my-api
 # Secrets load from local age cache, no 1Password calls
 ```
