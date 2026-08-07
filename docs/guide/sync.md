@@ -23,7 +23,7 @@ This works, but every time you `cd` into the project (with [shell integration](/
 With `fnox sync`, you pull those values once and cache them locally with a fast, offline encryption provider:
 
 ```bash
-fnox sync --provider age --config fnox.local.toml
+fnox sync --provider sync-age --local-file
 ```
 
 Now entering the directory is instant — secrets are decrypted locally from age without any remote calls.
@@ -33,47 +33,56 @@ Now entering the directory is instant — secrets are decrypted locally from age
 1. fnox reads all secrets from your merged config
 2. It resolves each secret's plaintext value from the original remote provider
 3. It encrypts each value with the target provider (e.g., age)
-4. It writes the encrypted cache into your config as a `sync` field on each secret
+4. It writes the encrypted cache into `fnox.local.toml` as a `sync` field on each secret
 
 When fnox resolves secrets, it checks for a `sync` field first and uses that instead of calling the original provider.
 
 ## Basic Usage
 
 ```bash
-# Set up an age provider if you haven't already
-fnox set --provider age  # or add [providers.age] to your config
+# Set up a personal age provider if you haven't already. Replace the generated
+# age1... placeholder in ~/.config/fnox/config.toml with your recipient.
+fnox provider add sync-age age --global
 
 # Sync everything to fnox.local.toml
-fnox sync --provider age --config fnox.local.toml
+fnox sync --provider sync-age --local-file
 ```
+
+Using a distinct name such as `sync-age` avoids colliding with an `age` provider
+that the project may already use for secrets encrypted in git. The global
+provider is machine-scoped and can be reused across checkouts. You can instead
+put the personal provider in `fnox.local.toml` if each project needs different
+settings.
 
 ### Preview what would be synced
 
 ```bash
-fnox sync --provider age --config fnox.local.toml --dry-run
+fnox sync --provider sync-age --local-file --dry-run
 ```
 
 ### Sync specific secrets
 
 ```bash
-fnox sync --provider age --config fnox.local.toml DATABASE_URL STRIPE_KEY
+fnox sync --provider sync-age --local-file DATABASE_URL STRIPE_KEY
 ```
 
 ### Sync only secrets from a specific source
 
 ```bash
-fnox sync --provider age --config fnox.local.toml --source op
+fnox sync --provider sync-age --local-file --source op
 ```
 
 ### Filter by regex pattern
 
 ```bash
-fnox sync --provider age --config fnox.local.toml --filter "^DB_"
+fnox sync --provider sync-age --local-file --filter "^DB_"
 ```
 
 ## What It Looks Like
 
-After syncing, your files look like this:
+If you keep the personal provider in the project-local override, your files
+look like this after syncing. With the global setup above, the
+`[providers.sync-age]` block lives in `~/.config/fnox/config.toml` instead.
 
 **fnox.toml** (committed — the source of truth):
 
@@ -81,10 +90,6 @@ After syncing, your files look like this:
 [providers.op]
 type = "1password"
 vault = "Engineering"
-
-[providers.age]
-type = "age"
-recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
 
 [secrets]
 DATABASE_URL = { provider = "op", value = "Database/url" }
@@ -95,26 +100,43 @@ SENDGRID_KEY = { provider = "op", value = "SendGrid/api-key" }
 **fnox.local.toml** (gitignored — your local cache):
 
 ```toml
+[providers.sync-age]
+type = "age"
+recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
+
 [secrets]
-DATABASE_URL = { provider = "op", value = "Database/url", sync = { provider = "age", value = "YWdlLWVuY3J5cHRpb24..." } }
-STRIPE_KEY = { provider = "op", value = "Stripe/secret-key", sync = { provider = "age", value = "YWdlLWVuY3J5cHRpb24..." } }
-SENDGRID_KEY = { provider = "op", value = "SendGrid/api-key", sync = { provider = "age", value = "YWdlLWVuY3J5cHRpb24..." } }
+DATABASE_URL = { provider = "op", value = "Database/url", sync = { provider = "sync-age", value = "YWdlLWVuY3J5cHRpb24..." } }
+STRIPE_KEY = { provider = "op", value = "Stripe/secret-key", sync = { provider = "sync-age", value = "YWdlLWVuY3J5cHRpb24..." } }
+SENDGRID_KEY = { provider = "op", value = "SendGrid/api-key", sync = { provider = "sync-age", value = "YWdlLWVuY3J5cHRpb24..." } }
 ```
 
 When you `cd` into the project, fnox sees the `sync` field and decrypts with age locally — no 1Password calls.
+
+::: tip Sync cache vs. encrypted secrets in git
+A sync cache is personal: its recipient belongs in the global config or
+`fnox.local.toml`.
+
+For age-encrypted secrets committed to git, commit a separate provider whose
+recipients include the whole team and CI. After changing that list, run
+`fnox reencrypt --provider age` to update the committed ciphertext.
+
+Provider definitions are replaced as a unit when configs are merged. A local
+`[providers.age]` does not deep-merge with a committed provider of the same
+name, so use a distinct name such as `sync-age` for the cache.
+:::
 
 ## Using a YubiKey
 
 If you use a YubiKey with the [age-plugin-yubikey](https://github.com/str4d/age-plugin-yubikey), syncing works the same way. Your age provider just uses the YubiKey identity:
 
 ```toml
-[providers.age]
+[providers.sync-age]
 type = "age"
 recipients = ["age1yubikey1q..."]  # YubiKey recipient
 ```
 
 ```bash
-fnox sync --provider age --config fnox.local.toml
+fnox sync --provider sync-age --local-file
 ```
 
 Secrets are encrypted to your YubiKey's age identity. Decryption requires the YubiKey to be plugged in, adding hardware-based security to your local cache. See [Age Plugin Support](/providers/age#plugin-support) for details and other plugins (TPM, FIDO2, …).
@@ -124,7 +146,7 @@ Secrets are encrypted to your YubiKey's age identity. Decryption requires the Yu
 When secrets change in the remote provider, re-run sync to update the local cache:
 
 ```bash
-fnox sync --provider age --config fnox.local.toml --force
+fnox sync --provider sync-age --local-file --force
 ```
 
 The `--force` flag skips the confirmation prompt. fnox re-fetches from the original provider and re-encrypts.
@@ -142,18 +164,19 @@ if [ ! -f ~/.config/fnox/age.txt ]; then
 fi
 export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)
 
-# 3. Add age provider to your local config, replacing the recipient with your public key from step 2
+# 3. Add a personal age provider to your local config, replacing the recipient with your public key from step 2
 recipient=$(grep 'public key:' ~/.config/fnox/age.txt | awk '{print $NF}')
-if [ ! -f fnox.local.toml ] || ! grep -qF "$recipient" fnox.local.toml; then
-	cat >fnox.local.toml <<EOF
-[providers.age]
+if ! grep -q '^\[providers\.sync-age\]$' fnox.local.toml 2>/dev/null; then
+	cat >>fnox.local.toml <<EOF
+
+[providers.sync-age]
 type = "age"
 recipients = ["$recipient"]
 EOF
 fi
 
 # 4. Sync all 1Password secrets to local age encryption
-fnox sync --provider age --config fnox.local.toml --force
+fnox sync --provider sync-age --local-file --force
 
 # 5. Done — entering the directory is now instant
 cd .. && cd my-api
