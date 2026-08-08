@@ -97,6 +97,11 @@ create_test_bw_item() {
       "name": "API Key",
       "value": "custom-secret-value-${BATS_TEST_NUMBER:-0}",
       "type": 1
+    },
+    {
+      "name": "API/Key",
+      "value": "slash-field-value-${BATS_TEST_NUMBER:-0}",
+      "type": 1
     }
   ]
 }
@@ -210,6 +215,27 @@ EOF
 	delete_test_bw_item "$item_id"
 }
 
+@test "fnox get retrieves custom field containing a slash" {
+	create_bitwarden_config
+
+	item_info=$(create_test_bw_item)
+	item_id=$(echo "$item_info" | cut -d'|' -f1)
+	item_name=$(echo "$item_info" | cut -d'|' -f2)
+
+	cat >>"${FNOX_CONFIG_FILE}" <<EOF
+
+[secrets.TEST_SLASH_FIELD]
+provider = "bitwarden"
+value = "$item_name/API/Key"
+EOF
+
+	run "$FNOX_BIN" get TEST_SLASH_FIELD
+	assert_success
+	assert_output "slash-field-value-${BATS_TEST_NUMBER:-0}"
+
+	delete_test_bw_item "$item_id"
+}
+
 @test "fnox get fails with invalid item name" {
 	create_bitwarden_config
 
@@ -224,21 +250,6 @@ EOF
 	run "$FNOX_BIN" get INVALID_ITEM
 	assert_failure
 	assert_output --partial "cli_failed"
-}
-
-@test "fnox get handles invalid secret reference format" {
-	create_bitwarden_config
-
-	cat >>"${FNOX_CONFIG_FILE}" <<EOF
-
-[secrets.INVALID_FORMAT]
-provider = "bitwarden"
-value = "invalid/format/with/too/many/slashes"
-EOF
-
-	run "$FNOX_BIN" get INVALID_FORMAT
-	assert_failure
-	assert_output --partial "Invalid secret reference format"
 }
 
 @test "fnox list shows Bitwarden secrets" {

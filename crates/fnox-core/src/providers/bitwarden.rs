@@ -42,6 +42,10 @@ impl fmt::Display for BitwardenBackend {
 }
 
 impl BitwardenProvider {
+    fn parse_reference(value: &str) -> (&str, &str) {
+        value.split_once('/').unwrap_or((value, "password"))
+    }
+
     pub fn new(
         collection: Option<String>,
         organization_id: Option<String>,
@@ -317,20 +321,7 @@ impl crate::providers::Provider for BitwardenProvider {
 
         // Parse value as "item/field" or just "item"
         // Default field is "password" if not specified
-        let parts: Vec<&str> = value.split('/').collect();
-
-        let (item_name, field_name) = match parts.len() {
-            1 => (parts[0], "password"),
-            2 => (parts[0], parts[1]),
-            _ => {
-                return Err(FnoxError::ProviderInvalidResponse {
-                    provider: "Bitwarden".to_string(),
-                    details: format!("Invalid secret reference format: '{}'", value),
-                    hint: "Expected 'item' or 'item/field'".to_string(),
-                    url: "https://fnox.jdx.dev/providers/bitwarden".to_string(),
-                });
-            }
-        };
+        let (item_name, field_name) = Self::parse_reference(value);
 
         tracing::debug!(
             "Reading Bitwarden item '{}' field '{}'",
@@ -375,13 +366,13 @@ mod tests {
     fn extracts_custom_field_from_bw_item() {
         let json = r#"{
             "fields": [
-                {"name": "API Key", "value": "secret-value", "type": 1},
+                {"name": "API/Key", "value": "secret-value", "type": 1},
                 {"name": "Region", "value": "us-east-1", "type": 0}
             ]
         }"#;
 
         let value = provider(BitwardenBackend::Bw)
-            .extract_custom_field("Database", "API Key", json)
+            .extract_custom_field("Database", "API/Key", json)
             .unwrap();
 
         assert_eq!(value, "secret-value");
@@ -403,10 +394,18 @@ mod tests {
     #[test]
     fn rbw_uses_field_flag_for_custom_fields() {
         let command = provider(BitwardenBackend::Rbw)
-            .build_rbw_command(Some("API Key"), "Database")
+            .build_rbw_command(Some("API/Key"), "Database")
             .unwrap();
         let args: Vec<_> = command.as_std().get_args().collect();
 
-        assert_eq!(args, ["get", "Database", "--field", "API Key"]);
+        assert_eq!(args, ["get", "Database", "--field", "API/Key"]);
+    }
+
+    #[test]
+    fn parses_custom_field_name_with_slashes() {
+        assert_eq!(
+            BitwardenProvider::parse_reference("Database/API/Key"),
+            ("Database", "API/Key")
+        );
     }
 }

@@ -169,7 +169,7 @@ API_KEY = { provider = "bitwarden", value = "Database/API Key" }
 
 Supported standard fields are `username`, `password`, `notes`, `uri`, and
 `totp`. Any other field name is resolved as a custom field. Custom field names
-are case-sensitive when using the default `bw` backend.
+may contain `/` and are case-sensitive when using the default `bw` backend.
 
 ## Usage
 
