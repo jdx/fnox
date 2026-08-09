@@ -1,6 +1,40 @@
 # Changelog
 
-## [1.32.0](https://github.com/jdx/fnox/compare/v1.31.1..v1.32.0) - 2026-07-31
+## [1.33.0](https://github.com/jdx/fnox/compare/v1.32.0..v1.33.0) - 2026-08-08
+
+### 🚀 Features
+
+- **(bitwarden)** support custom fields by [@jdx](https://github.com/jdx) in [#690](https://github.com/jdx/fnox/pull/690)
+
+### 🐛 Bug Fixes
+
+- **(bitwarden)** support slashes in custom fields by [@jdx](https://github.com/jdx) in [#693](https://github.com/jdx/fnox/pull/693)
+- **(ci)** update Infisical project bootstrap by [@jdx](https://github.com/jdx) in [#675](https://github.com/jdx/fnox/pull/675)
+
+### 📚 Documentation
+
+- **(sync)** clarify personal age provider setup by [@jdx](https://github.com/jdx) in [#692](https://github.com/jdx/fnox/pull/692)
+
+### 🔍 Other Changes
+
+- run perf jobs on bamboo by [@jdx](https://github.com/jdx) in [#672](https://github.com/jdx/fnox/pull/672)
+- build perf binaries on bamboo by [@jdx](https://github.com/jdx) in [#674](https://github.com/jdx/fnox/pull/674)
+
+### 📦️ Dependency Updates
+
+- update jdx/mise-action action to v4.2.3 by [@renovate[bot]](https://github.com/renovate[bot]) in [#677](https://github.com/jdx/fnox/pull/677)
+- update rust crate keepass to v0.13.18 by [@renovate[bot]](https://github.com/renovate[bot]) in [#678](https://github.com/jdx/fnox/pull/678)
+- update rust crate schemars to v1.2.2 by [@renovate[bot]](https://github.com/renovate[bot]) in [#679](https://github.com/jdx/fnox/pull/679)
+- update dependency github:jdx/tak to v0.0.5 by [@renovate[bot]](https://github.com/renovate[bot]) in [#676](https://github.com/jdx/fnox/pull/676)
+- update rust crate jsonwebtoken to v11 by [@renovate[bot]](https://github.com/renovate[bot]) in [#685](https://github.com/jdx/fnox/pull/685)
+- update zizmorcore/zizmor-action action to v0.6.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#680](https://github.com/jdx/fnox/pull/680)
+- update rust crate base64 to 0.23 by [@renovate[bot]](https://github.com/renovate[bot]) in [#683](https://github.com/jdx/fnox/pull/683)
+- update rust crate usage-lib to v4.1.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#684](https://github.com/jdx/fnox/pull/684)
+- update dependency @anthropic-ai/claude-code to v2.1.220 by [@renovate[bot]](https://github.com/renovate[bot]) in [#681](https://github.com/jdx/fnox/pull/681)
+- update rust crate usage-lib to v5 by [@renovate[bot]](https://github.com/renovate[bot]) in [#687](https://github.com/jdx/fnox/pull/687)
+- update rust crate rmcp to v3 by [@renovate[bot]](https://github.com/renovate[bot]) in [#688](https://github.com/jdx/fnox/pull/688)
+
+## [1.32.0](https://github.com/jdx/fnox/compare/v1.31.1..v1.32.0) - 2026-08-01
 
 ### 🚀 Features
 
