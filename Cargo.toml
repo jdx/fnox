@@ -17,7 +17,7 @@ rust-version = "1.91.1"
 [workspace.dependencies]
 aes-gcm = "0.11.0-rc.3"
 age = { version = "0.12", features = ["ssh", "plugin", "cli-common"] }
-aho-corasick = "1.1.4"
+aho-corasick = "1"
 anyhow = "1"
 arboard = "3"
 arc-swap = "1"
@@ -49,7 +49,7 @@ futures = "0.3"
 gcp_auth = { version = "0.12" }
 globset = "0.4"
 google-cloud-kms = { version = "0.6" }
-google-cloud-secretmanager-v1 = { version = "1.1" }
+google-cloud-secretmanager-v1 = { version = "1" }
 hex = "0.4"
 hkdf = "0.13"
 ignore = "0.4"
@@ -121,7 +121,7 @@ name = "fnox"
 path = "src/main.rs"
 
 [dependencies]
-fnox-core = { path = "crates/fnox-core", version = "1.33.0" }
+fnox-core = { path = "crates/fnox-core", version = "1" }
 
 # Direct dependencies of the CLI binary (commands, MCP server, TUI, hook-env,
 # shell integration). Provider/config/secret-resolver crates are pulled in

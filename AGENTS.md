@@ -24,6 +24,12 @@ will fail), pin that dependency to its last MSRV-compatible version instead.
 `.cargo/config.toml` sets `resolver.incompatible-rust-versions = "fallback"` so
 `cargo update`/`cargo add` prefer MSRV-compatible versions automatically.
 
+## Dependency Updates
+
+- Use the lowest compatibility-significant specificity in `Cargo.toml` (for example, `"1"` for stable 1.x dependencies).
+- When the existing manifest requirement accepts a routine dependency update, change only `Cargo.lock`.
+- Keep lockfile updates focused and avoid unrelated transitive dependency churn.
+
 ## Build & Test
 
 ```bash
