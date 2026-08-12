@@ -4,6 +4,21 @@ use crate::error::{FnoxError, Result};
 use clap::Args;
 use std::io::{self, Read};
 
+fn resolve_remote_key_name<'a>(
+    key: &'a str,
+    key_name: Option<&'a str>,
+    existing_secret: Option<&'a config::SecretConfig>,
+    provider_name: &str,
+) -> &'a str {
+    key_name
+        .or_else(|| {
+            existing_secret
+                .filter(|secret| secret.provider() == Some(provider_name))
+                .and_then(config::SecretConfig::value)
+        })
+        .unwrap_or(key)
+}
+
 #[derive(Debug, Args)]
 #[command(visible_aliases = ["s"])]
 pub struct SetCommand {
@@ -91,11 +106,13 @@ impl SetCommand {
             Some(value)
         };
 
+        let existing_secret = config.get_secret(&profile, &self.key).cloned();
+
         // Determine which provider to use
         let provider_name_to_use = if let Some(ref provider_name) = self.provider {
             Some(provider_name.clone())
-        } else if let Some(existing) = config
-            .get_secret(&profile, &self.key)
+        } else if let Some(existing) = existing_secret
+            .as_ref()
             .and_then(|s| s.provider().map(str::to_string))
         {
             Some(existing)
@@ -165,13 +182,18 @@ impl SetCommand {
                             provider_name
                         );
 
+                        let key_name = resolve_remote_key_name(
+                            &self.key,
+                            self.key_name.as_deref(),
+                            existing_secret.as_ref(),
+                            provider_name,
+                        );
+
                         if self.dry_run {
                             // In dry-run mode, skip actual remote storage
-                            let key_name = self.key_name.as_deref().unwrap_or(&self.key);
                             (None, Some(key_name.to_string()))
                         } else {
                             // Use the already-resolved provider to store the secret
-                            let key_name = self.key_name.as_deref().unwrap_or(&self.key);
                             let stored_key = provider.put_secret(key_name, value).await?;
 
                             // Store just the key name (without prefix) in config
@@ -341,5 +363,47 @@ impl SetCommand {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn secret(provider: &str, value: &str) -> config::SecretConfig {
+        let mut secret = config::SecretConfig::default();
+        secret.set_provider(Some(provider.to_string()));
+        secret.set_value(Some(value.to_string()));
+        secret
+    }
+
+    #[test]
+    fn remote_key_name_prefers_explicit_key_name() {
+        let existing = secret("gcp", "existing-name");
+
+        assert_eq!(
+            resolve_remote_key_name("ENV_NAME", Some("explicit-name"), Some(&existing), "gcp"),
+            "explicit-name"
+        );
+    }
+
+    #[test]
+    fn remote_key_name_reuses_existing_value_for_same_provider() {
+        let existing = secret("gcp", "existing-name");
+
+        assert_eq!(
+            resolve_remote_key_name("ENV_NAME", None, Some(&existing), "gcp"),
+            "existing-name"
+        );
+    }
+
+    #[test]
+    fn remote_key_name_uses_env_key_when_switching_providers() {
+        let existing = secret("aws", "existing-name");
+
+        assert_eq!(
+            resolve_remote_key_name("ENV_NAME", None, Some(&existing), "gcp"),
+            "ENV_NAME"
+        );
     }
 }
