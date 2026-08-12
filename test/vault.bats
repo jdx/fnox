@@ -16,6 +16,7 @@
 setup() {
 	load 'test_helper/common_setup'
 	_common_setup
+	_vault_secrets_to_cleanup=()
 
 	# Check if vault CLI is installed
 	if ! command -v vault >/dev/null 2>&1; then
@@ -43,6 +44,9 @@ setup() {
 }
 
 teardown() {
+	for secret_name in "${_vault_secrets_to_cleanup[@]}"; do
+		delete_test_vault_secret "$secret_name"
+	done
 	_common_teardown
 }
 
@@ -134,6 +138,7 @@ EOF
 	create_vault_config
 
 	secret_name=$(create_test_vault_secret)
+	_vault_secrets_to_cleanup+=("$secret_name")
 	cat >>"${FNOX_CONFIG_FILE}" <<EOF
 
 [secrets.TEST_USERNAME]
@@ -157,6 +162,15 @@ EOF
 	assert_output --partial "test-secret-value-"
 
 	delete_test_vault_secret "$secret_name"
+	run "$FNOX_BIN" set TEST_USERNAME "recreated-user"
+	assert_success
+
+	run "$FNOX_BIN" get TEST_USERNAME
+	assert_success
+	assert_output "recreated-user"
+
+	delete_test_vault_secret "$secret_name"
+	_vault_secrets_to_cleanup=()
 }
 
 @test "fnox get retrieves value field from Vault secret" {

@@ -24,6 +24,14 @@ fn parse_secret_reference(value: &str) -> Result<(&str, &str)> {
     }
 }
 
+fn is_missing_secret_error(error: &FnoxError) -> bool {
+    let FnoxError::ProviderCliFailed { details, .. } = error else {
+        return false;
+    };
+    let details = details.to_ascii_lowercase();
+    details.contains("no data found") || details.contains("no value found")
+}
+
 pub struct HashiCorpVaultProvider {
     address: Option<String>,
     path: Option<String>,
@@ -239,10 +247,19 @@ impl crate::providers::Provider for HashiCorpVaultProvider {
 
         // Patch explicit fields so updating one value does not replace its siblings.
         let value_arg = format!("{field_name}={value}");
-        let operation = if key.contains('/') { "patch" } else { "put" };
-        let args = vec!["kv", operation, &secret_path, &value_arg];
-
-        self.execute_vault_command(&args).await?;
+        if key.contains('/') {
+            let patch_args = vec!["kv", "patch", &secret_path, &value_arg];
+            if let Err(error) = self.execute_vault_command(&patch_args).await {
+                if !is_missing_secret_error(&error) {
+                    return Err(error);
+                }
+                let put_args = vec!["kv", "put", &secret_path, &value_arg];
+                self.execute_vault_command(&put_args).await?;
+            }
+        } else {
+            let put_args = vec!["kv", "put", &secret_path, &value_arg];
+            self.execute_vault_command(&put_args).await?;
+        }
 
         tracing::debug!("Successfully wrote secret '{}' to Vault", secret_path);
 
@@ -295,5 +312,24 @@ mod tests {
             ("database", "password")
         );
         assert!(parse_secret_reference("database/nested/password").is_err());
+    }
+
+    #[test]
+    fn recognizes_missing_secret_errors() {
+        let error = FnoxError::ProviderCliFailed {
+            provider: PROVIDER_NAME.to_string(),
+            details: "No data found at secret/data/database".to_string(),
+            hint: String::new(),
+            url: URL.to_string(),
+        };
+        assert!(is_missing_secret_error(&error));
+
+        let error = FnoxError::ProviderCliFailed {
+            provider: PROVIDER_NAME.to_string(),
+            details: "permission denied".to_string(),
+            hint: String::new(),
+            url: URL.to_string(),
+        };
+        assert!(!is_missing_secret_error(&error));
     }
 }
