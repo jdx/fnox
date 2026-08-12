@@ -2,6 +2,8 @@ use crate::env;
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
 use serde_json::json;
+use std::process::Stdio;
+use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
 const URL: &str = "https://fnox.jdx.dev/providers/vault";
@@ -101,6 +103,15 @@ impl HashiCorpVaultProvider {
 
     /// Execute vault CLI command with proper authentication
     async fn execute_vault_command(&self, args: &[&str]) -> Result<String> {
+        self.execute_vault_command_with_stdin(args, None).await
+    }
+
+    /// Execute a vault CLI command, optionally supplying its standard input.
+    async fn execute_vault_command_with_stdin(
+        &self,
+        args: &[&str],
+        stdin: Option<&str>,
+    ) -> Result<String> {
         tracing::debug!("Executing vault command with args: {:?}", args);
 
         let mut cmd = Command::new("vault");
@@ -138,9 +149,16 @@ impl HashiCorpVaultProvider {
         );
         cmd.env("VAULT_TOKEN", token);
 
-        cmd.args(args);
+        cmd.args(args)
+            .stdin(if stdin.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
 
-        let output = cmd.output().await.map_err(|e| {
+        let mut child = cmd.spawn().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 FnoxError::ProviderCliNotFound {
                     provider: "HashiCorp Vault".to_string(),
@@ -157,6 +175,38 @@ impl HashiCorpVaultProvider {
                 }
             }
         })?;
+
+        if let Some(input) = stdin {
+            let mut child_stdin =
+                child
+                    .stdin
+                    .take()
+                    .ok_or_else(|| FnoxError::ProviderCliFailed {
+                        provider: PROVIDER_NAME.to_string(),
+                        details: "Vault child process did not expose piped stdin".to_string(),
+                        hint: "This is an internal error".to_string(),
+                        url: URL.to_string(),
+                    })?;
+            child_stdin.write_all(input.as_bytes()).await.map_err(|e| {
+                FnoxError::ProviderCliFailed {
+                    provider: PROVIDER_NAME.to_string(),
+                    details: format!("Failed to write secret to Vault stdin: {e}"),
+                    hint: "This is an internal error".to_string(),
+                    url: URL.to_string(),
+                }
+            })?;
+            drop(child_stdin);
+        }
+
+        let output = child
+            .wait_with_output()
+            .await
+            .map_err(|e| FnoxError::ProviderCliFailed {
+                provider: PROVIDER_NAME.to_string(),
+                details: format!("Failed to wait for Vault command: {e}"),
+                hint: "Check your Vault configuration".to_string(),
+                url: URL.to_string(),
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -246,19 +296,34 @@ impl crate::providers::Provider for HashiCorpVaultProvider {
         tracing::debug!("Writing secret '{}' to HashiCorp Vault", secret_path);
 
         // Patch explicit fields so updating one value does not replace its siblings.
-        let value_arg = format!("{field_name}={value}");
+        // Passing values through stdin prevents Vault from interpreting leading
+        // `@` as file input or `-` as an instruction to read uncontrolled stdin.
+        let value_arg = format!("{field_name}=-");
         if key.contains('/') {
             let patch_args = vec!["kv", "patch", &secret_path, &value_arg];
-            if let Err(error) = self.execute_vault_command(&patch_args).await {
+            if let Err(error) = self
+                .execute_vault_command_with_stdin(&patch_args, Some(value))
+                .await
+            {
                 if !is_missing_secret_error(&error) {
                     return Err(error);
                 }
-                let put_args = vec!["kv", "put", &secret_path, &value_arg];
-                self.execute_vault_command(&put_args).await?;
+                let put_args = vec!["kv", "put", "-cas=0", &secret_path, &value_arg];
+                if self
+                    .execute_vault_command_with_stdin(&put_args, Some(value))
+                    .await
+                    .is_err()
+                {
+                    // A concurrent writer may have created the secret after the
+                    // failed patch. Retry the non-destructive patch in that case.
+                    self.execute_vault_command_with_stdin(&patch_args, Some(value))
+                        .await?;
+                }
             }
         } else {
             let put_args = vec!["kv", "put", &secret_path, &value_arg];
-            self.execute_vault_command(&put_args).await?;
+            self.execute_vault_command_with_stdin(&put_args, Some(value))
+                .await?;
         }
 
         tracing::debug!("Successfully wrote secret '{}' to Vault", secret_path);

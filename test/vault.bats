@@ -169,8 +169,59 @@ EOF
 	assert_success
 	assert_output "recreated-user"
 
+	run "$FNOX_BIN" set TEST_USERNAME "@literal-value"
+	assert_success
+	run "$FNOX_BIN" get TEST_USERNAME
+	assert_success
+	assert_output "@literal-value"
+
+	run "$FNOX_BIN" set TEST_USERNAME "-"
+	assert_success
+	run "$FNOX_BIN" get TEST_USERNAME
+	assert_success
+	assert_output "-"
+
 	delete_test_vault_secret "$secret_name"
 	_vault_secrets_to_cleanup=()
+}
+
+@test "fnox set preserves concurrent Vault fields while creating a field reference" {
+	create_vault_config
+
+	secret_name="fnox-race-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
+	_vault_secrets_to_cleanup+=("$secret_name")
+	cat >>"${FNOX_CONFIG_FILE}" <<EOF
+
+[secrets.TEST_USERNAME]
+provider = "vault"
+value = "$secret_name/username"
+EOF
+
+	export FNOX_TEST_REAL_VAULT
+	FNOX_TEST_REAL_VAULT=$(command -v vault)
+	export FNOX_TEST_VAULT_RACE_PATH="secret/$secret_name"
+	mkdir -p "$BATS_TEST_TMPDIR/vault-race-bin"
+	cat >"$BATS_TEST_TMPDIR/vault-race-bin/vault" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "kv" && "$2" == "put" && "$3" == "-cas=0" ]]; then
+	cat >/dev/null
+	"$FNOX_TEST_REAL_VAULT" kv put "$FNOX_TEST_VAULT_RACE_PATH" sibling=concurrent >/dev/null
+	exit 2
+fi
+exec "$FNOX_TEST_REAL_VAULT" "$@"
+EOF
+	chmod +x "$BATS_TEST_TMPDIR/vault-race-bin/vault"
+	export PATH="$BATS_TEST_TMPDIR/vault-race-bin:$PATH"
+
+	run "$FNOX_BIN" set TEST_USERNAME "race-safe-user"
+	assert_success
+
+	run "$FNOX_TEST_REAL_VAULT" kv get -field=username "secret/$secret_name"
+	assert_success
+	assert_output "race-safe-user"
+	run "$FNOX_TEST_REAL_VAULT" kv get -field=sibling "secret/$secret_name"
+	assert_success
+	assert_output "concurrent"
 }
 
 @test "fnox get retrieves value field from Vault secret" {
