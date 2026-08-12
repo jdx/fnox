@@ -31,7 +31,9 @@ fn is_missing_secret_error(error: &FnoxError) -> bool {
         return false;
     };
     let details = details.to_ascii_lowercase();
-    details.contains("no data found") || details.contains("no value found")
+    details.contains("no data found")
+        || details.contains("no value found")
+        || details.contains("code: 404")
 }
 
 fn deleted_secret_version(metadata: &str) -> Result<Option<u64>> {
@@ -461,6 +463,14 @@ mod tests {
         let error = FnoxError::ProviderCliFailed {
             provider: PROVIDER_NAME.to_string(),
             details: "No data found at secret/data/database".to_string(),
+            hint: String::new(),
+            url: URL.to_string(),
+        };
+        assert!(is_missing_secret_error(&error));
+
+        let error = FnoxError::ProviderCliFailed {
+            provider: PROVIDER_NAME.to_string(),
+            details: "Error making API request. Code: 404. Errors:".to_string(),
             hint: String::new(),
             url: URL.to_string(),
         };
