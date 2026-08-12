@@ -179,7 +179,7 @@ EOF
 	assert_success
 	run "$FNOX_BIN" get TEST_USERNAME
 	assert_success
-	assert_output "-"
+	assert_output -- "-"
 
 	delete_test_vault_secret "$secret_name"
 	_vault_secrets_to_cleanup=()
