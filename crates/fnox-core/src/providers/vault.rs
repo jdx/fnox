@@ -34,6 +34,52 @@ fn is_missing_secret_error(error: &FnoxError) -> bool {
     details.contains("no data found") || details.contains("no value found")
 }
 
+fn deleted_secret_version(metadata: &str) -> Result<Option<u64>> {
+    let metadata: serde_json::Value =
+        serde_json::from_str(metadata).map_err(|error| FnoxError::ProviderInvalidResponse {
+            provider: PROVIDER_NAME.to_string(),
+            details: format!("Invalid Vault metadata response: {error}"),
+            hint: "Check that the Vault CLI returned JSON metadata".to_string(),
+            url: URL.to_string(),
+        })?;
+    let data = metadata
+        .get("data")
+        .ok_or_else(|| FnoxError::ProviderInvalidResponse {
+            provider: PROVIDER_NAME.to_string(),
+            details: "Vault metadata response did not contain data".to_string(),
+            hint: "Check that the Vault CLI returned KV v2 metadata".to_string(),
+            url: URL.to_string(),
+        })?;
+    let current_version = data
+        .get("current_version")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| FnoxError::ProviderInvalidResponse {
+            provider: PROVIDER_NAME.to_string(),
+            details: "Vault metadata response did not contain current_version".to_string(),
+            hint: "Check that the Vault CLI returned KV v2 metadata".to_string(),
+            url: URL.to_string(),
+        })?;
+    let version = data
+        .get("versions")
+        .and_then(|versions| versions.get(current_version.to_string()))
+        .ok_or_else(|| FnoxError::ProviderInvalidResponse {
+            provider: PROVIDER_NAME.to_string(),
+            details: format!("Vault metadata did not contain version {current_version}"),
+            hint: "Check that the Vault CLI returned KV v2 metadata".to_string(),
+            url: URL.to_string(),
+        })?;
+    let deleted = version
+        .get("deletion_time")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|time| !time.is_empty())
+        || version
+            .get("destroyed")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+
+    Ok(deleted.then_some(current_version))
+}
+
 pub struct HashiCorpVaultProvider {
     address: Option<String>,
     path: Option<String>,
@@ -243,6 +289,12 @@ impl HashiCorpVaultProvider {
 
         Ok(stdout.trim().to_string())
     }
+
+    async fn deleted_secret_version(&self, secret_path: &str) -> Result<Option<u64>> {
+        let args = ["kv", "metadata", "get", "-format=json", secret_path];
+        let metadata = self.execute_vault_command(&args).await?;
+        deleted_secret_version(&metadata)
+    }
 }
 
 #[async_trait]
@@ -316,8 +368,33 @@ impl crate::providers::Provider for HashiCorpVaultProvider {
                 {
                     // A concurrent writer may have created the secret after the
                     // failed patch. Retry the non-destructive patch in that case.
-                    self.execute_vault_command_with_stdin(&patch_args, Some(value))
-                        .await?;
+                    if let Err(retry_error) = self
+                        .execute_vault_command_with_stdin(&patch_args, Some(value))
+                        .await
+                    {
+                        if !is_missing_secret_error(&retry_error) {
+                            return Err(retry_error);
+                        }
+
+                        // CAS 0 cannot write over a soft-deleted KV v2 path. Use
+                        // its deleted current version without risking a live path.
+                        if let Some(version) = self.deleted_secret_version(&secret_path).await? {
+                            let cas_arg = format!("-cas={version}");
+                            let recreate_args =
+                                vec!["kv", "put", &cas_arg, &secret_path, &value_arg];
+                            if self
+                                .execute_vault_command_with_stdin(&recreate_args, Some(value))
+                                .await
+                                .is_err()
+                            {
+                                self.execute_vault_command_with_stdin(&patch_args, Some(value))
+                                    .await?;
+                            }
+                        } else {
+                            self.execute_vault_command_with_stdin(&patch_args, Some(value))
+                                .await?;
+                        }
+                    }
                 }
             }
         } else {
@@ -396,5 +473,14 @@ mod tests {
             url: URL.to_string(),
         };
         assert!(!is_missing_secret_error(&error));
+    }
+
+    #[test]
+    fn recognizes_deleted_metadata_versions() {
+        let deleted = r#"{"data":{"current_version":2,"versions":{"2":{"deletion_time":"2026-08-12T00:00:00Z","destroyed":false}}}}"#;
+        assert_eq!(deleted_secret_version(deleted).unwrap(), Some(2));
+
+        let live = r#"{"data":{"current_version":3,"versions":{"3":{"deletion_time":"","destroyed":false}}}}"#;
+        assert_eq!(deleted_secret_version(live).unwrap(), None);
     }
 }
