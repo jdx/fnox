@@ -5,6 +5,24 @@ use serde_json::json;
 use tokio::process::Command;
 
 const URL: &str = "https://fnox.jdx.dev/providers/vault";
+const PROVIDER_NAME: &str = "HashiCorp Vault";
+
+fn parse_secret_reference(value: &str) -> Result<(&str, &str)> {
+    match value.split_once('/') {
+        None => Ok((value, "value")),
+        Some((secret, field))
+            if !secret.is_empty() && !field.is_empty() && !field.contains('/') =>
+        {
+            Ok((secret, field))
+        }
+        _ => Err(FnoxError::ProviderInvalidResponse {
+            provider: PROVIDER_NAME.to_string(),
+            details: format!("Invalid secret reference format: '{value}'"),
+            hint: "Expected 'secret' or 'secret/field'".to_string(),
+            url: URL.to_string(),
+        }),
+    }
+}
 
 pub struct HashiCorpVaultProvider {
     address: Option<String>,
@@ -178,22 +196,7 @@ impl crate::providers::Provider for HashiCorpVaultProvider {
     async fn get_secret(&self, value: &str) -> Result<String> {
         tracing::debug!("Getting secret '{}' from HashiCorp Vault", value);
 
-        // Parse value as "secret-name/field" or just "secret-name"
-        // Default field is "value" if not specified (Vault KV v2 convention)
-        let parts: Vec<&str> = value.split('/').collect();
-
-        let (secret_name, field_name) = match parts.len() {
-            1 => (parts[0], "value"),
-            2 => (parts[0], parts[1]),
-            _ => {
-                return Err(FnoxError::ProviderInvalidResponse {
-                    provider: "HashiCorp Vault".to_string(),
-                    details: format!("Invalid secret reference format: '{}'", value),
-                    hint: "Expected 'secret' or 'secret/field'".to_string(),
-                    url: URL.to_string(),
-                });
-            }
-        };
+        let (secret_name, field_name) = parse_secret_reference(value)?;
 
         let secret_path = self.get_secret_path(secret_name);
 
@@ -229,13 +232,15 @@ impl crate::providers::Provider for HashiCorpVaultProvider {
     }
 
     async fn put_secret(&self, key: &str, value: &str) -> Result<String> {
-        let secret_path = self.get_secret_path(key);
+        let (secret_name, field_name) = parse_secret_reference(key)?;
+        let secret_path = self.get_secret_path(secret_name);
 
         tracing::debug!("Writing secret '{}' to HashiCorp Vault", secret_path);
 
-        // Use vault kv put command: vault kv put <path> value=<value>
-        let value_arg = format!("value={}", value);
-        let args = vec!["kv", "put", &secret_path, &value_arg];
+        // Patch explicit fields so updating one value does not replace its siblings.
+        let value_arg = format!("{field_name}={value}");
+        let operation = if key.contains('/') { "patch" } else { "put" };
+        let args = vec!["kv", operation, &secret_path, &value_arg];
 
         self.execute_vault_command(&args).await?;
 
@@ -273,4 +278,22 @@ fn vault_namespace() -> Option<String> {
     env::var("FNOX_VAULT_NAMESPACE")
         .or_else(|_| env::var("VAULT_NAMESPACE"))
         .ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_secret_references() {
+        assert_eq!(
+            parse_secret_reference("database").unwrap(),
+            ("database", "value")
+        );
+        assert_eq!(
+            parse_secret_reference("database/password").unwrap(),
+            ("database", "password")
+        );
+        assert!(parse_secret_reference("database/nested/password").is_err());
+    }
 }

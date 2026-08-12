@@ -130,6 +130,35 @@ EOF
 	delete_test_vault_secret "$secret_name"
 }
 
+@test "fnox set updates a specific Vault field without replacing siblings" {
+	create_vault_config
+
+	secret_name=$(create_test_vault_secret)
+	cat >>"${FNOX_CONFIG_FILE}" <<EOF
+
+[secrets.TEST_USERNAME]
+provider = "vault"
+value = "$secret_name/username"
+
+[secrets.TEST_VALUE]
+provider = "vault"
+value = "$secret_name/value"
+EOF
+
+	run "$FNOX_BIN" set TEST_USERNAME "updated-user"
+	assert_success
+
+	run "$FNOX_BIN" get TEST_USERNAME
+	assert_success
+	assert_output "updated-user"
+
+	run "$FNOX_BIN" get TEST_VALUE
+	assert_success
+	assert_output --partial "test-secret-value-"
+
+	delete_test_vault_secret "$secret_name"
+}
+
 @test "fnox get retrieves value field from Vault secret" {
 	create_vault_config
 
