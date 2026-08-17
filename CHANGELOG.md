@@ -1,6 +1,39 @@
 # Changelog
 
-## [1.33.0](https://github.com/jdx/fnox/compare/v1.32.0..v1.33.0) - 2026-08-08
+## [1.33.1](https://github.com/jdx/fnox/compare/v1.33.0..v1.33.1) - 2026-08-17
+
+### 🐛 Bug Fixes
+
+- **(set)** preserve existing remote key name by [@jdx](https://github.com/jdx) in [#712](https://github.com/jdx/fnox/pull/712)
+
+### 📚 Documentation
+
+- fix sponsor logo sizing by [@jdx](https://github.com/jdx) in [#714](https://github.com/jdx/fnox/pull/714)
+
+### 🛡️ Security
+
+- **(deps)** update dependency @anthropic-ai/claude-code to v2.1.221 by [@renovate[bot]](https://github.com/renovate[bot]) in [#705](https://github.com/jdx/fnox/pull/705)
+
+### 📦️ Dependency Updates
+
+- simplify cargo version requirements by [@jdx](https://github.com/jdx) in [#694](https://github.com/jdx/fnox/pull/694)
+- update rust crate usage-lib to v5.1.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#695](https://github.com/jdx/fnox/pull/695)
+- update rust crate google-cloud-secretmanager-v1 to v1.12.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#706](https://github.com/jdx/fnox/pull/706)
+- update jdx/mise-action action to v4.2.4 by [@renovate[bot]](https://github.com/renovate[bot]) in [#697](https://github.com/jdx/fnox/pull/697)
+- update rust crate aho-corasick to v1.1.5 by [@renovate[bot]](https://github.com/renovate[bot]) in [#698](https://github.com/jdx/fnox/pull/698)
+- update rust crate data-encoding to v2.11.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#700](https://github.com/jdx/fnox/pull/700)
+- update rust crate clap to v4.6.5 by [@renovate[bot]](https://github.com/renovate[bot]) in [#699](https://github.com/jdx/fnox/pull/699)
+- update rust crate ignore to v0.4.32 by [@renovate[bot]](https://github.com/renovate[bot]) in [#701](https://github.com/jdx/fnox/pull/701)
+- update rust crate keepass to v0.13.20 by [@renovate[bot]](https://github.com/renovate[bot]) in [#702](https://github.com/jdx/fnox/pull/702)
+- update zizmorcore/zizmor-action action to v0.6.2 by [@renovate[bot]](https://github.com/renovate[bot]) in [#704](https://github.com/jdx/fnox/pull/704)
+- update rust crate rustls to v0.23.43 by [@renovate[bot]](https://github.com/renovate[bot]) in [#703](https://github.com/jdx/fnox/pull/703)
+- update rust crate base64 to v0.23.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#707](https://github.com/jdx/fnox/pull/707)
+- update rust crate globset to v0.4.20 by [@renovate[bot]](https://github.com/renovate[bot]) in [#708](https://github.com/jdx/fnox/pull/708)
+- update dependency @anthropic-ai/claude-code to v2.1.222 by [@renovate[bot]](https://github.com/renovate[bot]) in [#710](https://github.com/jdx/fnox/pull/710)
+- update rust crate ignore to v0.4.33 by [@renovate[bot]](https://github.com/renovate[bot]) in [#709](https://github.com/jdx/fnox/pull/709)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#715](https://github.com/jdx/fnox/pull/715)
+
+## [1.33.0](https://github.com/jdx/fnox/compare/v1.32.0..v1.33.0) - 2026-08-09
 
 ### 🚀 Features
 

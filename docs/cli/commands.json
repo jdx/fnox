@@ -1832,7 +1832,7 @@
   "config": {
     "props": {}
   },
-  "version": "1.33.0",
+  "version": "1.33.1",
   "usage": "Usage: fnox [OPTIONS] <COMMAND>",
   "complete": {
     "key": {
