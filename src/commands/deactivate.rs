@@ -29,6 +29,10 @@ impl DeactivateCommand {
 
         let shell = shell::get_shell(None)?;
 
+        // Persistent as_file secrets outlive the hook-env process. Remove the
+        // files before the shell discards __FNOX_SESSION, which owns their paths.
+        super::hook_env::cleanup_session_temp_files()?;
+
         // Generate deactivation output via the shell's trait method.
         // Eval-based shells produce shell code; structured shells (nushell)
         // produce JSON that the wrapper function interprets.

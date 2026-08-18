@@ -379,6 +379,146 @@ EOF
 	fi
 }
 
+@test "deactivate cleans up hook temp files" {
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+FILE_SECRET = { provider = "plain", value = "file-secret-value", as_file = true }
+EOF
+
+	run "$FNOX_BIN" hook-env --shell bash
+	assert_success
+	local hook_output="$output"
+	local session_var file_path
+	session_var=$(echo "$hook_output" | grep "export __FNOX_SESSION=" | sed -E "s/^export __FNOX_SESSION=//; s/^'(.*)'\$/\\1/")
+	file_path=$(echo "$hook_output" | grep "export FILE_SECRET=" | sed -E "s/^export FILE_SECRET=//; s/^'(.*)'\$/\\1/" | head -1)
+	test -f "$file_path"
+
+	run env FNOX_SHELL=bash __FNOX_SESSION="$session_var" "$FNOX_BIN" deactivate
+	assert_success
+	refute test -e "$file_path"
+}
+
+@test "deactivate cleans files after TMPDIR changes" {
+	local original_tmp="$TEST_TEMP_DIR/original-tmp"
+	local replacement_tmp="$TEST_TEMP_DIR/replacement-tmp"
+	mkdir -p "$original_tmp" "$replacement_tmp"
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+FILE_SECRET = { provider = "plain", value = "file-secret-value", as_file = true }
+EOF
+
+	run env TMPDIR="$original_tmp" "$FNOX_BIN" hook-env --shell bash
+	assert_success
+	local hook_output="$output"
+	local session_var file_path
+	session_var=$(echo "$hook_output" | grep "export __FNOX_SESSION=" | sed -E "s/^export __FNOX_SESSION=//; s/^'(.*)'\$/\\1/")
+	file_path=$(echo "$hook_output" | grep "export FILE_SECRET=" | sed -E "s/^export FILE_SECRET=//; s/^'(.*)'\$/\\1/" | head -1)
+	[[ $file_path == "$original_tmp"/* ]]
+	test -f "$file_path"
+
+	run env TMPDIR="$replacement_tmp" FNOX_SHELL=bash __FNOX_SESSION="$session_var" "$FNOX_BIN" deactivate
+	assert_success
+	refute test -e "$file_path"
+}
+
+@test "deactivate reports cleanup failures after attempting every file" {
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+FILE_SECRET_1 = { provider = "plain", value = "file-secret-value-1", as_file = true }
+FILE_SECRET_2 = { provider = "plain", value = "file-secret-value-2", as_file = true }
+EOF
+
+	run "$FNOX_BIN" hook-env --shell bash
+	assert_success
+	local hook_output="$output"
+	local session_var first_file second_file
+	session_var=$(echo "$hook_output" | grep "export __FNOX_SESSION=" | sed -E "s/^export __FNOX_SESSION=//; s/^'(.*)'\$/\\1/")
+	first_file=$(echo "$hook_output" | grep "export FILE_SECRET_1=" | sed -E "s/^export FILE_SECRET_1=//; s/^'(.*)'\$/\\1/" | head -1)
+	second_file=$(echo "$hook_output" | grep "export FILE_SECRET_2=" | sed -E "s/^export FILE_SECRET_2=//; s/^'(.*)'\$/\\1/" | head -1)
+	rm "$first_file"
+	mkdir "$first_file"
+
+	run env FNOX_SHELL=bash __FNOX_SESSION="$session_var" "$FNOX_BIN" deactivate
+	assert_failure
+	assert_output --partial "failed to clean up temp file for 'FILE_SECRET_1'"
+	refute_output --partial "unset __FNOX_SESSION"
+	refute test -e "$second_file"
+	rmdir "$first_file"
+}
+
+@test "zsh exit cleans up hook temp files" {
+	command -v zsh >/dev/null || skip "zsh is not installed"
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+FILE_SECRET = { provider = "plain", value = "file-secret-value", as_file = true }
+EOF
+
+	local file_path_file="$TEST_TEMP_DIR/file-path"
+	run zsh -dfc 'eval "$('"$FNOX_BIN"' activate zsh)"; _fnox_hook; print -r -- "$FILE_SECRET" > '"$file_path_file"
+	assert_success
+	local file_path
+	file_path=$(cat "$file_path_file")
+	[ -n "$file_path" ]
+	refute test -e "$file_path"
+}
+
+@test "nested zsh exit preserves parent hook temp files" {
+	command -v zsh >/dev/null || skip "zsh is not installed"
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+FILE_SECRET = { provider = "plain", value = "file-secret-value", as_file = true }
+EOF
+
+	local parent_path_file="$TEST_TEMP_DIR/parent-path"
+	local child_path_file="$TEST_TEMP_DIR/child-path"
+	local parent_survived_file="$TEST_TEMP_DIR/parent-survived"
+	local script="$TEST_TEMP_DIR/nested-zsh.zsh"
+	cat >"$script" <<'ZSH'
+eval "$("$FNOX_BIN" activate zsh)"
+_fnox_hook
+print -r -- "$FILE_SECRET" >"$PARENT_PATH_FILE"
+zsh -dfc 'eval "$("$FNOX_BIN" activate zsh)"; _fnox_hook; print -r -- "$FILE_SECRET" >"$CHILD_PATH_FILE"'
+test -f "$FILE_SECRET" && print yes >"$PARENT_SURVIVED_FILE"
+ZSH
+
+	run env FNOX_BIN="$FNOX_BIN" PARENT_PATH_FILE="$parent_path_file" CHILD_PATH_FILE="$child_path_file" PARENT_SURVIVED_FILE="$parent_survived_file" zsh -df "$script"
+	assert_success
+	local parent_path child_path
+	parent_path=$(cat "$parent_path_file")
+	child_path=$(cat "$child_path_file")
+	[ "$parent_path" != "$child_path" ]
+	[ "$(cat "$parent_survived_file")" = yes ]
+	refute test -e "$parent_path"
+	refute test -e "$child_path"
+}
+
 @test "export with as_file=true creates persistent file paths" {
 	# Create config with file-based secrets
 	cat >fnox.toml <<EOF

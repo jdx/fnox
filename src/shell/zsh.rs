@@ -11,11 +11,22 @@ impl Shell for Zsh {
         // Export shell type
         out.push_str("export FNOX_SHELL=zsh\n");
 
+        // A nested zsh inherits its parent's environment. Discard the encoded
+        // parent session so the child's first hook creates independently owned
+        // as_file paths instead of deleting the parent's paths on exit.
+        out.push_str(
+            r#"if [[ -n "${__FNOX_SESSION:-}" && "${__FNOX_ZSH_PID:-}" != "$$" ]]; then
+  unset __FNOX_SESSION
+fi
+export __FNOX_ZSH_PID=$$
+"#,
+        );
+
         // Define the fnox wrapper function
         out.push_str(&format!(
             r#"
 fnox() {{
-  local command
+  local command output status
   command="${{1:-}}"
   if [ "$#" = 0 ]; then
     {exe}
@@ -25,7 +36,12 @@ fnox() {{
 
   case "$command" in
   deactivate|shell)
-    eval "$({exe} "$command" "$@")"
+    output="$({exe} "$command" "$@")"
+    status=$?
+    if (( status != 0 )); then
+      return $status
+    fi
+    eval "$output"
     ;;
   *)
     {exe} "$command" "$@"
@@ -44,6 +60,10 @@ _fnox_hook() {{
   eval "$({exe} hook-env -s zsh)"
   trap - SIGINT
 }}
+
+_fnox_cleanup() {{
+  {exe} deactivate >/dev/null
+}}
 "#,
             ));
 
@@ -54,6 +74,14 @@ typeset -ag precmd_functions
 if [[ -z "${precmd_functions[(r)_fnox_hook]+1}" ]]; then
   precmd_functions=( _fnox_hook ${precmd_functions[@]} )
 fi
+"#,
+            );
+
+            // Clean up persistent as_file secrets when the shell exits.
+            out.push_str(
+                r#"
+autoload -Uz add-zsh-hook
+add-zsh-hook zshexit _fnox_cleanup
 "#,
             );
 
@@ -74,17 +102,19 @@ fi
     fn deactivate(&self) -> String {
         let mut out = String::new();
 
-        // Remove hook from precmd_functions and chpwd_functions
+        // Remove prompt, directory-change, and exit hooks
         out.push_str(
             r#"
 precmd_functions=( ${precmd_functions[@]:#_fnox_hook} )
 chpwd_functions=( ${chpwd_functions[@]:#_fnox_hook} )
+autoload -Uz add-zsh-hook
+add-zsh-hook -d zshexit _fnox_cleanup 2>/dev/null
 "#,
         );
 
         // Unset fnox-related variables
-        out.push_str("unset -f fnox _fnox_hook\n");
-        out.push_str("unset FNOX_SHELL __FNOX_SESSION\n");
+        out.push_str("unset -f fnox _fnox_hook _fnox_cleanup\n");
+        out.push_str("unset FNOX_SHELL __FNOX_SESSION __FNOX_ZSH_PID\n");
 
         out
     }
