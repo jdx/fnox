@@ -32,7 +32,9 @@ teardown() {
 	assert_output --partial "_fnox_hook()"
 	assert_output --partial "precmd_functions"
 	assert_output --partial "chpwd_functions"
+	assert_output --partial 'export __FNOX_ZSH_PID=$$'
 	assert_output --partial "add-zsh-hook zshexit _fnox_cleanup"
+	assert_output --partial 'return $status'
 }
 
 @test "fnox activate fish generates valid fish code" {

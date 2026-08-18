@@ -31,7 +31,7 @@ impl DeactivateCommand {
 
         // Persistent as_file secrets outlive the hook-env process. Remove the
         // files before the shell discards __FNOX_SESSION, which owns their paths.
-        super::hook_env::cleanup_session_temp_files();
+        super::hook_env::cleanup_session_temp_files()?;
 
         // Generate deactivation output via the shell's trait method.
         // Eval-based shells produce shell code; structured shells (nushell)

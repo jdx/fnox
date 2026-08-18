@@ -42,19 +42,10 @@ pub struct HookEnvCommand {
     /// Shell type (bash, zsh, fish, nu, pwsh)
     #[arg(short = 's', long)]
     pub shell: Option<String>,
-
-    /// Remove temporary files recorded by the current shell session
-    #[arg(long, hide = true)]
-    pub cleanup: bool,
 }
 
 impl HookEnvCommand {
     pub async fn run(&self, cli: &Cli) -> Result<()> {
-        if self.cleanup {
-            cleanup_session_temp_files();
-            return Ok(());
-        }
-
         // Get settings for output mode
         let settings =
             Settings::try_get().map_err(|e| anyhow::anyhow!("Failed to get settings: {}", e))?;
@@ -148,26 +139,45 @@ impl HookEnvCommand {
 ///
 /// Session data comes from the environment, so only remove files whose paths
 /// match the location and prefix used by hook-created secret files.
-pub(crate) fn cleanup_session_temp_files() {
-    let temp_dir = std::env::temp_dir();
+pub(crate) fn cleanup_session_temp_files() -> Result<()> {
+    let temp_dir = PREV_SESSION.hook_temp_dir.as_deref().or_else(|| {
+        PREV_SESSION
+            .temp_files
+            .values()
+            .find_map(|path| Path::new(path).parent())
+    });
+    let mut errors = Vec::new();
+
     for (key, path) in &PREV_SESSION.temp_files {
         let path = Path::new(path);
-        let is_hook_temp_file = path.parent() == Some(temp_dir.as_path())
+        let is_hook_temp_file = path.parent() == temp_dir
             && path
                 .file_name()
                 .and_then(|name| name.to_str())
                 .is_some_and(|name| name.starts_with("fnox-hook-"));
 
         if !is_hook_temp_file {
-            tracing::warn!("refusing to clean up invalid temp file path for '{}'", key);
+            errors.push(format!(
+                "refusing to clean up invalid temp file path for '{key}': {}",
+                path.display()
+            ));
             continue;
         }
 
         match fs::remove_file(path) {
             Ok(()) => tracing::debug!("cleaned up temp file for secret '{}'", key),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => tracing::debug!("failed to clean up temp file for '{}': {}", key, e),
+            Err(e) => errors.push(format!(
+                "failed to clean up temp file for '{key}' at {}: {e}",
+                path.display()
+            )),
         }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        anyhow::bail!(errors.join("; "))
     }
 }
 

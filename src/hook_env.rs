@@ -37,6 +37,9 @@ pub struct HookEnvSession {
     /// Paths to temporary files for file-based secrets (key -> file_path)
     #[serde(default)]
     pub temp_files: HashMap<String, String>,
+    /// Temp directory used to create file-based secrets
+    #[serde(default)]
+    pub hook_temp_dir: Option<PathBuf>,
 }
 
 /// Global previous session state, loaded from __FNOX_SESSION env var
@@ -98,6 +101,9 @@ impl HookEnvSession {
             .iter()
             .map(|(k, v)| (k.clone(), hash_secret_with_key(&hash_key, k, v)))
             .collect();
+        let hook_temp_dir = temp_files
+            .values()
+            .find_map(|path| Path::new(path).parent().map(Path::to_path_buf));
 
         Ok(Self {
             dir,
@@ -108,6 +114,7 @@ impl HookEnvSession {
             env_var_hash,
             config_files_hash,
             temp_files,
+            hook_temp_dir,
         })
     }
 

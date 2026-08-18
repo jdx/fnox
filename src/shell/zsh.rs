@@ -11,11 +11,22 @@ impl Shell for Zsh {
         // Export shell type
         out.push_str("export FNOX_SHELL=zsh\n");
 
+        // A nested zsh inherits its parent's environment. Discard the encoded
+        // parent session so the child's first hook creates independently owned
+        // as_file paths instead of deleting the parent's paths on exit.
+        out.push_str(
+            r#"if [[ -n "${__FNOX_SESSION:-}" && "${__FNOX_ZSH_PID:-}" != "$$" ]]; then
+  unset __FNOX_SESSION
+fi
+export __FNOX_ZSH_PID=$$
+"#,
+        );
+
         // Define the fnox wrapper function
         out.push_str(&format!(
             r#"
 fnox() {{
-  local command
+  local command output status
   command="${{1:-}}"
   if [ "$#" = 0 ]; then
     {exe}
@@ -25,7 +36,12 @@ fnox() {{
 
   case "$command" in
   deactivate|shell)
-    eval "$({exe} "$command" "$@")"
+    output="$({exe} "$command" "$@")"
+    status=$?
+    if (( status != 0 )); then
+      return $status
+    fi
+    eval "$output"
     ;;
   *)
     {exe} "$command" "$@"
@@ -46,7 +62,7 @@ _fnox_hook() {{
 }}
 
 _fnox_cleanup() {{
-  {exe} hook-env --cleanup
+  {exe} deactivate >/dev/null
 }}
 "#,
             ));
@@ -98,7 +114,7 @@ add-zsh-hook -d zshexit _fnox_cleanup 2>/dev/null
 
         // Unset fnox-related variables
         out.push_str("unset -f fnox _fnox_hook _fnox_cleanup\n");
-        out.push_str("unset FNOX_SHELL __FNOX_SESSION\n");
+        out.push_str("unset FNOX_SHELL __FNOX_SESSION __FNOX_ZSH_PID\n");
 
         out
     }
