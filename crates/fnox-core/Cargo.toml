@@ -40,6 +40,7 @@ hkdf = { workspace = true }
 indexmap = { workspace = true }
 jsonwebtoken = { workspace = true }
 keepass = { workspace = true }
+keeper-secrets-manager-core = { workspace = true }
 keyring-core = { workspace = true }
 libloading = { workspace = true }
 miette = { workspace = true }

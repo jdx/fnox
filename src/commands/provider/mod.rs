@@ -79,6 +79,10 @@ pub enum ProviderType {
     #[value(name = "keepass")]
     #[strum(serialize = "keepass")]
     KeePass,
+    /// Keeper Secrets Manager
+    #[value(name = "keeper-sm")]
+    #[strum(serialize = "keeper-sm")]
+    KeeperSecretsManager,
     /// OS Keychain
     #[value(name = "keychain")]
     Keychain,

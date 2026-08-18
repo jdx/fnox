@@ -1173,6 +1173,29 @@
         {
           "type": "object",
           "properties": {
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "config_file": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
+            "token": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "type": {
+              "type": "string",
+              "const": "keeper-sm"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
             "address": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },

@@ -265,6 +265,14 @@ impl AddCommand {
                 auth_command: None,
                 daemon_cache: None,
             },
+            ProviderType::KeeperSecretsManager => {
+                crate::config::ProviderConfig::KeeperSecretsManager {
+                    config_file: OptionStringOrSecretRef::literal("~/.keeper/ksm-config.json"),
+                    token: OptionStringOrSecretRef::none(),
+                    auth_command: None,
+                    daemon_cache: None,
+                }
+            }
             ProviderType::Keychain => crate::config::ProviderConfig::Keychain {
                 service: StringOrSecretRef::from("fnox"),
                 prefix: OptionStringOrSecretRef::none(),

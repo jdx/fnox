@@ -36,6 +36,7 @@ Provider type
 - `bitwarden-sm`
 - `infisical`
 - `keepass`
+- `keeper-sm`
 - `keychain`
 - `password-store`
 - `passwordstate`

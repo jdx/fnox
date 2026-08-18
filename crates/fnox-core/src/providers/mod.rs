@@ -23,6 +23,7 @@ pub mod gcp_sm;
 pub mod hw_encrypt;
 pub mod infisical;
 pub mod keepass;
+pub mod keeper_sm;
 pub mod keychain;
 pub mod onepassword;
 pub mod password_store;
@@ -146,7 +147,7 @@ mod generated {
         use super::super::fido2;
         use super::super::{
             age, aws_kms, aws_ps, aws_sm, azure_ac, azure_kms, azure_sm, bitwarden, bitwarden_sm,
-            doppler, foks, gcp_kms, gcp_sm, infisical, keepass, keychain, onepassword,
+            doppler, foks, gcp_kms, gcp_sm, infisical, keepass, keeper_sm, keychain, onepassword,
             password_store, passwordstate, plain, proton_pass, vault, yubikey,
         };
         include!(concat!(
