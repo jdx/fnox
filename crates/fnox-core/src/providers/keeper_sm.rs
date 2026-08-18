@@ -100,25 +100,26 @@ impl KeeperSecretsManagerProvider {
         T: Send + 'static,
         F: FnOnce(&mut SecretsManager) -> Result<T> + Send + 'static,
     {
-        let mut manager = self
-            .manager
-            .lock()
-            .map_err(|_| FnoxError::ProviderApiError {
-                provider: PROVIDER_NAME.to_string(),
-                details: "Keeper SDK client lock was poisoned".to_string(),
-                hint: "Retry the command".to_string(),
-                url: PROVIDER_URL.to_string(),
-            })?
-            .clone();
-
-        tokio::task::spawn_blocking(move || operation(&mut manager))
-            .await
-            .map_err(|e| FnoxError::ProviderApiError {
-                provider: PROVIDER_NAME.to_string(),
-                details: format!("Keeper SDK task failed: {e}"),
-                hint: "Retry the command".to_string(),
-                url: PROVIDER_URL.to_string(),
-            })?
+        let manager = Arc::clone(&self.manager);
+        tokio::task::spawn_blocking(move || {
+            let mut cloned = manager
+                .lock()
+                .map_err(|_| FnoxError::ProviderApiError {
+                    provider: PROVIDER_NAME.to_string(),
+                    details: "Keeper SDK client lock was poisoned".to_string(),
+                    hint: "Retry the command".to_string(),
+                    url: PROVIDER_URL.to_string(),
+                })?
+                .clone();
+            operation(&mut cloned)
+        })
+        .await
+        .map_err(|e| FnoxError::ProviderApiError {
+            provider: PROVIDER_NAME.to_string(),
+            details: format!("Keeper SDK task failed: {e}"),
+            hint: "Retry the command".to_string(),
+            url: PROVIDER_URL.to_string(),
+        })?
     }
 
     async fn ensure_parallel_ready(&self) -> Result<()> {
@@ -262,6 +263,15 @@ fn map_ksm_error(error: KSMRError, secret: Option<&str>) -> FnoxError {
     }
 }
 
+fn map_batch_failure(error: &FnoxError, notation: &str) -> FnoxError {
+    error.map_batch_error(
+        notation,
+        PROVIDER_NAME,
+        "Check the Keeper Secrets Manager configuration",
+        PROVIDER_URL,
+    )
+}
+
 #[async_trait]
 impl crate::providers::Provider for KeeperSecretsManagerProvider {
     fn capabilities(&self) -> Vec<crate::providers::ProviderCapability> {
@@ -293,17 +303,7 @@ impl crate::providers::Provider for KeeperSecretsManagerProvider {
         if let Err(error) = self.ensure_parallel_ready().await {
             return secrets
                 .iter()
-                .map(|(key, _)| {
-                    (
-                        key.clone(),
-                        Err(FnoxError::ProviderApiError {
-                            provider: PROVIDER_NAME.to_string(),
-                            details: error.to_string(),
-                            hint: "Retry the command".to_string(),
-                            url: PROVIDER_URL.to_string(),
-                        }),
-                    )
-                })
+                .map(|(key, notation)| (key.clone(), Err(map_batch_failure(&error, notation))))
                 .collect();
         }
 
@@ -367,6 +367,21 @@ mod tests {
             Some("abc/field/password"),
         );
         assert!(matches!(error, FnoxError::ProviderSecretNotFound { .. }));
+    }
+
+    #[test]
+    fn batch_failures_preserve_authentication_errors() {
+        let error = FnoxError::ProviderAuthFailed {
+            provider: PROVIDER_NAME.to_string(),
+            details: "invalid one-time token".to_string(),
+            hint: "replace the token".to_string(),
+            url: PROVIDER_URL.to_string(),
+        };
+
+        assert!(matches!(
+            map_batch_failure(&error, "record/field/password"),
+            FnoxError::ProviderAuthFailed { .. }
+        ));
     }
 
     #[test]
