@@ -379,6 +379,10 @@ domain = "api.example.com"
     #[test]
     fn ambient_credential_scrub_covers_provider_chains() {
         for key in [
+            "KSM_CONFIG",
+            "FNOX_KEEPER_CONFIG",
+            "KSM_TOKEN",
+            "FNOX_KEEPER_TOKEN",
             "AWS_PROFILE",
             "AWS_REGION",
             "AWS_WEB_IDENTITY_TOKEN_FILE",
