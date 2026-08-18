@@ -8,6 +8,7 @@ use anyhow::Result;
 use clap::Parser;
 use std::collections::HashMap;
 use std::fs;
+use std::path::Path;
 
 /// Output mode for shell integration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,10 +42,19 @@ pub struct HookEnvCommand {
     /// Shell type (bash, zsh, fish, nu, pwsh)
     #[arg(short = 's', long)]
     pub shell: Option<String>,
+
+    /// Remove temporary files recorded by the current shell session
+    #[arg(long, hide = true)]
+    pub cleanup: bool,
 }
 
 impl HookEnvCommand {
     pub async fn run(&self, cli: &Cli) -> Result<()> {
+        if self.cleanup {
+            cleanup_session_temp_files();
+            return Ok(());
+        }
+
         // Get settings for output mode
         let settings =
             Settings::try_get().map_err(|e| anyhow::anyhow!("Failed to get settings: {}", e))?;
@@ -131,6 +141,33 @@ impl HookEnvCommand {
         print!("{}", output);
 
         Ok(())
+    }
+}
+
+/// Remove hook temp files owned by the current shell session.
+///
+/// Session data comes from the environment, so only remove files whose paths
+/// match the location and prefix used by hook-created secret files.
+pub(crate) fn cleanup_session_temp_files() {
+    let temp_dir = std::env::temp_dir();
+    for (key, path) in &PREV_SESSION.temp_files {
+        let path = Path::new(path);
+        let is_hook_temp_file = path.parent() == Some(temp_dir.as_path())
+            && path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("fnox-hook-"));
+
+        if !is_hook_temp_file {
+            tracing::warn!("refusing to clean up invalid temp file path for '{}'", key);
+            continue;
+        }
+
+        match fs::remove_file(path) {
+            Ok(()) => tracing::debug!("cleaned up temp file for secret '{}'", key),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => tracing::debug!("failed to clean up temp file for '{}': {}", key, e),
+        }
     }
 }
 

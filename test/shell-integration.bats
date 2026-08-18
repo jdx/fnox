@@ -32,6 +32,7 @@ teardown() {
 	assert_output --partial "_fnox_hook()"
 	assert_output --partial "precmd_functions"
 	assert_output --partial "chpwd_functions"
+	assert_output --partial "add-zsh-hook zshexit _fnox_cleanup"
 }
 
 @test "fnox activate fish generates valid fish code" {
