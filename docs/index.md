@@ -97,6 +97,7 @@ API_KEY = { default = "dev-key-12345" }  # ← plain default value for local dev
 - **bitwarden-sm** - Bitwarden Secrets Manager
 - **doppler** - Doppler secrets manager
 - **foks** - FOKS (Federated Open Key Service)
+- **keeper-sm** - Keeper Secrets Manager
 - **vault** - HashiCorp Vault
 
 ### 🔑 Password Managers & Secret Services

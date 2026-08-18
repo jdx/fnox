@@ -30,6 +30,7 @@ Store secrets remotely in cloud providers. Your `fnox.toml` contains only refere
 | [Doppler](/providers/doppler)                        | Doppler secrets manager             | Developer-friendly cloud secrets         |
 | [FOKS](/providers/foks)                              | End-to-end encrypted, federated KV  | Self-hosted, E2EE, team-shared secrets   |
 | [HashiCorp Vault](/providers/vault)                  | Self-hosted or HCP Vault            | Multi-cloud, advanced features           |
+| [Keeper Secrets Manager](/providers/keeper-sm)       | Keeper Secrets Manager              | Enterprises using Keeper                 |
 
 ### 🔑 Password Managers & Secret Services
 

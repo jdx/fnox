@@ -17,6 +17,10 @@ const AMBIENT_CREDENTIAL_ENV_VARS: &[&str] = &[
     "PASSWORDSTATE_API_KEY",
     "DOPPLER_TOKEN",
     "FNOX_DOPPLER_TOKEN",
+    "KSM_CONFIG",
+    "FNOX_KEEPER_CONFIG",
+    "KSM_TOKEN",
+    "FNOX_KEEPER_TOKEN",
     "FOKS_BOT_TOKEN",
     "FNOX_FOKS_BOT_TOKEN",
     "GOOGLE_APPLICATION_CREDENTIALS",
@@ -375,6 +379,10 @@ domain = "api.example.com"
     #[test]
     fn ambient_credential_scrub_covers_provider_chains() {
         for key in [
+            "KSM_CONFIG",
+            "FNOX_KEEPER_CONFIG",
+            "KSM_TOKEN",
+            "FNOX_KEEPER_TOKEN",
             "AWS_PROFILE",
             "AWS_REGION",
             "AWS_WEB_IDENTITY_TOKEN_FILE",

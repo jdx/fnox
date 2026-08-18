@@ -3,26 +3,65 @@
   "title": "Config",
   "type": "object",
   "properties": {
-    "age_key_file": {
-      "description": "Age encryption key file path (optional, can also be set via env var or CLI flag)",
-      "type": ["string", "null"]
+    "import": {
+      "description": "Import paths to other config files",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
-    "daemon": {
-      "description": "Per-user daemon configuration",
-      "anyOf": [
-        {
-          "$ref": "#/$defs/DaemonConfig"
-        },
-        {
-          "type": "null"
-        }
-      ]
+    "root": {
+      "description": "Root configuration - stops recursion at this level",
+      "type": "boolean"
+    },
+    "leases": {
+      "description": "Lease backend configurations (for default profile)",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/LeaseBackendConfig"
+      }
+    },
+    "providers": {
+      "description": "Provider configurations (for default profile)",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/ProviderConfig"
+      }
     },
     "default_provider": {
       "description": "Default provider name for default profile",
       "anyOf": [
         {
           "$ref": "#/$defs/string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "secrets": {
+      "description": "Default profile secrets (top level)",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/SecretConfig"
+      }
+    },
+    "profiles": {
+      "description": "Named profiles",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/ProfileConfig"
+      }
+    },
+    "age_key_file": {
+      "description": "Age encryption key file path (optional, can also be set via env var or CLI flag)",
+      "type": ["string", "null"]
+    },
+    "if_missing": {
+      "description": "Default if_missing behavior for all secrets in this config",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/IfMissing"
         },
         {
           "type": "null"
@@ -40,30 +79,9 @@
         }
       ]
     },
-    "if_missing": {
-      "description": "Default if_missing behavior for all secrets in this config",
-      "anyOf": [
-        {
-          "$ref": "#/$defs/IfMissing"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "import": {
-      "description": "Import paths to other config files",
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "leases": {
-      "description": "Lease backend configurations (for default profile)",
-      "type": "object",
-      "additionalProperties": {
-        "$ref": "#/$defs/LeaseBackendConfig"
-      }
+    "prompt_auth": {
+      "description": "Whether to prompt for authentication when provider auth fails (default: true in TTY)",
+      "type": ["boolean", "null"]
     },
     "mcp": {
       "description": "MCP server configuration",
@@ -76,23 +94,16 @@
         }
       ]
     },
-    "profiles": {
-      "description": "Named profiles",
-      "type": "object",
-      "additionalProperties": {
-        "$ref": "#/$defs/ProfileConfig"
-      }
-    },
-    "prompt_auth": {
-      "description": "Whether to prompt for authentication when provider auth fails (default: true in TTY)",
-      "type": ["boolean", "null"]
-    },
-    "providers": {
-      "description": "Provider configurations (for default profile)",
-      "type": "object",
-      "additionalProperties": {
-        "$ref": "#/$defs/ProviderConfig"
-      }
+    "daemon": {
+      "description": "Per-user daemon configuration",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DaemonConfig"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "proxy": {
       "description": "Credential proxy configuration",
@@ -104,36 +115,294 @@
           "type": "null"
         }
       ]
-    },
-    "root": {
-      "description": "Root configuration - stops recursion at this level",
-      "type": "boolean"
-    },
-    "secrets": {
-      "description": "Default profile secrets (top level)",
-      "type": "object",
-      "additionalProperties": {
-        "$ref": "#/$defs/SecretConfig"
-      }
     }
   },
   "additionalProperties": false,
   "$defs": {
-    "BitwardenBackend": {
-      "type": "string",
-      "enum": ["bw", "rbw"]
-    },
-    "CloudflarePermissionGroup": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
+    "LeaseBackendConfig": {
+      "description": "Configuration for a lease backend (manually defined, no codegen)",
+      "oneOf": [
+        {
+          "description": "AWS STS AssumeRole",
+          "type": "object",
+          "properties": {
+            "region": {
+              "type": "string"
+            },
+            "profile": {
+              "type": ["string", "null"]
+            },
+            "role_arn": {
+              "type": "string"
+            },
+            "endpoint": {
+              "type": ["string", "null"]
+            },
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "type": {
+              "type": "string",
+              "const": "aws-sts"
+            }
+          },
+          "required": ["type", "region", "role_arn"]
         },
-        "name": {
-          "type": ["string", "null"]
+        {
+          "description": "GCP Service Account Impersonation",
+          "type": "object",
+          "properties": {
+            "service_account_email": {
+              "type": "string"
+            },
+            "scopes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": ["https://www.googleapis.com/auth/cloud-platform"]
+            },
+            "env_var": {
+              "type": "string",
+              "default": "CLOUDSDK_AUTH_ACCESS_TOKEN"
+            },
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "type": {
+              "type": "string",
+              "const": "gcp-iam"
+            }
+          },
+          "required": ["type", "service_account_email"]
+        },
+        {
+          "description": "HashiCorp Vault Dynamic Secrets",
+          "type": "object",
+          "properties": {
+            "address": {
+              "type": ["string", "null"]
+            },
+            "token": {
+              "type": ["string", "null"]
+            },
+            "credential_command": {
+              "type": ["string", "null"]
+            },
+            "secret_path": {
+              "type": "string"
+            },
+            "namespace": {
+              "type": ["string", "null"]
+            },
+            "env_map": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "method": {
+              "description": "HTTP method: \"get\" (default) or \"post\" (required for pki/issue and some engines)",
+              "type": "string",
+              "default": "get"
+            },
+            "type": {
+              "type": "string",
+              "const": "vault"
+            }
+          },
+          "required": ["type", "secret_path", "env_map"]
+        },
+        {
+          "description": "Azure Token Acquisition",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "env_var": {
+              "type": "string",
+              "default": "AZURE_ACCESS_TOKEN"
+            },
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "type": {
+              "type": "string",
+              "const": "azure-token"
+            }
+          },
+          "required": ["type", "scope"]
+        },
+        {
+          "description": "Cloudflare API Token",
+          "type": "object",
+          "properties": {
+            "token_type": {
+              "description": "Token type: \"user\" (default) or \"account\"",
+              "$ref": "#/$defs/CloudflareTokenType",
+              "default": "user"
+            },
+            "account_id": {
+              "type": ["string", "null"]
+            },
+            "policies": {
+              "type": ["array", "null"],
+              "items": {
+                "$ref": "#/$defs/CloudflarePolicy"
+              }
+            },
+            "env_var": {
+              "type": "string",
+              "default": "CLOUDFLARE_API_TOKEN"
+            },
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "type": {
+              "type": "string",
+              "const": "cloudflare"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "description": "GitHub App Installation Token",
+          "type": "object",
+          "properties": {
+            "app_id": {
+              "type": "string"
+            },
+            "installation_id": {
+              "type": "string"
+            },
+            "private_key_file": {
+              "type": ["string", "null"]
+            },
+            "env_var": {
+              "type": "string",
+              "default": "GITHUB_TOKEN"
+            },
+            "permissions": {
+              "type": ["object", "null"],
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "repositories": {
+              "type": ["array", "null"],
+              "items": {
+                "type": "string"
+              }
+            },
+            "api_base": {
+              "description": "GitHub API base URL (default: https://api.github.com)",
+              "type": ["string", "null"]
+            },
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "type": {
+              "type": "string",
+              "const": "github-app"
+            }
+          },
+          "required": ["type", "app_id", "installation_id"]
+        },
+        {
+          "description": "GitHub App User Access Token via OAuth Device Flow",
+          "type": "object",
+          "properties": {
+            "client_id": {
+              "type": "string"
+            },
+            "scope": {
+              "description": "OAuth scope string requested from GitHub.",
+              "type": "string",
+              "default": "repo read:org workflow"
+            },
+            "env_var": {
+              "type": "string",
+              "default": "GITHUB_TOKEN"
+            },
+            "keyring_service": {
+              "description": "OS keyring service used to cache access/refresh tokens.",
+              "type": "string",
+              "default": "fnox-github-oauth"
+            },
+            "keyring_cache": {
+              "description": "Disable to force device flow on each lease creation.",
+              "type": "boolean",
+              "default": true
+            },
+            "open_browser": {
+              "description": "Open the verification URL in a browser when possible.",
+              "type": "boolean",
+              "default": true
+            },
+            "auth_base": {
+              "description": "OAuth token endpoint base URL (default: https://github.com/login/oauth)",
+              "type": "string",
+              "default": "https://github.com/login/oauth"
+            },
+            "api_base": {
+              "description": "GitHub API base URL (default: https://api.github.com)",
+              "type": "string",
+              "default": "https://api.github.com"
+            },
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "type": {
+              "type": "string",
+              "const": "github-oauth"
+            }
+          },
+          "required": ["type", "client_id"]
+        },
+        {
+          "description": "Generic Command Backend",
+          "type": "object",
+          "properties": {
+            "create_command": {
+              "type": "string"
+            },
+            "revoke_command": {
+              "type": ["string", "null"]
+            },
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "timeout": {
+              "description": "Timeout for command execution (e.g., \"30s\", \"2m\"; default: \"30s\")",
+              "type": "string",
+              "default": "30s"
+            },
+            "type": {
+              "type": "string",
+              "const": "command"
+            }
+          },
+          "required": ["type", "create_command"]
         }
-      },
-      "required": ["id"]
+      ]
+    },
+    "CloudflareTokenType": {
+      "oneOf": [
+        {
+          "description": "User-owned token (POST /user/tokens)",
+          "type": "string",
+          "const": "user"
+        },
+        {
+          "description": "Account-owned token (POST /accounts/{account_id}/tokens)",
+          "type": "string",
+          "const": "account"
+        }
+      ]
     },
     "CloudflarePolicy": {
       "description": "A Cloudflare API token permission policy.\nMaps to the Cloudflare API's `policies` array in POST /user/tokens.",
@@ -164,441 +433,40 @@
       "type": "string",
       "enum": ["allow", "deny"]
     },
-    "CloudflareTokenType": {
-      "oneOf": [
-        {
-          "description": "User-owned token (POST /user/tokens)",
-          "type": "string",
-          "const": "user"
-        },
-        {
-          "description": "Account-owned token (POST /accounts/{account_id}/tokens)",
-          "type": "string",
-          "const": "account"
-        }
-      ]
-    },
-    "DaemonConfig": {
-      "description": "Per-user daemon configuration",
+    "CloudflarePermissionGroup": {
       "type": "object",
       "properties": {
-        "enabled": {
-          "description": "Enable daemon-backed resolution for supported read commands.",
-          "type": ["boolean", "null"]
+        "id": {
+          "type": "string"
         },
-        "idle_timeout": {
-          "description": "Idle timeout before the daemon exits, such as \"8h\", \"30m\", or \"300s\".",
+        "name": {
           "type": ["string", "null"]
         }
       },
-      "additionalProperties": false
-    },
-    "EnvMode": {
-      "description": "Where to inject the secret as an env var: true = shell + fnox exec (default), \"exec\" = fnox exec subprocesses only, false = never (fnox get only)",
-      "anyOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "type": "string",
-          "enum": ["exec"]
-        }
-      ]
-    },
-    "IfMissing": {
-      "type": "string",
-      "enum": ["error", "warn", "ignore"]
-    },
-    "LeaseBackendConfig": {
-      "description": "Configuration for a lease backend (manually defined, no codegen)",
-      "oneOf": [
-        {
-          "description": "AWS STS AssumeRole",
-          "type": "object",
-          "properties": {
-            "duration": {
-              "type": ["string", "null"]
-            },
-            "endpoint": {
-              "type": ["string", "null"]
-            },
-            "profile": {
-              "type": ["string", "null"]
-            },
-            "region": {
-              "type": "string"
-            },
-            "role_arn": {
-              "type": "string"
-            },
-            "type": {
-              "type": "string",
-              "const": "aws-sts"
-            }
-          },
-          "required": ["type", "region", "role_arn"]
-        },
-        {
-          "description": "GCP Service Account Impersonation",
-          "type": "object",
-          "properties": {
-            "duration": {
-              "type": ["string", "null"]
-            },
-            "env_var": {
-              "type": "string",
-              "default": "CLOUDSDK_AUTH_ACCESS_TOKEN"
-            },
-            "scopes": {
-              "type": "array",
-              "default": ["https://www.googleapis.com/auth/cloud-platform"],
-              "items": {
-                "type": "string"
-              }
-            },
-            "service_account_email": {
-              "type": "string"
-            },
-            "type": {
-              "type": "string",
-              "const": "gcp-iam"
-            }
-          },
-          "required": ["type", "service_account_email"]
-        },
-        {
-          "description": "HashiCorp Vault Dynamic Secrets",
-          "type": "object",
-          "properties": {
-            "address": {
-              "type": ["string", "null"]
-            },
-            "credential_command": {
-              "type": ["string", "null"]
-            },
-            "duration": {
-              "type": ["string", "null"]
-            },
-            "env_map": {
-              "type": "object",
-              "additionalProperties": {
-                "type": "string"
-              }
-            },
-            "method": {
-              "description": "HTTP method: \"get\" (default) or \"post\" (required for pki/issue and some engines)",
-              "type": "string",
-              "default": "get"
-            },
-            "namespace": {
-              "type": ["string", "null"]
-            },
-            "secret_path": {
-              "type": "string"
-            },
-            "token": {
-              "type": ["string", "null"]
-            },
-            "type": {
-              "type": "string",
-              "const": "vault"
-            }
-          },
-          "required": ["type", "secret_path", "env_map"]
-        },
-        {
-          "description": "Azure Token Acquisition",
-          "type": "object",
-          "properties": {
-            "duration": {
-              "type": ["string", "null"]
-            },
-            "env_var": {
-              "type": "string",
-              "default": "AZURE_ACCESS_TOKEN"
-            },
-            "scope": {
-              "type": "string"
-            },
-            "type": {
-              "type": "string",
-              "const": "azure-token"
-            }
-          },
-          "required": ["type", "scope"]
-        },
-        {
-          "description": "Cloudflare API Token",
-          "type": "object",
-          "properties": {
-            "account_id": {
-              "type": ["string", "null"]
-            },
-            "duration": {
-              "type": ["string", "null"]
-            },
-            "env_var": {
-              "type": "string",
-              "default": "CLOUDFLARE_API_TOKEN"
-            },
-            "policies": {
-              "type": ["array", "null"],
-              "items": {
-                "$ref": "#/$defs/CloudflarePolicy"
-              }
-            },
-            "token_type": {
-              "description": "Token type: \"user\" (default) or \"account\"",
-              "$ref": "#/$defs/CloudflareTokenType",
-              "default": "user"
-            },
-            "type": {
-              "type": "string",
-              "const": "cloudflare"
-            }
-          },
-          "required": ["type"]
-        },
-        {
-          "description": "GitHub App Installation Token",
-          "type": "object",
-          "properties": {
-            "api_base": {
-              "description": "GitHub API base URL (default: https://api.github.com)",
-              "type": ["string", "null"]
-            },
-            "app_id": {
-              "type": "string"
-            },
-            "duration": {
-              "type": ["string", "null"]
-            },
-            "env_var": {
-              "type": "string",
-              "default": "GITHUB_TOKEN"
-            },
-            "installation_id": {
-              "type": "string"
-            },
-            "permissions": {
-              "type": ["object", "null"],
-              "additionalProperties": {
-                "type": "string"
-              }
-            },
-            "private_key_file": {
-              "type": ["string", "null"]
-            },
-            "repositories": {
-              "type": ["array", "null"],
-              "items": {
-                "type": "string"
-              }
-            },
-            "type": {
-              "type": "string",
-              "const": "github-app"
-            }
-          },
-          "required": ["type", "app_id", "installation_id"]
-        },
-        {
-          "description": "GitHub App User Access Token via OAuth Device Flow",
-          "type": "object",
-          "properties": {
-            "api_base": {
-              "description": "GitHub API base URL (default: https://api.github.com)",
-              "type": "string",
-              "default": "https://api.github.com"
-            },
-            "auth_base": {
-              "description": "OAuth token endpoint base URL (default: https://github.com/login/oauth)",
-              "type": "string",
-              "default": "https://github.com/login/oauth"
-            },
-            "client_id": {
-              "type": "string"
-            },
-            "duration": {
-              "type": ["string", "null"]
-            },
-            "env_var": {
-              "type": "string",
-              "default": "GITHUB_TOKEN"
-            },
-            "keyring_cache": {
-              "description": "Disable to force device flow on each lease creation.",
-              "type": "boolean",
-              "default": true
-            },
-            "keyring_service": {
-              "description": "OS keyring service used to cache access/refresh tokens.",
-              "type": "string",
-              "default": "fnox-github-oauth"
-            },
-            "open_browser": {
-              "description": "Open the verification URL in a browser when possible.",
-              "type": "boolean",
-              "default": true
-            },
-            "scope": {
-              "description": "OAuth scope string requested from GitHub.",
-              "type": "string",
-              "default": "repo read:org workflow"
-            },
-            "type": {
-              "type": "string",
-              "const": "github-oauth"
-            }
-          },
-          "required": ["type", "client_id"]
-        },
-        {
-          "description": "Generic Command Backend",
-          "type": "object",
-          "properties": {
-            "create_command": {
-              "type": "string"
-            },
-            "duration": {
-              "type": ["string", "null"]
-            },
-            "revoke_command": {
-              "type": ["string", "null"]
-            },
-            "timeout": {
-              "description": "Timeout for command execution (e.g., \"30s\", \"2m\"; default: \"30s\")",
-              "type": "string",
-              "default": "30s"
-            },
-            "type": {
-              "type": "string",
-              "const": "command"
-            }
-          },
-          "required": ["type", "create_command"]
-        }
-      ]
-    },
-    "McpConfig": {
-      "description": "MCP server configuration",
-      "type": "object",
-      "properties": {
-        "exec_timeout_secs": {
-          "description": "Timeout in seconds for exec tool subprocess (default: 300, minimum: 1)",
-          "type": ["integer", "null"],
-          "format": "uint64",
-          "minimum": 1
-        },
-        "redact_output": {
-          "description": "Whether to redact secret values from exec tool output (default: true).\nWhen enabled, resolved secret values are replaced with [REDACTED] in\nstdout/stderr before returning to the agent.",
-          "type": ["boolean", "null"]
-        },
-        "secrets": {
-          "description": "Optional allowlist of secret names visible to the MCP server.\nWhen set, only these secrets are resolved and available via get_secret/exec.\nWhen None, all profile secrets are available.",
-          "type": ["array", "null"],
-          "items": {
-            "type": "string"
-          }
-        },
-        "tools": {
-          "description": "Which MCP tools to expose (default: [\"get_secret\", \"exec\"])",
-          "type": ["array", "null"],
-          "items": {
-            "$ref": "#/$defs/McpTool"
-          }
-        }
-      },
-      "additionalProperties": false
-    },
-    "McpTool": {
-      "description": "Available MCP tools",
-      "type": "string",
-      "enum": ["get_secret", "exec"]
-    },
-    "OptionProviderSecretRef": {
-      "description": "An optional provider-backed secret reference.",
-      "anyOf": [
-        {
-          "$ref": "#/$defs/ProviderSecretRef"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "OptionStringOrSecretRef": {
-      "description": "An optional value that can be a literal string, a secret reference, or absent.\n\nIn TOML, this deserializes from:\n- Field absent: `None`\n- `field = \"literal-value\"`: `Some(Literal(\"literal-value\"))`\n- `field = { secret = \"SECRET_NAME\" }`: `Some(SecretRef { secret: \"SECRET_NAME\" })`",
-      "anyOf": [
-        {
-          "$ref": "#/$defs/StringOrSecretRef"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "ProfileConfig": {
-      "description": "Configuration for a profile",
-      "type": "object",
-      "properties": {
-        "default_provider": {
-          "description": "Default provider name for this profile",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "leases": {
-          "description": "Lease backend configurations for this profile",
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/LeaseBackendConfig"
-          }
-        },
-        "providers": {
-          "description": "Provider configurations for this profile",
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/ProviderConfig"
-          }
-        },
-        "secrets": {
-          "description": "Secrets for this profile",
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/SecretConfig"
-          }
-        }
-      },
-      "additionalProperties": false
+      "required": ["id"]
     },
     "ProviderConfig": {
       "oneOf": [
         {
           "type": "object",
           "properties": {
-            "auth_command": {
-              "type": ["string", "null"]
-            },
-            "daemon_cache": {
-              "type": ["boolean", "null"]
-            },
-            "identity": {
-              "$ref": "#/$defs/OptionProviderSecretRef"
-            },
-            "key_file": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
             "recipients": {
               "type": "array",
               "items": {
                 "type": "string"
               }
+            },
+            "key_file": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "identity": {
+              "$ref": "#/$defs/OptionProviderSecretRef"
+            },
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "type": {
               "type": "string",
@@ -611,23 +479,23 @@
         {
           "type": "object",
           "properties": {
-            "auth_command": {
-              "type": ["string", "null"]
-            },
             "credential_id": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
-            "daemon_cache": {
-              "type": ["boolean", "null"]
-            },
-            "pin": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "rp_id": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
             "salt": {
               "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "rp_id": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "pin": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "type": {
               "type": "string",
@@ -640,12 +508,6 @@
         {
           "type": "object",
           "properties": {
-            "auth_command": {
-              "type": ["string", "null"]
-            },
-            "daemon_cache": {
-              "type": ["boolean", "null"]
-            },
             "database": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
@@ -654,6 +516,12 @@
             },
             "password": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "type": {
               "type": "string",
@@ -666,20 +534,20 @@
         {
           "type": "object",
           "properties": {
-            "auth_command": {
-              "type": ["string", "null"]
-            },
-            "daemon_cache": {
-              "type": ["boolean", "null"]
-            },
-            "gpg_opts": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "store_dir": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "gpg_opts": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "type": {
               "type": "string",
@@ -709,17 +577,17 @@
         {
           "type": "object",
           "properties": {
-            "auth_command": {
-              "type": ["string", "null"]
-            },
             "challenge": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
-            "daemon_cache": {
-              "type": ["boolean", "null"]
-            },
             "slot": {
               "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "type": {
               "type": "string",
@@ -732,7 +600,13 @@
         {
           "type": "object",
           "properties": {
+            "vault": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "account": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "token": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "auth_command": {
@@ -741,15 +615,9 @@
             "daemon_cache": {
               "type": ["boolean", "null"]
             },
-            "token": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
             "type": {
               "type": "string",
               "const": "1password"
-            },
-            "vault": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
             }
           },
           "additionalProperties": false,
@@ -758,8 +626,14 @@
         {
           "type": "object",
           "properties": {
-            "auth_command": {
-              "type": ["string", "null"]
+            "collection": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "organization_id": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "profile": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "backend": {
               "anyOf": [
@@ -771,17 +645,11 @@
                 }
               ]
             },
-            "collection": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
+            "auth_command": {
+              "type": ["string", "null"]
             },
             "daemon_cache": {
               "type": ["boolean", "null"]
-            },
-            "organization_id": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "profile": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "type": {
               "type": "string",
@@ -794,11 +662,8 @@
         {
           "type": "object",
           "properties": {
-            "auth_command": {
-              "type": ["string", "null"]
-            },
-            "daemon_cache": {
-              "type": ["boolean", "null"]
+            "project_id": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "environment": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -806,8 +671,11 @@
             "path": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
-            "project_id": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "type": {
               "type": "string",
@@ -820,27 +688,27 @@
         {
           "type": "object",
           "properties": {
+            "base_url": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
             "api_key": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "password_list_id": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "verify_ssl": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "auth_command": {
               "type": ["string", "null"]
             },
-            "base_url": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
             "daemon_cache": {
               "type": ["boolean", "null"]
-            },
-            "password_list_id": {
-              "$ref": "#/$defs/StringOrSecretRef"
             },
             "type": {
               "type": "string",
               "const": "passwordstate"
-            },
-            "verify_ssl": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
             }
           },
           "additionalProperties": false,
@@ -849,6 +717,9 @@
         {
           "type": "object",
           "properties": {
+            "vault": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "agent_reason": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
@@ -861,9 +732,6 @@
             "type": {
               "type": "string",
               "const": "proton-pass"
-            },
-            "vault": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
             }
           },
           "additionalProperties": false,
@@ -872,26 +740,26 @@
         {
           "type": "object",
           "properties": {
-            "auth_command": {
-              "type": ["string", "null"]
-            },
-            "daemon_cache": {
-              "type": ["boolean", "null"]
-            },
-            "endpoint": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
             "key_id": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "region": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
             "profile": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
-            "region": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
             "role_arn": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "endpoint": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "type": {
               "type": "string",
@@ -904,21 +772,21 @@
         {
           "type": "object",
           "properties": {
+            "vault_url": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "key_name": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
             "auth_command": {
               "type": ["string", "null"]
             },
             "daemon_cache": {
               "type": ["boolean", "null"]
             },
-            "key_name": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
             "type": {
               "type": "string",
               "const": "azure-kms"
-            },
-            "vault_url": {
-              "$ref": "#/$defs/StringOrSecretRef"
             }
           },
           "additionalProperties": false,
@@ -927,23 +795,23 @@
         {
           "type": "object",
           "properties": {
-            "auth_command": {
-              "type": ["string", "null"]
-            },
-            "daemon_cache": {
-              "type": ["boolean", "null"]
-            },
-            "key": {
-              "$ref": "#/$defs/StringOrSecretRef"
-            },
-            "keyring": {
+            "project": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
             "location": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
-            "project": {
+            "keyring": {
               "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "key": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "type": {
               "type": "string",
@@ -956,26 +824,26 @@
         {
           "type": "object",
           "properties": {
-            "auth_command": {
-              "type": ["string", "null"]
+            "region": {
+              "$ref": "#/$defs/StringOrSecretRef"
             },
-            "daemon_cache": {
-              "type": ["boolean", "null"]
+            "profile": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
             },
-            "endpoint": {
+            "role_arn": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
-            "profile": {
+            "endpoint": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
-            "region": {
-              "$ref": "#/$defs/StringOrSecretRef"
+            "auth_command": {
+              "type": ["string", "null"]
             },
-            "role_arn": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "type": {
               "type": "string",
@@ -988,26 +856,26 @@
         {
           "type": "object",
           "properties": {
-            "auth_command": {
-              "type": ["string", "null"]
+            "region": {
+              "$ref": "#/$defs/StringOrSecretRef"
             },
-            "daemon_cache": {
-              "type": ["boolean", "null"]
+            "profile": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
             },
-            "endpoint": {
+            "role_arn": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
-            "profile": {
+            "endpoint": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
-            "region": {
-              "$ref": "#/$defs/StringOrSecretRef"
+            "auth_command": {
+              "type": ["string", "null"]
             },
-            "role_arn": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "type": {
               "type": "string",
@@ -1020,12 +888,6 @@
         {
           "type": "object",
           "properties": {
-            "auth_command": {
-              "type": ["string", "null"]
-            },
-            "daemon_cache": {
-              "type": ["boolean", "null"]
-            },
             "endpoint": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
@@ -1034,6 +896,12 @@
             },
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "type": {
               "type": "string",
@@ -1046,21 +914,21 @@
         {
           "type": "object",
           "properties": {
+            "vault_url": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "prefix": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "auth_command": {
               "type": ["string", "null"]
             },
             "daemon_cache": {
               "type": ["boolean", "null"]
             },
-            "prefix": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
             "type": {
               "type": "string",
               "const": "azure-sm"
-            },
-            "vault_url": {
-              "$ref": "#/$defs/StringOrSecretRef"
             }
           },
           "additionalProperties": false,
@@ -1069,17 +937,17 @@
         {
           "type": "object",
           "properties": {
+            "project_id": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "profile": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "auth_command": {
               "type": ["string", "null"]
             },
             "daemon_cache": {
               "type": ["boolean", "null"]
-            },
-            "profile": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "project_id": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "type": {
               "type": "string",
@@ -1092,20 +960,20 @@
         {
           "type": "object",
           "properties": {
-            "auth_command": {
-              "type": ["string", "null"]
+            "project": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "config": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
-            "daemon_cache": {
-              "type": ["boolean", "null"]
-            },
-            "project": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
             "token": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "type": {
               "type": "string",
@@ -1118,14 +986,11 @@
         {
           "type": "object",
           "properties": {
-            "auth_command": {
-              "type": ["string", "null"]
-            },
-            "bot_token": {
+            "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
-            "daemon_cache": {
-              "type": ["boolean", "null"]
+            "team": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "home": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -1133,11 +998,14 @@
             "host": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
-            "prefix": {
+            "bot_token": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
-            "team": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "type": {
               "type": "string",
@@ -1150,17 +1018,17 @@
         {
           "type": "object",
           "properties": {
+            "project": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "prefix": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "auth_command": {
               "type": ["string", "null"]
             },
             "daemon_cache": {
               "type": ["boolean", "null"]
-            },
-            "prefix": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "project": {
-              "$ref": "#/$defs/StringOrSecretRef"
             },
             "type": {
               "type": "string",
@@ -1173,19 +1041,30 @@
         {
           "type": "object",
           "properties": {
-            "address": {
+            "config_file": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "token": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "auth_command": {
               "type": ["string", "null"]
             },
-            "credential_command": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
             "daemon_cache": {
               "type": ["boolean", "null"]
             },
-            "namespace": {
+            "type": {
+              "type": "string",
+              "const": "keeper-sm"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "address": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "path": {
@@ -1193,6 +1072,18 @@
             },
             "token": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "namespace": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "credential_command": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
             },
             "type": {
               "type": "string",
@@ -1205,17 +1096,17 @@
         {
           "type": "object",
           "properties": {
+            "service": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "prefix": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "auth_command": {
               "type": ["string", "null"]
             },
             "daemon_cache": {
               "type": ["boolean", "null"]
-            },
-            "prefix": {
-              "$ref": "#/$defs/OptionStringOrSecretRef"
-            },
-            "service": {
-              "$ref": "#/$defs/StringOrSecretRef"
             },
             "type": {
               "type": "string",
@@ -1224,6 +1115,46 @@
           },
           "additionalProperties": false,
           "required": ["type", "service"]
+        }
+      ]
+    },
+    "OptionStringOrSecretRef": {
+      "description": "An optional value that can be a literal string, a secret reference, or absent.\n\nIn TOML, this deserializes from:\n- Field absent: `None`\n- `field = \"literal-value\"`: `Some(Literal(\"literal-value\"))`\n- `field = { secret = \"SECRET_NAME\" }`: `Some(SecretRef { secret: \"SECRET_NAME\" })`",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StringOrSecretRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "StringOrSecretRef": {
+      "description": "Either a literal string or a reference to a secret",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "secret": {
+              "type": "string"
+            }
+          },
+          "required": ["secret"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "OptionProviderSecretRef": {
+      "description": "An optional provider-backed secret reference.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProviderSecretRef"
+        },
+        {
+          "type": "null"
         }
       ]
     },
@@ -1241,27 +1172,241 @@
       "additionalProperties": false,
       "required": ["provider", "value"]
     },
+    "BitwardenBackend": {
+      "type": "string",
+      "enum": ["bw", "rbw"]
+    },
+    "string": {
+      "type": "string"
+    },
+    "SecretConfig": {
+      "description": "Configuration for a single secret",
+      "type": "object",
+      "properties": {
+        "description": {
+          "description": "Description of the secret",
+          "type": ["string", "null"]
+        },
+        "if_missing": {
+          "description": "What to do if the secret is missing (error, warn, or ignore)",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IfMissing"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "default": {
+          "description": "Default value to use if provider fails or secret is not found",
+          "type": ["string", "null"]
+        },
+        "provider": {
+          "description": "Provider to fetch from (age, aws-kms, 1password, aws, etc.)",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value": {
+          "description": "Value for the provider (secret name, encrypted blob, etc.)",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "env": {
+          "description": "Where to inject this secret as an environment variable:\n- `true` — shell integration and `fnox exec` (default)\n- `\"exec\"` — only `fnox exec` subprocesses, never the interactive shell\n- `false` — never injected; only accessible via `fnox get`\n\nWhen unset, inherits the top-level `env` default (which itself defaults to `true`).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EnvMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "as_file": {
+          "description": "Write secret to a temporary file and set env var to the file path instead of the secret value",
+          "type": "boolean"
+        },
+        "json_path": {
+          "description": "JSON path to extract from the secret value (supports dot notation: \"nested.key\")\nWhen set, the secret value is parsed as JSON and the specified path is extracted.",
+          "type": ["string", "null"]
+        },
+        "line": {
+          "description": "1-indexed line number to extract from the secret value.\nWhen set, the secret value is split on newlines and the Nth line is returned.\nUseful for providers whose entries pack multiple related values into a\nsingle secret (e.g. one value per line). Mutually exclusive with `json_path`.",
+          "type": ["integer", "null"],
+          "format": "uint",
+          "minimum": 1
+        },
+        "sync": {
+          "description": "Cached sync data (provider + encrypted value from `fnox sync`)",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SyncConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "daemon_cache": {
+          "description": "Whether this secret may be cached by the per-user daemon.\nDefaults to true; set false for secrets that should always resolve directly.",
+          "type": ["boolean", "null"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "IfMissing": {
+      "type": "string",
+      "enum": ["error", "warn", "ignore"]
+    },
+    "EnvMode": {
+      "description": "Where to inject the secret as an env var: true = shell + fnox exec (default), \"exec\" = fnox exec subprocesses only, false = never (fnox get only)",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string",
+          "enum": ["exec"]
+        }
+      ]
+    },
+    "SyncConfig": {
+      "description": "Cached sync data for a secret (provider + encrypted value)",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": ["provider", "value"]
+    },
+    "ProfileConfig": {
+      "description": "Configuration for a profile",
+      "type": "object",
+      "properties": {
+        "leases": {
+          "description": "Lease backend configurations for this profile",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/LeaseBackendConfig"
+          }
+        },
+        "providers": {
+          "description": "Provider configurations for this profile",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ProviderConfig"
+          }
+        },
+        "default_provider": {
+          "description": "Default provider name for this profile",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "secrets": {
+          "description": "Secrets for this profile",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/SecretConfig"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "McpConfig": {
+      "description": "MCP server configuration",
+      "type": "object",
+      "properties": {
+        "tools": {
+          "description": "Which MCP tools to expose (default: [\"get_secret\", \"exec\"])",
+          "type": ["array", "null"],
+          "items": {
+            "$ref": "#/$defs/McpTool"
+          }
+        },
+        "exec_timeout_secs": {
+          "description": "Timeout in seconds for exec tool subprocess (default: 300, minimum: 1)",
+          "type": ["integer", "null"],
+          "format": "uint64",
+          "minimum": 1
+        },
+        "redact_output": {
+          "description": "Whether to redact secret values from exec tool output (default: true).\nWhen enabled, resolved secret values are replaced with [REDACTED] in\nstdout/stderr before returning to the agent.",
+          "type": ["boolean", "null"]
+        },
+        "secrets": {
+          "description": "Optional allowlist of secret names visible to the MCP server.\nWhen set, only these secrets are resolved and available via get_secret/exec.\nWhen None, all profile secrets are available.",
+          "type": ["array", "null"],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "McpTool": {
+      "description": "Available MCP tools",
+      "type": "string",
+      "enum": ["get_secret", "exec"]
+    },
+    "DaemonConfig": {
+      "description": "Per-user daemon configuration",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Enable daemon-backed resolution for supported read commands.",
+          "type": ["boolean", "null"]
+        },
+        "idle_timeout": {
+          "description": "Idle timeout before the daemon exits, such as \"8h\", \"30m\", or \"300s\".",
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
+    },
     "ProxyConfig": {
       "description": "Credential proxy configuration.",
       "type": "object",
       "properties": {
-        "audit": {
-          "description": "Emit request metadata through tracing. Headers, bodies, and secret\nvalues are never logged.",
-          "type": "boolean",
-          "default": true
-        },
         "egress": {
           "description": "What to do with destinations that have no matching proxy rule.",
           "$ref": "#/$defs/ProxyEgress",
           "default": "strict"
         },
+        "audit": {
+          "description": "Emit request metadata through tracing. Headers, bodies, and secret\nvalues are never logged.",
+          "type": "boolean",
+          "default": true
+        },
         "rules": {
           "description": "Destination-scoped credential substitution rules.",
           "type": "array",
-          "default": [],
           "items": {
             "$ref": "#/$defs/ProxyRule"
-          }
+          },
+          "default": []
         }
       },
       "additionalProperties": false
@@ -1285,6 +1430,10 @@
       "description": "Substitute one configured secret into requests for an approved destination.",
       "type": "object",
       "properties": {
+        "secret": {
+          "description": "Secret name from the active fnox profile.",
+          "type": "string"
+        },
         "domain": {
           "description": "Exact TLS server name to which the secret may be sent.",
           "type": "string"
@@ -1301,152 +1450,26 @@
         "methods": {
           "description": "Allowed HTTP methods. An empty list allows every method.",
           "type": "array",
-          "default": [],
           "items": {
             "type": "string"
-          }
+          },
+          "default": []
         },
         "paths": {
           "description": "Allowed URL path globs. An empty list allows every path.",
           "type": "array",
-          "default": [],
           "items": {
             "type": "string"
-          }
+          },
+          "default": []
         },
         "placeholder": {
           "description": "Placeholder passed to the child. A unique value is generated when omitted.",
           "type": ["string", "null"]
-        },
-        "secret": {
-          "description": "Secret name from the active fnox profile.",
-          "type": "string"
         }
       },
       "additionalProperties": false,
       "required": ["secret", "domain"]
-    },
-    "SecretConfig": {
-      "description": "Configuration for a single secret",
-      "type": "object",
-      "properties": {
-        "as_file": {
-          "description": "Write secret to a temporary file and set env var to the file path instead of the secret value",
-          "type": "boolean"
-        },
-        "daemon_cache": {
-          "description": "Whether this secret may be cached by the per-user daemon.\nDefaults to true; set false for secrets that should always resolve directly.",
-          "type": ["boolean", "null"]
-        },
-        "default": {
-          "description": "Default value to use if provider fails or secret is not found",
-          "type": ["string", "null"]
-        },
-        "description": {
-          "description": "Description of the secret",
-          "type": ["string", "null"]
-        },
-        "env": {
-          "description": "Where to inject this secret as an environment variable:\n- `true` — shell integration and `fnox exec` (default)\n- `\"exec\"` — only `fnox exec` subprocesses, never the interactive shell\n- `false` — never injected; only accessible via `fnox get`\n\nWhen unset, inherits the top-level `env` default (which itself defaults to `true`).",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/EnvMode"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "if_missing": {
-          "description": "What to do if the secret is missing (error, warn, or ignore)",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/IfMissing"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "json_path": {
-          "description": "JSON path to extract from the secret value (supports dot notation: \"nested.key\")\nWhen set, the secret value is parsed as JSON and the specified path is extracted.",
-          "type": ["string", "null"]
-        },
-        "line": {
-          "description": "1-indexed line number to extract from the secret value.\nWhen set, the secret value is split on newlines and the Nth line is returned.\nUseful for providers whose entries pack multiple related values into a\nsingle secret (e.g. one value per line). Mutually exclusive with `json_path`.",
-          "type": ["integer", "null"],
-          "format": "uint",
-          "minimum": 1
-        },
-        "provider": {
-          "description": "Provider to fetch from (age, aws-kms, 1password, aws, etc.)",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "sync": {
-          "description": "Cached sync data (provider + encrypted value from `fnox sync`)",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/SyncConfig"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "value": {
-          "description": "Value for the provider (secret name, encrypted blob, etc.)",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "additionalProperties": false
-    },
-    "StringOrSecretRef": {
-      "description": "Either a literal string or a reference to a secret",
-      "oneOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "object",
-          "properties": {
-            "secret": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false,
-          "required": ["secret"]
-        }
-      ]
-    },
-    "SyncConfig": {
-      "description": "Cached sync data for a secret (provider + encrypted value)",
-      "type": "object",
-      "properties": {
-        "provider": {
-          "type": "string"
-        },
-        "value": {
-          "type": "string"
-        }
-      },
-      "required": ["provider", "value"]
-    },
-    "string": {
-      "type": "string"
     }
   }
 }

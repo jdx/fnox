@@ -1,0 +1,23 @@
+# Keeper Secrets Manager provider - read-only access through the official Rust SDK
+display_name = "Keeper Secrets Manager"
+serde_rename = "keeper-sm"
+rust_variant = "KeeperSecretsManager"
+category = "CloudSecretsManager"
+description = "Keeper Secrets Manager"
+default_name = "keeper"
+setup_instructions = """
+Create a Keeper Secrets Manager application and client device.
+Set config_file to the downloaded JSON configuration, or set KSM_CONFIG.
+For first-run bootstrap, set KSM_TOKEN together with file-backed storage."""
+
+[fields.config_file]
+type = "optional"
+placeholder = "~/.keeper/ksm-config.json"
+label = "Configuration file:"
+wizard = true
+
+[fields.token]
+type = "optional"
+placeholder = ""
+label = ""
+wizard = false
