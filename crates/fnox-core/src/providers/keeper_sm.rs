@@ -5,10 +5,14 @@ use keeper_secrets_manager_core::{
     ClientOptions, FileKeyValueStorage, InMemoryKeyValueStorage, KSMRError, SecretsManager,
 };
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+};
 
 const PROVIDER_NAME: &str = "Keeper Secrets Manager";
 const PROVIDER_URL: &str = "https://fnox.jdx.dev/providers/keeper-sm";
+const BATCH_CONCURRENCY: usize = 10;
 
 pub fn env_dependencies() -> &'static [&'static str] {
     &[
@@ -26,11 +30,13 @@ enum KeeperStorage {
 
 pub struct KeeperSecretsManagerProvider {
     manager: Arc<Mutex<SecretsManager>>,
+    parallel_ready: Arc<AtomicBool>,
 }
 
 impl KeeperSecretsManagerProvider {
     pub fn new(config_file: Option<String>, token: Option<String>) -> Result<Self> {
         let token = token.or_else(keeper_token);
+        let requires_bootstrap = token.is_some();
         let storage = resolve_storage(config_file);
 
         validate_bootstrap_storage(&storage, token.is_some())?;
@@ -61,6 +67,7 @@ impl KeeperSecretsManagerProvider {
 
         Ok(Self {
             manager: Arc::new(Mutex::new(manager)),
+            parallel_ready: Arc::new(AtomicBool::new(!requires_bootstrap)),
         })
     }
 
@@ -86,6 +93,55 @@ impl KeeperSecretsManagerProvider {
             hint: "Retry the command".to_string(),
             url: PROVIDER_URL.to_string(),
         })?
+    }
+
+    async fn run_cloned<T, F>(&self, operation: F) -> Result<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(&mut SecretsManager) -> Result<T> + Send + 'static,
+    {
+        let mut manager = self
+            .manager
+            .lock()
+            .map_err(|_| FnoxError::ProviderApiError {
+                provider: PROVIDER_NAME.to_string(),
+                details: "Keeper SDK client lock was poisoned".to_string(),
+                hint: "Retry the command".to_string(),
+                url: PROVIDER_URL.to_string(),
+            })?
+            .clone();
+
+        tokio::task::spawn_blocking(move || operation(&mut manager))
+            .await
+            .map_err(|e| FnoxError::ProviderApiError {
+                provider: PROVIDER_NAME.to_string(),
+                details: format!("Keeper SDK task failed: {e}"),
+                hint: "Retry the command".to_string(),
+                url: PROVIDER_URL.to_string(),
+            })?
+    }
+
+    async fn ensure_parallel_ready(&self) -> Result<()> {
+        if self.parallel_ready.load(Ordering::Acquire) {
+            return Ok(());
+        }
+
+        let parallel_ready = Arc::clone(&self.parallel_ready);
+        self.run_blocking(move |manager| {
+            if parallel_ready.load(Ordering::Acquire) {
+                return Ok(());
+            }
+
+            // Redeem a one-time token on the shared client before cloning it for
+            // concurrent requests. Cloning an unbound client could redeem the same
+            // token more than once.
+            manager
+                .get_secrets(Vec::new())
+                .map_err(|e| map_ksm_error(e, None))?;
+            parallel_ready.store(true, Ordering::Release);
+            Ok(())
+        })
+        .await
     }
 }
 
@@ -228,28 +284,14 @@ impl crate::providers::Provider for KeeperSecretsManagerProvider {
         &self,
         secrets: &[(String, String)],
     ) -> HashMap<String, Result<String>> {
+        use futures::stream::{self, StreamExt};
+
         if secrets.is_empty() {
             return HashMap::new();
         }
 
-        let requested = secrets.to_vec();
-        match self
-            .run_blocking(move |manager| {
-                Ok(requested
-                    .into_iter()
-                    .map(|(key, notation)| {
-                        let result = manager
-                            .get_notation(&notation)
-                            .map(notation_value_to_string)
-                            .map_err(|e| map_ksm_error(e, Some(&notation)));
-                        (key, result)
-                    })
-                    .collect())
-            })
-            .await
-        {
-            Ok(results) => results,
-            Err(error) => secrets
+        if let Err(error) = self.ensure_parallel_ready().await {
+            return secrets
                 .iter()
                 .map(|(key, _)| {
                     (
@@ -262,8 +304,25 @@ impl crate::providers::Provider for KeeperSecretsManagerProvider {
                         }),
                     )
                 })
-                .collect(),
+                .collect();
         }
+
+        stream::iter(secrets.to_vec())
+            .map(|(key, notation)| async move {
+                let requested_notation = notation.clone();
+                let result = self
+                    .run_cloned(move |manager| {
+                        manager
+                            .get_notation(&requested_notation)
+                            .map(notation_value_to_string)
+                            .map_err(|e| map_ksm_error(e, Some(&requested_notation)))
+                    })
+                    .await;
+                (key, result)
+            })
+            .buffer_unordered(BATCH_CONCURRENCY)
+            .collect()
+            .await
     }
 
     async fn test_connection(&self) -> Result<()> {
