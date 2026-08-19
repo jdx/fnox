@@ -2,7 +2,6 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
 use crate::providers::{OptionProviderSecretRef, OptionStringOrSecretRef, StringOrSecretRef};
-use clap::Args;
 
 use super::ProviderType;
 

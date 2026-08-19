@@ -4,7 +4,6 @@ use crate::error::{FnoxError, Result};
 use crate::lease::{self, LeaseLedger, LeaseRecord, TempEnvGuard};
 use crate::secret_resolver::resolve_secrets_batch;
 use chrono::Utc;
-use clap::{Args, Subcommand, ValueEnum};
 use indexmap::IndexMap;
 
 #[derive(Debug, usage_derive::Args)]

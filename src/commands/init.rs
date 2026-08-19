@@ -2,7 +2,6 @@ use crate::commands::Cli;
 use crate::config::{Config, ProviderConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
 use crate::providers::{WizardCategory, WizardInfo, get_provider_from_resolved};
-use clap::Args;
 use demand::{Confirm, DemandOption, Input, Select};
 use std::collections::HashMap;
 

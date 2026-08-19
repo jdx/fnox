@@ -1,7 +1,6 @@
 use crate::commands::Cli;
 use crate::config::{self, Config, IfMissing};
 use crate::error::{FnoxError, Result};
-use clap::Args;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 

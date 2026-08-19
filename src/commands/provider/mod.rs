@@ -1,7 +1,6 @@
 use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::Result;
-use clap::{Args, Subcommand, ValueEnum};
 use strum::{Display, EnumString, VariantNames};
 
 mod add;

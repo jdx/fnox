@@ -3,7 +3,6 @@ use crate::config::Config;
 use crate::error::{FnoxError, Result};
 use crate::shell;
 use crate::temp_file_secrets::create_persistent_secret_file;
-use clap::{Args, ValueEnum};
 use console;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};

@@ -1,7 +1,6 @@
 use crate::error::{FnoxError, Result};
 use crate::secret_resolver::{handle_provider_error, resolve_if_missing_behavior};
 use crate::{commands::Cli, config::Config};
-use clap::Args;
 
 type MaskFn = Box<dyn Fn(&str, &str)>;
 

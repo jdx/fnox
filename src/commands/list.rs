@@ -1,7 +1,6 @@
 use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::Result;
-use clap::Args;
 use indexmap::IndexMap;
 use tabled::settings::{
     Color, Format, Modify, Style, Width,

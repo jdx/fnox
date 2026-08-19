@@ -2,7 +2,6 @@ use crate::error::{FnoxError, Result};
 use crate::lease::{self, LeaseLedger};
 use crate::temp_file_secrets::create_ephemeral_secret_file;
 use crate::{commands::Cli, config::Config};
-use clap::{Args, ValueHint};
 use std::collections::HashSet;
 use std::process::Command;
 use tempfile::NamedTempFile;

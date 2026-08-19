@@ -1,7 +1,6 @@
 use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::Result;
-use clap::Args;
 
 #[derive(Debug, usage_derive::Args)]
 #[usage(alias("ls"))]

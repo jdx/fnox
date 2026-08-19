@@ -3,7 +3,6 @@ use crate::config::{Config, SecretValue};
 use crate::encryption::age_encryption::AgeEncryptor;
 use crate::env;
 use crate::error::{FnoxError, Result};
-use clap::Args;
 use std::collections::HashMap;
 use std::path::PathBuf;
 

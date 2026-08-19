@@ -2,7 +2,6 @@ use crate::commands::Cli;
 use crate::config::{Config, ProxyConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
 use crate::proxy::{ProxyPlan, RunningProxy};
-use clap::{Args, Subcommand, ValueHint};
 use indexmap::IndexMap;
 use std::process::Stdio;
 

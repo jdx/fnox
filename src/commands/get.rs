@@ -4,7 +4,6 @@ use crate::lease::{self, LeaseLedger};
 use crate::suggest::{find_similar, format_suggestions};
 use crate::temp_file_secrets::create_persistent_secret_file;
 use crate::{commands::Cli, config::Config};
-use clap::Args;
 use indexmap::IndexMap;
 
 #[derive(Debug, usage_derive::Args)]

@@ -2,7 +2,6 @@ use crate::commands::Cli;
 use crate::config::{self, Config, SecretConfig, SyncConfig, local_override_filename};
 use crate::error::{FnoxError, Result};
 use crate::secret_resolver::resolve_secrets_batch;
-use clap::Args;
 use console;
 use indexmap::IndexMap;
 use regex::Regex;

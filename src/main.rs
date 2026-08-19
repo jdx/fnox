@@ -1,4 +1,3 @@
-use clap::Parser;
 use fnox::commands::Cli;
 use fnox::settings;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};

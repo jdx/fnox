@@ -3,7 +3,6 @@ use crate::config::Config;
 use crate::hook_env::PREV_SESSION;
 use crate::shell;
 use anyhow::Result;
-use clap::Parser;
 
 /// Disable fnox shell integration in the current shell session
 ///

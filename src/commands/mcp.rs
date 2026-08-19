@@ -3,7 +3,6 @@ use crate::config::Config;
 use crate::error::Result;
 use crate::mcp_server::FnoxMcpServer;
 use crate::{env, error::FnoxError};
-use clap::Args;
 use rmcp::service::RunningService;
 use rmcp::{RoleServer, ServiceExt};
 

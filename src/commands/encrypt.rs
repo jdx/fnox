@@ -2,7 +2,6 @@ use crate::commands::Cli;
 use crate::config::{Config, SecretValue};
 use crate::encryption::age_encryption::AgeEncryptor;
 use crate::error::{FnoxError, Result};
-use clap::Args;
 use std::collections::HashMap;
 
 #[derive(Debug, usage_derive::Args)]

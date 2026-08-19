@@ -1,7 +1,6 @@
 use crate::commands::Cli;
 use crate::config::{self, Config};
 use crate::error::{FnoxError, Result};
-use clap::{Args, ValueEnum};
 use console;
 use indexmap::IndexMap;
 use miette::{NamedSource, SourceSpan};

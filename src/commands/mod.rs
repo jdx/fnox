@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use crate::error::{FnoxError, Result};
-use clap::{Parser, Subcommand};
 
 use crate::config::Config;
 

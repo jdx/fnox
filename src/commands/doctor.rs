@@ -3,7 +3,6 @@ use crate::config::Config;
 use crate::env;
 use crate::error::Result;
 use crate::providers::get_provider_resolved;
-use clap::Args;
 
 #[derive(Debug, usage_derive::Args)]
 #[usage(alias("dr"))]

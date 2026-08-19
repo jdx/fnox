@@ -1,7 +1,6 @@
 use crate::config::Config;
 use crate::error::Result;
 use crate::secret_resolver;
-use clap::Args;
 
 use crate::commands::Cli;
 

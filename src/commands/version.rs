@@ -1,6 +1,5 @@
 use crate::commands::Cli;
 use crate::error::Result;
-use clap::Parser;
 
 #[derive(usage_derive::Cli)]
 #[usage(alias("v"))]

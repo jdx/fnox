@@ -1,6 +1,5 @@
 use crate::shell::{self, ActivateOptions};
 use anyhow::Result;
-use clap::Parser;
 
 #[derive(Debug, usage_derive::Cli)]
 #[usage(about = "Output shell activation code to enable automatic secret loading")]

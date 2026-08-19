@@ -4,7 +4,6 @@ use std::fs;
 use std::io::Write as _;
 use std::process::Command;
 
-use clap::Args;
 use indexmap::IndexMap;
 use tempfile::NamedTempFile;
 use toml_edit::{DocumentMut, Table, Value};

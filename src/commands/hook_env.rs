@@ -5,7 +5,6 @@ use crate::settings::Settings;
 use crate::shell;
 use crate::temp_file_secrets::create_persistent_secret_file;
 use anyhow::Result;
-use clap::Parser;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;

@@ -2,7 +2,6 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::daemon;
 use crate::error::Result;
-use clap::{Args, Subcommand};
 
 #[derive(Debug, usage_derive::Args)]
 pub struct DaemonCommand {

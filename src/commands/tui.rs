@@ -2,8 +2,6 @@
 
 use std::time::Duration;
 
-use clap::Args;
-
 use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::Result;
