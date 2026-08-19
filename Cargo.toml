@@ -175,7 +175,6 @@ usage-lib = { workspace = true }
 which = { workspace = true }
 
 [dev-dependencies]
-clap-sort = "1"
 tempfile = { workspace = true }
 
 [profile.dev]
