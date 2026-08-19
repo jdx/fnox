@@ -18,7 +18,11 @@ pub struct ExecCommand {
     pub replace: bool,
 
     /// Command to run
-    #[usage(arg, double_dash = "automatic")]
+    #[usage(
+        arg,
+        double_dash = "automatic",
+        value_hint = usage_rs::ValueHint::CommandWithArguments
+    )]
     pub command: Vec<String>,
 }
 

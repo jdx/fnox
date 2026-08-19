@@ -296,7 +296,13 @@
         "name": "exec",
         "aliases": ["x"],
         "hidden_aliases": ["run"],
-        "examples": []
+        "examples": [],
+        "complete": {
+          "command": {
+            "name": "command",
+            "type_": "command_args"
+          }
+        }
       },
       "export": {
         "full_cmd": ["export"],
@@ -320,7 +326,29 @@
               "double_dash": "Optional",
               "hide": false,
               "choices": {
-                "choices": ["env", "shell", "json", "yaml", "toml"]
+                "choices": ["env", "shell", "json", "yaml", "toml"],
+                "details": [
+                  {
+                    "value": "env",
+                    "help": "Environment variable format (KEY=value)"
+                  },
+                  {
+                    "value": "shell",
+                    "help": "POSIX shell format (export KEY=value)"
+                  },
+                  {
+                    "value": "json",
+                    "help": "JSON format"
+                  },
+                  {
+                    "value": "yaml",
+                    "help": "YAML format"
+                  },
+                  {
+                    "value": "toml",
+                    "help": "TOML format"
+                  }
+                ]
               }
             },
             "default": ["env"]
@@ -466,7 +494,25 @@
             "hide": false,
             "default": ["env"],
             "choices": {
-              "choices": ["env", "json", "yaml", "toml"]
+              "choices": ["env", "json", "yaml", "toml"],
+              "details": [
+                {
+                  "value": "env",
+                  "help": "Environment variable format (KEY=value)"
+                },
+                {
+                  "value": "json",
+                  "help": "JSON format"
+                },
+                {
+                  "value": "yaml",
+                  "help": "YAML format"
+                },
+                {
+                  "value": "toml",
+                  "help": "TOML format"
+                }
+              ]
             }
           }
         ],
@@ -704,7 +750,18 @@
                   "double_dash": "Optional",
                   "hide": false,
                   "choices": {
-                    "choices": ["shell", "json", "env"]
+                    "choices": ["shell", "json", "env"],
+                    "details": [
+                      {
+                        "value": "shell"
+                      },
+                      {
+                        "value": "json"
+                      },
+                      {
+                        "value": "env"
+                      }
+                    ]
                   }
                 },
                 "default": ["shell"]
@@ -970,6 +1027,108 @@
                     "proton-pass",
                     "vault",
                     "yubikey"
+                  ],
+                  "details": [
+                    {
+                      "value": "1password",
+                      "help": "1Password"
+                    },
+                    {
+                      "value": "age",
+                      "help": "Age encryption"
+                    },
+                    {
+                      "value": "aws",
+                      "help": "AWS Secrets Manager"
+                    },
+                    {
+                      "value": "aws-kms",
+                      "help": "AWS KMS"
+                    },
+                    {
+                      "value": "aws-ps",
+                      "help": "AWS Parameter Store"
+                    },
+                    {
+                      "value": "azure-ac",
+                      "help": "Azure App Configuration"
+                    },
+                    {
+                      "value": "azure-kms",
+                      "help": "Azure Key Vault KMS"
+                    },
+                    {
+                      "value": "azure-sm",
+                      "help": "Azure Key Vault Secrets Manager"
+                    },
+                    {
+                      "value": "gcp",
+                      "help": "Google Cloud Secret Manager"
+                    },
+                    {
+                      "value": "gcp-kms",
+                      "help": "Google Cloud KMS"
+                    },
+                    {
+                      "value": "fido2",
+                      "help": "FIDO2 hmac-secret hardware-backed encryption"
+                    },
+                    {
+                      "value": "bitwarden",
+                      "help": "Bitwarden Password Manager"
+                    },
+                    {
+                      "value": "doppler",
+                      "help": "Doppler secrets manager"
+                    },
+                    {
+                      "value": "foks",
+                      "help": "FOKS (Federated Open Key Service)"
+                    },
+                    {
+                      "value": "bitwarden-sm",
+                      "help": "Bitwarden Secrets Manager"
+                    },
+                    {
+                      "value": "infisical",
+                      "help": "Infisical"
+                    },
+                    {
+                      "value": "keepass",
+                      "help": "KeePass"
+                    },
+                    {
+                      "value": "keeper-sm",
+                      "help": "Keeper Secrets Manager"
+                    },
+                    {
+                      "value": "keychain",
+                      "help": "OS Keychain"
+                    },
+                    {
+                      "value": "password-store",
+                      "help": "password-store (pass)"
+                    },
+                    {
+                      "value": "passwordstate",
+                      "help": "Click Studios Passwordstate"
+                    },
+                    {
+                      "value": "plain",
+                      "help": "Plain text provider"
+                    },
+                    {
+                      "value": "proton-pass",
+                      "help": "Proton Pass"
+                    },
+                    {
+                      "value": "vault",
+                      "help": "HashiCorp Vault"
+                    },
+                    {
+                      "value": "yubikey",
+                      "help": "YubiKey HMAC-SHA1 hardware-backed encryption"
+                    }
                   ]
                 }
               }
@@ -1165,7 +1324,13 @@
             "name": "run",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": []
+            "examples": [],
+            "complete": {
+              "command": {
+                "name": "command",
+                "type_": "command_args"
+              }
+            }
           }
         },
         "args": [],
@@ -1359,7 +1524,15 @@
               "double_dash": "Optional",
               "hide": false,
               "choices": {
-                "choices": ["human", "json"]
+                "choices": ["human", "json"],
+                "details": [
+                  {
+                    "value": "human"
+                  },
+                  {
+                    "value": "json"
+                  }
+                ]
               }
             },
             "default": ["human"]
@@ -1562,7 +1735,18 @@
               "double_dash": "Optional",
               "hide": false,
               "choices": {
-                "choices": ["error", "warn", "ignore"]
+                "choices": ["error", "warn", "ignore"],
+                "details": [
+                  {
+                    "value": "error"
+                  },
+                  {
+                    "value": "warn"
+                  },
+                  {
+                    "value": "ignore"
+                  }
+                ]
               }
             }
           }

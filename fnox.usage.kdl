@@ -70,12 +70,19 @@ cmd "exec" help="Execute a command with secrets as environment variables" {
         long_help "Run the command in fnox's process, keeping the same PID and receiving signals\ndirectly; supports environment-only secrets without leases and does not inherit\nambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux,\nmacOS, and other Unix-like systems"
     }
     arg "[COMMAND]..." help="Command to run" double_dash="automatic"
+    complete "command" type="command_args"
 }
 cmd "export" help="Export secrets in various formats" {
     alias "ex"
     flag "-f --format" help="Export format" default="env" {
         arg "<FORMAT>" {
-            choices "env" "shell" "json" "yaml" "toml"
+            choices {
+                choice "env" help="Environment variable format (KEY=value)"
+                choice "shell" help="POSIX shell format (export KEY=value)"
+                choice "json" help="JSON format"
+                choice "yaml" help="YAML format"
+                choice "toml" help="TOML format"
+            }
         }
     }
     flag "-n --dry-run" help="Show what would be exported without writing to file"
@@ -112,7 +119,12 @@ cmd "import" help="Import secrets from various sources" {
         arg "<PREFIX>"
     }
     arg "[FORMAT]" help="Import source format" default="env" {
-        choices "env" "json" "yaml" "toml"
+        choices {
+            choice "env" help="Environment variable format (KEY=value)"
+            choice "json" help="JSON format"
+            choice "yaml" help="YAML format"
+            choice "toml" help="TOML format"
+        }
     }
 }
 cmd "init" help="Initialize a new fnox configuration file" {
@@ -131,7 +143,11 @@ cmd "lease" help="Manage ephemeral credential leases" {
         }
         flag "-f --format" help="Output format" default="shell" {
             arg "<FORMAT>" {
-                choices "shell" "json" "env"
+                choices {
+                    choice "shell"
+                    choice "json"
+                    choice "env"
+                }
             }
         }
         flag "-i --interactive" help="Prompt interactively for missing credentials"
@@ -172,7 +188,33 @@ cmd "provider" help="Manage providers (defaults to list)" {
         }
         arg "<PROVIDER>" help="Provider name"
         arg "<PROVIDER_TYPE>" help="Provider type" {
-            choices "1password" "age" "aws" "aws-kms" "aws-ps" "azure-ac" "azure-kms" "azure-sm" "gcp" "gcp-kms" "fido2" "bitwarden" "doppler" "foks" "bitwarden-sm" "infisical" "keepass" "keeper-sm" "keychain" "password-store" "passwordstate" "plain" "proton-pass" "vault" "yubikey"
+            choices {
+                choice "1password" help="1Password"
+                choice "age" help="Age encryption"
+                choice "aws" help="AWS Secrets Manager"
+                choice "aws-kms" help="AWS KMS"
+                choice "aws-ps" help="AWS Parameter Store"
+                choice "azure-ac" help="Azure App Configuration"
+                choice "azure-kms" help="Azure Key Vault KMS"
+                choice "azure-sm" help="Azure Key Vault Secrets Manager"
+                choice "gcp" help="Google Cloud Secret Manager"
+                choice "gcp-kms" help="Google Cloud KMS"
+                choice "fido2" help="FIDO2 hmac-secret hardware-backed encryption"
+                choice "bitwarden" help="Bitwarden Password Manager"
+                choice "doppler" help="Doppler secrets manager"
+                choice "foks" help="FOKS (Federated Open Key Service)"
+                choice "bitwarden-sm" help="Bitwarden Secrets Manager"
+                choice "infisical" help="Infisical"
+                choice "keepass" help="KeePass"
+                choice "keeper-sm" help="Keeper Secrets Manager"
+                choice "keychain" help="OS Keychain"
+                choice "password-store" help="password-store (pass)"
+                choice "passwordstate" help="Click Studios Passwordstate"
+                choice "plain" help="Plain text provider"
+                choice "proton-pass" help="Proton Pass"
+                choice "vault" help="HashiCorp Vault"
+                choice "yubikey" help="YubiKey HMAC-SHA1 hardware-backed encryption"
+            }
         }
     }
     cmd "list" help="List available providers" {
@@ -196,6 +238,7 @@ cmd "proxy" help="Broker credentials into destination-scoped HTTPS requests" sub
     }
     cmd "run" help="Run a command with placeholder credentials through the local proxy" {
         arg "[COMMAND]..." help="Command to run" double_dash="automatic"
+        complete "command" type="command_args"
     }
 }
 cmd "reencrypt" help="Re-encrypt secrets with current provider configuration" {
@@ -223,7 +266,10 @@ cmd "scan" help="Scan repository for potential secrets" {
     }
     flag "--format" help="Output format" default="human" {
         arg "<FORMAT>" {
-            choices "human" "json"
+            choices {
+                choice "human"
+                choice "json"
+            }
         }
     }
     flag "-q --quiet" help="Show only files with potential secrets"
@@ -249,12 +295,16 @@ cmd "set" help="Set a secret value" {
     flag "--default" help="Default value to use if secret is not found" {
         arg "<DEFAULT>"
     }
-    flag --from-file help="Read the secret value verbatim from a UTF-8 file" {
-        arg <FROM_FILE>
+    flag "--from-file" help="Read the secret value verbatim from a UTF-8 file" {
+        arg "<FROM_FILE>"
     }
-    flag --if-missing help="What to do if the secret is missing (error, warn, ignore)" {
-        arg <IF_MISSING> {
-            choices error warn ignore
+    flag "--if-missing" help="What to do if the secret is missing (error, warn, ignore)" {
+        arg "<IF_MISSING>" {
+            choices {
+                choice "error"
+                choice "warn"
+                choice "ignore"
+            }
         }
     }
     arg "<KEY>" help="Secret key (environment variable name)"
