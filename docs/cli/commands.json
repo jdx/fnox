@@ -1758,7 +1758,13 @@
         "name": "set",
         "aliases": ["s"],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "complete": {
+          "from_file": {
+            "name": "from_file",
+            "type_": "path"
+          }
+        }
       },
       "sponsors": {
         "full_cmd": ["sponsors"],

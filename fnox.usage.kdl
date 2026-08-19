@@ -311,6 +311,7 @@ cmd "set" help="Set a secret value" {
     arg "[VALUE]" help="Secret value to store." {
         long_help "Secret value to store.\n\nIf omitted: reads from stdin when piped (`echo \"x\" | fnox set KEY`),\nor prompts interactively with hidden input.\n\nPassing secrets as arguments exposes them in shell history and `ps` output.\nFor sensitive values, prefer stdin or the interactive prompt."
     }
+    complete "from_file" type="path"
 }
 cmd "sponsors" help="Show the companies sponsoring fnox and the jdx.dev open source tools" {
 }
