@@ -37,7 +37,7 @@ pub mod usage;
 pub mod version;
 
 #[derive(usage_derive::Cli)]
-#[usage(name = "fnox")]
+#[usage(name = "fnox", unknown_flags = "error")]
 #[usage(about = "A flexible secret management tool by @jdx")]
 #[usage(version)]
 pub struct Cli {
