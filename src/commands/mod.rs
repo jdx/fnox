@@ -202,6 +202,23 @@ fn completion_config(ctx: &usage_rs::spec::CompleteCtx<'_>) -> Config {
     Config::load_smart(path).unwrap_or_else(|_| Config::new())
 }
 
+fn completion_profiles(ctx: &usage_rs::spec::CompleteCtx<'_>) -> Vec<String> {
+    let mut profiles = Vec::new();
+    let mut words = ctx.words.iter();
+    while let Some(word) = words.next() {
+        if let Some(value) = word.strip_prefix("--profile=") {
+            profiles.push(value.to_string());
+        } else if matches!(word.as_str(), "-P" | "--profile") {
+            if let Some(value) = words.next() {
+                profiles.push(value.to_string());
+            }
+        } else if let Some(value) = word.strip_prefix("-P").filter(|value| !value.is_empty()) {
+            profiles.push(value.to_string());
+        }
+    }
+    profiles
+}
+
 fn candidates(values: impl IntoIterator<Item = String>) -> Vec<usage_rs::spec::Candidate<'static>> {
     values
         .into_iter()
@@ -212,7 +229,7 @@ fn candidates(values: impl IntoIterator<Item = String>) -> Vec<usage_rs::spec::C
 fn complete_key(ctx: usage_rs::spec::CompleteCtx<'_>) -> usage_rs::complete::CompletionFuture<'_> {
     Box::pin(async move {
         let config = completion_config(&ctx);
-        let profiles = Config::get_profiles(&[]);
+        let profiles = Config::get_profiles(&completion_profiles(&ctx));
         candidates(
             config
                 .get_secrets(&profiles)
@@ -240,14 +257,14 @@ fn complete_provider(
 ) -> usage_rs::complete::CompletionFuture<'_> {
     Box::pin(async move {
         let config = completion_config(&ctx);
-        let profiles = Config::get_profiles(&[]);
+        let profiles = Config::get_profiles(&completion_profiles(&ctx));
         candidates(config.get_providers(&profiles).into_keys())
     })
 }
 
 static COMPLETIONS: [usage_rs::complete::CompletionOverlay<'static>; 3] = [
     usage_rs::complete::CompletionOverlay::async_any("key", complete_key),
-    usage_rs::complete::CompletionOverlay::async_any("name", complete_provider),
+    usage_rs::complete::CompletionOverlay::async_any("provider", complete_provider),
     usage_rs::complete::CompletionOverlay::async_any("profile", complete_profile),
 ];
 
