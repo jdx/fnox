@@ -3,6 +3,7 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
+use strum::{Display, EnumString};
 
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use ignore::{DirEntry, WalkBuilder};
@@ -27,7 +28,7 @@ pub struct ScanCommand {
     ignore: Vec<String>,
 
     /// Output format
-    #[usage(long, value_enum, default_value_t = ScanFormat::Human)]
+    #[usage(long, value_enum, default_value_t = ScanFormat::Human, default = "human")]
     format: ScanFormat,
 
     /// Show only files with potential secrets
@@ -35,7 +36,8 @@ pub struct ScanCommand {
     quiet: bool,
 }
 
-#[derive(Clone, Copy, Debug, usage_derive::ValueEnum)]
+#[derive(Clone, Copy, Debug, usage_derive::ValueEnum, Display, EnumString)]
+#[strum(serialize_all = "lowercase")]
 enum ScanFormat {
     Human,
     Json,

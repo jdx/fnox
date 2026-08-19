@@ -7,7 +7,7 @@ use std::process::Command;
 #[usage(alias("complete", "completions"))]
 pub struct CompletionCommand {
     /// Shell type to generate completions for
-    #[usage(arg, value_name = "SHELL")]
+    #[usage(arg, name = "SHELL")]
     pub shell: String,
 }
 

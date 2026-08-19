@@ -11,7 +11,7 @@ use std::fs;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use strum::VariantNames;
+use strum::{EnumString, VariantNames};
 
 /// Default config filename, used as the clap default for `--config`.
 pub const DEFAULT_CONFIG_FILENAME: &str = "fnox.toml";
@@ -519,9 +519,11 @@ impl McpConfig {
     PartialEq,
     Eq,
     usage_derive::ValueEnum,
+    EnumString,
     VariantNames,
 )]
 #[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
 pub enum IfMissing {
     Error,
     Warn,

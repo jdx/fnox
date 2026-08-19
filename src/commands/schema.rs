@@ -3,7 +3,6 @@ use crate::config::Config;
 use crate::error::Result;
 
 #[derive(usage_derive::Args)]
-#[usage(hide)]
 pub struct SchemaCommand {}
 
 impl SchemaCommand {

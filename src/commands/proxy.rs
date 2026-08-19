@@ -116,7 +116,7 @@ enum ProxySubcommand {
 #[derive(Debug, usage_derive::Args)]
 struct ProxyRunCommand {
     /// Command to run
-    #[usage(arg, double_dash = "automatic", allow_hyphen_values = true, value_hint = ValueHint::CommandWithArguments)]
+    #[usage(arg, double_dash = "automatic")]
     command: Vec<String>,
 }
 

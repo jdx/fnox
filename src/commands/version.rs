@@ -1,9 +1,9 @@
 use crate::commands::Cli;
 use crate::error::Result;
 
-#[derive(usage_derive::Cli)]
+#[derive(usage_derive::Args)]
 #[usage(alias("v"))]
-pub struct VersionCommand;
+pub struct VersionCommand {}
 
 impl VersionCommand {
     pub async fn run(&self, _cli: &Cli) -> Result<()> {

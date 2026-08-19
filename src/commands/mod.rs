@@ -38,12 +38,11 @@ pub mod version;
 
 #[derive(usage_derive::Cli)]
 #[usage(name = "fnox")]
-#[usage(about = "A flexible secret management tool by @jdx", long_about = None)]
+#[usage(about = "A flexible secret management tool by @jdx")]
 #[usage(version)]
-#[usage(help_expected = true)]
 pub struct Cli {
     /// Path to the configuration file (default: fnox.toml, searches parent directories)
-    #[usage(short, long, default = crate::config::DEFAULT_CONFIG_FILENAME, global)]
+    #[usage(short, long, default = "fnox.toml", global)]
     pub config: PathBuf,
 
     /// Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple
@@ -244,22 +243,32 @@ impl Commands {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clap::CommandFactory;
 
     #[test]
     fn test_cli_ordering() {
-        // Validate that CLI commands and arguments are properly sorted
-        // using the published clap-sort crate.
-        clap_sort::assert_sorted(&Cli::command());
+        let names = Cli::spec()
+            .root
+            .subcommands
+            .iter()
+            .map(|command| command.cmd.name)
+            .collect::<Vec<_>>();
+        let mut sorted = names.clone();
+        sorted.sort_unstable();
+        assert_eq!(names, sorted, "CLI commands should remain sorted");
     }
 
     #[test]
     fn exec_replace_flag_matches_platform() {
-        let command = Cli::command();
-        let exec = command.find_subcommand("exec").unwrap();
+        let exec = Cli::spec()
+            .root
+            .subcommands
+            .iter()
+            .find(|command| command.cmd.name == "exec")
+            .unwrap();
         let has_replace = exec
-            .get_arguments()
-            .any(|argument| argument.get_long() == Some("replace"));
+            .flags
+            .iter()
+            .any(|flag| flag.flag.longs.contains(&"replace"));
 
         assert_eq!(has_replace, cfg!(unix));
     }

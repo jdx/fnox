@@ -37,8 +37,8 @@ blake3 = "1"
 bytes = "1"
 chrono = "0.4"
 ci_info = "0.14"
-usage-argv = { git = "https://github.com/jdx/usage", rev = "cc60dcb7fd01c8b61d7665fc7dc7c8210551601a", features = ["diagnostics", "spec"] }
-usage-derive = { git = "https://github.com/jdx/usage", rev = "cc60dcb7fd01c8b61d7665fc7dc7c8210551601a" }
+usage-argv = { git = "https://github.com/jdx/usage", rev = "64e87fcff095a7e8ddd84e22d44151eb010adfbe", features = ["diagnostics", "spec"] }
+usage-derive = { git = "https://github.com/jdx/usage", rev = "64e87fcff095a7e8ddd84e22d44151eb010adfbe" }
 console = "0.16"
 crossterm = { version = "0.29", features = ["event-stream"] }
 ctap-hid-fido2 = "3"
@@ -102,7 +102,7 @@ toml_edit = { version = "0.25", features = ["serde"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 urlencoding = "2"
-usage-lib = { git = "https://github.com/jdx/usage", rev = "cc60dcb7fd01c8b61d7665fc7dc7c8210551601a" }
+usage-lib = { git = "https://github.com/jdx/usage", rev = "64e87fcff095a7e8ddd84e22d44151eb010adfbe" }
 walkdir = "2"
 which = "8"
 xx = { version = "2", features = ["fslock"] }

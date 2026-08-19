@@ -145,8 +145,8 @@ impl ProviderCommand {
 #[cfg(test)]
 mod tests {
     use super::ProviderType;
-    use clap::ValueEnum;
     use std::collections::BTreeSet;
+    use usage_argv::spec::ValueEnum;
 
     fn normalize_provider_type_for_add(provider_type: &str) -> String {
         match provider_type {
@@ -176,13 +176,9 @@ mod tests {
             .map(|provider_type| normalize_provider_type_for_add(&provider_type))
             .collect();
 
-        let cli_types: BTreeSet<String> = ProviderType::value_variants()
+        let cli_types: BTreeSet<String> = ProviderType::CHOICES
             .iter()
-            .filter_map(|variant| {
-                variant
-                    .to_possible_value()
-                    .map(|value| value.get_name().to_string())
-            })
+            .map(|value| (*value).to_string())
             .collect();
 
         assert_eq!(
