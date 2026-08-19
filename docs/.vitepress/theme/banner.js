@@ -2,18 +2,36 @@ import "./banner.css";
 
 const ENDPOINT = "https://jdx.dev/banner.json";
 const STORAGE_KEY = "jdx-banner-dismissed";
+const ID_KEY = "jdx-banner-id";
+const HEIGHT_KEY = "jdx-banner-height";
 
 export function initBanner() {
   if (typeof window === "undefined") return;
   fetch(ENDPOINT)
     .then((r) => (r.ok ? r.json() : null))
     .then((b) => {
-      if (!b || !b.enabled) return;
-      if (isExpired(b.expires)) return;
-      if (localStorage.getItem(STORAGE_KEY) === b.id) return;
+      if (
+        !b ||
+        !b.enabled ||
+        isExpired(b.expires) ||
+        localStorage.getItem(STORAGE_KEY) === b.id
+      ) {
+        clearReserved();
+        return;
+      }
       render(b);
     })
-    .catch(() => {});
+    .catch(clearReserved);
+}
+
+function clearReserved() {
+  document.documentElement.style.removeProperty("--vp-layout-top-height");
+  try {
+    localStorage.removeItem(ID_KEY);
+    localStorage.removeItem(HEIGHT_KEY);
+  } catch {
+    // localStorage unavailable — nothing cached to clear.
+  }
 }
 
 function isExpired(expires) {
@@ -56,6 +74,12 @@ function render(b) {
       "--vp-layout-top-height",
       `${el.offsetHeight}px`,
     );
+    try {
+      localStorage.setItem(ID_KEY, b.id);
+      localStorage.setItem(HEIGHT_KEY, `${el.offsetHeight}px`);
+    } catch {
+      // localStorage unavailable — skip caching.
+    }
   };
 
   const observer =
@@ -71,7 +95,7 @@ function render(b) {
     localStorage.setItem(STORAGE_KEY, b.id);
     observer?.disconnect();
     el.remove();
-    document.documentElement.style.removeProperty("--vp-layout-top-height");
+    clearReserved();
   });
   el.appendChild(btn);
 

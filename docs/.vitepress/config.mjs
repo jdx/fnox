@@ -184,6 +184,19 @@ export default defineConfig({
     },
   },
   head: [
+    [
+      "script",
+      {},
+      `(function () {
+  try {
+    var d = document.documentElement;
+    var id = localStorage.getItem("jdx-banner-id");
+    var h = localStorage.getItem("jdx-banner-height");
+    if (id && h && localStorage.getItem("jdx-banner-dismissed") !== id)
+      d.style.setProperty("--vp-layout-top-height", h);
+  } catch (e) {}
+})();`,
+    ],
     ["link", { rel: "icon", href: "/favicon.ico", sizes: "any" }],
     [
       "link",
