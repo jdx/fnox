@@ -3,5 +3,6 @@
 # `fnox profiles`
 
 - **Usage**: `fnox profiles`
+- **Aliases**: `profile`
 
 List available profiles

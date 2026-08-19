@@ -25,7 +25,6 @@ bitwarden-secrets-manager = "latest"
 vault = "latest"
 "github:Infisical/cli" = "latest"
 node = "24"
-usage = "latest"
 
 [tasks.test]
 description = "Run both cargo and bats tests"
@@ -87,14 +86,19 @@ run = [
 
 [tasks."render:usage"]
 description = "Generate CLI documentation from usage"
-depends = ["build"]
+depends = ["build", "build-usage"]
 run = [
   "fnox usage > fnox.usage.kdl",
   "rm -rf docs/cli && mkdir -p docs/cli",
-  "usage g markdown -mf fnox.usage.kdl --out-dir docs/cli --url-prefix /cli",
-  "usage g json -f fnox.usage.kdl > docs/cli/commands.json",
+  "target/usage-cli/bin/usage g markdown -mf fnox.usage.kdl --out-dir docs/cli --url-prefix /cli",
+  "target/usage-cli/bin/usage g json -f fnox.usage.kdl > docs/cli/commands.json",
   "prettier --write docs/cli",
 ]
+
+[tasks.build-usage]
+run = "cargo install --locked --git https://github.com/jdx/usage --rev 88786493a5df2b90ad49314f68267c39c7497188 --root target/usage-cli usage-cli"
+sources = ["Cargo.lock"]
+outputs = ["target/usage-cli/bin/usage"]
 
 # Instruction-counted benchmarks (see tak.toml). Needs valgrind for the counts;
 # without it tak reports wall clock only and says so, so this still works on

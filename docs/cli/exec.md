@@ -3,7 +3,7 @@
 # `fnox exec`
 
 - **Usage**: `fnox exec [--replace] [COMMAND]…`
-- **Aliases**: `x`
+- **Aliases**: `x`, `run`
 
 Execute a command with secrets as environment variables
 
@@ -17,4 +17,7 @@ Command to run
 
 ### `--replace`
 
-Run the command in fnox's process, keeping the same PID and receiving signals directly; supports environment-only secrets without leases and does not inherit ambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux, macOS, and other Unix-like systems
+Run the command in fnox's process, keeping the same PID and receiving signals
+directly; supports environment-only secrets without leases and does not inherit
+ambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux,
+macOS, and other Unix-like systems
