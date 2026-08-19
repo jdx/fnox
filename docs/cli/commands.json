@@ -1454,6 +1454,23 @@
             }
           },
           {
+            "name": "from-file",
+            "usage": "--from-file <FROM_FILE>",
+            "help": "Read the secret value verbatim from a UTF-8 file",
+            "help_first_line": "Read the secret value verbatim from a UTF-8 file",
+            "short": [],
+            "long": ["from-file"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "FROM_FILE",
+              "usage": "<FROM_FILE>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            }
+          },
+          {
             "name": "base64-encode",
             "usage": "--base64-encode",
             "help": "Base64 encode the secret",

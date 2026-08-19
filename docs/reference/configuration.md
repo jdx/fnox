@@ -454,6 +454,16 @@ Write the secret to an ephemeral temp file and set the env var to the file path 
 GOOGLE_APPLICATION_CREDENTIALS = { provider = "op", value = "GCP Service Account/key file", as_file = true }
 ```
 
+When setting a secret whose contents come from a file, use `--from-file` to
+preserve the file exactly, including trailing newlines:
+
+```bash
+fnox set SSH_PRIVATE_KEY --from-file ~/.ssh/id_ed25519
+```
+
+With `as_file = true`, fnox writes those exact contents to a restricted temporary
+file and injects its path instead of the secret value.
+
 #### `json_path`
 
 Extract a field from a JSON secret value (dot notation for nesting).

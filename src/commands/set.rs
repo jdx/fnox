@@ -3,7 +3,7 @@ use crate::config::{self, Config, IfMissing};
 use crate::error::{FnoxError, Result};
 use clap::Args;
 use std::io::{self, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Resolve a remote key without carrying a reference across providers.
 fn resolve_remote_key_name<'a>(
@@ -73,6 +73,10 @@ pub struct SetCommand {
     #[arg(short = 'p', long)]
     pub provider: Option<String>,
 
+    /// Read the secret value verbatim from a UTF-8 file
+    #[arg(long, value_hint = clap::ValueHint::FilePath, conflicts_with = "value")]
+    pub from_file: Option<PathBuf>,
+
     /// Base64 encode the secret
     #[arg(long)]
     pub base64_encode: bool,
@@ -117,7 +121,14 @@ impl SetCommand {
             self.description.is_some() || self.if_missing.is_some() || self.default.is_some();
 
         // Get the secret value if provided
-        let secret_value = if let Some(ref v) = self.value {
+        let secret_value = if let Some(ref path) = self.from_file {
+            Some(std::fs::read_to_string(path).map_err(|source| {
+                FnoxError::SecretFileReadFailed {
+                    path: path.clone(),
+                    source,
+                }
+            })?)
+        } else if let Some(ref v) = self.value {
             // Value provided as argument
             Some(v.clone())
         } else if has_metadata && self.key_name.is_none() {

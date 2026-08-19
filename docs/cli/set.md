@@ -43,6 +43,10 @@ Show what would be done without making changes
 
 Provider to fetch from
 
+### `--from-file <FROM_FILE>`
+
+Read the secret value verbatim from a UTF-8 file
+
 ### `--base64-encode`
 
 Base64 encode the secret

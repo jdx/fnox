@@ -220,6 +220,9 @@ cmd set help="Set a secret value" {
     flag "-p --provider" help="Provider to fetch from" {
         arg <PROVIDER>
     }
+    flag --from-file help="Read the secret value verbatim from a UTF-8 file" {
+        arg <FROM_FILE>
+    }
     flag --base64-encode help="Base64 encode the secret"
     flag --default help="Default value to use if secret is not found" {
         arg <DEFAULT>
