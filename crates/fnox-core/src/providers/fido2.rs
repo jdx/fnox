@@ -12,6 +12,24 @@ pub fn env_dependencies() -> &'static [&'static str] {
 /// Cached FIDO2 hmac-secret responses keyed by provider name.
 static CACHED_SECRETS: OnceLock<std::sync::Mutex<HashMap<String, Vec<u8>>>> = OnceLock::new();
 
+fn batch_errors(secrets: &[(String, String)], message: &str) -> HashMap<String, Result<String>> {
+    secrets
+        .iter()
+        .map(|(key, _)| (key.clone(), Err(FnoxError::Provider(message.to_string()))))
+        .collect()
+}
+
+fn decrypt_batch(
+    secrets: &[(String, String)],
+    secret: &[u8],
+    context: &[u8],
+) -> HashMap<String, Result<String>> {
+    secrets
+        .iter()
+        .map(|(key, value)| (key.clone(), hw_encrypt::decrypt(secret, context, value)))
+        .collect()
+}
+
 #[derive(Clone)]
 pub struct Fido2Provider {
     credential_id: Vec<u8>,
@@ -70,6 +88,13 @@ impl Fido2Provider {
             return Ok(cached.clone());
         }
 
+        // Discover the device before prompting so device-count errors are shown
+        // without asking for a PIN that cannot be used.
+        let device = ctap_hid_fido2::FidoKeyHidFactory::create(
+            &ctap_hid_fido2::Cfg::init().with_keep_alive_msg_to_stderr(true),
+        )
+        .map_err(|e| FnoxError::Provider(format!("Failed to find FIDO2 device: {:?}", e)))?;
+
         // Resolve PIN: use config value, or prompt interactively
         let pin = if self.pin.is_some() {
             self.pin.clone()
@@ -83,11 +108,6 @@ impl Fido2Provider {
         } else {
             None
         };
-
-        let device = ctap_hid_fido2::FidoKeyHidFactory::create(
-            &ctap_hid_fido2::Cfg::init().with_keep_alive_msg_to_stderr(true),
-        )
-        .map_err(|e| FnoxError::Provider(format!("Failed to find FIDO2 device: {:?}", e)))?;
 
         let challenge = ctap_hid_fido2::verifier::create_challenge();
 
@@ -157,6 +177,77 @@ impl crate::providers::Provider for Fido2Provider {
             .await
             .map_err(|e| FnoxError::Provider(format!("FIDO2 task failed: {e}")))??;
         hw_encrypt::decrypt(&secret, &self.hkdf_context(), value)
+    }
+
+    async fn get_secrets_batch(
+        &self,
+        secrets: &[(String, String)],
+    ) -> HashMap<String, Result<String>> {
+        if secrets.is_empty() {
+            return HashMap::new();
+        }
+
+        let provider = self.clone();
+        let secret = match tokio::task::spawn_blocking(move || provider.get_hmac_secret()).await {
+            Ok(Ok(secret)) => secret,
+            Ok(Err(error)) => {
+                let message = match error {
+                    FnoxError::Provider(message) => message,
+                    error => error.to_string(),
+                };
+                return batch_errors(secrets, &message);
+            }
+            Err(error) => {
+                let message = format!("FIDO2 task failed: {error}");
+                return batch_errors(secrets, &message);
+            }
+        };
+
+        decrypt_batch(secrets, &secret, &self.hkdf_context())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decrypts_batch_with_shared_secret() {
+        let secret = [7; 32];
+        let context = b"fnox-fido2-test";
+        let secrets = vec![
+            (
+                "FIRST".to_string(),
+                hw_encrypt::encrypt(&secret, context, "one").unwrap(),
+            ),
+            (
+                "SECOND".to_string(),
+                hw_encrypt::encrypt(&secret, context, "two").unwrap(),
+            ),
+        ];
+
+        let mut results = decrypt_batch(&secrets, &secret, context);
+
+        assert_eq!(results.remove("FIRST").unwrap().unwrap(), "one");
+        assert_eq!(results.remove("SECOND").unwrap().unwrap(), "two");
+    }
+
+    #[test]
+    fn returns_batch_error_for_each_secret() {
+        let secrets = vec![
+            ("FIRST".to_string(), "value-1".to_string()),
+            ("SECOND".to_string(), "value-2".to_string()),
+        ];
+
+        let results = batch_errors(&secrets, "device error");
+
+        assert_eq!(results.len(), 2);
+        for result in results.values() {
+            assert_eq!(
+                result.as_ref().unwrap_err().to_string(),
+                "Provider error: device error"
+            );
+        }
     }
 }
 
