@@ -102,7 +102,6 @@ toml_edit = { version = "0.25", features = ["serde"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 urlencoding = "2"
-usage-lib = { git = "https://github.com/jdx/usage", rev = "88786493a5df2b90ad49314f68267c39c7497188" }
 walkdir = "2"
 which = "8"
 xx = { version = "2", features = ["fslock"] }
@@ -171,7 +170,6 @@ tokio-rustls = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-usage-lib = { workspace = true }
 which = { workspace = true }
 
 [dev-dependencies]

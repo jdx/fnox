@@ -2386,7 +2386,6 @@ dependencies = [
  "tracing-subscriber",
  "usage-argv",
  "usage-derive",
- "usage-lib",
  "which",
 ]
 
@@ -3962,17 +3961,6 @@ dependencies = [
  "hashbrown 0.16.1",
  "portable-atomic",
  "thiserror 2.0.20",
-]
-
-[[package]]
-name = "kdl"
-version = "6.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81a29e7b50079ff44549f68c0becb1c73d7f6de2a4ea952da77966daf3d4761e"
-dependencies = [
- "miette",
- "num",
- "winnow 0.6.24",
 ]
 
 [[package]]
@@ -5788,12 +5776,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "roff"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "323c417e1d9665a65b263ec744ba09030cfb277e9daa0b018a4ab62e57bc8189"
-
-[[package]]
 name = "rpassword"
 version = "7.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6395,12 +6377,6 @@ name = "shared_thread"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52b86057fcb5423f5018e331ac04623e32d6b5ce85e33300f92c79a1973928b0"
-
-[[package]]
-name = "shell-words"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc6fe69c597f9c37bfeeeeeb33da3530379845f10be461a66d16d03eca2ded77"
 
 [[package]]
 name = "shellexpand"
@@ -7133,7 +7109,7 @@ dependencies = [
  "toml_datetime",
  "toml_parser",
  "toml_writer",
- "winnow 1.0.4",
+ "winnow",
 ]
 
 [[package]]
@@ -7142,7 +7118,7 @@ version = "1.1.3+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d38ac1cf9b95face32296c0a3ede1fdc270627c9d9c02a7274dd6d960dc4d56"
 dependencies = [
- "winnow 1.0.4",
+ "winnow",
 ]
 
 [[package]]
@@ -7593,28 +7569,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "usage-lib"
-version = "5.1.0"
-source = "git+https://github.com/jdx/usage?rev=88786493a5df2b90ad49314f68267c39c7497188#88786493a5df2b90ad49314f68267c39c7497188"
-dependencies = [
- "heck",
- "indexmap 2.14.0",
- "itertools 0.15.0",
- "kdl",
- "log",
- "miette",
- "regex",
- "roff",
- "serde",
- "shell-words",
- "strum 0.28.0",
- "tera",
- "thiserror 2.0.20",
- "versions",
- "xx",
-]
-
-[[package]]
 name = "utf8_iter"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7656,16 +7610,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "versions"
-version = "7.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80a7e511ce1795821207a837b7b1c8d8aca0c648810966ad200446ae58f6667f"
-dependencies = [
- "itertools 0.14.0",
- "nom 8.0.0",
-]
 
 [[package]]
 name = "vsimd"
@@ -8310,15 +8254,6 @@ name = "windows_x86_64_msvc"
 version = "0.53.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6bbff5f0aada427a1e5a6da5f1f98158182f26556f345ac9e04d36d0ebed650"
-
-[[package]]
-name = "winnow"
-version = "0.6.24"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8d71a593cc5c42ad7876e2c1fda56f314f3754c084128833e64f1345ff8a03a"
-dependencies = [
- "memchr",
-]
 
 [[package]]
 name = "winnow"

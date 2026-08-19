@@ -247,15 +247,63 @@ mod tests {
 
     #[test]
     fn test_cli_ordering() {
-        let names = Cli::spec()
-            .root
-            .subcommands
-            .iter()
-            .map(|command| command.cmd.name)
-            .collect::<Vec<_>>();
-        let mut sorted = names.clone();
-        sorted.sort_unstable();
-        assert_eq!(names, sorted, "CLI commands should remain sorted");
+        fn short_key(short: u8) -> (u8, bool) {
+            (short.to_ascii_lowercase(), short.is_ascii_uppercase())
+        }
+
+        fn assert_sorted<'a>(command: &usage_argv::spec::CommandMeta<'a>, path: &mut Vec<&'a str>) {
+            path.push(command.cmd.name);
+
+            let subcommands = command
+                .subcommands
+                .iter()
+                .map(|subcommand| subcommand.cmd.name)
+                .collect::<Vec<_>>();
+            let mut sorted_subcommands = subcommands.clone();
+            sorted_subcommands.sort_unstable();
+            assert_eq!(
+                subcommands,
+                sorted_subcommands,
+                "subcommands in '{}' should remain sorted",
+                path.join(" ")
+            );
+
+            let short_flags = command
+                .flags
+                .iter()
+                .filter_map(|flag| flag.flag.shorts.first().copied())
+                .collect::<Vec<_>>();
+            let mut sorted_short_flags = short_flags.clone();
+            sorted_short_flags.sort_by_key(|short| short_key(*short));
+            assert_eq!(
+                short_flags,
+                sorted_short_flags,
+                "short flags in '{}' should remain sorted",
+                path.join(" ")
+            );
+
+            let long_only_flags = command
+                .flags
+                .iter()
+                .filter(|flag| flag.flag.shorts.is_empty())
+                .filter_map(|flag| flag.flag.longs.first().copied())
+                .collect::<Vec<_>>();
+            let mut sorted_long_only_flags = long_only_flags.clone();
+            sorted_long_only_flags.sort_unstable();
+            assert_eq!(
+                long_only_flags,
+                sorted_long_only_flags,
+                "long-only flags in '{}' should remain sorted",
+                path.join(" ")
+            );
+
+            for subcommand in command.subcommands {
+                assert_sorted(subcommand, path);
+            }
+            path.pop();
+        }
+
+        assert_sorted(Cli::spec().root, &mut Vec::new());
     }
 
     #[test]
