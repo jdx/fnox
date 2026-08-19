@@ -6,7 +6,7 @@ use crate::providers::get_provider_resolved;
 
 #[derive(Debug, usage_rs::Args)]
 #[usage(alias("dr"))]
-pub struct DoctorCommand {}
+pub struct DoctorCommand;
 
 impl DoctorCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {

@@ -14,7 +14,7 @@ use anyhow::Result;
 /// run the activation command again for your shell.
 #[derive(Debug, Clone, usage_rs::Args)]
 #[usage(verbatim_doc_comment)]
-pub struct DeactivateCommand {}
+pub struct DeactivateCommand;
 
 impl DeactivateCommand {
     pub async fn run(&self, _cli: &Cli, _config: Config) -> Result<()> {

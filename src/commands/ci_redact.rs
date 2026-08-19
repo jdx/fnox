@@ -5,7 +5,7 @@ use crate::{commands::Cli, config::Config};
 type MaskFn = Box<dyn Fn(&str, &str)>;
 
 #[derive(Debug, usage_rs::Args)]
-pub struct CiRedactCommand {}
+pub struct CiRedactCommand;
 
 impl CiRedactCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {

@@ -78,7 +78,7 @@ pub struct LeaseRevokeCommand {
 }
 
 #[derive(Debug, usage_rs::Args)]
-pub struct LeaseCleanupCommand {}
+pub struct LeaseCleanupCommand;
 
 impl LeaseCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {

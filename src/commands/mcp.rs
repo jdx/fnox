@@ -7,7 +7,7 @@ use rmcp::service::RunningService;
 use rmcp::{RoleServer, ServiceExt};
 
 #[derive(Debug, usage_rs::Args)]
-pub struct McpCommand {}
+pub struct McpCommand;
 
 impl McpCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {

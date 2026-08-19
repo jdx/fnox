@@ -2,7 +2,7 @@ use crate::commands::Cli;
 use crate::error::Result;
 
 #[derive(usage_rs::Args)]
-pub struct SponsorsCommand {}
+pub struct SponsorsCommand;
 
 impl SponsorsCommand {
     pub async fn run(&self, _cli: &Cli) -> Result<()> {

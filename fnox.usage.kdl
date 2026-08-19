@@ -4,7 +4,7 @@ bin "fnox"
 version "1.33.1"
 about "A flexible secret management tool by @jdx"
 unknown_flags "error"
-flag "-c --config" help="Path to the configuration file (default: fnox.toml, searches parent directories)" required=#true global=#true default="fnox.toml" {
+flag "-c --config" help="Path to the configuration file (default: fnox.toml, searches parent directories)" global=#true default="fnox.toml" {
     arg "<CONFIG>"
 }
 flag "-P --profile" help="Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones." global=#true var=#true {
@@ -73,7 +73,7 @@ cmd "exec" help="Execute a command with secrets as environment variables" {
 }
 cmd "export" help="Export secrets in various formats" {
     alias "ex"
-    flag "-f --format" help="Export format" required=#true default="env" {
+    flag "-f --format" help="Export format" default="env" {
         arg "<FORMAT>" {
             choices "env" "shell" "json" "yaml" "toml"
         }
@@ -111,7 +111,7 @@ cmd "import" help="Import secrets from various sources" {
     flag "--prefix" help="Prefix to add to imported secret names" {
         arg "<PREFIX>"
     }
-    arg "<FORMAT>" help="Import source format" default="env" {
+    arg "[FORMAT]" help="Import source format" default="env" {
         choices "env" "json" "yaml" "toml"
     }
 }
@@ -129,13 +129,13 @@ cmd "lease" help="Manage ephemeral credential leases" {
         flag "-d --duration" help="Lease duration (e.g., \"15m\", \"1h\", \"2h30m\"); overrides config duration" {
             arg "<DURATION>"
         }
-        flag "-f --format" help="Output format" required=#true default="shell" {
+        flag "-f --format" help="Output format" default="shell" {
             arg "<FORMAT>" {
                 choices "shell" "json" "env"
             }
         }
         flag "-i --interactive" help="Prompt interactively for missing credentials"
-        flag "-l --label" help="Label for the lease (e.g., session purpose)" required=#true default="fnox-lease" {
+        flag "-l --label" help="Label for the lease (e.g., session purpose)" default="fnox-lease" {
             arg "<LABEL>"
         }
         arg "[BACKEND_NAME]" help="Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted."
@@ -221,13 +221,13 @@ cmd "scan" help="Scan repository for potential secrets" {
     flag "-i --ignore" help="Skip files matching this glob pattern (can be used multiple times)" var=#true {
         arg "<IGNORE>"
     }
-    flag "--format" help="Output format" required=#true default="human" {
+    flag "--format" help="Output format" default="human" {
         arg "<FORMAT>" {
             choices "human" "json"
         }
     }
     flag "-q --quiet" help="Show only files with potential secrets"
-    arg "<DIR>" help="Directory to scan (default: current directory)" default="."
+    arg "[DIR]" help="Directory to scan (default: current directory)" default="."
     complete "dir" type="dir"
 }
 cmd "schema" help="Generate JSON Schema for fnox configuration" hide=#true {

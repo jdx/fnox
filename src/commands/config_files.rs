@@ -15,7 +15,7 @@ struct PartialConfig {
 }
 
 #[derive(usage_rs::Args)]
-pub struct ConfigFilesCommand {}
+pub struct ConfigFilesCommand;
 
 impl ConfigFilesCommand {
     pub async fn run(&self, cli: &Cli) -> Result<()> {

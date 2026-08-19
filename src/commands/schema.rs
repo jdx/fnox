@@ -3,7 +3,7 @@ use crate::config::Config;
 use crate::error::Result;
 
 #[derive(usage_rs::Args)]
-pub struct SchemaCommand {}
+pub struct SchemaCommand;
 
 impl SchemaCommand {
     pub async fn run(&self, _cli: &Cli) -> Result<()> {

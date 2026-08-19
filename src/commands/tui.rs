@@ -20,7 +20,7 @@ impl Drop for TerminalGuard {
 }
 
 #[derive(Debug, usage_rs::Args)]
-pub struct TuiCommand {}
+pub struct TuiCommand;
 
 impl TuiCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
