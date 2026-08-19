@@ -2,33 +2,46 @@ import "./banner.css";
 
 const ENDPOINT = "https://jdx.dev/banner.json";
 const STORAGE_KEY = "jdx-banner-dismissed";
-const ID_KEY = "jdx-banner-id";
-const HEIGHT_KEY = "jdx-banner-height";
+const CACHE_KEY = "jdx-banner-cache";
+
+function getDismissedId() {
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
 
 export function initBanner() {
   if (typeof window === "undefined") return;
-  fetch(ENDPOINT)
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 5000);
+  fetch(ENDPOINT, { signal: controller.signal })
     .then((r) => (r.ok ? r.json() : null))
     .then((b) => {
       if (
         !b ||
         !b.enabled ||
         isExpired(b.expires) ||
-        localStorage.getItem(STORAGE_KEY) === b.id
+        getDismissedId() === b.id
       ) {
         clearReserved();
         return;
       }
       render(b);
     })
-    .catch(clearReserved);
+    .catch(clearCurrentReservation)
+    .finally(() => window.clearTimeout(timeout));
+}
+
+function clearCurrentReservation() {
+  document.documentElement.style.removeProperty("--vp-layout-top-height");
 }
 
 function clearReserved() {
-  document.documentElement.style.removeProperty("--vp-layout-top-height");
+  clearCurrentReservation();
   try {
-    localStorage.removeItem(ID_KEY);
-    localStorage.removeItem(HEIGHT_KEY);
+    localStorage.removeItem(CACHE_KEY);
   } catch {
     // localStorage unavailable — nothing cached to clear.
   }
@@ -75,8 +88,15 @@ function render(b) {
       `${el.offsetHeight}px`,
     );
     try {
-      localStorage.setItem(ID_KEY, b.id);
-      localStorage.setItem(HEIGHT_KEY, `${el.offsetHeight}px`);
+      localStorage.setItem(
+        CACHE_KEY,
+        JSON.stringify({
+          id: b.id,
+          height: `${el.offsetHeight}px`,
+          width: window.innerWidth,
+          expires: b.expires ?? null,
+        }),
+      );
     } catch {
       // localStorage unavailable — skip caching.
     }
@@ -92,7 +112,11 @@ function render(b) {
   btn.setAttribute("aria-label", "Dismiss");
   btn.textContent = "\u00d7";
   btn.addEventListener("click", () => {
-    localStorage.setItem(STORAGE_KEY, b.id);
+    try {
+      localStorage.setItem(STORAGE_KEY, b.id);
+    } catch {
+      // Dismiss for this page even when localStorage is unavailable.
+    }
     observer?.disconnect();
     el.remove();
     clearReserved();
