@@ -180,6 +180,7 @@ pub enum Commands {
     Tui(tui::TuiCommand),
 
     /// Generate usage specification
+    #[usage(hide)]
     Usage(usage::UsageCommand),
 
     /// Show version information

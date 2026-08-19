@@ -85,7 +85,7 @@ pub struct SetCommand {
     pub from_file: Option<PathBuf>,
 
     /// What to do if the secret is missing (error, warn, ignore)
-    #[usage(long)]
+    #[usage(long, value_enum)]
     pub if_missing: Option<IfMissing>,
 }
 

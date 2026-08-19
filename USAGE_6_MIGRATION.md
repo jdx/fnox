@@ -1,24 +1,19 @@
 # usage 6.x migration status
 
-This branch converts fnox's real CLI structs and attributes from clap to
-usage-rs and removes clap from the runtime dependencies. It remains an
-experimental PR until usage 6.x can support the complete typed command tree.
+This branch converts fnox's real typed CLI from clap to usage-rs and removes
+clap from the runtime dependencies. The workspace compiles and all fnox and
+fnox-core tests pass. It remains an experimental PR until usage 6.x is
+published because its manifest deliberately pins a stacked git revision.
 
-`cargo check` reaches the usage derives and currently reports 326 diagnostics,
-mostly cascades from these underlying blockers:
+The working port still demonstrates release gaps tracked in jdx/usage's plan:
 
-- `ValueHint::CommandWithArguments` has no usage completion type;
-- cfg-gated value-enum variants cannot form usage's required const list;
-- usage's `ValueEnum` implementation conflicts with existing `FromStr`
-  implementations on fnox import/export formats;
-- expression-valued defaults such as `DEFAULT_CONFIG_FILENAME` do not map to a
-  literal usage attribute;
-- several command structs are reused or shaped as independent clap parser roots
-  in ways that do not implement usage `CommandArgs` after conversion;
-- clap `CommandFactory`-based spec generation and command sorting have no direct
-  replacement at their existing call sites;
-- positional placeholders, hidden command structs, and some relationship
-  selectors need semantic rather than textual attribute translation.
-
-The branch keeps the compiler failures on the real types visible. A generated
-String shadow would not exercise any of these constraints.
+- command-with-arguments completion hints have no usage equivalent, although
+  double-dash forwarding preserves parsing;
+- bare unit Args structs require braces, and the same Args body mounted under
+  multiple commands requires thin wrapper types;
+- a positional relationship is enforced after binding because the spec cannot
+  attach conflicts to positional arguments;
+- mutable spec generation pulls in usage-lib and its newer MSRV rather than
+  staying on the argv/derive tier;
+- parser tests need a local argv0-skipping helper because usage's `parse_from`
+  contract takes only the words after the executable.
