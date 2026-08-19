@@ -9,7 +9,7 @@ use std::io;
 use std::path::PathBuf;
 
 /// Sync secrets from remote providers to a local encryption provider
-#[derive(usage_derive::Args)]
+#[derive(usage_rs::Args)]
 pub struct SyncCommand {
     /// Only sync these specific secret keys
     keys: Vec<String>,

@@ -36,8 +36,8 @@ pub mod tui;
 pub mod usage;
 pub mod version;
 
-#[derive(usage_derive::Cli)]
-#[usage(name = "fnox", unknown_flags = "error")]
+#[derive(usage_rs::Cli)]
+#[usage(name = "fnox", unknown_flags = "error", completion)]
 #[usage(about = "A flexible secret management tool by @jdx")]
 #[usage(version)]
 pub struct Cli {
@@ -87,7 +87,7 @@ pub struct Cli {
     pub command: Commands,
 }
 
-#[derive(usage_derive::Subcommands)]
+#[derive(usage_rs::Subcommands)]
 pub enum Commands {
     /// Output shell activation code to enable automatic secret loading
     Activate(activate::ActivateCommand),
@@ -251,7 +251,7 @@ mod tests {
             (short.to_ascii_lowercase(), short.is_ascii_uppercase())
         }
 
-        fn assert_sorted<'a>(command: &usage_argv::spec::CommandMeta<'a>, path: &mut Vec<&'a str>) {
+        fn assert_sorted<'a>(command: &usage_rs::spec::CommandMeta<'a>, path: &mut Vec<&'a str>) {
             path.push(command.cmd.name);
 
             let subcommands = command

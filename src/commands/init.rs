@@ -5,7 +5,7 @@ use crate::providers::{WizardCategory, WizardInfo, get_provider_from_resolved};
 use demand::{Confirm, DemandOption, Input, Select};
 use std::collections::HashMap;
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 #[usage(alias = "i")]
 pub struct InitCommand {
     /// Overwrite existing configuration file

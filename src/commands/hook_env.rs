@@ -35,7 +35,7 @@ impl OutputMode {
     }
 }
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 #[usage(about = "Internal command used by shell hooks to load secrets")]
 pub struct HookEnvCommand {
     /// Shell type (bash, zsh, fish, nu, pwsh)

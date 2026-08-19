@@ -6,7 +6,7 @@ use crate::temp_file_secrets::create_persistent_secret_file;
 use crate::{commands::Cli, config::Config};
 use indexmap::IndexMap;
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct GetCommand {
     /// Secret key to retrieve
     pub key: String,

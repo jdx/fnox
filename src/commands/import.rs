@@ -11,7 +11,7 @@ use std::{collections::HashMap, path::PathBuf};
 use strum::{Display, EnumString, VariantNames};
 
 /// Supported import formats
-#[derive(Debug, Clone, Copy, usage_derive::ValueEnum, Display, EnumString, VariantNames)]
+#[derive(Debug, Clone, Copy, usage_rs::ValueEnum, Display, EnumString, VariantNames)]
 #[strum(serialize_all = "lowercase")]
 pub enum ImportFormat {
     /// Environment variable format (KEY=value)
@@ -25,7 +25,7 @@ pub enum ImportFormat {
 }
 
 /// Import secrets from various sources
-#[derive(usage_derive::Args)]
+#[derive(usage_rs::Args)]
 #[usage(alias("im"))]
 pub struct ImportCommand {
     /// Import source format

@@ -1,7 +1,7 @@
 use crate::shell::{self, ActivateOptions};
 use anyhow::Result;
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 #[usage(about = "Output shell activation code to enable automatic secret loading")]
 pub struct ActivateCommand {
     /// Shell to generate activation code for (bash, zsh, fish, nu, pwsh)

@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use strum::{Display, EnumString, VariantNames};
 
 /// Supported export formats
-#[derive(Debug, Clone, Copy, usage_derive::ValueEnum, Display, EnumString, VariantNames)]
+#[derive(Debug, Clone, Copy, usage_rs::ValueEnum, Display, EnumString, VariantNames)]
 #[strum(serialize_all = "lowercase")]
 pub enum ExportFormat {
     /// Environment variable format (KEY=value)
@@ -26,7 +26,7 @@ pub enum ExportFormat {
 }
 
 /// Export secrets in various formats
-#[derive(usage_derive::Args)]
+#[derive(usage_rs::Args)]
 #[usage(alias("ex"))]
 pub struct ExportCommand {
     /// Export format

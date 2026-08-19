@@ -15,7 +15,7 @@ use std::path::PathBuf;
 /// existing secrets remain encrypted with the old recipient set. This command
 /// decrypts and re-encrypts all matching secrets with the current provider
 /// configuration.
-#[derive(usage_derive::Args)]
+#[derive(usage_rs::Args)]
 pub struct ReencryptCommand {
     /// Only re-encrypt these specific secret keys
     keys: Vec<String>,

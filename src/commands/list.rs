@@ -8,7 +8,7 @@ use tabled::settings::{
 };
 use tabled::{Table, Tabled};
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 #[usage(alias("ls", "secrets"))]
 pub struct ListCommand {
     /// Show full provider keys without truncation

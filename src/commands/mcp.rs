@@ -6,7 +6,7 @@ use crate::{env, error::FnoxError};
 use rmcp::service::RunningService;
 use rmcp::{RoleServer, ServiceExt};
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct McpCommand {}
 
 impl McpCommand {

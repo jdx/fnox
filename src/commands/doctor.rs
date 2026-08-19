@@ -4,7 +4,7 @@ use crate::env;
 use crate::error::Result;
 use crate::providers::get_provider_resolved;
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 #[usage(alias("dr"))]
 pub struct DoctorCommand {}
 

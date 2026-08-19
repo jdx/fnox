@@ -518,7 +518,7 @@ impl McpConfig {
     JsonSchema,
     PartialEq,
     Eq,
-    usage_derive::ValueEnum,
+    usage_rs::ValueEnum,
     EnumString,
     VariantNames,
 )]

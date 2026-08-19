@@ -3,13 +3,13 @@ use crate::config::Config;
 use crate::daemon;
 use crate::error::Result;
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct DaemonCommand {
     #[usage(subcommand)]
     command: DaemonSubcommand,
 }
 
-#[derive(Debug, usage_derive::Subcommands)]
+#[derive(Debug, usage_rs::Subcommands)]
 enum DaemonSubcommand {
     /// Clear all running daemon caches
     Clear,

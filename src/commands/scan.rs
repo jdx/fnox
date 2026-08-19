@@ -17,7 +17,7 @@ use crate::error::{FnoxError, Result};
 const MAX_FILE_SIZE: u64 = 5 * 1024 * 1024;
 
 /// Scan repository for potential secrets in plaintext
-#[derive(usage_derive::Args)]
+#[derive(usage_rs::Args)]
 pub struct ScanCommand {
     /// Directory to scan (default: current directory)
     #[usage(arg, default = ".", value_hint = ValueHint::DirPath)]
@@ -36,7 +36,7 @@ pub struct ScanCommand {
     quiet: bool,
 }
 
-#[derive(Clone, Copy, Debug, usage_derive::ValueEnum, Display, EnumString)]
+#[derive(Clone, Copy, Debug, usage_rs::ValueEnum, Display, EnumString)]
 #[strum(serialize_all = "lowercase")]
 enum ScanFormat {
     Human,

@@ -12,7 +12,7 @@ use anyhow::Result;
 ///
 /// Note: This only affects the current shell session. To re-enable fnox,
 /// run the activation command again for your shell.
-#[derive(Debug, Clone, usage_derive::Args)]
+#[derive(Debug, Clone, usage_rs::Args)]
 #[usage(verbatim_doc_comment)]
 pub struct DeactivateCommand {}
 

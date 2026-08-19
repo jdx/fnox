@@ -7,14 +7,14 @@ use chrono::Utc;
 use indexmap::IndexMap;
 use strum::EnumString;
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 #[usage(about = "Manage ephemeral credential leases")]
 pub struct LeaseCommand {
     #[usage(subcommand)]
     pub subcommand: Option<LeaseSubcommand>,
 }
 
-#[derive(Debug, usage_derive::Subcommands)]
+#[derive(Debug, usage_rs::Subcommands)]
 pub enum LeaseSubcommand {
     /// Revoke all expired leases that need manual cleanup
     Cleanup(LeaseCleanupCommand),
@@ -26,7 +26,7 @@ pub enum LeaseSubcommand {
     Revoke(LeaseRevokeCommand),
 }
 
-#[derive(Debug, Clone, usage_derive::ValueEnum, EnumString)]
+#[derive(Debug, Clone, usage_rs::ValueEnum, EnumString)]
 #[strum(serialize_all = "lowercase")]
 pub enum OutputFormat {
     Shell,
@@ -34,7 +34,7 @@ pub enum OutputFormat {
     Env,
 }
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct LeaseCreateCommand {
     /// Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted.
     pub backend_name: Option<String>,
@@ -60,7 +60,7 @@ pub struct LeaseCreateCommand {
     pub label: String,
 }
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct LeaseListCommand {
     /// Show only active (non-expired, non-revoked) leases
     #[usage(long)]
@@ -71,13 +71,13 @@ pub struct LeaseListCommand {
     pub expired: bool,
 }
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct LeaseRevokeCommand {
     /// Lease ID to revoke
     pub lease_id: String,
 }
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct LeaseCleanupCommand {}
 
 impl LeaseCommand {

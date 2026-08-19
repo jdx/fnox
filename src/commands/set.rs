@@ -37,7 +37,7 @@ fn secret_belongs_to_target(
     }
 }
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 #[usage(alias("s"))]
 pub struct SetCommand {
     /// Secret key (environment variable name)

@@ -2,7 +2,7 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 #[usage(alias("t"))]
 pub struct TestCommand {
     /// Provider name (optional when using --all)

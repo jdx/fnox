@@ -2,7 +2,7 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::Result;
 
-#[derive(usage_derive::Args)]
+#[derive(usage_rs::Args)]
 pub struct SchemaCommand {}
 
 impl SchemaCommand {

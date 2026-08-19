@@ -5,7 +5,7 @@ use crate::providers::{OptionProviderSecretRef, OptionStringOrSecretRef, StringO
 
 use super::ProviderType;
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 #[usage(alias("a", "set"))]
 pub struct AddCommand {
     /// Provider name

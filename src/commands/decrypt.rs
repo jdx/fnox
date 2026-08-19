@@ -6,7 +6,7 @@ use crate::error::{FnoxError, Result};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct DecryptCommand {
     /// Key to use for decryption
     #[usage(short, long)]

@@ -4,7 +4,7 @@ use crate::{commands::Cli, config::Config};
 
 type MaskFn = Box<dyn Fn(&str, &str)>;
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct CiRedactCommand {}
 
 impl CiRedactCommand {

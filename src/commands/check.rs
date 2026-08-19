@@ -4,7 +4,7 @@ use crate::secret_resolver;
 
 use crate::commands::Cli;
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 #[usage(alias = "c")]
 pub struct CheckCommand {
     /// Check all secrets including those with if_missing=warn or if_missing=ignore

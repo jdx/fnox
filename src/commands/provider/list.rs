@@ -2,7 +2,7 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::Result;
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 #[usage(alias("ls"))]
 pub struct ListCommand {
     /// Output provider names for shell completion (one per line)

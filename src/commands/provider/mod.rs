@@ -15,7 +15,7 @@ pub use test::TestCommand;
 
 /// Supported provider types
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, usage_derive::ValueEnum, Display, EnumString, VariantNames,
+    Debug, Clone, Copy, PartialEq, Eq, usage_rs::ValueEnum, Display, EnumString, VariantNames,
 )]
 #[strum(serialize_all = "kebab-case")]
 pub enum ProviderType {
@@ -109,13 +109,13 @@ pub enum ProviderType {
     Yubikey,
 }
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct ProviderCommand {
     #[usage(subcommand)]
     pub action: Option<ProviderAction>,
 }
 
-#[derive(Debug, usage_derive::Subcommands)]
+#[derive(Debug, usage_rs::Subcommands)]
 pub enum ProviderAction {
     /// Add a new provider
     Add(AddCommand),
@@ -146,7 +146,7 @@ impl ProviderCommand {
 mod tests {
     use super::ProviderType;
     use std::collections::BTreeSet;
-    use usage_argv::spec::ValueEnum;
+    use usage_rs::spec::ValueEnum;
 
     fn normalize_provider_type_for_add(provider_type: &str) -> String {
         match provider_type {

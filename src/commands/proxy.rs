@@ -98,13 +98,13 @@ const AMBIENT_CREDENTIAL_ENV_VARS: &[&str] = &[
     "FNOX_PROTON_PASS_LINUX_KEYRING",
 ];
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct ProxyCommand {
     #[usage(subcommand)]
     command: ProxySubcommand,
 }
 
-#[derive(Debug, usage_derive::Subcommands)]
+#[derive(Debug, usage_rs::Subcommands)]
 enum ProxySubcommand {
     /// Show the effective credential proxy rules
     Rules,
@@ -113,7 +113,7 @@ enum ProxySubcommand {
     Run(ProxyRunCommand),
 }
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 struct ProxyRunCommand {
     /// Command to run
     #[usage(arg, double_dash = "automatic")]

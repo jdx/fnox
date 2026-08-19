@@ -4,7 +4,7 @@ use crate::encryption::age_encryption::AgeEncryptor;
 use crate::error::{FnoxError, Result};
 use std::collections::HashMap;
 
-#[derive(Debug, usage_derive::Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct EncryptCommand {
     /// Key to use for encryption
     #[usage(short, long)]
