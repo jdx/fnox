@@ -636,6 +636,17 @@ pub enum FnoxError {
         source: std::io::Error,
     },
 
+    #[error("Failed to read secret file: {}", path.display())]
+    #[diagnostic(
+        code(fnox::io::secret_file_read_failed),
+        help("Ensure the file exists, contains valid UTF-8, and you have read permissions")
+    )]
+    SecretFileReadFailed {
+        path: std::path::PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
     // ========================================================================
     // Generic I/O Errors (fallback)
     // ========================================================================

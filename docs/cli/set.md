@@ -51,6 +51,10 @@ Base64 encode the secret
 
 Default value to use if secret is not found
 
+### `--from-file <FROM_FILE>`
+
+Read the secret value verbatim from a UTF-8 file
+
 ### `--if-missing <IF_MISSING>`
 
 What to do if the secret is missing (error, warn, ignore)
