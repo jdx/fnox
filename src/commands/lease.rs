@@ -7,14 +7,14 @@ use chrono::Utc;
 use clap::{Args, Subcommand, ValueEnum};
 use indexmap::IndexMap;
 
-#[derive(Debug, Args)]
-#[command(about = "Manage ephemeral credential leases")]
+#[derive(Debug, usage_derive::Args)]
+#[usage(about = "Manage ephemeral credential leases")]
 pub struct LeaseCommand {
-    #[command(subcommand)]
+    #[usage(subcommand)]
     pub subcommand: Option<LeaseSubcommand>,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, usage_derive::Subcommands)]
 pub enum LeaseSubcommand {
     /// Revoke all expired leases that need manual cleanup
     Cleanup(LeaseCleanupCommand),
@@ -26,57 +26,57 @@ pub enum LeaseSubcommand {
     Revoke(LeaseRevokeCommand),
 }
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, usage_derive::ValueEnum)]
 pub enum OutputFormat {
     Shell,
     Json,
     Env,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_derive::Args)]
 pub struct LeaseCreateCommand {
     /// Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted.
     pub backend_name: Option<String>,
 
     /// Create leases for all configured backends
-    #[arg(short, long, conflicts_with = "backend_name")]
+    #[usage(short, long, conflicts = "--backend-name")]
     pub all: bool,
 
     /// Lease duration (e.g., "15m", "1h", "2h30m"); overrides config duration
-    #[arg(short, long)]
+    #[usage(short, long)]
     pub duration: Option<String>,
 
     /// Output format
-    #[arg(short, long, default_value = "shell")]
+    #[usage(short, long, default = "shell")]
     pub format: OutputFormat,
 
     /// Prompt interactively for missing credentials
-    #[arg(short, long)]
+    #[usage(short, long)]
     pub interactive: bool,
 
     /// Label for the lease (e.g., session purpose)
-    #[arg(short, long, default_value = "fnox-lease")]
+    #[usage(short, long, default = "fnox-lease")]
     pub label: String,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_derive::Args)]
 pub struct LeaseListCommand {
     /// Show only active (non-expired, non-revoked) leases
-    #[arg(long)]
+    #[usage(long)]
     pub active: bool,
 
     /// Show only expired leases
-    #[arg(long)]
+    #[usage(long)]
     pub expired: bool,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_derive::Args)]
 pub struct LeaseRevokeCommand {
     /// Lease ID to revoke
     pub lease_id: String,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_derive::Args)]
 pub struct LeaseCleanupCommand;
 
 impl LeaseCommand {

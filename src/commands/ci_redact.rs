@@ -5,7 +5,7 @@ use clap::Args;
 
 type MaskFn = Box<dyn Fn(&str, &str)>;
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_derive::Args)]
 pub struct CiRedactCommand {}
 
 impl CiRedactCommand {

@@ -7,10 +7,10 @@ use clap::Args;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_derive::Args)]
 pub struct DecryptCommand {
     /// Key to use for decryption
-    #[arg(short, long)]
+    #[usage(short, long)]
     pub key: Option<String>,
 }
 

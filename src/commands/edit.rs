@@ -25,7 +25,7 @@ const TEMP_FILE_HEADER: &str = "\
 
 ";
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_derive::Args)]
 pub struct EditCommand;
 
 /// Represents a secret with its metadata for tracking during editing

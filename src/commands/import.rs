@@ -12,7 +12,7 @@ use std::{collections::HashMap, path::PathBuf};
 use strum::{Display, EnumString, VariantNames};
 
 /// Supported import formats
-#[derive(Debug, Clone, Copy, ValueEnum, Display, EnumString, VariantNames)]
+#[derive(Debug, Clone, Copy, usage_derive::ValueEnum, Display, EnumString, VariantNames)]
 #[strum(serialize_all = "lowercase")]
 pub enum ImportFormat {
     /// Environment variable format (KEY=value)
@@ -26,39 +26,39 @@ pub enum ImportFormat {
 }
 
 /// Import secrets from various sources
-#[derive(Args)]
-#[command(visible_aliases = ["im"])]
+#[derive(usage_derive::Args)]
+#[usage(alias("im"))]
 pub struct ImportCommand {
     /// Import source format
-    #[arg(default_value = "env", value_enum)]
+    #[usage(arg, default = "env", value_enum)]
     format: ImportFormat,
 
     /// Skip confirmation prompts
-    #[arg(short, long)]
+    #[usage(short, long)]
     force: bool,
 
     /// Import to the global config file (~/.config/fnox/config.toml)
-    #[arg(short = 'g', long)]
+    #[usage(short = 'g', long)]
     global: bool,
 
     /// Source file or path to import from (default: stdin)
-    #[arg(short = 'i', long)]
+    #[usage(short = 'i', long)]
     input: Option<PathBuf>,
 
     /// Show what would be imported without making changes
-    #[arg(short = 'n', long)]
+    #[usage(short = 'n', long)]
     dry_run: bool,
 
     /// Provider to use for encrypting/storing imported secrets (required)
-    #[arg(short = 'p', long)]
+    #[usage(short = 'p', long)]
     provider: String,
 
     /// Only import matching secrets (regex pattern)
-    #[arg(long)]
+    #[usage(long)]
     filter: Option<String>,
 
     /// Prefix to add to imported secret names
-    #[arg(long)]
+    #[usage(long)]
     prefix: Option<String>,
 }
 

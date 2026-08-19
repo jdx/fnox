@@ -5,11 +5,11 @@ use clap::Args;
 
 use crate::commands::Cli;
 
-#[derive(Debug, Args)]
-#[command(visible_alias = "c")]
+#[derive(Debug, usage_derive::Args)]
+#[usage(alias = "c")]
 pub struct CheckCommand {
     /// Check all secrets including those with if_missing=warn or if_missing=ignore
-    #[arg(short = 'a', long)]
+    #[usage(short = 'a', long)]
     all: bool,
 }
 

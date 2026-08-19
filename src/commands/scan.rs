@@ -17,26 +17,26 @@ use crate::error::{FnoxError, Result};
 const MAX_FILE_SIZE: u64 = 5 * 1024 * 1024;
 
 /// Scan repository for potential secrets in plaintext
-#[derive(Args)]
+#[derive(usage_derive::Args)]
 pub struct ScanCommand {
     /// Directory to scan (default: current directory)
-    #[arg(default_value = ".", value_hint = ValueHint::DirPath)]
+    #[usage(arg, default = ".", value_hint = ValueHint::DirPath)]
     dir: PathBuf,
 
     /// Skip files matching this glob pattern (can be used multiple times)
-    #[arg(short, long)]
+    #[usage(short, long)]
     ignore: Vec<String>,
 
     /// Output format
-    #[arg(long, value_enum, default_value_t = ScanFormat::Human)]
+    #[usage(long, value_enum, default_value_t = ScanFormat::Human)]
     format: ScanFormat,
 
     /// Show only files with potential secrets
-    #[arg(short, long)]
+    #[usage(short, long)]
     quiet: bool,
 }
 
-#[derive(Clone, Copy, Debug, ValueEnum)]
+#[derive(Clone, Copy, Debug, usage_derive::ValueEnum)]
 enum ScanFormat {
     Human,
     Json,

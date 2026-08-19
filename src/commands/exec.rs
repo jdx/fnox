@@ -7,19 +7,19 @@ use std::collections::HashSet;
 use std::process::Command;
 use tempfile::NamedTempFile;
 
-#[derive(Debug, Args)]
-#[command(visible_alias = "x", alias = "run")]
+#[derive(Debug, usage_derive::Args)]
+#[usage(alias = "x", alias = "run")]
 pub struct ExecCommand {
     /// Run the command in fnox's process, keeping the same PID and receiving signals
     /// directly; supports environment-only secrets without leases and does not inherit
     /// ambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux,
     /// macOS, and other Unix-like systems
     #[cfg(unix)]
-    #[arg(long)]
+    #[usage(long)]
     pub replace: bool,
 
     /// Command to run
-    #[arg(trailing_var_arg = true, allow_hyphen_values = true, value_hint = ValueHint::CommandWithArguments)]
+    #[usage(arg, double_dash = "automatic", allow_hyphen_values = true, value_hint = ValueHint::CommandWithArguments)]
     pub command: Vec<String>,
 }
 

@@ -13,8 +13,8 @@ use clap::Parser;
 ///
 /// Note: This only affects the current shell session. To re-enable fnox,
 /// run the activation command again for your shell.
-#[derive(Debug, Clone, Parser)]
-#[clap(verbatim_doc_comment)]
+#[derive(Debug, Clone, usage_derive::Cli)]
+#[usage(verbatim_doc_comment)]
 pub struct DeactivateCommand {}
 
 impl DeactivateCommand {

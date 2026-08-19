@@ -7,7 +7,7 @@ use clap::Args;
 use rmcp::service::RunningService;
 use rmcp::{RoleServer, ServiceExt};
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_derive::Args)]
 pub struct McpCommand {}
 
 impl McpCommand {

@@ -1,8 +1,8 @@
 use crate::commands::Cli;
 use crate::error::Result;
 
-#[derive(clap::Args)]
-#[command(hide = true)]
+#[derive(usage_derive::Args)]
+#[usage(hide)]
 pub struct UsageCommand {}
 
 impl UsageCommand {

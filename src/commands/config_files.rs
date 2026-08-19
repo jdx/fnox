@@ -14,7 +14,7 @@ struct PartialConfig {
     import: Vec<String>,
 }
 
-#[derive(clap::Args)]
+#[derive(usage_derive::Args)]
 pub struct ConfigFilesCommand;
 
 impl ConfigFilesCommand {

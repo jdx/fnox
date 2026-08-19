@@ -15,7 +15,9 @@ pub use remove::RemoveCommand;
 pub use test::TestCommand;
 
 /// Supported provider types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Display, EnumString, VariantNames)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, usage_derive::ValueEnum, Display, EnumString, VariantNames,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum ProviderType {
     /// 1Password
@@ -108,13 +110,13 @@ pub enum ProviderType {
     Yubikey,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_derive::Args)]
 pub struct ProviderCommand {
-    #[command(subcommand)]
+    #[usage(subcommand)]
     pub action: Option<ProviderAction>,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, usage_derive::Subcommands)]
 pub enum ProviderAction {
     /// Add a new provider
     Add(AddCommand),

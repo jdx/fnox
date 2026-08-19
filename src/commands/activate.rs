@@ -2,15 +2,15 @@ use crate::shell::{self, ActivateOptions};
 use anyhow::Result;
 use clap::Parser;
 
-#[derive(Debug, Parser)]
-#[command(about = "Output shell activation code to enable automatic secret loading")]
+#[derive(Debug, usage_derive::Cli)]
+#[usage(about = "Output shell activation code to enable automatic secret loading")]
 pub struct ActivateCommand {
     /// Shell to generate activation code for (bash, zsh, fish, nu, pwsh)
-    #[arg(value_name = "SHELL")]
+    #[usage(arg, value_name = "SHELL")]
     pub shell: Option<String>,
 
     /// Don't automatically invoke hook-env (for testing)
-    #[arg(long)]
+    #[usage(long)]
     pub no_hook_env: bool,
 }
 

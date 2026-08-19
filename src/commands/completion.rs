@@ -2,12 +2,12 @@ use crate::commands::Cli;
 use crate::error::Result;
 use std::process::Command;
 
-#[derive(clap::Args)]
-#[command(about = "Generate shell completions")]
-#[command(aliases = ["complete", "completions"])]
+#[derive(usage_derive::Args)]
+#[usage(about = "Generate shell completions")]
+#[usage(alias("complete", "completions"))]
 pub struct CompletionCommand {
     /// Shell type to generate completions for
-    #[arg(value_name = "SHELL")]
+    #[usage(arg, value_name = "SHELL")]
     pub shell: String,
 }
 

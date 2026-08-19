@@ -21,7 +21,7 @@ impl Drop for TerminalGuard {
     }
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_derive::Args)]
 pub struct TuiCommand;
 
 impl TuiCommand {

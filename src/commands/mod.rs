@@ -37,59 +37,59 @@ pub mod tui;
 pub mod usage;
 pub mod version;
 
-#[derive(Parser)]
-#[command(name = "fnox")]
-#[command(about = "A flexible secret management tool by @jdx", long_about = None)]
-#[command(version)]
-#[command(help_expected = true)]
+#[derive(usage_derive::Cli)]
+#[usage(name = "fnox")]
+#[usage(about = "A flexible secret management tool by @jdx", long_about = None)]
+#[usage(version)]
+#[usage(help_expected = true)]
 pub struct Cli {
     /// Path to the configuration file (default: fnox.toml, searches parent directories)
-    #[arg(short, long, default_value = crate::config::DEFAULT_CONFIG_FILENAME, global = true)]
+    #[usage(short, long, default = crate::config::DEFAULT_CONFIG_FILENAME, global)]
     pub config: PathBuf,
 
     /// Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple
     /// profiles separated by commas or repeated flags; later profiles overlay earlier ones.
-    #[arg(short = 'P', long, action = clap::ArgAction::Append, global = true)]
+    #[usage(short = 'P', long, global)]
     pub profile: Vec<String>,
 
     /// Enable verbose logging
-    #[arg(short, long, global = true)]
+    #[usage(short, long, global)]
     pub verbose: bool,
 
     /// Path to age key file for decryption (deprecated: use provider config instead)
-    #[arg(long, global = true, hide = true)]
+    #[usage(long, global, hide)]
     pub age_key_file: Option<PathBuf>,
 
     /// What to do if a secret is missing (error, warn, ignore)
-    #[arg(long, global = true)]
+    #[usage(long, global)]
     pub if_missing: Option<String>,
 
     /// Disable colored output
-    #[arg(long, global = true)]
+    #[usage(long, global)]
     pub no_color: bool,
 
     /// Disable daemon-backed resolution for this invocation
-    #[arg(long, global = true)]
+    #[usage(long, global)]
     pub no_daemon: bool,
 
     /// Do not merge top-level secrets into the selected profile
-    #[arg(long, global = true)]
+    #[usage(long, global)]
     pub no_defaults: bool,
 
     /// Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)
-    #[arg(long, global = true, env = "FNOX_NON_INTERACTIVE")]
+    #[usage(long, global, env = "FNOX_NON_INTERACTIVE")]
     pub non_interactive: bool,
 
     /// Target profile for write commands (set, remove, import, sync, provider add/remove).
     /// Required when multiple profiles are active; defaults to the single active profile otherwise.
-    #[arg(long, global = true)]
+    #[usage(long, global)]
     pub write_profile: Option<String>,
 
-    #[command(subcommand)]
+    #[usage(subcommand)]
     pub command: Commands,
 }
 
-#[derive(Subcommand)]
+#[derive(usage_derive::Subcommands)]
 pub enum Commands {
     /// Output shell activation code to enable automatic secret loading
     Activate(activate::ActivateCommand),
@@ -98,7 +98,7 @@ pub enum Commands {
     Check(check::CheckCommand),
 
     /// Redact secrets in CI/CD output (GitHub Actions mask)
-    #[command(hide = true)]
+    #[usage(hide)]
     CiRedact(ci_redact::CiRedactCommand),
 
     /// Generate shell completions
@@ -129,7 +129,7 @@ pub enum Commands {
     Get(get::GetCommand),
 
     /// Internal command used by shell hooks to load secrets
-    #[command(hide = true)]
+    #[usage(hide)]
     HookEnv(hook_env::HookEnvCommand),
 
     /// Import secrets from various sources
@@ -166,7 +166,7 @@ pub enum Commands {
     Scan(scan::ScanCommand),
 
     /// Generate JSON Schema for fnox configuration
-    #[command(hide = true)]
+    #[usage(hide)]
     Schema(schema::SchemaCommand),
 
     /// Set a secret value

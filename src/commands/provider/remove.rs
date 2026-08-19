@@ -3,14 +3,14 @@ use crate::config::Config;
 use crate::error::{FnoxError, Result};
 use clap::Args;
 
-#[derive(Debug, Args)]
-#[command(visible_aliases = ["rm", "delete"])]
+#[derive(Debug, usage_derive::Args)]
+#[usage(alias("rm", "delete"))]
 pub struct RemoveCommand {
     /// Provider name
     pub provider: String,
 
     /// Remove from the global config file (~/.config/fnox/config.toml)
-    #[arg(short = 'g', long)]
+    #[usage(short = 'g', long)]
     pub global: bool,
 }
 

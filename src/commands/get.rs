@@ -7,13 +7,13 @@ use crate::{commands::Cli, config::Config};
 use clap::Args;
 use indexmap::IndexMap;
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_derive::Args)]
 pub struct GetCommand {
     /// Secret key to retrieve
     pub key: String,
 
     /// Base64 decode the secret
-    #[arg(long)]
+    #[usage(long)]
     pub base64_decode: bool,
 }
 

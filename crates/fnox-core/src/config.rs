@@ -3,7 +3,6 @@ use crate::error::{FnoxError, Result};
 use crate::settings::Settings;
 use crate::source_registry;
 use crate::spanned::SpannedValue;
-use clap::ValueEnum;
 use indexmap::IndexMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -511,7 +510,16 @@ impl McpConfig {
 }
 
 #[derive(
-    Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq, ValueEnum, VariantNames,
+    Debug,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    PartialEq,
+    Eq,
+    usage_derive::ValueEnum,
+    VariantNames,
 )]
 #[serde(rename_all = "lowercase")]
 pub enum IfMissing {

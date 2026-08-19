@@ -1452,7 +1452,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "473c7e07f409a8d772161724aa8db6a765a2532a70f9667eeb7b49d3d02fbdca"
 dependencies = [
  "clap_builder",
- "clap_derive",
 ]
 
 [[package]]
@@ -1474,18 +1473,6 @@ dependencies = [
  "anstyle",
  "clap_lex",
  "strsim",
-]
-
-[[package]]
-name = "clap_derive"
-version = "4.6.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d012d2b9d65aca7f18f4d9878a045bc17899bba951561ba5ec3c2ba1eed9a061"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "syn 3.0.3",
 ]
 
 [[package]]
@@ -2455,7 +2442,6 @@ dependencies = [
  "blake3",
  "chrono",
  "ci_info",
- "clap",
  "clap-sort",
  "console",
  "crossterm",
@@ -2491,6 +2477,8 @@ dependencies = [
  "toml_edit",
  "tracing",
  "tracing-subscriber",
+ "usage-argv",
+ "usage-derive",
  "usage-lib",
  "which",
 ]
@@ -2518,7 +2506,6 @@ dependencies = [
  "blake3",
  "bytes",
  "chrono",
- "clap",
  "ctap-hid-fido2",
  "dbus",
  "dbus-secret-service-keyring-store",
@@ -2560,6 +2547,8 @@ dependencies = [
  "toml_edit",
  "tracing",
  "urlencoding",
+ "usage-argv",
+ "usage-derive",
  "which",
  "windows-native-keyring-store",
  "xx",
@@ -7694,12 +7683,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
 
 [[package]]
+name = "usage-argv"
+version = "5.1.0"
+source = "git+https://github.com/jdx/usage?rev=cc60dcb7fd01c8b61d7665fc7dc7c8210551601a#cc60dcb7fd01c8b61d7665fc7dc7c8210551601a"
+
+[[package]]
+name = "usage-derive"
+version = "5.1.0"
+source = "git+https://github.com/jdx/usage?rev=cc60dcb7fd01c8b61d7665fc7dc7c8210551601a#cc60dcb7fd01c8b61d7665fc7dc7c8210551601a"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.3",
+]
+
+[[package]]
 name = "usage-lib"
 version = "5.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12698ad30baf6deeaf269f22385352c52dfadc27526e886a07b077e6fb25d17e"
+source = "git+https://github.com/jdx/usage?rev=cc60dcb7fd01c8b61d7665fc7dc7c8210551601a#cc60dcb7fd01c8b61d7665fc7dc7c8210551601a"
 dependencies = [
- "clap",
  "heck",
  "indexmap 2.14.0",
  "itertools 0.15.0",

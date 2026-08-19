@@ -1,7 +1,7 @@
 use crate::commands::Cli;
 use crate::error::Result;
 
-#[derive(clap::Args)]
+#[derive(usage_derive::Args)]
 pub struct SponsorsCommand {}
 
 impl SponsorsCommand {

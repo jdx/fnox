@@ -5,10 +5,10 @@ use crate::error::{FnoxError, Result};
 use clap::Args;
 use std::collections::HashMap;
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_derive::Args)]
 pub struct EncryptCommand {
     /// Key to use for encryption
-    #[arg(short, long)]
+    #[usage(short, long)]
     pub key: Option<String>,
 }
 
