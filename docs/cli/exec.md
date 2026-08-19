@@ -3,7 +3,7 @@
 # `fnox exec`
 
 - **Usage**: `fnox exec [--replace] [COMMAND]…`
-- **Aliases**: `x`, `run`
+- **Aliases**: `x`
 
 Execute a command with secrets as environment variables
 

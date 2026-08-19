@@ -103,8 +103,8 @@
         "hide": false,
         "help": "Generate shell completions",
         "name": "completion",
-        "aliases": ["complete", "completions"],
-        "hidden_aliases": [],
+        "aliases": [],
+        "hidden_aliases": ["complete", "completions"],
         "examples": []
       },
       "config-files": {
@@ -294,8 +294,8 @@
         "hide": false,
         "help": "Execute a command with secrets as environment variables",
         "name": "exec",
-        "aliases": ["x", "run"],
-        "hidden_aliases": [],
+        "aliases": ["x"],
+        "hidden_aliases": ["run"],
         "examples": []
       },
       "export": {

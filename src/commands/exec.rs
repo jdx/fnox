@@ -7,7 +7,7 @@ use std::process::Command;
 use tempfile::NamedTempFile;
 
 #[derive(Debug, usage_derive::Args)]
-#[usage(alias = "x", alias = "run")]
+#[usage(alias = "x", alias_hidden = "run")]
 pub struct ExecCommand {
     /// Run the command in fnox's process, keeping the same PID and receiving signals
     /// directly; supports environment-only secrets without leases and does not inherit

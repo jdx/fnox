@@ -4,7 +4,7 @@ use std::process::Command;
 
 #[derive(usage_derive::Args)]
 #[usage(about = "Generate shell completions")]
-#[usage(alias("complete", "completions"))]
+#[usage(alias_hidden("complete", "completions"))]
 pub struct CompletionCommand {
     /// Shell type to generate completions for
     #[usage(arg, name = "SHELL")]

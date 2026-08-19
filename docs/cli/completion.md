@@ -3,7 +3,6 @@
 # `fnox completion`
 
 - **Usage**: `fnox completion <SHELL>`
-- **Aliases**: `complete`, `completions`
 
 Generate shell completions
 
