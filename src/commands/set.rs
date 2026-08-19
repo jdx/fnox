@@ -81,7 +81,11 @@ pub struct SetCommand {
     pub default: Option<String>,
 
     /// Read the secret value verbatim from a UTF-8 file
-    #[usage(long, value_hint = usage_rs::ValueHint::FilePath)]
+    #[usage(
+        long,
+        conflicts = "value",
+        value_hint = usage_rs::ValueHint::FilePath
+    )]
     pub from_file: Option<PathBuf>,
 
     /// What to do if the secret is missing (error, warn, ignore)
@@ -91,11 +95,6 @@ pub struct SetCommand {
 
 impl SetCommand {
     pub async fn run(&self, cli: &Cli, mut config: Config) -> Result<()> {
-        if self.from_file.is_some() && self.value.is_some() {
-            return Err(FnoxError::Config(
-                "--from-file cannot be used with VALUE".to_string(),
-            ));
-        }
         let profile = Config::get_profiles(cli.profile.as_slice());
         let write_profile = Config::resolve_write_profile(&profile, cli.write_profile.as_deref())?;
         tracing::debug!(
