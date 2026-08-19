@@ -22,6 +22,15 @@ async fn main() -> miette::Result<()> {
 
     miette::set_panic_hook();
 
+    let argv: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+    if let Some(answer) = fnox::commands::completion_app()
+        .completion_request(&argv)
+        .await
+    {
+        print!("{answer}");
+        return Ok(());
+    }
+
     // Initialize rustls crypto provider for GCP SDKs
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
 

@@ -37,7 +37,7 @@ blake3 = "1"
 bytes = "1"
 chrono = "0.4"
 ci_info = "0.14"
-usage-rs = { git = "https://github.com/jdx/usage", rev = "88786493a5df2b90ad49314f68267c39c7497188", features = ["diagnostics"] }
+usage-rs = { git = "https://github.com/jdx/usage", rev = "44f81ad7281c9da57c7a69d08121a76885b0dd58", features = ["diagnostics", "completions"] }
 console = "0.16"
 crossterm = { version = "0.29", features = ["event-stream"] }
 ctap-hid-fido2 = "3"

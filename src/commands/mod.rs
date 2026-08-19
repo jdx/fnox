@@ -187,6 +187,74 @@ pub enum Commands {
     Version(version::VersionCommand),
 }
 
+fn completion_config(ctx: &usage_rs::spec::CompleteCtx<'_>) -> Config {
+    let mut path = PathBuf::from("fnox.toml");
+    let mut words = ctx.words.iter();
+    while let Some(word) = words.next() {
+        if let Some(value) = word.strip_prefix("--config=") {
+            path = value.into();
+        } else if matches!(word.as_str(), "-c" | "--config")
+            && let Some(value) = words.next()
+        {
+            path = value.into();
+        }
+    }
+    Config::load_smart(path).unwrap_or_else(|_| Config::new())
+}
+
+fn candidates(values: impl IntoIterator<Item = String>) -> Vec<usage_rs::spec::Candidate<'static>> {
+    values
+        .into_iter()
+        .map(usage_rs::spec::Candidate::new)
+        .collect()
+}
+
+fn complete_key(ctx: usage_rs::spec::CompleteCtx<'_>) -> usage_rs::complete::CompletionFuture<'_> {
+    Box::pin(async move {
+        let config = completion_config(&ctx);
+        let profiles = Config::get_profiles(&[]);
+        candidates(
+            config
+                .get_secrets(&profiles)
+                .unwrap_or_default()
+                .into_keys(),
+        )
+    })
+}
+
+fn complete_profile(
+    ctx: usage_rs::spec::CompleteCtx<'_>,
+) -> usage_rs::complete::CompletionFuture<'_> {
+    Box::pin(async move {
+        let config = completion_config(&ctx);
+        let mut names = vec!["default".to_string()];
+        names.extend(config.profiles.keys().cloned());
+        names.sort();
+        names.dedup();
+        candidates(names)
+    })
+}
+
+fn complete_provider(
+    ctx: usage_rs::spec::CompleteCtx<'_>,
+) -> usage_rs::complete::CompletionFuture<'_> {
+    Box::pin(async move {
+        let config = completion_config(&ctx);
+        let profiles = Config::get_profiles(&[]);
+        candidates(config.get_providers(&profiles).into_keys())
+    })
+}
+
+static COMPLETIONS: [usage_rs::complete::CompletionOverlay<'static>; 3] = [
+    usage_rs::complete::CompletionOverlay::async_any("key", complete_key),
+    usage_rs::complete::CompletionOverlay::async_any("name", complete_provider),
+    usage_rs::complete::CompletionOverlay::async_any("profile", complete_profile),
+];
+
+pub fn completion_app() -> usage_rs::complete::App<'static> {
+    Cli::app().completion_app().completions(&COMPLETIONS)
+}
+
 impl Commands {
     pub async fn run(&self, cli: &Cli) -> Result<()> {
         match self {
