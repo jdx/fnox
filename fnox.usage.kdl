@@ -295,7 +295,7 @@ cmd "set" help="Set a secret value" {
     flag "--default" help="Default value to use if secret is not found" {
         arg "<DEFAULT>"
     }
-    flag "--from-file" help="Read the secret value verbatim from a UTF-8 file" {
+    flag "--from-file" help="Read the secret value verbatim from a UTF-8 file" conflicts="VALUE" {
         arg "<FROM_FILE>"
     }
     flag "--if-missing" help="What to do if the secret is missing (error, warn, ignore)" {
