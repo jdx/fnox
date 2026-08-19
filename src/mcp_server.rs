@@ -84,6 +84,20 @@ impl FnoxMcpServer {
         }
     }
 
+    fn list_tools_result(&self) -> ListToolsResult {
+        let all_tools = self.tool_router.list_all();
+        let tools = self.mcp_config.tools();
+        let enabled: Vec<&str> = tools.iter().map(|t| t.tool_name()).collect();
+        let filtered = all_tools
+            .into_iter()
+            .filter(|t| enabled.contains(&t.name.as_ref()))
+            .collect();
+
+        ListToolsResult::with_all_items(filtered)
+            .with_ttl_ms(0)
+            .with_cache_scope(CacheScope::Private)
+    }
+
     /// Ensure env-injectable secrets are resolved and cached. First call
     /// resolves the batch (amortizes yubikey/SSO cost); subsequent calls are
     /// no-ops.
@@ -576,14 +590,7 @@ impl ServerHandler for FnoxMcpServer {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
-        let all_tools = self.tool_router.list_all();
-        let tools = self.mcp_config.tools();
-        let enabled: Vec<&str> = tools.iter().map(|t| t.tool_name()).collect();
-        let filtered = all_tools
-            .into_iter()
-            .filter(|t| enabled.contains(&t.name.as_ref()))
-            .collect();
-        Ok(ListToolsResult::with_all_items(filtered))
+        Ok(self.list_tools_result())
     }
 
     fn get_tool(&self, name: &str) -> Option<Tool> {
@@ -619,6 +626,29 @@ impl ServerHandler for FnoxMcpServer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn list_tools_includes_conservative_cache_hints() {
+        let server = FnoxMcpServer::new(
+            Config::default(),
+            vec!["default".into()],
+            McpConfig::default(),
+            ResolveContext {
+                config: "fnox.toml".into(),
+                profile: vec!["default".into()],
+                age_key_file: None,
+                if_missing: None,
+                no_defaults: false,
+                non_interactive: true,
+                no_daemon: true,
+            },
+            IndexMap::new(),
+        );
+
+        let result = server.list_tools_result();
+        assert_eq!(result.ttl_ms, Some(0));
+        assert_eq!(result.cache_scope, Some(CacheScope::Private));
+    }
 
     #[test]
     fn redact_replaces_secret_values() {
