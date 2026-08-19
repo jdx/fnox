@@ -17,7 +17,10 @@ export function initBanner() {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 5000);
   fetch(ENDPOINT, { signal: controller.signal })
-    .then((r) => (r.ok ? r.json() : null))
+    .then((r) => {
+      if (!r.ok) throw new Error(`banner request failed: ${r.status}`);
+      return r.json();
+    })
     .then((b) => {
       if (
         !b ||
@@ -30,8 +33,16 @@ export function initBanner() {
       }
       render(b);
     })
-    .catch(clearCurrentReservation)
+    .catch(clearCachedReservation)
     .finally(() => window.clearTimeout(timeout));
+}
+
+function clearCachedReservation() {
+  try {
+    localStorage.removeItem(CACHE_KEY);
+  } catch {
+    // localStorage unavailable — nothing cached to clear.
+  }
 }
 
 function clearCurrentReservation() {
@@ -40,11 +51,7 @@ function clearCurrentReservation() {
 
 function clearReserved() {
   clearCurrentReservation();
-  try {
-    localStorage.removeItem(CACHE_KEY);
-  } catch {
-    // localStorage unavailable — nothing cached to clear.
-  }
+  clearCachedReservation();
 }
 
 function isExpired(expires) {
@@ -94,6 +101,9 @@ function render(b) {
           id: b.id,
           height: `${el.offsetHeight}px`,
           width: window.innerWidth,
+          fontSize: getComputedStyle(document.documentElement).fontSize,
+          pixelRatio: window.devicePixelRatio,
+          cachedAt: Date.now(),
           expires: b.expires ?? null,
         }),
       );
