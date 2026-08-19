@@ -44,7 +44,10 @@ jobs:
           save-if: false
       - name: Install system dependencies (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev
+        run: |
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/apt-mirrors.txt
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev
       - name: Install Rust components
         run: rustup component add rustfmt clippy
       - name: Build
@@ -92,6 +95,7 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
           # Install gnome-keyring for keychain tests
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/apt-mirrors.txt
           sudo apt-get update
           sudo apt-get install -y gnome-keyring libsecret-tools
           # Start D-Bus session daemon
@@ -260,6 +264,7 @@ jobs:
       - name: Install system dependencies (Ubuntu)
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/apt-mirrors.txt
           sudo apt-get update
           sudo apt-get install -y gnome-keyring libsecret-tools libudev-dev
       - name: Setup gnome-keyring (Ubuntu)
@@ -334,7 +339,10 @@ jobs:
         with:
           cache: false
       - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev
+        run: |
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/apt-mirrors.txt
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev
       # cargo-msrv doesn't accept --workspace; verifying the binary's MSRV
       # transitively covers fnox-core because the binary depends on it.
       - run: cargo msrv verify
