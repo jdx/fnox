@@ -36,6 +36,10 @@ export function initBanner() {
         clearReserved();
         return;
       }
+      if (activeBanner?.id === b.id) {
+        cacheBanner(b, activeBanner.element.offsetHeight);
+        return;
+      }
       render(b);
     })
     .catch(() => {
@@ -101,6 +105,26 @@ function isHttpUrl(value) {
   }
 }
 
+function cacheBanner(b, height) {
+  try {
+    localStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({
+        id: b.id,
+        height: `${height}px`,
+        width: window.innerWidth,
+        fontSize: getComputedStyle(document.documentElement).fontSize,
+        pixelRatio: window.devicePixelRatio,
+        cachedAt: Date.now(),
+        expires: b.expires ?? null,
+        banner: b,
+      }),
+    );
+  } catch {
+    // localStorage unavailable — skip caching.
+  }
+}
+
 function removeActiveBanner() {
   activeBanner?.observer?.disconnect();
   activeBanner?.element.remove();
@@ -132,24 +156,7 @@ function render(b, persist = true) {
       "--vp-layout-top-height",
       `${el.offsetHeight}px`,
     );
-    try {
-      if (!persist) return;
-      localStorage.setItem(
-        CACHE_KEY,
-        JSON.stringify({
-          id: b.id,
-          height: `${el.offsetHeight}px`,
-          width: window.innerWidth,
-          fontSize: getComputedStyle(document.documentElement).fontSize,
-          pixelRatio: window.devicePixelRatio,
-          cachedAt: Date.now(),
-          expires: b.expires ?? null,
-          banner: b,
-        }),
-      );
-    } catch {
-      // localStorage unavailable — skip caching.
-    }
+    if (persist) cacheBanner(b, el.offsetHeight);
   };
 
   const observer =
@@ -173,7 +180,7 @@ function render(b, persist = true) {
   el.appendChild(btn);
 
   document.body.prepend(el);
-  activeBanner = { element: el, observer };
+  activeBanner = { id: b.id, element: el, observer };
 
   requestAnimationFrame(syncHeight);
   observer?.observe(el);
