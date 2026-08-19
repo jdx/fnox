@@ -73,10 +73,6 @@ pub struct SetCommand {
     #[arg(short = 'p', long)]
     pub provider: Option<String>,
 
-    /// Read the secret value verbatim from a UTF-8 file
-    #[arg(long, value_hint = clap::ValueHint::FilePath, conflicts_with = "value")]
-    pub from_file: Option<PathBuf>,
-
     /// Base64 encode the secret
     #[arg(long)]
     pub base64_encode: bool,
@@ -84,6 +80,10 @@ pub struct SetCommand {
     /// Default value to use if secret is not found
     #[arg(long)]
     pub default: Option<String>,
+
+    /// Read the secret value verbatim from a UTF-8 file
+    #[arg(long, value_hint = clap::ValueHint::FilePath, conflicts_with = "value")]
+    pub from_file: Option<PathBuf>,
 
     /// What to do if the secret is missing (error, warn, ignore)
     #[arg(long)]
