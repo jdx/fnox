@@ -96,7 +96,7 @@ run = [
 ]
 
 [tasks.build-usage]
-run = "cargo install --locked --git https://github.com/jdx/usage --rev bf1981901df6fbbca0acde9c09e7ecab26b26859 --root target/usage-cli usage-cli"
+run = "cargo install --locked --git https://github.com/jdx/usage --rev f78e58902e6772c1f2e33e67bfb4976eaa5805f5 --root target/usage-cli usage-cli"
 sources = ["Cargo.lock"]
 outputs = ["target/usage-cli/bin/usage"]
 
