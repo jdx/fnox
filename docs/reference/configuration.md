@@ -416,9 +416,11 @@ BASE_URL = { default = "example.com" }
 matter. Referenced secrets must be defined in the config and can resolve from a
 provider, a default, or an environment variable. Profile overrides also apply.
 
-Interpolation only works in `default` values. Provider values take precedence
-over defaults. Undefined references and dependency cycles are errors. A
-reference allowed to be missing expands to an empty string.
+Interpolation only works in `default` values. Resolution order is provider
+values, interpolated defaults, literal defaults, then environment variables.
+Undefined references and dependency cycles in an evaluated default are errors.
+If a referenced secret is defined but resolves to no value under a non-error
+`if_missing` policy, the reference expands to an empty string.
 
 **Use for:**
 
