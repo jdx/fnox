@@ -1,342 +1,342 @@
 min_usage_version "1.3"
-name "fnox"
-bin "fnox"
+name fnox
+bin fnox
 version "1.33.1"
 about "A flexible secret management tool by @jdx"
-unknown_flags "error"
-flag "-c --config" help="Path to the configuration file (default: fnox.toml, searches parent directories)" global=#true default="fnox.toml" {
-    arg "<CONFIG>"
+unknown_flags error
+flag "-c --config" help="Path to the configuration file (default: fnox.toml, searches parent directories)" global=#true default=fnox.toml {
+    arg <CONFIG>
 }
 flag "-P --profile" help="Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones." global=#true var=#true {
     long_help "Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple\nprofiles separated by commas or repeated flags; later profiles overlay earlier ones."
-    arg "<PROFILE>"
+    arg <PROFILE>
 }
 flag "-v --verbose" help="Enable verbose logging" global=#true
-flag "--age-key-file" help="Path to age key file for decryption (deprecated: use provider config instead)" global=#true hide=#true {
-    arg "<AGE_KEY_FILE>"
+flag --age-key-file help="Path to age key file for decryption (deprecated: use provider config instead)" global=#true hide=#true {
+    arg <AGE_KEY_FILE>
 }
-flag "--if-missing" help="What to do if a secret is missing (error, warn, ignore)" global=#true {
-    arg "<IF_MISSING>"
+flag --if-missing help="What to do if a secret is missing (error, warn, ignore)" global=#true {
+    arg <IF_MISSING>
 }
-flag "--no-color" help="Disable colored output" global=#true
-flag "--no-daemon" help="Disable daemon-backed resolution for this invocation" global=#true
-flag "--no-defaults" help="Do not merge top-level secrets into the selected profile" global=#true
-flag "--non-interactive" help="Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)" global=#true env="FNOX_NON_INTERACTIVE"
-flag "--write-profile" help="Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise." global=#true {
+flag --no-color help="Disable colored output" global=#true
+flag --no-daemon help="Disable daemon-backed resolution for this invocation" global=#true
+flag --no-defaults help="Do not merge top-level secrets into the selected profile" global=#true
+flag --non-interactive help="Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)" global=#true env=FNOX_NON_INTERACTIVE
+flag --write-profile help="Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise." global=#true {
     long_help "Target profile for write commands (set, remove, import, sync, provider add/remove).\nRequired when multiple profiles are active; defaults to the single active profile otherwise."
-    arg "<WRITE_PROFILE>"
+    arg <WRITE_PROFILE>
 }
-cmd "activate" help="Output shell activation code to enable automatic secret loading" {
-    flag "--no-hook-env" help="Don't automatically invoke hook-env (for testing)"
+cmd activate help="Output shell activation code to enable automatic secret loading" {
+    flag --no-hook-env help="Don't automatically invoke hook-env (for testing)"
     arg "[SHELL]" help="Shell to generate activation code for (bash, zsh, fish, nu, pwsh)"
 }
-cmd "check" help="Check if all required secrets are defined and configured" {
-    alias "c"
+cmd check help="Check if all required secrets are defined and configured" {
+    alias c
     flag "-a --all" help="Check all secrets including those with if_missing=warn or if_missing=ignore"
 }
-cmd "ci-redact" help="Redact secrets in CI/CD output (GitHub Actions mask)" hide=#true {
+cmd ci-redact help="Redact secrets in CI/CD output (GitHub Actions mask)" hide=#true {
 }
-cmd "completion" help="Generate shell completions" {
-    alias "complete" hide=#true
-    alias "completions" hide=#true
-    arg "<SHELL>" help="Shell type to generate completions for"
+cmd completion help="Generate shell completions" {
+    alias complete hide=#true
+    alias completions hide=#true
+    arg <SHELL> help="Shell type to generate completions for"
 }
-cmd "config-files" help="List all config files that would be loaded" {
+cmd config-files help="List all config files that would be loaded" {
 }
-cmd "daemon" help="Manage the per-user daemon" subcommand_required=#true {
-    cmd "clear" help="Clear all running daemon caches" {
+cmd daemon help="Manage the per-user daemon" subcommand_required=#true {
+    cmd clear help="Clear all running daemon caches" {
     }
-    cmd "serve" help="Run the daemon server in the foreground" hide=#true {
+    cmd serve help="Run the daemon server in the foreground" hide=#true {
     }
-    cmd "start" help="Start the per-user daemon in the background" {
+    cmd start help="Start the per-user daemon in the background" {
     }
-    cmd "status" help="Show daemon status" {
+    cmd status help="Show daemon status" {
     }
-    cmd "stop" help="Stop the daemon" {
+    cmd stop help="Stop the daemon" {
     }
 }
-cmd "deactivate" help="Disable fnox shell integration in the current shell session" {
+cmd deactivate help="Disable fnox shell integration in the current shell session" {
     long_help "Disable fnox shell integration in the current shell session\n\nThis removes the hook that automatically loads secrets when entering\ndirectories with fnox.toml files. It also restores environment variables\nto their state before fnox was activated.\n\nNote: This only affects the current shell session. To re-enable fnox,\nrun the activation command again for your shell."
 }
-cmd "doctor" help="Show diagnostic information about the current fnox state" {
-    alias "dr"
+cmd doctor help="Show diagnostic information about the current fnox state" {
+    alias dr
 }
-cmd "edit" help="Edit the configuration file" {
+cmd edit help="Edit the configuration file" {
 }
-cmd "exec" help="Execute a command with secrets as environment variables" {
-    alias "x"
-    alias "run" hide=#true
-    flag "--replace" help="Run the command in fnox's process, keeping the same PID and receiving signals directly; supports environment-only secrets without leases and does not inherit ambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux, macOS, and other Unix-like systems" {
+cmd exec help="Execute a command with secrets as environment variables" {
+    alias x
+    alias run hide=#true
+    flag --replace help="Run the command in fnox's process, keeping the same PID and receiving signals directly; supports environment-only secrets without leases and does not inherit ambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux, macOS, and other Unix-like systems" {
         long_help "Run the command in fnox's process, keeping the same PID and receiving signals\ndirectly; supports environment-only secrets without leases and does not inherit\nambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux,\nmacOS, and other Unix-like systems"
     }
-    arg "[COMMAND]..." help="Command to run" double_dash="automatic"
-    complete "command" type="command_args"
+    arg "[COMMAND]..." help="Command to run" double_dash=automatic
+    complete command type=command_args
 }
-cmd "export" help="Export secrets in various formats" {
-    alias "ex"
-    flag "-f --format" help="Export format" default="env" {
-        arg "<FORMAT>" {
+cmd export help="Export secrets in various formats" {
+    alias ex
+    flag "-f --format" help="Export format" default=env {
+        arg <FORMAT> {
             choices {
-                choice "env" help="Environment variable format (KEY=value)"
-                choice "shell" help="POSIX shell format (export KEY=value)"
-                choice "json" help="JSON format"
-                choice "yaml" help="YAML format"
-                choice "toml" help="TOML format"
+                choice env help="Environment variable format (KEY=value)"
+                choice shell help="POSIX shell format (export KEY=value)"
+                choice json help="JSON format"
+                choice yaml help="YAML format"
+                choice toml help="TOML format"
             }
         }
     }
     flag "-n --dry-run" help="Show what would be exported without writing to file"
     flag "-o --output" help="Output file (default: stdout)" {
-        arg "<OUTPUT>"
+        arg <OUTPUT>
     }
-    flag "--all" help="Include secrets with env = false or env = \"exec\" (excluded by default)"
-    flag "--header" help="Include metadata comments in env and shell output"
+    flag --all help="Include secrets with env = false or env = \"exec\" (excluded by default)"
+    flag --header help="Include metadata comments in env and shell output"
 }
-cmd "get" help="Get a secret value" {
-    flag "--base64-decode" help="Base64 decode the secret"
-    arg "<KEY>" help="Secret key to retrieve"
+cmd get help="Get a secret value" {
+    flag --base64-decode help="Base64 decode the secret"
+    arg <KEY> help="Secret key to retrieve"
 }
-cmd "hook-env" help="Internal command used by shell hooks to load secrets" hide=#true {
+cmd hook-env help="Internal command used by shell hooks to load secrets" hide=#true {
     flag "-s --shell" help="Shell type (bash, zsh, fish, nu, pwsh)" {
-        arg "<SHELL>"
+        arg <SHELL>
     }
 }
-cmd "import" help="Import secrets from various sources" {
-    alias "im"
+cmd import help="Import secrets from various sources" {
+    alias im
     flag "-f --force" help="Skip confirmation prompts"
     flag "-g --global" help="Import to the global config file (~/.config/fnox/config.toml)"
     flag "-i --input" help="Source file or path to import from (default: stdin)" {
-        arg "<INPUT>"
+        arg <INPUT>
     }
     flag "-n --dry-run" help="Show what would be imported without making changes"
     flag "-p --provider" help="Provider to use for encrypting/storing imported secrets (required)" required=#true {
-        arg "<PROVIDER>"
+        arg <PROVIDER>
     }
-    flag "--filter" help="Only import matching secrets (regex pattern)" {
-        arg "<FILTER>"
+    flag --filter help="Only import matching secrets (regex pattern)" {
+        arg <FILTER>
     }
-    flag "--prefix" help="Prefix to add to imported secret names" {
-        arg "<PREFIX>"
+    flag --prefix help="Prefix to add to imported secret names" {
+        arg <PREFIX>
     }
-    arg "[FORMAT]" help="Import source format" default="env" {
+    arg "[FORMAT]" help="Import source format" default=env {
         choices {
-            choice "env" help="Environment variable format (KEY=value)"
-            choice "json" help="JSON format"
-            choice "yaml" help="YAML format"
-            choice "toml" help="TOML format"
+            choice env help="Environment variable format (KEY=value)"
+            choice json help="JSON format"
+            choice yaml help="YAML format"
+            choice toml help="TOML format"
         }
     }
 }
-cmd "init" help="Initialize a new fnox configuration file" {
-    alias "i"
+cmd init help="Initialize a new fnox configuration file" {
+    alias i
     flag "-f --force" help="Overwrite existing configuration file"
     flag "-g --global" help="Initialize the global config file (~/.config/fnox/config.toml)"
-    flag "--skip-wizard" help="Skip the interactive wizard and create a minimal config"
+    flag --skip-wizard help="Skip the interactive wizard and create a minimal config"
 }
-cmd "lease" help="Manage ephemeral credential leases" {
-    cmd "cleanup" help="Revoke all expired leases that need manual cleanup" {
+cmd lease help="Manage ephemeral credential leases" {
+    cmd cleanup help="Revoke all expired leases that need manual cleanup" {
     }
-    cmd "create" help="Create a short-lived credential lease from a secret" {
+    cmd create help="Create a short-lived credential lease from a secret" {
         flag "-a --all" help="Create leases for all configured backends"
         flag "-d --duration" help="Lease duration (e.g., \"15m\", \"1h\", \"2h30m\"); overrides config duration" {
-            arg "<DURATION>"
+            arg <DURATION>
         }
-        flag "-f --format" help="Output format" default="shell" {
-            arg "<FORMAT>" {
+        flag "-f --format" help="Output format" default=shell {
+            arg <FORMAT> {
                 choices {
-                    choice "shell"
-                    choice "json"
-                    choice "env"
+                    choice shell
+                    choice json
+                    choice env
                 }
             }
         }
         flag "-i --interactive" help="Prompt interactively for missing credentials"
-        flag "-l --label" help="Label for the lease (e.g., session purpose)" default="fnox-lease" {
-            arg "<LABEL>"
+        flag "-l --label" help="Label for the lease (e.g., session purpose)" default=fnox-lease {
+            arg <LABEL>
         }
         arg "[BACKEND_NAME]" help="Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted."
     }
-    cmd "list" help="List tracked leases" {
-        flag "--active" help="Show only active (non-expired, non-revoked) leases"
-        flag "--expired" help="Show only expired leases"
+    cmd list help="List tracked leases" {
+        flag --active help="Show only active (non-expired, non-revoked) leases"
+        flag --expired help="Show only expired leases"
     }
-    cmd "revoke" help="Revoke a lease by ID" {
-        arg "<LEASE_ID>" help="Lease ID to revoke"
+    cmd revoke help="Revoke a lease by ID" {
+        arg <LEASE_ID> help="Lease ID to revoke"
     }
 }
-cmd "list" help="List all secrets" {
-    alias "ls"
-    alias "secrets"
+cmd list help="List all secrets" {
+    alias ls
+    alias secrets
     flag "-f --full" help="Show full provider keys without truncation"
     flag "-s --sources" help="Show source file paths where secrets are defined"
     flag "-V --values" help="Show secret values (if available)"
-    flag "--complete" help="Output secret keys for shell completion (one per line)" hide=#true
+    flag --complete help="Output secret keys for shell completion (one per line)" hide=#true
 }
-cmd "mcp" help="Start an MCP server for secret-gated AI agent access" {
+cmd mcp help="Start an MCP server for secret-gated AI agent access" {
 }
-cmd "profiles" help="List available profiles" {
-    alias "profile"
-    flag "--complete" help="Output profile names for shell completion (one per line)" hide=#true
+cmd profiles help="List available profiles" {
+    alias profile
+    flag --complete help="Output profile names for shell completion (one per line)" hide=#true
 }
-cmd "provider" help="Manage providers (defaults to list)" {
-    cmd "add" help="Add a new provider" {
-        alias "a"
-        alias "set"
+cmd provider help="Manage providers (defaults to list)" {
+    cmd add help="Add a new provider" {
+        alias a
+        alias set
         flag "-g --global" help="Add to the global config file (~/.config/fnox/config.toml)"
-        flag "--vault" help="Default Proton Pass vault name (only valid with provider type proton-pass)" {
-            arg "<VAULT>"
+        flag --vault help="Default Proton Pass vault name (only valid with provider type proton-pass)" {
+            arg <VAULT>
         }
-        arg "<PROVIDER>" help="Provider name"
-        arg "<PROVIDER_TYPE>" help="Provider type" {
+        arg <PROVIDER> help="Provider name"
+        arg <PROVIDER_TYPE> help="Provider type" {
             choices {
                 choice "1password" help="1Password"
-                choice "age" help="Age encryption"
-                choice "aws" help="AWS Secrets Manager"
-                choice "aws-kms" help="AWS KMS"
-                choice "aws-ps" help="AWS Parameter Store"
-                choice "azure-ac" help="Azure App Configuration"
-                choice "azure-kms" help="Azure Key Vault KMS"
-                choice "azure-sm" help="Azure Key Vault Secrets Manager"
-                choice "gcp" help="Google Cloud Secret Manager"
-                choice "gcp-kms" help="Google Cloud KMS"
-                choice "fido2" help="FIDO2 hmac-secret hardware-backed encryption"
-                choice "bitwarden" help="Bitwarden Password Manager"
-                choice "doppler" help="Doppler secrets manager"
-                choice "foks" help="FOKS (Federated Open Key Service)"
-                choice "bitwarden-sm" help="Bitwarden Secrets Manager"
-                choice "infisical" help="Infisical"
-                choice "keepass" help="KeePass"
-                choice "keeper-sm" help="Keeper Secrets Manager"
-                choice "keychain" help="OS Keychain"
-                choice "password-store" help="password-store (pass)"
-                choice "passwordstate" help="Click Studios Passwordstate"
-                choice "plain" help="Plain text provider"
-                choice "proton-pass" help="Proton Pass"
-                choice "vault" help="HashiCorp Vault"
-                choice "yubikey" help="YubiKey HMAC-SHA1 hardware-backed encryption"
+                choice age help="Age encryption"
+                choice aws help="AWS Secrets Manager"
+                choice aws-kms help="AWS KMS"
+                choice aws-ps help="AWS Parameter Store"
+                choice azure-ac help="Azure App Configuration"
+                choice azure-kms help="Azure Key Vault KMS"
+                choice azure-sm help="Azure Key Vault Secrets Manager"
+                choice gcp help="Google Cloud Secret Manager"
+                choice gcp-kms help="Google Cloud KMS"
+                choice fido2 help="FIDO2 hmac-secret hardware-backed encryption"
+                choice bitwarden help="Bitwarden Password Manager"
+                choice doppler help="Doppler secrets manager"
+                choice foks help="FOKS (Federated Open Key Service)"
+                choice bitwarden-sm help="Bitwarden Secrets Manager"
+                choice infisical help=Infisical
+                choice keepass help=KeePass
+                choice keeper-sm help="Keeper Secrets Manager"
+                choice keychain help="OS Keychain"
+                choice password-store help="password-store (pass)"
+                choice passwordstate help="Click Studios Passwordstate"
+                choice plain help="Plain text provider"
+                choice proton-pass help="Proton Pass"
+                choice vault help="HashiCorp Vault"
+                choice yubikey help="YubiKey HMAC-SHA1 hardware-backed encryption"
             }
         }
     }
-    cmd "list" help="List available providers" {
-        alias "ls"
-        flag "--complete" help="Output provider names for shell completion (one per line)" hide=#true
+    cmd list help="List available providers" {
+        alias ls
+        flag --complete help="Output provider names for shell completion (one per line)" hide=#true
     }
-    cmd "remove" help="Remove a provider" {
-        alias "rm"
-        alias "delete"
+    cmd remove help="Remove a provider" {
+        alias rm
+        alias delete
         flag "-g --global" help="Remove from the global config file (~/.config/fnox/config.toml)"
-        arg "<PROVIDER>" help="Provider name"
+        arg <PROVIDER> help="Provider name"
     }
-    cmd "test" help="Test a provider connection" {
-        alias "t"
+    cmd test help="Test a provider connection" {
+        alias t
         flag "-a --all" help="Test all configured providers"
         arg "[PROVIDER]" help="Provider name (optional when using --all)"
     }
 }
-cmd "proxy" help="Broker credentials into destination-scoped HTTPS requests" subcommand_required=#true {
-    cmd "rules" help="Show the effective credential proxy rules" {
+cmd proxy help="Broker credentials into destination-scoped HTTPS requests" subcommand_required=#true {
+    cmd rules help="Show the effective credential proxy rules" {
     }
-    cmd "run" help="Run a command with placeholder credentials through the local proxy" {
-        arg "[COMMAND]..." help="Command to run" double_dash="automatic"
-        complete "command" type="command_args"
+    cmd run help="Run a command with placeholder credentials through the local proxy" {
+        arg "[COMMAND]..." help="Command to run" double_dash=automatic
+        complete command type=command_args
     }
 }
-cmd "reencrypt" help="Re-encrypt secrets with current provider configuration" {
+cmd reencrypt help="Re-encrypt secrets with current provider configuration" {
     long_help "Re-encrypt secrets with current provider configuration\n\nWhen you add or remove recipients from an encryption provider (e.g. age),\nexisting secrets remain encrypted with the old recipient set. This command\ndecrypts and re-encrypts all matching secrets with the current provider\nconfiguration."
     flag "-f --force" help="Skip confirmation prompt"
     flag "-n --dry-run" help="Show what would be done without making changes"
     flag "-p --provider" help="Only re-encrypt secrets from this provider" {
-        arg "<PROVIDER>"
+        arg <PROVIDER>
     }
-    flag "--filter" help="Only re-encrypt matching secrets (regex pattern)" {
-        arg "<FILTER>"
+    flag --filter help="Only re-encrypt matching secrets (regex pattern)" {
+        arg <FILTER>
     }
     arg "[KEYS]..." help="Only re-encrypt these specific secret keys"
 }
-cmd "remove" help="Remove a secret" {
-    alias "rm"
-    alias "delete"
+cmd remove help="Remove a secret" {
+    alias rm
+    alias delete
     flag "-g --global" help="Remove from the global config file (~/.config/fnox/config.toml)"
     flag "-n --dry-run" help="Show what would be removed without making changes"
-    arg "<KEY>" help="Secret key to remove"
+    arg <KEY> help="Secret key to remove"
 }
-cmd "scan" help="Scan repository for potential secrets" {
+cmd scan help="Scan repository for potential secrets" {
     flag "-i --ignore" help="Skip files matching this glob pattern (can be used multiple times)" var=#true {
-        arg "<IGNORE>"
+        arg <IGNORE>
     }
-    flag "--format" help="Output format" default="human" {
-        arg "<FORMAT>" {
+    flag --format help="Output format" default=human {
+        arg <FORMAT> {
             choices {
-                choice "human"
-                choice "json"
+                choice human
+                choice json
             }
         }
     }
     flag "-q --quiet" help="Show only files with potential secrets"
-    arg "[DIR]" help="Directory to scan (default: current directory)" default="."
-    complete "dir" type="dir"
+    arg "[DIR]" help="Directory to scan (default: current directory)" default=.
+    complete dir type=dir
 }
-cmd "schema" help="Generate JSON Schema for fnox configuration" hide=#true {
+cmd schema help="Generate JSON Schema for fnox configuration" hide=#true {
 }
-cmd "set" help="Set a secret value" {
-    alias "s"
+cmd set help="Set a secret value" {
+    alias s
     flag "-d --description" help="Description of the secret" {
-        arg "<DESCRIPTION>"
+        arg <DESCRIPTION>
     }
     flag "-g --global" help="Save to the global config file (~/.config/fnox/config.toml)"
     flag "-k --key-name" help="Key name in the provider (if different from env var name)" {
-        arg "<KEY_NAME>"
+        arg <KEY_NAME>
     }
     flag "-n --dry-run" help="Show what would be done without making changes"
     flag "-p --provider" help="Provider to fetch from" {
-        arg "<PROVIDER>"
+        arg <PROVIDER>
     }
-    flag "--base64-encode" help="Base64 encode the secret"
-    flag "--default" help="Default value to use if secret is not found" {
-        arg "<DEFAULT>"
+    flag --base64-encode help="Base64 encode the secret"
+    flag --default help="Default value to use if secret is not found" {
+        arg <DEFAULT>
     }
-    flag "--from-file" help="Read the secret value verbatim from a UTF-8 file" conflicts="VALUE" {
-        arg "<FROM_FILE>"
+    flag --from-file help="Read the secret value verbatim from a UTF-8 file" conflicts=VALUE {
+        arg <FROM_FILE>
     }
-    flag "--if-missing" help="What to do if the secret is missing (error, warn, ignore)" {
-        arg "<IF_MISSING>" {
+    flag --if-missing help="What to do if the secret is missing (error, warn, ignore)" {
+        arg <IF_MISSING> {
             choices {
-                choice "error"
-                choice "warn"
-                choice "ignore"
+                choice error
+                choice warn
+                choice ignore
             }
         }
     }
-    arg "<KEY>" help="Secret key (environment variable name)"
+    arg <KEY> help="Secret key (environment variable name)"
     arg "[VALUE]" help="Secret value to store." {
         long_help "Secret value to store.\n\nIf omitted: reads from stdin when piped (`echo \"x\" | fnox set KEY`),\nor prompts interactively with hidden input.\n\nPassing secrets as arguments exposes them in shell history and `ps` output.\nFor sensitive values, prefer stdin or the interactive prompt."
     }
-    complete "from_file" type="path"
+    complete from_file type=path
 }
-cmd "sponsors" help="Show the companies sponsoring fnox and the jdx.dev open source tools" {
+cmd sponsors help="Show the companies sponsoring fnox and the jdx.dev open source tools" {
 }
-cmd "sync" help="Sync secrets from remote providers to a local encryption provider" {
+cmd sync help="Sync secrets from remote providers to a local encryption provider" {
     flag "-f --force" help="Skip confirmation prompt"
     flag "-g --global" help="Write to global config (~/.config/fnox/config.toml)"
     flag "-n --dry-run" help="Show what would be done without making changes"
     flag "-p --provider" help="Target encryption provider (defaults to default_provider)" {
-        arg "<PROVIDER>"
+        arg <PROVIDER>
     }
     flag "-s --source" help="Only sync secrets from this source provider" {
-        arg "<SOURCE>"
+        arg <SOURCE>
     }
-    flag "--filter" help="Only sync matching secrets (regex pattern)" {
-        arg "<FILTER>"
+    flag --filter help="Only sync matching secrets (regex pattern)" {
+        arg <FILTER>
     }
-    flag "--local-file" help="Write sync overrides to the local override file next to the config file" conflicts="--global"
+    flag --local-file help="Write sync overrides to the local override file next to the config file" conflicts=--global
     arg "[KEYS]..." help="Only sync these specific secret keys"
 }
-cmd "tui" help="Interactive TUI dashboard for managing secrets" {
+cmd tui help="Interactive TUI dashboard for managing secrets" {
 }
-cmd "usage" help="Generate usage specification" hide=#true {
+cmd usage help="Generate usage specification" hide=#true {
 }
-cmd "version" help="Show version information" {
-    alias "v"
+cmd version help="Show version information" {
+    alias v
 }
 // Dynamic completions for fnox commands
 
