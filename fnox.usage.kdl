@@ -176,7 +176,7 @@ cmd list help="List all secrets" {
 cmd mcp help="Start an MCP server for secret-gated AI agent access" {
 }
 cmd profiles help="List available profiles" {
-    alias profile
+    alias profile hide=#true
     flag --complete help="Output profile names for shell completion (one per line)" hide=#true
 }
 cmd provider help="Manage providers (defaults to list)" {

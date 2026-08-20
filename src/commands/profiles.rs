@@ -3,7 +3,7 @@ use crate::config::Config;
 use crate::error::Result;
 
 #[derive(Debug, usage_rs::Args)]
-#[usage(alias = "profile")]
+#[usage(alias_hidden = "profile")]
 pub struct ProfilesCommand {
     /// Output profile names for shell completion (one per line)
     #[usage(long, hide)]

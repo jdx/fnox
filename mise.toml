@@ -96,8 +96,8 @@ run = [
 ]
 
 [tasks.build-usage]
-run = "cargo install --locked --git https://github.com/jdx/usage --rev 53cf558cfabc5d8b780de0b0867b5a0800e7ee76 --root target/usage-cli usage-cli"
-sources = ["Cargo.lock"]
+run = "cargo install --locked --git https://github.com/jdx/usage --rev a2e9692178b1c9fc56fa69769eeecddd056aae7b --root target/usage-cli usage-cli"
+sources = ["Cargo.lock", "mise.toml"]
 outputs = ["target/usage-cli/bin/usage"]
 
 # Instruction-counted benchmarks (see tak.toml). Needs valgrind for the counts;

@@ -998,8 +998,8 @@
         "args_override_self": true,
         "help": "List available profiles",
         "name": "profiles",
-        "aliases": ["profile"],
-        "hidden_aliases": [],
+        "aliases": [],
+        "hidden_aliases": ["profile"],
         "examples": []
       },
       "provider": {
