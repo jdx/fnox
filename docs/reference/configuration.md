@@ -404,6 +404,22 @@ Fallback value if secret cannot be resolved.
 DATABASE_URL = { provider = "age", value = "encrypted...", default = "postgresql://localhost/dev" }  # Fallback for local dev
 ```
 
+Use `${SECRET_NAME}` to include another secret in a default value:
+
+```toml
+[secrets]
+API_BASE_URL = { default = "https://api.${BASE_URL}" }
+BASE_URL = { default = "example.com" }
+```
+
+`API_BASE_URL` resolves to `https://api.example.com`. Declaration order does not
+matter. Referenced secrets must be defined in the config and can resolve from a
+provider, a default, or an environment variable. Profile overrides also apply.
+
+Interpolation only works in `default` values. Provider values take precedence
+over defaults. Undefined references and dependency cycles are errors. A
+reference allowed to be missing expands to an empty string.
+
 **Use for:**
 
 - Non-sensitive defaults
