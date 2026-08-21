@@ -7558,6 +7558,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "162179f728d278bd58665be652eee85d2ae555bf28128476d009e75e264f49d3"
 
 [[package]]
+name = "usage-config"
+version = "5.1.0"
+source = "git+https://github.com/jdx/usage?rev=f265f771e914e3869848fad2fe2f226f63454355#f265f771e914e3869848fad2fe2f226f63454355"
+
+[[package]]
 name = "usage-derive"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7575,6 +7580,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f6fbc51c1c0ecb24dc799c6002c20b39736d0ddf47fa1167a21014485eb40a5"
 dependencies = [
  "usage-argv",
+ "usage-config",
  "usage-derive",
  "usage-test",
 ]

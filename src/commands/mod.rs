@@ -38,6 +38,7 @@ pub mod version;
 
 #[derive(usage_rs::Cli)]
 #[usage(name = "fnox", unknown_flags = "error")]
+#[usage(config = crate::settings::SettingsData)]
 #[usage(about = "A flexible secret management tool by @jdx")]
 #[usage(version)]
 pub struct Cli {
@@ -47,7 +48,7 @@ pub struct Cli {
 
     /// Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple
     /// profiles separated by commas or repeated flags; later profiles overlay earlier ones.
-    #[usage(short = 'P', long, global)]
+    #[usage(short = 'P', long, global, setting = "profile")]
     pub profile: Vec<String>,
 
     /// Enable verbose logging
@@ -55,11 +56,11 @@ pub struct Cli {
     pub verbose: bool,
 
     /// Path to age key file for decryption (deprecated: use provider config instead)
-    #[usage(long, global, hide)]
+    #[usage(long, global, hide, setting = "age_key_file")]
     pub age_key_file: Option<PathBuf>,
 
     /// What to do if a secret is missing (error, warn, ignore)
-    #[usage(long, global)]
+    #[usage(long, global, setting = "if_missing")]
     pub if_missing: Option<String>,
 
     /// Disable colored output
@@ -71,7 +72,7 @@ pub struct Cli {
     pub no_daemon: bool,
 
     /// Do not merge top-level secrets into the selected profile
-    #[usage(long, global)]
+    #[usage(long, global, setting = "no_defaults")]
     pub no_defaults: bool,
 
     /// Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)
@@ -336,6 +337,16 @@ impl Commands {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_flags_this_cli_reads_are_the_flags_its_settings_declare() {
+        // A flag documented as setting something and read by nothing — or bound and
+        // documented nowhere — fails here rather than in a user's hands.
+        assert_eq!(
+            crate::settings::SettingsData::SETTINGS_REGISTRY.drift(Cli::SETTINGS_BINDINGS),
+            Vec::<String>::new()
+        );
+    }
 
     #[test]
     fn test_cli_ordering() {
