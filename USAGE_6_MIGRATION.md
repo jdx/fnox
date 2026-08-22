@@ -8,8 +8,6 @@ The working port still demonstrates release gaps tracked in jdx/usage's plan:
 
 - command-with-arguments completion hints have no usage equivalent, although
   double-dash forwarding preserves parsing;
-- bare unit Args structs require braces, and the same Args body mounted under
-  multiple commands requires thin wrapper types;
 - a positional relationship is enforced after binding because the spec cannot
   attach conflicts to positional arguments;
 - mutable spec generation pulls in usage-lib and its newer MSRV rather than
