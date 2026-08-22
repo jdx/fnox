@@ -187,7 +187,7 @@ pub enum Commands {
     Version(version::VersionCommand),
 }
 
-fn completion_config(ctx: &usage_rs::spec::CompleteCtx<'_>) -> Config {
+fn completion_config_path(ctx: &usage_rs::spec::CompleteCtx<'_>) -> PathBuf {
     let mut path = PathBuf::from("fnox.toml");
     let mut words = ctx.words.iter();
     while let Some(word) = words.next() {
@@ -197,8 +197,15 @@ fn completion_config(ctx: &usage_rs::spec::CompleteCtx<'_>) -> Config {
             && let Some(value) = words.next()
         {
             path = value.into();
+        } else if let Some(value) = word.strip_prefix("-c").filter(|value| !value.is_empty()) {
+            path = value.into();
         }
     }
+    path
+}
+
+fn completion_config(ctx: &usage_rs::spec::CompleteCtx<'_>) -> Config {
+    let path = completion_config_path(ctx);
     Config::load_smart(path).unwrap_or_else(|_| Config::new())
 }
 
@@ -405,5 +412,35 @@ mod tests {
             .any(|flag| flag.flag.longs.contains(&"replace"));
 
         assert_eq!(has_replace, cfg!(unix));
+    }
+
+    #[test]
+    fn glued_short_config_value_is_used_for_completion() {
+        let words = vec!["fnox".to_string(), "-cother.toml".to_string()];
+        let ctx = usage_rs::spec::CompleteCtx {
+            words: &words,
+            cword: words.len(),
+            prefix: "",
+            command_path: &[],
+            command_words: &words[1..],
+        };
+
+        assert_eq!(completion_config_path(&ctx), PathBuf::from("other.toml"));
+        let separated_words = vec![
+            "fnox".to_string(),
+            "-c".to_string(),
+            "other.toml".to_string(),
+        ];
+        let separated_ctx = usage_rs::spec::CompleteCtx {
+            words: &separated_words,
+            cword: separated_words.len(),
+            prefix: "",
+            command_path: &[],
+            command_words: &separated_words[1..],
+        };
+        assert_eq!(
+            completion_config_path(&separated_ctx),
+            PathBuf::from("other.toml")
+        );
     }
 }
