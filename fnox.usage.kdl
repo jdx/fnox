@@ -9,7 +9,6 @@ flag "-c --config" help="Path to the configuration file (default: fnox.toml, sea
     arg <CONFIG>
 }
 flag "-P --profile" help="Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones." global=#true var=#true {
-    long_help "Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple\nprofiles separated by commas or repeated flags; later profiles overlay earlier ones."
     arg <PROFILE>
 }
 flag "-v --verbose" help="Enable verbose logging" global=#true
@@ -24,7 +23,6 @@ flag --no-daemon help="Disable daemon-backed resolution for this invocation" glo
 flag --no-defaults help="Do not merge top-level secrets into the selected profile" global=#true
 flag --non-interactive help="Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)" global=#true env=FNOX_NON_INTERACTIVE
 flag --write-profile help="Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise." global=#true {
-    long_help "Target profile for write commands (set, remove, import, sync, provider add/remove).\nRequired when multiple profiles are active; defaults to the single active profile otherwise."
     arg <WRITE_PROFILE>
 }
 cmd activate help="Output shell activation code to enable automatic secret loading" {
@@ -57,7 +55,16 @@ cmd daemon help="Manage the per-user daemon" subcommand_required=#true {
     }
 }
 cmd deactivate help="Disable fnox shell integration in the current shell session" {
-    long_help "Disable fnox shell integration in the current shell session\n\nThis removes the hook that automatically loads secrets when entering\ndirectories with fnox.toml files. It also restores environment variables\nto their state before fnox was activated.\n\nNote: This only affects the current shell session. To re-enable fnox,\nrun the activation command again for your shell."
+    long_help #"""
+Disable fnox shell integration in the current shell session
+
+This removes the hook that automatically loads secrets when entering
+directories with fnox.toml files. It also restores environment variables
+to their state before fnox was activated.
+
+Note: This only affects the current shell session. To re-enable fnox,
+run the activation command again for your shell.
+"""#
 }
 cmd doctor help="Show diagnostic information about the current fnox state" {
     alias dr
@@ -67,9 +74,7 @@ cmd edit help="Edit the configuration file" {
 cmd exec help="Execute a command with secrets as environment variables" {
     alias x
     alias run hide=#true
-    flag --replace help="Run the command in fnox's process, keeping the same PID and receiving signals directly; supports environment-only secrets without leases and does not inherit ambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux, macOS, and other Unix-like systems" {
-        long_help "Run the command in fnox's process, keeping the same PID and receiving signals\ndirectly; supports environment-only secrets without leases and does not inherit\nambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux,\nmacOS, and other Unix-like systems"
-    }
+    flag --replace help="Run the command in fnox's process, keeping the same PID and receiving signals directly; supports environment-only secrets without leases and does not inherit ambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux, macOS, and other Unix-like systems"
     arg "[COMMAND]..." help="Command to run" double_dash=automatic
     complete command type=command_args
 }
@@ -243,7 +248,11 @@ cmd proxy help="Broker credentials into destination-scoped HTTPS requests" subco
     }
 }
 cmd reencrypt help="Re-encrypt secrets with current provider configuration" {
-    long_help "Re-encrypt secrets with current provider configuration\n\nWhen you add or remove recipients from an encryption provider (e.g. age),\nexisting secrets remain encrypted with the old recipient set. This command\ndecrypts and re-encrypts all matching secrets with the current provider\nconfiguration."
+    long_help #"""
+Re-encrypt secrets with current provider configuration
+
+When you add or remove recipients from an encryption provider (e.g. age), existing secrets remain encrypted with the old recipient set. This command decrypts and re-encrypts all matching secrets with the current provider configuration.
+"""#
     flag "-f --force" help="Skip confirmation prompt"
     flag "-n --dry-run" help="Show what would be done without making changes"
     flag "-p --provider" help="Only re-encrypt secrets from this provider" {
@@ -310,7 +319,13 @@ cmd set help="Set a secret value" {
     }
     arg <KEY> help="Secret key (environment variable name)"
     arg "[VALUE]" help="Secret value to store." {
-        long_help "Secret value to store.\n\nIf omitted: reads from stdin when piped (`echo \"x\" | fnox set KEY`),\nor prompts interactively with hidden input.\n\nPassing secrets as arguments exposes them in shell history and `ps` output.\nFor sensitive values, prefer stdin or the interactive prompt."
+        long_help #"""
+Secret value to store.
+
+If omitted: reads from stdin when piped (`echo "x" | fnox set KEY`), or prompts interactively with hidden input.
+
+Passing secrets as arguments exposes them in shell history and `ps` output. For sensitive values, prefer stdin or the interactive prompt.
+"""#
     }
     complete from_file type=path
 }

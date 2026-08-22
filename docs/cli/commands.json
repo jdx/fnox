@@ -6,7 +6,9 @@
     "usage": "[FLAGS] <SUBCOMMAND>",
     "subcommands": {
       "activate": {
-        "full_cmd": ["activate"],
+        "full_cmd": [
+          "activate"
+        ],
         "usage": "activate [--no-hook-env] [SHELL]",
         "subcommands": {},
         "args": [
@@ -27,7 +29,9 @@
             "help": "Don't automatically invoke hook-env (for testing)",
             "help_first_line": "Don't automatically invoke hook-env (for testing)",
             "short": [],
-            "long": ["no-hook-env"],
+            "long": [
+              "no-hook-env"
+            ],
             "hide": false,
             "global": false
           }
@@ -43,7 +47,9 @@
         "examples": []
       },
       "check": {
-        "full_cmd": ["check"],
+        "full_cmd": [
+          "check"
+        ],
         "usage": "check [-a --all]",
         "subcommands": {},
         "args": [],
@@ -53,8 +59,12 @@
             "usage": "-a --all",
             "help": "Check all secrets including those with if_missing=warn or if_missing=ignore",
             "help_first_line": "Check all secrets including those with if_missing=warn or if_missing=ignore",
-            "short": ["a"],
-            "long": ["all"],
+            "short": [
+              "a"
+            ],
+            "long": [
+              "all"
+            ],
             "hide": false,
             "global": false
           }
@@ -65,12 +75,16 @@
         "args_override_self": true,
         "help": "Check if all required secrets are defined and configured",
         "name": "check",
-        "aliases": ["c"],
+        "aliases": [
+          "c"
+        ],
         "hidden_aliases": [],
         "examples": []
       },
       "ci-redact": {
-        "full_cmd": ["ci-redact"],
+        "full_cmd": [
+          "ci-redact"
+        ],
         "usage": "ci-redact",
         "subcommands": {},
         "args": [],
@@ -86,7 +100,9 @@
         "examples": []
       },
       "completion": {
-        "full_cmd": ["completion"],
+        "full_cmd": [
+          "completion"
+        ],
         "usage": "completion <SHELL>",
         "subcommands": {},
         "args": [
@@ -108,11 +124,16 @@
         "help": "Generate shell completions",
         "name": "completion",
         "aliases": [],
-        "hidden_aliases": ["complete", "completions"],
+        "hidden_aliases": [
+          "complete",
+          "completions"
+        ],
         "examples": []
       },
       "config-files": {
-        "full_cmd": ["config-files"],
+        "full_cmd": [
+          "config-files"
+        ],
         "usage": "config-files",
         "subcommands": {},
         "args": [],
@@ -128,11 +149,16 @@
         "examples": []
       },
       "daemon": {
-        "full_cmd": ["daemon"],
+        "full_cmd": [
+          "daemon"
+        ],
         "usage": "daemon <SUBCOMMAND>",
         "subcommands": {
           "clear": {
-            "full_cmd": ["daemon", "clear"],
+            "full_cmd": [
+              "daemon",
+              "clear"
+            ],
             "usage": "daemon clear",
             "subcommands": {},
             "args": [],
@@ -148,7 +174,10 @@
             "examples": []
           },
           "serve": {
-            "full_cmd": ["daemon", "serve"],
+            "full_cmd": [
+              "daemon",
+              "serve"
+            ],
             "usage": "daemon serve",
             "subcommands": {},
             "args": [],
@@ -164,7 +193,10 @@
             "examples": []
           },
           "start": {
-            "full_cmd": ["daemon", "start"],
+            "full_cmd": [
+              "daemon",
+              "start"
+            ],
             "usage": "daemon start",
             "subcommands": {},
             "args": [],
@@ -180,7 +212,10 @@
             "examples": []
           },
           "status": {
-            "full_cmd": ["daemon", "status"],
+            "full_cmd": [
+              "daemon",
+              "status"
+            ],
             "usage": "daemon status",
             "subcommands": {},
             "args": [],
@@ -196,7 +231,10 @@
             "examples": []
           },
           "stop": {
-            "full_cmd": ["daemon", "stop"],
+            "full_cmd": [
+              "daemon",
+              "stop"
+            ],
             "usage": "daemon stop",
             "subcommands": {},
             "args": [],
@@ -226,7 +264,9 @@
         "examples": []
       },
       "deactivate": {
-        "full_cmd": ["deactivate"],
+        "full_cmd": [
+          "deactivate"
+        ],
         "usage": "deactivate",
         "subcommands": {},
         "args": [],
@@ -243,7 +283,9 @@
         "examples": []
       },
       "doctor": {
-        "full_cmd": ["doctor"],
+        "full_cmd": [
+          "doctor"
+        ],
         "usage": "doctor",
         "subcommands": {},
         "args": [],
@@ -254,12 +296,16 @@
         "args_override_self": true,
         "help": "Show diagnostic information about the current fnox state",
         "name": "doctor",
-        "aliases": ["dr"],
+        "aliases": [
+          "dr"
+        ],
         "hidden_aliases": [],
         "examples": []
       },
       "edit": {
-        "full_cmd": ["edit"],
+        "full_cmd": [
+          "edit"
+        ],
         "usage": "edit",
         "subcommands": {},
         "args": [],
@@ -275,7 +321,9 @@
         "examples": []
       },
       "exec": {
-        "full_cmd": ["exec"],
+        "full_cmd": [
+          "exec"
+        ],
         "usage": "exec [--replace] [COMMAND]…",
         "subcommands": {},
         "args": [
@@ -295,10 +343,11 @@
             "name": "replace",
             "usage": "--replace",
             "help": "Run the command in fnox's process, keeping the same PID and receiving signals directly; supports environment-only secrets without leases and does not inherit ambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux, macOS, and other Unix-like systems",
-            "help_long": "Run the command in fnox's process, keeping the same PID and receiving signals\ndirectly; supports environment-only secrets without leases and does not inherit\nambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux,\nmacOS, and other Unix-like systems",
             "help_first_line": "Run the command in fnox's process, keeping the same PID and receiving signals directly; supports environment-only secrets without leases and does not inherit ambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux, macOS, and other Unix-like systems",
             "short": [],
-            "long": ["replace"],
+            "long": [
+              "replace"
+            ],
             "hide": false,
             "global": false
           }
@@ -309,8 +358,12 @@
         "args_override_self": true,
         "help": "Execute a command with secrets as environment variables",
         "name": "exec",
-        "aliases": ["x"],
-        "hidden_aliases": ["run"],
+        "aliases": [
+          "x"
+        ],
+        "hidden_aliases": [
+          "run"
+        ],
         "examples": [],
         "complete": {
           "command": {
@@ -320,7 +373,9 @@
         }
       },
       "export": {
-        "full_cmd": ["export"],
+        "full_cmd": [
+          "export"
+        ],
         "usage": "export [FLAGS]",
         "subcommands": {},
         "args": [],
@@ -330,8 +385,12 @@
             "usage": "-f --format <FORMAT>",
             "help": "Export format",
             "help_first_line": "Export format",
-            "short": ["f"],
-            "long": ["format"],
+            "short": [
+              "f"
+            ],
+            "long": [
+              "format"
+            ],
             "hide": false,
             "global": false,
             "arg": {
@@ -341,7 +400,13 @@
               "double_dash": "Optional",
               "hide": false,
               "choices": {
-                "choices": ["env", "shell", "json", "yaml", "toml"],
+                "choices": [
+                  "env",
+                  "shell",
+                  "json",
+                  "yaml",
+                  "toml"
+                ],
                 "details": [
                   {
                     "value": "env",
@@ -366,15 +431,21 @@
                 ]
               }
             },
-            "default": ["env"]
+            "default": [
+              "env"
+            ]
           },
           {
             "name": "dry-run",
             "usage": "-n --dry-run",
             "help": "Show what would be exported without writing to file",
             "help_first_line": "Show what would be exported without writing to file",
-            "short": ["n"],
-            "long": ["dry-run"],
+            "short": [
+              "n"
+            ],
+            "long": [
+              "dry-run"
+            ],
             "hide": false,
             "global": false
           },
@@ -383,8 +454,12 @@
             "usage": "-o --output <OUTPUT>",
             "help": "Output file (default: stdout)",
             "help_first_line": "Output file (default: stdout)",
-            "short": ["o"],
-            "long": ["output"],
+            "short": [
+              "o"
+            ],
+            "long": [
+              "output"
+            ],
             "hide": false,
             "global": false,
             "arg": {
@@ -401,7 +476,9 @@
             "help": "Include secrets with env = false or env = \"exec\" (excluded by default)",
             "help_first_line": "Include secrets with env = false or env = \"exec\" (excluded by default)",
             "short": [],
-            "long": ["all"],
+            "long": [
+              "all"
+            ],
             "hide": false,
             "global": false
           },
@@ -411,7 +488,9 @@
             "help": "Include metadata comments in env and shell output",
             "help_first_line": "Include metadata comments in env and shell output",
             "short": [],
-            "long": ["header"],
+            "long": [
+              "header"
+            ],
             "hide": false,
             "global": false
           }
@@ -422,12 +501,16 @@
         "args_override_self": true,
         "help": "Export secrets in various formats",
         "name": "export",
-        "aliases": ["ex"],
+        "aliases": [
+          "ex"
+        ],
         "hidden_aliases": [],
         "examples": []
       },
       "get": {
-        "full_cmd": ["get"],
+        "full_cmd": [
+          "get"
+        ],
         "usage": "get [--base64-decode] <KEY>",
         "subcommands": {},
         "args": [
@@ -448,7 +531,9 @@
             "help": "Base64 decode the secret",
             "help_first_line": "Base64 decode the secret",
             "short": [],
-            "long": ["base64-decode"],
+            "long": [
+              "base64-decode"
+            ],
             "hide": false,
             "global": false
           }
@@ -464,7 +549,9 @@
         "examples": []
       },
       "hook-env": {
-        "full_cmd": ["hook-env"],
+        "full_cmd": [
+          "hook-env"
+        ],
         "usage": "hook-env [-s --shell <SHELL>]",
         "subcommands": {},
         "args": [],
@@ -474,8 +561,12 @@
             "usage": "-s --shell <SHELL>",
             "help": "Shell type (bash, zsh, fish, nu, pwsh)",
             "help_first_line": "Shell type (bash, zsh, fish, nu, pwsh)",
-            "short": ["s"],
-            "long": ["shell"],
+            "short": [
+              "s"
+            ],
+            "long": [
+              "shell"
+            ],
             "hide": false,
             "global": false,
             "arg": {
@@ -498,7 +589,9 @@
         "examples": []
       },
       "import": {
-        "full_cmd": ["import"],
+        "full_cmd": [
+          "import"
+        ],
         "usage": "import <FLAGS> [FORMAT]",
         "subcommands": {},
         "args": [
@@ -510,9 +603,16 @@
             "required": false,
             "double_dash": "Optional",
             "hide": false,
-            "default": ["env"],
+            "default": [
+              "env"
+            ],
             "choices": {
-              "choices": ["env", "json", "yaml", "toml"],
+              "choices": [
+                "env",
+                "json",
+                "yaml",
+                "toml"
+              ],
               "details": [
                 {
                   "value": "env",
@@ -540,8 +640,12 @@
             "usage": "-f --force",
             "help": "Skip confirmation prompts",
             "help_first_line": "Skip confirmation prompts",
-            "short": ["f"],
-            "long": ["force"],
+            "short": [
+              "f"
+            ],
+            "long": [
+              "force"
+            ],
             "hide": false,
             "global": false
           },
@@ -550,8 +654,12 @@
             "usage": "-g --global",
             "help": "Import to the global config file (~/.config/fnox/config.toml)",
             "help_first_line": "Import to the global config file (~/.config/fnox/config.toml)",
-            "short": ["g"],
-            "long": ["global"],
+            "short": [
+              "g"
+            ],
+            "long": [
+              "global"
+            ],
             "hide": false,
             "global": false
           },
@@ -560,8 +668,12 @@
             "usage": "-i --input <INPUT>",
             "help": "Source file or path to import from (default: stdin)",
             "help_first_line": "Source file or path to import from (default: stdin)",
-            "short": ["i"],
-            "long": ["input"],
+            "short": [
+              "i"
+            ],
+            "long": [
+              "input"
+            ],
             "hide": false,
             "global": false,
             "arg": {
@@ -577,8 +689,12 @@
             "usage": "-n --dry-run",
             "help": "Show what would be imported without making changes",
             "help_first_line": "Show what would be imported without making changes",
-            "short": ["n"],
-            "long": ["dry-run"],
+            "short": [
+              "n"
+            ],
+            "long": [
+              "dry-run"
+            ],
             "hide": false,
             "global": false
           },
@@ -587,8 +703,12 @@
             "usage": "-p --provider <PROVIDER>",
             "help": "Provider to use for encrypting/storing imported secrets (required)",
             "help_first_line": "Provider to use for encrypting/storing imported secrets (required)",
-            "short": ["p"],
-            "long": ["provider"],
+            "short": [
+              "p"
+            ],
+            "long": [
+              "provider"
+            ],
             "required": true,
             "hide": false,
             "global": false,
@@ -606,7 +726,9 @@
             "help": "Only import matching secrets (regex pattern)",
             "help_first_line": "Only import matching secrets (regex pattern)",
             "short": [],
-            "long": ["filter"],
+            "long": [
+              "filter"
+            ],
             "hide": false,
             "global": false,
             "arg": {
@@ -623,7 +745,9 @@
             "help": "Prefix to add to imported secret names",
             "help_first_line": "Prefix to add to imported secret names",
             "short": [],
-            "long": ["prefix"],
+            "long": [
+              "prefix"
+            ],
             "hide": false,
             "global": false,
             "arg": {
@@ -641,12 +765,16 @@
         "args_override_self": true,
         "help": "Import secrets from various sources",
         "name": "import",
-        "aliases": ["im"],
+        "aliases": [
+          "im"
+        ],
         "hidden_aliases": [],
         "examples": []
       },
       "init": {
-        "full_cmd": ["init"],
+        "full_cmd": [
+          "init"
+        ],
         "usage": "init [FLAGS]",
         "subcommands": {},
         "args": [],
@@ -656,8 +784,12 @@
             "usage": "-f --force",
             "help": "Overwrite existing configuration file",
             "help_first_line": "Overwrite existing configuration file",
-            "short": ["f"],
-            "long": ["force"],
+            "short": [
+              "f"
+            ],
+            "long": [
+              "force"
+            ],
             "hide": false,
             "global": false
           },
@@ -666,8 +798,12 @@
             "usage": "-g --global",
             "help": "Initialize the global config file (~/.config/fnox/config.toml)",
             "help_first_line": "Initialize the global config file (~/.config/fnox/config.toml)",
-            "short": ["g"],
-            "long": ["global"],
+            "short": [
+              "g"
+            ],
+            "long": [
+              "global"
+            ],
             "hide": false,
             "global": false
           },
@@ -677,7 +813,9 @@
             "help": "Skip the interactive wizard and create a minimal config",
             "help_first_line": "Skip the interactive wizard and create a minimal config",
             "short": [],
-            "long": ["skip-wizard"],
+            "long": [
+              "skip-wizard"
+            ],
             "hide": false,
             "global": false
           }
@@ -688,16 +826,23 @@
         "args_override_self": true,
         "help": "Initialize a new fnox configuration file",
         "name": "init",
-        "aliases": ["i"],
+        "aliases": [
+          "i"
+        ],
         "hidden_aliases": [],
         "examples": []
       },
       "lease": {
-        "full_cmd": ["lease"],
+        "full_cmd": [
+          "lease"
+        ],
         "usage": "lease <SUBCOMMAND>",
         "subcommands": {
           "cleanup": {
-            "full_cmd": ["lease", "cleanup"],
+            "full_cmd": [
+              "lease",
+              "cleanup"
+            ],
             "usage": "lease cleanup",
             "subcommands": {},
             "args": [],
@@ -713,7 +858,10 @@
             "examples": []
           },
           "create": {
-            "full_cmd": ["lease", "create"],
+            "full_cmd": [
+              "lease",
+              "create"
+            ],
             "usage": "lease create [FLAGS] [BACKEND_NAME]",
             "subcommands": {},
             "args": [
@@ -733,8 +881,12 @@
                 "usage": "-a --all",
                 "help": "Create leases for all configured backends",
                 "help_first_line": "Create leases for all configured backends",
-                "short": ["a"],
-                "long": ["all"],
+                "short": [
+                  "a"
+                ],
+                "long": [
+                  "all"
+                ],
                 "hide": false,
                 "global": false
               },
@@ -743,8 +895,12 @@
                 "usage": "-d --duration <DURATION>",
                 "help": "Lease duration (e.g., \"15m\", \"1h\", \"2h30m\"); overrides config duration",
                 "help_first_line": "Lease duration (e.g., \"15m\", \"1h\", \"2h30m\"); overrides config duration",
-                "short": ["d"],
-                "long": ["duration"],
+                "short": [
+                  "d"
+                ],
+                "long": [
+                  "duration"
+                ],
                 "hide": false,
                 "global": false,
                 "arg": {
@@ -760,8 +916,12 @@
                 "usage": "-f --format <FORMAT>",
                 "help": "Output format",
                 "help_first_line": "Output format",
-                "short": ["f"],
-                "long": ["format"],
+                "short": [
+                  "f"
+                ],
+                "long": [
+                  "format"
+                ],
                 "hide": false,
                 "global": false,
                 "arg": {
@@ -771,7 +931,11 @@
                   "double_dash": "Optional",
                   "hide": false,
                   "choices": {
-                    "choices": ["shell", "json", "env"],
+                    "choices": [
+                      "shell",
+                      "json",
+                      "env"
+                    ],
                     "details": [
                       {
                         "value": "shell"
@@ -785,15 +949,21 @@
                     ]
                   }
                 },
-                "default": ["shell"]
+                "default": [
+                  "shell"
+                ]
               },
               {
                 "name": "interactive",
                 "usage": "-i --interactive",
                 "help": "Prompt interactively for missing credentials",
                 "help_first_line": "Prompt interactively for missing credentials",
-                "short": ["i"],
-                "long": ["interactive"],
+                "short": [
+                  "i"
+                ],
+                "long": [
+                  "interactive"
+                ],
                 "hide": false,
                 "global": false
               },
@@ -802,8 +972,12 @@
                 "usage": "-l --label <LABEL>",
                 "help": "Label for the lease (e.g., session purpose)",
                 "help_first_line": "Label for the lease (e.g., session purpose)",
-                "short": ["l"],
-                "long": ["label"],
+                "short": [
+                  "l"
+                ],
+                "long": [
+                  "label"
+                ],
                 "hide": false,
                 "global": false,
                 "arg": {
@@ -813,7 +987,9 @@
                   "double_dash": "Optional",
                   "hide": false
                 },
-                "default": ["fnox-lease"]
+                "default": [
+                  "fnox-lease"
+                ]
               }
             ],
             "mounts": [],
@@ -827,7 +1003,10 @@
             "examples": []
           },
           "list": {
-            "full_cmd": ["lease", "list"],
+            "full_cmd": [
+              "lease",
+              "list"
+            ],
             "usage": "lease list [--active] [--expired]",
             "subcommands": {},
             "args": [],
@@ -838,7 +1017,9 @@
                 "help": "Show only active (non-expired, non-revoked) leases",
                 "help_first_line": "Show only active (non-expired, non-revoked) leases",
                 "short": [],
-                "long": ["active"],
+                "long": [
+                  "active"
+                ],
                 "hide": false,
                 "global": false
               },
@@ -848,7 +1029,9 @@
                 "help": "Show only expired leases",
                 "help_first_line": "Show only expired leases",
                 "short": [],
-                "long": ["expired"],
+                "long": [
+                  "expired"
+                ],
                 "hide": false,
                 "global": false
               }
@@ -864,7 +1047,10 @@
             "examples": []
           },
           "revoke": {
-            "full_cmd": ["lease", "revoke"],
+            "full_cmd": [
+              "lease",
+              "revoke"
+            ],
             "usage": "lease revoke <LEASE_ID>",
             "subcommands": {},
             "args": [
@@ -903,7 +1089,9 @@
         "examples": []
       },
       "list": {
-        "full_cmd": ["list"],
+        "full_cmd": [
+          "list"
+        ],
         "usage": "list [FLAGS]",
         "subcommands": {},
         "args": [],
@@ -913,8 +1101,12 @@
             "usage": "-f --full",
             "help": "Show full provider keys without truncation",
             "help_first_line": "Show full provider keys without truncation",
-            "short": ["f"],
-            "long": ["full"],
+            "short": [
+              "f"
+            ],
+            "long": [
+              "full"
+            ],
             "hide": false,
             "global": false
           },
@@ -923,8 +1115,12 @@
             "usage": "-s --sources",
             "help": "Show source file paths where secrets are defined",
             "help_first_line": "Show source file paths where secrets are defined",
-            "short": ["s"],
-            "long": ["sources"],
+            "short": [
+              "s"
+            ],
+            "long": [
+              "sources"
+            ],
             "hide": false,
             "global": false
           },
@@ -933,8 +1129,12 @@
             "usage": "-V --values",
             "help": "Show secret values (if available)",
             "help_first_line": "Show secret values (if available)",
-            "short": ["V"],
-            "long": ["values"],
+            "short": [
+              "V"
+            ],
+            "long": [
+              "values"
+            ],
             "hide": false,
             "global": false
           },
@@ -944,7 +1144,9 @@
             "help": "Output secret keys for shell completion (one per line)",
             "help_first_line": "Output secret keys for shell completion (one per line)",
             "short": [],
-            "long": ["complete"],
+            "long": [
+              "complete"
+            ],
             "hide": true,
             "global": false
           }
@@ -955,12 +1157,17 @@
         "args_override_self": true,
         "help": "List all secrets",
         "name": "list",
-        "aliases": ["ls", "secrets"],
+        "aliases": [
+          "ls",
+          "secrets"
+        ],
         "hidden_aliases": [],
         "examples": []
       },
       "mcp": {
-        "full_cmd": ["mcp"],
+        "full_cmd": [
+          "mcp"
+        ],
         "usage": "mcp",
         "subcommands": {},
         "args": [],
@@ -976,7 +1183,9 @@
         "examples": []
       },
       "profiles": {
-        "full_cmd": ["profiles"],
+        "full_cmd": [
+          "profiles"
+        ],
         "usage": "profiles",
         "subcommands": {},
         "args": [],
@@ -987,7 +1196,9 @@
             "help": "Output profile names for shell completion (one per line)",
             "help_first_line": "Output profile names for shell completion (one per line)",
             "short": [],
-            "long": ["complete"],
+            "long": [
+              "complete"
+            ],
             "hide": true,
             "global": false
           }
@@ -999,15 +1210,22 @@
         "help": "List available profiles",
         "name": "profiles",
         "aliases": [],
-        "hidden_aliases": ["profile"],
+        "hidden_aliases": [
+          "profile"
+        ],
         "examples": []
       },
       "provider": {
-        "full_cmd": ["provider"],
+        "full_cmd": [
+          "provider"
+        ],
         "usage": "provider <SUBCOMMAND>",
         "subcommands": {
           "add": {
-            "full_cmd": ["provider", "add"],
+            "full_cmd": [
+              "provider",
+              "add"
+            ],
             "usage": "provider add [-g --global] [--vault <VAULT>] <PROVIDER> <PROVIDER_TYPE>",
             "subcommands": {},
             "args": [
@@ -1167,8 +1385,12 @@
                 "usage": "-g --global",
                 "help": "Add to the global config file (~/.config/fnox/config.toml)",
                 "help_first_line": "Add to the global config file (~/.config/fnox/config.toml)",
-                "short": ["g"],
-                "long": ["global"],
+                "short": [
+                  "g"
+                ],
+                "long": [
+                  "global"
+                ],
                 "hide": false,
                 "global": false
               },
@@ -1178,7 +1400,9 @@
                 "help": "Default Proton Pass vault name (only valid with provider type proton-pass)",
                 "help_first_line": "Default Proton Pass vault name (only valid with provider type proton-pass)",
                 "short": [],
-                "long": ["vault"],
+                "long": [
+                  "vault"
+                ],
                 "hide": false,
                 "global": false,
                 "arg": {
@@ -1196,12 +1420,18 @@
             "args_override_self": true,
             "help": "Add a new provider",
             "name": "add",
-            "aliases": ["a", "set"],
+            "aliases": [
+              "a",
+              "set"
+            ],
             "hidden_aliases": [],
             "examples": []
           },
           "list": {
-            "full_cmd": ["provider", "list"],
+            "full_cmd": [
+              "provider",
+              "list"
+            ],
             "usage": "provider list",
             "subcommands": {},
             "args": [],
@@ -1212,7 +1442,9 @@
                 "help": "Output provider names for shell completion (one per line)",
                 "help_first_line": "Output provider names for shell completion (one per line)",
                 "short": [],
-                "long": ["complete"],
+                "long": [
+                  "complete"
+                ],
                 "hide": true,
                 "global": false
               }
@@ -1223,12 +1455,17 @@
             "args_override_self": true,
             "help": "List available providers",
             "name": "list",
-            "aliases": ["ls"],
+            "aliases": [
+              "ls"
+            ],
             "hidden_aliases": [],
             "examples": []
           },
           "remove": {
-            "full_cmd": ["provider", "remove"],
+            "full_cmd": [
+              "provider",
+              "remove"
+            ],
             "usage": "provider remove [-g --global] <PROVIDER>",
             "subcommands": {},
             "args": [
@@ -1248,8 +1485,12 @@
                 "usage": "-g --global",
                 "help": "Remove from the global config file (~/.config/fnox/config.toml)",
                 "help_first_line": "Remove from the global config file (~/.config/fnox/config.toml)",
-                "short": ["g"],
-                "long": ["global"],
+                "short": [
+                  "g"
+                ],
+                "long": [
+                  "global"
+                ],
                 "hide": false,
                 "global": false
               }
@@ -1260,12 +1501,18 @@
             "args_override_self": true,
             "help": "Remove a provider",
             "name": "remove",
-            "aliases": ["rm", "delete"],
+            "aliases": [
+              "rm",
+              "delete"
+            ],
             "hidden_aliases": [],
             "examples": []
           },
           "test": {
-            "full_cmd": ["provider", "test"],
+            "full_cmd": [
+              "provider",
+              "test"
+            ],
             "usage": "provider test [-a --all] [PROVIDER]",
             "subcommands": {},
             "args": [
@@ -1285,8 +1532,12 @@
                 "usage": "-a --all",
                 "help": "Test all configured providers",
                 "help_first_line": "Test all configured providers",
-                "short": ["a"],
-                "long": ["all"],
+                "short": [
+                  "a"
+                ],
+                "long": [
+                  "all"
+                ],
                 "hide": false,
                 "global": false
               }
@@ -1297,7 +1548,9 @@
             "args_override_self": true,
             "help": "Test a provider connection",
             "name": "test",
-            "aliases": ["t"],
+            "aliases": [
+              "t"
+            ],
             "hidden_aliases": [],
             "examples": []
           }
@@ -1315,11 +1568,16 @@
         "examples": []
       },
       "proxy": {
-        "full_cmd": ["proxy"],
+        "full_cmd": [
+          "proxy"
+        ],
         "usage": "proxy <SUBCOMMAND>",
         "subcommands": {
           "rules": {
-            "full_cmd": ["proxy", "rules"],
+            "full_cmd": [
+              "proxy",
+              "rules"
+            ],
             "usage": "proxy rules",
             "subcommands": {},
             "args": [],
@@ -1335,7 +1593,10 @@
             "examples": []
           },
           "run": {
-            "full_cmd": ["proxy", "run"],
+            "full_cmd": [
+              "proxy",
+              "run"
+            ],
             "usage": "proxy run [COMMAND]…",
             "subcommands": {},
             "args": [
@@ -1382,7 +1643,9 @@
         "examples": []
       },
       "reencrypt": {
-        "full_cmd": ["reencrypt"],
+        "full_cmd": [
+          "reencrypt"
+        ],
         "usage": "reencrypt [FLAGS] [KEYS]…",
         "subcommands": {},
         "args": [
@@ -1403,8 +1666,12 @@
             "usage": "-f --force",
             "help": "Skip confirmation prompt",
             "help_first_line": "Skip confirmation prompt",
-            "short": ["f"],
-            "long": ["force"],
+            "short": [
+              "f"
+            ],
+            "long": [
+              "force"
+            ],
             "hide": false,
             "global": false
           },
@@ -1413,8 +1680,12 @@
             "usage": "-n --dry-run",
             "help": "Show what would be done without making changes",
             "help_first_line": "Show what would be done without making changes",
-            "short": ["n"],
-            "long": ["dry-run"],
+            "short": [
+              "n"
+            ],
+            "long": [
+              "dry-run"
+            ],
             "hide": false,
             "global": false
           },
@@ -1423,8 +1694,12 @@
             "usage": "-p --provider <PROVIDER>",
             "help": "Only re-encrypt secrets from this provider",
             "help_first_line": "Only re-encrypt secrets from this provider",
-            "short": ["p"],
-            "long": ["provider"],
+            "short": [
+              "p"
+            ],
+            "long": [
+              "provider"
+            ],
             "hide": false,
             "global": false,
             "arg": {
@@ -1441,7 +1716,9 @@
             "help": "Only re-encrypt matching secrets (regex pattern)",
             "help_first_line": "Only re-encrypt matching secrets (regex pattern)",
             "short": [],
-            "long": ["filter"],
+            "long": [
+              "filter"
+            ],
             "hide": false,
             "global": false,
             "arg": {
@@ -1458,14 +1735,16 @@
         "hide": false,
         "args_override_self": true,
         "help": "Re-encrypt secrets with current provider configuration",
-        "help_long": "Re-encrypt secrets with current provider configuration\n\nWhen you add or remove recipients from an encryption provider (e.g. age),\nexisting secrets remain encrypted with the old recipient set. This command\ndecrypts and re-encrypts all matching secrets with the current provider\nconfiguration.",
+        "help_long": "Re-encrypt secrets with current provider configuration\n\nWhen you add or remove recipients from an encryption provider (e.g. age), existing secrets remain encrypted with the old recipient set. This command decrypts and re-encrypts all matching secrets with the current provider configuration.",
         "name": "reencrypt",
         "aliases": [],
         "hidden_aliases": [],
         "examples": []
       },
       "remove": {
-        "full_cmd": ["remove"],
+        "full_cmd": [
+          "remove"
+        ],
         "usage": "remove [-g --global] [-n --dry-run] <KEY>",
         "subcommands": {},
         "args": [
@@ -1485,8 +1764,12 @@
             "usage": "-g --global",
             "help": "Remove from the global config file (~/.config/fnox/config.toml)",
             "help_first_line": "Remove from the global config file (~/.config/fnox/config.toml)",
-            "short": ["g"],
-            "long": ["global"],
+            "short": [
+              "g"
+            ],
+            "long": [
+              "global"
+            ],
             "hide": false,
             "global": false
           },
@@ -1495,8 +1778,12 @@
             "usage": "-n --dry-run",
             "help": "Show what would be removed without making changes",
             "help_first_line": "Show what would be removed without making changes",
-            "short": ["n"],
-            "long": ["dry-run"],
+            "short": [
+              "n"
+            ],
+            "long": [
+              "dry-run"
+            ],
             "hide": false,
             "global": false
           }
@@ -1507,12 +1794,17 @@
         "args_override_self": true,
         "help": "Remove a secret",
         "name": "remove",
-        "aliases": ["rm", "delete"],
+        "aliases": [
+          "rm",
+          "delete"
+        ],
         "hidden_aliases": [],
         "examples": []
       },
       "scan": {
-        "full_cmd": ["scan"],
+        "full_cmd": [
+          "scan"
+        ],
         "usage": "scan [FLAGS] [DIR]",
         "subcommands": {},
         "args": [
@@ -1524,7 +1816,9 @@
             "required": false,
             "double_dash": "Optional",
             "hide": false,
-            "default": ["."]
+            "default": [
+              "."
+            ]
           }
         ],
         "flags": [
@@ -1533,8 +1827,12 @@
             "usage": "-i --ignore… <IGNORE>",
             "help": "Skip files matching this glob pattern (can be used multiple times)",
             "help_first_line": "Skip files matching this glob pattern (can be used multiple times)",
-            "short": ["i"],
-            "long": ["ignore"],
+            "short": [
+              "i"
+            ],
+            "long": [
+              "ignore"
+            ],
             "var": true,
             "hide": false,
             "global": false,
@@ -1552,7 +1850,9 @@
             "help": "Output format",
             "help_first_line": "Output format",
             "short": [],
-            "long": ["format"],
+            "long": [
+              "format"
+            ],
             "hide": false,
             "global": false,
             "arg": {
@@ -1562,7 +1862,10 @@
               "double_dash": "Optional",
               "hide": false,
               "choices": {
-                "choices": ["human", "json"],
+                "choices": [
+                  "human",
+                  "json"
+                ],
                 "details": [
                   {
                     "value": "human"
@@ -1573,15 +1876,21 @@
                 ]
               }
             },
-            "default": ["human"]
+            "default": [
+              "human"
+            ]
           },
           {
             "name": "quiet",
             "usage": "-q --quiet",
             "help": "Show only files with potential secrets",
             "help_first_line": "Show only files with potential secrets",
-            "short": ["q"],
-            "long": ["quiet"],
+            "short": [
+              "q"
+            ],
+            "long": [
+              "quiet"
+            ],
             "hide": false,
             "global": false
           }
@@ -1603,7 +1912,9 @@
         }
       },
       "schema": {
-        "full_cmd": ["schema"],
+        "full_cmd": [
+          "schema"
+        ],
         "usage": "schema",
         "subcommands": {},
         "args": [],
@@ -1619,7 +1930,9 @@
         "examples": []
       },
       "set": {
-        "full_cmd": ["set"],
+        "full_cmd": [
+          "set"
+        ],
         "usage": "set [FLAGS] <KEY> [VALUE]",
         "subcommands": {},
         "args": [
@@ -1636,7 +1949,7 @@
             "name": "VALUE",
             "usage": "[VALUE]",
             "help": "Secret value to store.",
-            "help_long": "Secret value to store.\n\nIf omitted: reads from stdin when piped (`echo \"x\" | fnox set KEY`),\nor prompts interactively with hidden input.\n\nPassing secrets as arguments exposes them in shell history and `ps` output.\nFor sensitive values, prefer stdin or the interactive prompt.",
+            "help_long": "Secret value to store.\n\nIf omitted: reads from stdin when piped (`echo \"x\" | fnox set KEY`), or prompts interactively with hidden input.\n\nPassing secrets as arguments exposes them in shell history and `ps` output. For sensitive values, prefer stdin or the interactive prompt.",
             "help_first_line": "Secret value to store.",
             "required": false,
             "double_dash": "Optional",
@@ -1649,8 +1962,12 @@
             "usage": "-d --description <DESCRIPTION>",
             "help": "Description of the secret",
             "help_first_line": "Description of the secret",
-            "short": ["d"],
-            "long": ["description"],
+            "short": [
+              "d"
+            ],
+            "long": [
+              "description"
+            ],
             "hide": false,
             "global": false,
             "arg": {
@@ -1666,8 +1983,12 @@
             "usage": "-g --global",
             "help": "Save to the global config file (~/.config/fnox/config.toml)",
             "help_first_line": "Save to the global config file (~/.config/fnox/config.toml)",
-            "short": ["g"],
-            "long": ["global"],
+            "short": [
+              "g"
+            ],
+            "long": [
+              "global"
+            ],
             "hide": false,
             "global": false
           },
@@ -1676,8 +1997,12 @@
             "usage": "-k --key-name <KEY_NAME>",
             "help": "Key name in the provider (if different from env var name)",
             "help_first_line": "Key name in the provider (if different from env var name)",
-            "short": ["k"],
-            "long": ["key-name"],
+            "short": [
+              "k"
+            ],
+            "long": [
+              "key-name"
+            ],
             "hide": false,
             "global": false,
             "arg": {
@@ -1693,8 +2018,12 @@
             "usage": "-n --dry-run",
             "help": "Show what would be done without making changes",
             "help_first_line": "Show what would be done without making changes",
-            "short": ["n"],
-            "long": ["dry-run"],
+            "short": [
+              "n"
+            ],
+            "long": [
+              "dry-run"
+            ],
             "hide": false,
             "global": false
           },
@@ -1703,8 +2032,12 @@
             "usage": "-p --provider <PROVIDER>",
             "help": "Provider to fetch from",
             "help_first_line": "Provider to fetch from",
-            "short": ["p"],
-            "long": ["provider"],
+            "short": [
+              "p"
+            ],
+            "long": [
+              "provider"
+            ],
             "hide": false,
             "global": false,
             "arg": {
@@ -1721,7 +2054,9 @@
             "help": "Base64 encode the secret",
             "help_first_line": "Base64 encode the secret",
             "short": [],
-            "long": ["base64-encode"],
+            "long": [
+              "base64-encode"
+            ],
             "hide": false,
             "global": false
           },
@@ -1731,7 +2066,9 @@
             "help": "Default value to use if secret is not found",
             "help_first_line": "Default value to use if secret is not found",
             "short": [],
-            "long": ["default"],
+            "long": [
+              "default"
+            ],
             "hide": false,
             "global": false,
             "arg": {
@@ -1748,7 +2085,9 @@
             "help": "Read the secret value verbatim from a UTF-8 file",
             "help_first_line": "Read the secret value verbatim from a UTF-8 file",
             "short": [],
-            "long": ["from-file"],
+            "long": [
+              "from-file"
+            ],
             "hide": false,
             "global": false,
             "arg": {
@@ -1758,7 +2097,9 @@
               "double_dash": "Optional",
               "hide": false
             },
-            "conflicts": ["VALUE"]
+            "conflicts": [
+              "VALUE"
+            ]
           },
           {
             "name": "if-missing",
@@ -1766,7 +2107,9 @@
             "help": "What to do if the secret is missing (error, warn, ignore)",
             "help_first_line": "What to do if the secret is missing (error, warn, ignore)",
             "short": [],
-            "long": ["if-missing"],
+            "long": [
+              "if-missing"
+            ],
             "hide": false,
             "global": false,
             "arg": {
@@ -1776,7 +2119,11 @@
               "double_dash": "Optional",
               "hide": false,
               "choices": {
-                "choices": ["error", "warn", "ignore"],
+                "choices": [
+                  "error",
+                  "warn",
+                  "ignore"
+                ],
                 "details": [
                   {
                     "value": "error"
@@ -1798,7 +2145,9 @@
         "args_override_self": true,
         "help": "Set a secret value",
         "name": "set",
-        "aliases": ["s"],
+        "aliases": [
+          "s"
+        ],
         "hidden_aliases": [],
         "examples": [],
         "complete": {
@@ -1809,7 +2158,9 @@
         }
       },
       "sponsors": {
-        "full_cmd": ["sponsors"],
+        "full_cmd": [
+          "sponsors"
+        ],
         "usage": "sponsors",
         "subcommands": {},
         "args": [],
@@ -1825,7 +2176,9 @@
         "examples": []
       },
       "sync": {
-        "full_cmd": ["sync"],
+        "full_cmd": [
+          "sync"
+        ],
         "usage": "sync [FLAGS] [KEYS]…",
         "subcommands": {},
         "args": [
@@ -1846,8 +2199,12 @@
             "usage": "-f --force",
             "help": "Skip confirmation prompt",
             "help_first_line": "Skip confirmation prompt",
-            "short": ["f"],
-            "long": ["force"],
+            "short": [
+              "f"
+            ],
+            "long": [
+              "force"
+            ],
             "hide": false,
             "global": false
           },
@@ -1856,8 +2213,12 @@
             "usage": "-g --global",
             "help": "Write to global config (~/.config/fnox/config.toml)",
             "help_first_line": "Write to global config (~/.config/fnox/config.toml)",
-            "short": ["g"],
-            "long": ["global"],
+            "short": [
+              "g"
+            ],
+            "long": [
+              "global"
+            ],
             "hide": false,
             "global": false
           },
@@ -1866,8 +2227,12 @@
             "usage": "-n --dry-run",
             "help": "Show what would be done without making changes",
             "help_first_line": "Show what would be done without making changes",
-            "short": ["n"],
-            "long": ["dry-run"],
+            "short": [
+              "n"
+            ],
+            "long": [
+              "dry-run"
+            ],
             "hide": false,
             "global": false
           },
@@ -1876,8 +2241,12 @@
             "usage": "-p --provider <PROVIDER>",
             "help": "Target encryption provider (defaults to default_provider)",
             "help_first_line": "Target encryption provider (defaults to default_provider)",
-            "short": ["p"],
-            "long": ["provider"],
+            "short": [
+              "p"
+            ],
+            "long": [
+              "provider"
+            ],
             "hide": false,
             "global": false,
             "arg": {
@@ -1893,8 +2262,12 @@
             "usage": "-s --source <SOURCE>",
             "help": "Only sync secrets from this source provider",
             "help_first_line": "Only sync secrets from this source provider",
-            "short": ["s"],
-            "long": ["source"],
+            "short": [
+              "s"
+            ],
+            "long": [
+              "source"
+            ],
             "hide": false,
             "global": false,
             "arg": {
@@ -1911,7 +2284,9 @@
             "help": "Only sync matching secrets (regex pattern)",
             "help_first_line": "Only sync matching secrets (regex pattern)",
             "short": [],
-            "long": ["filter"],
+            "long": [
+              "filter"
+            ],
             "hide": false,
             "global": false,
             "arg": {
@@ -1928,10 +2303,14 @@
             "help": "Write sync overrides to the local override file next to the config file",
             "help_first_line": "Write sync overrides to the local override file next to the config file",
             "short": [],
-            "long": ["local-file"],
+            "long": [
+              "local-file"
+            ],
             "hide": false,
             "global": false,
-            "conflicts": ["--global"]
+            "conflicts": [
+              "--global"
+            ]
           }
         ],
         "mounts": [],
@@ -1945,7 +2324,9 @@
         "examples": []
       },
       "tui": {
-        "full_cmd": ["tui"],
+        "full_cmd": [
+          "tui"
+        ],
         "usage": "tui",
         "subcommands": {},
         "args": [],
@@ -1961,7 +2342,9 @@
         "examples": []
       },
       "usage": {
-        "full_cmd": ["usage"],
+        "full_cmd": [
+          "usage"
+        ],
         "usage": "usage",
         "subcommands": {},
         "args": [],
@@ -1977,7 +2360,9 @@
         "examples": []
       },
       "version": {
-        "full_cmd": ["version"],
+        "full_cmd": [
+          "version"
+        ],
         "usage": "version",
         "subcommands": {},
         "args": [],
@@ -1988,7 +2373,9 @@
         "args_override_self": true,
         "help": "Show version information",
         "name": "version",
-        "aliases": ["v"],
+        "aliases": [
+          "v"
+        ],
         "hidden_aliases": [],
         "examples": []
       }
@@ -2000,8 +2387,12 @@
         "usage": "-c --config <CONFIG>",
         "help": "Path to the configuration file (default: fnox.toml, searches parent directories)",
         "help_first_line": "Path to the configuration file (default: fnox.toml, searches parent directories)",
-        "short": ["c"],
-        "long": ["config"],
+        "short": [
+          "c"
+        ],
+        "long": [
+          "config"
+        ],
         "hide": false,
         "global": true,
         "arg": {
@@ -2011,16 +2402,21 @@
           "double_dash": "Optional",
           "hide": false
         },
-        "default": ["fnox.toml"]
+        "default": [
+          "fnox.toml"
+        ]
       },
       {
         "name": "profile",
         "usage": "-P --profile… <PROFILE>",
         "help": "Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones.",
-        "help_long": "Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple\nprofiles separated by commas or repeated flags; later profiles overlay earlier ones.",
         "help_first_line": "Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones.",
-        "short": ["P"],
-        "long": ["profile"],
+        "short": [
+          "P"
+        ],
+        "long": [
+          "profile"
+        ],
         "var": true,
         "hide": false,
         "global": true,
@@ -2037,8 +2433,12 @@
         "usage": "-v --verbose",
         "help": "Enable verbose logging",
         "help_first_line": "Enable verbose logging",
-        "short": ["v"],
-        "long": ["verbose"],
+        "short": [
+          "v"
+        ],
+        "long": [
+          "verbose"
+        ],
         "hide": false,
         "global": true
       },
@@ -2048,7 +2448,9 @@
         "help": "Path to age key file for decryption (deprecated: use provider config instead)",
         "help_first_line": "Path to age key file for decryption (deprecated: use provider config instead)",
         "short": [],
-        "long": ["age-key-file"],
+        "long": [
+          "age-key-file"
+        ],
         "hide": true,
         "global": true,
         "arg": {
@@ -2065,7 +2467,9 @@
         "help": "What to do if a secret is missing (error, warn, ignore)",
         "help_first_line": "What to do if a secret is missing (error, warn, ignore)",
         "short": [],
-        "long": ["if-missing"],
+        "long": [
+          "if-missing"
+        ],
         "hide": false,
         "global": true,
         "arg": {
@@ -2082,7 +2486,9 @@
         "help": "Disable colored output",
         "help_first_line": "Disable colored output",
         "short": [],
-        "long": ["no-color"],
+        "long": [
+          "no-color"
+        ],
         "hide": false,
         "global": true
       },
@@ -2092,7 +2498,9 @@
         "help": "Disable daemon-backed resolution for this invocation",
         "help_first_line": "Disable daemon-backed resolution for this invocation",
         "short": [],
-        "long": ["no-daemon"],
+        "long": [
+          "no-daemon"
+        ],
         "hide": false,
         "global": true
       },
@@ -2102,7 +2510,9 @@
         "help": "Do not merge top-level secrets into the selected profile",
         "help_first_line": "Do not merge top-level secrets into the selected profile",
         "short": [],
-        "long": ["no-defaults"],
+        "long": [
+          "no-defaults"
+        ],
         "hide": false,
         "global": true
       },
@@ -2112,7 +2522,9 @@
         "help": "Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)",
         "help_first_line": "Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)",
         "short": [],
-        "long": ["non-interactive"],
+        "long": [
+          "non-interactive"
+        ],
         "hide": false,
         "global": true,
         "env": "FNOX_NON_INTERACTIVE"
@@ -2121,10 +2533,11 @@
         "name": "write-profile",
         "usage": "--write-profile <WRITE_PROFILE>",
         "help": "Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise.",
-        "help_long": "Target profile for write commands (set, remove, import, sync, provider add/remove).\nRequired when multiple profiles are active; defaults to the single active profile otherwise.",
         "help_first_line": "Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise.",
         "short": [],
-        "long": ["write-profile"],
+        "long": [
+          "write-profile"
+        ],
         "hide": false,
         "global": true,
         "arg": {
