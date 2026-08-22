@@ -385,7 +385,9 @@ mod tests {
         let env = EnvLayer::new([
             ("FNOX_AGE_KEY_FILE".to_string(), "/env/key.txt".to_string()),
             ("FNOX_PROFILE".to_string(), "staging, prod".to_string()),
-            ("FNOX_NO_DEFAULTS".to_string(), "true".to_string()),
+            // Preserve fnox's pre-usage-config behavior: environment boolean words
+            // are case-insensitive.
+            ("FNOX_NO_DEFAULTS".to_string(), "TRUE".to_string()),
         ]);
 
         let resolved = resolve(
