@@ -2,26 +2,25 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
 use crate::providers::{OptionProviderSecretRef, OptionStringOrSecretRef, StringOrSecretRef};
-use clap::Args;
 
 use super::ProviderType;
 
-#[derive(Debug, Args)]
-#[command(visible_aliases = ["a", "set"])]
+#[derive(Debug, usage_rs::Args)]
+#[usage(alias("a", "set"))]
 pub struct AddCommand {
     /// Provider name
     pub provider: String,
 
     /// Provider type
-    #[arg(value_enum)]
+    #[usage(arg, value_enum)]
     pub provider_type: ProviderType,
 
     /// Add to the global config file (~/.config/fnox/config.toml)
-    #[arg(short = 'g', long)]
+    #[usage(short = 'g', long)]
     pub global: bool,
 
     /// Default Proton Pass vault name (only valid with provider type proton-pass)
-    #[arg(long)]
+    #[usage(long)]
     pub vault: Option<String>,
 }
 

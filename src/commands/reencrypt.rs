@@ -2,7 +2,6 @@ use crate::commands::Cli;
 use crate::config::{Config, SecretConfig};
 use crate::error::{FnoxError, Result};
 use crate::secret_resolver::resolve_secrets_batch;
-use clap::Args;
 use console;
 use indexmap::IndexMap;
 use regex::Regex;
@@ -16,25 +15,25 @@ use std::path::PathBuf;
 /// existing secrets remain encrypted with the old recipient set. This command
 /// decrypts and re-encrypts all matching secrets with the current provider
 /// configuration.
-#[derive(Args)]
+#[derive(usage_rs::Args)]
 pub struct ReencryptCommand {
     /// Only re-encrypt these specific secret keys
     keys: Vec<String>,
 
     /// Skip confirmation prompt
-    #[arg(short, long)]
+    #[usage(short, long)]
     force: bool,
 
     /// Show what would be done without making changes
-    #[arg(short = 'n', long)]
+    #[usage(short = 'n', long)]
     dry_run: bool,
 
     /// Only re-encrypt secrets from this provider
-    #[arg(short = 'p', long)]
+    #[usage(short = 'p', long)]
     provider: Option<String>,
 
     /// Only re-encrypt matching secrets (regex pattern)
-    #[arg(long)]
+    #[usage(long)]
     filter: Option<String>,
 }
 

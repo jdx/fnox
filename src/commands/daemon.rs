@@ -2,20 +2,19 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::daemon;
 use crate::error::Result;
-use clap::{Args, Subcommand};
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct DaemonCommand {
-    #[command(subcommand)]
+    #[usage(subcommand)]
     command: DaemonSubcommand,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, usage_rs::Subcommands)]
 enum DaemonSubcommand {
     /// Clear all running daemon caches
     Clear,
     /// Run the daemon server in the foreground
-    #[command(hide = true)]
+    #[usage(hide)]
     Serve,
     /// Start the per-user daemon in the background
     Start,

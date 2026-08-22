@@ -2,7 +2,6 @@ use crate::commands::Cli;
 use crate::config::{self, Config, SecretConfig, SyncConfig, local_override_filename};
 use crate::error::{FnoxError, Result};
 use crate::secret_resolver::resolve_secrets_batch;
-use clap::Args;
 use console;
 use indexmap::IndexMap;
 use regex::Regex;
@@ -10,37 +9,37 @@ use std::io;
 use std::path::PathBuf;
 
 /// Sync secrets from remote providers to a local encryption provider
-#[derive(Args)]
+#[derive(usage_rs::Args)]
 pub struct SyncCommand {
     /// Only sync these specific secret keys
     keys: Vec<String>,
 
     /// Skip confirmation prompt
-    #[arg(short, long)]
+    #[usage(short, long)]
     force: bool,
 
     /// Write to global config (~/.config/fnox/config.toml)
-    #[arg(short = 'g', long)]
+    #[usage(short = 'g', long)]
     global: bool,
 
     /// Show what would be done without making changes
-    #[arg(short = 'n', long)]
+    #[usage(short = 'n', long)]
     dry_run: bool,
 
     /// Target encryption provider (defaults to default_provider)
-    #[arg(short = 'p', long)]
+    #[usage(short = 'p', long)]
     provider: Option<String>,
 
     /// Only sync secrets from this source provider
-    #[arg(short = 's', long)]
+    #[usage(short = 's', long)]
     source: Option<String>,
 
     /// Only sync matching secrets (regex pattern)
-    #[arg(long)]
+    #[usage(long)]
     filter: Option<String>,
 
     /// Write sync overrides to the local override file next to the config file
-    #[arg(long, conflicts_with = "global")]
+    #[usage(long, conflicts = "--global")]
     local_file: bool,
 }
 

@@ -5,7 +5,6 @@ use crate::settings::Settings;
 use crate::shell;
 use crate::temp_file_secrets::create_persistent_secret_file;
 use anyhow::Result;
-use clap::Parser;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -36,11 +35,11 @@ impl OutputMode {
     }
 }
 
-#[derive(Debug, Parser)]
-#[command(about = "Internal command used by shell hooks to load secrets")]
+#[derive(Debug, usage_rs::Args)]
+#[usage(about = "Internal command used by shell hooks to load secrets")]
 pub struct HookEnvCommand {
     /// Shell type (bash, zsh, fish, nu, pwsh)
-    #[arg(short = 's', long)]
+    #[usage(short = 's', long)]
     pub shell: Option<String>,
 }
 

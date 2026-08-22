@@ -2,23 +2,22 @@ use crate::commands::Cli;
 use crate::config::{Config, ProviderConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
 use crate::providers::{WizardCategory, WizardInfo, get_provider_from_resolved};
-use clap::Args;
 use demand::{Confirm, DemandOption, Input, Select};
 use std::collections::HashMap;
 
-#[derive(Debug, Args)]
-#[command(visible_alias = "i")]
+#[derive(Debug, usage_rs::Args)]
+#[usage(alias = "i")]
 pub struct InitCommand {
     /// Overwrite existing configuration file
-    #[arg(short, long)]
+    #[usage(short, long)]
     force: bool,
 
     /// Initialize the global config file (~/.config/fnox/config.toml)
-    #[arg(short = 'g', long)]
+    #[usage(short = 'g', long)]
     global: bool,
 
     /// Skip the interactive wizard and create a minimal config
-    #[arg(long)]
+    #[usage(long)]
     skip_wizard: bool,
 }
 

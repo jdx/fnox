@@ -1,7 +1,6 @@
 use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::Result;
-use clap::Args;
 use indexmap::IndexMap;
 use tabled::settings::{
     Color, Format, Modify, Style, Width,
@@ -9,23 +8,23 @@ use tabled::settings::{
 };
 use tabled::{Table, Tabled};
 
-#[derive(Debug, Args)]
-#[command(visible_aliases = ["ls", "secrets"])]
+#[derive(Debug, usage_rs::Args)]
+#[usage(alias("ls", "secrets"))]
 pub struct ListCommand {
     /// Show full provider keys without truncation
-    #[arg(short, long)]
+    #[usage(short, long)]
     pub full: bool,
 
     /// Show source file paths where secrets are defined
-    #[arg(short, long)]
+    #[usage(short, long)]
     pub sources: bool,
 
     /// Show secret values (if available)
-    #[arg(short = 'V', long)]
+    #[usage(short = 'V', long)]
     pub values: bool,
 
     /// Output secret keys for shell completion (one per line)
-    #[arg(long, hide = true)]
+    #[usage(long, hide)]
     pub complete: bool,
 }
 

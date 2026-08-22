@@ -2,9 +2,8 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::Result;
 
-#[derive(clap::Args)]
-#[command(hide = true)]
-pub struct SchemaCommand {}
+#[derive(usage_rs::Args)]
+pub struct SchemaCommand;
 
 impl SchemaCommand {
     pub async fn run(&self, _cli: &Cli) -> Result<()> {

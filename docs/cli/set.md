@@ -17,9 +17,11 @@ Secret key (environment variable name)
 
 Secret value to store.
 
-If omitted: reads from stdin when piped (`echo "x" | fnox set KEY`), or prompts interactively with hidden input.
+If omitted: reads from stdin when piped (`echo "x" | fnox set KEY`),
+or prompts interactively with hidden input.
 
-Passing secrets as arguments exposes them in shell history and `ps` output. For sensitive values, prefer stdin or the interactive prompt.
+Passing secrets as arguments exposes them in shell history and `ps` output.
+For sensitive values, prefer stdin or the interactive prompt.
 
 ## Flags
 

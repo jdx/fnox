@@ -3,8 +3,8 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
+use strum::{Display, EnumString};
 
-use clap::{Args, ValueEnum, ValueHint};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use ignore::{DirEntry, WalkBuilder};
 use regex::Regex;
@@ -17,26 +17,27 @@ use crate::error::{FnoxError, Result};
 const MAX_FILE_SIZE: u64 = 5 * 1024 * 1024;
 
 /// Scan repository for potential secrets in plaintext
-#[derive(Args)]
+#[derive(usage_rs::Args)]
 pub struct ScanCommand {
     /// Directory to scan (default: current directory)
-    #[arg(default_value = ".", value_hint = ValueHint::DirPath)]
+    #[usage(arg, default = ".", value_hint = ValueHint::DirPath)]
     dir: PathBuf,
 
     /// Skip files matching this glob pattern (can be used multiple times)
-    #[arg(short, long)]
+    #[usage(short, long)]
     ignore: Vec<String>,
 
     /// Output format
-    #[arg(long, value_enum, default_value_t = ScanFormat::Human)]
+    #[usage(long, value_enum, default_value_t = ScanFormat::Human, default = "human")]
     format: ScanFormat,
 
     /// Show only files with potential secrets
-    #[arg(short, long)]
+    #[usage(short, long)]
     quiet: bool,
 }
 
-#[derive(Clone, Copy, Debug, ValueEnum)]
+#[derive(Clone, Copy, Debug, usage_rs::ValueEnum, Display, EnumString)]
+#[strum(serialize_all = "lowercase")]
 enum ScanFormat {
     Human,
     Json,

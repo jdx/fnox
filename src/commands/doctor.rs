@@ -3,11 +3,10 @@ use crate::config::Config;
 use crate::env;
 use crate::error::Result;
 use crate::providers::get_provider_resolved;
-use clap::Args;
 
-#[derive(Debug, Args)]
-#[command(visible_aliases = ["dr"])]
-pub struct DoctorCommand {}
+#[derive(Debug, usage_rs::Args)]
+#[usage(alias("dr"))]
+pub struct DoctorCommand;
 
 impl DoctorCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {

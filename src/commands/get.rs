@@ -4,16 +4,15 @@ use crate::lease::{self, LeaseLedger};
 use crate::suggest::{find_similar, format_suggestions};
 use crate::temp_file_secrets::create_persistent_secret_file;
 use crate::{commands::Cli, config::Config};
-use clap::Args;
 use indexmap::IndexMap;
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct GetCommand {
     /// Secret key to retrieve
     pub key: String,
 
     /// Base64 decode the secret
-    #[arg(long)]
+    #[usage(long)]
     pub base64_decode: bool,
 }
 

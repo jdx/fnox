@@ -4,17 +4,17 @@ use crate::error::{FnoxError, Result};
 use crate::lease::{self, LeaseLedger, LeaseRecord, TempEnvGuard};
 use crate::secret_resolver::resolve_secrets_batch;
 use chrono::Utc;
-use clap::{Args, Subcommand, ValueEnum};
 use indexmap::IndexMap;
+use strum::EnumString;
 
-#[derive(Debug, Args)]
-#[command(about = "Manage ephemeral credential leases")]
+#[derive(Debug, usage_rs::Args)]
+#[usage(about = "Manage ephemeral credential leases")]
 pub struct LeaseCommand {
-    #[command(subcommand)]
+    #[usage(subcommand)]
     pub subcommand: Option<LeaseSubcommand>,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, usage_rs::Subcommands)]
 pub enum LeaseSubcommand {
     /// Revoke all expired leases that need manual cleanup
     Cleanup(LeaseCleanupCommand),
@@ -26,57 +26,58 @@ pub enum LeaseSubcommand {
     Revoke(LeaseRevokeCommand),
 }
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, usage_rs::ValueEnum, EnumString)]
+#[strum(serialize_all = "lowercase")]
 pub enum OutputFormat {
     Shell,
     Json,
     Env,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct LeaseCreateCommand {
     /// Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted.
     pub backend_name: Option<String>,
 
     /// Create leases for all configured backends
-    #[arg(short, long, conflicts_with = "backend_name")]
+    #[usage(short, long)]
     pub all: bool,
 
     /// Lease duration (e.g., "15m", "1h", "2h30m"); overrides config duration
-    #[arg(short, long)]
+    #[usage(short, long)]
     pub duration: Option<String>,
 
     /// Output format
-    #[arg(short, long, default_value = "shell")]
+    #[usage(short, long, default = "shell", value_enum)]
     pub format: OutputFormat,
 
     /// Prompt interactively for missing credentials
-    #[arg(short, long)]
+    #[usage(short, long)]
     pub interactive: bool,
 
     /// Label for the lease (e.g., session purpose)
-    #[arg(short, long, default_value = "fnox-lease")]
+    #[usage(short, long, default = "fnox-lease")]
     pub label: String,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct LeaseListCommand {
     /// Show only active (non-expired, non-revoked) leases
-    #[arg(long)]
+    #[usage(long)]
     pub active: bool,
 
     /// Show only expired leases
-    #[arg(long)]
+    #[usage(long)]
     pub expired: bool,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct LeaseRevokeCommand {
     /// Lease ID to revoke
     pub lease_id: String,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct LeaseCleanupCommand;
 
 impl LeaseCommand {
@@ -104,6 +105,11 @@ impl LeaseCommand {
 
 impl LeaseCreateCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
+        if self.all && self.backend_name.is_some() {
+            return Err(FnoxError::Config(
+                "--all cannot be used with a lease backend name".to_string(),
+            ));
+        }
         let profile = Config::get_profiles(cli.profile.as_slice());
         let project_dir = lease::project_dir_from_config(&config, &cli.config);
         let leases = config.get_leases(&profile);

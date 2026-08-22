@@ -1,7 +1,6 @@
 use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::Result;
-use clap::{Args, Subcommand, ValueEnum};
 use strum::{Display, EnumString, VariantNames};
 
 mod add;
@@ -15,7 +14,9 @@ pub use remove::RemoveCommand;
 pub use test::TestCommand;
 
 /// Supported provider types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Display, EnumString, VariantNames)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, usage_rs::ValueEnum, Display, EnumString, VariantNames,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum ProviderType {
     /// 1Password
@@ -108,13 +109,13 @@ pub enum ProviderType {
     Yubikey,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct ProviderCommand {
-    #[command(subcommand)]
+    #[usage(subcommand)]
     pub action: Option<ProviderAction>,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, usage_rs::Subcommands)]
 pub enum ProviderAction {
     /// Add a new provider
     Add(AddCommand),
@@ -144,8 +145,8 @@ impl ProviderCommand {
 #[cfg(test)]
 mod tests {
     use super::ProviderType;
-    use clap::ValueEnum;
     use std::collections::BTreeSet;
+    use usage_rs::spec::ValueEnum;
 
     fn normalize_provider_type_for_add(provider_type: &str) -> String {
         match provider_type {
@@ -175,13 +176,9 @@ mod tests {
             .map(|provider_type| normalize_provider_type_for_add(&provider_type))
             .collect();
 
-        let cli_types: BTreeSet<String> = ProviderType::value_variants()
+        let cli_types: BTreeSet<String> = ProviderType::CHOICES
             .iter()
-            .filter_map(|variant| {
-                variant
-                    .to_possible_value()
-                    .map(|value| value.get_name().to_string())
-            })
+            .map(|value| (*value).to_string())
             .collect();
 
         assert_eq!(

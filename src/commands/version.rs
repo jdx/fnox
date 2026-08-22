@@ -1,9 +1,8 @@
 use crate::commands::Cli;
 use crate::error::Result;
-use clap::Parser;
 
-#[derive(Parser)]
-#[command(visible_aliases = ["v"])]
+#[derive(usage_rs::Args)]
+#[usage(alias("v"))]
 pub struct VersionCommand;
 
 impl VersionCommand {

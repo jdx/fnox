@@ -1,16 +1,15 @@
 use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
-use clap::Args;
 
-#[derive(Debug, Args)]
-#[command(visible_aliases = ["t"])]
+#[derive(Debug, usage_rs::Args)]
+#[usage(alias("t"))]
 pub struct TestCommand {
     /// Provider name (optional when using --all)
     pub provider: Option<String>,
 
     /// Test all configured providers
-    #[arg(short = 'a', long)]
+    #[usage(short = 'a', long)]
     pub all: bool,
 }
 

@@ -18,7 +18,8 @@ Path to the configuration file (default: fnox.toml, searches parent directories)
 
 ### `-P --profile… <PROFILE>`
 
-Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones
+Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple
+profiles separated by commas or repeated flags; later profiles overlay earlier ones.
 
 ### `-v --verbose`
 
@@ -44,9 +45,12 @@ Do not merge top-level secrets into the selected profile
 
 Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)
 
+**Environment Variable:** `FNOX_NON_INTERACTIVE`
+
 ### `--write-profile <WRITE_PROFILE>`
 
-Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise
+Target profile for write commands (set, remove, import, sync, provider add/remove).
+Required when multiple profiles are active; defaults to the single active profile otherwise.
 
 ## Subcommands
 

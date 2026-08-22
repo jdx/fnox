@@ -3,7 +3,6 @@ use crate::config::Config;
 use crate::error::{FnoxError, Result};
 use crate::shell;
 use crate::temp_file_secrets::create_persistent_secret_file;
-use clap::{Args, ValueEnum};
 use console;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -11,7 +10,7 @@ use std::path::PathBuf;
 use strum::{Display, EnumString, VariantNames};
 
 /// Supported export formats
-#[derive(Debug, Clone, Copy, ValueEnum, Display, EnumString, VariantNames)]
+#[derive(Debug, Clone, Copy, usage_rs::ValueEnum, Display, EnumString, VariantNames)]
 #[strum(serialize_all = "lowercase")]
 pub enum ExportFormat {
     /// Environment variable format (KEY=value)
@@ -27,27 +26,27 @@ pub enum ExportFormat {
 }
 
 /// Export secrets in various formats
-#[derive(Args)]
-#[command(visible_aliases = ["ex"])]
+#[derive(usage_rs::Args)]
+#[usage(alias("ex"))]
 pub struct ExportCommand {
     /// Export format
-    #[arg(short, long, default_value = "env", value_enum)]
+    #[usage(short, long, default = "env", value_enum)]
     format: ExportFormat,
 
     /// Show what would be exported without writing to file
-    #[arg(short = 'n', long)]
+    #[usage(short = 'n', long)]
     dry_run: bool,
 
     /// Output file (default: stdout)
-    #[arg(short = 'o', long)]
+    #[usage(short = 'o', long)]
     output: Option<PathBuf>,
 
     /// Include secrets with env = false or env = "exec" (excluded by default)
-    #[arg(long)]
+    #[usage(long)]
     all: bool,
 
     /// Include metadata comments in env and shell output
-    #[arg(long)]
+    #[usage(long)]
     header: bool,
 }
 
