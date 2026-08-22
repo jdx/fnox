@@ -95,3 +95,7 @@ Required when multiple profiles are active; defaults to the single active profil
 - [`fnox sync [FLAGS] [KEYS]…`](/cli/sync.md)
 - [`fnox tui`](/cli/tui.md)
 - [`fnox version`](/cli/version.md)
+
+## Configuration
+
+- [Settings](/cli/configuration.md)

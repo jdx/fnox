@@ -34,15 +34,11 @@ async fn main() -> miette::Result<()> {
     // Initialize rustls crypto provider for GCP SDKs
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
 
-    let cli = Cli::parse();
+    let (cli, settings_layer) = Cli::parse_with_settings();
 
-    // Set CLI snapshot for settings system
-    settings::Settings::set_cli_snapshot(settings::CliSnapshot {
-        age_key_file: cli.age_key_file.clone(),
-        profile: cli.profile.clone(),
-        if_missing: cli.if_missing.clone(),
-        no_defaults: cli.no_defaults,
-    });
+    // Hand the settings system the command line as the parser saw it: what was given
+    // contributes, what was left off does not, and nothing here copies fields by hand.
+    settings::Settings::set_cli_layer(settings_layer);
     fnox::env::set_non_interactive(cli.non_interactive);
 
     // Handle --no-color flag

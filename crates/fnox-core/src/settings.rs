@@ -1,65 +1,219 @@
 // Settings management for fnox
-// Based on the pattern from hk (https://github.com/jdx/hk)
 //
-// This module provides a centralized settings system that merges configuration from:
+// The settings are declared once, on `SettingsData` below: `#[derive(usage::Config)]`
+// generates the usage-config registry, the reader that fills the struct from a resolution,
+// and the spec `config` block that documents them. There is no settings.toml and no build
+// script generator left to keep in step with this file.
+//
+// Resolution is usage-config's single merge, with the precedence fnox has always had:
 // 1. Default values (lowest precedence)
-// 2. Config files (fnox.toml)
-// 3. Environment variables
-// 4. CLI flags (highest precedence)
+// 2. Environment variables
+// 3. CLI flags (highest precedence)
 
 use arc_swap::ArcSwap;
 use miette::Result;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::{LazyLock, Mutex};
+use usage_rs::config::{CliLayer, EnvLayer, Layers, SourceKind, Value, resolve};
 
-// Include generated settings code
-mod generated {
-    pub(super) mod settings {
-        include!(concat!(env!("OUT_DIR"), "/generated/settings.rs"));
-    }
-    pub(super) mod settings_merge {
-        include!(concat!(env!("OUT_DIR"), "/generated/settings_merge.rs"));
-    }
-    pub(super) mod settings_meta {
-        include!(concat!(env!("OUT_DIR"), "/generated/settings_meta.rs"));
-    }
+/// Every setting fnox has.
+///
+/// The struct is the registry: `SETTINGS_PROPS`, `SETTINGS_REGISTRY`, `read`, and
+/// `spec_kdl` are generated from these fields, and the CLI's emitted spec carries the
+/// `config` block through `#[usage(config = ...)]` on the root.
+#[derive(usage_rs::Config, Debug, Clone, PartialEq)]
+pub struct SettingsData {
+    /// Path to a file containing the age encryption key.
+    ///
+    /// This can be set via:
+    /// - CLI flag: --age-key-file <path>
+    /// - Environment variable: FNOX_AGE_KEY_FILE
+    ///
+    /// Priority (highest to lowest): CLI > Environment > Default
+    #[usage(
+        env = "FNOX_AGE_KEY_FILE",
+        cli("--age-key-file"),
+        since = "0.1.0",
+        example("fnox get MY_SECRET --age-key-file ~/.age/key.txt"),
+        example("FNOX_AGE_KEY_FILE=~/.age/key.txt fnox get MY_SECRET")
+    )]
+    pub age_key_file: Option<PathBuf>,
+
+    /// Configuration profile to use for secrets retrieval.
+    ///
+    /// Profiles allow you to maintain multiple configurations (e.g., dev, staging, prod)
+    /// in a single fnox.toml file.
+    ///
+    /// Priority (highest to lowest): CLI > Environment > Default
+    #[usage(
+        env = "FNOX_PROFILE",
+        cli("--profile", "-P"),
+        parse = "list_by_comma",
+        default("default"),
+        since = "0.1.0",
+        example("fnox get MY_SECRET --profile production"),
+        example("FNOX_PROFILE=staging fnox get MY_SECRET")
+    )]
+    pub profile: Vec<String>,
+
+    /// When a non-default profile is selected, do not merge top-level [secrets] into
+    /// the profile. Only [profiles.<name>.secrets] will be used.
+    ///
+    /// Priority (highest to lowest): CLI > Environment > Default
+    #[usage(
+        env = "FNOX_NO_DEFAULTS",
+        cli("--no-defaults"),
+        default = false,
+        since = "1.12.0",
+        example("fnox exec --profile dev --no-defaults -- ./my-app"),
+        example("FNOX_NO_DEFAULTS=true fnox exec --profile dev -- ./my-app")
+    )]
+    pub no_defaults: bool,
+
+    /// Control output level for shell integration.
+    ///
+    /// Available modes:
+    /// - "none" - No output from shell integration
+    /// - "normal" - Show summary when secrets are loaded/unloaded (default)
+    /// - "debug" - Show detailed information including early-exit reasons
+    ///
+    /// Priority: Environment > Default
+    #[usage(
+        env = "FNOX_SHELL_OUTPUT",
+        default = "normal",
+        since = "0.1.0",
+        example("FNOX_SHELL_OUTPUT=none fnox activate bash"),
+        example("FNOX_SHELL_OUTPUT=debug fnox activate zsh")
+    )]
+    pub shell_integration_output: String,
+
+    /// Runtime override for if_missing behavior when a secret cannot be resolved.
+    ///
+    /// Available modes:
+    /// - "error" - Fail the command if a secret cannot be resolved
+    /// - "warn" - Print a warning and continue
+    /// - "ignore" - Silently skip missing secrets
+    ///
+    /// Priority (highest to lowest): CLI flag > Environment > Secret level >
+    /// Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)
+    #[usage(
+        env = "FNOX_IF_MISSING",
+        cli("--if-missing"),
+        since = "1.1.0",
+        example("fnox exec --if-missing error -- ./my-app"),
+        example("FNOX_IF_MISSING=ignore fnox exec -- ./my-app")
+    )]
+    pub if_missing: Option<String>,
+
+    /// HTTP request timeout in seconds for lease backend API calls (Vault, GCP IAM, etc.).
+    ///
+    /// Prevents fnox exec from hanging indefinitely on slow or unreachable servers.
+    /// Set to "0" to disable the timeout (not recommended).
+    ///
+    /// Priority: Environment > Default
+    #[usage(
+        env = "FNOX_HTTP_TIMEOUT",
+        default = "30s",
+        since = "1.16.0",
+        example("FNOX_HTTP_TIMEOUT=60s fnox exec -- ./my-app"),
+        example("FNOX_HTTP_TIMEOUT=10s fnox lease create my-lease --duration 1h")
+    )]
+    pub http_timeout: String,
+
+    /// Base default behavior when a secret cannot be resolved and not specified in config.
+    ///
+    /// Available modes:
+    /// - "error" - Fail the command if a secret cannot be resolved
+    /// - "warn" - Print a warning and continue (default)
+    /// - "ignore" - Silently skip missing secrets
+    ///
+    /// Priority (highest to lowest): CLI flag > FNOX_IF_MISSING > Secret level >
+    /// Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)
+    #[usage(
+        env = "FNOX_IF_MISSING_DEFAULT",
+        since = "1.1.0",
+        example("export FNOX_IF_MISSING_DEFAULT=error  # Strict by default"),
+        example("export FNOX_IF_MISSING_DEFAULT=ignore  # Lenient by default")
+    )]
+    pub if_missing_default: Option<String>,
 }
 
-pub use generated::settings::Settings as GeneratedSettings;
-use generated::settings_merge::{SettingValue, SourceMap};
-use generated::settings_meta::SETTINGS_META;
+pub use SettingsData as GeneratedSettings;
 
-pub type SettingsSnapshot = Arc<GeneratedSettings>;
+pub type SettingsSnapshot = Arc<SettingsData>;
 
 // Global cached settings instance using ArcSwap for safe reloading
-static GLOBAL_SETTINGS: LazyLock<ArcSwap<GeneratedSettings>> =
-    LazyLock::new(|| ArcSwap::from_pointee(GeneratedSettings::default()));
+static GLOBAL_SETTINGS: LazyLock<ArcSwap<SettingsData>> =
+    LazyLock::new(|| ArcSwap::from_pointee(default_settings()));
 
 // Track whether we've initialized with real settings
 static INITIALIZED: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
 
-/// CLI snapshot captured from parsed command-line arguments
+/// CLI snapshot captured from parsed command-line arguments.
+///
+/// The programmatic form of the command-line layer, for callers that hold typed values
+/// rather than argv: the daemon applies a client's request through this, and tests set it
+/// directly. `fnox`'s own `main` hands over the layer the parser built instead, which is
+/// how "the flag was left off" and "the flag said no" stay distinguishable.
 #[derive(Debug, Clone, Default)]
 pub struct CliSnapshot {
-    pub age_key_file: Option<std::path::PathBuf>,
+    pub age_key_file: Option<PathBuf>,
     pub profile: Vec<String>,
     pub if_missing: Option<String>,
     pub no_defaults: bool,
 }
 
-static CLI_SNAPSHOT: LazyLock<Mutex<Option<CliSnapshot>>> = LazyLock::new(|| Mutex::new(None));
+impl CliSnapshot {
+    /// This snapshot as the command-line layer of a resolution.
+    ///
+    /// Only what was given contributes, because the command line outranks every other
+    /// layer: an entry it did not earn would silently beat an environment variable the
+    /// user did set.
+    fn into_layer(self) -> CliLayer {
+        let mut layer = CliLayer::new(std::iter::empty::<(String, String)>());
+        if let Some(age_key_file) = self.age_key_file {
+            layer = layer.with_value(
+                "age_key_file",
+                Value::String(age_key_file.display().to_string()),
+            );
+        }
+        if !self.profile.is_empty() {
+            layer = layer.with_value(
+                "profile",
+                Value::List(self.profile.into_iter().map(Value::String).collect()),
+            );
+        }
+        if let Some(if_missing) = self.if_missing {
+            layer = layer.with_value("if_missing", Value::String(if_missing));
+        }
+        if self.no_defaults {
+            layer = layer.with_value("no_defaults", Value::Bool(true));
+        }
+        layer
+    }
+}
+
+static CLI_LAYER: LazyLock<Mutex<Option<CliLayer>>> = LazyLock::new(|| Mutex::new(None));
+
+/// The declared defaults, read the same way any other resolution is.
+fn default_settings() -> SettingsData {
+    let resolved = resolve(SettingsData::SETTINGS_REGISTRY, Layers::new())
+        .expect("no layers were given, so there is nothing to fail");
+    SettingsData::read(&resolved).expect("every fnox setting has a declared default or is optional")
+}
 
 /// Main Settings interface
 pub struct Settings;
 
 impl Settings {
     /// Get the current settings snapshot (panics on error)
-    pub fn get() -> Arc<GeneratedSettings> {
+    pub fn get() -> Arc<SettingsData> {
         Self::try_get().expect("Failed to load configuration")
     }
 
     /// Try to get the current settings snapshot (returns error instead of panicking)
-    pub fn try_get() -> Result<Arc<GeneratedSettings>> {
+    pub fn try_get() -> Result<Arc<SettingsData>> {
         Self::get_snapshot()
     }
 
@@ -79,156 +233,92 @@ impl Settings {
         Ok(GLOBAL_SETTINGS.load_full())
     }
 
-    /// Set the CLI snapshot (called after parsing CLI args)
-    pub fn set_cli_snapshot(snapshot: CliSnapshot) {
-        *CLI_SNAPSHOT.lock().unwrap() = Some(snapshot);
+    /// Set the command-line layer (called after parsing CLI args).
+    pub fn set_cli_layer(layer: CliLayer) {
+        *CLI_LAYER.lock().unwrap() = Some(layer);
         if *INITIALIZED.lock().unwrap() {
             match Self::build_from_all_sources() {
                 Ok(settings) => GLOBAL_SETTINGS.store(Arc::new(settings)),
                 Err(e) => {
-                    tracing::warn!("failed to reload settings after CLI snapshot update: {e}")
+                    tracing::warn!("failed to reload settings after CLI layer update: {e}")
                 }
             }
         }
+    }
+
+    /// Set the CLI snapshot, for a caller holding typed values rather than argv.
+    pub fn set_cli_snapshot(snapshot: CliSnapshot) {
+        Self::set_cli_layer(snapshot.into_layer());
     }
 
     /// Build settings by merging all sources
-    fn build_from_all_sources() -> Result<GeneratedSettings> {
-        let defaults = GeneratedSettings::default();
-        let env_map = Self::collect_env_map()?;
-        let cli_map = Self::collect_cli_map();
+    fn build_from_all_sources() -> Result<SettingsData> {
+        let env = EnvLayer::from_process();
+        let cli_guard = CLI_LAYER.lock().unwrap();
 
-        Ok(Self::merge_settings(&defaults, &env_map, &cli_map))
+        let mut layers = Layers::new();
+        if let Some(cli) = cli_guard.as_ref() {
+            layers = layers.then(cli);
+        }
+        let layers = layers.then(&env);
+
+        let resolved = resolve(SettingsData::SETTINGS_REGISTRY, layers)
+            .map_err(|e| miette::miette!("failed to resolve settings: {e}"))?;
+        for warning in usage_rs::config::explain::warnings(&resolved) {
+            tracing::warn!("{warning}");
+        }
+        let mut settings = SettingsData::read(&resolved)
+            .map_err(|e| miette::miette!("failed to read settings: {e}"))?;
+
+        // Environment-supplied values keep the conveniences the hand-written env reader
+        // had, applied by provenance so a CLI-supplied value is left exactly as typed.
+        let registry = SettingsData::SETTINGS_REGISTRY;
+        let from_env = |key: &str| {
+            registry.lookup(key).is_some_and(|found| {
+                resolved
+                    .origin(found.id)
+                    .is_some_and(|origin| origin.kind == SourceKind::ENV)
+            })
+        };
+
+        // Expand tilde (~) in paths to the user's home directory
+        if from_env("age_key_file") {
+            settings.age_key_file = settings
+                .age_key_file
+                .map(|path| Self::expand_path(&path.display().to_string()));
+        }
+
+        // Skip invalid profile names, with the same warning `FNOX_PROFILE` has always
+        // produced for them.
+        if from_env("profile") {
+            settings.profile.retain(|name| {
+                if name.is_empty() {
+                    return false;
+                }
+                if !crate::env::is_valid_profile_name(name) {
+                    eprintln!(
+                        "Warning: Invalid profile name '{}' in FNOX_PROFILE ignored (contains path separators or invalid characters)",
+                        name
+                    );
+                    return false;
+                }
+                true
+            });
+        }
+
+        Ok(settings)
     }
 
     /// Expand tilde (~) in path strings to the user's home directory
-    fn expand_path(path: &str) -> std::path::PathBuf {
+    fn expand_path(path: &str) -> PathBuf {
         shellexpand::tilde(path).into_owned().into()
-    }
-
-    /// Collect settings from environment variables
-    fn collect_env_map() -> Result<SourceMap> {
-        let mut map = SourceMap::new();
-
-        for (setting_name, meta) in SETTINGS_META.iter() {
-            for env_var in meta.sources.env {
-                if let Ok(val) = std::env::var(env_var) {
-                    match meta.typ {
-                        "string" => {
-                            map.insert(setting_name, SettingValue::String(val));
-                        }
-                        "option<string>" => {
-                            map.insert(setting_name, SettingValue::OptionString(Some(val)));
-                        }
-                        "path" => {
-                            map.insert(setting_name, SettingValue::Path(Self::expand_path(&val)));
-                        }
-                        "option<path>" => {
-                            map.insert(
-                                setting_name,
-                                SettingValue::OptionPath(Some(Self::expand_path(&val))),
-                            );
-                        }
-                        "bool" => {
-                            // Parse bool from env var (accept "true", "1", "yes", "on")
-                            let bool_val =
-                                matches!(val.to_lowercase().as_str(), "true" | "1" | "yes" | "on");
-                            map.insert(setting_name, SettingValue::Bool(bool_val));
-                        }
-                        "vec<string>" => {
-                            map.insert(
-                                setting_name,
-                                SettingValue::VecString(crate::env::parse_profile_list(&val)),
-                            );
-                        }
-                        _ => {
-                            // Ignore unknown types
-                        }
-                    }
-                    break; // First matching env var wins
-                }
-            }
-        }
-
-        Ok(map)
-    }
-
-    /// Collect settings from CLI snapshot
-    fn collect_cli_map() -> SourceMap {
-        let mut map = SourceMap::new();
-
-        if let Some(snapshot) = CLI_SNAPSHOT.lock().unwrap().clone() {
-            if let Some(age_key_file) = snapshot.age_key_file {
-                map.insert("age_key_file", SettingValue::OptionPath(Some(age_key_file)));
-            }
-
-            if !snapshot.profile.is_empty() {
-                map.insert("profile", SettingValue::VecString(snapshot.profile.clone()));
-            }
-
-            if let Some(if_missing) = snapshot.if_missing {
-                map.insert("if_missing", SettingValue::OptionString(Some(if_missing)));
-            }
-
-            if snapshot.no_defaults {
-                map.insert("no_defaults", SettingValue::Bool(true));
-            }
-        }
-
-        map
-    }
-
-    /// Merge settings from all sources
-    /// Precedence: CLI > Env > Defaults
-    fn merge_settings(
-        defaults: &GeneratedSettings,
-        env: &SourceMap,
-        cli: &SourceMap,
-    ) -> GeneratedSettings {
-        let mut val =
-            serde_json::to_value(defaults.clone()).unwrap_or_else(|_| serde_json::json!({}));
-
-        // Helper to set a value
-        fn set_value(val: &mut serde_json::Value, field: &str, v: &SettingValue) {
-            let new_v = match v {
-                SettingValue::String(s) => serde_json::json!(s),
-                SettingValue::OptionString(opt) => serde_json::json!(opt),
-                SettingValue::Path(p) => serde_json::json!(p.display().to_string()),
-                SettingValue::OptionPath(opt) => {
-                    serde_json::json!(opt.as_ref().map(|p| p.display().to_string()))
-                }
-                SettingValue::Bool(b) => serde_json::json!(b),
-                SettingValue::VecString(v) => serde_json::json!(v),
-            };
-
-            if let Some(obj) = val.as_object_mut() {
-                obj.insert(field.to_string(), new_v);
-            }
-        }
-
-        // Apply layers in precedence order (low to high): defaults < env < cli
-        for (name, _meta) in SETTINGS_META.iter() {
-            let field = *name;
-
-            // Apply env
-            if let Some(sv) = env.get(field) {
-                set_value(&mut val, field, sv);
-            }
-
-            // Apply cli (overrides env)
-            if let Some(sv) = cli.get(field) {
-                set_value(&mut val, field, sv);
-            }
-        }
-
-        serde_json::from_value(val).unwrap_or_else(|_| defaults.clone())
     }
 
     #[cfg(test)]
     pub fn reset_for_tests() {
-        GLOBAL_SETTINGS.store(Arc::new(GeneratedSettings::default()));
+        GLOBAL_SETTINGS.store(Arc::new(default_settings()));
         *INITIALIZED.lock().unwrap() = false;
-        *CLI_SNAPSHOT.lock().unwrap() = None;
+        *CLI_LAYER.lock().unwrap() = None;
     }
 }
 
@@ -238,74 +328,82 @@ mod tests {
 
     #[test]
     fn test_default_settings() {
-        let settings = GeneratedSettings::default();
+        let settings = default_settings();
         assert_eq!(settings.profile, vec!["default".to_string()]);
         assert_eq!(settings.age_key_file, None);
         assert!(!settings.no_defaults);
+        assert_eq!(settings.shell_integration_output, "normal");
+        assert_eq!(settings.http_timeout, "30s");
+        assert_eq!(settings.if_missing, None);
+        assert_eq!(settings.if_missing_default, None);
     }
 
     #[test]
-    fn test_settings_merge_precedence() {
-        let defaults = GeneratedSettings {
-            age_key_file: None,
-            profile: vec!["default".to_string()],
-            no_defaults: false,
-            shell_integration_output: "normal".to_string(),
+    fn test_cli_layer_overrides_defaults() {
+        let cli = CliSnapshot {
+            age_key_file: Some(PathBuf::from("/cli/key.txt")),
+            profile: vec!["prod".to_string()],
             if_missing: None,
-            if_missing_default: None,
-            http_timeout: "30s".to_string(),
-        };
+            no_defaults: false,
+        }
+        .into_layer();
 
-        let mut env = SourceMap::new();
-        env.insert(
-            "age_key_file",
-            SettingValue::OptionPath(Some(std::path::PathBuf::from("/env/key.txt"))),
-        );
+        let resolved =
+            resolve(SettingsData::SETTINGS_REGISTRY, Layers::new().then(&cli)).expect("resolves");
+        let settings = SettingsData::read(&resolved).expect("reads");
 
-        let mut cli = SourceMap::new();
-        cli.insert(
-            "age_key_file",
-            SettingValue::OptionPath(Some(std::path::PathBuf::from("/cli/key.txt"))),
-        );
+        assert_eq!(settings.age_key_file, Some(PathBuf::from("/cli/key.txt")));
+        assert_eq!(settings.profile, vec!["prod".to_string()]);
+        // Not given, so the defaults stand.
+        assert!(!settings.no_defaults);
+        assert_eq!(settings.http_timeout, "30s");
+    }
 
-        let merged = Settings::merge_settings(&defaults, &env, &cli);
+    #[test]
+    fn test_cli_layer_beats_env() {
+        let cli = CliSnapshot {
+            age_key_file: Some(PathBuf::from("/cli/key.txt")),
+            ..Default::default()
+        }
+        .into_layer();
+        let env = EnvLayer::new([("FNOX_AGE_KEY_FILE".to_string(), "/env/key.txt".to_string())]);
+
+        let resolved = resolve(
+            SettingsData::SETTINGS_REGISTRY,
+            Layers::new().then(&cli).then(&env),
+        )
+        .expect("resolves");
+        let settings = SettingsData::read(&resolved).expect("reads");
 
         // CLI should win
-        assert_eq!(
-            merged.age_key_file,
-            Some(std::path::PathBuf::from("/cli/key.txt"))
-        );
+        assert_eq!(settings.age_key_file, Some(PathBuf::from("/cli/key.txt")));
     }
 
     #[test]
-    fn test_settings_merge_partial() {
-        let defaults = GeneratedSettings {
-            age_key_file: None,
-            profile: vec!["default".to_string()],
-            no_defaults: false,
-            shell_integration_output: "normal".to_string(),
-            if_missing: None,
-            if_missing_default: None,
-            http_timeout: "30s".to_string(),
-        };
+    fn test_env_fills_what_cli_left_alone() {
+        let cli = CliLayer::new(std::iter::empty::<(String, String)>());
+        let env = EnvLayer::new([
+            ("FNOX_AGE_KEY_FILE".to_string(), "/env/key.txt".to_string()),
+            ("FNOX_PROFILE".to_string(), "staging, prod".to_string()),
+            // Preserve fnox's pre-usage-config behavior: environment boolean words
+            // are case-insensitive.
+            ("FNOX_NO_DEFAULTS".to_string(), "TRUE".to_string()),
+        ]);
 
-        let mut env = SourceMap::new();
-        env.insert(
-            "age_key_file",
-            SettingValue::OptionPath(Some(std::path::PathBuf::from("/env/key.txt"))),
-        );
+        let resolved = resolve(
+            SettingsData::SETTINGS_REGISTRY,
+            Layers::new().then(&cli).then(&env),
+        )
+        .expect("resolves");
+        let settings = SettingsData::read(&resolved).expect("reads");
 
-        let cli = SourceMap::new();
-
-        let merged = Settings::merge_settings(&defaults, &env, &cli);
-
-        // Env should be used since CLI is empty
+        assert_eq!(settings.age_key_file, Some(PathBuf::from("/env/key.txt")));
         assert_eq!(
-            merged.age_key_file,
-            Some(std::path::PathBuf::from("/env/key.txt"))
+            settings.profile,
+            vec!["staging".to_string(), "prod".to_string()],
+            "FNOX_PROFILE is a comma-separated list"
         );
-        // Default profile should remain
-        assert_eq!(merged.profile, vec!["default".to_string()]);
+        assert!(settings.no_defaults);
     }
 
     #[test]
@@ -317,6 +415,28 @@ mod tests {
 
         // Test without tilde (should remain unchanged)
         let expanded = Settings::expand_path("/absolute/path");
-        assert_eq!(expanded, std::path::PathBuf::from("/absolute/path"));
+        assert_eq!(expanded, PathBuf::from("/absolute/path"));
+    }
+
+    #[test]
+    fn test_registry_matches_docs() {
+        // The emitted config block is the settings documentation now; make sure the
+        // registry holds what the old settings.toml declared.
+        let keys: Vec<&str> = SettingsData::SETTINGS_PROPS
+            .iter()
+            .map(|meta| meta.key)
+            .collect();
+        assert_eq!(
+            keys,
+            vec![
+                "age_key_file",
+                "profile",
+                "no_defaults",
+                "shell_integration_output",
+                "if_missing",
+                "http_timeout",
+                "if_missing_default",
+            ]
+        );
     }
 }
