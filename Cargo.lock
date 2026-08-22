@@ -7695,9 +7695,9 @@ checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
 
 [[package]]
 name = "usage-lib"
-version = "5.1.0"
+version = "6.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12698ad30baf6deeaf269f22385352c52dfadc27526e886a07b077e6fb25d17e"
+checksum = "7e786797f739c30c4f69bef3e33b6494554522f2f78d8f62260a21d8175c3d8e"
 dependencies = [
  "clap",
  "heck",
@@ -7714,7 +7714,6 @@ dependencies = [
  "tera",
  "thiserror 2.0.20",
  "versions",
- "xx",
 ]
 
 [[package]]
