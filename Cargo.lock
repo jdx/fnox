@@ -7553,13 +7553,15 @@ checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
 
 [[package]]
 name = "usage-argv"
-version = "6.0.0"
-source = "git+https://github.com/jdx/usage?rev=e23e61a3df28cd381884fd121120ccd336f09481#e23e61a3df28cd381884fd121120ccd336f09481"
+version = "6.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24b9737d4a78f9407c5cd035cedd6fee9ceb0b99e3287237cb2c86b66eea9cab"
 
 [[package]]
 name = "usage-derive"
-version = "6.0.0"
-source = "git+https://github.com/jdx/usage?rev=e23e61a3df28cd381884fd121120ccd336f09481#e23e61a3df28cd381884fd121120ccd336f09481"
+version = "6.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21b230ac0b4408abfc7fdf134f77e9618d1d88a75e3056286e16f4c33d8b7d02"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -7568,8 +7570,9 @@ dependencies = [
 
 [[package]]
 name = "usage-rs"
-version = "6.0.0"
-source = "git+https://github.com/jdx/usage?rev=e23e61a3df28cd381884fd121120ccd336f09481#e23e61a3df28cd381884fd121120ccd336f09481"
+version = "6.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "28a7fe976bd4d6e61e94a5bb1303373a7b335d775de3cab053d825f674285300"
 dependencies = [
  "usage-argv",
  "usage-derive",
@@ -7578,8 +7581,9 @@ dependencies = [
 
 [[package]]
 name = "usage-test"
-version = "6.0.0"
-source = "git+https://github.com/jdx/usage?rev=e23e61a3df28cd381884fd121120ccd336f09481#e23e61a3df28cd381884fd121120ccd336f09481"
+version = "6.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "792b118cf01b911457089730f601df7aa11de54b582b5d50ec52e3e6eb0ee9a8"
 dependencies = [
  "usage-argv",
 ]
