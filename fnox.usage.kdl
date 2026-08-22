@@ -9,7 +9,6 @@ flag "-c --config" help="Path to the configuration file (default: fnox.toml, sea
     arg <CONFIG>
 }
 flag "-P --profile" help="Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones." global=#true var=#true {
-    long_help "Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple\nprofiles separated by commas or repeated flags; later profiles overlay earlier ones."
     arg <PROFILE>
 }
 flag "-v --verbose" help="Enable verbose logging" global=#true
@@ -24,7 +23,6 @@ flag --no-daemon help="Disable daemon-backed resolution for this invocation" glo
 flag --no-defaults help="Do not merge top-level secrets into the selected profile" global=#true
 flag --non-interactive help="Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)" global=#true env=FNOX_NON_INTERACTIVE
 flag --write-profile help="Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise." global=#true {
-    long_help "Target profile for write commands (set, remove, import, sync, provider add/remove).\nRequired when multiple profiles are active; defaults to the single active profile otherwise."
     arg <WRITE_PROFILE>
 }
 cmd activate help="Output shell activation code to enable automatic secret loading" {
@@ -57,7 +55,16 @@ cmd daemon help="Manage the per-user daemon" subcommand_required=#true {
     }
 }
 cmd deactivate help="Disable fnox shell integration in the current shell session" {
-    long_help "Disable fnox shell integration in the current shell session\n\nThis removes the hook that automatically loads secrets when entering\ndirectories with fnox.toml files. It also restores environment variables\nto their state before fnox was activated.\n\nNote: This only affects the current shell session. To re-enable fnox,\nrun the activation command again for your shell."
+    long_help #"""
+Disable fnox shell integration in the current shell session
+
+This removes the hook that automatically loads secrets when entering
+directories with fnox.toml files. It also restores environment variables
+to their state before fnox was activated.
+
+Note: This only affects the current shell session. To re-enable fnox,
+run the activation command again for your shell.
+"""#
 }
 cmd doctor help="Show diagnostic information about the current fnox state" {
     alias dr
@@ -67,9 +74,7 @@ cmd edit help="Edit the configuration file" {
 cmd exec help="Execute a command with secrets as environment variables" {
     alias x
     alias run hide=#true
-    flag --replace help="Run the command in fnox's process, keeping the same PID and receiving signals directly; supports environment-only secrets without leases and does not inherit ambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux, macOS, and other Unix-like systems" {
-        long_help "Run the command in fnox's process, keeping the same PID and receiving signals\ndirectly; supports environment-only secrets without leases and does not inherit\nambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux,\nmacOS, and other Unix-like systems"
-    }
+    flag --replace help="Run the command in fnox's process, keeping the same PID and receiving signals directly; supports environment-only secrets without leases and does not inherit ambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux, macOS, and other Unix-like systems"
     arg "[COMMAND]..." help="Command to run" double_dash=automatic
     complete command type=command_args
 }
@@ -243,7 +248,11 @@ cmd proxy help="Broker credentials into destination-scoped HTTPS requests" subco
     }
 }
 cmd reencrypt help="Re-encrypt secrets with current provider configuration" {
-    long_help "Re-encrypt secrets with current provider configuration\n\nWhen you add or remove recipients from an encryption provider (e.g. age),\nexisting secrets remain encrypted with the old recipient set. This command\ndecrypts and re-encrypts all matching secrets with the current provider\nconfiguration."
+    long_help #"""
+Re-encrypt secrets with current provider configuration
+
+When you add or remove recipients from an encryption provider (e.g. age), existing secrets remain encrypted with the old recipient set. This command decrypts and re-encrypts all matching secrets with the current provider configuration.
+"""#
     flag "-f --force" help="Skip confirmation prompt"
     flag "-n --dry-run" help="Show what would be done without making changes"
     flag "-p --provider" help="Only re-encrypt secrets from this provider" {
@@ -310,7 +319,13 @@ cmd set help="Set a secret value" {
     }
     arg <KEY> help="Secret key (environment variable name)"
     arg "[VALUE]" help="Secret value to store." {
-        long_help "Secret value to store.\n\nIf omitted: reads from stdin when piped (`echo \"x\" | fnox set KEY`),\nor prompts interactively with hidden input.\n\nPassing secrets as arguments exposes them in shell history and `ps` output.\nFor sensitive values, prefer stdin or the interactive prompt."
+        long_help #"""
+Secret value to store.
+
+If omitted: reads from stdin when piped (`echo "x" | fnox set KEY`), or prompts interactively with hidden input.
+
+Passing secrets as arguments exposes them in shell history and `ps` output. For sensitive values, prefer stdin or the interactive prompt.
+"""#
     }
     complete from_file type=path
 }
@@ -340,42 +355,42 @@ cmd version help="Show version information" {
     alias v
 }
 config {
-    prop "age_key_file" type="option<path>" optional=#true since="0.1.0" help="Path to a file containing the age encryption key." long_help="Path to a file containing the age encryption key.\n\nThis can be set via:\n- CLI flag: --age-key-file <path>\n- Environment variable: FNOX_AGE_KEY_FILE\n\nPriority (highest to lowest): CLI > Environment > Default" {
+    prop "age_key_file" type="option<path>" optional=#true since="0.1.0" help="Path to a file containing the age encryption key." long_help="Path to a file containing the age encryption key.\n\nThis can be set via: - CLI flag: --age-key-file <path> - Environment variable: FNOX_AGE_KEY_FILE\n\nPriority (highest to lowest): CLI > Environment > Default" {
         env "FNOX_AGE_KEY_FILE"
         cli "--age-key-file"
         example "fnox get MY_SECRET --age-key-file ~/.age/key.txt"
         example "FNOX_AGE_KEY_FILE=~/.age/key.txt fnox get MY_SECRET"
     }
-    prop "profile" type="list<string>" parse="list_by_comma" since="0.1.0" help="Configuration profile to use for secrets retrieval." long_help="Configuration profile to use for secrets retrieval.\n\nProfiles allow you to maintain multiple configurations (e.g., dev, staging, prod)\nin a single fnox.toml file.\n\nPriority (highest to lowest): CLI > Environment > Default" {
+    prop "profile" type="list<string>" parse="list_by_comma" since="0.1.0" help="Configuration profile to use for secrets retrieval." long_help="Configuration profile to use for secrets retrieval.\n\nProfiles allow you to maintain multiple configurations (e.g., dev, staging, prod) in a single fnox.toml file.\n\nPriority (highest to lowest): CLI > Environment > Default" {
         default "default"
         env "FNOX_PROFILE"
         cli "--profile" "-P"
         example "fnox get MY_SECRET --profile production"
         example "FNOX_PROFILE=staging fnox get MY_SECRET"
     }
-    prop "no_defaults" type="bool" default=#false since="1.12.0" help="When a non-default profile is selected, do not merge top-level [secrets] into the profile. Only [profiles.<name>.secrets] will be used." long_help="When a non-default profile is selected, do not merge top-level [secrets] into\nthe profile. Only [profiles.<name>.secrets] will be used.\n\nPriority (highest to lowest): CLI > Environment > Default" {
+    prop "no_defaults" type="bool" default=#false since="1.12.0" help="When a non-default profile is selected, do not merge top-level [secrets] into the profile. Only [profiles.<name>.secrets] will be used." long_help="When a non-default profile is selected, do not merge top-level [secrets] into the profile. Only [profiles.<name>.secrets] will be used.\n\nPriority (highest to lowest): CLI > Environment > Default" {
         env "FNOX_NO_DEFAULTS"
         cli "--no-defaults"
         example "fnox exec --profile dev --no-defaults -- ./my-app"
         example "FNOX_NO_DEFAULTS=true fnox exec --profile dev -- ./my-app"
     }
-    prop "shell_integration_output" type="string" default="normal" since="0.1.0" help="Control output level for shell integration." long_help="Control output level for shell integration.\n\nAvailable modes:\n- \"none\" - No output from shell integration\n- \"normal\" - Show summary when secrets are loaded/unloaded (default)\n- \"debug\" - Show detailed information including early-exit reasons\n\nPriority: Environment > Default" {
+    prop "shell_integration_output" type="string" default="normal" since="0.1.0" help="Control output level for shell integration." long_help="Control output level for shell integration.\n\nAvailable modes: - \"none\" - No output from shell integration - \"normal\" - Show summary when secrets are loaded/unloaded (default) - \"debug\" - Show detailed information including early-exit reasons\n\nPriority: Environment > Default" {
         env "FNOX_SHELL_OUTPUT"
         example "FNOX_SHELL_OUTPUT=none fnox activate bash"
         example "FNOX_SHELL_OUTPUT=debug fnox activate zsh"
     }
-    prop "if_missing" type="option<string>" optional=#true since="1.1.0" help="Runtime override for if_missing behavior when a secret cannot be resolved." long_help="Runtime override for if_missing behavior when a secret cannot be resolved.\n\nAvailable modes:\n- \"error\" - Fail the command if a secret cannot be resolved\n- \"warn\" - Print a warning and continue\n- \"ignore\" - Silently skip missing secrets\n\nPriority (highest to lowest): CLI flag > Environment > Secret level >\nTop-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)" {
+    prop "if_missing" type="option<string>" optional=#true since="1.1.0" help="Runtime override for if_missing behavior when a secret cannot be resolved." long_help="Runtime override for if_missing behavior when a secret cannot be resolved.\n\nAvailable modes: - \"error\" - Fail the command if a secret cannot be resolved - \"warn\" - Print a warning and continue - \"ignore\" - Silently skip missing secrets\n\nPriority (highest to lowest): CLI flag > Environment > Secret level > Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)" {
         env "FNOX_IF_MISSING"
         cli "--if-missing"
         example "fnox exec --if-missing error -- ./my-app"
         example "FNOX_IF_MISSING=ignore fnox exec -- ./my-app"
     }
-    prop "http_timeout" type="string" default="30s" since="1.16.0" help="HTTP request timeout in seconds for lease backend API calls (Vault, GCP IAM, etc.)." long_help="HTTP request timeout in seconds for lease backend API calls (Vault, GCP IAM, etc.).\n\nPrevents fnox exec from hanging indefinitely on slow or unreachable servers.\nSet to \"0\" to disable the timeout (not recommended).\n\nPriority: Environment > Default" {
+    prop "http_timeout" type="string" default="30s" since="1.16.0" help="HTTP request timeout in seconds for lease backend API calls (Vault, GCP IAM, etc.)." long_help="HTTP request timeout in seconds for lease backend API calls (Vault, GCP IAM, etc.).\n\nPrevents fnox exec from hanging indefinitely on slow or unreachable servers. Set to \"0\" to disable the timeout (not recommended).\n\nPriority: Environment > Default" {
         env "FNOX_HTTP_TIMEOUT"
         example "FNOX_HTTP_TIMEOUT=60s fnox exec -- ./my-app"
         example "FNOX_HTTP_TIMEOUT=10s fnox lease create my-lease --duration 1h"
     }
-    prop "if_missing_default" type="option<string>" optional=#true since="1.1.0" help="Base default behavior when a secret cannot be resolved and not specified in config." long_help="Base default behavior when a secret cannot be resolved and not specified in config.\n\nAvailable modes:\n- \"error\" - Fail the command if a secret cannot be resolved\n- \"warn\" - Print a warning and continue (default)\n- \"ignore\" - Silently skip missing secrets\n\nPriority (highest to lowest): CLI flag > FNOX_IF_MISSING > Secret level >\nTop-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)" {
+    prop "if_missing_default" type="option<string>" optional=#true since="1.1.0" help="Base default behavior when a secret cannot be resolved and not specified in config." long_help="Base default behavior when a secret cannot be resolved and not specified in config.\n\nAvailable modes: - \"error\" - Fail the command if a secret cannot be resolved - \"warn\" - Print a warning and continue (default) - \"ignore\" - Silently skip missing secrets\n\nPriority (highest to lowest): CLI flag > FNOX_IF_MISSING > Secret level > Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)" {
         env "FNOX_IF_MISSING_DEFAULT"
         example "export FNOX_IF_MISSING_DEFAULT=error  # Strict by default"
         example "export FNOX_IF_MISSING_DEFAULT=ignore  # Lenient by default"

@@ -96,7 +96,7 @@ run = [
 ]
 
 [tasks.build-usage]
-run = "cargo install --locked --root target/usage-cli usage-cli --version 6.0.0"
+run = "cargo install --locked --root target/usage-cli --git https://github.com/jdx/usage --rev 600c2287b7cd23a4841ad789a7dcb6dd7d8dd31a usage-cli"
 sources = ["Cargo.lock", "mise.toml"]
 outputs = ["target/usage-cli/bin/usage"]
 
