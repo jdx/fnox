@@ -1,7 +1,7 @@
 use crate::commands::Cli;
 use crate::config::{Config, ProviderConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
-use crate::secret_resolver::resolve_secrets_batch;
+use crate::secret_resolver::{resolve_secrets_batch, resolve_secrets_batch_with_pre_resolved};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -151,6 +151,8 @@ enum Response {
     },
     ResolveInForeground {
         fingerprint: String,
+        cached_values: IndexMap<String, Option<String>>,
+        keys: Vec<String>,
     },
     Status {
         pid: u32,
@@ -260,7 +262,11 @@ pub async fn resolve_batch_with_context(
 
     match call_or_start(ctx, config, Request::ResolveBatch(batch_request.clone())).await? {
         Response::Resolved { values } => Ok(values),
-        Response::ResolveInForeground { fingerprint } => {
+        Response::ResolveInForeground {
+            fingerprint,
+            mut cached_values,
+            keys,
+        } => {
             let secrets = if include_all_modes {
                 secrets.clone()
             } else {
@@ -270,9 +276,33 @@ pub async fn resolve_batch_with_context(
                     .map(|(key, secret)| (key.clone(), secret.clone()))
                     .collect()
             };
-            let values = resolve_secrets_batch(config, profile, &secrets).await?;
-            store_foreground_values(ctx, config, batch_request, fingerprint, values.clone())
-                .await?;
+            let foreground_keys = keys.into_iter().collect::<HashSet<_>>();
+            let foreground_secrets = secrets
+                .iter()
+                .filter(|(key, _)| foreground_keys.contains(*key))
+                .map(|(key, secret)| (key.clone(), secret.clone()))
+                .collect();
+            let mut foreground_values = resolve_secrets_batch_with_pre_resolved(
+                config,
+                profile,
+                &foreground_secrets,
+                &cached_values,
+            )
+            .await?;
+            let mut values = IndexMap::new();
+            for key in secrets.keys() {
+                if let Some(value) = cached_values.swap_remove(key) {
+                    values.insert(key.clone(), value);
+                } else if let Some(value) = foreground_values.swap_remove(key) {
+                    values.insert(key.clone(), value);
+                }
+            }
+            if let Err(error) =
+                store_foreground_values(ctx, config, batch_request, fingerprint, values.clone())
+                    .await
+            {
+                tracing::warn!("failed to fill daemon cache after foreground resolution: {error}");
+            }
             Ok(values)
         }
         Response::Error { message } => Err(FnoxError::Config(message)),
@@ -329,7 +359,7 @@ pub async fn resolve_one_with_context(
 
     match call_or_start(ctx, config, Request::ResolveOne(one_request.clone())).await? {
         Response::Resolved { mut values } => Ok(values.swap_remove(key).flatten()),
-        Response::ResolveInForeground { fingerprint } => {
+        Response::ResolveInForeground { fingerprint, .. } => {
             let value =
                 crate::secret_resolver::resolve_secret(config, profile, key, secret_config).await?;
             let values = [(key.to_string(), value.clone())].into_iter().collect();
@@ -346,7 +376,11 @@ pub async fn resolve_one_with_context(
                 include_all_modes: true,
                 env: one_request.env,
             };
-            store_foreground_values(ctx, config, batch_request, fingerprint, values).await?;
+            if let Err(error) =
+                store_foreground_values(ctx, config, batch_request, fingerprint, values).await
+            {
+                tracing::warn!("failed to fill daemon cache after foreground resolution: {error}");
+            }
             Ok(value)
         }
         Response::Error { message } => Err(FnoxError::Config(message)),
@@ -894,11 +928,15 @@ async fn process_request(
                     requested.contains(key) && (req.include_all_modes || sc.env_mode().in_shell())
                 })
                 .collect();
-            if let Some(fingerprint) =
-                foreground_fingerprint_if_needed(&config, &req.profile, &secrets, &req, &state)
+            if let Some(foreground) =
+                foreground_resolution_if_needed(&config, &req.profile, &secrets, &req, &state)
                     .await?
             {
-                return Ok(Response::ResolveInForeground { fingerprint });
+                return Ok(Response::ResolveInForeground {
+                    fingerprint: foreground.fingerprint,
+                    cached_values: foreground.cached_values,
+                    keys: foreground.keys,
+                });
             }
             let values = resolve_with_cache(&config, &req.profile, secrets, &req, state).await?;
             Ok(Response::Resolved { values })
@@ -934,7 +972,7 @@ async fn process_request(
                 env: req.env,
             };
             let secrets = [(req.key, secret_config)].into_iter().collect();
-            if let Some(fingerprint) = foreground_fingerprint_if_needed(
+            if let Some(foreground) = foreground_resolution_if_needed(
                 &config,
                 &batch_req.profile,
                 &secrets,
@@ -943,7 +981,11 @@ async fn process_request(
             )
             .await?
             {
-                return Ok(Response::ResolveInForeground { fingerprint });
+                return Ok(Response::ResolveInForeground {
+                    fingerprint: foreground.fingerprint,
+                    cached_values: foreground.cached_values,
+                    keys: foreground.keys,
+                });
             }
             let values =
                 resolve_with_cache(&config, &batch_req.profile, secrets, &batch_req, state).await?;
@@ -963,13 +1005,19 @@ fn secret_is_cacheable(
         && provider_daemon_cache_enabled(providers, default_provider, secret)
 }
 
-async fn foreground_fingerprint_if_needed(
+struct ForegroundResolution {
+    fingerprint: String,
+    cached_values: IndexMap<String, Option<String>>,
+    keys: Vec<String>,
+}
+
+async fn foreground_resolution_if_needed(
     config: &Config,
     profile: &[String],
     secrets: &IndexMap<String, SecretConfig>,
     req: &ResolveBatchRequest,
     state: &std::sync::Arc<Mutex<DaemonState>>,
-) -> Result<Option<String>> {
+) -> Result<Option<ForegroundResolution>> {
     if req.non_interactive || secrets.is_empty() {
         return Ok(None);
     }
@@ -978,16 +1026,29 @@ async fn foreground_fingerprint_if_needed(
     let providers = config.get_providers(profile);
     let default_provider = cache_policy_default_provider(config, profile, &providers);
     let state = state.lock().await;
+    let mut cached_values = IndexMap::new();
+    let mut keys = Vec::new();
     for (key, secret) in secrets {
-        if !secret_is_cacheable(&providers, default_provider, secret, req)
-            || !state
-                .cache
-                .contains_key(&cache_key(&fingerprint, profile, key, secret, req))
+        if secret_is_cacheable(&providers, default_provider, secret, req)
+            && let Some(value) =
+                state
+                    .cache
+                    .get(&cache_key(&fingerprint, profile, key, secret, req))
         {
-            return Ok(Some(fingerprint));
+            cached_values.insert(key.clone(), value.clone());
+        } else {
+            keys.push(key.clone());
         }
     }
-    Ok(None)
+    if keys.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(ForegroundResolution {
+            fingerprint,
+            cached_values,
+            keys,
+        }))
+    }
 }
 
 async fn store_resolved_values(
@@ -1526,8 +1587,7 @@ pub fn parse_duration(value: &str) -> Result<Duration> {
 mod tests {
     use super::{
         CacheKey, DaemonState, Purpose, ResolveBatchRequest, cache_key, config_fingerprint,
-        foreground_fingerprint_if_needed, parse_duration, resolve_with_cache,
-        store_resolved_values,
+        foreground_resolution_if_needed, parse_duration, resolve_with_cache, store_resolved_values,
     };
     use fnox_core::config::{Config, ProviderConfig, SecretConfig};
     use indexmap::IndexMap;
@@ -1696,37 +1756,57 @@ mod tests {
         req.non_interactive = false;
         let state = Arc::new(Mutex::new(DaemonState::default()));
 
-        let fingerprint =
-            foreground_fingerprint_if_needed(&config, &req.profile, &secrets, &req, &state)
+        let foreground =
+            foreground_resolution_if_needed(&config, &req.profile, &secrets, &req, &state)
                 .await
                 .unwrap()
                 .expect("cache miss should be resolved by the foreground client");
+        assert_eq!(foreground.keys, ["API_KEY"]);
+        assert!(foreground.cached_values.is_empty());
 
         store_resolved_values(
             &config,
             &req.profile,
             &secrets,
             &req,
-            &fingerprint,
-            IndexMap::from([("API_KEY".to_string(), Some("fresh".to_string()))]),
+            &foreground.fingerprint,
+            IndexMap::from([("API_KEY".to_string(), Some("from-foreground".to_string()))]),
             state.clone(),
         )
         .await
         .unwrap();
 
         assert!(
-            foreground_fingerprint_if_needed(&config, &req.profile, &secrets, &req, &state,)
+            foreground_resolution_if_needed(&config, &req.profile, &secrets, &req, &state,)
                 .await
                 .unwrap()
                 .is_none(),
             "cached requests should stay in the daemon"
         );
-        let resolved = resolve_with_cache(&config, &req.profile, secrets, &req, state)
+        let resolved = resolve_with_cache(&config, &req.profile, secrets, &req, state.clone())
             .await
             .unwrap();
         assert_eq!(
             resolved.get("API_KEY").and_then(|value| value.as_deref()),
-            Some("fresh")
+            Some("from-foreground")
+        );
+
+        let secrets = IndexMap::from([
+            ("API_KEY".to_string(), secret),
+            ("OTHER_KEY".to_string(), plain_secret("other")),
+        ]);
+        let foreground =
+            foreground_resolution_if_needed(&config, &req.profile, &secrets, &req, &state)
+                .await
+                .unwrap()
+                .expect("the uncached entry should require foreground resolution");
+        assert_eq!(foreground.keys, ["OTHER_KEY"]);
+        assert_eq!(
+            foreground
+                .cached_values
+                .get("API_KEY")
+                .and_then(|value| value.as_deref()),
+            Some("from-foreground")
         );
     }
 
@@ -1741,7 +1821,7 @@ mod tests {
         let state = Arc::new(Mutex::new(DaemonState::default()));
 
         assert!(
-            foreground_fingerprint_if_needed(&config, &req.profile, &secrets, &req, &state,)
+            foreground_resolution_if_needed(&config, &req.profile, &secrets, &req, &state,)
                 .await
                 .unwrap()
                 .is_none()

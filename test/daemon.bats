@@ -76,7 +76,7 @@ EOF
 	run "$FNOX_BIN" daemon status
 	assert_success
 	daemon_pid="$(printf '%s\n' "$output" | sed -n 's/^pid: //p')"
-	assert_not_equal "$(cat "$PASS_PPID_FILE")" "$daemon_pid"
+	[ "$(cat "$PASS_PPID_FILE")" != "$daemon_pid" ]
 
 	run "$FNOX_BIN" get FOO
 	assert_success
