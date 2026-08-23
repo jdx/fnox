@@ -11,7 +11,7 @@
 
 Path to a file containing the age encryption key.
 
-This can be set via: - CLI flag: --age-key-file <path> - Environment variable: FNOX_AGE_KEY_FILE
+This can be set via: - CLI flag: --age-key-file &lt;path> - Environment variable: FNOX_AGE_KEY_FILE
 
 Priority (highest to lowest): CLI > Environment > Default
 
@@ -93,7 +93,7 @@ export FNOX_IF_MISSING_DEFAULT=ignore  # Lenient by default
 - **since**: 1.12.0
 - **set with**: `--no-defaults`, `FNOX_NO_DEFAULTS`
 
-When a non-default profile is selected, do not merge top-level [secrets] into the profile. Only [profiles.<name>.secrets] will be used.
+When a non-default profile is selected, do not merge top-level [secrets] into the profile. Only [profiles.&lt;name>.secrets] will be used.
 
 Priority (highest to lowest): CLI > Environment > Default
 
