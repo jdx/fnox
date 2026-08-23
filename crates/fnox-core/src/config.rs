@@ -6,7 +6,7 @@ use crate::spanned::SpannedValue;
 use indexmap::IndexMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -118,6 +118,17 @@ pub fn is_profile_file(path: &Path) -> bool {
         })
 }
 
+/// Extract the profile declared by a profile-specific config filename.
+/// `default` is excluded because `fnox.default.toml` is not a supported
+/// profile overlay.
+fn profile_name_from_file(path: &Path) -> Option<String> {
+    let name = path.file_name()?.to_str()?;
+    let name = name.strip_prefix('.').unwrap_or(name);
+    let profile = name.strip_prefix("fnox.")?.strip_suffix(".toml")?;
+    (profile != "default" && profile != "local" && env::is_valid_profile_name(profile))
+        .then(|| profile.to_string())
+}
+
 // Re-export ProviderConfig from providers module
 pub use crate::providers::ProviderConfig;
 
@@ -194,6 +205,10 @@ pub struct Config {
     /// Track which config file the default_provider came from (not serialized)
     #[serde(skip)]
     pub default_provider_source: Option<PathBuf>,
+
+    /// Profile names whose profile-specific config file was loaded.
+    #[serde(skip)]
+    loaded_file_profiles: HashSet<String>,
 
     /// The project root directory — the nearest directory to cwd that contains
     /// a config file. Used for scoping the lease ledger per-project.
@@ -710,6 +725,10 @@ impl Config {
             }
         })?;
 
+        if let Some(profile) = profile_name_from_file(path) {
+            config.loaded_file_profiles.insert(profile);
+        }
+
         // Set source paths for all secrets and providers
         config.set_source_paths(path);
 
@@ -960,6 +979,10 @@ impl Config {
         for (name, source) in overlay.secret_sources {
             merged.secret_sources.insert(name, source);
         }
+
+        merged
+            .loaded_file_profiles
+            .extend(overlay.loaded_file_profiles);
 
         // Merge profiles (overlay takes precedence)
         for (name, profile) in overlay.profiles {
@@ -1324,6 +1347,7 @@ impl Config {
             provider_sources: HashMap::new(),
             secret_sources: HashMap::new(),
             default_provider_source: None,
+            loaded_file_profiles: HashSet::new(),
             project_dir: None,
         }
     }
@@ -1363,6 +1387,39 @@ impl Config {
         } else {
             profiles.join(",")
         }
+    }
+
+    /// Return all profile names declared by a profile table or by a loaded
+    /// profile-specific config file.
+    pub fn available_profiles(&self) -> Vec<String> {
+        let mut profiles = vec!["default".to_string()];
+        profiles.extend(self.profiles.keys().cloned());
+        profiles.extend(self.loaded_file_profiles.iter().cloned());
+        profiles.sort();
+        profiles.dedup();
+        profiles
+    }
+
+    /// Ensure every active profile is backed by either a `[profiles.<name>]`
+    /// table or a profile-specific config file. `allow_missing` is the profile
+    /// a write command is about to create.
+    pub fn validate_profiles(
+        &self,
+        profiles: &[String],
+        allow_missing: Option<&str>,
+    ) -> Result<()> {
+        for profile in profiles.iter().filter(|profile| *profile != "default") {
+            if Some(profile.as_str()) != allow_missing
+                && !self.profiles.contains_key(profile)
+                && !self.loaded_file_profiles.contains(profile)
+            {
+                return Err(FnoxError::ProfileNotFound {
+                    profile: profile.clone(),
+                    available_profiles: self.available_profiles(),
+                });
+            }
+        }
+        Ok(())
     }
 
     /// Resolve the write-target profile.

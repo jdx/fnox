@@ -317,6 +317,11 @@ impl Commands {
             Commands::List(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Mcp(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Profiles(cmd) => cmd.run(cli, self.load_config(cli)?).await,
+            Commands::Provider(cmd)
+                if matches!(&cmd.action, Some(provider::ProviderAction::Add(_))) =>
+            {
+                cmd.run(cli, Config::new()).await
+            }
             Commands::Provider(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Proxy(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Reencrypt(cmd) => cmd.run(cli, self.load_config(cli)?).await,
@@ -329,8 +334,23 @@ impl Commands {
         }
     }
 
+    /// Load configuration and validate the active profiles for this command.
     fn load_config(&self, cli: &Cli) -> Result<Config> {
-        Config::load_smart(&cli.config)
+        let config = Config::load_smart(&cli.config)?;
+        let profiles = Config::get_profiles(&cli.profile);
+        let allow_missing = match self {
+            Commands::Set(_) | Commands::Import(_) => Some(Config::resolve_write_profile(
+                &profiles,
+                cli.write_profile.as_deref(),
+            )?),
+            Commands::Profiles(_) => return Ok(config),
+            _ => {
+                config.validate_profiles(&profiles, None)?;
+                return Ok(config);
+            }
+        };
+        config.validate_profiles(&profiles, allow_missing.as_deref())?;
+        Ok(config)
     }
 }
 

@@ -502,6 +502,24 @@ teardown() {
 	assert_output --partial 'export DEFAULT_SECRET=default-value'
 }
 
+@test "fnox hook-env does not load defaults for an unknown profile" {
+	cd "$TEST_TEMP_DIR"
+	cat >fnox.toml <<-EOF
+		[providers.plain]
+		type = "plain"
+
+		[secrets.DEFAULT_SECRET]
+		provider = "plain"
+		value = "default-value"
+	EOF
+
+	export FNOX_PROFILE="typo"
+	run "$FNOX_BIN" hook-env -s bash
+
+	assert_success
+	refute_output --partial 'DEFAULT_SECRET'
+}
+
 # ============================================================================
 # Error handling tests
 # ============================================================================

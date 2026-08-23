@@ -122,6 +122,16 @@ pub enum FnoxError {
     // ========================================================================
     // Profile Errors
     // ========================================================================
+    #[error("Profile '{profile}' not found")]
+    #[diagnostic(
+        code(fnox::profile::not_found),
+        help("Available profiles: {}", available_profiles.join(", ")),
+        url("https://fnox.jdx.dev/guide/profiles")
+    )]
+    ProfileNotFound {
+        profile: String,
+        available_profiles: Vec<String>,
+    },
 
     // ========================================================================
     // Secret Errors
