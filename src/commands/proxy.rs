@@ -2,7 +2,6 @@ use crate::commands::Cli;
 use crate::config::{Config, ProxyConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
 use crate::proxy::{ProxyPlan, RunningProxy};
-use clap::{Args, Subcommand, ValueHint};
 use indexmap::IndexMap;
 use std::process::Stdio;
 
@@ -99,13 +98,13 @@ const AMBIENT_CREDENTIAL_ENV_VARS: &[&str] = &[
     "FNOX_PROTON_PASS_LINUX_KEYRING",
 ];
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct ProxyCommand {
-    #[command(subcommand)]
+    #[usage(subcommand)]
     command: ProxySubcommand,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, usage_rs::Subcommands)]
 enum ProxySubcommand {
     /// Show the effective credential proxy rules
     Rules,
@@ -114,10 +113,14 @@ enum ProxySubcommand {
     Run(ProxyRunCommand),
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_rs::Args)]
 struct ProxyRunCommand {
     /// Command to run
-    #[arg(trailing_var_arg = true, allow_hyphen_values = true, value_hint = ValueHint::CommandWithArguments)]
+    #[usage(
+        arg,
+        double_dash = "automatic",
+        value_hint = usage_rs::ValueHint::CommandWithArguments
+    )]
     command: Vec<String>,
 }
 

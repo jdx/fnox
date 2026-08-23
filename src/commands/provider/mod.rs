@@ -1,7 +1,6 @@
 use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::Result;
-use clap::{Args, Subcommand, ValueEnum};
 use strum::{Display, EnumString, VariantNames};
 
 mod add;
@@ -15,106 +14,108 @@ pub use remove::RemoveCommand;
 pub use test::TestCommand;
 
 /// Supported provider types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Display, EnumString, VariantNames)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, usage_rs::ValueEnum, Display, EnumString, VariantNames,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum ProviderType {
     /// 1Password
-    #[value(name = "1password")]
+    #[usage(name = "1password")]
     #[strum(serialize = "1password")]
     OnePassword,
     /// Age encryption
-    #[value(name = "age")]
+    #[usage(name = "age")]
     Age,
     /// AWS Secrets Manager
-    #[value(name = "aws")]
+    #[usage(name = "aws")]
     Aws,
     /// AWS KMS
-    #[value(name = "aws-kms")]
+    #[usage(name = "aws-kms")]
     #[strum(serialize = "aws-kms")]
     AwsKms,
     /// AWS Parameter Store
-    #[value(name = "aws-ps")]
+    #[usage(name = "aws-ps")]
     #[strum(serialize = "aws-ps")]
     AwsParameterStore,
     /// Azure App Configuration
-    #[value(name = "azure-ac")]
+    #[usage(name = "azure-ac")]
     #[strum(serialize = "azure-ac")]
     AzureAppConfiguration,
     /// Azure Key Vault KMS
-    #[value(name = "azure-kms")]
+    #[usage(name = "azure-kms")]
     #[strum(serialize = "azure-kms")]
     AzureKms,
     /// Azure Key Vault Secrets Manager
-    #[value(name = "azure-sm")]
+    #[usage(name = "azure-sm")]
     #[strum(serialize = "azure-sm")]
     AzureSecretsManager,
     /// Google Cloud Secret Manager
-    #[value(name = "gcp")]
+    #[usage(name = "gcp")]
     Gcp,
     /// Google Cloud KMS
-    #[value(name = "gcp-kms")]
+    #[usage(name = "gcp-kms")]
     #[strum(serialize = "gcp-kms")]
     GcpKms,
     /// FIDO2 hmac-secret hardware-backed encryption
     #[cfg(not(target_env = "musl"))]
-    #[value(name = "fido2")]
+    #[usage(name = "fido2")]
     Fido2,
     /// Bitwarden Password Manager
-    #[value(name = "bitwarden")]
+    #[usage(name = "bitwarden")]
     Bitwarden,
     /// Doppler secrets manager
-    #[value(name = "doppler")]
+    #[usage(name = "doppler")]
     Doppler,
     /// FOKS (Federated Open Key Service)
-    #[value(name = "foks")]
+    #[usage(name = "foks")]
     Foks,
     /// Bitwarden Secrets Manager
-    #[value(name = "bitwarden-sm")]
+    #[usage(name = "bitwarden-sm")]
     #[strum(serialize = "bitwarden-sm")]
     BitwardenSecretsManager,
     /// Infisical
-    #[value(name = "infisical")]
+    #[usage(name = "infisical")]
     Infisical,
     /// KeePass
-    #[value(name = "keepass")]
+    #[usage(name = "keepass")]
     #[strum(serialize = "keepass")]
     KeePass,
     /// Keeper Secrets Manager
-    #[value(name = "keeper-sm")]
+    #[usage(name = "keeper-sm")]
     #[strum(serialize = "keeper-sm")]
     KeeperSecretsManager,
     /// OS Keychain
-    #[value(name = "keychain")]
+    #[usage(name = "keychain")]
     Keychain,
     /// password-store (pass)
-    #[value(name = "password-store")]
+    #[usage(name = "password-store")]
     #[strum(serialize = "password-store")]
     PasswordStore,
     /// Click Studios Passwordstate
-    #[value(name = "passwordstate")]
+    #[usage(name = "passwordstate")]
     Passwordstate,
     /// Plain text provider
-    #[value(name = "plain")]
+    #[usage(name = "plain")]
     Plain,
     /// Proton Pass
-    #[value(name = "proton-pass")]
+    #[usage(name = "proton-pass")]
     #[strum(serialize = "proton-pass")]
     ProtonPass,
     /// HashiCorp Vault
-    #[value(name = "vault")]
+    #[usage(name = "vault")]
     Vault,
     /// YubiKey HMAC-SHA1 hardware-backed encryption
-    #[value(name = "yubikey")]
+    #[usage(name = "yubikey")]
     Yubikey,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct ProviderCommand {
-    #[command(subcommand)]
+    #[usage(subcommand)]
     pub action: Option<ProviderAction>,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, usage_rs::Subcommands)]
 pub enum ProviderAction {
     /// Add a new provider
     Add(AddCommand),
@@ -144,8 +145,8 @@ impl ProviderCommand {
 #[cfg(test)]
 mod tests {
     use super::ProviderType;
-    use clap::ValueEnum;
     use std::collections::BTreeSet;
+    use usage_rs::spec::ValueEnum;
 
     fn normalize_provider_type_for_add(provider_type: &str) -> String {
         match provider_type {
@@ -175,13 +176,9 @@ mod tests {
             .map(|provider_type| normalize_provider_type_for_add(&provider_type))
             .collect();
 
-        let cli_types: BTreeSet<String> = ProviderType::value_variants()
+        let cli_types: BTreeSet<String> = ProviderType::CHOICES
             .iter()
-            .filter_map(|variant| {
-                variant
-                    .to_possible_value()
-                    .map(|value| value.get_name().to_string())
-            })
+            .map(|value| (*value).to_string())
             .collect();
 
         assert_eq!(

@@ -3,14 +3,13 @@ use crate::config::{Config, SecretValue};
 use crate::encryption::age_encryption::AgeEncryptor;
 use crate::env;
 use crate::error::{FnoxError, Result};
-use clap::Args;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct DecryptCommand {
     /// Key to use for decryption
-    #[arg(short, long)]
+    #[usage(short, long)]
     pub key: Option<String>,
 }
 

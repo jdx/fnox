@@ -2,13 +2,12 @@ use crate::commands::Cli;
 use crate::config::{Config, SecretValue};
 use crate::encryption::age_encryption::AgeEncryptor;
 use crate::error::{FnoxError, Result};
-use clap::Args;
 use std::collections::HashMap;
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct EncryptCommand {
     /// Key to use for encryption
-    #[arg(short, long)]
+    #[usage(short, long)]
     pub key: Option<String>,
 }
 

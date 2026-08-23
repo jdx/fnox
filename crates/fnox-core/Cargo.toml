@@ -28,7 +28,7 @@ base64 = { workspace = true }
 blake3 = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
-clap = { workspace = true }
+usage-rs = { workspace = true }
 demand = { workspace = true }
 dirs = { workspace = true }
 futures = { workspace = true }

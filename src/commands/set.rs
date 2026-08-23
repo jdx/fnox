@@ -1,7 +1,6 @@
 use crate::commands::Cli;
 use crate::config::{self, Config, IfMissing};
 use crate::error::{FnoxError, Result};
-use clap::Args;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
@@ -38,8 +37,8 @@ fn secret_belongs_to_target(
     }
 }
 
-#[derive(Debug, Args)]
-#[command(visible_aliases = ["s"])]
+#[derive(Debug, usage_rs::Args)]
+#[usage(alias("s"))]
 pub struct SetCommand {
     /// Secret key (environment variable name)
     pub key: String,
@@ -54,39 +53,43 @@ pub struct SetCommand {
     pub value: Option<String>,
 
     /// Description of the secret
-    #[arg(short = 'd', long)]
+    #[usage(short = 'd', long)]
     pub description: Option<String>,
 
     /// Save to the global config file (~/.config/fnox/config.toml)
-    #[arg(short = 'g', long)]
+    #[usage(short = 'g', long)]
     pub global: bool,
 
     /// Key name in the provider (if different from env var name)
-    #[arg(short = 'k', long)]
+    #[usage(short = 'k', long)]
     pub key_name: Option<String>,
 
     /// Show what would be done without making changes
-    #[arg(short = 'n', long)]
+    #[usage(short = 'n', long)]
     pub dry_run: bool,
 
     /// Provider to fetch from
-    #[arg(short = 'p', long)]
+    #[usage(short = 'p', long)]
     pub provider: Option<String>,
 
     /// Base64 encode the secret
-    #[arg(long)]
+    #[usage(long)]
     pub base64_encode: bool,
 
     /// Default value to use if secret is not found
-    #[arg(long)]
+    #[usage(long)]
     pub default: Option<String>,
 
     /// Read the secret value verbatim from a UTF-8 file
-    #[arg(long, value_hint = clap::ValueHint::FilePath, conflicts_with = "value")]
+    #[usage(
+        long,
+        conflicts = "value",
+        value_hint = usage_rs::ValueHint::FilePath
+    )]
     pub from_file: Option<PathBuf>,
 
     /// What to do if the secret is missing (error, warn, ignore)
-    #[arg(long)]
+    #[usage(long, value_enum)]
     pub if_missing: Option<IfMissing>,
 }
 

@@ -4,7 +4,6 @@ use std::fs;
 use std::io::Write as _;
 use std::process::Command;
 
-use clap::Args;
 use indexmap::IndexMap;
 use tempfile::NamedTempFile;
 use toml_edit::{DocumentMut, Table, Value};
@@ -25,7 +24,7 @@ const TEMP_FILE_HEADER: &str = "\
 
 ";
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct EditCommand;
 
 /// Represents a secret with its metadata for tracking during editing

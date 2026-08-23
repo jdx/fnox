@@ -1,13 +1,12 @@
 use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::Result;
-use clap::Args;
 
-#[derive(Debug, Args)]
-#[command(alias = "profile")]
+#[derive(Debug, usage_rs::Args)]
+#[usage(alias_hidden = "profile")]
 pub struct ProfilesCommand {
     /// Output profile names for shell completion (one per line)
-    #[arg(long, hide = true)]
+    #[usage(long, hide)]
     pub complete: bool,
 }
 

@@ -3,7 +3,6 @@ use crate::error::{FnoxError, Result};
 use crate::settings::Settings;
 use crate::source_registry;
 use crate::spanned::SpannedValue;
-use clap::ValueEnum;
 use indexmap::IndexMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -12,7 +11,7 @@ use std::fs;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use strum::VariantNames;
+use strum::{EnumString, VariantNames};
 
 /// Default config filename, used as the clap default for `--config`.
 pub const DEFAULT_CONFIG_FILENAME: &str = "fnox.toml";
@@ -511,9 +510,20 @@ impl McpConfig {
 }
 
 #[derive(
-    Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq, ValueEnum, VariantNames,
+    Debug,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    PartialEq,
+    Eq,
+    usage_rs::ValueEnum,
+    EnumString,
+    VariantNames,
 )]
 #[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
 pub enum IfMissing {
     Error,
     Warn,

@@ -33,7 +33,9 @@
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Output shell activation code to enable automatic secret loading",
         "name": "activate",
         "aliases": [],
@@ -58,7 +60,9 @@
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Check if all required secrets are defined and configured",
         "name": "check",
         "aliases": ["c"],
@@ -72,7 +76,9 @@
         "args": [],
         "flags": [],
         "mounts": [],
+        "unknown_flags": null,
         "hide": true,
+        "args_override_self": true,
         "help": "Redact secrets in CI/CD output (GitHub Actions mask)",
         "name": "ci-redact",
         "aliases": [],
@@ -96,7 +102,9 @@
         ],
         "flags": [],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Generate shell completions",
         "name": "completion",
         "aliases": [],
@@ -110,7 +118,9 @@
         "args": [],
         "flags": [],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "List all config files that would be loaded",
         "name": "config-files",
         "aliases": [],
@@ -128,7 +138,9 @@
             "args": [],
             "flags": [],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Clear all running daemon caches",
             "name": "clear",
             "aliases": [],
@@ -142,7 +154,9 @@
             "args": [],
             "flags": [],
             "mounts": [],
+            "unknown_flags": null,
             "hide": true,
+            "args_override_self": true,
             "help": "Run the daemon server in the foreground",
             "name": "serve",
             "aliases": [],
@@ -156,7 +170,9 @@
             "args": [],
             "flags": [],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Start the per-user daemon in the background",
             "name": "start",
             "aliases": [],
@@ -170,7 +186,9 @@
             "args": [],
             "flags": [],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Show daemon status",
             "name": "status",
             "aliases": [],
@@ -184,7 +202,9 @@
             "args": [],
             "flags": [],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Stop the daemon",
             "name": "stop",
             "aliases": [],
@@ -195,8 +215,10 @@
         "args": [],
         "flags": [],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
         "subcommand_required": true,
+        "args_override_self": true,
         "help": "Manage the per-user daemon",
         "name": "daemon",
         "aliases": [],
@@ -210,8 +232,11 @@
         "args": [],
         "flags": [],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Disable fnox shell integration in the current shell session",
+        "help_long": "Disable fnox shell integration in the current shell session\n\nThis removes the hook that automatically loads secrets when entering\ndirectories with fnox.toml files. It also restores environment variables\nto their state before fnox was activated.\n\nNote: This only affects the current shell session. To re-enable fnox,\nrun the activation command again for your shell.",
         "name": "deactivate",
         "aliases": [],
         "hidden_aliases": [],
@@ -224,7 +249,9 @@
         "args": [],
         "flags": [],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Show diagnostic information about the current fnox state",
         "name": "doctor",
         "aliases": ["dr"],
@@ -238,7 +265,9 @@
         "args": [],
         "flags": [],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Edit the configuration file",
         "name": "edit",
         "aliases": [],
@@ -274,12 +303,20 @@
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Execute a command with secrets as environment variables",
         "name": "exec",
         "aliases": ["x"],
         "hidden_aliases": ["run"],
-        "examples": []
+        "examples": [],
+        "complete": {
+          "command": {
+            "name": "command",
+            "type_": "command_args"
+          }
+        }
       },
       "export": {
         "full_cmd": ["export"],
@@ -303,7 +340,29 @@
               "double_dash": "Optional",
               "hide": false,
               "choices": {
-                "choices": ["env", "shell", "json", "yaml", "toml"]
+                "choices": ["env", "shell", "json", "yaml", "toml"],
+                "details": [
+                  {
+                    "value": "env",
+                    "help": "Environment variable format (KEY=value)"
+                  },
+                  {
+                    "value": "shell",
+                    "help": "POSIX shell format (export KEY=value)"
+                  },
+                  {
+                    "value": "json",
+                    "help": "JSON format"
+                  },
+                  {
+                    "value": "yaml",
+                    "help": "YAML format"
+                  },
+                  {
+                    "value": "toml",
+                    "help": "TOML format"
+                  }
+                ]
               }
             },
             "default": ["env"]
@@ -357,7 +416,9 @@
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Export secrets in various formats",
         "name": "export",
         "aliases": ["ex"],
@@ -392,7 +453,9 @@
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Get a secret value",
         "name": "get",
         "aliases": [],
@@ -424,7 +487,9 @@
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": true,
+        "args_override_self": true,
         "help": "Internal command used by shell hooks to load secrets",
         "name": "hook-env",
         "aliases": [],
@@ -446,7 +511,25 @@
             "hide": false,
             "default": ["env"],
             "choices": {
-              "choices": ["env", "json", "yaml", "toml"]
+              "choices": ["env", "json", "yaml", "toml"],
+              "details": [
+                {
+                  "value": "env",
+                  "help": "Environment variable format (KEY=value)"
+                },
+                {
+                  "value": "json",
+                  "help": "JSON format"
+                },
+                {
+                  "value": "yaml",
+                  "help": "YAML format"
+                },
+                {
+                  "value": "toml",
+                  "help": "TOML format"
+                }
+              ]
             }
           }
         ],
@@ -552,7 +635,9 @@
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Import secrets from various sources",
         "name": "import",
         "aliases": ["im"],
@@ -597,7 +682,9 @@
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Initialize a new fnox configuration file",
         "name": "init",
         "aliases": ["i"],
@@ -615,7 +702,9 @@
             "args": [],
             "flags": [],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Revoke all expired leases that need manual cleanup",
             "name": "cleanup",
             "aliases": [],
@@ -630,8 +719,8 @@
               {
                 "name": "BACKEND_NAME",
                 "usage": "[BACKEND_NAME]",
-                "help": "Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted",
-                "help_first_line": "Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted",
+                "help": "Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted.",
+                "help_first_line": "Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted.",
                 "required": false,
                 "double_dash": "Optional",
                 "hide": false
@@ -681,7 +770,18 @@
                   "double_dash": "Optional",
                   "hide": false,
                   "choices": {
-                    "choices": ["shell", "json", "env"]
+                    "choices": ["shell", "json", "env"],
+                    "details": [
+                      {
+                        "value": "shell"
+                      },
+                      {
+                        "value": "json"
+                      },
+                      {
+                        "value": "env"
+                      }
+                    ]
                   }
                 },
                 "default": ["shell"]
@@ -716,7 +816,9 @@
               }
             ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Create a short-lived credential lease from a secret",
             "name": "create",
             "aliases": [],
@@ -751,7 +853,9 @@
               }
             ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "List tracked leases",
             "name": "list",
             "aliases": [],
@@ -775,7 +879,9 @@
             ],
             "flags": [],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Revoke a lease by ID",
             "name": "revoke",
             "aliases": [],
@@ -786,7 +892,9 @@
         "args": [],
         "flags": [],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Manage ephemeral credential leases",
         "name": "lease",
         "aliases": [],
@@ -841,7 +949,9 @@
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "List all secrets",
         "name": "list",
         "aliases": ["ls", "secrets"],
@@ -855,7 +965,9 @@
         "args": [],
         "flags": [],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Start an MCP server for secret-gated AI agent access",
         "name": "mcp",
         "aliases": [],
@@ -880,7 +992,9 @@
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "List available profiles",
         "name": "profiles",
         "aliases": [],
@@ -940,6 +1054,108 @@
                     "proton-pass",
                     "vault",
                     "yubikey"
+                  ],
+                  "details": [
+                    {
+                      "value": "1password",
+                      "help": "1Password"
+                    },
+                    {
+                      "value": "age",
+                      "help": "Age encryption"
+                    },
+                    {
+                      "value": "aws",
+                      "help": "AWS Secrets Manager"
+                    },
+                    {
+                      "value": "aws-kms",
+                      "help": "AWS KMS"
+                    },
+                    {
+                      "value": "aws-ps",
+                      "help": "AWS Parameter Store"
+                    },
+                    {
+                      "value": "azure-ac",
+                      "help": "Azure App Configuration"
+                    },
+                    {
+                      "value": "azure-kms",
+                      "help": "Azure Key Vault KMS"
+                    },
+                    {
+                      "value": "azure-sm",
+                      "help": "Azure Key Vault Secrets Manager"
+                    },
+                    {
+                      "value": "gcp",
+                      "help": "Google Cloud Secret Manager"
+                    },
+                    {
+                      "value": "gcp-kms",
+                      "help": "Google Cloud KMS"
+                    },
+                    {
+                      "value": "fido2",
+                      "help": "FIDO2 hmac-secret hardware-backed encryption"
+                    },
+                    {
+                      "value": "bitwarden",
+                      "help": "Bitwarden Password Manager"
+                    },
+                    {
+                      "value": "doppler",
+                      "help": "Doppler secrets manager"
+                    },
+                    {
+                      "value": "foks",
+                      "help": "FOKS (Federated Open Key Service)"
+                    },
+                    {
+                      "value": "bitwarden-sm",
+                      "help": "Bitwarden Secrets Manager"
+                    },
+                    {
+                      "value": "infisical",
+                      "help": "Infisical"
+                    },
+                    {
+                      "value": "keepass",
+                      "help": "KeePass"
+                    },
+                    {
+                      "value": "keeper-sm",
+                      "help": "Keeper Secrets Manager"
+                    },
+                    {
+                      "value": "keychain",
+                      "help": "OS Keychain"
+                    },
+                    {
+                      "value": "password-store",
+                      "help": "password-store (pass)"
+                    },
+                    {
+                      "value": "passwordstate",
+                      "help": "Click Studios Passwordstate"
+                    },
+                    {
+                      "value": "plain",
+                      "help": "Plain text provider"
+                    },
+                    {
+                      "value": "proton-pass",
+                      "help": "Proton Pass"
+                    },
+                    {
+                      "value": "vault",
+                      "help": "HashiCorp Vault"
+                    },
+                    {
+                      "value": "yubikey",
+                      "help": "YubiKey HMAC-SHA1 hardware-backed encryption"
+                    }
                   ]
                 }
               }
@@ -974,7 +1190,9 @@
               }
             ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Add a new provider",
             "name": "add",
             "aliases": ["a", "set"],
@@ -999,7 +1217,9 @@
               }
             ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "List available providers",
             "name": "list",
             "aliases": ["ls"],
@@ -1034,7 +1254,9 @@
               }
             ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Remove a provider",
             "name": "remove",
             "aliases": ["rm", "delete"],
@@ -1069,7 +1291,9 @@
               }
             ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Test a provider connection",
             "name": "test",
             "aliases": ["t"],
@@ -1080,7 +1304,9 @@
         "args": [],
         "flags": [],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Manage providers (defaults to list)",
         "name": "provider",
         "aliases": [],
@@ -1098,7 +1324,9 @@
             "args": [],
             "flags": [],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Show the effective credential proxy rules",
             "name": "rules",
             "aliases": [],
@@ -1123,19 +1351,29 @@
             ],
             "flags": [],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Run a command with placeholder credentials through the local proxy",
             "name": "run",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": []
+            "examples": [],
+            "complete": {
+              "command": {
+                "name": "command",
+                "type_": "command_args"
+              }
+            }
           }
         },
         "args": [],
         "flags": [],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
         "subcommand_required": true,
+        "args_override_self": true,
         "help": "Broker credentials into destination-scoped HTTPS requests",
         "name": "proxy",
         "aliases": [],
@@ -1215,8 +1453,11 @@
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Re-encrypt secrets with current provider configuration",
+        "help_long": "Re-encrypt secrets with current provider configuration\n\nWhen you add or remove recipients from an encryption provider (e.g. age), existing secrets remain encrypted with the old recipient set. This command decrypts and re-encrypts all matching secrets with the current provider configuration.",
         "name": "reencrypt",
         "aliases": [],
         "hidden_aliases": [],
@@ -1260,7 +1501,9 @@
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Remove a secret",
         "name": "remove",
         "aliases": ["rm", "delete"],
@@ -1318,7 +1561,15 @@
               "double_dash": "Optional",
               "hide": false,
               "choices": {
-                "choices": ["human", "json"]
+                "choices": ["human", "json"],
+                "details": [
+                  {
+                    "value": "human"
+                  },
+                  {
+                    "value": "json"
+                  }
+                ]
               }
             },
             "default": ["human"]
@@ -1335,12 +1586,20 @@
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Scan repository for potential secrets",
         "name": "scan",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "complete": {
+          "dir": {
+            "name": "dir",
+            "type_": "dir"
+          }
+        }
       },
       "schema": {
         "full_cmd": ["schema"],
@@ -1349,7 +1608,9 @@
         "args": [],
         "flags": [],
         "mounts": [],
+        "unknown_flags": null,
         "hide": true,
+        "args_override_self": true,
         "help": "Generate JSON Schema for fnox configuration",
         "name": "schema",
         "aliases": [],
@@ -1373,9 +1634,9 @@
           {
             "name": "VALUE",
             "usage": "[VALUE]",
-            "help": "Secret value to store",
+            "help": "Secret value to store.",
             "help_long": "Secret value to store.\n\nIf omitted: reads from stdin when piped (`echo \"x\" | fnox set KEY`), or prompts interactively with hidden input.\n\nPassing secrets as arguments exposes them in shell history and `ps` output. For sensitive values, prefer stdin or the interactive prompt.",
-            "help_first_line": "Secret value to store",
+            "help_first_line": "Secret value to store.",
             "required": false,
             "double_dash": "Optional",
             "hide": false
@@ -1495,7 +1756,8 @@
               "required": true,
               "double_dash": "Optional",
               "hide": false
-            }
+            },
+            "conflicts": ["VALUE"]
           },
           {
             "name": "if-missing",
@@ -1513,18 +1775,37 @@
               "double_dash": "Optional",
               "hide": false,
               "choices": {
-                "choices": ["error", "warn", "ignore"]
+                "choices": ["error", "warn", "ignore"],
+                "details": [
+                  {
+                    "value": "error"
+                  },
+                  {
+                    "value": "warn"
+                  },
+                  {
+                    "value": "ignore"
+                  }
+                ]
               }
             }
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Set a secret value",
         "name": "set",
         "aliases": ["s"],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "complete": {
+          "from_file": {
+            "name": "from_file",
+            "type_": "path"
+          }
+        }
       },
       "sponsors": {
         "full_cmd": ["sponsors"],
@@ -1533,7 +1814,9 @@
         "args": [],
         "flags": [],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Show the companies sponsoring fnox and the jdx.dev open source tools",
         "name": "sponsors",
         "aliases": [],
@@ -1646,11 +1929,14 @@
             "short": [],
             "long": ["local-file"],
             "hide": false,
-            "global": false
+            "global": false,
+            "conflicts": ["--global"]
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Sync secrets from remote providers to a local encryption provider",
         "name": "sync",
         "aliases": [],
@@ -1664,7 +1950,9 @@
         "args": [],
         "flags": [],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Interactive TUI dashboard for managing secrets",
         "name": "tui",
         "aliases": [],
@@ -1678,7 +1966,9 @@
         "args": [],
         "flags": [],
         "mounts": [],
+        "unknown_flags": null,
         "hide": true,
+        "args_override_self": true,
         "help": "Generate usage specification",
         "name": "usage",
         "aliases": [],
@@ -1692,7 +1982,9 @@
         "args": [],
         "flags": [],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Show version information",
         "name": "version",
         "aliases": ["v"],
@@ -1723,8 +2015,8 @@
       {
         "name": "profile",
         "usage": "-P --profile… <PROFILE>",
-        "help": "Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones",
-        "help_first_line": "Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones",
+        "help": "Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones.",
+        "help_first_line": "Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones.",
         "short": ["P"],
         "long": ["profile"],
         "var": true,
@@ -1820,13 +2112,14 @@
         "short": [],
         "long": ["non-interactive"],
         "hide": false,
-        "global": true
+        "global": true,
+        "env": "FNOX_NON_INTERACTIVE"
       },
       {
         "name": "write-profile",
         "usage": "--write-profile <WRITE_PROFILE>",
-        "help": "Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise",
-        "help_first_line": "Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise",
+        "help": "Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise.",
+        "help_first_line": "Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise.",
         "short": [],
         "long": ["write-profile"],
         "hide": false,
@@ -1841,17 +2134,22 @@
       }
     ],
     "mounts": [],
+    "unknown_flags": null,
     "hide": false,
+    "subcommand_required": true,
+    "args_override_self": true,
     "name": "fnox",
     "aliases": [],
     "hidden_aliases": [],
     "examples": []
   },
   "config": {
-    "props": {}
+    "props": {},
+    "sources": {},
+    "files": []
   },
   "version": "1.33.1",
-  "usage": "Usage: fnox [OPTIONS] <COMMAND>",
+  "usage": "",
   "complete": {
     "key": {
       "name": "key",
@@ -1871,5 +2169,6 @@
     }
   },
   "about": "A flexible secret management tool by @jdx",
-  "min_usage_version": "1.3"
+  "min_usage_version": "1.3",
+  "unknown_flags": "error"
 }

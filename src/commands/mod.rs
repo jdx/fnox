@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use crate::error::{FnoxError, Result};
-use clap::{Parser, Subcommand};
 
 use crate::config::Config;
 
@@ -37,59 +36,58 @@ pub mod tui;
 pub mod usage;
 pub mod version;
 
-#[derive(Parser)]
-#[command(name = "fnox")]
-#[command(about = "A flexible secret management tool by @jdx", long_about = None)]
-#[command(version)]
-#[command(help_expected = true)]
+#[derive(usage_rs::Cli)]
+#[usage(name = "fnox", unknown_flags = "error")]
+#[usage(about = "A flexible secret management tool by @jdx")]
+#[usage(version)]
 pub struct Cli {
     /// Path to the configuration file (default: fnox.toml, searches parent directories)
-    #[arg(short, long, default_value = crate::config::DEFAULT_CONFIG_FILENAME, global = true)]
+    #[usage(short, long, default = "fnox.toml", global)]
     pub config: PathBuf,
 
     /// Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple
     /// profiles separated by commas or repeated flags; later profiles overlay earlier ones.
-    #[arg(short = 'P', long, action = clap::ArgAction::Append, global = true)]
+    #[usage(short = 'P', long, global)]
     pub profile: Vec<String>,
 
     /// Enable verbose logging
-    #[arg(short, long, global = true)]
+    #[usage(short, long, global)]
     pub verbose: bool,
 
     /// Path to age key file for decryption (deprecated: use provider config instead)
-    #[arg(long, global = true, hide = true)]
+    #[usage(long, global, hide)]
     pub age_key_file: Option<PathBuf>,
 
     /// What to do if a secret is missing (error, warn, ignore)
-    #[arg(long, global = true)]
+    #[usage(long, global)]
     pub if_missing: Option<String>,
 
     /// Disable colored output
-    #[arg(long, global = true)]
+    #[usage(long, global)]
     pub no_color: bool,
 
     /// Disable daemon-backed resolution for this invocation
-    #[arg(long, global = true)]
+    #[usage(long, global)]
     pub no_daemon: bool,
 
     /// Do not merge top-level secrets into the selected profile
-    #[arg(long, global = true)]
+    #[usage(long, global)]
     pub no_defaults: bool,
 
     /// Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)
-    #[arg(long, global = true, env = "FNOX_NON_INTERACTIVE")]
+    #[usage(long, global, env = "FNOX_NON_INTERACTIVE")]
     pub non_interactive: bool,
 
     /// Target profile for write commands (set, remove, import, sync, provider add/remove).
     /// Required when multiple profiles are active; defaults to the single active profile otherwise.
-    #[arg(long, global = true)]
+    #[usage(long, global)]
     pub write_profile: Option<String>,
 
-    #[command(subcommand)]
+    #[usage(subcommand)]
     pub command: Commands,
 }
 
-#[derive(Subcommand)]
+#[derive(usage_rs::Subcommands)]
 pub enum Commands {
     /// Output shell activation code to enable automatic secret loading
     Activate(activate::ActivateCommand),
@@ -98,7 +96,7 @@ pub enum Commands {
     Check(check::CheckCommand),
 
     /// Redact secrets in CI/CD output (GitHub Actions mask)
-    #[command(hide = true)]
+    #[usage(hide)]
     CiRedact(ci_redact::CiRedactCommand),
 
     /// Generate shell completions
@@ -129,7 +127,7 @@ pub enum Commands {
     Get(get::GetCommand),
 
     /// Internal command used by shell hooks to load secrets
-    #[command(hide = true)]
+    #[usage(hide)]
     HookEnv(hook_env::HookEnvCommand),
 
     /// Import secrets from various sources
@@ -166,7 +164,7 @@ pub enum Commands {
     Scan(scan::ScanCommand),
 
     /// Generate JSON Schema for fnox configuration
-    #[command(hide = true)]
+    #[usage(hide)]
     Schema(schema::SchemaCommand),
 
     /// Set a secret value
@@ -182,10 +180,103 @@ pub enum Commands {
     Tui(tui::TuiCommand),
 
     /// Generate usage specification
+    #[usage(hide)]
     Usage(usage::UsageCommand),
 
     /// Show version information
     Version(version::VersionCommand),
+}
+
+fn completion_config_path(ctx: &usage_rs::spec::CompleteCtx<'_>) -> PathBuf {
+    let mut path = PathBuf::from("fnox.toml");
+    let mut words = ctx.words.iter();
+    while let Some(word) = words.next() {
+        if let Some(value) = word.strip_prefix("--config=") {
+            path = value.into();
+        } else if matches!(word.as_str(), "-c" | "--config")
+            && let Some(value) = words.next()
+        {
+            path = value.into();
+        } else if let Some(value) = word.strip_prefix("-c").filter(|value| !value.is_empty()) {
+            path = value.into();
+        }
+    }
+    path
+}
+
+fn completion_config(ctx: &usage_rs::spec::CompleteCtx<'_>) -> Config {
+    let path = completion_config_path(ctx);
+    Config::load_smart(path).unwrap_or_else(|_| Config::new())
+}
+
+fn completion_profiles(ctx: &usage_rs::spec::CompleteCtx<'_>) -> Vec<String> {
+    let mut profiles = Vec::new();
+    let mut words = ctx.words.iter();
+    while let Some(word) = words.next() {
+        if let Some(value) = word.strip_prefix("--profile=") {
+            profiles.push(value.to_string());
+        } else if matches!(word.as_str(), "-P" | "--profile") {
+            if let Some(value) = words.next() {
+                profiles.push(value.to_string());
+            }
+        } else if let Some(value) = word.strip_prefix("-P").filter(|value| !value.is_empty()) {
+            profiles.push(value.to_string());
+        }
+    }
+    profiles
+}
+
+fn candidates(values: impl IntoIterator<Item = String>) -> Vec<usage_rs::spec::Candidate<'static>> {
+    values
+        .into_iter()
+        .map(usage_rs::spec::Candidate::new)
+        .collect()
+}
+
+fn complete_key(ctx: usage_rs::spec::CompleteCtx<'_>) -> usage_rs::complete::CompletionFuture<'_> {
+    Box::pin(async move {
+        let config = completion_config(&ctx);
+        let profiles = Config::get_profiles(&completion_profiles(&ctx));
+        candidates(
+            config
+                .get_secrets(&profiles)
+                .unwrap_or_default()
+                .into_keys(),
+        )
+    })
+}
+
+fn complete_profile(
+    ctx: usage_rs::spec::CompleteCtx<'_>,
+) -> usage_rs::complete::CompletionFuture<'_> {
+    Box::pin(async move {
+        let config = completion_config(&ctx);
+        let mut names = vec!["default".to_string()];
+        names.extend(config.profiles.keys().cloned());
+        names.sort();
+        names.dedup();
+        candidates(names)
+    })
+}
+
+fn complete_provider(
+    ctx: usage_rs::spec::CompleteCtx<'_>,
+) -> usage_rs::complete::CompletionFuture<'_> {
+    Box::pin(async move {
+        let config = completion_config(&ctx);
+        let profiles = Config::get_profiles(&completion_profiles(&ctx));
+        candidates(config.get_providers(&profiles).into_keys())
+    })
+}
+
+static COMPLETIONS: [usage_rs::complete::CompletionOverlay<'static>; 3] = [
+    usage_rs::complete::CompletionOverlay::async_any("key", complete_key),
+    usage_rs::complete::CompletionOverlay::async_any("provider", complete_provider),
+    usage_rs::complete::CompletionOverlay::async_any("profile", complete_profile),
+];
+
+pub fn completion_app() -> usage_rs::complete::App<'static> {
+    Cli::app().completion_app().completions(&COMPLETIONS)
 }
 
 impl Commands {
@@ -245,23 +336,111 @@ impl Commands {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clap::CommandFactory;
 
     #[test]
     fn test_cli_ordering() {
-        // Validate that CLI commands and arguments are properly sorted
-        // using the published clap-sort crate.
-        clap_sort::assert_sorted(&Cli::command());
+        fn short_key(short: u8) -> (u8, bool) {
+            (short.to_ascii_lowercase(), short.is_ascii_uppercase())
+        }
+
+        fn assert_sorted<'a>(command: &usage_rs::spec::CommandMeta<'a>, path: &mut Vec<&'a str>) {
+            path.push(command.cmd.name);
+
+            let subcommands = command
+                .subcommands
+                .iter()
+                .map(|subcommand| subcommand.cmd.name)
+                .collect::<Vec<_>>();
+            let mut sorted_subcommands = subcommands.clone();
+            sorted_subcommands.sort_unstable();
+            assert_eq!(
+                subcommands,
+                sorted_subcommands,
+                "subcommands in '{}' should remain sorted",
+                path.join(" ")
+            );
+
+            let short_flags = command
+                .flags
+                .iter()
+                .filter_map(|flag| flag.flag.shorts.first().copied())
+                .collect::<Vec<_>>();
+            let mut sorted_short_flags = short_flags.clone();
+            sorted_short_flags.sort_by_key(|short| short_key(*short));
+            assert_eq!(
+                short_flags,
+                sorted_short_flags,
+                "short flags in '{}' should remain sorted",
+                path.join(" ")
+            );
+
+            let long_only_flags = command
+                .flags
+                .iter()
+                .filter(|flag| flag.flag.shorts.is_empty())
+                .filter_map(|flag| flag.flag.longs.first().copied())
+                .collect::<Vec<_>>();
+            let mut sorted_long_only_flags = long_only_flags.clone();
+            sorted_long_only_flags.sort_unstable();
+            assert_eq!(
+                long_only_flags,
+                sorted_long_only_flags,
+                "long-only flags in '{}' should remain sorted",
+                path.join(" ")
+            );
+
+            for subcommand in command.subcommands {
+                assert_sorted(subcommand, path);
+            }
+            path.pop();
+        }
+
+        assert_sorted(Cli::spec().root, &mut Vec::new());
     }
 
     #[test]
     fn exec_replace_flag_matches_platform() {
-        let command = Cli::command();
-        let exec = command.find_subcommand("exec").unwrap();
+        let exec = Cli::spec()
+            .root
+            .subcommands
+            .iter()
+            .find(|command| command.cmd.name == "exec")
+            .unwrap();
         let has_replace = exec
-            .get_arguments()
-            .any(|argument| argument.get_long() == Some("replace"));
+            .flags
+            .iter()
+            .any(|flag| flag.flag.longs.contains(&"replace"));
 
         assert_eq!(has_replace, cfg!(unix));
+    }
+
+    #[test]
+    fn glued_short_config_value_is_used_for_completion() {
+        let words = vec!["fnox".to_string(), "-cother.toml".to_string()];
+        let ctx = usage_rs::spec::CompleteCtx {
+            words: &words,
+            cword: words.len(),
+            prefix: "",
+            command_path: &[],
+            command_words: &words[1..],
+        };
+
+        assert_eq!(completion_config_path(&ctx), PathBuf::from("other.toml"));
+        let separated_words = vec![
+            "fnox".to_string(),
+            "-c".to_string(),
+            "other.toml".to_string(),
+        ];
+        let separated_ctx = usage_rs::spec::CompleteCtx {
+            words: &separated_words,
+            cword: separated_words.len(),
+            prefix: "",
+            command_path: &[],
+            command_words: &separated_words[1..],
+        };
+        assert_eq!(
+            completion_config_path(&separated_ctx),
+            PathBuf::from("other.toml")
+        );
     }
 }

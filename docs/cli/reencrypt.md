@@ -6,6 +6,8 @@
 
 Re-encrypt secrets with current provider configuration
 
+When you add or remove recipients from an encryption provider (e.g. age), existing secrets remain encrypted with the old recipient set. This command decrypts and re-encrypts all matching secrets with the current provider configuration.
+
 ## Arguments
 
 ### `[KEYS]…`
