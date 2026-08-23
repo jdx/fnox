@@ -45,6 +45,45 @@ EOF
 	assert_output --partial "cached_entries: 1"
 }
 
+@test "daemon resolves cache misses in the foreground client" {
+	mkdir -p "$TEST_TEMP_DIR/bin"
+	cat >"$TEST_TEMP_DIR/bin/pass" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$PPID" >>"$PASS_PPID_FILE"
+printf 'foreground-value\n'
+EOF
+	chmod +x "$TEST_TEMP_DIR/bin/pass"
+	export PATH="$TEST_TEMP_DIR/bin:$PATH"
+	export PASS_PPID_FILE="$TEST_TEMP_DIR/pass-pids"
+
+	cat >fnox.toml <<'EOF'
+root = true
+
+[daemon]
+enabled = true
+
+[providers.pass]
+type = "password-store"
+
+[secrets]
+FOO = { provider = "pass", value = "foo" }
+EOF
+
+	run "$FNOX_BIN" get FOO
+	assert_success
+	assert_output "foreground-value"
+
+	run "$FNOX_BIN" daemon status
+	assert_success
+	daemon_pid="$(printf '%s\n' "$output" | sed -n 's/^pid: //p')"
+	assert_not_equal "$(cat "$PASS_PPID_FILE")" "$daemon_pid"
+
+	run "$FNOX_BIN" get FOO
+	assert_success
+	assert_output "foreground-value"
+	assert_equal "$(wc -l <"$PASS_PPID_FILE" | tr -d ' ')" "1"
+}
+
 @test "daemon clear removes cached entries" {
 	daemon_config
 
