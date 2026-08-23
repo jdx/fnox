@@ -118,6 +118,17 @@ pub fn is_profile_file(path: &Path) -> bool {
         })
 }
 
+/// Extract the profile declared by a profile-specific config filename.
+/// `default` is excluded because `fnox.default.toml` is not a supported
+/// profile overlay.
+fn profile_name_from_file(path: &Path) -> Option<String> {
+    let name = path.file_name()?.to_str()?;
+    let name = name.strip_prefix('.').unwrap_or(name);
+    let profile = name.strip_prefix("fnox.")?.strip_suffix(".toml")?;
+    (profile != "default" && profile != "local" && env::is_valid_profile_name(profile))
+        .then(|| profile.to_string())
+}
+
 // Re-export ProviderConfig from providers module
 pub use crate::providers::ProviderConfig;
 
@@ -714,6 +725,10 @@ impl Config {
             }
         })?;
 
+        if let Some(profile) = profile_name_from_file(path) {
+            config.loaded_file_profiles.insert(profile);
+        }
+
         // Set source paths for all secrets and providers
         config.set_source_paths(path);
 
@@ -761,14 +776,7 @@ impl Config {
         for filename in &filenames {
             let path = dir.join(filename);
             if path.exists() {
-                let mut file_config = Self::load(&path)?;
-                for profile in profiles.iter().filter(|profile| *profile != "default") {
-                    if filename == &format!("fnox.{profile}.toml")
-                        || filename == &format!(".fnox.{profile}.toml")
-                    {
-                        file_config.loaded_file_profiles.insert(profile.clone());
-                    }
-                }
+                let file_config = Self::load(&path)?;
                 config = Self::merge_configs(config, file_config)?;
                 found = true;
             }

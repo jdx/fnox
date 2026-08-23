@@ -466,6 +466,20 @@ EOF
 	assert_output --partial '"profile": "staging"'
 }
 
+@test 'explicit profile-specific config file declares a valid profile' {
+	cat >fnox.staging.toml <<'EOF'
+root = true
+
+[secrets]
+SHARED = { default = "staging-value" }
+EOF
+
+	run "$FNOX_BIN" --config ./fnox.staging.toml --profile staging export --format json
+	assert_success
+	assert_output --partial 'staging-value'
+	assert_output --partial '"profile": "staging"'
+}
+
 @test 'set can create an unknown write profile' {
 	cat >fnox.toml <<'EOF'
 root = true

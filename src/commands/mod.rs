@@ -329,6 +329,7 @@ impl Commands {
         }
     }
 
+    /// Load configuration and validate the active profiles for this command.
     fn load_config(&self, cli: &Cli) -> Result<Config> {
         let config = Config::load_smart(&cli.config)?;
         let profiles = Config::get_profiles(&cli.profile);
@@ -337,13 +338,13 @@ impl Commands {
                 &profiles,
                 cli.write_profile.as_deref(),
             )?),
+            // Provider add intentionally ignores FNOX_PROFILE and uses only
+            // explicit CLI profiles. It also loads and updates its target
+            // config independently, so there is nothing to validate here.
             Commands::Provider(cmd)
                 if matches!(&cmd.action, Some(provider::ProviderAction::Add(_))) =>
             {
-                Some(Config::resolve_write_profile(
-                    &profiles,
-                    cli.write_profile.as_deref(),
-                )?)
+                return Ok(config);
             }
             Commands::Profiles(_) => return Ok(config),
             _ => {
