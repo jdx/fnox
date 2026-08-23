@@ -203,6 +203,25 @@ fn default_settings() -> SettingsData {
     SettingsData::read(&resolved).expect("every fnox setting has a declared default or is optional")
 }
 
+fn validate_env_profiles(profile: &mut Vec<String>) {
+    profile.retain(|name| {
+        if name.is_empty() {
+            return false;
+        }
+        if !crate::env::is_valid_profile_name(name) {
+            eprintln!(
+                "Warning: Invalid profile name '{}' in FNOX_PROFILE ignored (contains path separators or invalid characters)",
+                name
+            );
+            return false;
+        }
+        true
+    });
+    if profile.is_empty() {
+        *profile = default_settings().profile;
+    }
+}
+
 /// Main Settings interface
 pub struct Settings;
 
@@ -291,19 +310,7 @@ impl Settings {
         // Skip invalid profile names, with the same warning `FNOX_PROFILE` has always
         // produced for them.
         if from_env("profile") {
-            settings.profile.retain(|name| {
-                if name.is_empty() {
-                    return false;
-                }
-                if !crate::env::is_valid_profile_name(name) {
-                    eprintln!(
-                        "Warning: Invalid profile name '{}' in FNOX_PROFILE ignored (contains path separators or invalid characters)",
-                        name
-                    );
-                    return false;
-                }
-                true
-            });
+            validate_env_profiles(&mut settings.profile);
         }
 
         Ok(settings)
@@ -404,6 +411,18 @@ mod tests {
             "FNOX_PROFILE is a comma-separated list"
         );
         assert!(settings.no_defaults);
+    }
+
+    #[test]
+    fn test_invalid_env_profiles_fall_back_to_default() {
+        let env = EnvLayer::new([("FNOX_PROFILE".to_string(), "../bad,/also-bad".to_string())]);
+        let resolved =
+            resolve(SettingsData::SETTINGS_REGISTRY, Layers::new().then(&env)).expect("resolves");
+        let mut settings = SettingsData::read(&resolved).expect("reads");
+
+        validate_env_profiles(&mut settings.profile);
+
+        assert_eq!(settings.profile, vec!["default".to_string()]);
     }
 
     #[test]

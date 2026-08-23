@@ -15,11 +15,11 @@ This can be set via: - CLI flag: --age-key-file <path> - Environment variable: F
 
 Priority (highest to lowest): CLI > Environment > Default
 
-```
+```sh
 fnox get MY_SECRET --age-key-file ~/.age/key.txt
 ```
 
-```
+```sh
 FNOX_AGE_KEY_FILE=~/.age/key.txt fnox get MY_SECRET
 ```
 
@@ -36,11 +36,11 @@ Prevents fnox exec from hanging indefinitely on slow or unreachable servers. Set
 
 Priority: Environment > Default
 
-```
+```sh
 FNOX_HTTP_TIMEOUT=60s fnox exec -- ./my-app
 ```
 
-```
+```sh
 FNOX_HTTP_TIMEOUT=10s fnox lease create my-lease --duration 1h
 ```
 
@@ -57,11 +57,11 @@ Available modes: - "error" - Fail the command if a secret cannot be resolved - "
 
 Priority (highest to lowest): CLI flag > Environment > Secret level > Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)
 
-```
+```sh
 fnox exec --if-missing error -- ./my-app
 ```
 
-```
+```sh
 FNOX_IF_MISSING=ignore fnox exec -- ./my-app
 ```
 
@@ -78,11 +78,11 @@ Available modes: - "error" - Fail the command if a secret cannot be resolved - "
 
 Priority (highest to lowest): CLI flag > FNOX_IF_MISSING > Secret level > Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)
 
-```
+```sh
 export FNOX_IF_MISSING_DEFAULT=error  # Strict by default
 ```
 
-```
+```sh
 export FNOX_IF_MISSING_DEFAULT=ignore  # Lenient by default
 ```
 
@@ -97,11 +97,11 @@ When a non-default profile is selected, do not merge top-level [secrets] into th
 
 Priority (highest to lowest): CLI > Environment > Default
 
-```
+```sh
 fnox exec --profile dev --no-defaults -- ./my-app
 ```
 
-```
+```sh
 FNOX_NO_DEFAULTS=true fnox exec --profile dev -- ./my-app
 ```
 
@@ -118,11 +118,11 @@ Profiles allow you to maintain multiple configurations (e.g., dev, staging, prod
 
 Priority (highest to lowest): CLI > Environment > Default
 
-```
+```sh
 fnox get MY_SECRET --profile production
 ```
 
-```
+```sh
 FNOX_PROFILE=staging fnox get MY_SECRET
 ```
 
@@ -139,10 +139,10 @@ Available modes: - "none" - No output from shell integration - "normal" - Show s
 
 Priority: Environment > Default
 
-```
+```sh
 FNOX_SHELL_OUTPUT=none fnox activate bash
 ```
 
-```
+```sh
 FNOX_SHELL_OUTPUT=debug fnox activate zsh
 ```
