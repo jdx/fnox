@@ -184,6 +184,39 @@ export default defineConfig({
     },
   },
   head: [
+    [
+      "script",
+      {},
+      `(function () {
+  try {
+    var d = document.documentElement;
+    var c = JSON.parse(localStorage.getItem("jdx-banner-cache") || "null");
+    var expires = c && c.expires ? Date.parse(c.expires) : NaN;
+    var now = Date.now();
+    var metadataValid =
+      c &&
+      typeof c.id === "string" &&
+      typeof c.height === "string" &&
+      /^[1-9]\\d*(?:\\.\\d+)?px$/.test(c.height) &&
+      Number.isFinite(c.width) &&
+      typeof c.fontSize === "string" &&
+      Number.isFinite(c.pixelRatio) &&
+      Number.isFinite(c.cachedAt) &&
+      c.cachedAt <= now &&
+      now - c.cachedAt < 300000 &&
+      (!c.expires || (typeof c.expires === "string" && Number.isFinite(expires) && now < expires));
+    var contextMatches =
+      metadataValid &&
+      c.width === innerWidth &&
+      c.fontSize === getComputedStyle(d).fontSize &&
+      c.pixelRatio === devicePixelRatio;
+    if (contextMatches && localStorage.getItem("jdx-banner-dismissed") !== c.id)
+      d.style.setProperty("--vp-layout-top-height", c.height);
+    else if (c && !metadataValid)
+      localStorage.removeItem("jdx-banner-cache");
+  } catch (e) {}
+})();`,
+    ],
     ["link", { rel: "icon", href: "/favicon.ico", sizes: "any" }],
     [
       "link",
