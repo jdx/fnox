@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.34.0](https://github.com/jdx/fnox/compare/v1.33.1..v1.34.0) - 2026-08-23
+
+### 🚀 Features
+
+- **(keeper-sm)** add secrets manager provider by [@jdx](https://github.com/jdx) in [#720](https://github.com/jdx/fnox/pull/720)
+
+### 🐛 Bug Fixes
+
+- **(env)** clean up as_file secrets on zsh exit by [@jdx](https://github.com/jdx) in [#724](https://github.com/jdx/fnox/pull/724)
+- **(fido2)** prompt once for batch resolution by [@jdx](https://github.com/jdx) in [#732](https://github.com/jdx/fnox/pull/732)
+- **(hook-env)** keep auth output off stdout by [@halms](https://github.com/halms) in [#713](https://github.com/jdx/fnox/pull/713)
+- **(mcp)** include cache hints in tool list by [@jdx](https://github.com/jdx) in [#727](https://github.com/jdx/fnox/pull/727)
+- **(set)** preserve file secret newlines by [@jdx](https://github.com/jdx) in [#730](https://github.com/jdx/fnox/pull/730)
+
+### 🚜 Refactor
+
+- replace clap with usage by [@jdx](https://github.com/jdx) in [#725](https://github.com/jdx/fnox/pull/725)
+
+### 📚 Documentation
+
+- prevent mobile banner layout shifts by [@jdx](https://github.com/jdx) in [#731](https://github.com/jdx/fnox/pull/731)
+- document ${DEFAULT} syntax by [@arthurfiorette](https://github.com/arthurfiorette) in [#733](https://github.com/jdx/fnox/pull/733)
+
+### 📦️ Dependency Updates
+
+- update dependency @anthropic-ai/claude-code to v2.1.227 by [@renovate[bot]](https://github.com/renovate[bot]) in [#717](https://github.com/jdx/fnox/pull/717)
+- update swatinem/rust-cache digest to 6323deb by [@renovate[bot]](https://github.com/renovate[bot]) in [#716](https://github.com/jdx/fnox/pull/716)
+- update jdx/renovate-config digest to 75abd12 by [@renovate[bot]](https://github.com/renovate[bot]) in [#721](https://github.com/jdx/fnox/pull/721)
+- update dependency @anthropic-ai/claude-code to v2.1.228 by [@renovate[bot]](https://github.com/renovate[bot]) in [#722](https://github.com/jdx/fnox/pull/722)
+
+### New Contributors
+
+- @arthurfiorette made their first contribution in [#733](https://github.com/jdx/fnox/pull/733)
+
 ## [1.33.1](https://github.com/jdx/fnox/compare/v1.33.0..v1.33.1) - 2026-08-17
 
 ### 🐛 Bug Fixes

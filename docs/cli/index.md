@@ -4,7 +4,7 @@
 
 **Usage**: `fnox [FLAGS] <SUBCOMMAND>`
 
-**Version**: 1.33.1
+**Version**: 1.34.0
 
 - **Usage**: `fnox [FLAGS] <SUBCOMMAND>`
 
