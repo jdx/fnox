@@ -317,6 +317,11 @@ impl Commands {
             Commands::List(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Mcp(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Profiles(cmd) => cmd.run(cli, self.load_config(cli)?).await,
+            Commands::Provider(cmd)
+                if matches!(&cmd.action, Some(provider::ProviderAction::Add(_))) =>
+            {
+                cmd.run(cli, Config::new()).await
+            }
             Commands::Provider(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Proxy(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Reencrypt(cmd) => cmd.run(cli, self.load_config(cli)?).await,
@@ -338,14 +343,6 @@ impl Commands {
                 &profiles,
                 cli.write_profile.as_deref(),
             )?),
-            // Provider add intentionally ignores FNOX_PROFILE and uses only
-            // explicit CLI profiles. It also loads and updates its target
-            // config independently, so there is nothing to validate here.
-            Commands::Provider(cmd)
-                if matches!(&cmd.action, Some(provider::ProviderAction::Add(_))) =>
-            {
-                return Ok(config);
-            }
             Commands::Profiles(_) => return Ok(config),
             _ => {
                 config.validate_profiles(&profiles, None)?;

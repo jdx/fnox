@@ -96,15 +96,17 @@ vault|vault|vault"
 	unset FNOX_PROFILE
 	run "$FNOX_BIN" init --skip-wizard
 	assert_success
+	cat >fnox.missing.toml <<'EOF'
+this is not valid toml
+EOF
 
-	run env FNOX_PROFILE=missing,other "$FNOX_BIN" provider add myage age
+	run env FNOX_PROFILE=missing "$FNOX_BIN" provider add myage age
 	assert_success
 
 	run cat "$FNOX_CONFIG_FILE"
 	assert_success
 	assert_output --partial "[providers.myage]"
 	refute_output --partial "[profiles.missing"
-	refute_output --partial "[profiles.other"
 }
 
 @test "fnox provider add with --profile writes to profile section" {
