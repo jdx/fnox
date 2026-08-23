@@ -209,7 +209,7 @@ fn validate_env_profiles(profile: &mut Vec<String>) {
             return false;
         }
         if !crate::env::is_valid_profile_name(name) {
-            eprintln!(
+            tracing::warn!(
                 "Warning: Invalid profile name '{}' in FNOX_PROFILE ignored (contains path separators or invalid characters)",
                 name
             );
