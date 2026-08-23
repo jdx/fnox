@@ -2,6 +2,7 @@
 _.path = ["target/debug", "test/bats/bin"]
 
 [tools]
+usage = "6.1.0"
 # Pinned rather than "latest" because tak is the measuring instrument: an
 # upgrade that changes how it samples would land in the series as a step change
 # in fnox's numbers, indistinguishable from a real regression. Bump deliberately.
@@ -86,20 +87,15 @@ run = [
 
 [tasks."render:usage"]
 description = "Generate CLI documentation from usage"
-depends = ["build", "build-usage"]
+depends = ["build"]
 run = [
   "fnox usage > fnox.usage.kdl",
   "rm -rf docs/cli && mkdir -p docs/cli",
-  "target/usage-cli/bin/usage g markdown -mf fnox.usage.kdl --out-dir docs/cli --url-prefix /cli",
+  "usage g markdown -mf fnox.usage.kdl --out-dir docs/cli --url-prefix /cli",
   "perl -pi -e 'if (/^```$/) { s/$/sh/ unless $in_fence; $in_fence = !$in_fence }' docs/cli/configuration.md",
-  "target/usage-cli/bin/usage g json -f fnox.usage.kdl > docs/cli/commands.json",
+  "usage g json -f fnox.usage.kdl > docs/cli/commands.json",
   "prettier --write docs/cli",
 ]
-
-[tasks.build-usage]
-run = "cargo install --locked --root target/usage-cli --version 6.1.0 usage-cli"
-sources = ["Cargo.lock", "mise.toml"]
-outputs = ["target/usage-cli/bin/usage"]
 
 # Instruction-counted benchmarks (see tak.toml). Needs valgrind for the counts;
 # without it tak reports wall clock only and says so, so this still works on
