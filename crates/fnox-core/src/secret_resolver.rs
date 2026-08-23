@@ -731,13 +731,28 @@ pub async fn resolve_secrets_batch(
     profile: &[String],
     secrets: &IndexMap<String, SecretConfig>,
 ) -> Result<IndexMap<String, Option<String>>> {
+    resolve_secrets_batch_with_pre_resolved(config, profile, secrets, &IndexMap::new()).await
+}
+
+/// Resolves multiple secrets while treating previously resolved values as
+/// dependencies that are already available.
+pub async fn resolve_secrets_batch_with_pre_resolved(
+    config: &Config,
+    profile: &[String],
+    secrets: &IndexMap<String, SecretConfig>,
+    pre_resolved: &IndexMap<String, Option<String>>,
+) -> Result<IndexMap<String, Option<String>>> {
     // Classify each secret: provider-backed vs no-provider
     let mut secret_provider: HashMap<String, (String, String)> = HashMap::new(); // key -> (provider_name, provider_value)
     let mut no_provider = Vec::new();
 
     let providers = config.get_providers(profile);
     let all_keys: Vec<String> = secrets.keys().cloned().collect();
-    let secret_keys: HashSet<&str> = all_keys.iter().map(|k| k.as_str()).collect();
+    let secret_keys: HashSet<&str> = all_keys
+        .iter()
+        .map(|key| key.as_str())
+        .chain(pre_resolved.keys().map(|key| key.as_str()))
+        .collect();
     let mut default_deps: HashMap<String, Vec<String>> = HashMap::new();
     let mut hard_default_deps: HashMap<String, Vec<String>> = HashMap::new();
 
@@ -831,7 +846,13 @@ pub async fn resolve_secrets_batch(
     let (levels, cycle) = compute_resolution_levels(&all_keys, &deps_for_secret, &no_provider_set);
 
     // Resolve each level in order
-    let mut temp_results: HashMap<String, Option<String>> = HashMap::new();
+    let mut temp_results: HashMap<String, Option<String>> =
+        pre_resolved.clone().into_iter().collect();
+    for (key, value) in pre_resolved {
+        if let Some(value) = value {
+            env::set_var(key, value);
+        }
+    }
 
     for ready in &levels {
         let level_results = resolve_level(
@@ -1706,6 +1727,33 @@ mod tests {
                 .get("DATABASE_URL")
                 .and_then(|value| value.as_ref()),
             Some(&"postgres://app@localhost/fnox".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_interpolated_default_can_use_pre_resolved_reference() {
+        let config = Config::new();
+        let secrets = IndexMap::from([(
+            "DATABASE_URL".to_string(),
+            default_secret("postgres://${POSTGRES_USER}@localhost/fnox"),
+        )]);
+        let pre_resolved =
+            IndexMap::from([("POSTGRES_USER".to_string(), Some("cached-user".to_string()))]);
+
+        let resolved = resolve_secrets_batch_with_pre_resolved(
+            &config,
+            &profile("default"),
+            &secrets,
+            &pre_resolved,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            resolved
+                .get("DATABASE_URL")
+                .and_then(|value| value.as_ref()),
+            Some(&"postgres://cached-user@localhost/fnox".to_string())
         );
     }
 

@@ -23,6 +23,12 @@ fnox daemon clear
 fnox daemon stop
 ```
 
+On a cache miss, an interactive fnox client resolves the requested secrets in
+the foreground and sends the results to the daemon for memory-only caching.
+This keeps terminal-dependent authentication, such as a FIDO2 PIN and hardware
+key touch, attached to the terminal that invoked fnox. Explicitly
+non-interactive clients resolve misses in the daemon and never prompt.
+
 Use `--no-daemon` for a single direct resolution:
 
 ```bash
@@ -84,7 +90,7 @@ vault = "Engineering"
 daemon_cache = false
 ```
 
-This disables cache reuse for those values. If daemon mode is enabled, fnox still talks to the daemon for supported read commands; the daemon resolves those entries directly instead of returning a cached value.
+This disables cache reuse for those values. If daemon mode is enabled, fnox still talks to the daemon for supported read commands, but those entries are resolved again for every request.
 
 ## Security Model
 
