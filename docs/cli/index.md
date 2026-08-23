@@ -93,3 +93,7 @@ Target profile for write commands (set, remove, import, sync, provider add/remov
 - [`fnox sync [FLAGS] [KEYS]…`](/cli/sync.md)
 - [`fnox tui`](/cli/tui.md)
 - [`fnox version`](/cli/version.md)
+
+## Configuration
+
+- [Settings](/cli/configuration.md)

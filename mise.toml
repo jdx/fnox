@@ -91,6 +91,7 @@ run = [
   "fnox usage > fnox.usage.kdl",
   "rm -rf docs/cli && mkdir -p docs/cli",
   "target/usage-cli/bin/usage g markdown -mf fnox.usage.kdl --out-dir docs/cli --url-prefix /cli",
+  "perl -pi -e 'if (/^```$/) { s/$/sh/ unless $in_fence; $in_fence = !$in_fence }' docs/cli/configuration.md",
   "target/usage-cli/bin/usage g json -f fnox.usage.kdl > docs/cli/commands.json",
   "prettier --write docs/cli",
 ]
