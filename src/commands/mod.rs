@@ -330,7 +330,29 @@ impl Commands {
     }
 
     fn load_config(&self, cli: &Cli) -> Result<Config> {
-        Config::load_smart(&cli.config)
+        let config = Config::load_smart(&cli.config)?;
+        let profiles = Config::get_profiles(&cli.profile);
+        let allow_missing = match self {
+            Commands::Set(_) | Commands::Import(_) => Some(Config::resolve_write_profile(
+                &profiles,
+                cli.write_profile.as_deref(),
+            )?),
+            Commands::Provider(cmd)
+                if matches!(&cmd.action, Some(provider::ProviderAction::Add(_))) =>
+            {
+                Some(Config::resolve_write_profile(
+                    &profiles,
+                    cli.write_profile.as_deref(),
+                )?)
+            }
+            Commands::Profiles(_) => return Ok(config),
+            _ => {
+                config.validate_profiles(&profiles, None)?;
+                return Ok(config);
+            }
+        };
+        config.validate_profiles(&profiles, allow_missing.as_deref())?;
+        Ok(config)
     }
 }
 

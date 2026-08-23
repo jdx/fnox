@@ -12,10 +12,7 @@ pub struct ProfilesCommand {
 
 impl ProfilesCommand {
     pub async fn run(&self, _cli: &Cli, config: Config) -> Result<()> {
-        let mut profile_names = vec!["default".to_string()];
-        profile_names.extend(config.profiles.keys().cloned());
-        profile_names.sort();
-        profile_names.dedup();
+        let profile_names = config.available_profiles();
 
         if self.complete {
             // Output for completion

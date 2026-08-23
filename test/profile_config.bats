@@ -313,6 +313,8 @@ recipients = ["age1test"]
 
 [secrets]
 MAIN_SECRET = { description = "Main secret", default = "main-value" }
+
+[profiles.production]
 EOF
 
 	# Create production profile config
@@ -430,6 +432,52 @@ EOF
 	run "$FNOX_BIN" -P extra get S1
 	assert_success
 	assert_output --partial "v1"
+}
+
+@test 'unknown profile fails instead of exporting top-level secrets' {
+	cat >fnox.toml <<'EOF'
+root = true
+
+[secrets]
+SHARED = { default = "top-level-value" }
+EOF
+
+	run "$FNOX_BIN" export --profile typo --format json
+	assert_failure
+	assert_output --partial "Profile 'typo' not found"
+	refute_output --partial 'top-level-value'
+}
+
+@test 'profile-specific config file declares a valid profile' {
+	cat >fnox.toml <<'EOF'
+root = true
+
+[secrets]
+SHARED = { default = "top-level-value" }
+EOF
+	cat >fnox.staging.toml <<'EOF'
+[secrets]
+SHARED = { default = "staging-value" }
+EOF
+
+	run "$FNOX_BIN" export --profile staging --format json
+	assert_success
+	assert_output --partial 'staging-value'
+	assert_output --partial '"profile": "staging"'
+}
+
+@test 'set can create an unknown write profile' {
+	cat >fnox.toml <<'EOF'
+root = true
+
+[providers.plain]
+type = "plain"
+EOF
+
+	run "$FNOX_BIN" set --profile new NEW_SECRET 'new-value'
+	assert_success
+	assert_file_contains fnox.toml '\[profiles.new.secrets\]'
+	assert_file_contains fnox.toml 'NEW_SECRET.*new-value'
 }
 
 @test 'fnox.$FNOX_PROFILE.toml can override default_provider' {

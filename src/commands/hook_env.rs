@@ -262,6 +262,9 @@ async fn load_secrets_from_config(cli: &Cli) -> Result<LoadedSecrets> {
 
     // Get the active profile (settings was already loaded above)
     let profile_name = &settings.profile;
+    config
+        .validate_profiles(profile_name, None)
+        .map_err(|e| anyhow::anyhow!(e))?;
 
     // Get secrets for the profile using the Config method (inherits top-level secrets)
     let profile_secrets = config
