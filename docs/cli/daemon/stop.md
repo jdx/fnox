@@ -2,6 +2,10 @@
 
 # `fnox daemon stop`
 
-- **Usage**: `fnox daemon stop`
+- **Usage:** `fnox daemon stop`
 
 Stop the daemon
+
+## Flags
+
+- **`-h --help`** — Print help

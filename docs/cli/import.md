@@ -2,52 +2,26 @@
 
 # `fnox import`
 
-- **Usage**: `fnox import <FLAGS> [FORMAT]`
-- **Aliases**: `im`
+- **Usage:** `fnox import <FLAGS> [FORMAT]`
+- **Aliases:** `im`
 
 Import secrets from various sources
 
 ## Arguments
 
-### `[FORMAT]`
+- **`[FORMAT]`** — Import source format
 
-Import source format
+  **Choices:** `env`, `json`, `yaml`, `toml`
 
-**Choices:**
-
-- `env`
-- `json`
-- `yaml`
-- `toml`
-
-**Default:** `env`
+  **Default:** `env`
 
 ## Flags
 
-### `-f --force`
-
-Skip confirmation prompts
-
-### `-g --global`
-
-Import to the global config file (~/.config/fnox/config.toml)
-
-### `-i --input <INPUT>`
-
-Source file or path to import from (default: stdin)
-
-### `-n --dry-run`
-
-Show what would be imported without making changes
-
-### `-p --provider <PROVIDER>`
-
-Provider to use for encrypting/storing imported secrets (required)
-
-### `--filter <FILTER>`
-
-Only import matching secrets (regex pattern)
-
-### `--prefix <PREFIX>`
-
-Prefix to add to imported secret names
+- **`-f --force`** — Skip confirmation prompts
+- **`-g --global`** — Import to the global config file (~/.config/fnox/config.toml)
+- **`-i --input <INPUT>`** — Source file or path to import from (default: stdin)
+- **`-n --dry-run`** — Show what would be imported without making changes
+- **`-p --provider <PROVIDER>`** — Provider to use for encrypting/storing imported secrets (required)
+- **`--filter <FILTER>`** — Only import matching secrets (regex pattern)
+- **`--prefix <PREFIX>`** — Prefix to add to imported secret names
+- **`-h --help`** — Print help

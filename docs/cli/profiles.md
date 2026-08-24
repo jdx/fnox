@@ -2,6 +2,10 @@
 
 # `fnox profiles`
 
-- **Usage**: `fnox profiles`
+- **Usage:** `fnox profiles`
 
 List available profiles
+
+## Flags
+
+- **`-h --help`** — Print help

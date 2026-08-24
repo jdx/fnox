@@ -2,21 +2,14 @@
 
 # `fnox init`
 
-- **Usage**: `fnox init [FLAGS]`
-- **Aliases**: `i`
+- **Usage:** `fnox init [FLAGS]`
+- **Aliases:** `i`
 
 Initialize a new fnox configuration file
 
 ## Flags
 
-### `-f --force`
-
-Overwrite existing configuration file
-
-### `-g --global`
-
-Initialize the global config file (~/.config/fnox/config.toml)
-
-### `--skip-wizard`
-
-Skip the interactive wizard and create a minimal config
+- **`-f --force`** — Overwrite existing configuration file
+- **`-g --global`** — Initialize the global config file (~/.config/fnox/config.toml)
+- **`--skip-wizard`** — Skip the interactive wizard and create a minimal config
+- **`-h --help`** — Print help

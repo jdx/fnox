@@ -2,6 +2,10 @@
 
 # `fnox config-files`
 
-- **Usage**: `fnox config-files`
+- **Usage:** `fnox config-files`
 
 List all config files that would be loaded
+
+## Flags
+
+- **`-h --help`** — Print help

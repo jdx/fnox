@@ -4,10 +4,10 @@
 
 ## `age_key_file`
 
-- **type**: `option<path>`
-- **optional**: true
-- **since**: 0.1.0
-- **set with**: `--age-key-file`, `FNOX_AGE_KEY_FILE`
+- **Type:** `option<path>`
+- **Optional:** true
+- **Since:** 0.1.0
+- **Set with:** `--age-key-file`, `FNOX_AGE_KEY_FILE`
 
 Path to a file containing the age encryption key.
 
@@ -25,10 +25,10 @@ FNOX_AGE_KEY_FILE=~/.age/key.txt fnox get MY_SECRET
 
 ## `http_timeout`
 
-- **type**: `string`
-- **default**: `30s`
-- **since**: 1.16.0
-- **set with**: `FNOX_HTTP_TIMEOUT`
+- **Type:** `string`
+- **Default:** `30s`
+- **Since:** 1.16.0
+- **Set with:** `FNOX_HTTP_TIMEOUT`
 
 HTTP request timeout in seconds for lease backend API calls (Vault, GCP IAM, etc.).
 
@@ -46,10 +46,10 @@ FNOX_HTTP_TIMEOUT=10s fnox lease create my-lease --duration 1h
 
 ## `if_missing`
 
-- **type**: `option<string>`
-- **optional**: true
-- **since**: 1.1.0
-- **set with**: `--if-missing`, `FNOX_IF_MISSING`
+- **Type:** `option<string>`
+- **Optional:** true
+- **Since:** 1.1.0
+- **Set with:** `--if-missing`, `FNOX_IF_MISSING`
 
 Runtime override for if_missing behavior when a secret cannot be resolved.
 
@@ -67,10 +67,10 @@ FNOX_IF_MISSING=ignore fnox exec -- ./my-app
 
 ## `if_missing_default`
 
-- **type**: `option<string>`
-- **optional**: true
-- **since**: 1.1.0
-- **set with**: `FNOX_IF_MISSING_DEFAULT`
+- **Type:** `option<string>`
+- **Optional:** true
+- **Since:** 1.1.0
+- **Set with:** `FNOX_IF_MISSING_DEFAULT`
 
 Base default behavior when a secret cannot be resolved and not specified in config.
 
@@ -88,10 +88,10 @@ export FNOX_IF_MISSING_DEFAULT=ignore  # Lenient by default
 
 ## `no_defaults`
 
-- **type**: `bool`
-- **default**: `false`
-- **since**: 1.12.0
-- **set with**: `--no-defaults`, `FNOX_NO_DEFAULTS`
+- **Type:** `bool`
+- **Default:** `false`
+- **Since:** 1.12.0
+- **Set with:** `--no-defaults`, `FNOX_NO_DEFAULTS`
 
 When a non-default profile is selected, do not merge top-level [secrets] into the profile. Only [profiles.&lt;name>.secrets] will be used.
 
@@ -107,10 +107,10 @@ FNOX_NO_DEFAULTS=true fnox exec --profile dev -- ./my-app
 
 ## `profile`
 
-- **type**: `list<string>`
-- **default**: `default`
-- **since**: 0.1.0
-- **set with**: `--profile`, `-P`, `FNOX_PROFILE`
+- **Type:** `list<string>`
+- **Default:** `default`
+- **Since:** 0.1.0
+- **Set with:** `--profile`, `-P`, `FNOX_PROFILE`
 
 Configuration profile to use for secrets retrieval.
 
@@ -128,10 +128,10 @@ FNOX_PROFILE=staging fnox get MY_SECRET
 
 ## `shell_integration_output`
 
-- **type**: `string`
-- **default**: `normal`
-- **since**: 0.1.0
-- **set with**: `FNOX_SHELL_OUTPUT`
+- **Type:** `string`
+- **Default:** `normal`
+- **Since:** 0.1.0
+- **Set with:** `FNOX_SHELL_OUTPUT`
 
 Control output level for shell integration.
 

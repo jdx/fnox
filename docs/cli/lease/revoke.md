@@ -2,12 +2,14 @@
 
 # `fnox lease revoke`
 
-- **Usage**: `fnox lease revoke <LEASE_ID>`
+- **Usage:** `fnox lease revoke <LEASE_ID>`
 
 Revoke a lease by ID
 
 ## Arguments
 
-### `<LEASE_ID>`
+- **`<LEASE_ID>`** — Lease ID to revoke
 
-Lease ID to revoke
+## Flags
+
+- **`-h --help`** — Print help

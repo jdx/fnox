@@ -2,12 +2,14 @@
 
 # `fnox proxy run`
 
-- **Usage**: `fnox proxy run [COMMAND]…`
+- **Usage:** `fnox proxy run [COMMAND]…`
 
 Run a command with placeholder credentials through the local proxy
 
 ## Arguments
 
-### `[COMMAND]…`
+- **`[COMMAND]…`** — Command to run
 
-Command to run
+## Flags
+
+- **`-h --help`** — Print help

@@ -2,6 +2,10 @@
 
 # `fnox mcp`
 
-- **Usage**: `fnox mcp`
+- **Usage:** `fnox mcp`
 
 Start an MCP server for secret-gated AI agent access
+
+## Flags
+
+- **`-h --help`** — Print help

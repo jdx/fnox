@@ -2,7 +2,11 @@
 
 # `fnox doctor`
 
-- **Usage**: `fnox doctor`
-- **Aliases**: `dr`
+- **Usage:** `fnox doctor`
+- **Aliases:** `dr`
 
 Show diagnostic information about the current fnox state
+
+## Flags
+
+- **`-h --help`** — Print help

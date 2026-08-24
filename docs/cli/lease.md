@@ -2,9 +2,13 @@
 
 # `fnox lease`
 
-- **Usage**: `fnox lease <SUBCOMMAND>`
+- **Usage:** `fnox lease <SUBCOMMAND>`
 
 Manage ephemeral credential leases
+
+## Flags
+
+- **`-h --help`** — Print help
 
 ## Subcommands
 

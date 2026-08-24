@@ -2,6 +2,10 @@
 
 # `fnox lease cleanup`
 
-- **Usage**: `fnox lease cleanup`
+- **Usage:** `fnox lease cleanup`
 
 Revoke all expired leases that need manual cleanup
+
+## Flags
+
+- **`-h --help`** — Print help

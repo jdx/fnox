@@ -2,7 +2,11 @@
 
 # `fnox provider list`
 
-- **Usage**: `fnox provider list`
-- **Aliases**: `ls`
+- **Usage:** `fnox provider list`
+- **Aliases:** `ls`
 
 List available providers
+
+## Flags
+
+- **`-h --help`** — Print help

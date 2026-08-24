@@ -2,65 +2,32 @@
 
 # `fnox set`
 
-- **Usage**: `fnox set [FLAGS] <KEY> [VALUE]`
-- **Aliases**: `s`
+- **Usage:** `fnox set [FLAGS] <KEY> [VALUE]`
+- **Aliases:** `s`
 
 Set a secret value
 
 ## Arguments
 
-### `<KEY>`
+- **`<KEY>`** — Secret key (environment variable name)
+- **`[VALUE]`** — Secret value to store.
 
-Secret key (environment variable name)
+  If omitted: reads from stdin when piped (`echo "x" | fnox set KEY`), or prompts interactively with hidden input.
 
-### `[VALUE]`
-
-Secret value to store.
-
-If omitted: reads from stdin when piped (`echo "x" | fnox set KEY`), or prompts interactively with hidden input.
-
-Passing secrets as arguments exposes them in shell history and `ps` output. For sensitive values, prefer stdin or the interactive prompt.
+  Passing secrets as arguments exposes them in shell history and `ps` output. For sensitive values, prefer stdin or the interactive prompt.
 
 ## Flags
 
-### `-d --description <DESCRIPTION>`
+- **`-d --description <DESCRIPTION>`** — Description of the secret
+- **`-g --global`** — Save to the global config file (~/.config/fnox/config.toml)
+- **`-k --key-name <KEY_NAME>`** — Key name in the provider (if different from env var name)
+- **`-n --dry-run`** — Show what would be done without making changes
+- **`-p --provider <PROVIDER>`** — Provider to fetch from
+- **`--base64-encode`** — Base64 encode the secret
+- **`--default <DEFAULT>`** — Default value to use if secret is not found
+- **`--from-file <FROM_FILE>`** — Read the secret value verbatim from a UTF-8 file
+- **`--if-missing <IF_MISSING>`** — What to do if the secret is missing (error, warn, ignore)
 
-Description of the secret
+  **Choices:** `error`, `warn`, `ignore`
 
-### `-g --global`
-
-Save to the global config file (~/.config/fnox/config.toml)
-
-### `-k --key-name <KEY_NAME>`
-
-Key name in the provider (if different from env var name)
-
-### `-n --dry-run`
-
-Show what would be done without making changes
-
-### `-p --provider <PROVIDER>`
-
-Provider to fetch from
-
-### `--base64-encode`
-
-Base64 encode the secret
-
-### `--default <DEFAULT>`
-
-Default value to use if secret is not found
-
-### `--from-file <FROM_FILE>`
-
-Read the secret value verbatim from a UTF-8 file
-
-### `--if-missing <IF_MISSING>`
-
-What to do if the secret is missing (error, warn, ignore)
-
-**Choices:**
-
-- `error`
-- `warn`
-- `ignore`
+- **`-h --help`** — Print help

@@ -2,16 +2,12 @@
 
 # `fnox lease list`
 
-- **Usage**: `fnox lease list [--active] [--expired]`
+- **Usage:** `fnox lease list [--active] [--expired]`
 
 List tracked leases
 
 ## Flags
 
-### `--active`
-
-Show only active (non-expired, non-revoked) leases
-
-### `--expired`
-
-Show only expired leases
+- **`--active`** — Show only active (non-expired, non-revoked) leases
+- **`--expired`** — Show only expired leases
+- **`-h --help`** — Print help

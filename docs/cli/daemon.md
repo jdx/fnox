@@ -2,9 +2,13 @@
 
 # `fnox daemon`
 
-- **Usage**: `fnox daemon <SUBCOMMAND>`
+- **Usage:** `fnox daemon <SUBCOMMAND>`
 
 Manage the per-user daemon
+
+## Flags
+
+- **`-h --help`** — Print help
 
 ## Subcommands
 

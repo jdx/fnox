@@ -2,9 +2,13 @@
 
 # `fnox provider`
 
-- **Usage**: `fnox provider <SUBCOMMAND>`
+- **Usage:** `fnox provider <SUBCOMMAND>`
 
 Manage providers (defaults to list)
+
+## Flags
+
+- **`-h --help`** — Print help
 
 ## Subcommands
 

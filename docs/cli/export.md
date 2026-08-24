@@ -2,39 +2,21 @@
 
 # `fnox export`
 
-- **Usage**: `fnox export [FLAGS]`
-- **Aliases**: `ex`
+- **Usage:** `fnox export [FLAGS]`
+- **Aliases:** `ex`
 
 Export secrets in various formats
 
 ## Flags
 
-### `-f --format <FORMAT>`
+- **`-f --format <FORMAT>`** — Export format
 
-Export format
+  **Choices:** `env`, `shell`, `json`, `yaml`, `toml`
 
-**Choices:**
+  **Default:** `env`
 
-- `env`
-- `shell`
-- `json`
-- `yaml`
-- `toml`
-
-**Default:** `env`
-
-### `-n --dry-run`
-
-Show what would be exported without writing to file
-
-### `-o --output <OUTPUT>`
-
-Output file (default: stdout)
-
-### `--all`
-
-Include secrets with env = false or env = "exec" (excluded by default)
-
-### `--header`
-
-Include metadata comments in env and shell output
+- **`-n --dry-run`** — Show what would be exported without writing to file
+- **`-o --output <OUTPUT>`** — Output file (default: stdout)
+- **`--all`** — Include secrets with env = false or env = "exec" (excluded by default)
+- **`--header`** — Include metadata comments in env and shell output
+- **`-h --help`** — Print help
