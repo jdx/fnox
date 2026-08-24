@@ -590,12 +590,14 @@ type = "plain"
 [secrets]
 SPECIAL_SECRET = { provider = "plain", value = "secret$value`tick`" }
 QUOTED_SECRET = { provider = "plain", value = "quoted \"value\" with \\ backslash" }
+TRAILING_BACKSLASH = { provider = "plain", value = 'secret$value\' }
 EOF
 
 	run "$FNOX_BIN" export --format env
 	assert_success
-	assert_output --partial 'SPECIAL_SECRET="secret$value`tick`"'
+	assert_output --partial "SPECIAL_SECRET='secret\$value\`tick\`'"
 	assert_output --partial 'QUOTED_SECRET="quoted \"value\" with \\ backslash"'
+	assert_output --partial 'TRAILING_BACKSLASH="secret\$value\\"'
 }
 
 @test "export env format can include metadata header" {
