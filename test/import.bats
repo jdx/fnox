@@ -81,6 +81,9 @@ EOF
 	# Create a .env file with quoted values
 	cat >.env <<'EOF'
 SINGLE_QUOTED='value with spaces'
+SINGLE_QUOTED_APOSTROPHE='it\'s $5'
+SINGLE_QUOTED_MULTILINE='first line
+$second line'
 DOUBLE_QUOTED="another value with spaces"
 DOUBLE_QUOTED_ESCAPES="quoted \"value\" with \\ backslash and \n newline"
 DOLLAR_AND_BACKTICK="secret$value`tick`"
@@ -91,6 +94,12 @@ EOF
 
 	assert_fnox_success get SINGLE_QUOTED --age-key-file key.txt
 	assert_output "value with spaces"
+
+	assert_fnox_success get SINGLE_QUOTED_APOSTROPHE --age-key-file key.txt
+	assert_output 'it'\''s $5'
+
+	assert_fnox_success get SINGLE_QUOTED_MULTILINE --age-key-file key.txt
+	assert_output $'first line\n$second line'
 
 	assert_fnox_success get DOUBLE_QUOTED --age-key-file key.txt
 	assert_output "another value with spaces"

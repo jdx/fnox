@@ -594,7 +594,7 @@ EOF
 
 	run "$FNOX_BIN" export --format env
 	assert_success
-	assert_output --partial 'SPECIAL_SECRET="secret$value`tick`"'
+	assert_output --partial "SPECIAL_SECRET='secret\$value\`tick\`'"
 	assert_output --partial 'QUOTED_SECRET="quoted \"value\" with \\ backslash"'
 }
 
