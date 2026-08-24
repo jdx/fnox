@@ -2,19 +2,16 @@
 
 # `fnox provider remove`
 
-- **Usage**: `fnox provider remove [-g --global] <PROVIDER>`
-- **Aliases**: `rm`, `delete`
+- **Usage:** `fnox provider remove [-g --global] <PROVIDER>`
+- **Aliases:** `rm`, `delete`
 
 Remove a provider
 
 ## Arguments
 
-### `<PROVIDER>`
-
-Provider name
+- **`<PROVIDER>`** — Provider name
 
 ## Flags
 
-### `-g --global`
-
-Remove from the global config file (~/.config/fnox/config.toml)
+- **`-g --global`** — Remove from the global config file (~/.config/fnox/config.toml)
+- **`-h --help`** — Print help

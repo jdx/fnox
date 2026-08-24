@@ -2,55 +2,20 @@
 
 # `fnox provider add`
 
-- **Usage**: `fnox provider add [-g --global] [--vault <VAULT>] <PROVIDER> <PROVIDER_TYPE>`
-- **Aliases**: `a`, `set`
+- **Usage:** `fnox provider add [-g --global] [--vault <VAULT>] <PROVIDER> <PROVIDER_TYPE>`
+- **Aliases:** `a`, `set`
 
 Add a new provider
 
 ## Arguments
 
-### `<PROVIDER>`
+- **`<PROVIDER>`** — Provider name
+- **`<PROVIDER_TYPE>`** — Provider type
 
-Provider name
-
-### `<PROVIDER_TYPE>`
-
-Provider type
-
-**Choices:**
-
-- `1password`
-- `age`
-- `aws`
-- `aws-kms`
-- `aws-ps`
-- `azure-ac`
-- `azure-kms`
-- `azure-sm`
-- `gcp`
-- `gcp-kms`
-- `fido2`
-- `bitwarden`
-- `doppler`
-- `foks`
-- `bitwarden-sm`
-- `infisical`
-- `keepass`
-- `keeper-sm`
-- `keychain`
-- `password-store`
-- `passwordstate`
-- `plain`
-- `proton-pass`
-- `vault`
-- `yubikey`
+  **Choices:** `1password`, `age`, `aws`, `aws-kms`, `aws-ps`, `azure-ac`, `azure-kms`, `azure-sm`, `gcp`, `gcp-kms`, `fido2`, `bitwarden`, `doppler`, `foks`, `bitwarden-sm`, `infisical`, `keepass`, `keeper-sm`, `keychain`, `password-store`, `passwordstate`, `plain`, `proton-pass`, `vault`, `yubikey`
 
 ## Flags
 
-### `-g --global`
-
-Add to the global config file (~/.config/fnox/config.toml)
-
-### `--vault <VAULT>`
-
-Default Proton Pass vault name (only valid with provider type proton-pass)
+- **`-g --global`** — Add to the global config file (~/.config/fnox/config.toml)
+- **`--vault <VAULT>`** — Default Proton Pass vault name (only valid with provider type proton-pass)
+- **`-h --help`** — Print help

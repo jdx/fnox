@@ -2,6 +2,10 @@
 
 # `fnox daemon clear`
 
-- **Usage**: `fnox daemon clear`
+- **Usage:** `fnox daemon clear`
 
 Clear all running daemon caches
+
+## Flags
+
+- **`-h --help`** — Print help

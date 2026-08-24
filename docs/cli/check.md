@@ -2,13 +2,12 @@
 
 # `fnox check`
 
-- **Usage**: `fnox check [-a --all]`
-- **Aliases**: `c`
+- **Usage:** `fnox check [-a --all]`
+- **Aliases:** `c`
 
 Check if all required secrets are defined and configured
 
 ## Flags
 
-### `-a --all`
-
-Check all secrets including those with if_missing=warn or if_missing=ignore
+- **`-a --all`** — Check all secrets including those with if_missing=warn or if_missing=ignore
+- **`-h --help`** — Print help

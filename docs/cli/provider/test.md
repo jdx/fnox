@@ -2,19 +2,16 @@
 
 # `fnox provider test`
 
-- **Usage**: `fnox provider test [-a --all] [PROVIDER]`
-- **Aliases**: `t`
+- **Usage:** `fnox provider test [-a --all] [PROVIDER]`
+- **Aliases:** `t`
 
 Test a provider connection
 
 ## Arguments
 
-### `[PROVIDER]`
-
-Provider name (optional when using --all)
+- **`[PROVIDER]`** — Provider name (optional when using --all)
 
 ## Flags
 
-### `-a --all`
-
-Test all configured providers
+- **`-a --all`** — Test all configured providers
+- **`-h --help`** — Print help

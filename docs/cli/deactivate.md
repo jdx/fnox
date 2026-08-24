@@ -2,7 +2,7 @@
 
 # `fnox deactivate`
 
-- **Usage**: `fnox deactivate`
+- **Usage:** `fnox deactivate`
 
 Disable fnox shell integration in the current shell session
 
@@ -12,3 +12,7 @@ to their state before fnox was activated.
 
 Note: This only affects the current shell session. To re-enable fnox,
 run the activation command again for your shell.
+
+## Flags
+
+- **`-h --help`** — Print help

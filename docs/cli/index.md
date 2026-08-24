@@ -2,53 +2,34 @@
 
 # `fnox`
 
-**Usage**: `fnox [FLAGS] <SUBCOMMAND>`
+**Usage:** `fnox [FLAGS] <SUBCOMMAND>`
 
-**Version**: 1.34.0
+**Version:** 1.34.0
 
-- **Usage**: `fnox [FLAGS] <SUBCOMMAND>`
+- **Usage:** `fnox [FLAGS] <SUBCOMMAND>`
 
 ## Global Flags
 
-### `-c --config <CONFIG>`
+- **`-c --config <CONFIG>`** — Path to the configuration file (default: fnox.toml, searches parent directories)
 
-Path to the configuration file (default: fnox.toml, searches parent directories)
+  **Default:** `fnox.toml`
 
-**Default:** `fnox.toml`
+- **`-P --profile… <PROFILE>`** — Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones.
+- **`-v --verbose`** — Enable verbose logging
+- **`--if-missing <IF_MISSING>`** — What to do if a secret is missing (error, warn, ignore)
+- **`--no-color`** — Disable colored output
+- **`--no-daemon`** — Disable daemon-backed resolution for this invocation
+- **`--no-defaults`** — Do not merge top-level secrets into the selected profile
+- **`--non-interactive`** — Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)
 
-### `-P --profile… <PROFILE>`
+  **Environment Variable:** `FNOX_NON_INTERACTIVE`
 
-Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones.
+- **`--write-profile <WRITE_PROFILE>`** — Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise.
 
-### `-v --verbose`
+## Flags
 
-Enable verbose logging
-
-### `--if-missing <IF_MISSING>`
-
-What to do if a secret is missing (error, warn, ignore)
-
-### `--no-color`
-
-Disable colored output
-
-### `--no-daemon`
-
-Disable daemon-backed resolution for this invocation
-
-### `--no-defaults`
-
-Do not merge top-level secrets into the selected profile
-
-### `--non-interactive`
-
-Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)
-
-**Environment Variable:** `FNOX_NON_INTERACTIVE`
-
-### `--write-profile <WRITE_PROFILE>`
-
-Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise.
+- **`-h --help`** — Print help
+- **`-V --version`** — Print version
 
 ## Subcommands
 

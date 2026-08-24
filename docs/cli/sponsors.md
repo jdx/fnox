@@ -2,6 +2,10 @@
 
 # `fnox sponsors`
 
-- **Usage**: `fnox sponsors`
+- **Usage:** `fnox sponsors`
 
 Show the companies sponsoring fnox and the jdx.dev open source tools
+
+## Flags
+
+- **`-h --help`** — Print help

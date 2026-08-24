@@ -2,7 +2,11 @@
 
 # `fnox version`
 
-- **Usage**: `fnox version`
-- **Aliases**: `v`
+- **Usage:** `fnox version`
+- **Aliases:** `v`
 
 Show version information
+
+## Flags
+
+- **`-h --help`** — Print help

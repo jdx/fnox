@@ -2,12 +2,14 @@
 
 # `fnox completion`
 
-- **Usage**: `fnox completion <SHELL>`
+- **Usage:** `fnox completion <SHELL>`
 
 Generate shell completions
 
 ## Arguments
 
-### `<SHELL>`
+- **`<SHELL>`** — Shell type to generate completions for
 
-Shell type to generate completions for
+## Flags
+
+- **`-h --help`** — Print help

@@ -2,18 +2,15 @@
 
 # `fnox activate`
 
-- **Usage**: `fnox activate [--no-hook-env] [SHELL]`
+- **Usage:** `fnox activate [--no-hook-env] [SHELL]`
 
 Output shell activation code to enable automatic secret loading
 
 ## Arguments
 
-### `[SHELL]`
-
-Shell to generate activation code for (bash, zsh, fish, nu, pwsh)
+- **`[SHELL]`** — Shell to generate activation code for (bash, zsh, fish, nu, pwsh)
 
 ## Flags
 
-### `--no-hook-env`
-
-Don't automatically invoke hook-env (for testing)
+- **`--no-hook-env`** — Don't automatically invoke hook-env (for testing)
+- **`-h --help`** — Print help

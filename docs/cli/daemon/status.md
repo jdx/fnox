@@ -2,6 +2,10 @@
 
 # `fnox daemon status`
 
-- **Usage**: `fnox daemon status`
+- **Usage:** `fnox daemon status`
 
 Show daemon status
+
+## Flags
+
+- **`-h --help`** — Print help

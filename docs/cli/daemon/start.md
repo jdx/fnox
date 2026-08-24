@@ -2,6 +2,10 @@
 
 # `fnox daemon start`
 
-- **Usage**: `fnox daemon start`
+- **Usage:** `fnox daemon start`
 
 Start the per-user daemon in the background
+
+## Flags
+
+- **`-h --help`** — Print help

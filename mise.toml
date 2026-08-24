@@ -2,7 +2,7 @@
 _.path = ["target/debug", "test/bats/bin"]
 
 [tools]
-usage = "6.1.0"
+usage = "6.2.0"
 # Pinned rather than "latest" because tak is the measuring instrument: an
 # upgrade that changes how it samples would land in the series as a step change
 # in fnox's numbers, indistinguishable from a real regression. Bump deliberately.

@@ -2,6 +2,10 @@
 
 # `fnox edit`
 
-- **Usage**: `fnox edit`
+- **Usage:** `fnox edit`
 
 Edit the configuration file
+
+## Flags
+
+- **`-h --help`** — Print help

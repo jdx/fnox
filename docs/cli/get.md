@@ -2,18 +2,15 @@
 
 # `fnox get`
 
-- **Usage**: `fnox get [--base64-decode] <KEY>`
+- **Usage:** `fnox get [--base64-decode] <KEY>`
 
 Get a secret value
 
 ## Arguments
 
-### `<KEY>`
-
-Secret key to retrieve
+- **`<KEY>`** — Secret key to retrieve
 
 ## Flags
 
-### `--base64-decode`
-
-Base64 decode the secret
+- **`--base64-decode`** — Base64 decode the secret
+- **`-h --help`** — Print help

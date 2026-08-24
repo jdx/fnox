@@ -2,7 +2,7 @@
 
 # `fnox reencrypt`
 
-- **Usage**: `fnox reencrypt [FLAGS] [KEYS]…`
+- **Usage:** `fnox reencrypt [FLAGS] [KEYS]…`
 
 Re-encrypt secrets with current provider configuration
 
@@ -10,24 +10,12 @@ When you add or remove recipients from an encryption provider (e.g. age), existi
 
 ## Arguments
 
-### `[KEYS]…`
-
-Only re-encrypt these specific secret keys
+- **`[KEYS]…`** — Only re-encrypt these specific secret keys
 
 ## Flags
 
-### `-f --force`
-
-Skip confirmation prompt
-
-### `-n --dry-run`
-
-Show what would be done without making changes
-
-### `-p --provider <PROVIDER>`
-
-Only re-encrypt secrets from this provider
-
-### `--filter <FILTER>`
-
-Only re-encrypt matching secrets (regex pattern)
+- **`-f --force`** — Skip confirmation prompt
+- **`-n --dry-run`** — Show what would be done without making changes
+- **`-p --provider <PROVIDER>`** — Only re-encrypt secrets from this provider
+- **`--filter <FILTER>`** — Only re-encrypt matching secrets (regex pattern)
+- **`-h --help`** — Print help

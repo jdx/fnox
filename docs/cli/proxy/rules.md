@@ -2,6 +2,10 @@
 
 # `fnox proxy rules`
 
-- **Usage**: `fnox proxy rules`
+- **Usage:** `fnox proxy rules`
 
 Show the effective credential proxy rules
+
+## Flags
+
+- **`-h --help`** — Print help

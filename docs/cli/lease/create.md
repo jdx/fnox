@@ -2,44 +2,27 @@
 
 # `fnox lease create`
 
-- **Usage**: `fnox lease create [FLAGS] [BACKEND_NAME]`
+- **Usage:** `fnox lease create [FLAGS] [BACKEND_NAME]`
 
 Create a short-lived credential lease from a secret
 
 ## Arguments
 
-### `[BACKEND_NAME]`
-
-Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted.
+- **`[BACKEND_NAME]`** — Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted.
 
 ## Flags
 
-### `-a --all`
+- **`-a --all`** — Create leases for all configured backends
+- **`-d --duration <DURATION>`** — Lease duration (e.g., "15m", "1h", "2h30m"); overrides config duration
+- **`-f --format <FORMAT>`** — Output format
 
-Create leases for all configured backends
+  **Choices:** `shell`, `json`, `env`
 
-### `-d --duration <DURATION>`
+  **Default:** `shell`
 
-Lease duration (e.g., "15m", "1h", "2h30m"); overrides config duration
+- **`-i --interactive`** — Prompt interactively for missing credentials
+- **`-l --label <LABEL>`** — Label for the lease (e.g., session purpose)
 
-### `-f --format <FORMAT>`
+  **Default:** `fnox-lease`
 
-Output format
-
-**Choices:**
-
-- `shell`
-- `json`
-- `env`
-
-**Default:** `shell`
-
-### `-i --interactive`
-
-Prompt interactively for missing credentials
-
-### `-l --label <LABEL>`
-
-Label for the lease (e.g., session purpose)
-
-**Default:** `fnox-lease`
+- **`-h --help`** — Print help

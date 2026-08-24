@@ -2,35 +2,24 @@
 
 # `fnox scan`
 
-- **Usage**: `fnox scan [FLAGS] [DIR]`
+- **Usage:** `fnox scan [FLAGS] [DIR]`
 
 Scan repository for potential secrets
 
 ## Arguments
 
-### `[DIR]`
+- **`[DIR]`** — Directory to scan (default: current directory)
 
-Directory to scan (default: current directory)
-
-**Default:** `.`
+  **Default:** `.`
 
 ## Flags
 
-### `-i --ignore… <IGNORE>`
+- **`-i --ignore… <IGNORE>`** — Skip files matching this glob pattern (can be used multiple times)
+- **`--format <FORMAT>`** — Output format
 
-Skip files matching this glob pattern (can be used multiple times)
+  **Choices:** `human`, `json`
 
-### `--format <FORMAT>`
+  **Default:** `human`
 
-Output format
-
-**Choices:**
-
-- `human`
-- `json`
-
-**Default:** `human`
-
-### `-q --quiet`
-
-Show only files with potential secrets
+- **`-q --quiet`** — Show only files with potential secrets
+- **`-h --help`** — Print help

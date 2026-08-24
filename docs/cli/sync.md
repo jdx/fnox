@@ -2,42 +2,21 @@
 
 # `fnox sync`
 
-- **Usage**: `fnox sync [FLAGS] [KEYS]…`
+- **Usage:** `fnox sync [FLAGS] [KEYS]…`
 
 Sync secrets from remote providers to a local encryption provider
 
 ## Arguments
 
-### `[KEYS]…`
-
-Only sync these specific secret keys
+- **`[KEYS]…`** — Only sync these specific secret keys
 
 ## Flags
 
-### `-f --force`
-
-Skip confirmation prompt
-
-### `-g --global`
-
-Write to global config (~/.config/fnox/config.toml)
-
-### `-n --dry-run`
-
-Show what would be done without making changes
-
-### `-p --provider <PROVIDER>`
-
-Target encryption provider (defaults to default_provider)
-
-### `-s --source <SOURCE>`
-
-Only sync secrets from this source provider
-
-### `--filter <FILTER>`
-
-Only sync matching secrets (regex pattern)
-
-### `--local-file`
-
-Write sync overrides to the local override file next to the config file
+- **`-f --force`** — Skip confirmation prompt
+- **`-g --global`** — Write to global config (~/.config/fnox/config.toml)
+- **`-n --dry-run`** — Show what would be done without making changes
+- **`-p --provider <PROVIDER>`** — Target encryption provider (defaults to default_provider)
+- **`-s --source <SOURCE>`** — Only sync secrets from this source provider
+- **`--filter <FILTER>`** — Only sync matching secrets (regex pattern)
+- **`--local-file`** — Write sync overrides to the local override file next to the config file
+- **`-h --help`** — Print help

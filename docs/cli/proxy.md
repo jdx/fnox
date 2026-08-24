@@ -2,9 +2,13 @@
 
 # `fnox proxy`
 
-- **Usage**: `fnox proxy <SUBCOMMAND>`
+- **Usage:** `fnox proxy <SUBCOMMAND>`
 
 Broker credentials into destination-scoped HTTPS requests
+
+## Flags
+
+- **`-h --help`** — Print help
 
 ## Subcommands
 

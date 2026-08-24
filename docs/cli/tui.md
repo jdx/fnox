@@ -2,6 +2,10 @@
 
 # `fnox tui`
 
-- **Usage**: `fnox tui`
+- **Usage:** `fnox tui`
 
 Interactive TUI dashboard for managing secrets
+
+## Flags
+
+- **`-h --help`** — Print help
