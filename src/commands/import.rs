@@ -304,7 +304,7 @@ impl ImportCommand {
         let mut lines = input.lines();
 
         while let Some(line) = lines.next() {
-            let mut line = line.trim().to_string();
+            let mut line = line.trim_start().to_string();
 
             // Skip empty lines and comments
             if line.is_empty() || line.starts_with('#') {
@@ -546,9 +546,22 @@ fn unescape_single_quoted_env_value(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        has_unclosed_single_quoted_value, unescape_double_quoted_env_value,
-        unescape_single_quoted_env_value,
+        ImportCommand, ImportFormat, has_unclosed_single_quoted_value,
+        unescape_double_quoted_env_value, unescape_single_quoted_env_value,
     };
+
+    fn import_command() -> ImportCommand {
+        ImportCommand {
+            format: ImportFormat::Env,
+            force: true,
+            global: false,
+            input: None,
+            dry_run: false,
+            provider: String::new(),
+            filter: None,
+            prefix: None,
+        }
+    }
 
     #[test]
     fn detects_multiline_single_quoted_values() {
@@ -556,6 +569,16 @@ mod tests {
         assert!(has_unclosed_single_quoted_value("VALUE='it\\'s first"));
         assert!(!has_unclosed_single_quoted_value("VALUE='first'"));
         assert!(!has_unclosed_single_quoted_value("VALUE=first"));
+    }
+
+    #[test]
+    fn parse_env_preserves_multiline_spaces_and_double_quoted_fallbacks() {
+        let secrets = import_command()
+            .parse_env("SPACES='first  \nsecond'\nFALLBACK=\"prefix\\\\'$$value\\ncontinuation\"")
+            .unwrap();
+
+        assert_eq!(secrets["SPACES"], "first  \nsecond");
+        assert_eq!(secrets["FALLBACK"], "prefix\\'$value\ncontinuation");
     }
 
     #[test]

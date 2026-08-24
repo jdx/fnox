@@ -301,5 +301,9 @@ mod tests {
         assert_eq!(dotenv_quote("a\n$b"), "'a\n$b'");
         assert_eq!(dotenv_quote("secret$value\\"), "\"secret$$value\\\\\"");
         assert_eq!(dotenv_quote("a\\'b $5"), "\"a\\\\'b $$5\"");
+        assert_eq!(
+            dotenv_quote("prefix\\'$value\ncontinuation"),
+            "\"prefix\\\\'$$value\\ncontinuation\""
+        );
     }
 }
