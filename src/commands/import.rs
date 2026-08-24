@@ -315,7 +315,9 @@ impl ImportCommand {
             // dotenv values. Reassemble them before parsing the assignment.
             while has_unclosed_single_quoted_value(&line) {
                 let Some(next_line) = lines.next() else {
-                    break;
+                    return Err(FnoxError::Config(
+                        "Unterminated single-quoted ENV value".to_string(),
+                    ));
                 };
                 line.push('\n');
                 line.push_str(next_line);
@@ -575,6 +577,16 @@ mod tests {
 
         assert_eq!(secrets["SPACES"], "first  \nsecond");
         assert_eq!(secrets["FALLBACK"], "prefix\\'$value\ncontinuation");
+    }
+
+    #[test]
+    fn parse_env_rejects_unterminated_single_quoted_values() {
+        let error = import_command().parse_env("KEY='secret").unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "Configuration error: Unterminated single-quoted ENV value"
+        );
     }
 
     #[test]
