@@ -189,4 +189,4 @@ jobs:
           else
             TAG_NAME="${GITHUB_REF_NAME}"
           fi
-          gh release edit "$TAG_NAME" --draft=false
+          gh release edit "$TAG_NAME" --repo "${{ github.repository }}" --draft=false
