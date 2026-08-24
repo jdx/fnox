@@ -112,6 +112,7 @@ jobs:
           gh release create "$TAG_NAME" \
             --title "$TAG_NAME" \
             --notes-file release-notes.md \
+            --draft \
             release-assets/*
         env:
           INPUTS_VERSION: ${{ inputs.version }}
@@ -171,3 +172,21 @@ jobs:
           If fnox is handling secrets or config for you or your team, please consider [sponsoring at jdx.dev](https://jdx.dev/sponsors.html). Sponsorships are what let fnox stay independent and the project keep moving.
           EOF
           gh release edit "$TAG_NAME" --notes-file /tmp/release-notes.md
+
+  publish-release:
+    needs: [enhance-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.FNOX_GH_TOKEN }}
+          INPUTS_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ -n "${INPUTS_VERSION}" ]]; then
+            TAG_NAME="v${INPUTS_VERSION}"
+          else
+            TAG_NAME="${GITHUB_REF_NAME}"
+          fi
+          gh release edit "$TAG_NAME" --repo "${{ github.repository }}" --draft=false
