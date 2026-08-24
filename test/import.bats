@@ -86,6 +86,7 @@ SINGLE_QUOTED_MULTILINE='first line
 $second line'
 DOUBLE_QUOTED="another value with spaces"
 DOUBLE_QUOTED_ESCAPES="quoted \"value\" with \\ backslash and \n newline"
+DOUBLE_QUOTED_DOLLAR_ESCAPE="secret$$value\\"
 DOLLAR_AND_BACKTICK="secret$value`tick`"
 UNQUOTED=no_spaces
 EOF
@@ -106,6 +107,9 @@ EOF
 
 	assert_fnox_success get DOUBLE_QUOTED_ESCAPES --age-key-file key.txt
 	assert_output $'quoted "value" with \\ backslash and \n newline'
+
+	assert_fnox_success get DOUBLE_QUOTED_DOLLAR_ESCAPE --age-key-file key.txt
+	assert_output "secret\$value\\"
 
 	assert_fnox_success get DOLLAR_AND_BACKTICK --age-key-file key.txt
 	assert_output 'secret$value`tick`'

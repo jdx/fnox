@@ -234,11 +234,27 @@ fn dotenv_quote(value: &str) -> String {
 
     // Docker Compose interpolates `$` in unquoted and double-quoted dotenv
     // values. Single quotes keep secret values literal.
-    if value.contains('$') {
+    if value.contains('$') && is_single_quote_safe(value) {
         return format!("'{}'", value.replace('\'', "\\'"));
     }
 
     // Use `--format shell` for sourceable shell output.
+    dotenv_double_quote(value, value.contains('$'))
+}
+
+fn is_single_quote_safe(value: &str) -> bool {
+    let mut backslashes = 0;
+    for c in value.chars() {
+        match c {
+            '\\' => backslashes += 1,
+            '\'' if backslashes % 2 == 1 => return false,
+            _ => backslashes = 0,
+        }
+    }
+    backslashes % 2 == 0
+}
+
+fn dotenv_double_quote(value: &str, escape_dollars: bool) -> String {
     let mut quoted = String::with_capacity(value.len() + 2);
     quoted.push('"');
     for c in value.chars() {
@@ -248,6 +264,7 @@ fn dotenv_quote(value: &str) -> String {
             '\n' => quoted.push_str("\\n"),
             '\r' => quoted.push_str("\\r"),
             '\t' => quoted.push_str("\\t"),
+            '$' if escape_dollars => quoted.push_str("$$"),
             _ => quoted.push(c),
         }
     }
@@ -282,5 +299,7 @@ mod tests {
         assert_eq!(dotenv_quote("$$test"), "'$$test'");
         assert_eq!(dotenv_quote("it's $5"), "'it\\'s $5'");
         assert_eq!(dotenv_quote("a\n$b"), "'a\n$b'");
+        assert_eq!(dotenv_quote("secret$value\\"), "\"secret$$value\\\\\"");
+        assert_eq!(dotenv_quote("a\\'b $5"), "\"a\\\\'b $$5\"");
     }
 }

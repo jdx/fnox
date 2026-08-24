@@ -512,6 +512,11 @@ fn unescape_double_quoted_env_value(value: &str) -> String {
     let mut chars = value.chars();
 
     while let Some(c) = chars.next() {
+        if c == '$' && chars.as_str().starts_with('$') {
+            chars.next();
+            unescaped.push('$');
+            continue;
+        }
         if c != '\\' {
             unescaped.push(c);
             continue;
@@ -558,6 +563,10 @@ mod tests {
         assert_eq!(
             unescape_double_quoted_env_value(r#"line1\nline2\t\"quoted\"\\path"#),
             "line1\nline2\t\"quoted\"\\path"
+        );
+        assert_eq!(
+            unescape_double_quoted_env_value(r"secret$$value\\"),
+            "secret$value\\"
         );
     }
 
