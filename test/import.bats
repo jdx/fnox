@@ -86,7 +86,7 @@ SINGLE_QUOTED_MULTILINE='first line
 $second line'
 DOUBLE_QUOTED="another value with spaces"
 DOUBLE_QUOTED_ESCAPES="quoted \"value\" with \\ backslash and \n newline"
-DOUBLE_QUOTED_DOLLAR_ESCAPE="secret$$value\\"
+DOUBLE_QUOTED_DOLLAR_ESCAPE="secret\$value\\"
 DOLLAR_AND_BACKTICK="secret$value`tick`"
 UNQUOTED=no_spaces
 EOF

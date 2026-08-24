@@ -512,11 +512,6 @@ fn unescape_double_quoted_env_value(value: &str) -> String {
     let mut chars = value.chars();
 
     while let Some(c) = chars.next() {
-        if c == '$' && chars.as_str().starts_with('$') {
-            chars.next();
-            unescaped.push('$');
-            continue;
-        }
         if c != '\\' {
             unescaped.push(c);
             continue;
@@ -525,6 +520,7 @@ fn unescape_double_quoted_env_value(value: &str) -> String {
         match chars.next() {
             Some('\\') => unescaped.push('\\'),
             Some('"') => unescaped.push('"'),
+            Some('$') => unescaped.push('$'),
             Some('n') => unescaped.push('\n'),
             Some('r') => unescaped.push('\r'),
             Some('t') => unescaped.push('\t'),
@@ -574,7 +570,7 @@ mod tests {
     #[test]
     fn parse_env_preserves_multiline_spaces_and_double_quoted_fallbacks() {
         let secrets = import_command()
-            .parse_env("SPACES='first  \nsecond'\nFALLBACK=\"prefix\\\\'$$value\\ncontinuation\"")
+            .parse_env("SPACES='first  \nsecond'\nFALLBACK=\"prefix\\\\'\\$value\\ncontinuation\"")
             .unwrap();
 
         assert_eq!(secrets["SPACES"], "first  \nsecond");
@@ -588,8 +584,12 @@ mod tests {
             "line1\nline2\t\"quoted\"\\path"
         );
         assert_eq!(
-            unescape_double_quoted_env_value(r"secret$$value\\"),
+            unescape_double_quoted_env_value(r"secret\$value\\"),
             "secret$value\\"
+        );
+        assert_eq!(
+            unescape_double_quoted_env_value("secret$$value"),
+            "secret$$value"
         );
     }
 
@@ -597,7 +597,7 @@ mod tests {
     fn unescape_double_quoted_env_value_preserves_unknown_escapes() {
         assert_eq!(
             unescape_double_quoted_env_value(r#"secret\$value\`tick"#),
-            r#"secret\$value\`tick"#
+            r#"secret$value\`tick"#
         );
     }
 

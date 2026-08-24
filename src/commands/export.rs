@@ -264,7 +264,7 @@ fn dotenv_double_quote(value: &str, escape_dollars: bool) -> String {
             '\n' => quoted.push_str("\\n"),
             '\r' => quoted.push_str("\\r"),
             '\t' => quoted.push_str("\\t"),
-            '$' if escape_dollars => quoted.push_str("$$"),
+            '$' if escape_dollars => quoted.push_str("\\$"),
             _ => quoted.push(c),
         }
     }
@@ -299,11 +299,11 @@ mod tests {
         assert_eq!(dotenv_quote("$$test"), "'$$test'");
         assert_eq!(dotenv_quote("it's $5"), "'it\\'s $5'");
         assert_eq!(dotenv_quote("a\n$b"), "'a\n$b'");
-        assert_eq!(dotenv_quote("secret$value\\"), "\"secret$$value\\\\\"");
-        assert_eq!(dotenv_quote("a\\'b $5"), "\"a\\\\'b $$5\"");
+        assert_eq!(dotenv_quote("secret$value\\"), "\"secret\\$value\\\\\"");
+        assert_eq!(dotenv_quote("a\\'b $5"), "\"a\\\\'b \\$5\"");
         assert_eq!(
             dotenv_quote("prefix\\'$value\ncontinuation"),
-            "\"prefix\\\\'$$value\\ncontinuation\""
+            "\"prefix\\\\'\\$value\\ncontinuation\""
         );
     }
 }
