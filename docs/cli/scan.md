@@ -14,7 +14,7 @@ Scan repository for potential secrets
 
 ## Flags
 
-- **`-i --ignore… <IGNORE>`** — Skip files matching this glob pattern (can be used multiple times)
+- **`-i --ignore <IGNORE>`** — Skip files matching this glob pattern (can be used multiple times)
 - **`--format <FORMAT>`** — Output format
 
   **Choices:** `human`, `json`

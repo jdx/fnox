@@ -14,7 +14,7 @@
 
   **Default:** `fnox.toml`
 
-- **`-P --profile… <PROFILE>`** — Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones.
+- **`-P --profile <PROFILE>`** — Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones.
 - **`-v --verbose`** — Enable verbose logging
 - **`--if-missing <IF_MISSING>`** — What to do if a secret is missing (error, warn, ignore)
 - **`--no-color`** — Disable colored output
