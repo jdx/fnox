@@ -9,9 +9,24 @@ Manage secrets with encryption or cloud providers—or both! fnox gives you a un
 
 ## Sponsors
 
-fnox is sponsored by [entire.io](https://entire.io) and [37signals](https://37signals.com).
-
-[View all sponsors](https://jdx.dev/sponsors.html).
+<p align="center">
+  Sponsored by<br><br>
+  <a href="https://entire.io">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://jdx.dev/sponsors/entire-lockup.svg">
+      <img src="https://jdx.dev/sponsors/entire-lockup-on-light.svg" alt="Entire" height="36">
+    </picture>
+  </a>
+  &nbsp;&nbsp;&nbsp;
+  <a href="https://omarchy.org/patrons/">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://jdx.dev/sponsors/omacom-foundation.svg">
+      <img src="https://jdx.dev/sponsors/omacom-foundation-on-light.svg" alt="Omacom Foundation" height="36">
+    </picture>
+  </a>
+  <br><br>
+  <a href="https://jdx.dev/sponsors.html">View all sponsors</a>
+</p>
 
 ## Quick Start
 
