@@ -8,7 +8,7 @@ local linters = new Mapping<String, Step> {
     }
     ["cargo-fmt"] = Builtins.cargo_fmt
     ["cargo-clippy"] = (Builtins.cargo_clippy) {
-        check = "mbx build clippy -q -- -D warnings"
+        check = "mbx clippy -q -- -D warnings"
     }
     ["shfmt"] = (Builtins.shfmt) {
         glob = List("**/*.bats", "**/*.sh", "**/*.bash")

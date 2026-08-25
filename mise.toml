@@ -34,7 +34,7 @@ depends = ["test:cargo", "test:bats"]
 
 [tasks."test:cargo"]
 description = "Run cargo tests only"
-run = "mbx build test"
+run = "mbx test"
 
 [tasks."test:bats"]
 description = "Run bats tests only"
@@ -58,7 +58,7 @@ run = "fnox exec -- bats --jobs 16 {{arg(name='test', var=true, default='test')}
 
 [tasks.cargo-test]
 description = "Run cargo tests only"
-run = "mbx build test"
+run = "mbx test"
 
 [tasks.lint]
 run = "hk check --all --slow"
@@ -68,7 +68,7 @@ run = "hk fix --all --slow"
 
 [tasks.build]
 description = "Build the project"
-run = "mbx build build"
+run = "mbx build"
 
 [tasks.ci]
 description = "Run full CI check (build, test, lint)"
