@@ -12,7 +12,9 @@ unblock yourself without skipping or weakening the check:
 ```sh
 cargo build
 cargo test
+cargo check --workspace
 cargo clippy -q -- -D warnings
+cargo msrv verify
 ```
 
 If Cargo succeeds where mbx fails, or mbx introduces a papercut, please start a
