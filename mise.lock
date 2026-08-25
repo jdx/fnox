@@ -440,6 +440,45 @@ checksum = "sha256:e437443331865218763d44089680f4d36547353e8c3c8b394c24859203e6c
 url = "https://github.com/foresterre/cargo-msrv/releases/download/v0.19.3/cargo-msrv-x86_64-pc-windows-msvc-v0.19.3.zip"
 url_api = "https://api.github.com/repos/foresterre/cargo-msrv/releases/assets/380851496"
 
+[[tools."github:jdx/mr-boxington"]]
+version = "0.3.0"
+backend = "github:jdx/mr-boxington"
+
+[tools."github:jdx/mr-boxington"."platforms.linux-arm64"]
+checksum = "sha256:4be02935fb0c1892b659c8146e07fe092fb12f6c4e86c6ebbc3b63449d5dcb25"
+url = "https://github.com/jdx/mr-boxington/releases/download/v0.3.0/mbx-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/jdx/mr-boxington/releases/assets/526704880"
+
+[tools."github:jdx/mr-boxington"."platforms.linux-arm64-musl"]
+checksum = "sha256:4be02935fb0c1892b659c8146e07fe092fb12f6c4e86c6ebbc3b63449d5dcb25"
+url = "https://github.com/jdx/mr-boxington/releases/download/v0.3.0/mbx-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/jdx/mr-boxington/releases/assets/526704880"
+
+[tools."github:jdx/mr-boxington"."platforms.linux-x64"]
+checksum = "sha256:65ef46c20761ffd1d930638c3ff2d237535a98f28968929f04f195bfdd258e77"
+url = "https://github.com/jdx/mr-boxington/releases/download/v0.3.0/mbx-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/jdx/mr-boxington/releases/assets/526704890"
+
+[tools."github:jdx/mr-boxington"."platforms.linux-x64-musl"]
+checksum = "sha256:65ef46c20761ffd1d930638c3ff2d237535a98f28968929f04f195bfdd258e77"
+url = "https://github.com/jdx/mr-boxington/releases/download/v0.3.0/mbx-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/jdx/mr-boxington/releases/assets/526704890"
+
+[tools."github:jdx/mr-boxington"."platforms.macos-arm64"]
+checksum = "sha256:1803cec79be0b753fc3af23044edc46fd81ffdf9d66fcb7b6637cfb22cc6db4a"
+url = "https://github.com/jdx/mr-boxington/releases/download/v0.3.0/mbx-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/jdx/mr-boxington/releases/assets/526704881"
+
+[tools."github:jdx/mr-boxington"."platforms.macos-x64"]
+checksum = "sha256:72a98d019b83859e465d30a91422e7b2eb72cf53fb42e116a277865310392c0c"
+url = "https://github.com/jdx/mr-boxington/releases/download/v0.3.0/mbx-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/jdx/mr-boxington/releases/assets/526704883"
+
+[tools."github:jdx/mr-boxington"."platforms.windows-x64"]
+checksum = "sha256:9d99f1f57789e88f4870ac61fd6c4e2ceec5ed532f4c9c8e9be4f32663a1fd16"
+url = "https://github.com/jdx/mr-boxington/releases/download/v0.3.0/mbx-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/jdx/mr-boxington/releases/assets/526704879"
+
 [[tools."github:jdx/tak"]]
 version = "0.0.5"
 backend = "github:jdx/tak"

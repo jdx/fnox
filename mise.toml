@@ -2,6 +2,7 @@
 _.path = ["target/debug", "test/bats/bin"]
 
 [tools]
+"github:jdx/mr-boxington" = "latest"
 usage = "6.4.0"
 # Pinned rather than "latest" because tak is the measuring instrument: an
 # upgrade that changes how it samples would land in the series as a step change
@@ -33,7 +34,7 @@ depends = ["test:cargo", "test:bats"]
 
 [tasks."test:cargo"]
 description = "Run cargo tests only"
-run = "cargo test"
+run = "mbx build test"
 
 [tasks."test:bats"]
 description = "Run bats tests only"
@@ -57,7 +58,7 @@ run = "fnox exec -- bats --jobs 16 {{arg(name='test', var=true, default='test')}
 
 [tasks.cargo-test]
 description = "Run cargo tests only"
-run = "cargo test"
+run = "mbx build test"
 
 [tasks.lint]
 run = "hk check --all --slow"
@@ -67,7 +68,7 @@ run = "hk fix --all --slow"
 
 [tasks.build]
 description = "Build the project"
-run = "cargo build"
+run = "mbx build build"
 
 [tasks.ci]
 description = "Run full CI check (build, test, lint)"
