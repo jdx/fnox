@@ -14,6 +14,8 @@ cargo build
 cargo test
 cargo check --workspace
 cargo clippy -q -- -D warnings
+# CI also runs this broader clippy check:
+cargo clippy --workspace --all-targets -- -D warnings
 cargo msrv verify
 ```
 
