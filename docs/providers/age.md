@@ -198,8 +198,9 @@ cat ~/.ssh/id_rsa.pub
 
 Age plugins extend age with hardware-backed and alternative keys. fnox supports any [age plugin](https://github.com/FiloSottile/awesome-age#plugins), for example [age-plugin-yubikey](https://github.com/str4d/age-plugin-yubikey) (YubiKey / PIV) or [age-plugin-se](https://github.com/remko/age-plugin-se) (Apple's Secure Enclave).
 
-A plugin recipient looks like a native age recipient but carries the plugin name
-in its prefix (`age1yubikey1...`, `age1tpm1...`, …):
+A plugin recipient can carry the plugin name in its prefix, such as
+`age1yubikey1...`. Some plugins instead produce `age1tag1...` recipients; for
+example, current age-plugin-tpm releases use that format.
 
 ```toml
 [providers.age]

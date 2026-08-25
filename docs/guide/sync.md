@@ -172,8 +172,8 @@ the portable token, and FIDO2-HMAC unwraps an age identity into host memory.
 
 On macOS, [age-plugin-se](https://github.com/remko/age-plugin-se) generates the
 age key inside Apple's Secure Enclave. The private key is non-exportable and
-never leaves the hardware, and each decryption can require Touch ID — so the
-local cache is unreadable without both your Mac and your fingerprint.
+never leaves the hardware. Decryption requires that Mac and enforces the access
+control policy chosen when the identity was created, which can require Touch ID.
 
 ```bash
 # 1. Install the plugin (must be on PATH)
