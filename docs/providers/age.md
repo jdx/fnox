@@ -19,7 +19,7 @@ age = { type = "age", recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8z
 EOF
 
 # 4. Set private key
-export FNOX_AGE_KEY=$(cat ~/.config/fnox/age.txt | grep "AGE-SECRET-KEY")
+export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)
 
 # 5. Encrypt a secret
 fnox set DATABASE_URL "postgresql://localhost/mydb" --provider age
@@ -64,12 +64,7 @@ AGE-SECRET-KEY-1ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDEFGHIJKLMNOPQRS
 
 ### Option 2: Use SSH Key
 
-Age has first-class SSH key support! Use your existing SSH keys:
-
-```bash
-# No key generation needed!
-# Just use your SSH public key as the recipient
-```
+Age has first-class SSH key support — no key generation needed. Your existing SSH public key becomes the recipient and your private key decrypts; see [SSH Key Support](#ssh-key-support) below.
 
 ## Configuration
 
@@ -110,10 +105,10 @@ age = { type = "age", recipients = ["age1..."], identity = { provider = "keychai
 
 ```bash
 # Export the secret key
-export FNOX_AGE_KEY=$(cat ~/.config/fnox/age.txt | grep "AGE-SECRET-KEY")
+export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)
 
 # Add to shell profile
-echo 'export FNOX_AGE_KEY=$(cat ~/.config/fnox/age.txt | grep "AGE-SECRET-KEY")' >> ~/.bashrc
+echo 'export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)' >> ~/.bashrc
 ```
 
 #### Using SSH Key
@@ -369,7 +364,7 @@ jobs:
 3. Copy the secret key:
 
    ```bash
-   cat ci-age.txt | grep "AGE-SECRET-KEY"
+   grep "AGE-SECRET-KEY" ci-age.txt
    ```
 
 4. Add to GitHub Secrets as `FNOX_AGE_KEY`
@@ -404,7 +399,7 @@ cat ~/.config/fnox/age.txt  # Check public key
 cat ~/.ssh/id_ed25519.pub   # Check SSH public key
 
 # Compare with fnox.toml recipients
-cat fnox.toml | grep recipients
+grep recipients fnox.toml
 ```
 
 ### "failed to decrypt"

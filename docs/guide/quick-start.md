@@ -82,7 +82,7 @@ recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
 EOF
 
 # 4. Set your decryption key
-export FNOX_AGE_KEY=$(cat ~/.config/fnox/age.txt | grep "AGE-SECRET-KEY")
+export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)
 
 # 5. Encrypt a secret
 fnox set DATABASE_URL "postgresql://prod.example.com/db" --provider age
@@ -90,9 +90,16 @@ fnox set DATABASE_URL "postgresql://prod.example.com/db" --provider age
 
 The secret is now encrypted in `fnox.toml` and safe to commit to git!
 
+::: tip Using a password manager or cloud vault?
+Encrypted-in-git is great for solo and open source projects. If your team keeps
+secrets in a vault like 1Password, follow [the golden path](/guide/golden-path)
+instead: commit references to the vault and cache secrets locally with
+[`fnox sync`](/guide/sync).
+:::
+
 ## Next Steps
 
-- [Syncing Secrets Locally](/guide/sync) - The golden path: keep secrets in a remote vault like 1Password and cache them locally with age
+- [Golden Path Setup](/guide/golden-path) - The recommended workflow: a remote vault plus a local encrypted cache
 - [How It Works](/guide/how-it-works) - Understand fnox's architecture
 - [Providers](/providers/overview) - Explore all available providers
 - [Shell Integration](/guide/shell-integration) - Deep dive into shell integration

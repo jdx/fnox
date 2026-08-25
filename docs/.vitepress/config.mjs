@@ -61,14 +61,15 @@ export default defineConfig({
           { text: "What is fnox?", link: "/guide/what-is-fnox" },
           { text: "Installation", link: "/guide/installation" },
           { text: "Quick Start", link: "/guide/quick-start" },
-          { text: "Contributing", link: "/contributing" },
           { text: "How It Works", link: "/guide/how-it-works" },
+          { text: "Contributing", link: "/contributing" },
         ],
       },
       {
         text: "Features",
         items: [
           { text: "Shell Integration", link: "/guide/shell-integration" },
+          { text: "Syncing Secrets Locally", link: "/guide/sync" },
           { text: "Per-User Daemon", link: "/guide/daemon" },
           { text: "Credential Proxy", link: "/guide/proxy" },
           { text: "Mise Integration", link: "/guide/mise-integration" },
@@ -80,7 +81,6 @@ export default defineConfig({
             link: "/guide/missing-secrets",
           },
           { text: "Import/Export", link: "/guide/import-export" },
-          { text: "Syncing Secrets Locally", link: "/guide/sync" },
           { text: "Credential Leases", link: "/guide/leases" },
           { text: "MCP Server", link: "/guide/mcp" },
         ],
@@ -99,6 +99,7 @@ export default defineConfig({
       {
         text: "Examples",
         items: [
+          { text: "Golden Path Setup", link: "/guide/golden-path" },
           { text: "Real-World Setup", link: "/guide/real-world-example" },
         ],
       },

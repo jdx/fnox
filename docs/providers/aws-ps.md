@@ -414,7 +414,7 @@ Parameter doesn't exist. Check:
 aws ssm get-parameters-by-path --path "/myapp/prod/" --recursive
 
 # Check if prefix is correct in fnox.toml
-cat fnox.toml | grep prefix
+grep prefix fnox.toml
 ```
 
 ### "Invalid Region"
@@ -423,7 +423,7 @@ Verify region matches:
 
 ```bash
 # Check fnox.toml region
-cat fnox.toml | grep region
+grep region fnox.toml
 
 # Check AWS credentials region
 echo $AWS_REGION

@@ -449,7 +449,7 @@ Secret doesn't exist. Check:
 aws secretsmanager list-secrets
 
 # Check if prefix is correct in fnox.toml
-cat fnox.toml | grep prefix
+grep prefix fnox.toml
 ```
 
 ### "Invalid Region"
@@ -458,7 +458,7 @@ Verify region matches:
 
 ```bash
 # Check fnox.toml region
-cat fnox.toml | grep region
+grep region fnox.toml
 
 # Check AWS credentials region
 echo $AWS_REGION

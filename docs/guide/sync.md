@@ -10,6 +10,9 @@ truth, but day-to-day loads are instant and work offline. To go further, keep
 the age key in hardware:
 [Apple's Secure Enclave (Touch ID)](#apple-secure-enclave-touch-id), a
 [YubiKey](#yubikey), or a [TPM or FIDO2 token](#tpm-and-fido2).
+
+For a zero-to-working walkthrough of the whole setup, see
+[Golden Path Setup](/guide/golden-path).
 :::
 
 ## Why Sync?
@@ -264,6 +267,29 @@ Add the resulting recipient to the provider's `recipients`, point `key_file`
 at the identity file, and sync as usual. If the identity must never touch host
 memory, use a YubiKey rather than FIDO2-HMAC.
 
+### Age Plugins vs. Native Hardware Providers
+
+fnox also ships native [`yubikey`](/providers/yubikey) and
+[`fido2`](/providers/fido2) providers that skip age entirely: they derive a
+symmetric AES-256-GCM key from the hardware token and can be used as sync
+targets the same way (`fnox sync --provider secure --local-file`). The
+trade-offs:
+
+- **Native providers** need no plugin binary — fnox talks to the token
+  directly — and the config is fully portable: move `fnox.local.toml` to
+  another machine, plug in the same token, and it decrypts. But the encryption
+  is symmetric, so the token must be present (and touched) for `fnox sync`
+  itself, not just for decryption, and only that one token can ever decrypt
+  the cache.
+- **Age plugins** encrypt to a public recipient, so syncing never touches the
+  hardware — only decryption does — and a provider can list several recipients
+  (e.g. a YubiKey plus a backup key). In exchange, the plugin binary must be
+  installed wherever you decrypt.
+
+For a personal sync cache either works well; pick the native providers if you
+don't want to install age plugins, and the age route if you want backup
+recipients or hardware-free syncing.
+
 ## Refreshing the Cache
 
 When secrets change in the remote provider, re-run sync to update the local cache:
@@ -273,6 +299,15 @@ fnox sync --provider sync-age --local-file --force
 ```
 
 The `--force` flag skips the confirmation prompt. fnox re-fetches from the original provider and re-encrypts.
+
+## What About CI?
+
+The sync cache is a per-developer convenience — don't sync in CI. Let CI
+authenticate to the remote provider directly (e.g. a 1Password
+[service account token](https://developer.1password.com/docs/service-accounts/)
+or an AWS role), or give it [age-encrypted secrets committed to
+git](/providers/age#ci-cd-setup) with its own key. The committed `fnox.toml`
+references resolve the same way in both cases.
 
 ## Full Workflow Example
 
@@ -315,6 +350,7 @@ cd .. && cd my-api
 
 ## Next Steps
 
+- [Golden Path Setup](/guide/golden-path) - Zero-to-working walkthrough of this workflow
 - [Per-User Daemon](/guide/daemon) - Cache resolved secrets in memory for a session
 - [Import/Export](/guide/import-export) - Migrate secrets between formats
 - [Shell Integration](/guide/shell-integration) - Auto-load secrets on `cd`

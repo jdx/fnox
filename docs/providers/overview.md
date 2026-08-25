@@ -2,6 +2,8 @@
 
 fnox supports multiple secret storage and encryption providers. Choose the ones that fit your workflow.
 
+Not sure where to start? [The golden path](/guide/what-is-fnox#the-golden-path) combines a remote vault (source of truth) with a local age cache via [`fnox sync`](/guide/sync) — see the [Golden Path Setup](/guide/golden-path) walkthrough.
+
 ## Provider Categories
 
 ### 🔐 Encryption (secrets in git, encrypted)
@@ -11,6 +13,8 @@ Store encrypted secrets in your `fnox.toml` file. The encrypted ciphertext is sa
 | Provider                          | Description                              | Best For                                  |
 | --------------------------------- | ---------------------------------------- | ----------------------------------------- |
 | [age](/providers/age)             | Modern encryption (works with SSH keys!) | Development secrets, open source projects |
+| [FIDO2](/providers/fido2)         | Symmetric key from a FIDO2 security key  | Secrets bound to a hardware token         |
+| [YubiKey](/providers/yubikey)     | YubiKey HMAC challenge-response          | Secrets bound to a specific YubiKey       |
 | [AWS KMS](/providers/aws-kms)     | AWS Key Management Service               | AWS-based projects requiring IAM control  |
 | [Azure KMS](/providers/azure-kms) | Azure Key Vault encryption               | Azure-based projects                      |
 | [GCP KMS](/providers/gcp-kms)     | Google Cloud KMS                         | GCP-based projects                        |
@@ -77,7 +81,7 @@ DATABASE_URL = { provider = "aws", value = "database-url" }
 
 | Feature        | age    | AWS KMS | AWS SM | 1Password | Vault |
 | -------------- | ------ | ------- | ------ | --------- | ----- |
-| Offline        | ✅     | ❌      | ❌     | ❌        | ❌    |
+| Offline†       | ✅     | ❌      | ❌     | ❌        | ❌    |
 | In Git         | ✅     | ✅      | ❌     | ❌        | ❌    |
 | Free           | ✅     | 💰      | 💰     | 💰        | ✅\*  |
 | Audit Logs     | ❌     | ✅      | ✅     | ✅        | ✅    |
@@ -86,6 +90,8 @@ DATABASE_URL = { provider = "aws", value = "database-url" }
 | Team-Friendly  | ✅     | ✅      | ✅     | ✅        | ✅    |
 
 \*Self-hosted Vault is free, HCP Vault is paid
+
+†Any remote provider becomes offline-capable by caching secrets locally with [`fnox sync`](/guide/sync)
 
 ## Next Steps
 
