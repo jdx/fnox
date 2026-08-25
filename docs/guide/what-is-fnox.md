@@ -23,7 +23,7 @@ fnox supports many provider combinations, but the recommended workflow — the g
 2. **Cache them locally with [`fnox sync`](/guide/sync)**, which re-encrypts every secret to your personal [age](/providers/age) key in the gitignored `fnox.local.toml`.
 3. **Load them instantly** via [shell integration](/guide/shell-integration) or `fnox exec` — decryption happens locally and offline, with no network calls to the vault.
 
-For the strongest setup, back the local age key with hardware — [Apple's Secure Enclave (Touch ID)](/guide/sync#apple-secure-enclave-touch-id), a [YubiKey](/guide/sync#yubikey), or a [TPM / FIDO2 key](/guide/sync#tpm-and-fido2-linux-windows) on Linux and Windows — so the cache can only be decrypted on your machine. See [Syncing Secrets Locally](/guide/sync) for the full walkthrough.
+For the strongest setup, protect the local age key with hardware — [Apple's Secure Enclave (Touch ID)](/guide/sync#apple-secure-enclave-touch-id), a [YubiKey](/guide/sync#yubikey), or [TPM and FIDO2 hardware](/guide/sync#tpm-and-fido2). Secure Enclave and TPM keys are machine-bound; YubiKey and FIDO2 tokens are portable and have different security properties. See [Syncing Secrets Locally](/guide/sync) for the full walkthrough.
 
 ## Why Choose fnox?
 

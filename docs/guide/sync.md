@@ -9,8 +9,9 @@ This is the recommended way to use fnox: keep secrets in a remote vault like
 You get centralized management and instant, offline secret loading. For the
 strongest setup, bind the local key to hardware —
 [Apple's Secure Enclave (Touch ID)](#apple-secure-enclave-touch-id), a
-[YubiKey](#yubikey), or a [TPM / FIDO2 key](#tpm-and-fido2-linux-windows) — so
-the cache can only be decrypted on your machine.
+[YubiKey](#yubikey), or [TPM and FIDO2 hardware](#tpm-and-fido2). Secure Enclave
+and TPM keys are bound to one machine, while YubiKey and FIDO2 tokens are
+portable; each option's security properties are described below.
 :::
 
 ## Why Sync?
@@ -163,7 +164,9 @@ name, so use a distinct name such as `sync-age` for the cache.
 The sync cache is only as secure as the age key that decrypts it. Instead of a
 plaintext key file on disk, you can bind decryption to hardware via an
 [age plugin](/providers/age#plugin-support) — the workflow stays exactly the
-same, only the provider's recipient (and identity) changes.
+same, only the provider's recipient (and identity) changes. The guarantees vary:
+Secure Enclave and TPM identities are machine-bound, YubiKey identities require
+the portable token, and FIDO2-HMAC unwraps an age identity into host memory.
 
 ### Apple Secure Enclave (Touch ID)
 
@@ -208,7 +211,8 @@ through the Secure Enclave, prompting for Touch ID according to the
 `age-se.txt` is only a reference to the hardware key, not the key itself — but
 treat it like an identity file anyway. Unset `FNOX_AGE_KEY` if you have it
 exported, since it takes precedence over the provider's `key_file`. Secure
-Enclave decryption requires macOS 14 or later.
+Enclave identity generation and decryption require macOS 14 or later and a Mac
+with a Secure Enclave processor.
 :::
 
 ### YubiKey
@@ -225,22 +229,41 @@ recipients = ["age1yubikey1q..."]  # YubiKey recipient
 fnox sync --provider sync-age --local-file
 ```
 
-Secrets are encrypted to your YubiKey's age identity. Decryption requires the YubiKey to be plugged in, adding hardware-based security to your local cache. See [Age Plugin Support](/providers/age#plugin-support) for details and other plugins.
+Secrets are encrypted to your YubiKey's age identity. Decryption requires the
+YubiKey to be plugged in, adding hardware-based security to your local cache.
+The token is portable, so you can decrypt on another compatible machine that
+has the plugin and identity reference. See [Age Plugin
+Support](/providers/age#plugin-support) for details and other plugins.
 
-### TPM and FIDO2 (Linux / Windows)
+### TPM and FIDO2
 
 Machines without a Secure Enclave or YubiKey usually still have hardware key
 storage:
 
 - [age-plugin-tpm](https://github.com/Foxboron/age-plugin-tpm) binds the age
-  key to the TPM 2.0 chip built into most modern laptops (recipients start with
-  `age1tpm1...`).
+  key to the TPM 2.0 chip built into most modern laptops. The identity cannot be
+  used with another machine's TPM; current recipients start with `age1tag1...`.
 - [age-plugin-fido2-hmac](https://github.com/olastor/age-plugin-fido2-hmac)
-  works with any FIDO2 security key (recipients start with `age1fido2-hmac1...`).
+  works with FIDO2 security keys that support the `hmac-secret` extension;
+  documented recipients start with `age1zdy...`. The plugin is experimental and
+  unwraps the age identity into host memory during decryption. If that in-memory
+  identity is stolen, it can decrypt without the token.
 
-The pattern is always the same: generate an identity with the plugin's keygen
-command, put the printed recipient in the provider's `recipients`, point
-`key_file` at the identity file, and run `fnox sync` as usual.
+Follow each plugin's installation instructions for your platform, then generate
+the identity and recipient with its documented command:
+
+```bash
+# TPM
+age-plugin-tpm --generate -o ~/.config/fnox/age-tpm.txt
+age-plugin-tpm -y ~/.config/fnox/age-tpm.txt
+
+# FIDO2-HMAC; writes the identity and prints its public key in a comment
+age-plugin-fido2-hmac -g > ~/.config/fnox/age-fido2.txt
+```
+
+Put the resulting recipient in the provider's `recipients`, point `key_file` at
+the identity file, and run `fnox sync` as usual. A YubiKey is preferable to
+FIDO2-HMAC when the decrypted identity must never enter host memory.
 
 ## Refreshing the Cache
 
