@@ -15,6 +15,16 @@ fnox works with either—or both! They've got their pros and cons. Either way, f
 
 fnox's config file, `fnox.toml`, will either contain the encrypted secrets, or a reference to a secret in a cloud provider. You can either use `fnox exec -- <command>` to run a command with the secrets, or you can use the [shell integration](/guide/shell-integration) to automatically load the secrets into your shell environment when you `cd` into a directory with a `fnox.toml` file.
 
+## The Golden Path
+
+fnox supports many provider combinations, but the recommended workflow — the golden path — combines a remote vault with a local encrypted cache:
+
+1. **Keep secrets in a remote vault** like [1Password](/providers/1password), and commit only references to them in `fnox.toml`. The vault is the single source of truth, and nothing sensitive ever lands in git.
+2. **Cache them locally with [`fnox sync`](/guide/sync)**, which re-encrypts every secret to your personal [age](/providers/age) key in the gitignored `fnox.local.toml`.
+3. **Load them instantly** via [shell integration](/guide/shell-integration) or `fnox exec` — decryption happens locally and offline, with no network calls to the vault.
+
+For the strongest setup, back the local age key with hardware — [Apple's Secure Enclave (Touch ID)](/guide/sync#apple-secure-enclave-touch-id), a [YubiKey](/guide/sync#yubikey), or a [TPM / FIDO2 key](/guide/sync#tpm-and-fido2-linux-windows) on Linux and Windows — so the cache can only be decrypted on your machine. See [Syncing Secrets Locally](/guide/sync) for the full walkthrough.
+
 ## Why Choose fnox?
 
 ### Works with Your Existing Infrastructure

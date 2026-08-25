@@ -208,6 +208,10 @@ recipients = ["age1yubikey1qwla8v7cu3mx6mp79asgrh5ad2h52flwln7c66ydcyy50lg5uh0gx
 ```
 
 Please refer to the respective plugin docs for detailed setup instructions.
+For end-to-end walkthroughs of hardware-backed decryption (Secure Enclave,
+YubiKey, TPM, FIDO2) see
+[Hardware-Backed Decryption](/guide/sync#hardware-backed-decryption) in the
+sync guide.
 
 ## Team Workflow
 

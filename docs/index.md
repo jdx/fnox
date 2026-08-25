@@ -59,6 +59,16 @@ fnox exec -- npm start
 eval "$(fnox activate bash)"  # or zsh, fish — see docs for Nushell
 ```
 
+## The Golden Path
+
+The recommended workflow combines a remote vault with a local encrypted cache: keep secrets in a vault like 1Password (committing only references in `fnox.toml`), then cache them locally with [`fnox sync`](/guide/sync) behind a personal age key — optionally hardware-backed by [Apple's Secure Enclave, a YubiKey, or a TPM](/guide/sync#hardware-backed-decryption).
+
+```bash
+fnox sync --provider sync-age --local-file
+```
+
+You get centralized secret management and instant, offline loads on every `cd`. See [The Golden Path](/guide/what-is-fnox#the-golden-path) for details.
+
 ## How It Works
 
 fnox uses a simple TOML config file (`fnox.toml`) that you check into git. Secrets are either:

@@ -92,6 +92,7 @@ The secret is now encrypted in `fnox.toml` and safe to commit to git!
 
 ## Next Steps
 
+- [Syncing Secrets Locally](/guide/sync) - The golden path: keep secrets in a remote vault like 1Password and cache them locally with age
 - [How It Works](/guide/how-it-works) - Understand fnox's architecture
 - [Providers](/providers/overview) - Explore all available providers
 - [Shell Integration](/guide/shell-integration) - Deep dive into shell integration
