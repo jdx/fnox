@@ -287,9 +287,10 @@ EOF
 	# Setup: Create initial keychain secrets. A keychain CLI can be present in
 	# headless CI while its backing keychain is still unavailable.
 	run fnox set KC_EXISTING "kc-original" --provider keychain
-	if [ "$status" -ne 0 ]; then
+	if [ "$status" -ne 0 ] && [[ "$output" == *"User interaction is"* ]] && [[ "$output" == *"not allowed"* ]]; then
 		skip "Keychain not accessible in this environment"
 	fi
+	assert_success
 	echo "kc-to-delete" | fnox set KC_DELETE --provider keychain
 
 	# Verify setup
