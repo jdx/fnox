@@ -19,7 +19,7 @@ age = { type = "age", recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8z
 EOF
 
 # 4. Set private key
-export FNOX_AGE_KEY=$(cat ~/.config/fnox/age.txt | grep "AGE-SECRET-KEY")
+export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)
 
 # 5. Encrypt a secret
 fnox set DATABASE_URL "postgresql://localhost/mydb" --provider age
@@ -64,12 +64,7 @@ AGE-SECRET-KEY-1ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDEFGHIJKLMNOPQRS
 
 ### Option 2: Use SSH Key
 
-Age has first-class SSH key support! Use your existing SSH keys:
-
-```bash
-# No key generation needed!
-# Just use your SSH public key as the recipient
-```
+Age has first-class SSH key support — no key generation needed. Your existing SSH public key becomes the recipient and your private key decrypts; see [SSH Key Support](#ssh-key-support) below.
 
 ## Configuration
 
@@ -110,10 +105,10 @@ age = { type = "age", recipients = ["age1..."], identity = { provider = "keychai
 
 ```bash
 # Export the secret key
-export FNOX_AGE_KEY=$(cat ~/.config/fnox/age.txt | grep "AGE-SECRET-KEY")
+export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)
 
 # Add to shell profile
-echo 'export FNOX_AGE_KEY=$(cat ~/.config/fnox/age.txt | grep "AGE-SECRET-KEY")' >> ~/.bashrc
+echo 'export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)' >> ~/.bashrc
 ```
 
 #### Using SSH Key
@@ -198,8 +193,9 @@ cat ~/.ssh/id_rsa.pub
 
 Age plugins extend age with hardware-backed and alternative keys. fnox supports any [age plugin](https://github.com/FiloSottile/awesome-age#plugins), for example [age-plugin-yubikey](https://github.com/str4d/age-plugin-yubikey) (YubiKey / PIV) or [age-plugin-se](https://github.com/remko/age-plugin-se) (Apple's Secure Enclave).
 
-A plugin recipient looks like a native age recipient but carries the plugin name
-in its prefix (`age1yubikey1...`, `age1tpm1...`, …):
+Plugin recipients usually carry the plugin name in their prefix
+(`age1yubikey1...`), though not always — current age-plugin-tpm releases
+produce `age1tag1...` recipients, for example.
 
 ```toml
 [providers.age]
@@ -207,7 +203,9 @@ type = "age"
 recipients = ["age1yubikey1qwla8v7cu3mx6mp79asgrh5ad2h52flwln7c66ydcyy50lg5uh0gxh4kmaz"]
 ```
 
-Please refer to the respective plugin docs for detailed setup instructions.
+Refer to each plugin's docs for setup instructions. The sync guide also has
+full [hardware-backed decryption](/guide/sync#hardware-backed-decryption)
+walkthroughs for Secure Enclave, YubiKey, TPM, and FIDO2.
 
 ## Team Workflow
 
@@ -366,7 +364,7 @@ jobs:
 3. Copy the secret key:
 
    ```bash
-   cat ci-age.txt | grep "AGE-SECRET-KEY"
+   grep "AGE-SECRET-KEY" ci-age.txt
    ```
 
 4. Add to GitHub Secrets as `FNOX_AGE_KEY`
@@ -401,7 +399,7 @@ cat ~/.config/fnox/age.txt  # Check public key
 cat ~/.ssh/id_ed25519.pub   # Check SSH public key
 
 # Compare with fnox.toml recipients
-cat fnox.toml | grep recipients
+grep recipients fnox.toml
 ```
 
 ### "failed to decrypt"
