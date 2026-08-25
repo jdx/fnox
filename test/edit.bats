@@ -284,8 +284,12 @@ service = "fnox-test"
 prefix = "test-$$/"
 EOF
 
-	# Setup: Create initial keychain secrets
-	echo "kc-original" | fnox set KC_EXISTING --provider keychain
+	# Setup: Create initial keychain secrets. A keychain CLI can be present in
+	# headless CI while its backing keychain is still unavailable.
+	run fnox set KC_EXISTING "kc-original" --provider keychain
+	if [ "$status" -ne 0 ]; then
+		skip "Keychain not accessible in this environment"
+	fi
 	echo "kc-to-delete" | fnox set KC_DELETE --provider keychain
 
 	# Verify setup
