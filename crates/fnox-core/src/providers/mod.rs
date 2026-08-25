@@ -200,6 +200,21 @@ pub trait Provider: Send + Sync {
         ))
     }
 
+    /// Encrypt multiple values in a batch.
+    ///
+    /// Providers that need user interaction can override this to perform that
+    /// interaction once for the entire batch.
+    async fn encrypt_secrets_batch(
+        &self,
+        secrets: &[(String, String)],
+    ) -> HashMap<String, Result<String>> {
+        let mut encrypted = HashMap::with_capacity(secrets.len());
+        for (key, value) in secrets {
+            encrypted.insert(key.clone(), self.encrypt(value).await);
+        }
+        encrypted
+    }
+
     /// Store a secret and return the value to save in config
     ///
     /// This is a unified method for both encryption and remote storage:

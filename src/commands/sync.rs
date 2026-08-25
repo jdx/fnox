@@ -262,17 +262,33 @@ impl SyncCommand {
             })?;
         }
 
+        let plaintext_secrets: Vec<(String, String)> = resolved
+            .iter()
+            .filter_map(|(key, plaintext)| {
+                plaintext
+                    .as_ref()
+                    .map(|plaintext| (key.clone(), plaintext.clone()))
+            })
+            .collect();
+        let mut encrypted_secrets = target_provider
+            .encrypt_secrets_batch(&plaintext_secrets)
+            .await;
+
         for (key, plaintext) in &resolved {
-            let Some(plaintext) = plaintext else {
+            if plaintext.is_none() {
                 tracing::warn!("Skipping '{}': could not resolve value", key);
                 skipped_count += 1;
                 continue;
-            };
+            }
 
             let mut secret_config = secrets_to_sync[key].clone();
 
             // Encrypt with target provider
-            match target_provider.encrypt(plaintext).await {
+            match encrypted_secrets.remove(key).unwrap_or_else(|| {
+                Err(FnoxError::Provider(format!(
+                    "provider did not return an encrypted value for '{key}'"
+                )))
+            }) {
                 Ok(encrypted) => {
                     secret_config.sync = Some(SyncConfig {
                         provider: target_provider_name.clone(),
