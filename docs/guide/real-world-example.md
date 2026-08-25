@@ -2,6 +2,8 @@
 
 Let's build a complete setup for a typical web application with development, staging, and production environments.
 
+This example keeps dev/staging secrets encrypted in git with age. If your team keeps secrets in a vault like 1Password instead, see the [Golden Path Setup](/guide/golden-path).
+
 ## The Scenario
 
 You're building an API that needs:
@@ -55,7 +57,7 @@ Set decryption key:
 
 ```bash
 # Add to ~/.bashrc or ~/.zshrc
-export FNOX_AGE_KEY=$(cat ~/.config/fnox/age.txt | grep "AGE-SECRET-KEY")
+export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)
 ```
 
 ## Step 3: Add Development Secrets
@@ -306,7 +308,7 @@ jobs:
 2. Add `FNOX_AGE_KEY`:
    ```bash
    # Copy the CI age secret key (from the CI recipient's age.txt)
-   cat ~/.config/fnox/ci-age.txt | grep "AGE-SECRET-KEY"
+   grep "AGE-SECRET-KEY" ~/.config/fnox/ci-age.txt
    ```
 3. Add `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` for production
 
@@ -330,7 +332,7 @@ grep "public key:" ~/.config/fnox/age.txt
 # Send to team lead to add to fnox.toml recipients
 
 # 5. Set decryption key
-echo 'export FNOX_AGE_KEY=$(cat ~/.config/fnox/age.txt | grep "AGE-SECRET-KEY")' >> ~/.bashrc
+echo 'export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)' >> ~/.bashrc
 source ~/.bashrc
 
 # 6. Enable shell integration

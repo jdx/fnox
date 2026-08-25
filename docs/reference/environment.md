@@ -73,7 +73,7 @@ export FNOX_AGE_KEY="AGE-SECRET-KEY-1..."
 
 ```bash
 # Set age key from file
-export FNOX_AGE_KEY=$(cat ~/.config/fnox/age.txt | grep "AGE-SECRET-KEY")
+export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)
 
 # Or set directly
 export FNOX_AGE_KEY="AGE-SECRET-KEY-1ABCDEFGHIJKLMNOPQRSTUVWXYZ..."

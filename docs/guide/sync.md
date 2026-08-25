@@ -2,6 +2,19 @@
 
 `fnox sync` fetches secrets from remote providers (1Password, AWS Secrets Manager, etc.) and re-encrypts them with a local encryption provider (age, YubiKey via age plugin, AWS KMS, etc.). The encrypted values are stored in `fnox.local.toml` (gitignored) so that subsequent access is instant and offline — no remote calls needed.
 
+::: tip The golden path
+This is the recommended way to use fnox: secrets live in a remote vault like
+1Password, `fnox.toml` only holds references to them, and `fnox sync` caches
+them locally under a personal age key. The vault stays the single source of
+truth, but day-to-day loads are instant and work offline. To go further, keep
+the age key in hardware:
+[Apple's Secure Enclave (Touch ID)](#apple-secure-enclave-touch-id), a
+[YubiKey](#yubikey), or a [TPM or FIDO2 token](#tpm-and-fido2).
+
+For a zero-to-working walkthrough of the whole setup, see
+[Golden Path Setup](/guide/golden-path).
+:::
+
 ## Why Sync?
 
 A typical team setup stores secrets in a shared provider like 1Password:
@@ -147,7 +160,64 @@ Provider definitions are replaced as a unit when configs are merged. A local
 name, so use a distinct name such as `sync-age` for the cache.
 :::
 
-## Using a YubiKey
+## Hardware-Backed Decryption
+
+The sync cache is only as secure as the age key that decrypts it. Rather than
+keeping that key in a plaintext file on disk, you can hold it in hardware
+through an [age plugin](/providers/age#plugin-support). Syncing works the same
+either way; all that changes is the provider's recipient and identity. Secure
+Enclave and TPM keys never leave the machine they were created on, a YubiKey
+travels with you, and FIDO2-HMAC sits somewhere in between (the identity gets
+copied into host memory during decryption).
+
+### Apple Secure Enclave (Touch ID)
+
+On macOS, [age-plugin-se](https://github.com/remko/age-plugin-se) generates the
+age key inside Apple's Secure Enclave. The private key can't be exported, so
+decryption only works on that Mac — and, depending on the access control policy
+you pick at keygen time, only after a Touch ID prompt.
+
+```bash
+# 1. Install the plugin (must be on PATH)
+brew install age-plugin-se
+
+# 2. Generate a hardware-bound identity
+mkdir -p ~/.config/fnox
+age-plugin-se keygen --access-control=any-biometry -o ~/.config/fnox/age-se.txt
+# Public key: age1se1...
+```
+
+Put the printed `age1se1...` recipient in the provider config. The global
+config is a good home for it, since every project on the machine can then reuse
+the same key:
+
+```toml
+# ~/.config/fnox/config.toml
+[providers.sync-age]
+type = "age"
+recipients = ["age1se1..."]
+key_file = "~/.config/fnox/age-se.txt"
+```
+
+Then sync as usual:
+
+```bash
+fnox sync --provider sync-age --local-file
+```
+
+That's it — `fnox get`, `fnox exec`, and shell integration now decrypt the
+cache through the Secure Enclave. Whether you're prompted for Touch ID depends
+on the `--access-control` policy you chose (`any-biometry`,
+`any-biometry-or-passcode`, `none`, …).
+
+::: warning
+`age-se.txt` doesn't contain the private key — it's a reference to the key in
+the Secure Enclave — but treat it like an identity file anyway. If you have
+`FNOX_AGE_KEY` exported, unset it: it takes precedence over the provider's
+`key_file`. Requires macOS 14+ and a Mac with a Secure Enclave.
+:::
+
+### YubiKey
 
 If you use a YubiKey with the [age-plugin-yubikey](https://github.com/str4d/age-plugin-yubikey), syncing works the same way. Your age provider just uses the YubiKey identity:
 
@@ -161,7 +231,64 @@ recipients = ["age1yubikey1q..."]  # YubiKey recipient
 fnox sync --provider sync-age --local-file
 ```
 
-Secrets are encrypted to your YubiKey's age identity. Decryption requires the YubiKey to be plugged in, adding hardware-based security to your local cache. See [Age Plugin Support](/providers/age#plugin-support) for details and other plugins (TPM, FIDO2, …).
+Secrets are encrypted to your YubiKey's age identity, so decrypting the cache
+requires the key to be plugged in. Unlike a Secure Enclave or TPM key, the
+YubiKey isn't tied to one machine: plug it into any machine that has the plugin
+and the identity reference and you can decrypt there too. See [Age Plugin
+Support](/providers/age#plugin-support) for details and other plugins.
+
+### TPM and FIDO2
+
+No Secure Enclave or YubiKey? Most machines still have some form of hardware
+key storage:
+
+- [age-plugin-tpm](https://github.com/Foxboron/age-plugin-tpm) stores the age
+  key in the TPM 2.0 chip found in most modern laptops. Like the Secure
+  Enclave, the key is stuck to that machine. Current releases produce
+  recipients starting with `age1tag1...`.
+- [age-plugin-fido2-hmac](https://github.com/olastor/age-plugin-fido2-hmac)
+  works with FIDO2 security keys that support the `hmac-secret` extension
+  (recipients start with `age1zdy...`). It's still experimental, and during
+  decryption the age identity gets unwrapped into host memory — anyone who
+  steals it from there can decrypt without the token.
+
+Install the plugin for your platform, then generate an identity:
+
+```bash
+# TPM
+age-plugin-tpm --generate -o ~/.config/fnox/age-tpm.txt
+age-plugin-tpm -y ~/.config/fnox/age-tpm.txt
+
+# FIDO2-HMAC; writes the identity and prints its public key in a comment
+age-plugin-fido2-hmac -g > ~/.config/fnox/age-fido2.txt
+```
+
+Add the resulting recipient to the provider's `recipients`, point `key_file`
+at the identity file, and sync as usual. If the identity must never touch host
+memory, use a YubiKey rather than FIDO2-HMAC.
+
+### Age Plugins vs. Native Hardware Providers
+
+fnox also ships native [`yubikey`](/providers/yubikey) and
+[`fido2`](/providers/fido2) providers that skip age entirely: they derive a
+symmetric AES-256-GCM key from the hardware token and can be used as sync
+targets the same way (`fnox sync --provider secure --local-file`). The
+trade-offs:
+
+- **Native providers** need no plugin binary — fnox talks to the token
+  directly — and the config is fully portable: move `fnox.local.toml` to
+  another machine, plug in the same token, and it decrypts. But the encryption
+  is symmetric, so the token must be present (and touched) for `fnox sync`
+  itself, not just for decryption, and only that one token can ever decrypt
+  the cache.
+- **Age plugins** encrypt to a public recipient, so syncing never touches the
+  hardware — only decryption does — and a provider can list several recipients
+  (e.g. a YubiKey plus a backup key). In exchange, the plugin binary must be
+  installed wherever you decrypt.
+
+For a personal sync cache either works well; pick the native providers if you
+don't want to install age plugins, and the age route if you want backup
+recipients or hardware-free syncing.
 
 ## Refreshing the Cache
 
@@ -172,6 +299,15 @@ fnox sync --provider sync-age --local-file --force
 ```
 
 The `--force` flag skips the confirmation prompt. fnox re-fetches from the original provider and re-encrypts.
+
+## What About CI?
+
+The sync cache is a per-developer convenience — don't sync in CI. Let CI
+authenticate to the remote provider directly (e.g. a 1Password
+[service account token](https://developer.1password.com/docs/service-accounts/)
+or an AWS role), or give it [age-encrypted secrets committed to
+git](/providers/age#ci-cd-setup) with its own key. The committed `fnox.toml`
+references resolve the same way in both cases.
 
 ## Full Workflow Example
 
@@ -214,6 +350,7 @@ cd .. && cd my-api
 
 ## Next Steps
 
+- [Golden Path Setup](/guide/golden-path) - Zero-to-working walkthrough of this workflow
 - [Per-User Daemon](/guide/daemon) - Cache resolved secrets in memory for a session
 - [Import/Export](/guide/import-export) - Migrate secrets between formats
 - [Shell Integration](/guide/shell-integration) - Auto-load secrets on `cd`

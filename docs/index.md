@@ -59,6 +59,16 @@ fnox exec -- npm start
 eval "$(fnox activate bash)"  # or zsh, fish — see docs for Nushell
 ```
 
+## The Golden Path
+
+The recommended setup: keep secrets in a vault like 1Password, commit only references to them in `fnox.toml`, and cache them locally with [`fnox sync`](/guide/sync) under a personal age key — which can even live in [hardware like a Secure Enclave, YubiKey, or TPM](/guide/sync#hardware-backed-decryption).
+
+```bash
+fnox sync --provider sync-age --local-file
+```
+
+The vault stays the source of truth, but secrets load instantly and offline on every `cd`. See [The Golden Path](/guide/what-is-fnox#the-golden-path) for details, or jump straight to the [setup walkthrough](/guide/golden-path).
+
 ## How It Works
 
 fnox uses a simple TOML config file (`fnox.toml`) that you check into git. Secrets are either:
@@ -80,34 +90,11 @@ API_KEY = { default = "dev-key-12345" }  # ← plain default value for local dev
 
 ## Supported Providers
 
-### 🔐 Encryption (secrets in git, encrypted)
+fnox works with over 20 providers across four categories:
 
-- **age** - Modern encryption (works with SSH keys!)
-- **aws-kms** - AWS Key Management Service
-- **azure-kms** - Azure Key Vault encryption
-- **gcp-kms** - Google Cloud KMS
+- **🔐 Encryption (secrets in git)** — age (with SSH keys and hardware plugins), FIDO2, YubiKey, AWS/Azure/GCP KMS
+- **☁️ Cloud secret storage** — AWS Secrets Manager & Parameter Store, Azure Key Vault, GCP Secret Manager, HashiCorp Vault, Doppler, and more
+- **🔑 Password managers** — 1Password, Bitwarden, Proton Pass, Infisical
+- **💻 Local storage** — OS keychain, KeePass, password-store
 
-### ☁️ Cloud Secret Storage (remote, centralized)
-
-- **aws-ps** - AWS Parameter Store
-- **aws-sm** - AWS Secrets Manager
-- **azure-ac** - Azure App Configuration
-- **azure-sm** - Azure Key Vault Secrets
-- **gcp-sm** - Google Cloud Secret Manager
-- **bitwarden-sm** - Bitwarden Secrets Manager
-- **doppler** - Doppler secrets manager
-- **foks** - FOKS (Federated Open Key Service)
-- **keeper-sm** - Keeper Secrets Manager
-- **vault** - HashiCorp Vault
-
-### 🔑 Password Managers & Secret Services
-
-- **1password** - 1Password CLI
-- **bitwarden** - Bitwarden/Vaultwarden
-- **infisical** - Infisical secrets management
-
-### 💻 Local Storage
-
-- **keychain** - OS Keychain (macOS/Windows/Linux)
-- **password-store** - GPG-encrypted password store (Unix pass)
-- **plain** - Plain text (for defaults only!)
+See the [Providers Overview](/providers/overview) for the full list and a comparison of trade-offs.
