@@ -17,13 +17,13 @@ fnox's config file, `fnox.toml`, will either contain the encrypted secrets, or a
 
 ## The Golden Path
 
-fnox supports many provider combinations, but the recommended workflow — the golden path — combines a remote vault with a local encrypted cache:
+fnox supports a lot of provider combinations, but there's one workflow we recommend — the golden path:
 
-1. **Keep secrets in a remote vault** like [1Password](/providers/1password), and commit only references to them in `fnox.toml`. The vault is the single source of truth, and nothing sensitive ever lands in git.
-2. **Cache them locally with [`fnox sync`](/guide/sync)**, which re-encrypts every secret to your personal [age](/providers/age) key in the gitignored `fnox.local.toml`.
-3. **Load them instantly** via [shell integration](/guide/shell-integration) or `fnox exec` — decryption happens locally and offline, with no network calls to the vault.
+1. **Keep secrets in a remote vault** like [1Password](/providers/1password) and commit only references to them in `fnox.toml`. The vault stays the single source of truth and nothing sensitive goes into git.
+2. **Cache them locally with [`fnox sync`](/guide/sync)**, which re-encrypts each secret to your personal [age](/providers/age) key in the gitignored `fnox.local.toml`.
+3. **Load them from the cache** via [shell integration](/guide/shell-integration) or `fnox exec`. Decryption is local, so it's instant and works offline.
 
-For the strongest setup, protect the local age key with hardware — [Apple's Secure Enclave (Touch ID)](/guide/sync#apple-secure-enclave-touch-id), a [YubiKey](/guide/sync#yubikey), or [TPM and FIDO2 hardware](/guide/sync#tpm-and-fido2). Secure Enclave and TPM keys are machine-bound; YubiKey and FIDO2 tokens are portable and have different security properties. See [Syncing Secrets Locally](/guide/sync) for the full walkthrough.
+You can also keep the age key in hardware — [Apple's Secure Enclave (Touch ID)](/guide/sync#apple-secure-enclave-touch-id), a [YubiKey](/guide/sync#yubikey), or a [TPM or FIDO2 token](/guide/sync#tpm-and-fido2) — so the cache can't be decrypted without the machine or the token. See [Syncing Secrets Locally](/guide/sync) for the full walkthrough.
 
 ## Why Choose fnox?
 

@@ -198,9 +198,9 @@ cat ~/.ssh/id_rsa.pub
 
 Age plugins extend age with hardware-backed and alternative keys. fnox supports any [age plugin](https://github.com/FiloSottile/awesome-age#plugins), for example [age-plugin-yubikey](https://github.com/str4d/age-plugin-yubikey) (YubiKey / PIV) or [age-plugin-se](https://github.com/remko/age-plugin-se) (Apple's Secure Enclave).
 
-A plugin recipient can carry the plugin name in its prefix, such as
-`age1yubikey1...`. Some plugins instead produce `age1tag1...` recipients; for
-example, current age-plugin-tpm releases use that format.
+Plugin recipients usually carry the plugin name in their prefix
+(`age1yubikey1...`), though not always — current age-plugin-tpm releases
+produce `age1tag1...` recipients, for example.
 
 ```toml
 [providers.age]
@@ -208,11 +208,9 @@ type = "age"
 recipients = ["age1yubikey1qwla8v7cu3mx6mp79asgrh5ad2h52flwln7c66ydcyy50lg5uh0gxh4kmaz"]
 ```
 
-Please refer to the respective plugin docs for detailed setup instructions.
-For end-to-end walkthroughs of hardware-backed decryption (Secure Enclave,
-YubiKey, TPM, FIDO2) see
-[Hardware-Backed Decryption](/guide/sync#hardware-backed-decryption) in the
-sync guide.
+Refer to each plugin's docs for setup instructions. The sync guide also has
+full [hardware-backed decryption](/guide/sync#hardware-backed-decryption)
+walkthroughs for Secure Enclave, YubiKey, TPM, and FIDO2.
 
 ## Team Workflow
 

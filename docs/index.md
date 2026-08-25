@@ -61,13 +61,13 @@ eval "$(fnox activate bash)"  # or zsh, fish — see docs for Nushell
 
 ## The Golden Path
 
-The recommended workflow combines a remote vault with a local encrypted cache: keep secrets in a vault like 1Password (committing only references in `fnox.toml`), then cache them locally with [`fnox sync`](/guide/sync) behind a personal age key — optionally hardware-backed by [Apple's Secure Enclave, a YubiKey, or a TPM](/guide/sync#hardware-backed-decryption).
+The recommended setup: keep secrets in a vault like 1Password, commit only references to them in `fnox.toml`, and cache them locally with [`fnox sync`](/guide/sync) under a personal age key — which can even live in [hardware like a Secure Enclave, YubiKey, or TPM](/guide/sync#hardware-backed-decryption).
 
 ```bash
 fnox sync --provider sync-age --local-file
 ```
 
-You get centralized secret management and instant, offline loads on every `cd`. See [The Golden Path](/guide/what-is-fnox#the-golden-path) for details.
+The vault stays the source of truth, but secrets load instantly and offline on every `cd`. See [The Golden Path](/guide/what-is-fnox#the-golden-path) for details.
 
 ## How It Works
 
