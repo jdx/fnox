@@ -99,7 +99,7 @@ jobs:
           chmod +x target/debug/fnox
           echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
       - name: Setup age key for fnox
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]')
         run: mkdir -p ~/.config/fnox && echo "${{ secrets.AGE_SECRET }}" > ~/.config/fnox/age.txt
       - name: Setup services (Ubuntu)
         if: ${{ matrix.os == 'ubuntu-latest' }}
@@ -299,10 +299,10 @@ jobs:
           chmod +x target/debug/fnox
           echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
       - name: Setup age key for fnox
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]')
         run: mkdir -p ~/.config/fnox && echo "${{ secrets.AGE_SECRET }}" > ~/.config/fnox/age.txt
       - name: Redact secrets in CI output
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]')
         run: |
           fnox ci-redact
           # shellcheck disable=SC2016
