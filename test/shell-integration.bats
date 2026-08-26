@@ -286,6 +286,33 @@ teardown() {
 	assert_output ""
 }
 
+@test "fnox hook-env exits early when moving within the same config hierarchy" {
+	project_dir="$TEST_TEMP_DIR/project"
+	mkdir -p "$project_dir/inner"
+	cd "$project_dir"
+	cat >fnox.toml <<-EOF
+		[providers.plain]
+		type = "plain"
+
+		[secrets.CACHED_SECRET]
+		provider = "plain"
+		value = "cached-value"
+	EOF
+
+	# First run from the project root loads the secret and creates the session
+	output1=$("$FNOX_BIN" hook-env -s bash)
+	echo "$output1" | grep -q 'export CACHED_SECRET=cached-value'
+	session=$(echo "$output1" | grep '__FNOX_SESSION=' | sed -E "s/^export __FNOX_SESSION=//; s/^'(.*)'\$/\\1/")
+
+	# Moving into an empty child keeps the same effective config hierarchy
+	export __FNOX_SESSION="$session"
+	cd inner
+	run "$FNOX_BIN" hook-env -s bash
+
+	assert_success
+	assert_output ""
+}
+
 @test "fnox hook-env reloads when config is modified" {
 	cd "$TEST_TEMP_DIR"
 	cat >fnox.toml <<-EOF
@@ -396,7 +423,7 @@ teardown() {
 	assert_output --partial 'unset TEMPORARY_SECRET'
 }
 
-@test "fnox hook-env reloads when directory changes" {
+@test "fnox hook-env reloads when moving to a different config hierarchy" {
 	# Create first directory with config
 	dir1="$TEST_TEMP_DIR/dir1"
 	mkdir -p "$dir1"
@@ -428,7 +455,7 @@ teardown() {
 		value = "dir2-value"
 	EOF
 
-	# Second run in dir2 with session from dir1 - should detect directory change
+	# Second run in dir2 with session from dir1 - should detect the config change
 	export __FNOX_SESSION="$session"
 	run "$FNOX_BIN" hook-env -s bash
 

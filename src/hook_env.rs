@@ -154,12 +154,6 @@ pub fn hash_secret_value_with_session(session: &HookEnvSession, key: &str, value
 /// Check if we should exit early (optimization)
 /// Returns true if nothing changed and we can skip work
 pub fn should_exit_early() -> bool {
-    // Check if directory changed
-    if has_directory_changed() {
-        tracing::debug!("directory changed, must run hook-env");
-        return false;
-    }
-
     // Check if fnox.toml was modified
     if has_config_been_modified() {
         tracing::debug!("fnox.toml modified, must run hook-env");
@@ -174,12 +168,6 @@ pub fn should_exit_early() -> bool {
 
     tracing::debug!("no changes detected, exiting early");
     true
-}
-
-/// Check if current directory is different from previous session
-fn has_directory_changed() -> bool {
-    let current_dir = std::env::current_dir().ok();
-    PREV_SESSION.dir != current_dir
 }
 
 /// Check if any config files in the hierarchy have been modified since last run
