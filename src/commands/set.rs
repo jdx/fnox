@@ -95,6 +95,8 @@ pub struct SetCommand {
 
 impl SetCommand {
     pub async fn run(&self, cli: &Cli, mut config: Config) -> Result<()> {
+        config::validate_secret_name(&self.key)?;
+
         let profile = Config::get_profiles(cli.profile.as_slice());
         let write_profile = Config::resolve_write_profile(&profile, cli.write_profile.as_deref())?;
         tracing::debug!(

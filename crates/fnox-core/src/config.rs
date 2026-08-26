@@ -16,6 +16,41 @@ use strum::{EnumString, VariantNames};
 /// Default config filename, used as the clap default for `--config`.
 pub const DEFAULT_CONFIG_FILENAME: &str = "fnox.toml";
 
+/// Return whether a secret name can be used as a shell environment variable.
+///
+/// Shell integration evaluates generated shell code, so accepting anything
+/// broader than a portable identifier would make the name itself part of the
+/// command grammar. Keep this deliberately ASCII-only and equivalent to
+/// `^[A-Za-z_][A-Za-z0-9_]*$`.
+pub fn is_valid_secret_name(name: &str) -> bool {
+    let mut bytes = name.bytes();
+    matches!(bytes.next(), Some(b'A'..=b'Z' | b'a'..=b'z' | b'_'))
+        && bytes.all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+}
+
+fn invalid_secret_name_issue(name: &str, profile: Option<&str>) -> crate::error::ValidationIssue {
+    let location = profile
+        .filter(|profile| *profile != "default")
+        .map(|profile| format!(" in profile '{profile}'"))
+        .unwrap_or_default();
+    crate::error::ValidationIssue::with_help(
+        format!("Secret name '{name}'{location} is not a valid environment variable name"),
+        "Use only letters, digits, and underscores, starting with a letter or underscore",
+    )
+}
+
+/// Validate one secret name before it is persisted or used for environment
+/// injection.
+pub fn validate_secret_name(name: &str) -> Result<()> {
+    if is_valid_secret_name(name) {
+        Ok(())
+    } else {
+        Err(FnoxError::ConfigValidationFailed {
+            issues: vec![invalid_secret_name_issue(name, None)],
+        })
+    }
+}
+
 /// Returns all config filenames in load order (first = lowest priority, last = highest priority).
 ///
 /// Order: main configs → profile configs (in the order given) → local configs
@@ -1510,6 +1545,15 @@ impl Config {
             }
         }
 
+        let issues = secrets
+            .keys()
+            .filter(|name| !is_valid_secret_name(name))
+            .map(|name| invalid_secret_name_issue(name, None))
+            .collect::<Vec<_>>();
+        if !issues.is_empty() {
+            return Err(FnoxError::ConfigValidationFailed { issues });
+        }
+
         // Secrets that don't set `env` themselves inherit the top-level default
         if self.env.is_some() {
             for secret in secrets.values_mut() {
@@ -1843,6 +1887,9 @@ impl Config {
 
         // Check for secrets with empty values (likely a mistake, but allowed for plain provider)
         for (key, secret) in &self.secrets {
+            if !is_valid_secret_name(key) {
+                issues.push(invalid_secret_name_issue(key, None));
+            }
             if let Some(issue) = self.check_empty_value(key, secret, "default") {
                 issues.push(issue);
             }
@@ -1892,6 +1939,9 @@ impl Config {
 
             // Check for profile secrets with empty values (likely a mistake, but allowed for plain provider)
             for (key, secret) in &profile_config.secrets {
+                if !is_valid_secret_name(key) {
+                    issues.push(invalid_secret_name_issue(key, Some(profile_name)));
+                }
                 if let Some(issue) = self.check_empty_value(key, secret, profile_name) {
                     issues.push(issue);
                 }
@@ -2232,6 +2282,42 @@ fn is_false(value: &bool) -> bool {
 mod tests {
     use super::*;
     use std::path::Path;
+
+    #[test]
+    fn secret_names_are_portable_environment_identifiers() {
+        for valid in ["A", "_", "MY_SECRET", "secret_123"] {
+            assert!(
+                is_valid_secret_name(valid),
+                "expected {valid:?} to be valid"
+            );
+        }
+        for invalid in ["", "1SECRET", "BAD-NAME", "BAD NAME", "X; touch /tmp/pwn #"] {
+            assert!(
+                !is_valid_secret_name(invalid),
+                "expected {invalid:?} to be invalid"
+            );
+        }
+    }
+
+    #[test]
+    fn get_secrets_rejects_invalid_environment_names() {
+        let config: Config = toml_edit::de::from_str(
+            r#"
+root = true
+
+[secrets]
+"X; touch /tmp/pwn #" = { default = "harmless" }
+"ALSO-BAD" = { default = "harmless" }
+"#,
+        )
+        .unwrap();
+
+        let error = config
+            .get_secrets_with_no_defaults(&["default".to_string()], false)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("Configuration validation failed (2 issues)"));
+    }
 
     #[test]
     fn test_empty_import_not_serialized() {

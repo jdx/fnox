@@ -81,11 +81,15 @@ PROMPT_COMMAND="${PROMPT_COMMAND//_fnox_hook/}"
     }
 
     fn set_env(&self, key: &str, value: &str) -> String {
-        format!("export {}={}\n", key, super::posix_quote(value))
+        format!(
+            "export {}={}\n",
+            super::posix_quote(key),
+            super::posix_quote(value)
+        )
     }
 
     fn unset_env(&self, key: &str) -> String {
-        format!("unset {}\n", key)
+        format!("unset {}\n", super::posix_quote(key))
     }
 }
 
