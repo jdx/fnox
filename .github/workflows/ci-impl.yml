@@ -49,6 +49,7 @@ jobs:
       - uses: ./.github/actions/mbx
         with:
           backend: ${{ inputs.mbx-backend }}
+          mirror-github-cache: "true"
       - name: Install system dependencies (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -249,6 +250,7 @@ jobs:
       - uses: ./.github/actions/mbx
         with:
           backend: ${{ inputs.mbx-backend }}
+          mirror-github-cache: "true"
       - name: Check Windows build
         run: mbx check --workspace
 
