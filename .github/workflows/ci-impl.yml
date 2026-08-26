@@ -1,0 +1,381 @@
+name: ci implementation
+
+on:
+  workflow_call:
+    inputs:
+      trusted:
+        required: true
+        type: boolean
+      mbx-backend:
+        required: true
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            runner: namespace-profile-endev-macos-arm64
+          - os: ubuntu-latest
+            runner: namespace-profile-endev-linux-amd64
+    runs-on: ${{ !inputs.trusted && matrix.os || matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - name: Assert OIDC is unavailable to untrusted CI
+        if: ${{ !inputs.trusted }}
+        run: |
+          test -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          test -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
+        with:
+          cache: false
+      - uses: ./.github/actions/mbx
+        with:
+          backend: ${{ inputs.mbx-backend }}
+      - name: Install system dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/apt-mirrors.txt
+          fi
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev
+      - name: Install Rust components
+        run: rustup component add rustfmt clippy
+      - name: Build
+        run: mbx build
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: fnox-${{ matrix.os }}
+          path: target/debug/fnox
+
+  ci-bats:
+    needs: build
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            runner: namespace-profile-endev-macos-arm64
+            tranche: 0
+          - os: macos-latest
+            runner: namespace-profile-endev-macos-arm64
+            tranche: 1
+          - os: ubuntu-latest
+            runner: namespace-profile-endev-linux-amd64
+            tranche: 0
+          - os: ubuntu-latest
+            runner: namespace-profile-endev-linux-amd64
+            tranche: 1
+    runs-on: ${{ !inputs.trusted && matrix.os || matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - run: brew install parallel hashicorp/tap/vault
+        if: ${{ matrix.os == 'macos-latest' }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
+        with:
+          cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: fnox-${{ matrix.os }}
+          path: target/debug
+      - name: Add fnox to PATH
+        run: |
+          chmod +x target/debug/fnox
+          echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+      - name: Setup age key for fnox
+        if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'jdx')
+        run: mkdir -p ~/.config/fnox && echo "${{ secrets.AGE_SECRET }}" > ~/.config/fnox/age.txt
+      - name: Setup services (Ubuntu)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          # Install gnome-keyring for keychain tests
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/apt-mirrors.txt
+          fi
+          sudo apt-get update
+          sudo apt-get install -y gnome-keyring libsecret-tools
+          # Start D-Bus session daemon
+          mkdir -p ~/.dbus-session
+          dbus-daemon --session --fork --print-address=1 > ~/.dbus-session/bus-address
+          DBUS_SESSION_BUS_ADDRESS=$(cat ~/.dbus-session/bus-address)
+          export DBUS_SESSION_BUS_ADDRESS
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
+          # Start gnome-keyring daemon for keychain tests
+          echo "foobar" | gnome-keyring-daemon --unlock --components=secrets --daemonize
+          # Start Vaultwarden with HTTPS (self-signed certificate)
+          # Generate self-signed certificate
+          mkdir -p /tmp/vaultwarden-certs
+          openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout /tmp/vaultwarden-certs/key.pem \
+            -out /tmp/vaultwarden-certs/cert.pem \
+            -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" 2>/dev/null || true
+          # Start Vaultwarden with HTTPS enabled
+          docker run -d --name vaultwarden \
+            -p 8080:80 \
+            -e DOMAIN=https://localhost:8080 \
+            -e SIGNUPS_ALLOWED=true \
+            -e DISABLE_ADMIN_TOKEN=true \
+            -e I_REALLY_WANT_VOLATILE_STORAGE=true \
+            -e ROCKET_TLS='{certs="/data/certs/cert.pem",key="/data/certs/key.pem"}' \
+            -v /tmp/vaultwarden-certs:/data/certs:ro \
+            vaultwarden/server:latest
+          # Start Vault
+          docker run -d --name vault --cap-add=IPC_LOCK \
+            -p 8200:8200 \
+            -e VAULT_DEV_ROOT_TOKEN_ID=fnox-test-token \
+            -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 \
+            -e VAULT_ADDR=http://127.0.0.1:8200 \
+            hashicorp/vault:latest
+          # Start Infisical (self-hosted with PostgreSQL and Redis)
+          docker compose -f test/docker-compose.infisical-ci.yml up -d
+          # Start LocalStack for AWS tests (STS leases, KMS, Secrets Manager, Parameter Store)
+          docker run -d --name localstack \
+            -p 4566:4566 \
+            -e SERVICES=sts,iam,kms,secretsmanager,ssm \
+            localstack/localstack:4
+          # Wait for services to be ready
+          # Poll LocalStack health endpoint (can take 10-30s on cold runners)
+          for _i in $(seq 1 30); do
+            curl -sf http://localhost:4566/_localstack/health && break
+            sleep 2
+          done
+          # Wait for Vault to be ready
+          for _i in $(seq 1 15); do
+            curl -sf http://localhost:8200/v1/sys/health && break
+            sleep 1
+          done
+          # Setup LocalStack resources for AWS provider tests
+          export AWS_ACCESS_KEY_ID=test
+          export AWS_SECRET_ACCESS_KEY=test
+          export AWS_DEFAULT_REGION=us-east-1
+          # Create KMS key for tests
+          LOCALSTACK_KMS_KEY_ID=$(aws --endpoint-url http://localhost:4566 kms create-key \
+            --region us-east-1 --query 'KeyMetadata.KeyId' --output text)
+          aws --endpoint-url http://localhost:4566 kms create-alias \
+            --alias-name alias/fnox-testing \
+            --target-key-id "$LOCALSTACK_KMS_KEY_ID" \
+            --region us-east-1
+          # Create shared test secret in Secrets Manager
+          aws --endpoint-url http://localhost:4566 secretsmanager create-secret \
+            --name "fnox/test-secret" \
+            --secret-string "This is a test secret in AWS Secrets Manager!" \
+            --region us-east-1
+          {
+            echo "VAULT_ADDR=http://localhost:8200"
+            echo "VAULT_TOKEN=fnox-test-token"
+            echo "LOCALSTACK_ENDPOINT=http://localhost:4566"
+          } >> "$GITHUB_ENV"
+      - name: Setup Bitwarden for tests
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          source ./test/setup-bitwarden-ci.sh
+          echo "BW_SESSION=$BW_SESSION" >> "$GITHUB_ENV"
+      - name: Install Infisical CLI
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | sudo -E bash
+          sudo apt-get update && sudo apt-get install -y infisical
+      - name: Setup Infisical for tests
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          source ./test/setup-infisical-ci.sh
+          {
+            echo "INFISICAL_TOKEN=$INFISICAL_TOKEN"
+            echo "INFISICAL_CLIENT_ID=$INFISICAL_CLIENT_ID"
+            echo "INFISICAL_CLIENT_SECRET=$INFISICAL_CLIENT_SECRET"
+            echo "INFISICAL_PROJECT_ID=$INFISICAL_PROJECT_ID"
+            echo "INFISICAL_API_URL=http://localhost:8081/api"
+          } >> "$GITHUB_ENV"
+      - name: Setup services (macOS)
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: |
+          # Start Vault in dev mode in background
+          vault server -dev -dev-root-token-id=fnox-test-token -dev-listen-address=127.0.0.1:8200 &
+          {
+            echo "VAULT_ADDR=http://127.0.0.1:8200"
+            echo "VAULT_TOKEN=fnox-test-token"
+          } >> "$GITHUB_ENV"
+          # Wait for Vault to be ready
+          sleep 2
+      - name: Run bats tests - tranche ${{ matrix.tranche }}
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4
+        env:
+          TRANCHE: ${{ matrix.tranche }}
+          TRANCHE_COUNT: 2
+          KEEPASS_PASSWORD: fnox-test-password
+          BATS_FILTER_TAGS: ${{ (github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release-plz')) && '!expensive' || '' }}
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          command: mise run test:bats
+
+  windows-check:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
+        with:
+          cache: false
+          fetch_from_github: false
+      - uses: ./.github/actions/mbx
+        with:
+          backend: ${{ inputs.mbx-backend }}
+      - name: Check Windows build
+        run: mbx check --workspace
+
+  ci-other:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            runner: namespace-profile-endev-macos-arm64
+          - os: ubuntu-latest
+            runner: namespace-profile-endev-linux-amd64
+    runs-on: ${{ !inputs.trusted && matrix.os || matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
+        with:
+          cache: false
+      - uses: ./.github/actions/mbx
+        with:
+          backend: ${{ inputs.mbx-backend }}
+      - name: Install system dependencies (Ubuntu)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/apt-mirrors.txt
+          fi
+          sudo apt-get update
+          sudo apt-get install -y gnome-keyring libsecret-tools libudev-dev
+      - name: Setup gnome-keyring (Ubuntu)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          # Start D-Bus session daemon
+          mkdir -p ~/.dbus-session
+          dbus-daemon --session --fork --print-address=1 > ~/.dbus-session/bus-address
+          DBUS_SESSION_BUS_ADDRESS=$(cat ~/.dbus-session/bus-address)
+          export DBUS_SESSION_BUS_ADDRESS
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
+          # Start gnome-keyring daemon for keychain tests
+          echo "foobar" | gnome-keyring-daemon --unlock --components=secrets --daemonize
+      - name: Install Rust components
+        run: rustup component add rustfmt clippy
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: fnox-${{ matrix.os }}
+          path: target/debug
+      - name: Add fnox to PATH
+        run: |
+          chmod +x target/debug/fnox
+          echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+      - name: Setup age key for fnox
+        if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'jdx')
+        run: mkdir -p ~/.config/fnox && echo "${{ secrets.AGE_SECRET }}" > ~/.config/fnox/age.txt
+      - name: Redact secrets in CI output
+        if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'jdx')
+        run: |
+          fnox ci-redact
+          # shellcheck disable=SC2016
+          fnox run -- sh -c 'echo MY_UNIMPORTANT_SECRET: $MY_UNIMPORTANT_SECRET'
+      - name: Clean cached Rust build artifacts
+        run: cargo clean
+      - name: Run tests
+        run: mbx test --workspace
+      - name: mise run render
+        run: mise run render
+      - name: assert render produces no diff
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::'mise run render' produced changes. Run it locally and commit."
+            git status
+            git diff HEAD
+            exit 1
+          fi
+      - name: Check formatting
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          command: mise run lint
+      - name: Run clippy
+        run: mbx clippy --workspace --all-targets -- -D warnings
+
+  msrv:
+    runs-on: ${{ !inputs.trusted && 'ubuntu-latest' || 'namespace-profile-endev-linux-amd64' }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
+        with:
+          cache: false
+      - uses: ./.github/actions/mbx
+        with:
+          backend: ${{ inputs.mbx-backend }}
+      - name: Install system dependencies
+        run: |
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/apt-mirrors.txt
+          fi
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev
+      # cargo-msrv doesn't accept --workspace; verifying the binary's MSRV
+      # transitively covers fnox-core because the binary depends on it.
+      - run: mbx msrv verify
+
+  final:
+    permissions: {}
+    needs:
+      - ci-bats
+      - ci-other
+      - msrv
+      - windows-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    # Run on success or upstream failure but skip when the workflow is cancelled
+    # — `always()` would override `cancel-in-progress` and waste a runner.
+    if: ${{ !cancelled() }}
+    steps:
+      - name: Check job results
+        if: |
+          needs.ci-bats.result != 'success' ||
+          needs.ci-other.result != 'success' ||
+          needs.msrv.result != 'success' ||
+          needs.windows-check.result != 'success'
+        run: exit 1
+      - run: echo "All CI jobs completed successfully"
