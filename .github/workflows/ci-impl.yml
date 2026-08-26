@@ -9,6 +9,9 @@ on:
       mbx-backend:
         required: true
         type: string
+    secrets:
+      AGE_SECRET:
+        required: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
