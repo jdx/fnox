@@ -340,12 +340,13 @@ EOF
 	# Note: Azure Key Vault secret names can only contain alphanumeric characters and hyphens
 	export TEST_SECRET_NAME="fnox-test-AZURE-SM-CREATE-TEST-${timestamp}"
 
-	# Create secret using fnox set (will create it in Azure Key Vault)
-	run "$FNOX_BIN" set "AZURE-SM-CREATE-TEST-${timestamp}" "$secret_value" --provider azure-sm
+	# Keep the local key portable while using Azure's hyphenated remote name.
+	run "$FNOX_BIN" set AZURE_SM_CREATE_TEST "$secret_value" \
+		--provider azure-sm --key-name "AZURE-SM-CREATE-TEST-${timestamp}"
 	assert_success
 
 	# Get secret back to verify it was created correctly
-	run "$FNOX_BIN" get "AZURE-SM-CREATE-TEST-${timestamp}"
+	run "$FNOX_BIN" get AZURE_SM_CREATE_TEST
 	assert_success
 	assert_output "$secret_value"
 
