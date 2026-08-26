@@ -30,7 +30,7 @@ jobs:
             runner: namespace-profile-endev-macos-arm64
           - os: ubuntu-latest
             runner: namespace-profile-endev-linux-amd64
-    runs-on: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]') && matrix.os || matrix.runner }}
+    runs-on: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login != 'jdx') && matrix.os || matrix.runner }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -78,7 +78,7 @@ jobs:
           - os: ubuntu-latest
             runner: namespace-profile-endev-linux-amd64
             tranche: 1
-    runs-on: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]') && matrix.os || matrix.runner }}
+    runs-on: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login != 'jdx') && matrix.os || matrix.runner }}
     timeout-minutes: 20
     steps:
       - run: brew install parallel hashicorp/tap/vault
@@ -99,7 +99,7 @@ jobs:
           chmod +x target/debug/fnox
           echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
       - name: Setup age key for fnox
-        if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]')
+        if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'jdx')
         run: mkdir -p ~/.config/fnox && echo "${{ secrets.AGE_SECRET }}" > ~/.config/fnox/age.txt
       - name: Setup services (Ubuntu)
         if: ${{ matrix.os == 'ubuntu-latest' }}
@@ -258,7 +258,7 @@ jobs:
             runner: namespace-profile-endev-macos-arm64
           - os: ubuntu-latest
             runner: namespace-profile-endev-linux-amd64
-    runs-on: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]') && matrix.os || matrix.runner }}
+    runs-on: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login != 'jdx') && matrix.os || matrix.runner }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -299,10 +299,10 @@ jobs:
           chmod +x target/debug/fnox
           echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
       - name: Setup age key for fnox
-        if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]')
+        if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'jdx')
         run: mkdir -p ~/.config/fnox && echo "${{ secrets.AGE_SECRET }}" > ~/.config/fnox/age.txt
       - name: Redact secrets in CI output
-        if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]')
+        if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'jdx')
         run: |
           fnox ci-redact
           # shellcheck disable=SC2016
@@ -331,7 +331,7 @@ jobs:
         run: mbx clippy --workspace --all-targets -- -D warnings
 
   msrv:
-    runs-on: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]') && 'ubuntu-latest' || 'namespace-profile-endev-linux-amd64' }}
+    runs-on: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login != 'jdx') && 'ubuntu-latest' || 'namespace-profile-endev-linux-amd64' }}
     timeout-minutes: 10
     permissions:
       contents: read
