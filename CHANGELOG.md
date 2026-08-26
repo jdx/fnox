@@ -1,5 +1,44 @@
 # Changelog
 
+## [1.34.1](https://github.com/jdx/fnox/compare/v1.34.0..v1.34.1) - 2026-08-26
+
+### 🐛 Bug Fixes
+
+- **(config)** encode html in generated documentation by [@jdx](https://github.com/jdx) in [#739](https://github.com/jdx/fnox/pull/739)
+- **(config)** reject unknown profiles by [@jdx](https://github.com/jdx) in [#741](https://github.com/jdx/fnox/pull/741)
+- **(daemon)** resolve interactive cache misses in foreground by [@jdx](https://github.com/jdx) in [#743](https://github.com/jdx/fnox/pull/743)
+- **(export)** preserve dollar signs in dotenv output by [@jdx](https://github.com/jdx) in [#746](https://github.com/jdx/fnox/pull/746)
+- **(sync)** prompt once for age batch decryption by [@jdx](https://github.com/jdx) in [#755](https://github.com/jdx/fnox/pull/755)
+
+### 📚 Documentation
+
+- **(sync)** call out the golden path and add hardware-backed decryption by [@jdx](https://github.com/jdx) in [#748](https://github.com/jdx/fnox/pull/748)
+
+### 🛡️ Security
+
+- handle unavailable secret providers by [@jdx](https://github.com/jdx) in [#757](https://github.com/jdx/fnox/pull/757)
+
+### 🔍 Other Changes
+
+- **(ci)** adopt mbx for Rust builds by [@jdx](https://github.com/jdx) in [#749](https://github.com/jdx/fnox/pull/749)
+- **(ci)** isolate mbx OIDC permissions by [@jdx](https://github.com/jdx) in [#758](https://github.com/jdx/fnox/pull/758)
+- **(env)** harden secret injection boundaries by [@jdx](https://github.com/jdx) in [#763](https://github.com/jdx/fnox/pull/763)
+- **(sponsors)** replace 37signals with omacom foundation by [@jdx](https://github.com/jdx) in [#754](https://github.com/jdx/fnox/pull/754)
+- manage usage cli with mise by [@jdx](https://github.com/jdx) in [#737](https://github.com/jdx/fnox/pull/737)
+- generate release notes before publishing by [@jdx](https://github.com/jdx) in [#745](https://github.com/jdx/fnox/pull/745)
+- seed mbx cache for fork PRs by [@jdx](https://github.com/jdx) in [#762](https://github.com/jdx/fnox/pull/762)
+- notarize the macOS release binary by [@jdx](https://github.com/jdx) in [#764](https://github.com/jdx/fnox/pull/764)
+
+### 📦️ Dependency Updates
+
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#744](https://github.com/jdx/fnox/pull/744)
+- bump usage to 6.4.0 by [@jdx](https://github.com/jdx) in [#747](https://github.com/jdx/fnox/pull/747)
+- update jdx/mise-action action to v4.2.5 by [@renovate[bot]](https://github.com/renovate[bot]) in [#750](https://github.com/jdx/fnox/pull/750)
+- update dependency @anthropic-ai/claude-code to v2.1.234 by [@renovate[bot]](https://github.com/renovate[bot]) in [#751](https://github.com/jdx/fnox/pull/751)
+- update rust crate demand to v2.1.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#752](https://github.com/jdx/fnox/pull/752)
+- update dependency @anthropic-ai/claude-code to v2.1.235 by [@renovate[bot]](https://github.com/renovate[bot]) in [#753](https://github.com/jdx/fnox/pull/753)
+- update dependency usage to v6.4.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#759](https://github.com/jdx/fnox/pull/759)
+
 ## [1.34.0](https://github.com/jdx/fnox/compare/v1.33.1..v1.34.0) - 2026-08-23
 
 ### 🚀 Features
@@ -16,6 +55,7 @@
 
 ### 🚜 Refactor
 
+- **(settings)** replace settings.toml codegen with usage-config derive by [@jdx](https://github.com/jdx) in [#734](https://github.com/jdx/fnox/pull/734)
 - replace clap with usage by [@jdx](https://github.com/jdx) in [#725](https://github.com/jdx/fnox/pull/725)
 
 ### 📚 Documentation

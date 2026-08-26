@@ -3,7 +3,7 @@ members = [".", "crates/fnox-core"]
 resolver = "3"
 
 [workspace.package]
-version = "1.34.0"
+version = "1.34.1"
 edition = "2024"
 authors = ["@jdx"]
 license = "MIT"
