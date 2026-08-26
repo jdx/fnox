@@ -100,6 +100,15 @@ impl ImportCommand {
             secrets = prefixed_secrets;
         }
 
+        // Reject names after filtering and prefixing, before provider lookup or
+        // encryption can perform any side effects. Otherwise import could
+        // persist a config that fails as soon as secrets are resolved.
+        let mut secret_names = secrets.keys().collect::<Vec<_>>();
+        secret_names.sort_unstable();
+        for key in secret_names {
+            config::validate_secret_name(key)?;
+        }
+
         if secrets.is_empty() {
             println!("No secrets to import");
             return Ok(());

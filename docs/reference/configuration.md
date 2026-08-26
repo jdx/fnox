@@ -95,6 +95,9 @@ SECRET_NAME = { provider = "PROVIDER_NAME", value = "...", default = "...", if_m
 # ... same structure as top-level ...
 ```
 
+Secret names are environment variable names and must match
+`^[A-Za-z_][A-Za-z0-9_]*$`.
+
 ## Top-Level Settings
 
 ### `if_missing`

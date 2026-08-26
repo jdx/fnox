@@ -127,6 +127,19 @@ SCRIPT
 	assert_output "replacement-ok"
 }
 
+@test "exec omits ambient age identities when spawning a child" {
+	cat >fnox.toml <<'TOML'
+root = true
+TOML
+
+	export FNOX_AGE_KEY="AGE-SECRET-KEY-TEST"
+	export FNOX_AGE_KEY_FILE="$TEST_TEMP_DIR/age-key.txt"
+
+	run "$FNOX_BIN" --no-daemon exec -- \
+		bash -c 'test -z "${FNOX_AGE_KEY+x}" && test -z "${FNOX_AGE_KEY_FILE+x}"'
+	assert_success
+}
+
 @test "exec --replace delivers signals directly to the replacement process" {
 	cat >fnox.toml <<'TOML'
 root = true
@@ -225,7 +238,7 @@ SCRIPT
 	TARGET_PID=""
 }
 
-@test "exec --replace allows explicit secrets to restore scrubbed variables" {
+@test "exec allows explicit secrets to restore scrubbed variables" {
 	cat >fnox.toml <<'TOML'
 root = true
 
@@ -245,6 +258,10 @@ TOML
 	export FNOX_AGE_KEY_FILE="ambient-file"
 
 	# Selected secrets are applied after ambient resolver credentials are removed.
+	run "$FNOX_BIN" --no-daemon exec -- \
+		bash -c 'test "$FNOX_AGE_KEY" = "selected-value" && test "$FNOX_AGE_KEY_FILE" = "selected-file"'
+	assert_success
+
 	run "$FNOX_BIN" --no-daemon exec --replace -- \
 		bash -c 'test "$FNOX_AGE_KEY" = "selected-value" && test "$FNOX_AGE_KEY_FILE" = "selected-file"'
 	assert_success

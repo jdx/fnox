@@ -182,6 +182,23 @@ teardown() {
 	assert_output --partial 'export SECRET_THREE=value-three'
 }
 
+@test "fnox hook-env rejects command injection in secret names" {
+	cd "$TEST_TEMP_DIR"
+	marker="$TEST_TEMP_DIR/fnox-hook-injected"
+	cat >fnox.toml <<-EOF
+		root = true
+
+		[secrets]
+		"X; touch $marker #" = { default = "harmless" }
+	EOF
+
+	run bash -c 'eval "$("$1" hook-env -s bash)"' _ "$FNOX_BIN"
+
+	assert_success
+	assert_output --partial "Configuration validation failed"
+	assert_file_not_exists "$marker"
+}
+
 @test "fnox hook-env generates fish-compatible output" {
 	cd "$TEST_TEMP_DIR"
 	cat >fnox.toml <<-EOF
@@ -196,8 +213,8 @@ teardown() {
 	run "$FNOX_BIN" hook-env -s fish
 
 	assert_success
-	assert_output --partial 'set -gx FISH_SECRET "fish-value"'
-	assert_output --partial 'set -gx __FNOX_SESSION'
+	assert_output --partial 'set -gx "FISH_SECRET" "fish-value"'
+	assert_output --partial 'set -gx "__FNOX_SESSION"'
 }
 
 @test "fnox hook-env generates powershell-compatible output" {
@@ -214,8 +231,8 @@ teardown() {
 	run "$FNOX_BIN" hook-env -s pwsh
 
 	assert_success
-	assert_output --partial "\${Env:PWSH_SECRET}='pwsh-value'"
-	assert_output --partial '${Env:__FNOX_SESSION}='
+	assert_output --partial "Set-Item -LiteralPath 'Env:PWSH_SECRET' -Value 'pwsh-value'"
+	assert_output --partial "Set-Item -LiteralPath 'Env:__FNOX_SESSION' -Value"
 }
 
 @test "fnox hook-env escapes single quotes for powershell" {
@@ -232,7 +249,7 @@ teardown() {
 	run "$FNOX_BIN" hook-env -s pwsh
 
 	assert_success
-	assert_output --partial "\${Env:PWSH_QUOTE}='it''s a value'"
+	assert_output --partial "Set-Item -LiteralPath 'Env:PWSH_QUOTE' -Value 'it''s a value'"
 }
 
 @test "fnox hook-env finds config in parent directory" {

@@ -25,6 +25,11 @@ const PER_STREAM_LIMIT: usize = (MAX_OUTPUT_BYTES / 2) + 1;
 /// Default execution timeout (5 minutes)
 const DEFAULT_EXEC_TIMEOUT_SECS: u64 = 300;
 
+fn scrub_age_identity(cmd: &mut tokio::process::Command) {
+    cmd.env_remove("FNOX_AGE_KEY");
+    cmd.env_remove("FNOX_AGE_KEY_FILE");
+}
+
 /// MCP tool parameter: request a secret by name
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct GetSecretParams {
@@ -353,6 +358,10 @@ impl FnoxMcpServer {
         let cmd_path = cmd_name;
 
         let mut cmd = tokio::process::Command::new(cmd_path);
+        // MCP subprocesses must receive resolved secrets, not the ambient age
+        // identity that can decrypt other values in the configuration.
+        // Explicitly configured secrets with these names are injected below.
+        scrub_age_identity(&mut cmd);
         if params.command.len() > 1 {
             cmd.args(&params.command[1..]);
         }
@@ -648,6 +657,20 @@ mod tests {
         let result = server.list_tools_result();
         assert_eq!(result.ttl_ms, Some(0));
         assert_eq!(result.cache_scope, Some(CacheScope::Private));
+    }
+
+    #[test]
+    fn mcp_exec_command_scrubs_ambient_age_identity() {
+        let mut cmd = tokio::process::Command::new("unused");
+        scrub_age_identity(&mut cmd);
+
+        let removed = cmd
+            .as_std()
+            .get_envs()
+            .filter_map(|(key, value)| value.is_none().then_some(key.to_string_lossy()))
+            .collect::<Vec<_>>();
+        assert!(removed.iter().any(|key| key == "FNOX_AGE_KEY"));
+        assert!(removed.iter().any(|key| key == "FNOX_AGE_KEY_FILE"));
     }
 
     #[test]
