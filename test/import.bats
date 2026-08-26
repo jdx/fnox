@@ -213,6 +213,19 @@ EOF
 	assert_fnox_failure get API_KEY
 }
 
+@test "fnox import rejects invalid secret names after prefixing" {
+	setup_age_provider
+
+	cat >.env <<EOF
+API_KEY=secret-key-xyz
+EOF
+
+	assert_fnox_failure import -i .env --prefix "INVALID-" --provider age --force
+	assert_output --partial "Secret name 'INVALID-API_KEY'"
+	assert_output --partial "not a valid environment variable name"
+	assert_config_not_contains "INVALID-API_KEY"
+}
+
 @test "fnox import requires confirmation by default" {
 	setup_age_provider
 

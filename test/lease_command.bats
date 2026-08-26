@@ -153,6 +153,21 @@ EOF
 	assert_output --partial "MY_SECRET=sec-xyz789"
 }
 
+@test "command backend: exec preserves leased age identity credentials" {
+	cat >"$TEST_TEMP_DIR/create-age-creds.sh" <<'SCRIPT'
+#!/usr/bin/env bash
+echo '{"credentials":{"FNOX_AGE_KEY":"leased-key","FNOX_AGE_KEY_FILE":"leased-file"},"lease_id":"cmd-age-lease"}'
+SCRIPT
+	chmod +x "$TEST_TEMP_DIR/create-age-creds.sh"
+	create_command_config "$TEST_TEMP_DIR/create-age-creds.sh"
+
+	export FNOX_AGE_KEY="ambient-key"
+	export FNOX_AGE_KEY_FILE="ambient-file"
+	run "$FNOX_BIN" exec -- bash -c \
+		'test "$FNOX_AGE_KEY" = "leased-key" && test "$FNOX_AGE_KEY_FILE" = "leased-file"'
+	assert_success
+}
+
 @test "command backend: passes FNOX_LEASE_DURATION and FNOX_LEASE_LABEL" {
 	create_cred_script_with_env
 	create_command_config "$TEST_TEMP_DIR/create-creds-env.sh"

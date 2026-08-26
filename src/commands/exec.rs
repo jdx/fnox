@@ -72,6 +72,12 @@ impl ExecCommand {
 
         let mut cmd = Command::new(cmd_path);
 
+        // The target should not inherit the age identity that decrypts other
+        // values in the configuration. Explicit secrets and lease credentials
+        // with these names are intentionally applied after this ambient scrub.
+        cmd.env_remove("FNOX_AGE_KEY");
+        cmd.env_remove("FNOX_AGE_KEY_FILE");
+
         if self.command.len() > 1 {
             cmd.args(&self.command[1..]);
         }
@@ -152,12 +158,6 @@ impl ExecCommand {
                 }
             }
         }
-
-        // The target should receive resolved secrets, not the age identity that
-        // decrypts other values in the configuration. Explicitly configured
-        // secrets with these names are added back by the loop below.
-        cmd.env_remove("FNOX_AGE_KEY");
-        cmd.env_remove("FNOX_AGE_KEY_FILE");
 
         // Add resolved secrets as environment variables
         for (key, value) in resolved_secrets {
