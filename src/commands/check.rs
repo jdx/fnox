@@ -1,4 +1,4 @@
-use crate::config::{Config, SecretConfig};
+use crate::config::Config;
 use crate::error::Result;
 use crate::secret_resolver;
 use indexmap::IndexMap;
@@ -25,7 +25,6 @@ impl CheckCommand {
         let mut issues = Vec::new();
         let mut warnings = Vec::new();
         let mut secrets_to_check = IndexMap::new();
-        let mut batches: IndexMap<String, IndexMap<String, SecretConfig>> = IndexMap::new();
 
         // Check secrets
         if let Ok(secrets) = config.get_secrets(&profile) {
@@ -34,7 +33,7 @@ impl CheckCommand {
             } else {
                 println!("Found {} secret(s) in profile(s)", secrets.len());
 
-                for (name, secret_config) in secrets {
+                for (name, secret_config) in &secrets {
                     // Check if secret has a value source
                     if !secret_config.has_value() {
                         match secret_config.if_missing {
@@ -64,7 +63,7 @@ impl CheckCommand {
                         } else {
                             // Determine if we should check this secret
                             let if_missing = secret_resolver::resolve_if_missing_behavior(
-                                &secret_config,
+                                secret_config,
                                 &config,
                             );
 
@@ -79,33 +78,33 @@ impl CheckCommand {
                                 continue;
                             }
 
-                            let resolution_provider = secret_config
-                                .sync
-                                .as_ref()
-                                .map(|sync| sync.provider.clone())
-                                .unwrap_or_else(|| provider.to_string());
-                            batches
-                                .entry(resolution_provider)
-                                .or_default()
-                                .insert(name.clone(), secret_config.clone());
-                            secrets_to_check.insert(name, secret_config);
+                            secrets_to_check.insert(name.clone(), secret_config.clone());
                         }
                     }
                 }
 
-                let mut batch_values = IndexMap::new();
-                for (_, batch) in batches {
-                    if let Ok(values) = crate::daemon::resolve_batch(
-                        cli,
-                        &config,
-                        &profile,
-                        &batch,
-                        crate::daemon::Purpose::Check,
-                        true,
-                    )
-                    .await
-                    {
-                        batch_values.extend(values);
+                let secrets_to_resolve = secret_resolver::include_resolution_dependencies(
+                    &config,
+                    &profile,
+                    &secrets,
+                    &secrets_to_check,
+                )?;
+                let mut batch_values = crate::daemon::resolve_batch(
+                    cli,
+                    &config,
+                    &profile,
+                    &secrets_to_resolve,
+                    crate::daemon::Purpose::Check,
+                    true,
+                )
+                .await
+                .unwrap_or_default();
+
+                // Preserve dependency context when a daemon-backed batch is followed by
+                // foreground per-secret retries for detailed diagnostics.
+                for (name, value) in &batch_values {
+                    if let Some(value) = value {
+                        crate::env::set_var(name, value);
                     }
                 }
 

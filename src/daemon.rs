@@ -1,7 +1,10 @@
 use crate::commands::Cli;
 use crate::config::{Config, ProviderConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
-use crate::secret_resolver::{resolve_secrets_batch, resolve_secrets_batch_with_pre_resolved};
+use crate::secret_resolver::{
+    resolve_secrets_batch, resolve_secrets_batch_best_effort,
+    resolve_secrets_batch_with_pre_resolved,
+};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -241,7 +244,11 @@ pub async fn resolve_batch_with_context(
                 .map(|(key, secret)| (key.clone(), secret.clone()))
                 .collect()
         };
-        return resolve_secrets_batch(config, profile, &secrets).await;
+        return if purpose == Purpose::Check {
+            resolve_secrets_batch_best_effort(config, profile, &secrets).await
+        } else {
+            resolve_secrets_batch(config, profile, &secrets).await
+        };
     }
 
     let keys = secrets.keys().cloned().collect();
@@ -282,13 +289,17 @@ pub async fn resolve_batch_with_context(
                 .filter(|(key, _)| foreground_keys.contains(*key))
                 .map(|(key, secret)| (key.clone(), secret.clone()))
                 .collect();
-            let mut foreground_values = resolve_secrets_batch_with_pre_resolved(
-                config,
-                profile,
-                &foreground_secrets,
-                &cached_values,
-            )
-            .await?;
+            let mut foreground_values = if purpose == Purpose::Check {
+                resolve_secrets_batch_best_effort(config, profile, &foreground_secrets).await?
+            } else {
+                resolve_secrets_batch_with_pre_resolved(
+                    config,
+                    profile,
+                    &foreground_secrets,
+                    &cached_values,
+                )
+                .await?
+            };
             let mut values = IndexMap::new();
             for key in secrets.keys() {
                 if let Some(value) = cached_values.swap_remove(key) {
@@ -938,7 +949,10 @@ async fn process_request(
                     keys: foreground.keys,
                 });
             }
-            let values = resolve_with_cache(&config, &req.profile, secrets, &req, state).await?;
+            let best_effort = req.purpose == Purpose::Check.as_str();
+            let values =
+                resolve_with_cache(&config, &req.profile, secrets, &req, best_effort, state)
+                    .await?;
             Ok(Response::Resolved { values })
         }
         Request::ResolveOne(req) => {
@@ -987,8 +1001,15 @@ async fn process_request(
                     keys: foreground.keys,
                 });
             }
-            let values =
-                resolve_with_cache(&config, &batch_req.profile, secrets, &batch_req, state).await?;
+            let values = resolve_with_cache(
+                &config,
+                &batch_req.profile,
+                secrets,
+                &batch_req,
+                false,
+                state,
+            )
+            .await?;
             Ok(Response::Resolved { values })
         }
     }
@@ -1101,6 +1122,7 @@ async fn resolve_with_cache(
     profile: &[String],
     secrets: IndexMap<String, SecretConfig>,
     req: &ResolveBatchRequest,
+    best_effort: bool,
     state: std::sync::Arc<Mutex<DaemonState>>,
 ) -> Result<IndexMap<String, Option<String>>> {
     let fingerprint = config_fingerprint(config, &req.env)?;
@@ -1127,7 +1149,11 @@ async fn resolve_with_cache(
     }
 
     if !misses.is_empty() {
-        let resolved = resolve_secrets_batch(config, profile, &misses).await?;
+        let resolved = if best_effort {
+            resolve_secrets_batch_best_effort(config, profile, &misses).await?
+        } else {
+            resolve_secrets_batch(config, profile, &misses).await?
+        };
         let mut state = state.lock().await;
         for (key, value) in resolved {
             if let Some(cache_key) = miss_keys.remove(&key) {
@@ -1743,6 +1769,7 @@ mod tests {
             &req.profile,
             IndexMap::from([("API_KEY".to_string(), secret)]),
             &req,
+            false,
             state,
         )
         .await
@@ -1793,9 +1820,10 @@ mod tests {
                 .is_none(),
             "cached requests should stay in the daemon"
         );
-        let resolved = resolve_with_cache(&config, &req.profile, secrets, &req, state.clone())
-            .await
-            .unwrap();
+        let resolved =
+            resolve_with_cache(&config, &req.profile, secrets, &req, false, state.clone())
+                .await
+                .unwrap();
         assert_eq!(
             resolved.get("API_KEY").and_then(|value| value.as_deref()),
             Some("from-foreground")
@@ -1854,6 +1882,7 @@ mod tests {
             &req.profile,
             IndexMap::from([("API_KEY".to_string(), secret)]),
             &req,
+            false,
             state,
         )
         .await
@@ -1894,6 +1923,7 @@ daemon_cache = false
             &req.profile,
             IndexMap::from([("API_KEY".to_string(), secret)]),
             &req,
+            false,
             state,
         )
         .await
@@ -1920,6 +1950,7 @@ daemon_cache = false
             &req.profile,
             IndexMap::from([("API_KEY".to_string(), secret)]),
             &req,
+            false,
             state,
         )
         .await
@@ -1947,6 +1978,7 @@ daemon_cache = false
             &req.profile,
             IndexMap::from([("API_KEY".to_string(), secret)]),
             &req,
+            false,
             state,
         )
         .await
@@ -1974,6 +2006,7 @@ daemon_cache = false
             &req.profile,
             IndexMap::from([("API_KEY".to_string(), secret)]),
             &req,
+            false,
             state,
         )
         .await

@@ -77,6 +77,83 @@ EOF
 	assert_output --partial "No secrets"
 }
 
+@test "fnox check preserves cross-provider dependency order" {
+	mkdir -p "$TEST_TEMP_DIR/bin"
+	cat >"$TEST_TEMP_DIR/bin/op" <<'EOF'
+#!/bin/sh
+printf 'called\n' >>"$OP_CALLS_FILE"
+if [ "${OP_SERVICE_ACCOUNT_TOKEN:-}" != "token" ]; then
+	printf 'service account token is missing\n' >&2
+	exit 1
+fi
+printf 'value\n'
+EOF
+	chmod +x "$TEST_TEMP_DIR/bin/op"
+	export PATH="$TEST_TEMP_DIR/bin:$PATH"
+	export OP_CALLS_FILE="$TEST_TEMP_DIR/op-calls"
+	unset FNOX_OP_SERVICE_ACCOUNT_TOKEN OP_SERVICE_ACCOUNT_TOKEN
+	: >"$OP_CALLS_FILE"
+
+	cat >fnox.toml <<'EOF'
+root = true
+default_provider = "plain"
+
+[providers.op]
+type = "1password"
+vault = "test"
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+TARGET = { provider = "op", value = "target", if_missing = "error" }
+OP_SERVICE_ACCOUNT_TOKEN = { value = "token", if_missing = "ignore", env = false }
+EOF
+
+	assert_fnox_success check
+	assert_equal "$(wc -l <"$OP_CALLS_FILE" | tr -d ' ')" "1"
+}
+
+@test "fnox check daemon fallback preserves dependency context" {
+	export XDG_RUNTIME_DIR="$TEST_TEMP_DIR/runtime"
+	mkdir -p "$XDG_RUNTIME_DIR" "$TEST_TEMP_DIR/bin"
+	cat >"$TEST_TEMP_DIR/bin/op" <<'EOF'
+#!/bin/sh
+if [ "${OP_SERVICE_ACCOUNT_TOKEN:-}" != "token" ]; then
+	printf 'service account token is missing\n' >&2
+	exit 1
+fi
+printf 'target secret is missing\n' >&2
+exit 1
+EOF
+	chmod +x "$TEST_TEMP_DIR/bin/op"
+	export PATH="$TEST_TEMP_DIR/bin:$PATH"
+	unset FNOX_OP_SERVICE_ACCOUNT_TOKEN OP_SERVICE_ACCOUNT_TOKEN
+
+	cat >fnox.toml <<'EOF'
+root = true
+default_provider = "plain"
+
+[daemon]
+enabled = true
+
+[providers.op]
+type = "1password"
+vault = "test"
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+TARGET = { provider = "op", value = "target", if_missing = "error" }
+OP_SERVICE_ACCOUNT_TOKEN = { value = "token", if_missing = "ignore", env = false }
+EOF
+
+	assert_fnox_failure --non-interactive check
+	assert_output --partial "target secret is missing"
+	refute_output --partial "service account token is missing"
+}
+
 @test "fnox check batch resolves secrets sharing an age key" {
 	if ! command -v age-keygen >/dev/null 2>&1; then
 		skip "age-keygen not installed"
@@ -127,6 +204,18 @@ EOF
 	assert_fnox_success check
 	assert_equal "$(grep -c '^age-key$' "$PASS_CALLS_FILE")" "1"
 
+	: >"$PASS_CALLS_FILE"
+	local second_line second_value shared_prefix
+	second_line=$(grep 'SECOND.*sync = ' fnox.toml)
+	second_value=${second_line##*value = \"}
+	second_value=${second_value%%\"*}
+	shared_prefix=${second_value%:*}
+	sed -i.bak "s|$second_value|$shared_prefix:invalid|" fnox.toml
+	assert_fnox_failure check
+	assert_output --partial "SECOND"
+	assert_equal "$(grep -c '^age-key$' "$PASS_CALLS_FILE")" "2"
+
+	assert_fnox_success sync -p age --force
 	: >"$PASS_CALLS_FILE"
 	echo 'THIRD = { provider = "identity", value = "missing", if_missing = "error" }' >>fnox.toml
 	assert_fnox_failure check
@@ -197,8 +286,13 @@ EOF
 	mkdir -p "$XDG_RUNTIME_DIR" "$TEST_TEMP_DIR/bin"
 	cat >"$TEST_TEMP_DIR/bin/pass" <<'EOF'
 #!/bin/sh
-printf 'called\n' >>"$PASS_CALLS_FILE"
-printf 'value\n'
+printf '%s\n' "$2" >>"$PASS_CALLS_FILE"
+if [ "$2" = "good" ]; then
+	printf 'value\n'
+	exit 0
+fi
+printf 'secret is not in the password store\n' >&2
+exit 1
 EOF
 	chmod +x "$TEST_TEMP_DIR/bin/pass"
 	export PATH="$TEST_TEMP_DIR/bin:$PATH"
@@ -215,12 +309,16 @@ enabled = true
 type = "password-store"
 
 [secrets]
-REQUIRED = { provider = "pass", value = "required", if_missing = "error" }
+GOOD = { provider = "pass", value = "good", if_missing = "error" }
+BAD = { provider = "pass", value = "bad", if_missing = "error" }
 EOF
 
-	assert_fnox_success check
-	assert_fnox_success check
-	assert_equal "$(wc -l <"$PASS_CALLS_FILE" | tr -d ' ')" "2"
+	assert_fnox_failure --non-interactive check
+	assert_output --partial "Secret 'BAD' failed to resolve: Configuration error: password-store: secret 'bad' not found"
+	assert_fnox_failure check
+	assert_output --partial "BAD"
+	assert_equal "$(grep -c '^good$' "$PASS_CALLS_FILE")" "2"
+	assert_equal "$(grep -c '^bad$' "$PASS_CALLS_FILE")" "4"
 
 	assert_fnox_success daemon status
 	assert_output --partial "cached_entries: 0"
