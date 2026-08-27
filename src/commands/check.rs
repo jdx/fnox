@@ -1,6 +1,7 @@
-use crate::config::Config;
+use crate::config::{Config, SecretConfig};
 use crate::error::Result;
 use crate::secret_resolver;
+use indexmap::IndexMap;
 
 use crate::commands::Cli;
 
@@ -23,6 +24,8 @@ impl CheckCommand {
 
         let mut issues = Vec::new();
         let mut warnings = Vec::new();
+        let mut secrets_to_check = IndexMap::new();
+        let mut batches: IndexMap<String, IndexMap<String, SecretConfig>> = IndexMap::new();
 
         // Check secrets
         if let Ok(secrets) = config.get_secrets(&profile) {
@@ -76,62 +79,85 @@ impl CheckCommand {
                                 continue;
                             }
 
-                            // Try to actually resolve the secret from the provider
-                            match crate::daemon::resolve_one(
-                                cli,
-                                &config,
-                                &profile,
-                                &name,
-                                &secret_config,
-                                crate::daemon::Purpose::Check,
-                            )
-                            .await
-                            {
-                                Ok(Some(_)) => {
-                                    // Secret resolved successfully
-                                }
-                                Ok(None) => {
-                                    // No value found, but that might be OK depending on if_missing
-                                    match if_missing {
-                                        crate::config::IfMissing::Error => {
-                                            issues.push(format!(
-                                                "Secret '{}' could not be resolved from provider '{}'",
-                                                name, provider
-                                            ));
-                                        }
-                                        crate::config::IfMissing::Warn => {
-                                            warnings.push(format!(
-                                                "Secret '{}' could not be resolved from provider '{}'",
-                                                name, provider
-                                            ));
-                                        }
-                                        crate::config::IfMissing::Ignore => {
-                                            // Silently ignore
-                                        }
-                                    }
-                                }
-                                Err(err) => {
-                                    // Error resolving secret
-                                    match if_missing {
-                                        crate::config::IfMissing::Error => {
-                                            issues.push(format!(
-                                                "Secret '{}' failed to resolve: {}",
-                                                name, err
-                                            ));
-                                        }
-                                        crate::config::IfMissing::Warn => {
-                                            warnings.push(format!(
-                                                "Secret '{}' failed to resolve: {}",
-                                                name, err
-                                            ));
-                                        }
-                                        crate::config::IfMissing::Ignore => {
-                                            // Silently ignore
-                                        }
-                                    }
-                                }
-                            }
+                            let resolution_provider = secret_config
+                                .sync
+                                .as_ref()
+                                .map(|sync| sync.provider.clone())
+                                .unwrap_or_else(|| provider.to_string());
+                            batches
+                                .entry(resolution_provider)
+                                .or_default()
+                                .insert(name.clone(), secret_config.clone());
+                            secrets_to_check.insert(name, secret_config);
                         }
+                    }
+                }
+
+                let mut batch_values = IndexMap::new();
+                for (_, batch) in batches {
+                    if let Ok(values) = crate::daemon::resolve_batch(
+                        cli,
+                        &config,
+                        &profile,
+                        &batch,
+                        crate::daemon::Purpose::Check,
+                        true,
+                    )
+                    .await
+                    {
+                        batch_values.extend(values);
+                    }
+                }
+
+                for (name, secret_config) in secrets_to_check {
+                    if batch_values.shift_remove(&name).flatten().is_some() {
+                        continue;
+                    }
+
+                    let provider = secret_config
+                        .provider()
+                        .expect("checked secrets have an explicit provider");
+                    let if_missing =
+                        secret_resolver::resolve_if_missing_behavior(&secret_config, &config);
+
+                    // Fall back to single resolution to retain the detailed error for this secret.
+                    match crate::daemon::resolve_one(
+                        cli,
+                        &config,
+                        &profile,
+                        &name,
+                        &secret_config,
+                        crate::daemon::Purpose::Check,
+                    )
+                    .await
+                    {
+                        Ok(Some(_)) => {}
+                        Ok(None) => match if_missing {
+                            crate::config::IfMissing::Error => {
+                                issues.push(format!(
+                                    "Secret '{}' could not be resolved from provider '{}'",
+                                    name, provider
+                                ));
+                            }
+                            crate::config::IfMissing::Warn => {
+                                warnings.push(format!(
+                                    "Secret '{}' could not be resolved from provider '{}'",
+                                    name, provider
+                                ));
+                            }
+                            crate::config::IfMissing::Ignore => {}
+                        },
+                        Err(err) => match if_missing {
+                            crate::config::IfMissing::Error => {
+                                issues
+                                    .push(format!("Secret '{}' failed to resolve: {}", name, err));
+                            }
+                            crate::config::IfMissing::Warn => {
+                                warnings
+                                    .push(format!("Secret '{}' failed to resolve: {}", name, err));
+                            }
+                            crate::config::IfMissing::Ignore => {}
+                        },
                     }
                 }
             }
