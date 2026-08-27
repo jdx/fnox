@@ -120,6 +120,28 @@ EOF
 	assert_output 'from-app-file'
 }
 
+@test 'remove deletes a secret from a profile-specific file' {
+	cat >fnox.toml <<'EOF'
+root = true
+
+[profiles.app]
+EOF
+
+	cat >fnox.app.toml <<'EOF'
+[secrets]
+APP_ONLY = { default = "from-app-file" }
+EOF
+
+	run "$FNOX_BIN" -P app remove APP_ONLY
+	assert_success
+
+	run "$FNOX_BIN" -P app get APP_ONLY
+	assert_failure
+	assert_output --partial "Secret 'APP_ONLY' not found"
+
+	assert_file_not_contains fnox.app.toml 'APP_ONLY'
+}
+
 @test 'metadata-only update preserves inherited secret value' {
 	cat >fnox.toml <<'EOF'
 root = true
