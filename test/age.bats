@@ -29,10 +29,12 @@ root = true
 [providers.readwrite]
 type = "age"
 recipients = ["$readwrite_public"]
+key_file = "missing-readwrite-key.txt"
 
 [providers.readonly]
 type = "age"
 recipients = ["$readonly_public"]
+key_file = "readonly-key.txt"
 
 [secrets]
 EOF
@@ -45,6 +47,7 @@ EOF
 	export FNOX_AGE_KEY=$readonly_private
 	run "$FNOX_BIN" set DVC_READONLY_SAS_TOKEN readonly --provider readonly
 	assert_success
+	unset FNOX_AGE_KEY
 
 	run env FNOX_DAEMON=off "$FNOX_BIN" get AZURE_STORAGE_SAS_TOKEN
 	assert_success
