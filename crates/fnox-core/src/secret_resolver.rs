@@ -507,11 +507,21 @@ async fn resolve_interpolated_default_value(
         return Ok(None);
     }
 
-    let mut dependencies = collect_interpolation_closure(config, profile, key, &secrets)?;
-    // The caller has already attempted the root secret's provider. Resolve only
-    // the secrets referenced by its default so the provider is not retried.
-    dependencies.shift_remove(key);
-    let resolved = resolve_secrets_batch(config, profile, &dependencies).await?;
+    let mut subset = collect_interpolation_closure(config, profile, key, &secrets)?;
+    // The caller has already attempted the root secret's provider. Keep the
+    // root in the dependency graph for cycle detection, but remove the source
+    // that would cause the provider to be retried.
+    let root = subset
+        .get_mut(key)
+        .expect("interpolation closure contains its root");
+    root.set_provider(None);
+    root.set_value(None);
+    root.sync = None;
+
+    let mut resolved = resolve_secrets_batch(config, profile, &subset).await?;
+    if let Some(Some(value)) = resolved.shift_remove(key) {
+        return Ok(Some(value));
+    }
     let resolved_context: HashMap<String, Option<String>> = resolved.into_iter().collect();
     let default = render_default_template(key, default, &resolved_context)?;
     Ok(Some(apply_post_processing(default, secret_config)?))
@@ -2066,6 +2076,54 @@ mod tests {
             .unwrap();
 
         assert_eq!(resolved, Some("postgres://localhost/fnox".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_secret_preserves_cycle_through_root_fallback() {
+        use crate::providers::OptionStringOrSecretRef;
+
+        let mut config = Config::new();
+        config.providers.insert(
+            "onepassword".to_string(),
+            ProviderConfig::OnePassword {
+                vault: OptionStringOrSecretRef::none(),
+                account: OptionStringOrSecretRef::none(),
+                token: OptionStringOrSecretRef::none(),
+                auth_command: None,
+                daemon_cache: None,
+            },
+        );
+
+        let mut root = default_secret("${DEPENDENT_SECRET}");
+        root.set_provider(Some("missing-provider".to_string()));
+        root.set_value(Some("encrypted-root".to_string()));
+        root.if_missing = Some(IfMissing::Ignore);
+        config
+            .secrets
+            .insert("OP_SERVICE_ACCOUNT_TOKEN".to_string(), root);
+
+        let mut dependent = SecretConfig::new();
+        dependent.set_provider(Some("onepassword".to_string()));
+        dependent.set_value(Some("op://vault/item/field".to_string()));
+        config
+            .secrets
+            .insert("DEPENDENT_SECRET".to_string(), dependent);
+
+        let root_config = &config.secrets["OP_SERVICE_ACCOUNT_TOKEN"];
+        let err = resolve_secret(
+            &config,
+            &profile("default"),
+            "OP_SERVICE_ACCOUNT_TOKEN",
+            root_config,
+        )
+        .await
+        .unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("Interpolation dependency cycle among secrets"),
+            "unexpected error: {err}"
+        );
     }
 
     #[tokio::test]
