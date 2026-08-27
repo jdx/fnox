@@ -1,8 +1,11 @@
 use crate::auth_prompt::prompt_and_run_auth;
 use crate::config::{Config, IfMissing, SecretConfig};
-use crate::env;
+use crate::env::{self, PROVIDER_ENV_ACCESS, ProviderEnvOverlay};
 use crate::error::{FnoxError, Result};
-use crate::providers::{ProviderConfig, get_provider_resolved};
+use crate::providers::{
+    ProviderConfig, prepare_provider_read,
+    resolver::{ResolutionContext, resolve_provider_config_with_context},
+};
 use crate::settings::Settings;
 use crate::source_registry;
 use crate::suggest::{find_similar, format_suggestions};
@@ -568,11 +571,14 @@ async fn resolve_secret_raw(
     }
 
     // Priority 3: Environment variable
-    let value_to_process = if let Ok(env_value) = env::var(key) {
-        tracing::debug!("Found secret '{}' in current environment", key);
-        Some(env_value)
-    } else {
-        None
+    let value_to_process = {
+        let _access = PROVIDER_ENV_ACCESS.read().await;
+        if let Ok(env_value) = env::var(key) {
+            tracing::debug!("Found secret '{}' in current environment", key);
+            Some(env_value)
+        } else {
+            None
+        }
     };
 
     // Apply post-processing to whatever value we found (e.g., JSON path extraction)
@@ -653,7 +659,7 @@ async fn try_resolve_with_auth_retry(
         Ok(value) => Ok(Some(value)),
         Err(error) => {
             // Try auth prompt and retry
-            if prompt_and_run_auth(config, provider_config, provider_name, &error)? {
+            if prompt_and_run_auth_guarded(config, provider_config, provider_name, &error).await? {
                 // Auth command ran successfully, retry
                 try_get_secret(
                     config,
@@ -672,6 +678,16 @@ async fn try_resolve_with_auth_retry(
     }
 }
 
+async fn prompt_and_run_auth_guarded(
+    config: &Config,
+    provider_config: &ProviderConfig,
+    provider_name: &str,
+    error: &FnoxError,
+) -> Result<bool> {
+    let _access = PROVIDER_ENV_ACCESS.read().await;
+    prompt_and_run_auth(config, provider_config, provider_name, error)
+}
+
 /// Helper to get a single secret from a provider without auth retry logic.
 /// Creates the provider instance and calls `get_secret`.
 async fn try_get_secret(
@@ -688,7 +704,19 @@ async fn try_get_secret(
         )));
     }
 
-    let provider = get_provider_resolved(config, profile, provider_name, provider_config).await?;
+    let mut ctx = ResolutionContext::new();
+    let resolved_provider = resolve_provider_config_with_context(
+        config,
+        profile,
+        provider_name,
+        provider_config,
+        &mut ctx,
+    )
+    .await?;
+    let prepared_provider =
+        prepare_provider_read(config, profile, provider_name, resolved_provider, &mut ctx).await?;
+    let _access = PROVIDER_ENV_ACCESS.read().await;
+    let provider = prepared_provider.instantiate(config, profile, provider_name)?;
     provider.get_secret(provider_value).await
 }
 
@@ -735,12 +763,11 @@ fn resolve_default_value(
 
 /// Resolves multiple secrets efficiently using batch operations when possible.
 ///
-/// Secrets are resolved in dependency order using Kahn's algorithm. If a provider
-/// declares env var dependencies (e.g., 1Password needs `OP_SERVICE_ACCOUNT_TOKEN`),
-/// and another secret provides that env var (e.g., an age-encrypted secret named
-/// `OP_SERVICE_ACCOUNT_TOKEN`), the dependency is resolved first. Between resolution
-/// levels, resolved values are set as environment variables so subsequent providers
-/// can read them.
+/// Secrets are resolved in dependency order using Kahn's algorithm. Provider environment
+/// dependencies, provider configuration secret references, nested provider dependencies,
+/// and interpolated defaults are resolved before the secrets that consume them. Between
+/// resolution levels, resolved values are set as environment variables so subsequent
+/// providers can read them.
 ///
 /// Returns an error immediately if any secret with `if_missing = "error"` fails to resolve.
 pub async fn resolve_secrets_batch(
@@ -748,14 +775,15 @@ pub async fn resolve_secrets_batch(
     profile: &[String],
     secrets: &IndexMap<String, SecretConfig>,
 ) -> Result<IndexMap<String, Option<String>>> {
-    resolve_secrets_batch_inner(
+    Ok(resolve_secrets_batch_inner(
         config,
         profile,
         secrets,
         &IndexMap::new(),
         BatchFailureMode::FailFast,
     )
-    .await
+    .await?
+    .values)
 }
 
 /// Adds provider and interpolated-default dependencies required to resolve a set of secrets.
@@ -787,11 +815,11 @@ pub fn include_resolution_dependencies(
                 });
 
             if let Some(provider) = provider_name.and_then(|name| providers.get(name)) {
-                for dependency in provider.env_dependencies() {
-                    if !requested.contains_key(*dependency)
-                        && let Some(secret) = all_secrets.get(*dependency)
+                for dependency in provider.resolution_dependencies(&providers) {
+                    if !requested.contains_key(&dependency)
+                        && let Some(secret) = all_secrets.get(&dependency)
                     {
-                        requested.insert((*dependency).to_string(), secret.clone());
+                        requested.insert(dependency, secret.clone());
                         added = true;
                     }
                 }
@@ -816,13 +844,21 @@ pub fn include_resolution_dependencies(
     Ok(requested)
 }
 
-/// Resolves multiple secrets while retaining successful values when provider-backed
-/// siblings fail. Structural configuration and post-processing errors still fail the batch.
+/// Values and provider diagnostics collected by best-effort batch resolution.
+#[derive(Debug, Default)]
+pub struct BestEffortBatchResolution {
+    pub values: IndexMap<String, Option<String>>,
+    pub errors: IndexMap<String, String>,
+}
+
+/// Resolves multiple secrets while retaining successful values and per-secret diagnostics
+/// when provider-backed siblings fail. Structural configuration and post-processing errors
+/// still fail the batch.
 pub async fn resolve_secrets_batch_best_effort(
     config: &Config,
     profile: &[String],
     secrets: &IndexMap<String, SecretConfig>,
-) -> Result<IndexMap<String, Option<String>>> {
+) -> Result<BestEffortBatchResolution> {
     resolve_secrets_batch_inner(
         config,
         profile,
@@ -841,14 +877,15 @@ pub async fn resolve_secrets_batch_with_pre_resolved(
     secrets: &IndexMap<String, SecretConfig>,
     pre_resolved: &IndexMap<String, Option<String>>,
 ) -> Result<IndexMap<String, Option<String>>> {
-    resolve_secrets_batch_inner(
+    Ok(resolve_secrets_batch_inner(
         config,
         profile,
         secrets,
         pre_resolved,
         BatchFailureMode::FailFast,
     )
-    .await
+    .await?
+    .values)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -863,7 +900,7 @@ async fn resolve_secrets_batch_inner(
     secrets: &IndexMap<String, SecretConfig>,
     pre_resolved: &IndexMap<String, Option<String>>,
     failure_mode: BatchFailureMode,
-) -> Result<IndexMap<String, Option<String>>> {
+) -> Result<BestEffortBatchResolution> {
     // Classify each secret: provider-backed vs no-provider
     let mut secret_provider: HashMap<String, (String, String)> = HashMap::new(); // key -> (provider_name, provider_value)
     let mut no_provider = Vec::new();
@@ -942,12 +979,9 @@ async fn resolve_secrets_batch_inner(
     for (key, (provider_name, _)) in &secret_provider {
         let deps = providers
             .get(provider_name)
-            .map(|pc| pc.env_dependencies())
-            .unwrap_or(&[]);
-        deps_for_secret.insert(
-            key.clone(),
-            deps.iter().map(|dep| dep.to_string()).collect(),
-        );
+            .map(|provider| provider.resolution_dependencies(&providers))
+            .unwrap_or_default();
+        deps_for_secret.insert(key.clone(), deps);
     }
     for (key, refs) in &default_deps {
         match deps_for_secret.entry(key.clone()) {
@@ -970,9 +1004,13 @@ async fn resolve_secrets_batch_inner(
     // Resolve each level in order
     let mut temp_results: HashMap<String, Option<String>> =
         pre_resolved.clone().into_iter().collect();
-    for (key, value) in pre_resolved {
-        if let Some(value) = value {
-            env::set_var(key, value);
+    let mut temp_errors = HashMap::new();
+    if failure_mode == BatchFailureMode::FailFast {
+        let _access = PROVIDER_ENV_ACCESS.write().await;
+        for (key, value) in pre_resolved {
+            if let Some(value) = value {
+                env::set_var(key, value);
+            }
         }
     }
 
@@ -988,14 +1026,19 @@ async fn resolve_secrets_batch_inner(
         )
         .await?;
 
-        // Set resolved env vars so next level's providers can see them
-        for (key, value) in &level_results {
-            if let Some(val) = value {
-                env::set_var(key, val);
+        // Normal resolution exports every value for subsequent levels and callers.
+        // Check resolution scopes only declared dependencies around each provider.
+        if failure_mode == BatchFailureMode::FailFast {
+            let _access = PROVIDER_ENV_ACCESS.write().await;
+            for (key, value) in &level_results.values {
+                if let Some(val) = value {
+                    env::set_var(key, val);
+                }
             }
         }
 
-        temp_results.extend(level_results);
+        temp_results.extend(level_results.values);
+        temp_errors.extend(level_results.errors);
     }
 
     // Handle any remaining secrets (cycles) - resolve best-effort
@@ -1030,18 +1073,26 @@ async fn resolve_secrets_batch_inner(
             failure_mode,
         )
         .await?;
-        temp_results.extend(level_results);
+        temp_results.extend(level_results.values);
+        temp_errors.extend(level_results.errors);
     }
 
     // Build final results in the original order from the input secrets IndexMap
     let mut results = IndexMap::new();
+    let mut errors = IndexMap::new();
     for (key, _secret_config) in secrets {
         if let Some(value) = temp_results.remove(key) {
             results.insert(key.clone(), value);
         }
+        if let Some(error) = temp_errors.remove(key) {
+            errors.insert(key.clone(), error);
+        }
     }
 
-    Ok(results)
+    Ok(BestEffortBatchResolution {
+        values: results,
+        errors,
+    })
 }
 
 /// Build a dependency graph and compute resolution levels using Kahn's algorithm.
@@ -1119,6 +1170,12 @@ fn compute_resolution_levels(
 }
 
 /// Resolve a single level of secrets (all can be resolved in parallel).
+#[derive(Default)]
+struct LevelResolution {
+    values: HashMap<String, Option<String>>,
+    errors: HashMap<String, String>,
+}
+
 async fn resolve_level(
     config: &Config,
     profile: &[String],
@@ -1127,7 +1184,7 @@ async fn resolve_level(
     ready: &[String],
     resolved_so_far: &HashMap<String, Option<String>>,
     failure_mode: BatchFailureMode,
-) -> Result<HashMap<String, Option<String>>> {
+) -> Result<LevelResolution> {
     use futures::stream::{self, StreamExt};
 
     // Split ready keys into provider-backed and no-provider
@@ -1145,9 +1202,8 @@ async fn resolve_level(
         }
     }
 
-    let mut temp_results = HashMap::new();
+    let mut level_resolution = LevelResolution::default();
 
-    // Resolve provider-backed secrets in parallel by provider
     let provider_results: Vec<_> = stream::iter(by_provider)
         .map(|(provider_name, provider_secrets)| async move {
             resolve_provider_batch(
@@ -1166,7 +1222,9 @@ async fn resolve_level(
         .await;
 
     for provider_result in provider_results {
-        temp_results.extend(provider_result?);
+        let provider_resolution = provider_result?;
+        level_resolution.values.extend(provider_resolution.values);
+        level_resolution.errors.extend(provider_resolution.errors);
     }
 
     // Resolve no-provider secrets in parallel
@@ -1184,10 +1242,10 @@ async fn resolve_level(
 
     for result in no_provider_results {
         let (key, value) = result?;
-        temp_results.insert(key, value);
+        level_resolution.values.insert(key, value);
     }
 
-    Ok(temp_results)
+    Ok(level_resolution)
 }
 
 async fn resolve_no_provider_secret(
@@ -1213,8 +1271,8 @@ async fn resolve_provider_batch(
     provider_secrets: Vec<(String, String)>,
     resolved_so_far: &HashMap<String, Option<String>>,
     failure_mode: BatchFailureMode,
-) -> Result<HashMap<String, Option<String>>> {
-    let mut results = HashMap::new();
+) -> Result<LevelResolution> {
+    let mut resolution = LevelResolution::default();
 
     tracing::debug!(
         "Resolving {} secrets from provider '{}' using batch",
@@ -1237,8 +1295,12 @@ async fn resolve_provider_batch(
                 .iter()
                 .map(|(key, _)| key.clone())
                 .collect();
-            let fallback_resolved =
-                resolve_default_fallbacks(&fallback_keys, secrets, resolved_so_far, &mut results)?;
+            let fallback_resolved = resolve_default_fallbacks(
+                &fallback_keys,
+                secrets,
+                resolved_so_far,
+                &mut resolution.values,
+            )?;
             for (key, _) in &provider_secrets {
                 if fallback_resolved.contains(key) {
                     let secret_config = &secrets[key];
@@ -1263,13 +1325,18 @@ async fn resolve_provider_batch(
                     config_path: config.provider_sources.get(provider_name).cloned(),
                     suggestion: suggestion.clone(),
                 };
+                if failure_mode == BatchFailureMode::BestEffort {
+                    resolution.errors.insert(key.clone(), error.to_string());
+                    resolution.values.insert(key.clone(), None);
+                    continue;
+                }
                 if let Some(error) = handle_provider_error(key, error, if_missing, true) {
                     // Fail fast if if_missing is error
                     return Err(error);
                 }
-                results.insert(key.clone(), None);
+                resolution.values.insert(key.clone(), None);
             }
-            return Ok(results);
+            return Ok(resolution);
         }
     };
 
@@ -1281,8 +1348,12 @@ async fn resolve_provider_batch(
             .iter()
             .map(|(key, _)| key.clone())
             .collect();
-        let fallback_resolved =
-            resolve_default_fallbacks(&fallback_keys, secrets, resolved_so_far, &mut results)?;
+        let fallback_resolved = resolve_default_fallbacks(
+            &fallback_keys,
+            secrets,
+            resolved_so_far,
+            &mut resolution.values,
+        )?;
         for (key, _) in &provider_secrets {
             if fallback_resolved.contains(key) {
                 let secret_config = &secrets[key];
@@ -1303,12 +1374,17 @@ async fn resolve_provider_batch(
                 "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
                 provider_name
             ));
+            if failure_mode == BatchFailureMode::BestEffort {
+                resolution.errors.insert(key.clone(), error.to_string());
+                resolution.values.insert(key.clone(), None);
+                continue;
+            }
             if let Some(error) = handle_provider_error(key, error, if_missing, true) {
                 return Err(error);
             }
-            results.insert(key.clone(), None);
+            resolution.values.insert(key.clone(), None);
         }
-        return Ok(results);
+        return Ok(resolution);
     }
 
     let ctx = ProviderBatchContext {
@@ -1322,7 +1398,7 @@ async fn resolve_provider_batch(
     };
 
     // Try to get secrets with auth retry on failure
-    try_batch_with_auth_retry(&ctx, &provider_secrets, &mut results).await
+    try_batch_with_auth_retry(&ctx, &provider_secrets, &mut resolution).await
 }
 
 struct ProviderBatchContext<'a> {
@@ -1341,19 +1417,14 @@ struct ProviderBatchContext<'a> {
 async fn try_batch_with_auth_retry(
     ctx: &ProviderBatchContext<'_>,
     provider_secrets: &[(String, String)],
-    results: &mut HashMap<String, Option<String>>,
-) -> Result<HashMap<String, Option<String>>> {
+    resolution: &mut LevelResolution,
+) -> Result<LevelResolution> {
     // Initial batch secret retrieval attempt before any authentication retry logic
     match try_get_secrets_batch(ctx, provider_secrets).await {
         Ok(batch_results) => {
             let auth_error = extract_auth_error_from_batch(&batch_results);
             if let Some(ref auth_err) = auth_error
-                && prompt_and_run_auth(
-                    ctx.config,
-                    ctx.provider_config,
-                    ctx.provider_name,
-                    auth_err,
-                )?
+                && prompt_and_run_batch_auth(ctx, auth_err).await?
             {
                 // Auth prompt successful, retry the batch operation.
                 return match try_get_secrets_batch(ctx, provider_secrets).await {
@@ -1363,10 +1434,11 @@ async fn try_batch_with_auth_retry(
                             ctx.config,
                             retry_results,
                             ctx.resolved_so_far,
-                            results,
+                            &mut resolution.values,
+                            &mut resolution.errors,
                             ctx.failure_mode,
                         )?;
-                        Ok(std::mem::take(results))
+                        Ok(std::mem::take(resolution))
                     }
                     Err(retry_error) => handle_batch_error(
                         ctx.secrets,
@@ -1374,7 +1446,7 @@ async fn try_batch_with_auth_retry(
                         provider_secrets,
                         &retry_error,
                         ctx.resolved_so_far,
-                        results,
+                        resolution,
                         ctx.failure_mode,
                     ),
                 };
@@ -1385,14 +1457,15 @@ async fn try_batch_with_auth_retry(
                 ctx.config,
                 batch_results,
                 ctx.resolved_so_far,
-                results,
+                &mut resolution.values,
+                &mut resolution.errors,
                 ctx.failure_mode,
             )?;
-            Ok(std::mem::take(results))
+            Ok(std::mem::take(resolution))
         }
         Err(error) => {
             // Try auth prompt and retry
-            if prompt_and_run_auth(ctx.config, ctx.provider_config, ctx.provider_name, &error)? {
+            if prompt_and_run_batch_auth(ctx, &error).await? {
                 // Auth command ran successfully, retry
                 match try_get_secrets_batch(ctx, provider_secrets).await {
                     Ok(batch_results) => {
@@ -1401,10 +1474,11 @@ async fn try_batch_with_auth_retry(
                             ctx.config,
                             batch_results,
                             ctx.resolved_so_far,
-                            results,
+                            &mut resolution.values,
+                            &mut resolution.errors,
                             ctx.failure_mode,
                         )?;
-                        Ok(std::mem::take(results))
+                        Ok(std::mem::take(resolution))
                     }
                     Err(retry_error) => handle_batch_error(
                         ctx.secrets,
@@ -1412,7 +1486,7 @@ async fn try_batch_with_auth_retry(
                         provider_secrets,
                         &retry_error,
                         ctx.resolved_so_far,
-                        results,
+                        resolution,
                         ctx.failure_mode,
                     ),
                 }
@@ -1424,7 +1498,7 @@ async fn try_batch_with_auth_retry(
                     provider_secrets,
                     &error,
                     ctx.resolved_so_far,
-                    results,
+                    resolution,
                     ctx.failure_mode,
                 )
             }
@@ -1439,15 +1513,19 @@ fn handle_batch_error(
     provider_secrets: &[(String, String)],
     error: &FnoxError,
     resolved_so_far: &HashMap<String, Option<String>>,
-    results: &mut HashMap<String, Option<String>>,
+    resolution: &mut LevelResolution,
     failure_mode: BatchFailureMode,
-) -> Result<HashMap<String, Option<String>>> {
+) -> Result<LevelResolution> {
     let fallback_keys: Vec<String> = provider_secrets
         .iter()
         .map(|(key, _)| key.clone())
         .collect();
-    let fallback_resolved =
-        resolve_default_fallbacks(&fallback_keys, secrets, resolved_so_far, results)?;
+    let fallback_resolved = resolve_default_fallbacks(
+        &fallback_keys,
+        secrets,
+        resolved_so_far,
+        &mut resolution.values,
+    )?;
     for (key, _) in provider_secrets {
         if fallback_resolved.contains(key) {
             let secret_config = &secrets[key];
@@ -1462,13 +1540,20 @@ fn handle_batch_error(
         let secret_config = &secrets[key];
         let if_missing = batch_if_missing_behavior(secret_config, config, failure_mode);
         let provider_error = FnoxError::Provider(error.to_string());
+        if failure_mode == BatchFailureMode::BestEffort {
+            resolution
+                .errors
+                .insert(key.clone(), provider_error.to_string());
+            resolution.values.insert(key.clone(), None);
+            continue;
+        }
         if let Some(err) = handle_provider_error(key, provider_error, if_missing, true) {
             // Fail fast if if_missing is error
             return Err(err);
         }
-        results.insert(key.clone(), None);
+        resolution.values.insert(key.clone(), None);
     }
-    Ok(std::mem::take(results))
+    Ok(std::mem::take(resolution))
 }
 
 /// Extract the first auth error from batch results, if any.
@@ -1492,20 +1577,64 @@ fn extract_auth_error_from_batch(
     })
 }
 
+async fn prompt_and_run_batch_auth(
+    ctx: &ProviderBatchContext<'_>,
+    error: &FnoxError,
+) -> Result<bool> {
+    let values = ProviderEnvOverlay::resolved_values(
+        ctx.provider_config.env_dependencies(),
+        ctx.resolved_so_far,
+    );
+    if values.is_empty() {
+        let _access = PROVIDER_ENV_ACCESS.read().await;
+        prompt_and_run_auth(ctx.config, ctx.provider_config, ctx.provider_name, error)
+    } else {
+        let _access = PROVIDER_ENV_ACCESS.write().await;
+        let _env = ProviderEnvOverlay::apply(&values);
+        prompt_and_run_auth(ctx.config, ctx.provider_config, ctx.provider_name, error)
+    }
+}
+
 /// Helper to get multiple secrets in batch from a provider without auth retry logic.
 /// Creates the provider instance and calls `get_secrets_batch` on it.
 async fn try_get_secrets_batch(
     ctx: &ProviderBatchContext<'_>,
     provider_secrets: &[(String, String)],
 ) -> Result<HashMap<String, Result<String>>> {
-    let provider = get_provider_resolved(
+    // Nested providers use the same pre-resolved dependency context while each
+    // provider command receives only its own declared environment values.
+    let mut resolution_ctx = ResolutionContext::with_pre_resolved(ctx.resolved_so_far);
+    let resolved_provider = resolve_provider_config_with_context(
         ctx.config,
         ctx.profile,
         ctx.provider_name,
         ctx.provider_config,
+        &mut resolution_ctx,
     )
     .await?;
-    Ok(provider.get_secrets_batch(provider_secrets).await)
+    let prepared_provider = prepare_provider_read(
+        ctx.config,
+        ctx.profile,
+        ctx.provider_name,
+        resolved_provider,
+        &mut resolution_ctx,
+    )
+    .await?;
+    let values = ProviderEnvOverlay::resolved_values(
+        ctx.provider_config.env_dependencies(),
+        ctx.resolved_so_far,
+    );
+
+    if values.is_empty() {
+        let _access = PROVIDER_ENV_ACCESS.read().await;
+        let provider = prepared_provider.instantiate(ctx.config, ctx.profile, ctx.provider_name)?;
+        Ok(provider.get_secrets_batch(provider_secrets).await)
+    } else {
+        let _access = PROVIDER_ENV_ACCESS.write().await;
+        let _env = ProviderEnvOverlay::apply(&values);
+        let provider = prepared_provider.instantiate(ctx.config, ctx.profile, ctx.provider_name)?;
+        Ok(provider.get_secrets_batch(provider_secrets).await)
+    }
 }
 
 /// Process batch results and populate the results map
@@ -1515,6 +1644,7 @@ fn process_batch_results(
     batch_results: HashMap<String, Result<String>>,
     resolved_so_far: &HashMap<String, Option<String>>,
     results: &mut HashMap<String, Option<String>>,
+    errors: &mut HashMap<String, String>,
     failure_mode: BatchFailureMode,
 ) -> Result<()> {
     let mut failed = Vec::new();
@@ -1558,6 +1688,11 @@ fn process_batch_results(
 
         let secret_config = &secrets[&key];
         let if_missing = batch_if_missing_behavior(secret_config, config, failure_mode);
+        if failure_mode == BatchFailureMode::BestEffort {
+            errors.insert(key.clone(), e.to_string());
+            results.insert(key, None);
+            continue;
+        }
         if let Some(error) = handle_provider_error(&key, e, if_missing, true) {
             // Fail fast if if_missing is error
             return Err(error);
@@ -1985,12 +2120,14 @@ mod tests {
 
         let resolved_so_far = HashMap::new();
         let mut results = HashMap::new();
+        let mut errors = HashMap::new();
         process_batch_results(
             &secrets,
             &config,
             batch_results,
             &resolved_so_far,
             &mut results,
+            &mut errors,
             BatchFailureMode::FailFast,
         )
         .unwrap();
@@ -2024,12 +2161,14 @@ mod tests {
 
         let resolved_so_far = HashMap::new();
         let mut results = HashMap::new();
+        let mut errors = HashMap::new();
         process_batch_results(
             &secrets,
             &config,
             batch_results,
             &resolved_so_far,
             &mut results,
+            &mut errors,
             BatchFailureMode::FailFast,
         )
         .unwrap();
@@ -2051,12 +2190,14 @@ mod tests {
 
         let resolved_so_far = HashMap::new();
         let mut results = HashMap::new();
+        let mut errors = HashMap::new();
         let err = process_batch_results(
             &secrets,
             &config,
             batch_results,
             &resolved_so_far,
             &mut results,
+            &mut errors,
             BatchFailureMode::FailFast,
         )
         .unwrap_err();
@@ -2086,6 +2227,7 @@ mod tests {
         .into_iter()
         .collect();
         let mut results = HashMap::new();
+        let mut errors = HashMap::new();
 
         process_batch_results(
             &secrets,
@@ -2093,12 +2235,178 @@ mod tests {
             batch_results,
             &HashMap::new(),
             &mut results,
+            &mut errors,
             BatchFailureMode::BestEffort,
         )
         .unwrap();
 
         assert_eq!(results.get("GOOD"), Some(&Some("value".to_string())));
         assert_eq!(results.get("BAD"), Some(&None));
+        assert!(errors["BAD"].contains("secret 'BAD' not found"));
+    }
+
+    #[test]
+    fn test_best_effort_batch_omits_recovered_errors() {
+        let config = Config::new();
+        let mut secret = default_secret("fallback");
+        secret.if_missing = Some(IfMissing::Error);
+        let secrets = [("RECOVERED".to_string(), secret)].into_iter().collect();
+        let batch_results = [(
+            "RECOVERED".to_string(),
+            Err(provider_secret_not_found("RECOVERED")),
+        )]
+        .into_iter()
+        .collect();
+        let mut results = HashMap::new();
+        let mut errors = HashMap::new();
+
+        process_batch_results(
+            &secrets,
+            &config,
+            batch_results,
+            &HashMap::new(),
+            &mut results,
+            &mut errors,
+            BatchFailureMode::BestEffort,
+        )
+        .unwrap();
+
+        assert_eq!(
+            results.get("RECOVERED"),
+            Some(&Some("fallback".to_string()))
+        );
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_scoped_provider_env_restores_declared_dependencies() {
+        const EXISTING: &str = "FNOX_TEST_SCOPED_PROVIDER_EXISTING";
+        const ABSENT: &str = "FNOX_TEST_SCOPED_PROVIDER_ABSENT";
+        const UNRELATED: &str = "FNOX_TEST_SCOPED_PROVIDER_UNRELATED";
+
+        env::set_var(EXISTING, "original");
+        env::remove_var(ABSENT);
+        env::remove_var(UNRELATED);
+        let resolved = HashMap::from([
+            (EXISTING.to_string(), Some("replacement".to_string())),
+            (ABSENT.to_string(), Some("temporary".to_string())),
+            (UNRELATED.to_string(), Some("secret".to_string())),
+        ]);
+
+        let values = ProviderEnvOverlay::resolved_values(&[EXISTING, ABSENT], &resolved);
+        assert_eq!(values.len(), 2);
+        assert!(values.iter().all(|(key, _)| key != UNRELATED));
+
+        {
+            let _guard = ProviderEnvOverlay::apply(&values);
+            assert_eq!(env::var(EXISTING).as_deref(), Ok("replacement"));
+            assert_eq!(env::var(ABSENT).as_deref(), Ok("temporary"));
+            assert!(env::var_os(UNRELATED).is_none());
+        }
+
+        assert_eq!(env::var(EXISTING).as_deref(), Ok("original"));
+        assert!(env::var_os(ABSENT).is_none());
+        assert!(env::var_os(UNRELATED).is_none());
+        env::remove_var(EXISTING);
+    }
+
+    #[tokio::test]
+    async fn test_provider_env_access_serializes_overlays() {
+        const KEY: &str = "FNOX_TEST_SERIALIZED_PROVIDER_ENV";
+
+        env::remove_var(KEY);
+        let first_started = std::sync::Arc::new(tokio::sync::Barrier::new(2));
+        let release_first = std::sync::Arc::new(tokio::sync::Notify::new());
+        let second_started = std::sync::Arc::new(tokio::sync::Notify::new());
+
+        let first = {
+            let first_started = first_started.clone();
+            let release_first = release_first.clone();
+            tokio::spawn(async move {
+                let _access = PROVIDER_ENV_ACCESS.write().await;
+                let _env = ProviderEnvOverlay::apply(&[(KEY.to_string(), "first".to_string())]);
+                first_started.wait().await;
+                release_first.notified().await;
+                assert_eq!(env::var(KEY).as_deref(), Ok("first"));
+            })
+        };
+
+        first_started.wait().await;
+        let second = {
+            let second_started = second_started.clone();
+            tokio::spawn(async move {
+                let _access = PROVIDER_ENV_ACCESS.write().await;
+                let _env = ProviderEnvOverlay::apply(&[(KEY.to_string(), "second".to_string())]);
+                second_started.notify_one();
+                assert_eq!(env::var(KEY).as_deref(), Ok("second"));
+            })
+        };
+
+        assert!(
+            tokio::time::timeout(
+                std::time::Duration::from_millis(20),
+                second_started.notified()
+            )
+            .await
+            .is_err()
+        );
+        release_first.notify_one();
+        first.await.unwrap();
+        second_started.notified().await;
+        second.await.unwrap();
+        assert!(env::var_os(KEY).is_none());
+    }
+
+    #[tokio::test]
+    async fn test_environment_fallback_waits_for_provider_overlay_restoration() {
+        const KEY: &str = "FNOX_TEST_PROVIDER_ENV_FALLBACK";
+
+        env::remove_var(KEY);
+        let overlay_started = std::sync::Arc::new(tokio::sync::Barrier::new(2));
+        let release_overlay = std::sync::Arc::new(tokio::sync::Notify::new());
+        let read_started = std::sync::Arc::new(tokio::sync::Barrier::new(2));
+        let read_finished = std::sync::Arc::new(tokio::sync::Notify::new());
+
+        let overlay = {
+            let overlay_started = overlay_started.clone();
+            let release_overlay = release_overlay.clone();
+            tokio::spawn(async move {
+                let _access = PROVIDER_ENV_ACCESS.write().await;
+                let _env = ProviderEnvOverlay::apply(&[(KEY.to_string(), "temporary".to_string())]);
+                overlay_started.wait().await;
+                release_overlay.notified().await;
+            })
+        };
+
+        overlay_started.wait().await;
+        let reader = {
+            let read_started = read_started.clone();
+            let read_finished = read_finished.clone();
+            tokio::spawn(async move {
+                let config = Config::new();
+                let mut secret = SecretConfig::new();
+                secret.if_missing = Some(IfMissing::Ignore);
+                read_started.wait().await;
+                let result =
+                    resolve_secret_raw(&config, &["default".to_string()], KEY, &secret).await;
+                read_finished.notify_one();
+                result
+            })
+        };
+
+        read_started.wait().await;
+        assert!(
+            tokio::time::timeout(
+                std::time::Duration::from_millis(20),
+                read_finished.notified()
+            )
+            .await
+            .is_err()
+        );
+        release_overlay.notify_one();
+        overlay.await.unwrap();
+        assert_eq!(reader.await.unwrap().unwrap(), None);
+        assert!(env::var_os(KEY).is_none());
     }
 
     #[tokio::test]

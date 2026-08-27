@@ -2,7 +2,7 @@ use crate::commands::Cli;
 use crate::config::{Config, ProviderConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
 use crate::secret_resolver::{
-    resolve_secrets_batch, resolve_secrets_batch_best_effort,
+    BestEffortBatchResolution, resolve_secrets_batch, resolve_secrets_batch_best_effort,
     resolve_secrets_batch_with_pre_resolved,
 };
 use indexmap::IndexMap;
@@ -151,6 +151,8 @@ struct StoreResolvedRequest {
 enum Response {
     Resolved {
         values: IndexMap<String, Option<String>>,
+        #[serde(default)]
+        errors: IndexMap<String, String>,
     },
     ResolveInForeground {
         fingerprint: String,
@@ -226,6 +228,24 @@ pub async fn resolve_batch(
     .await
 }
 
+pub async fn resolve_batch_for_check(
+    cli: &Cli,
+    config: &Config,
+    profile: &[String],
+    secrets: &IndexMap<String, SecretConfig>,
+    include_all_modes: bool,
+) -> Result<BestEffortBatchResolution> {
+    resolve_batch_resolution_with_context(
+        &ResolveContext::from_cli(cli),
+        config,
+        profile,
+        secrets,
+        Purpose::Check,
+        include_all_modes,
+    )
+    .await
+}
+
 pub async fn resolve_batch_with_context(
     ctx: &ResolveContext,
     config: &Config,
@@ -234,6 +254,26 @@ pub async fn resolve_batch_with_context(
     purpose: Purpose,
     include_all_modes: bool,
 ) -> Result<IndexMap<String, Option<String>>> {
+    Ok(resolve_batch_resolution_with_context(
+        ctx,
+        config,
+        profile,
+        secrets,
+        purpose,
+        include_all_modes,
+    )
+    .await?
+    .values)
+}
+
+async fn resolve_batch_resolution_with_context(
+    ctx: &ResolveContext,
+    config: &Config,
+    profile: &[String],
+    secrets: &IndexMap<String, SecretConfig>,
+    purpose: Purpose,
+    include_all_modes: bool,
+) -> Result<BestEffortBatchResolution> {
     if !should_use_daemon(ctx, config) {
         let secrets = if include_all_modes {
             secrets.clone()
@@ -247,7 +287,10 @@ pub async fn resolve_batch_with_context(
         return if purpose == Purpose::Check {
             resolve_secrets_batch_best_effort(config, profile, &secrets).await
         } else {
-            resolve_secrets_batch(config, profile, &secrets).await
+            Ok(BestEffortBatchResolution {
+                values: resolve_secrets_batch(config, profile, &secrets).await?,
+                errors: IndexMap::new(),
+            })
         };
     }
 
@@ -268,7 +311,7 @@ pub async fn resolve_batch_with_context(
     };
 
     match call_or_start(ctx, config, Request::ResolveBatch(batch_request.clone())).await? {
-        Response::Resolved { values } => Ok(values),
+        Response::Resolved { values, errors } => Ok(BestEffortBatchResolution { values, errors }),
         Response::ResolveInForeground {
             fingerprint,
             mut cached_values,
@@ -289,22 +332,25 @@ pub async fn resolve_batch_with_context(
                 .filter(|(key, _)| foreground_keys.contains(*key))
                 .map(|(key, secret)| (key.clone(), secret.clone()))
                 .collect();
-            let mut foreground_values = if purpose == Purpose::Check {
+            let mut foreground_resolution = if purpose == Purpose::Check {
                 resolve_secrets_batch_best_effort(config, profile, &foreground_secrets).await?
             } else {
-                resolve_secrets_batch_with_pre_resolved(
-                    config,
-                    profile,
-                    &foreground_secrets,
-                    &cached_values,
-                )
-                .await?
+                BestEffortBatchResolution {
+                    values: resolve_secrets_batch_with_pre_resolved(
+                        config,
+                        profile,
+                        &foreground_secrets,
+                        &cached_values,
+                    )
+                    .await?,
+                    errors: IndexMap::new(),
+                }
             };
             let mut values = IndexMap::new();
             for key in secrets.keys() {
                 if let Some(value) = cached_values.swap_remove(key) {
                     values.insert(key.clone(), value);
-                } else if let Some(value) = foreground_values.swap_remove(key) {
+                } else if let Some(value) = foreground_resolution.values.swap_remove(key) {
                     values.insert(key.clone(), value);
                 }
             }
@@ -314,7 +360,10 @@ pub async fn resolve_batch_with_context(
             {
                 tracing::warn!("failed to fill daemon cache after foreground resolution: {error}");
             }
-            Ok(values)
+            Ok(BestEffortBatchResolution {
+                values,
+                errors: foreground_resolution.errors,
+            })
         }
         Response::Error { message } => Err(FnoxError::Config(message)),
         _ => Err(FnoxError::Config(
@@ -369,7 +418,7 @@ pub async fn resolve_one_with_context(
     };
 
     match call_or_start(ctx, config, Request::ResolveOne(one_request.clone())).await? {
-        Response::Resolved { mut values } => Ok(values.swap_remove(key).flatten()),
+        Response::Resolved { mut values, .. } => Ok(values.swap_remove(key).flatten()),
         Response::ResolveInForeground { fingerprint, .. } => {
             let value =
                 crate::secret_resolver::resolve_secret(config, profile, key, secret_config).await?;
@@ -950,10 +999,13 @@ async fn process_request(
                 });
             }
             let best_effort = req.purpose == Purpose::Check.as_str();
-            let values =
+            let resolution =
                 resolve_with_cache(&config, &req.profile, secrets, &req, best_effort, state)
                     .await?;
-            Ok(Response::Resolved { values })
+            Ok(Response::Resolved {
+                values: resolution.values,
+                errors: resolution.errors,
+            })
         }
         Request::ResolveOne(req) => {
             let _guard = request_lock.lock().await;
@@ -970,6 +1022,7 @@ async fn process_request(
             let Some(secret_config) = config.get_secret(&req.profile, &req.key)?.cloned() else {
                 return Ok(Response::Resolved {
                     values: [(req.key, None)].into_iter().collect(),
+                    errors: IndexMap::new(),
                 });
             };
             let batch_req = ResolveBatchRequest {
@@ -1001,7 +1054,7 @@ async fn process_request(
                     keys: foreground.keys,
                 });
             }
-            let values = resolve_with_cache(
+            let resolution = resolve_with_cache(
                 &config,
                 &batch_req.profile,
                 secrets,
@@ -1010,7 +1063,10 @@ async fn process_request(
                 state,
             )
             .await?;
-            Ok(Response::Resolved { values })
+            Ok(Response::Resolved {
+                values: resolution.values,
+                errors: resolution.errors,
+            })
         }
     }
 }
@@ -1124,11 +1180,12 @@ async fn resolve_with_cache(
     req: &ResolveBatchRequest,
     best_effort: bool,
     state: std::sync::Arc<Mutex<DaemonState>>,
-) -> Result<IndexMap<String, Option<String>>> {
+) -> Result<BestEffortBatchResolution> {
     let fingerprint = config_fingerprint(config, &req.env)?;
     let providers = config.get_providers(profile)?;
     let default_provider = cache_policy_default_provider(config, profile, &providers);
     let mut results = IndexMap::new();
+    let mut errors = IndexMap::new();
     let mut misses = IndexMap::new();
     let mut miss_keys = HashMap::new();
 
@@ -1149,18 +1206,22 @@ async fn resolve_with_cache(
     }
 
     if !misses.is_empty() {
-        let resolved = if best_effort {
+        let mut resolution = if best_effort {
             resolve_secrets_batch_best_effort(config, profile, &misses).await?
         } else {
-            resolve_secrets_batch(config, profile, &misses).await?
+            BestEffortBatchResolution {
+                values: resolve_secrets_batch(config, profile, &misses).await?,
+                errors: IndexMap::new(),
+            }
         };
         let mut state = state.lock().await;
-        for (key, value) in resolved {
+        for (key, value) in resolution.values {
             if let Some(cache_key) = miss_keys.remove(&key) {
                 state.cache.insert(cache_key, value.clone());
             }
             results.insert(key, value);
         }
+        errors.append(&mut resolution.errors);
     }
 
     let mut ordered = IndexMap::new();
@@ -1169,7 +1230,10 @@ async fn resolve_with_cache(
             ordered.insert(key.clone(), value);
         }
     }
-    Ok(ordered)
+    Ok(BestEffortBatchResolution {
+        values: ordered,
+        errors,
+    })
 }
 
 fn cache_policy_default_provider<'a>(
@@ -1322,7 +1386,7 @@ fn socket_path(cli: &Cli) -> Result<PathBuf> {
 /// Wire-protocol version tag included in the socket path hash.
 /// Incrementing this ensures new clients don't connect to stale daemons
 /// running an incompatible wire format.
-const WIRE_VERSION: u8 = 3;
+const WIRE_VERSION: u8 = 4;
 
 fn socket_path_for_context(ctx: &ResolveContext) -> Result<PathBuf> {
     let mut hasher = blake3::Hasher::new();
@@ -1622,8 +1686,9 @@ pub fn parse_duration(value: &str) -> Result<Duration> {
 #[cfg(test)]
 mod tests {
     use super::{
-        CacheKey, DaemonState, Purpose, ResolveBatchRequest, cache_key, config_fingerprint,
-        foreground_resolution_if_needed, parse_duration, resolve_with_cache, store_resolved_values,
+        CacheKey, DaemonState, Purpose, ResolveBatchRequest, Response, cache_key,
+        config_fingerprint, foreground_resolution_if_needed, parse_duration, resolve_with_cache,
+        store_resolved_values,
     };
     use fnox_core::config::{Config, ProviderConfig, SecretConfig};
     use indexmap::IndexMap;
@@ -1652,6 +1717,31 @@ mod tests {
 
         let decoded: ResolveBatchRequest = serde_json::from_str(&json).unwrap();
         assert!(decoded.include_all_modes);
+    }
+
+    #[test]
+    fn resolved_response_carries_check_diagnostics() {
+        let response = Response::Resolved {
+            values: IndexMap::from([("API_KEY".to_string(), None)]),
+            errors: IndexMap::from([("API_KEY".to_string(), "not found".to_string())]),
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        let decoded: Response = serde_json::from_str(&json).unwrap();
+
+        match decoded {
+            Response::Resolved { values, errors } => {
+                assert_eq!(values["API_KEY"], None);
+                assert_eq!(errors["API_KEY"], "not found");
+            }
+            _ => panic!("expected resolved response"),
+        }
+
+        let decoded: Response =
+            serde_json::from_str(r#"{"status":"resolved","values":{}}"#).unwrap();
+        assert!(matches!(
+            decoded,
+            Response::Resolved { errors, .. } if errors.is_empty()
+        ));
     }
 
     #[test]
@@ -1776,7 +1866,10 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            resolved.get("API_KEY").and_then(|value| value.as_deref()),
+            resolved
+                .values
+                .get("API_KEY")
+                .and_then(|value| value.as_deref()),
             Some("fresh")
         );
     }
@@ -1825,7 +1918,10 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(
-            resolved.get("API_KEY").and_then(|value| value.as_deref()),
+            resolved
+                .values
+                .get("API_KEY")
+                .and_then(|value| value.as_deref()),
             Some("from-foreground")
         );
 
@@ -1889,7 +1985,10 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            resolved.get("API_KEY").and_then(|value| value.as_deref()),
+            resolved
+                .values
+                .get("API_KEY")
+                .and_then(|value| value.as_deref()),
             Some("fresh")
         );
     }
@@ -1930,7 +2029,10 @@ daemon_cache = false
         .unwrap();
 
         assert_eq!(
-            resolved.get("API_KEY").and_then(|value| value.as_deref()),
+            resolved
+                .values
+                .get("API_KEY")
+                .and_then(|value| value.as_deref()),
             Some("fresh")
         );
     }
@@ -1957,7 +2059,10 @@ daemon_cache = false
         .unwrap();
 
         assert_eq!(
-            resolved.get("API_KEY").and_then(|value| value.as_deref()),
+            resolved
+                .values
+                .get("API_KEY")
+                .and_then(|value| value.as_deref()),
             Some("fresh")
         );
     }
@@ -1985,7 +2090,10 @@ daemon_cache = false
         .unwrap();
 
         assert_eq!(
-            resolved.get("API_KEY").and_then(|value| value.as_deref()),
+            resolved
+                .values
+                .get("API_KEY")
+                .and_then(|value| value.as_deref()),
             Some("cached")
         );
     }
@@ -2013,7 +2121,10 @@ daemon_cache = false
         .unwrap();
 
         assert_eq!(
-            resolved.get("API_KEY").and_then(|value| value.as_deref()),
+            resolved
+                .values
+                .get("API_KEY")
+                .and_then(|value| value.as_deref()),
             Some("cached")
         );
     }

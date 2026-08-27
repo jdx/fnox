@@ -7,10 +7,10 @@
 //! can reference a secret from another provider) and detects circular dependencies.
 
 use crate::config::Config;
-use crate::env;
+use crate::env::{self, PROVIDER_ENV_ACCESS, ProviderEnvOverlay};
 use crate::error::{FnoxError, Result};
 use crate::suggest::{find_similar, format_suggestions};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::secret_ref::{OptionProviderSecretRef, OptionStringOrSecretRef, StringOrSecretRef};
 use super::{ProviderConfig, ResolvedProviderConfig};
@@ -22,6 +22,8 @@ pub struct ResolutionContext {
     provider_stack: HashSet<String>,
     /// Stack path for error messages
     resolution_path: Vec<String>,
+    pre_resolved: HashMap<String, Option<String>>,
+    age_identity_cycle_guard: super::age::AgeIdentityCycleGuard,
 }
 
 impl ResolutionContext {
@@ -30,7 +32,33 @@ impl ResolutionContext {
         Self {
             provider_stack: HashSet::new(),
             resolution_path: Vec::new(),
+            pre_resolved: HashMap::new(),
+            age_identity_cycle_guard: super::age::AgeIdentityCycleGuard::default(),
         }
+    }
+
+    pub(crate) fn with_pre_resolved(pre_resolved: &HashMap<String, Option<String>>) -> Self {
+        Self {
+            provider_stack: HashSet::new(),
+            resolution_path: Vec::new(),
+            pre_resolved: pre_resolved.clone(),
+            age_identity_cycle_guard: super::age::AgeIdentityCycleGuard::default(),
+        }
+    }
+
+    pub(crate) fn with_identity_cycle_guard(
+        age_identity_cycle_guard: super::age::AgeIdentityCycleGuard,
+    ) -> Self {
+        Self {
+            provider_stack: HashSet::new(),
+            resolution_path: Vec::new(),
+            pre_resolved: HashMap::new(),
+            age_identity_cycle_guard,
+        }
+    }
+
+    pub(crate) fn age_identity_cycle_guard(&self) -> super::age::AgeIdentityCycleGuard {
+        self.age_identity_cycle_guard.clone()
     }
 
     /// Check if we're already resolving this provider (cycle detection)
@@ -172,22 +200,6 @@ pub fn resolve_provider_ref<'a>(
     value: &'a OptionProviderSecretRef,
     ctx: &'a mut ResolutionContext,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<String>>> + Send + 'a>> {
-    resolve_provider_ref_with_identity_cycle_guard(
-        config,
-        profile,
-        value,
-        ctx,
-        super::age::AgeIdentityCycleGuard::default(),
-    )
-}
-
-pub fn resolve_provider_ref_with_identity_cycle_guard<'a>(
-    config: &'a Config,
-    profile: &'a [String],
-    value: &'a OptionProviderSecretRef,
-    ctx: &'a mut ResolutionContext,
-    identity_cycle_guard: super::age::AgeIdentityCycleGuard,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<String>>> + Send + 'a>> {
     Box::pin(async move {
         let Some(provider_ref) = value.as_ref() else {
             return Ok(None);
@@ -222,15 +234,32 @@ pub fn resolve_provider_ref_with_identity_cycle_guard<'a>(
             ctx,
         )
         .await?;
-        let provider = super::get_provider_from_resolved_with_context_and_identity_cycle_guard(
+        let prepared_provider = super::prepare_provider_read(
             config,
             profile,
             &provider_ref.provider,
-            &resolved_provider,
-            Some(identity_cycle_guard),
-        )?;
+            resolved_provider,
+            ctx,
+        )
+        .await?;
+        let values = ProviderEnvOverlay::resolved_values(
+            provider_config.env_dependencies(),
+            &ctx.pre_resolved,
+        );
+        let value = if values.is_empty() {
+            let _access = PROVIDER_ENV_ACCESS.read().await;
+            let provider =
+                prepared_provider.instantiate(config, profile, &provider_ref.provider)?;
+            provider.get_secret(&provider_ref.value).await?
+        } else {
+            let _access = PROVIDER_ENV_ACCESS.write().await;
+            let _env = ProviderEnvOverlay::apply(&values);
+            let provider =
+                prepared_provider.instantiate(config, profile, &provider_ref.provider)?;
+            provider.get_secret(&provider_ref.value).await?
+        };
 
-        provider.get_secret(&provider_ref.value).await.map(Some)
+        Ok(Some(value))
     })
 }
 
@@ -247,6 +276,16 @@ fn resolve_secret_ref<'a>(
     ctx: &'a mut ResolutionContext,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send + 'a>> {
     Box::pin(async move {
+        if let Some(value) = ctx.pre_resolved.get(secret_name) {
+            return value
+                .clone()
+                .ok_or_else(|| FnoxError::ProviderConfigResolutionFailed {
+                    provider: provider_name.to_string(),
+                    secret: secret_name.to_string(),
+                    details: format!("Secret '{secret_name}' did not resolve"),
+                });
+        }
+
         // First, try to find the secret in config
         let secrets = config.get_secrets(profile)?;
 
@@ -276,14 +315,30 @@ fn resolve_secret_ref<'a>(
                         ctx,
                     )
                     .await?;
-
-                    // Create the provider and get the secret
-                    let provider = super::get_provider_from_resolved_with_context(
+                    let prepared_provider = super::prepare_provider_read(
                         config,
                         profile,
                         secret_provider_name,
-                        &resolved_provider,
-                    )?;
+                        resolved_provider,
+                        ctx,
+                    )
+                    .await?;
+
+                    let values = ProviderEnvOverlay::resolved_values(
+                        secret_provider_config.env_dependencies(),
+                        &ctx.pre_resolved,
+                    );
+                    if values.is_empty() {
+                        let _access = PROVIDER_ENV_ACCESS.read().await;
+                        let provider =
+                            prepared_provider.instantiate(config, profile, secret_provider_name)?;
+                        return provider.get_secret(provider_value).await;
+                    }
+
+                    let _access = PROVIDER_ENV_ACCESS.write().await;
+                    let _env = ProviderEnvOverlay::apply(&values);
+                    let provider =
+                        prepared_provider.instantiate(config, profile, secret_provider_name)?;
                     return provider.get_secret(provider_value).await;
                 } else {
                     // Find similar provider names for suggestion
@@ -308,6 +363,7 @@ fn resolve_secret_ref<'a>(
         }
 
         // Fall back to environment variable
+        let _access = PROVIDER_ENV_ACCESS.read().await;
         env::var(secret_name).map_err(|_| FnoxError::ProviderConfigResolutionFailed {
             provider: provider_name.to_string(),
             secret: secret_name.to_string(),
@@ -382,6 +438,49 @@ inherits = ["a"]
         assert!(matches!(
             error,
             FnoxError::ProfileInheritanceCycle { cycle } if cycle == "a -> b -> a"
+        ));
+    }
+
+    #[tokio::test]
+    async fn secret_ref_uses_pre_resolved_value() {
+        let config = Config::new();
+        let mut ctx = ResolutionContext::with_pre_resolved(&HashMap::from([(
+            "TOKEN".to_string(),
+            Some("resolved-token".to_string()),
+        )]));
+
+        let value = resolve_secret_ref(
+            &config,
+            &["default".to_string()],
+            "provider",
+            "TOKEN",
+            &mut ctx,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(value, "resolved-token");
+    }
+
+    #[tokio::test]
+    async fn secret_ref_does_not_retry_pre_resolved_missing_value() {
+        let config = Config::new();
+        let mut ctx =
+            ResolutionContext::with_pre_resolved(&HashMap::from([("TOKEN".to_string(), None)]));
+
+        let error = resolve_secret_ref(
+            &config,
+            &["default".to_string()],
+            "provider",
+            "TOKEN",
+            &mut ctx,
+        )
+        .await
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            FnoxError::ProviderConfigResolutionFailed { secret, .. } if secret == "TOKEN"
         ));
     }
 }

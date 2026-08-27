@@ -1,6 +1,7 @@
 use crate::error::Result;
 use async_trait::async_trait;
-use std::collections::HashMap;
+use indexmap::IndexMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 // Provider implementation modules
@@ -290,6 +291,45 @@ impl ProviderConfig {
             .filter(|info| info.category == category)
             .collect()
     }
+
+    pub(crate) fn resolution_dependencies(
+        &self,
+        providers: &IndexMap<String, ProviderConfig>,
+    ) -> Vec<String> {
+        fn collect(
+            provider: &ProviderConfig,
+            providers: &IndexMap<String, ProviderConfig>,
+            visited: &mut HashSet<String>,
+            dependencies: &mut Vec<String>,
+        ) {
+            for dependency in provider
+                .env_dependencies()
+                .iter()
+                .copied()
+                .chain(provider.config_secret_dependencies())
+            {
+                if !dependencies.iter().any(|existing| existing == dependency) {
+                    dependencies.push(dependency.to_string());
+                }
+            }
+
+            if !matches!(provider, ProviderConfig::AgeEncryption { .. })
+                || crate::env::FNOX_AGE_KEY.is_none()
+            {
+                for provider_name in provider.nested_provider_dependencies() {
+                    if visited.insert(provider_name.to_string())
+                        && let Some(nested) = providers.get(provider_name)
+                    {
+                        collect(nested, providers, visited, dependencies);
+                    }
+                }
+            }
+        }
+
+        let mut dependencies = Vec::new();
+        collect(self, providers, &mut HashSet::new(), &mut dependencies);
+        dependencies
+    }
 }
 
 /// Create a provider from an unresolved provider configuration.
@@ -309,27 +349,77 @@ pub async fn get_provider_resolved(
     get_provider_from_resolved_with_context(config, profile, provider_name, &resolved)
 }
 
+pub(crate) enum PreparedProviderRead {
+    Standard(ResolvedProviderConfig),
+    Age {
+        recipients: Vec<String>,
+        key_file: Option<String>,
+        identity: Option<String>,
+    },
+}
+
+impl PreparedProviderRead {
+    pub(crate) fn instantiate(
+        self,
+        config: &crate::config::Config,
+        profile: &[String],
+        provider_name: &str,
+    ) -> Result<Box<dyn Provider>> {
+        match self {
+            Self::Standard(resolved) => {
+                get_provider_from_resolved_with_context(config, profile, provider_name, &resolved)
+            }
+            Self::Age {
+                recipients,
+                key_file,
+                identity,
+            } => {
+                let provider_source = provider_source_path(config, profile, provider_name);
+                Ok(Box::new(
+                    age::AgeEncryptionProvider::new_with_resolved_identity(
+                        recipients,
+                        crate::config_path::resolve_optional_string_relative_to_file(
+                            key_file,
+                            provider_source.as_deref(),
+                        ),
+                        identity,
+                    )?,
+                ))
+            }
+        }
+    }
+}
+
+pub(crate) async fn prepare_provider_read(
+    config: &crate::config::Config,
+    profile: &[String],
+    provider_name: &str,
+    resolved: ResolvedProviderConfig,
+    ctx: &mut resolver::ResolutionContext,
+) -> Result<PreparedProviderRead> {
+    if let ResolvedProviderConfig::AgeEncryption {
+        recipients,
+        key_file,
+        identity,
+    } = resolved
+    {
+        let identity =
+            age::resolve_identity_for_read(config, profile, provider_name, &identity, ctx).await?;
+        return Ok(PreparedProviderRead::Age {
+            recipients,
+            key_file,
+            identity,
+        });
+    }
+
+    Ok(PreparedProviderRead::Standard(resolved))
+}
+
 pub(crate) fn get_provider_from_resolved_with_context(
     config: &crate::config::Config,
     profile: &[String],
     provider_name: &str,
     resolved: &ResolvedProviderConfig,
-) -> Result<Box<dyn Provider>> {
-    get_provider_from_resolved_with_context_and_identity_cycle_guard(
-        config,
-        profile,
-        provider_name,
-        resolved,
-        None,
-    )
-}
-
-pub(crate) fn get_provider_from_resolved_with_context_and_identity_cycle_guard(
-    config: &crate::config::Config,
-    profile: &[String],
-    provider_name: &str,
-    resolved: &ResolvedProviderConfig,
-    identity_cycle_guard: Option<age::AgeIdentityCycleGuard>,
 ) -> Result<Box<dyn Provider>> {
     if let ResolvedProviderConfig::AgeEncryption {
         recipients,
@@ -348,7 +438,6 @@ pub(crate) fn get_provider_from_resolved_with_context_and_identity_cycle_guard(
             std::sync::Arc::new(config.clone()),
             profile.to_vec(),
             provider_name.to_string(),
-            identity_cycle_guard,
         )?));
     }
     if let ResolvedProviderConfig::KeePass {

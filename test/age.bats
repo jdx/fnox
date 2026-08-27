@@ -72,19 +72,40 @@ EOF
 	local private_key
 	private_key=$(grep "^AGE-SECRET-KEY" key.txt)
 
-	# Create config with single provider
+	mkdir -p "$TEST_TEMP_DIR/bin"
+	cat >"$TEST_TEMP_DIR/bin/pass" <<'EOF'
+#!/bin/sh
+printf 'called\n' >>"$PASS_CALLS_FILE"
+printf 'secret is not in the password store\n' >&2
+exit 1
+EOF
+	chmod +x "$TEST_TEMP_DIR/bin/pass"
+	export PATH="$TEST_TEMP_DIR/bin:$PATH"
+	export PASS_CALLS_FILE="$TEST_TEMP_DIR/pass-calls"
+	: >"$PASS_CALLS_FILE"
+
 	cat >fnox.toml <<EOF
 root = true
 
 [providers.age]
 type = "age"
 recipients = ["$public_key"]
+identity = { provider = "identity", value = "unused" }
 
-[secrets]
+[providers.identity]
+type = "1password"
+
+[providers.optional]
+type = "password-store"
+
+[secrets.OP_SERVICE_ACCOUNT_TOKEN]
+provider = "optional"
+value = "missing"
+if_missing = "ignore"
+env = false
 EOF
 
-	# Set a secret without specifying provider - should use the only one available
-	run "$FNOX_BIN" set MY_SECRET "secret-value"
+	run "$FNOX_BIN" set MY_SECRET "secret-value" --provider age
 	assert_success
 
 	# Verify the secret was encrypted with the age provider
@@ -96,6 +117,9 @@ EOF
 	run "$FNOX_BIN" get MY_SECRET
 	assert_success
 	assert_output "secret-value"
+
+	assert_fnox_success check
+	assert_equal "$(wc -l <"$PASS_CALLS_FILE" | tr -d ' ')" "0"
 }
 
 @test "decrypts using provider-backed identity" {

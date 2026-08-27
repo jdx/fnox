@@ -1,5 +1,6 @@
+use std::collections::HashMap;
 pub use std::env::*;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{path::PathBuf, sync::LazyLock};
@@ -18,6 +19,50 @@ pub fn is_non_interactive() -> bool {
 
 /// Mutex to serialize access to std::env::set_var, which is unsafe in Rust 2024 edition.
 static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
+pub(crate) static PROVIDER_ENV_ACCESS: LazyLock<tokio::sync::RwLock<()>> =
+    LazyLock::new(|| tokio::sync::RwLock::new(()));
+
+pub(crate) struct ProviderEnvOverlay {
+    previous: Vec<(String, Option<OsString>)>,
+}
+
+impl ProviderEnvOverlay {
+    pub(crate) fn resolved_values(
+        dependencies: &[&str],
+        resolved: &HashMap<String, Option<String>>,
+    ) -> Vec<(String, String)> {
+        dependencies
+            .iter()
+            .filter_map(|dependency| {
+                resolved
+                    .get(*dependency)
+                    .and_then(|value| value.as_ref())
+                    .map(|value| ((*dependency).to_string(), value.clone()))
+            })
+            .collect()
+    }
+
+    pub(crate) fn apply(values: &[(String, String)]) -> Self {
+        let mut previous = Vec::new();
+        for (key, value) in values {
+            previous.push((key.clone(), var_os(key)));
+            set_var(key, value);
+        }
+        Self { previous }
+    }
+}
+
+impl Drop for ProviderEnvOverlay {
+    fn drop(&mut self) {
+        for (key, value) in self.previous.drain(..).rev() {
+            match value {
+                Some(value) => set_var(key, value),
+                None => remove_var(key),
+            }
+        }
+    }
+}
 
 /// Set an environment variable, serializing access via ENV_MUTEX.
 ///

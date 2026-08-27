@@ -86,12 +86,16 @@ if [ "${OP_SERVICE_ACCOUNT_TOKEN:-}" != "token" ]; then
 	printf 'service account token is missing\n' >&2
 	exit 1
 fi
+if [ -n "${UNRELATED:-}" ]; then
+	printf 'unrelated secret was exposed\n' >&2
+	exit 1
+fi
 printf 'value\n'
 EOF
 	chmod +x "$TEST_TEMP_DIR/bin/op"
 	export PATH="$TEST_TEMP_DIR/bin:$PATH"
 	export OP_CALLS_FILE="$TEST_TEMP_DIR/op-calls"
-	unset FNOX_OP_SERVICE_ACCOUNT_TOKEN OP_SERVICE_ACCOUNT_TOKEN
+	unset FNOX_OP_SERVICE_ACCOUNT_TOKEN OP_SERVICE_ACCOUNT_TOKEN UNRELATED
 	: >"$OP_CALLS_FILE"
 
 	cat >fnox.toml <<'EOF'
@@ -108,6 +112,7 @@ type = "plain"
 [secrets]
 TARGET = { provider = "op", value = "target", if_missing = "error" }
 OP_SERVICE_ACCOUNT_TOKEN = { value = "token", if_missing = "ignore", env = false }
+UNRELATED = { provider = "plain", value = "sibling", if_missing = "error" }
 EOF
 
 	assert_fnox_success check
@@ -123,12 +128,16 @@ if [ "${OP_SERVICE_ACCOUNT_TOKEN:-}" != "token" ]; then
 	printf 'service account token is missing\n' >&2
 	exit 1
 fi
+if [ -n "${UNRELATED:-}" ]; then
+	printf 'unrelated secret was exposed\n' >&2
+	exit 1
+fi
 printf 'target secret is missing\n' >&2
 exit 1
 EOF
 	chmod +x "$TEST_TEMP_DIR/bin/op"
 	export PATH="$TEST_TEMP_DIR/bin:$PATH"
-	unset FNOX_OP_SERVICE_ACCOUNT_TOKEN OP_SERVICE_ACCOUNT_TOKEN
+	unset FNOX_OP_SERVICE_ACCOUNT_TOKEN OP_SERVICE_ACCOUNT_TOKEN UNRELATED
 
 	cat >fnox.toml <<'EOF'
 root = true
@@ -147,11 +156,77 @@ type = "plain"
 [secrets]
 TARGET = { provider = "op", value = "target", if_missing = "error" }
 OP_SERVICE_ACCOUNT_TOKEN = { value = "token", if_missing = "ignore", env = false }
+UNRELATED = { provider = "plain", value = "sibling", if_missing = "error" }
 EOF
 
 	assert_fnox_failure --non-interactive check
 	assert_output --partial "target secret is missing"
 	refute_output --partial "service account token is missing"
+	refute_output --partial "unrelated secret was exposed"
+}
+
+@test "fnox check isolates dependencies from nested provider resolution" {
+	mkdir -p "$TEST_TEMP_DIR/bin"
+	cat >"$TEST_TEMP_DIR/bin/op" <<'EOF'
+#!/bin/sh
+printf 'called\n' >>"$OP_CALLS_FILE"
+if [ "${OP_SERVICE_ACCOUNT_TOKEN:-}" != "nested-token" ]; then
+	printf 'nested provider dependency is missing\n' >&2
+	exit 1
+fi
+if [ -n "${VAULT_ADDR:-}" ] || [ -n "${UNRELATED:-}" ]; then
+	printf 'nested provider inherited outer secrets\n' >&2
+	exit 1
+fi
+printf 'nested-token\n'
+EOF
+	cat >"$TEST_TEMP_DIR/bin/vault" <<'EOF'
+#!/bin/sh
+if [ "${VAULT_ADDR:-}" != "outer-address" ]; then
+	printf 'vault address is missing\n' >&2
+	exit 1
+fi
+if [ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ] || [ -n "${UNRELATED:-}" ]; then
+	printf 'vault inherited unrelated secrets\n' >&2
+	exit 1
+fi
+printf 'target secret is missing\n' >&2
+exit 1
+EOF
+	chmod +x "$TEST_TEMP_DIR/bin/op" "$TEST_TEMP_DIR/bin/vault"
+	export PATH="$TEST_TEMP_DIR/bin:$PATH"
+	export OP_CALLS_FILE="$TEST_TEMP_DIR/op-calls"
+	unset FNOX_OP_SERVICE_ACCOUNT_TOKEN FNOX_VAULT_ADDR FNOX_VAULT_TOKEN OP_SERVICE_ACCOUNT_TOKEN VAULT_ADDR VAULT_TOKEN UNRELATED
+	: >"$OP_CALLS_FILE"
+
+	cat >fnox.toml <<'EOF'
+root = true
+
+[providers.op]
+type = "1password"
+vault = "test"
+
+[providers.plain]
+type = "plain"
+
+[providers.vault]
+type = "vault"
+token = { secret = "NESTED_TOKEN" }
+
+[secrets]
+TARGET = { provider = "vault", value = "target", if_missing = "error" }
+VAULT_ADDR = { provider = "plain", value = "outer-address", if_missing = "ignore", env = false }
+NESTED_TOKEN = { provider = "op", value = "nested-token", if_missing = "error", env = false }
+OP_SERVICE_ACCOUNT_TOKEN = { provider = "plain", value = "nested-token", if_missing = "ignore", env = false }
+UNRELATED = { provider = "plain", value = "sibling", if_missing = "error" }
+EOF
+
+	assert_fnox_failure check
+	assert_output --partial "target secret is missing"
+	refute_output --partial "nested provider dependency is missing"
+	refute_output --partial "nested provider inherited outer secrets"
+	refute_output --partial "vault inherited unrelated secrets"
+	assert_equal "$(wc -l <"$OP_CALLS_FILE" | tr -d ' ')" "1"
 }
 
 @test "fnox check batch resolves secrets sharing an age key" {
@@ -166,20 +241,31 @@ EOF
 	AGE_IDENTITY=$(grep "^AGE-SECRET-KEY" key.txt)
 
 	mkdir -p "$TEST_TEMP_DIR/bin"
-	cat >"$TEST_TEMP_DIR/bin/pass" <<'EOF'
+	cat >"$TEST_TEMP_DIR/bin/op" <<'EOF'
 #!/bin/sh
-printf '%s\n' "$2" >>"$PASS_CALLS_FILE"
-if [ "$2" = "age-key" ]; then
+printf '%s\n' "$2" >>"$OP_CALLS_FILE"
+if [ "${OP_SERVICE_ACCOUNT_TOKEN:-}" != "identity-token" ]; then
+	printf 'identity provider dependency is missing\n' >&2
+	exit 1
+fi
+if [ -n "${UNRELATED:-}" ]; then
+	printf 'unrelated secret was exposed\n' >&2
+	exit 1
+fi
+case "$2" in
+*age-key*)
 	printf '%s\n' "$AGE_IDENTITY"
 	exit 0
-fi
-printf '%s\n' "secret is not in the password store" >&2
+	;;
+esac
+printf '%s\n' "secret is not in 1Password" >&2
 exit 1
 EOF
-	chmod +x "$TEST_TEMP_DIR/bin/pass"
+	chmod +x "$TEST_TEMP_DIR/bin/op"
 	export PATH="$TEST_TEMP_DIR/bin:$PATH"
-	export PASS_CALLS_FILE="$TEST_TEMP_DIR/pass-calls"
-	: >"$PASS_CALLS_FILE"
+	export OP_CALLS_FILE="$TEST_TEMP_DIR/op-calls"
+	unset FNOX_OP_SERVICE_ACCOUNT_TOKEN OP_SERVICE_ACCOUNT_TOKEN UNRELATED
+	: >"$OP_CALLS_FILE"
 
 	cat >fnox.toml <<EOF
 root = true
@@ -188,7 +274,8 @@ root = true
 type = "plain"
 
 [providers.identity]
-type = "password-store"
+type = "1password"
+vault = "test"
 
 [providers.age]
 type = "age"
@@ -198,13 +285,15 @@ identity = { provider = "identity", value = "age-key" }
 [secrets]
 FIRST = { provider = "source", value = "first", if_missing = "error", env = "exec" }
 SECOND = { provider = "source", value = "second", if_missing = "error", env = false }
+OP_SERVICE_ACCOUNT_TOKEN = { provider = "source", value = "identity-token", if_missing = "ignore", env = false }
+UNRELATED = { provider = "source", value = "sibling", if_missing = "error" }
 EOF
 
-	assert_fnox_success sync -p age --force
+	assert_fnox_success sync FIRST SECOND -p age --force
 	assert_fnox_success check
-	assert_equal "$(grep -c '^age-key$' "$PASS_CALLS_FILE")" "1"
+	assert_equal "$(grep -c 'age-key' "$OP_CALLS_FILE")" "1"
 
-	: >"$PASS_CALLS_FILE"
+	: >"$OP_CALLS_FILE"
 	local second_line second_value shared_prefix
 	second_line=$(grep 'SECOND.*sync = ' fnox.toml)
 	second_value=${second_line##*value = \"}
@@ -213,14 +302,14 @@ EOF
 	sed -i.bak "s|$second_value|$shared_prefix:invalid|" fnox.toml
 	assert_fnox_failure check
 	assert_output --partial "SECOND"
-	assert_equal "$(grep -c '^age-key$' "$PASS_CALLS_FILE")" "2"
+	assert_equal "$(grep -c 'age-key' "$OP_CALLS_FILE")" "1"
 
-	assert_fnox_success sync -p age --force
-	: >"$PASS_CALLS_FILE"
+	assert_fnox_success sync FIRST SECOND -p age --force
+	: >"$OP_CALLS_FILE"
 	echo 'THIRD = { provider = "identity", value = "missing", if_missing = "error" }' >>fnox.toml
 	assert_fnox_failure check
 	assert_output --partial "THIRD"
-	assert_equal "$(grep -c '^age-key$' "$PASS_CALLS_FILE")" "1"
+	assert_equal "$(grep -c 'age-key' "$OP_CALLS_FILE")" "1"
 }
 
 @test "fnox check retains diagnostics when batch resolution fails" {
@@ -314,11 +403,11 @@ BAD = { provider = "pass", value = "bad", if_missing = "error" }
 EOF
 
 	assert_fnox_failure --non-interactive check
-	assert_output --partial "Secret 'BAD' failed to resolve: Configuration error: password-store: secret 'bad' not found"
+	assert_output --partial "Secret 'BAD' failed to resolve: password-store: secret 'bad' not found"
 	assert_fnox_failure check
 	assert_output --partial "BAD"
 	assert_equal "$(grep -c '^good$' "$PASS_CALLS_FILE")" "2"
-	assert_equal "$(grep -c '^bad$' "$PASS_CALLS_FILE")" "4"
+	assert_equal "$(grep -c '^bad$' "$PASS_CALLS_FILE")" "2"
 
 	assert_fnox_success daemon status
 	assert_output --partial "cached_entries: 0"

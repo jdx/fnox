@@ -363,6 +363,8 @@ fn generate_provider_methods(
     let mut auth_command_arms = Vec::new();
     let mut daemon_cache_arms = Vec::new();
     let mut env_deps_arms = Vec::new();
+    let mut config_secret_deps_arms = Vec::new();
+    let mut nested_provider_deps_arms = Vec::new();
     let mut interactive_auth_arms = Vec::new();
 
     for (_name, provider) in providers {
@@ -410,6 +412,54 @@ fn generate_provider_methods(
         env_deps_arms.push(quote! {
             Self::#variant { .. } => #module::env_dependencies()
         });
+        let config_secret_fields: Vec<_> = provider
+            .fields
+            .iter()
+            .filter(|(_, field)| matches!(field.typ.as_str(), "required" | "optional"))
+            .map(|(name, _)| {
+                let field_name = Ident::new(name, Span::call_site());
+                quote! { #field_name.secret_name() }
+            })
+            .collect();
+        let config_secret_patterns: Vec<_> = provider
+            .fields
+            .iter()
+            .filter(|(_, field)| matches!(field.typ.as_str(), "required" | "optional"))
+            .map(|(name, _)| Ident::new(name, Span::call_site()))
+            .collect();
+        config_secret_deps_arms.push(if config_secret_patterns.is_empty() {
+            quote! { Self::#variant { .. } => Vec::new() }
+        } else {
+            quote! {
+                Self::#variant { #(#config_secret_patterns),*, .. } => {
+                    [#(#config_secret_fields),*].into_iter().flatten().collect()
+                }
+            }
+        });
+        let provider_ref_fields: Vec<_> = provider
+            .fields
+            .iter()
+            .filter(|(_, field)| field.typ == "provider_ref")
+            .map(|(name, _)| {
+                let field_name = Ident::new(name, Span::call_site());
+                quote! { #field_name.as_ref().map(|reference| reference.provider.as_str()) }
+            })
+            .collect();
+        let provider_ref_patterns: Vec<_> = provider
+            .fields
+            .iter()
+            .filter(|(_, field)| field.typ == "provider_ref")
+            .map(|(name, _)| Ident::new(name, Span::call_site()))
+            .collect();
+        nested_provider_deps_arms.push(if provider_ref_patterns.is_empty() {
+            quote! { Self::#variant { .. } => Vec::new() }
+        } else {
+            quote! {
+                Self::#variant { #(#provider_ref_patterns),*, .. } => {
+                    [#(#provider_ref_fields),*].into_iter().flatten().collect()
+                }
+            }
+        });
         let interactive = provider.requires_interactive_auth;
         interactive_auth_arms.push(quote! {
             Self::#variant { .. } => #interactive
@@ -445,6 +495,18 @@ fn generate_provider_methods(
             pub fn env_dependencies(&self) -> &'static [&'static str] {
                 match self {
                     #(#env_deps_arms),*
+                }
+            }
+
+            pub(crate) fn config_secret_dependencies(&self) -> Vec<&str> {
+                match self {
+                    #(#config_secret_deps_arms),*
+                }
+            }
+
+            pub(crate) fn nested_provider_dependencies(&self) -> Vec<&str> {
+                match self {
+                    #(#nested_provider_deps_arms),*
                 }
             }
 

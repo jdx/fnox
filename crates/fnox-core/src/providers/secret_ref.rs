@@ -66,8 +66,7 @@ impl StringOrSecretRef {
     }
 
     /// Returns the secret name if this is a secret reference
-    #[cfg(test)]
-    pub fn secret_name(&self) -> Option<&str> {
+    pub(crate) fn secret_name(&self) -> Option<&str> {
         match self {
             Self::SecretRef { secret } => Some(secret),
             Self::Literal(_) => None,
@@ -175,8 +174,7 @@ impl OptionStringOrSecretRef {
     }
 
     /// Returns the secret name if this is a secret reference
-    #[cfg(test)]
-    pub fn secret_name(&self) -> Option<&str> {
+    pub(crate) fn secret_name(&self) -> Option<&str> {
         match &self.0 {
             Some(StringOrSecretRef::SecretRef { secret }) => Some(secret),
             _ => None,

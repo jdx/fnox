@@ -17,11 +17,15 @@ pub fn env_dependencies() -> &'static [&'static str] {
 pub struct AgeEncryptionProvider {
     recipients: Vec<String>,
     key_file: Option<PathBuf>,
-    identity: OptionProviderSecretRef,
+    identity: AgeIdentity,
     config: Option<Arc<crate::config::Config>>,
     profile: Vec<String>,
     provider_name: String,
-    identity_cycle_guard: Option<AgeIdentityCycleGuard>,
+}
+
+enum AgeIdentity {
+    Reference(OptionProviderSecretRef),
+    Resolved(Option<String>),
 }
 
 impl AgeEncryptionProvider {
@@ -33,11 +37,10 @@ impl AgeEncryptionProvider {
         Ok(Self {
             recipients,
             key_file: key_file.map(|k| crate::config_path::resolve_relative_to_file(&k, None)),
-            identity,
+            identity: AgeIdentity::Reference(identity),
             config: None,
             profile: vec!["default".to_string()],
             provider_name: "age".to_string(),
-            identity_cycle_guard: None,
         })
     }
 
@@ -48,22 +51,41 @@ impl AgeEncryptionProvider {
         config: Arc<crate::config::Config>,
         profile: Vec<String>,
         provider_name: String,
-        identity_cycle_guard: Option<AgeIdentityCycleGuard>,
     ) -> Result<Self> {
         Ok(Self {
             recipients,
             key_file: key_file.map(|k| crate::config_path::resolve_relative_to_file(&k, None)),
-            identity,
+            identity: AgeIdentity::Reference(identity),
             config: Some(config),
             profile,
             provider_name,
-            identity_cycle_guard,
+        })
+    }
+
+    pub(crate) fn new_with_resolved_identity(
+        recipients: Vec<String>,
+        key_file: Option<String>,
+        identity: Option<String>,
+    ) -> Result<Self> {
+        Ok(Self {
+            recipients,
+            key_file: key_file.map(|k| crate::config_path::resolve_relative_to_file(&k, None)),
+            identity: AgeIdentity::Resolved(identity),
+            config: None,
+            profile: vec!["default".to_string()],
+            provider_name: "age".to_string(),
         })
     }
 
     async fn resolve_provider_identity(&self) -> Result<Option<String>> {
-        let Some(identity) = self.identity.as_ref() else {
-            return Ok(None);
+        let identity = match &self.identity {
+            AgeIdentity::Resolved(identity) => return Ok(identity.clone()),
+            AgeIdentity::Reference(identity) => {
+                let Some(identity) = identity.as_ref() else {
+                    return Ok(None);
+                };
+                identity
+            }
         };
 
         if identity.provider == self.provider_name {
@@ -79,15 +101,16 @@ impl AgeEncryptionProvider {
             ));
         };
 
-        let identity_cycle_guard = self.identity_cycle_guard.clone().unwrap_or_default();
+        let identity_cycle_guard = AgeIdentityCycleGuard::default();
         let _guard = identity_cycle_guard.enter(&self.provider_name)?;
-        let mut ctx = crate::providers::resolver::ResolutionContext::new();
-        crate::providers::resolver::resolve_provider_ref_with_identity_cycle_guard(
+        let mut ctx = crate::providers::resolver::ResolutionContext::with_identity_cycle_guard(
+            identity_cycle_guard,
+        );
+        crate::providers::resolver::resolve_provider_ref(
             config,
             &self.profile,
-            &self.identity,
+            &OptionProviderSecretRef(Some(identity.clone())),
             &mut ctx,
-            identity_cycle_guard,
         )
         .await
     }
@@ -124,7 +147,7 @@ pub struct AgeIdentityCycleGuard {
 }
 
 impl AgeIdentityCycleGuard {
-    fn enter(&self, provider_name: &str) -> Result<AgeIdentityCycleEntry> {
+    pub(crate) fn enter(&self, provider_name: &str) -> Result<AgeIdentityCycleEntry> {
         let mut resolving = self
             .resolving
             .lock()
@@ -148,7 +171,39 @@ impl AgeIdentityCycleGuard {
     }
 }
 
-struct AgeIdentityCycleEntry {
+pub(crate) async fn resolve_identity_for_read(
+    config: &crate::config::Config,
+    profile: &[String],
+    provider_name: &str,
+    identity: &OptionProviderSecretRef,
+    ctx: &mut crate::providers::resolver::ResolutionContext,
+) -> Result<Option<String>> {
+    if env::FNOX_AGE_KEY.is_some() {
+        return Ok(None);
+    }
+
+    let Some(identity) = identity.as_ref() else {
+        return Ok(None);
+    };
+    if identity.provider == provider_name {
+        return Err(FnoxError::ProviderConfigCycle {
+            provider: provider_name.to_string(),
+            cycle: format!("{provider_name} -> {provider_name}"),
+        });
+    }
+
+    let identity_cycle_guard = ctx.age_identity_cycle_guard();
+    let _guard = identity_cycle_guard.enter(provider_name)?;
+    crate::providers::resolver::resolve_provider_ref(
+        config,
+        profile,
+        &OptionProviderSecretRef(Some(identity.clone())),
+        ctx,
+    )
+    .await
+}
+
+pub(crate) struct AgeIdentityCycleEntry {
     provider_name: String,
     resolving: Arc<Mutex<Vec<String>>>,
 }
@@ -486,6 +541,7 @@ impl AgeEncryptionProvider {
 mod tests {
     use super::*;
     use crate::providers::Provider;
+    use crate::providers::secret_ref::ProviderSecretRef;
     use age::secrecy::ExposeSecret;
 
     fn test_provider() -> (AgeEncryptionProvider, tempfile::TempPath) {
@@ -556,5 +612,50 @@ mod tests {
 
         assert_eq!(decrypted["FIRST"].as_ref().unwrap(), "one");
         assert_eq!(decrypted["SECOND"].as_ref().unwrap(), "two");
+    }
+
+    #[tokio::test]
+    async fn concurrent_identity_reads_have_independent_cycle_guards() {
+        let config: crate::config::Config = toml_edit::de::from_str(
+            r#"
+[providers.identity]
+type = "plain"
+"#,
+        )
+        .unwrap();
+        let provider = Arc::new(
+            AgeEncryptionProvider::new_with_config(
+                Vec::new(),
+                None,
+                OptionProviderSecretRef(Some(ProviderSecretRef {
+                    provider: "identity".to_string(),
+                    value: "identity-value".to_string(),
+                })),
+                Arc::new(config),
+                vec!["default".to_string()],
+                "age".to_string(),
+            )
+            .unwrap(),
+        );
+
+        let access = crate::env::PROVIDER_ENV_ACCESS.write().await;
+        let first = {
+            let provider = provider.clone();
+            tokio::spawn(async move { provider.resolve_provider_identity().await })
+        };
+        let second = {
+            let provider = provider.clone();
+            tokio::spawn(async move { provider.resolve_provider_identity().await })
+        };
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        drop(access);
+
+        let (first, second) = tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            tokio::join!(first, second)
+        })
+        .await
+        .unwrap();
+        assert_eq!(first.unwrap().unwrap().as_deref(), Some("identity-value"));
+        assert_eq!(second.unwrap().unwrap().as_deref(), Some("identity-value"));
     }
 }
