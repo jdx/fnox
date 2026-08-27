@@ -1219,6 +1219,13 @@ fn config_fingerprint(config: &Config, env: &[(String, String)]) -> Result<Strin
     if let Some(path) = &config.default_provider_source {
         paths.insert(path.clone());
     }
+    for profile in config.profiles.values() {
+        paths.extend(profile.provider_sources.values().cloned());
+        paths.extend(profile.secret_sources.values().cloned());
+        if let Some(path) = &profile.default_provider_source {
+            paths.insert(path.clone());
+        }
+    }
     if let Some(project_dir) = &config.project_dir {
         for name in crate::config::all_config_filenames(&[]) {
             let path = project_dir.join(name);

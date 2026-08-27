@@ -248,7 +248,7 @@ fn resolve_secret_ref<'a>(
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send + 'a>> {
     Box::pin(async move {
         // First, try to find the secret in config
-        let secrets = config.get_secrets(profile).unwrap_or_default();
+        let secrets = config.get_secrets(profile)?;
 
         if let Some(secret_config) = secrets.get(secret_name) {
             // Secret found in config - resolve it
@@ -354,5 +354,34 @@ mod tests {
         ctx.push("c");
 
         assert_eq!(ctx.path_string(), "a -> b -> c");
+    }
+
+    #[tokio::test]
+    async fn secret_ref_propagates_profile_inheritance_errors() {
+        let config: Config = toml_edit::de::from_str(
+            r#"
+[profiles.a]
+inherits = ["b"]
+
+[profiles.b]
+inherits = ["a"]
+"#,
+        )
+        .unwrap();
+        let mut ctx = ResolutionContext::new();
+
+        let error = resolve_secret_ref(
+            &config,
+            &["a".to_string()],
+            "provider",
+            "FNOX_CYCLE_TEST_SECRET",
+            &mut ctx,
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            FnoxError::ProfileInheritanceCycle { cycle } if cycle == "a -> b -> a"
+        ));
     }
 }

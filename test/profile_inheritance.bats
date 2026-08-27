@@ -99,6 +99,49 @@ EOF
 	assert_output 'from-profile-file'
 }
 
+@test 'selected profile file overrides inherited profile tables' {
+	cat >fnox.toml <<'EOF'
+root = true
+
+[profiles.shared.secrets]
+SHARED = { default = "from-inherited-profile" }
+
+[profiles.app]
+inherits = ["shared"]
+EOF
+
+	cat >fnox.app.toml <<'EOF'
+[secrets]
+SHARED = { default = "from-app-file" }
+EOF
+
+	run "$FNOX_BIN" -P app --no-defaults get SHARED
+	assert_success
+	assert_output 'from-app-file'
+}
+
+@test 'metadata-only update preserves inherited secret value' {
+	cat >fnox.toml <<'EOF'
+root = true
+
+[profiles.shared.secrets]
+INHERITED = { default = "inherited-value" }
+
+[profiles.app]
+inherits = ["shared"]
+EOF
+
+	run "$FNOX_BIN" -P app set --description 'local description' INHERITED
+	assert_success
+
+	run "$FNOX_BIN" -P app --no-defaults get INHERITED
+	assert_success
+	assert_output 'inherited-value'
+
+	assert_file_contains fnox.toml 'local description'
+	assert_file_contains fnox.toml 'inherited-value'
+}
+
 @test 'profile inheritance reports unknown profiles' {
 	cat >fnox.toml <<'EOF'
 root = true
