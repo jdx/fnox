@@ -120,7 +120,7 @@ impl GetCommand {
         config: &Config,
         profile: &[String],
     ) -> Result<Option<(String, IndexMap<String, SecretConfig>)>> {
-        let leases = config.get_leases(profile);
+        let leases = config.get_leases(profile)?;
 
         // Fast path: check if any lease backend produces this key (pure config
         // lookup — no network calls or backend instantiation needed).
@@ -172,7 +172,7 @@ impl GetCommand {
         // (e.g. VAULT_TOKEN) would never be injected and encryption would fail
         // permanently, forcing a fresh API call on every invocation.
         if let Ok(Some(ref default_provider_name)) = config.get_default_provider(profile) {
-            let providers_map = config.get_providers(profile);
+            let providers_map = config.get_providers(profile)?;
             if let Some(provider_config) = providers_map.get(default_provider_name) {
                 for dep in provider_config.env_dependencies() {
                     consumed.insert(dep);

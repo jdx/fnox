@@ -28,7 +28,7 @@ impl McpCommand {
             }
             let allowed_set: std::collections::HashSet<&str> =
                 allowlist.iter().map(|s| s.as_str()).collect();
-            let providers = config.get_providers(&profile);
+            let providers = config.get_providers(&profile)?;
             for name in allowlist {
                 if !all_secrets.contains_key(name) {
                     tracing::warn!(

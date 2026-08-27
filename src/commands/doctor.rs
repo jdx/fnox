@@ -70,7 +70,7 @@ impl DoctorCommand {
 
         // Providers info
         println!("🔧 Providers:");
-        let providers = config.get_providers(&profile);
+        let providers = config.get_providers(&profile)?;
         println!("  Count: {}", providers.len());
 
         if !providers.is_empty() {

@@ -37,7 +37,7 @@ impl TestCommand {
     ) -> Result<()> {
         tracing::debug!("Testing provider '{}'", provider_name);
 
-        let providers = config.get_providers(profile);
+        let providers = config.get_providers(profile)?;
         let provider_config = providers
             .get(provider_name)
             .ok_or_else(|| FnoxError::Config(format!("Provider '{}' not found", provider_name)))?;
@@ -66,7 +66,7 @@ impl TestCommand {
         config: &Config,
         profile: &[String],
     ) -> Result<()> {
-        let providers = config.get_providers(profile);
+        let providers = config.get_providers(profile)?;
 
         if providers.is_empty() {
             println!("No providers configured");

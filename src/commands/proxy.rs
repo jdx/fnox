@@ -172,7 +172,7 @@ fn collect_requested_secrets(
     proxy: &ProxyConfig,
     all_secrets: &IndexMap<String, SecretConfig>,
 ) -> Result<IndexMap<String, SecretConfig>> {
-    let providers = config.get_providers(profile);
+    let providers = config.get_providers(profile)?;
     let default_provider = config.get_default_provider(profile)?;
     let mut requested = IndexMap::new();
 
@@ -283,7 +283,7 @@ impl ProxyRunCommand {
         for key in AMBIENT_CREDENTIAL_ENV_VARS {
             command.env_remove(key);
         }
-        for provider in config.get_providers(&profile).values() {
+        for provider in config.get_providers(&profile)?.values() {
             for dependency in provider.env_dependencies() {
                 command.env_remove(dependency);
             }

@@ -44,7 +44,7 @@ impl ExecCommand {
 
         // Get the profile secrets
         let profile_secrets = config.get_secrets(&profile)?;
-        let leases = config.get_leases(&profile);
+        let leases = config.get_leases(&profile)?;
 
         #[cfg(unix)]
         if self.replace {

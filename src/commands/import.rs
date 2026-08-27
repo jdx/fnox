@@ -115,7 +115,7 @@ impl ImportCommand {
         }
 
         // Verify provider exists (use merged config to find providers from any source)
-        let providers = merged_config.get_providers(&profile);
+        let providers = merged_config.get_providers(&profile)?;
         let provider_config =
             providers
                 .get(&self.provider)

@@ -157,7 +157,7 @@ impl SetCommand {
             Some(value)
         };
 
-        let effective_secret = config.get_secret(&write_profile_stack, &self.key).cloned();
+        let effective_secret = config.get_secret(&write_profile_stack, &self.key)?.cloned();
         let existing_secret = effective_secret
             .as_ref()
             .filter(|secret| secret_belongs_to_target(secret, &target_path, &write_profile))
@@ -190,7 +190,7 @@ impl SetCommand {
         let (encrypted_value, remote_key_name) = if let Some(ref value) = secret_value {
             if let Some(ref provider_name) = provider_name_to_use {
                 // Get the provider config
-                let providers = config.get_providers(&write_profile_stack);
+                let providers = config.get_providers(&write_profile_stack)?;
                 if let Some(provider_config) = providers.get(provider_name) {
                     // Get the provider (resolving any secret refs) and check its capabilities
                     let provider = crate::providers::get_provider_resolved(

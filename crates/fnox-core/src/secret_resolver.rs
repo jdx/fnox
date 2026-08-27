@@ -267,7 +267,7 @@ fn create_provider_not_configured_error(
     config: &Config,
 ) -> FnoxError {
     // Find similar provider names for suggestion
-    let providers = config.get_providers(profile);
+    let providers = config.get_providers(profile).unwrap_or_default();
     let available_providers: Vec<_> = providers.keys().map(|s| s.as_str()).collect();
     let similar = find_similar(provider_name, available_providers);
     let suggestion = format_suggestions(&similar);
@@ -614,7 +614,7 @@ async fn try_resolve_from_provider(
     };
 
     // Get the provider config
-    let providers = config.get_providers(profile);
+    let providers = config.get_providers(profile)?;
     let provider_config = providers.get(&provider_name).ok_or_else(|| {
         create_provider_not_configured_error(&provider_name, profile, secret_config, config)
     })?;
@@ -763,7 +763,7 @@ pub async fn resolve_secrets_batch_with_pre_resolved(
     let mut secret_provider: HashMap<String, (String, String)> = HashMap::new(); // key -> (provider_name, provider_value)
     let mut no_provider = Vec::new();
 
-    let providers = config.get_providers(profile);
+    let providers = config.get_providers(profile)?;
     let all_keys: Vec<String> = secrets.keys().cloned().collect();
     let secret_keys: HashSet<&str> = all_keys
         .iter()
@@ -1116,7 +1116,7 @@ async fn resolve_provider_batch(
     );
 
     // Get the provider config
-    let providers = config.get_providers(profile);
+    let providers = config.get_providers(profile)?;
     let provider_config = match providers.get(provider_name) {
         Some(config) => config,
         None => {

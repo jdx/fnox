@@ -193,7 +193,7 @@ pub fn resolve_provider_ref_with_identity_cycle_guard<'a>(
             return Ok(None);
         };
 
-        let providers = config.get_providers(profile);
+        let providers = config.get_providers(profile)?;
         let Some(provider_config) = providers.get(&provider_ref.provider) else {
             let available_providers: Vec<_> = providers.keys().map(|s| s.as_str()).collect();
             let similar = find_similar(&provider_ref.provider, available_providers);
@@ -256,7 +256,7 @@ fn resolve_secret_ref<'a>(
                 && let Some(provider_value) = secret_config.value()
             {
                 // This secret uses a provider - need to resolve that provider first
-                let providers = config.get_providers(profile);
+                let providers = config.get_providers(profile)?;
                 if let Some(secret_provider_config) = providers.get(secret_provider_name) {
                     if env::is_non_interactive()
                         && secret_provider_config.requires_interactive_auth()

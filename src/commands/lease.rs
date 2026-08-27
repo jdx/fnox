@@ -112,7 +112,7 @@ impl LeaseCreateCommand {
         }
         let profile = Config::get_profiles(cli.profile.as_slice());
         let project_dir = lease::project_dir_from_config(&config, &cli.config);
-        let leases = config.get_leases(&profile);
+        let leases = config.get_leases(&profile)?;
 
         // Resolve secrets once upfront (shared across all backends)
         let profile_secrets = config.get_secrets(&profile)?;
@@ -441,7 +441,7 @@ impl LeaseRevokeCommand {
         let cached_credentials = record.cached_credentials.clone();
         let encryption_provider_name = record.encryption_provider.clone();
         let profile = Config::get_profiles(cli.profile.as_slice());
-        let leases = config.get_leases(&profile);
+        let leases = config.get_leases(&profile)?;
 
         // Decrypt cached credentials (if encrypted) so backends can use
         // credential values for revocation (e.g. GitHub App needs the token).
@@ -534,7 +534,7 @@ impl LeaseCleanupCommand {
         }
 
         let profile = Config::get_profiles(cli.profile.as_slice());
-        let leases = config.get_leases(&profile);
+        let leases = config.get_leases(&profile)?;
         let mut cleaned = 0;
 
         for record in &expired {

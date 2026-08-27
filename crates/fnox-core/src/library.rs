@@ -169,7 +169,7 @@ impl Fnox {
         // whole IndexMap — preferred over get_secrets(profile)?.get(key).
         if let Some(secret_config) =
             self.config
-                .get_secret_with_no_defaults(&self.profiles, key, self.no_defaults)
+                .get_secret_with_no_defaults(&self.profiles, key, self.no_defaults)?
         {
             return crate::secret_resolver::resolve_secret(
                 &self.config,
@@ -349,6 +349,31 @@ LIB_TEST_DEFAULTS_KEY_UNIQUE_X = { default = "the-default-value" }
             }
             other => panic!("expected SecretNotFound, got {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn get_propagates_profile_inheritance_cycles() {
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join(CONFIG_FILENAME),
+            r#"
+[profiles.a]
+inherits = ["b"]
+
+[profiles.b]
+inherits = ["a"]
+"#,
+        )
+        .unwrap();
+
+        let fnox = Fnox::open(dir.path().join(CONFIG_FILENAME))
+            .unwrap()
+            .with_profile("a");
+        let error = fnox.get("UNDECLARED").await.unwrap_err();
+        assert!(matches!(
+            error,
+            FnoxError::ProfileInheritanceCycle { cycle } if cycle == "a -> b -> a"
+        ));
     }
 
     /// Given a fnox.toml that declares similarly-named keys,
