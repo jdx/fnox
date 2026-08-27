@@ -1300,6 +1300,13 @@
       "description": "Configuration for a profile",
       "type": "object",
       "properties": {
+        "inherits": {
+          "description": "Profiles to apply before this profile, in order",
+          "type": ["array", "null"],
+          "items": {
+            "type": "string"
+          }
+        },
         "leases": {
           "description": "Lease backend configurations for this profile",
           "type": "object",

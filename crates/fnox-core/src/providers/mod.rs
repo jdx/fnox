@@ -428,6 +428,9 @@ fn provider_source_path(
     profiles: &[String],
     provider_name: &str,
 ) -> Option<PathBuf> {
+    let profiles = config
+        .resolve_profiles(profiles)
+        .unwrap_or_else(|_| profiles.to_vec());
     for profile in profiles.iter().filter(|p| *p != "default").rev() {
         if let Some(profile_config) = config.profiles.get(profile)
             && profile_config.providers.contains_key(provider_name)

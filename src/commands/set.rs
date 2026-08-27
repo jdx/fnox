@@ -30,7 +30,7 @@ fn secret_belongs_to_target(
         return false;
     }
 
-    if write_profile == "default" || config::is_profile_file(target_path) {
+    if write_profile == "default" {
         !secret.source_is_profile
     } else {
         secret.source_profile.as_deref() == Some(write_profile)
@@ -157,7 +157,7 @@ impl SetCommand {
             Some(value)
         };
 
-        let effective_secret = config.get_secret(&write_profile_stack, &self.key).cloned();
+        let effective_secret = config.get_secret(&write_profile_stack, &self.key)?.cloned();
         let existing_secret = effective_secret
             .as_ref()
             .filter(|secret| secret_belongs_to_target(secret, &target_path, &write_profile))
@@ -190,7 +190,7 @@ impl SetCommand {
         let (encrypted_value, remote_key_name) = if let Some(ref value) = secret_value {
             if let Some(ref provider_name) = provider_name_to_use {
                 // Get the provider config
-                let providers = config.get_providers(&write_profile_stack);
+                let providers = config.get_providers(&write_profile_stack)?;
                 if let Some(provider_config) = providers.get(provider_name) {
                     // Get the provider (resolving any secret refs) and check its capabilities
                     let provider = crate::providers::get_provider_resolved(
@@ -276,8 +276,16 @@ impl SetCommand {
         // full stack, so the secret lands in the correct TOML section.
         let profile_secrets = config.get_secrets_mut(&write_profile_stack);
 
-        // Get or create the secret config
-        let secret_config = profile_secrets.entry(self.key.clone()).or_default();
+        // A metadata-only update to an inherited secret creates a local
+        // override. Seed it from the effective secret so the override retains
+        // the inherited value/provider instead of shadowing it with an empty
+        // entry.
+        let inherited_secret = (secret_value.is_none() && existing_secret.is_none())
+            .then(|| effective_secret.clone())
+            .flatten();
+        let secret_config = profile_secrets
+            .entry(self.key.clone())
+            .or_insert_with(|| inherited_secret.unwrap_or_default());
 
         // Update metadata
         if let Some(ref desc) = self.description {
@@ -456,6 +464,20 @@ mod tests {
             &existing,
             Path::new("/child/fnox.toml"),
             "default"
+        ));
+    }
+
+    #[test]
+    fn profile_file_secret_belongs_to_named_profile_target() {
+        let mut existing = secret("plain", "value");
+        existing.source_path = Some("/project/fnox.app.toml".into());
+        existing.source_is_profile = true;
+        existing.source_profile = Some("app".to_string());
+
+        assert!(secret_belongs_to_target(
+            &existing,
+            Path::new("/project/fnox.app.toml"),
+            "app"
         ));
     }
 }

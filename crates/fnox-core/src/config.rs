@@ -334,6 +334,10 @@ pub struct SecretConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProfileConfig {
+    /// Profiles to apply before this profile, in order
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inherits: Option<Vec<String>>,
+
     /// Lease backend configurations for this profile
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub leases: IndexMap<String, crate::lease_backends::LeaseBackendConfig>,
@@ -761,7 +765,7 @@ impl Config {
         })?;
 
         if let Some(profile) = profile_name_from_file(path) {
-            config.loaded_file_profiles.insert(profile);
+            config.scope_to_profile(profile);
         }
 
         // Set source paths for all secrets and providers
@@ -770,39 +774,81 @@ impl Config {
         Ok(config)
     }
 
+    /// Treat top-level provider, secret, lease, and default-provider entries
+    /// from `fnox.<profile>.toml` as entries in that named profile. The file is
+    /// loaded conditionally for the profile, so leaving these entries at the
+    /// config root would give them base precedence and let inherited profile
+    /// tables override the selected profile file.
+    fn scope_to_profile(&mut self, profile_name: String) {
+        self.loaded_file_profiles.insert(profile_name.clone());
+        self.scope_root_entries_to_profile(profile_name);
+    }
+
+    fn scope_root_entries_to_profile(&mut self, profile_name: String) {
+        let profile = self.profiles.entry(profile_name).or_default();
+        profile.leases.extend(std::mem::take(&mut self.leases));
+        profile
+            .providers
+            .extend(std::mem::take(&mut self.providers));
+        profile
+            .provider_sources
+            .extend(std::mem::take(&mut self.provider_sources));
+        profile.secrets.extend(std::mem::take(&mut self.secrets));
+        profile
+            .secret_sources
+            .extend(std::mem::take(&mut self.secret_sources));
+        if self.default_provider.is_some() {
+            profile.default_provider = self.default_provider.take();
+            profile.default_provider_source = self.default_provider_source.take();
+        }
+    }
+
     /// Load configuration with recursive directory search and merging
     fn load_with_recursion<P: AsRef<Path>>(_start_path: P) -> Result<Self> {
         // Start from current working directory and search upwards
         let current_dir = env::current_dir()
             .map_err(|e| FnoxError::Config(format!("Failed to get current directory: {}", e)))?;
 
-        match Self::load_recursive(&current_dir, false) {
-            Ok((_config, found)) if !found => {
-                // No config file was found anywhere in the directory tree
-                Err(FnoxError::ConfigNotFound {
-                    message: format!(
-                        "No configuration file found in {} or any parent directory",
-                        current_dir.display()
-                    ),
-                    help: "Run 'fnox init' to create a configuration file".to_string(),
-                })
+        let requested_profiles = Self::get_profiles(&[]);
+        let mut profiles = requested_profiles.clone();
+        let (mut config, mut found) = Self::load_recursive(&current_dir, false, &profiles)?;
+
+        // Profile inheritance can select additional profile-specific files. Keep
+        // loading until discovering those files no longer expands the stack.
+        loop {
+            let expanded = config.resolve_profiles_for_discovery(&profiles)?;
+            if expanded == profiles {
+                break;
             }
-            Ok((mut config, _)) => {
-                // Find the nearest directory to cwd that contains a config file.
-                // This is the project root used for scoping the lease ledger.
-                config.project_dir = Self::find_project_dir(&current_dir);
-                Ok(config)
-            }
-            Err(e) => Err(e),
+            profiles = expanded;
+            (config, found) = Self::load_recursive(&current_dir, false, &profiles)?;
         }
+
+        if !found {
+            return Err(FnoxError::ConfigNotFound {
+                message: format!(
+                    "No configuration file found in {} or any parent directory",
+                    current_dir.display()
+                ),
+                help: "Run 'fnox init' to create a configuration file".to_string(),
+            });
+        }
+
+        // Discovery must be permissive long enough to look for an inherited
+        // profile file. Once the fixed point is reached, reject inherited
+        // profiles that were neither declared nor discovered.
+        config.resolve_profiles(&requested_profiles)?;
+
+        // Find the nearest directory to cwd that contains a config file.
+        // This is the project root used for scoping the lease ledger.
+        config.project_dir = Self::find_project_dir(&current_dir, &profiles);
+        Ok(config)
     }
 
     /// Recursively search for fnox.toml files and merge them
     /// Returns (config, found_any) where found_any indicates if any config file was found
-    fn load_recursive(dir: &Path, found_any: bool) -> Result<(Self, bool)> {
-        // Get active profiles from Settings (respects: CLI flag > Env var > Default)
-        let profiles = Self::get_profiles(&[]);
-        let filenames = all_config_filenames(&profiles);
+    fn load_recursive(dir: &Path, found_any: bool, profiles: &[String]) -> Result<(Self, bool)> {
+        let filenames = all_config_filenames(profiles);
 
         // Load all existing config files in order (later files override earlier ones)
         let mut config = Self::new();
@@ -811,7 +857,14 @@ impl Config {
         for filename in &filenames {
             let path = dir.join(filename);
             if path.exists() {
-                let file_config = Self::load(&path)?;
+                let mut file_config = Self::load(&path)?;
+                if matches!(filename.as_str(), "fnox.local.toml" | ".fnox.local.toml") {
+                    let write_profile = Self::write_profile(profiles);
+                    if write_profile != "default" {
+                        file_config.scope_root_entries_to_profile(write_profile.to_string());
+                        file_config.set_source_paths(&path);
+                    }
+                }
                 config = Self::merge_configs(config, file_config)?;
                 found = true;
             }
@@ -841,7 +894,7 @@ impl Config {
 
         // If we have a parent directory, recurse up and merge
         if let Some(parent_dir) = dir.parent() {
-            let (parent_config, parent_found) = Self::load_recursive(parent_dir, found)?;
+            let (parent_config, parent_found) = Self::load_recursive(parent_dir, found, profiles)?;
             config = Self::merge_configs(parent_config, config)?;
             found = found || parent_found;
         } else {
@@ -858,9 +911,8 @@ impl Config {
 
     /// Find the nearest directory to `start` that contains a config file.
     /// Walks upward from `start` and returns the first match.
-    fn find_project_dir(start: &Path) -> Option<PathBuf> {
-        let profiles = Self::get_profiles(&[]);
-        let filenames = all_config_filenames(&profiles);
+    fn find_project_dir(start: &Path, profiles: &[String]) -> Option<PathBuf> {
+        let filenames = all_config_filenames(profiles);
         let mut dir = Some(start);
         while let Some(d) = dir {
             for filename in &filenames {
@@ -1023,6 +1075,9 @@ impl Config {
         for (name, profile) in overlay.profiles {
             if let Some(existing_profile) = merged.profiles.get_mut(&name) {
                 // Merge existing profile
+                if profile.inherits.is_some() {
+                    existing_profile.inherits = profile.inherits;
+                }
                 for (lease_name, lease) in profile.leases {
                     existing_profile.leases.insert(lease_name, lease);
                 }
@@ -1443,8 +1498,11 @@ impl Config {
         profiles: &[String],
         allow_missing: Option<&str>,
     ) -> Result<()> {
-        for profile in profiles.iter().filter(|profile| *profile != "default") {
-            if Some(profile.as_str()) != allow_missing
+        let resolved = self.resolve_profiles(profiles)?;
+        for profile in resolved.iter().filter(|profile| *profile != "default") {
+            let is_allowed_missing = Some(profile.as_str()) == allow_missing
+                && profiles.iter().any(|requested| requested == profile);
+            if !is_allowed_missing
                 && !self.profiles.contains_key(profile)
                 && !self.loaded_file_profiles.contains(profile)
             {
@@ -1455,6 +1513,109 @@ impl Config {
             }
         }
         Ok(())
+    }
+
+    /// Expand an ordered profile stack, applying inherited profiles before the
+    /// profile that names them. Profiles reached through multiple paths are
+    /// applied once at their earliest dependency-valid position.
+    pub fn resolve_profiles(&self, profiles: &[String]) -> Result<Vec<String>> {
+        self.resolve_profiles_inner(profiles, true)
+    }
+
+    /// Resolve profiles while discovering profile-specific files. Missing
+    /// inherited profiles are allowed here because their file may be what the
+    /// next fixed-point iteration discovers.
+    fn resolve_profiles_for_discovery(&self, profiles: &[String]) -> Result<Vec<String>> {
+        self.resolve_profiles_inner(profiles, false)
+    }
+
+    fn resolve_profiles_inner(
+        &self,
+        profiles: &[String],
+        validate_inherited: bool,
+    ) -> Result<Vec<String>> {
+        fn visit(
+            config: &Config,
+            profile: &str,
+            resolved: &mut Vec<String>,
+            visiting: &mut Vec<String>,
+            visited: &mut HashSet<String>,
+            force: bool,
+            validate_inherited: bool,
+        ) -> Result<()> {
+            if !env::is_valid_profile_name(profile) {
+                return Err(FnoxError::Config(format!(
+                    "Invalid inherited profile name: '{profile}'"
+                )));
+            }
+            if visited.contains(profile) && !force {
+                return Ok(());
+            }
+
+            // `default` is represented by the top-level config. A
+            // `[profiles.default]` table is ignored everywhere else and must not
+            // become an alternate inheritance entry point.
+            if profile == "default" {
+                visited.insert(profile.to_string());
+                resolved.push(profile.to_string());
+                return Ok(());
+            }
+            if validate_inherited
+                && !force
+                && !config.profiles.contains_key(profile)
+                && !config.loaded_file_profiles.contains(profile)
+            {
+                return Err(FnoxError::ProfileNotFound {
+                    profile: profile.to_string(),
+                    available_profiles: config.available_profiles(),
+                });
+            }
+            if let Some(start) = visiting.iter().position(|name| name == profile) {
+                let mut cycle = visiting[start..].to_vec();
+                cycle.push(profile.to_string());
+                return Err(FnoxError::ProfileInheritanceCycle {
+                    cycle: cycle.join(" -> "),
+                });
+            }
+
+            visiting.push(profile.to_string());
+            if let Some(profile_config) = config.profiles.get(profile) {
+                for inherited in profile_config.inherits() {
+                    visit(
+                        config,
+                        inherited,
+                        resolved,
+                        visiting,
+                        visited,
+                        false,
+                        validate_inherited,
+                    )?;
+                }
+            }
+            visiting.pop();
+
+            visited.insert(profile.to_string());
+            resolved.push(profile.to_string());
+            Ok(())
+        }
+
+        let mut resolved = Vec::new();
+        let mut visiting = Vec::new();
+        let mut visited = HashSet::new();
+        for profile in profiles {
+            // Preserve the existing behavior of explicitly repeated profiles,
+            // while deduplicating shared inherited ancestors.
+            visit(
+                self,
+                profile,
+                &mut resolved,
+                &mut visiting,
+                &mut visited,
+                true,
+                validate_inherited,
+            )?;
+        }
+        Ok(resolved)
     }
 
     /// Resolve the write-target profile.
@@ -1532,6 +1693,7 @@ impl Config {
         profiles: &[String],
         no_defaults: bool,
     ) -> Result<IndexMap<String, SecretConfig>> {
+        let profiles = self.resolve_profiles(profiles)?;
         let has_non_default = profiles.iter().any(|p| p != "default");
         let mut secrets = if !has_non_default || !no_defaults {
             self.secrets.clone()
@@ -1571,7 +1733,7 @@ impl Config {
     /// Mirrors the precedence used by [`Self::get_secrets`]: later profiles take
     /// precedence, falling back to top-level secrets unless `no_defaults` is set
     /// and at least one non-default profile is active.
-    pub fn get_secret(&self, profiles: &[String], key: &str) -> Option<&SecretConfig> {
+    pub fn get_secret(&self, profiles: &[String], key: &str) -> Result<Option<&SecretConfig>> {
         self.get_secret_with_no_defaults(profiles, key, Settings::get().no_defaults)
     }
 
@@ -1581,22 +1743,23 @@ impl Config {
         profiles: &[String],
         key: &str,
         no_defaults: bool,
-    ) -> Option<&SecretConfig> {
+    ) -> Result<Option<&SecretConfig>> {
+        let profiles = self.resolve_profiles(profiles)?;
         let has_non_default = profiles.iter().any(|p| p != "default");
 
         for profile in profiles.iter().filter(|p| *p != "default").rev() {
             if let Some(profile_config) = self.profiles.get(profile)
                 && let Some(secret) = profile_config.secrets.get(key)
             {
-                return Some(secret);
+                return Ok(Some(secret));
             }
         }
 
         if has_non_default && no_defaults {
-            return None;
+            return Ok(None);
         }
 
-        self.secrets.get(key)
+        Ok(self.secrets.get(key))
     }
 
     /// Get effective secrets (mutable) for the write target profile.
@@ -1619,7 +1782,8 @@ impl Config {
     pub fn get_leases(
         &self,
         profiles: &[String],
-    ) -> IndexMap<String, crate::lease_backends::LeaseBackendConfig> {
+    ) -> Result<IndexMap<String, crate::lease_backends::LeaseBackendConfig>> {
+        let profiles = self.resolve_profiles(profiles)?;
         let mut leases = self.leases.clone();
 
         for profile in profiles.iter().filter(|p| *p != "default") {
@@ -1628,14 +1792,15 @@ impl Config {
             }
         }
 
-        leases
+        Ok(leases)
     }
 
     /// Get effective providers for the active profile stack.
     ///
     /// Top-level providers form the base. Profile-specific providers are overlaid
     /// in order, with later profiles taking precedence.
-    pub fn get_providers(&self, profiles: &[String]) -> IndexMap<String, ProviderConfig> {
+    pub fn get_providers(&self, profiles: &[String]) -> Result<IndexMap<String, ProviderConfig>> {
+        let profiles = self.resolve_profiles(profiles)?;
         let mut providers = self.providers.clone();
 
         for profile in profiles.iter().filter(|p| *p != "default") {
@@ -1644,7 +1809,7 @@ impl Config {
             }
         }
 
-        providers
+        Ok(providers)
     }
 
     /// Get the default provider for the active profile stack.
@@ -1653,7 +1818,8 @@ impl Config {
     /// or auto-selects if there's only one provider. Top-level default_provider
     /// is used when no profile overrides it.
     pub fn get_default_provider(&self, profiles: &[String]) -> Result<Option<String>> {
-        let providers = self.get_providers(profiles);
+        let profiles = self.resolve_profiles(profiles)?;
+        let providers = self.get_providers(&profiles)?;
 
         // If no providers configured and this is a root config, return None
         if providers.is_empty() && self.root {
@@ -1834,30 +2000,13 @@ impl Config {
     /// Returns true if the provider is "plain" type.
     fn is_plain_provider(&self, secret_provider: Option<&str>, profile: &str) -> bool {
         // Get providers for this profile first (needed for auto-selection)
-        let providers = self.get_providers(&[profile.to_string()]);
+        let profiles = [profile.to_string()];
+        let providers = self.get_providers(&profiles).unwrap_or_default();
 
         // Determine which provider name to use
         let provider_name = secret_provider
             .map(String::from)
-            .or_else(|| {
-                // Try profile's default_provider first (only for non-default profiles)
-                if profile != "default" {
-                    self.profiles
-                        .get(profile)
-                        .and_then(|p| p.default_provider().map(|s| s.to_string()))
-                } else {
-                    None
-                }
-            })
-            .or_else(|| self.default_provider().map(|s| s.to_string()))
-            .or_else(|| {
-                // Auto-select if exactly one provider exists (matching get_default_provider behavior)
-                if providers.len() == 1 {
-                    providers.keys().next().cloned()
-                } else {
-                    None
-                }
-            });
+            .or_else(|| self.get_default_provider(&profiles).ok().flatten());
 
         let Some(provider_name) = provider_name else {
             return false;
@@ -1935,7 +2084,7 @@ impl Config {
 
         // Validate each profile
         for (profile_name, profile_config) in &self.profiles {
-            let providers = self.get_providers(std::slice::from_ref(profile_name));
+            let providers = self.get_providers(std::slice::from_ref(profile_name))?;
 
             // Check for profile secrets with empty values (likely a mistake, but allowed for plain provider)
             for (key, secret) in &profile_config.secrets {
@@ -2228,6 +2377,7 @@ impl ProfileConfig {
     /// Create a new profile config
     pub fn new() -> Self {
         Self {
+            inherits: None,
             leases: IndexMap::new(),
             providers: IndexMap::new(),
             default_provider: None,
@@ -2240,7 +2390,8 @@ impl ProfileConfig {
 
     /// Check if the profile is effectively empty (no serializable content)
     pub fn is_empty(&self) -> bool {
-        self.leases.is_empty()
+        self.inherits.is_none()
+            && self.leases.is_empty()
             && self.providers.is_empty()
             && self.secrets.is_empty()
             && self.default_provider().is_none()
@@ -2251,6 +2402,11 @@ impl ProfileConfig {
         self.default_provider
             .as_ref()
             .map(|s: &SpannedValue<String>| s.value().as_str())
+    }
+
+    /// Profiles inherited by this profile, in overlay order.
+    pub fn inherits(&self) -> &[String] {
+        self.inherits.as_deref().unwrap_or_default()
     }
 
     /// Get the default provider's source span (byte range in the config file).
@@ -2648,7 +2804,7 @@ value = "prod"
         .unwrap();
 
         let profiles = vec!["aws".to_string(), "prod".to_string()];
-        let providers = config.get_providers(&profiles);
+        let providers = config.get_providers(&profiles).unwrap();
         assert!(providers.contains_key("base"));
         assert!(providers.contains_key("aws_plain"));
         assert!(providers.contains_key("prod_plain"));
@@ -2670,6 +2826,245 @@ value = "prod"
             secrets.get("PROD_ONLY").and_then(SecretConfig::value),
             Some("prod")
         );
+    }
+
+    #[test]
+    fn test_profile_inheritance_expands_dependencies_before_profile() {
+        let config: Config = toml_edit::de::from_str(
+            r#"
+[profiles.shared]
+
+[profiles.database]
+inherits = ["shared"]
+
+[profiles.app]
+inherits = ["shared", "database"]
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            config.resolve_profiles(&["app".to_string()]).unwrap(),
+            vec!["shared", "database", "app"]
+        );
+    }
+
+    #[test]
+    fn test_profile_inheritance_preserves_explicit_repetition() {
+        let config: Config = toml_edit::de::from_str(
+            r#"
+[profiles.a]
+
+[profiles.b]
+inherits = ["a"]
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            config
+                .resolve_profiles(&["a".to_string(), "b".to_string(), "a".to_string()])
+                .unwrap(),
+            vec!["a", "b", "a"]
+        );
+    }
+
+    #[test]
+    fn test_profile_inheritance_detects_cycles() {
+        let config: Config = toml_edit::de::from_str(
+            r#"
+[profiles.a]
+inherits = ["b"]
+
+[profiles.b]
+inherits = ["c"]
+
+[profiles.c]
+inherits = ["a"]
+"#,
+        )
+        .unwrap();
+
+        let error = config.resolve_profiles(&["a".to_string()]).unwrap_err();
+        assert!(matches!(
+            error,
+            FnoxError::ProfileInheritanceCycle { cycle } if cycle == "a -> b -> c -> a"
+        ));
+    }
+
+    #[test]
+    fn test_profile_inheritance_rejects_invalid_names() {
+        let config: Config = toml_edit::de::from_str(
+            r#"
+[profiles.app]
+inherits = ["x/../other"]
+"#,
+        )
+        .unwrap();
+
+        let error = config.resolve_profiles(&["app".to_string()]).unwrap_err();
+        assert!(matches!(
+            error,
+            FnoxError::Config(message)
+                if message == "Invalid inherited profile name: 'x/../other'"
+        ));
+    }
+
+    #[test]
+    fn test_effective_getters_reject_missing_inherited_profile() {
+        let config: Config = toml_edit::de::from_str(
+            r#"
+[profiles.app]
+inherits = ["missing"]
+"#,
+        )
+        .unwrap();
+
+        let error = config.get_secrets(&["app".to_string()]).unwrap_err();
+        assert!(matches!(
+            error,
+            FnoxError::ProfileNotFound { profile, .. } if profile == "missing"
+        ));
+    }
+
+    #[test]
+    fn test_profile_file_content_is_scoped_to_named_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("fnox.app.toml");
+        std::fs::write(
+            &path,
+            r#"
+default_provider = "plain"
+
+[providers.plain]
+type = "plain"
+
+[leases.command]
+type = "command"
+create_command = "echo token"
+
+[secrets.KEY]
+default = "app"
+"#,
+        )
+        .unwrap();
+
+        let config = Config::load(&path).unwrap();
+        let profile = &config.profiles["app"];
+        assert!(config.secrets.is_empty());
+        assert!(config.providers.is_empty());
+        assert!(config.leases.is_empty());
+        assert_eq!(profile.default_provider(), Some("plain"));
+        assert!(profile.providers.contains_key("plain"));
+        assert!(profile.leases.contains_key("command"));
+        assert_eq!(profile.secrets["KEY"].default.as_deref(), Some("app"));
+        assert_eq!(profile.secret_sources["KEY"].as_path(), path.as_path());
+        assert_eq!(profile.provider_sources["plain"].as_path(), path.as_path());
+        assert_eq!(
+            profile.default_provider_source.as_deref(),
+            Some(path.as_path())
+        );
+    }
+
+    #[test]
+    fn test_default_profile_does_not_inherit_from_profile_table() {
+        let config: Config = toml_edit::de::from_str(
+            r#"
+[profiles.default]
+inherits = ["unexpected"]
+
+[profiles.app]
+inherits = ["default"]
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            config.resolve_profiles(&["app".to_string()]).unwrap(),
+            vec!["default", "app"]
+        );
+    }
+
+    #[test]
+    fn test_effective_config_getters_propagate_inheritance_cycles() {
+        let config: Config = toml_edit::de::from_str(
+            r#"
+[profiles.a]
+inherits = ["b"]
+
+[profiles.b]
+inherits = ["a"]
+"#,
+        )
+        .unwrap();
+        let profiles = ["a".to_string()];
+
+        assert!(matches!(
+            config.get_secret(&profiles, "KEY"),
+            Err(FnoxError::ProfileInheritanceCycle { .. })
+        ));
+        assert!(matches!(
+            config.get_providers(&profiles),
+            Err(FnoxError::ProfileInheritanceCycle { .. })
+        ));
+        assert!(matches!(
+            config.get_leases(&profiles),
+            Err(FnoxError::ProfileInheritanceCycle { .. })
+        ));
+    }
+
+    #[test]
+    fn test_find_project_dir_uses_inherited_profile_files() {
+        let root = tempfile::tempdir().unwrap();
+        let nested = root.path().join("nested");
+        std::fs::create_dir(&nested).unwrap();
+        std::fs::write(root.path().join("fnox.toml"), "").unwrap();
+        std::fs::write(nested.join("fnox.shared.toml"), "").unwrap();
+
+        assert_eq!(
+            Config::find_project_dir(&nested, &["shared".to_string()]),
+            Some(nested)
+        );
+    }
+
+    #[test]
+    fn test_profile_inheritance_validates_inherited_profiles() {
+        let config: Config = toml_edit::de::from_str(
+            r#"
+[profiles.app]
+inherits = ["missing"]
+"#,
+        )
+        .unwrap();
+
+        let error = config
+            .validate_profiles(&["app".to_string()], None)
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            FnoxError::ProfileNotFound { profile, .. } if profile == "missing"
+        ));
+    }
+
+    #[test]
+    fn test_profile_inherits_can_be_cleared_by_overlay() {
+        let base: Config = toml_edit::de::from_str(
+            r#"
+[profiles.app]
+inherits = ["shared"]
+"#,
+        )
+        .unwrap();
+        let overlay: Config = toml_edit::de::from_str(
+            r#"
+[profiles.app]
+inherits = []
+"#,
+        )
+        .unwrap();
+
+        let merged = Config::merge_configs(base, overlay).unwrap();
+        assert!(merged.profiles["app"].inherits().is_empty());
     }
 
     #[test]

@@ -52,7 +52,7 @@ impl CheckCommand {
 
                     // Check provider configuration
                     if let Some(provider) = secret_config.provider() {
-                        let providers = config.get_providers(&profile);
+                        let providers = config.get_providers(&profile)?;
                         if !providers.contains_key(provider) {
                             warnings.push(format!(
                                 "Secret '{}' references unknown provider '{}'",
@@ -140,7 +140,7 @@ impl CheckCommand {
         }
 
         // Check providers
-        let providers = config.get_providers(&profile);
+        let providers = config.get_providers(&profile)?;
         if providers.is_empty() {
             warnings.push("No providers configured".to_string());
         } else {

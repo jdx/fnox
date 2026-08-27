@@ -266,7 +266,12 @@ fn complete_provider(
     Box::pin(async move {
         let config = completion_config(&ctx);
         let profiles = Config::get_profiles(&completion_profiles(&ctx));
-        candidates(config.get_providers(&profiles).into_keys())
+        candidates(
+            config
+                .get_providers(&profiles)
+                .unwrap_or_default()
+                .into_keys(),
+        )
     })
 }
 

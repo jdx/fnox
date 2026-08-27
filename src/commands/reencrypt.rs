@@ -47,7 +47,7 @@ impl ReencryptCommand {
 
         let profile_display = Config::display_profiles(&profile);
 
-        let providers = merged_config.get_providers(&profile);
+        let providers = merged_config.get_providers(&profile)?;
         let all_secrets = merged_config.get_secrets(&profile)?;
 
         let filter_regex = if let Some(ref filter) = self.filter {

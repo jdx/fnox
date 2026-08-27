@@ -83,7 +83,7 @@ impl SyncCommand {
         };
 
         // Verify target provider exists and has Encryption capability
-        let providers = merged_config.get_providers(&profile);
+        let providers = merged_config.get_providers(&profile)?;
         let provider_config = providers.get(&target_provider_name).ok_or_else(|| {
             FnoxError::ProviderNotConfigured {
                 provider: target_provider_name.clone(),

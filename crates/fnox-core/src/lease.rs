@@ -343,7 +343,10 @@ pub async fn find_encryption_provider(
         _ => return EncryptionProviderResult::NotConfigured,
     };
 
-    let providers_map = config.get_providers(profile);
+    let providers_map = match config.get_providers(profile) {
+        Ok(providers) => providers,
+        Err(error) => return EncryptionProviderResult::Unavailable(provider_name, error),
+    };
     let provider_config = match providers_map.get(&provider_name) {
         Some(c) => c,
         None => return EncryptionProviderResult::NotConfigured,

@@ -133,6 +133,14 @@ pub enum FnoxError {
         available_profiles: Vec<String>,
     },
 
+    #[error("Profile inheritance cycle detected: {cycle}")]
+    #[diagnostic(
+        code(fnox::profile::inheritance_cycle),
+        help("Remove one of the inherits entries in the cycle"),
+        url("https://fnox.jdx.dev/guide/profiles")
+    )]
+    ProfileInheritanceCycle { cycle: String },
+
     // ========================================================================
     // Secret Errors
     // ========================================================================

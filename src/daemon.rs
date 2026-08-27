@@ -953,7 +953,7 @@ async fn process_request(
                 req.non_interactive,
             );
             let config = Config::load_smart(&req.config)?;
-            let Some(secret_config) = config.get_secret(&req.profile, &req.key).cloned() else {
+            let Some(secret_config) = config.get_secret(&req.profile, &req.key)?.cloned() else {
                 return Ok(Response::Resolved {
                     values: [(req.key, None)].into_iter().collect(),
                 });
@@ -1023,7 +1023,7 @@ async fn foreground_resolution_if_needed(
     }
 
     let fingerprint = config_fingerprint(config, &req.env)?;
-    let providers = config.get_providers(profile);
+    let providers = config.get_providers(profile)?;
     let default_provider = cache_policy_default_provider(config, profile, &providers);
     let state = state.lock().await;
     let mut cached_values = IndexMap::new();
@@ -1066,7 +1066,7 @@ async fn store_resolved_values(
         return Ok(());
     }
 
-    let providers = config.get_providers(profile);
+    let providers = config.get_providers(profile)?;
     let default_provider = cache_policy_default_provider(config, profile, &providers);
     let mut state = state.lock().await;
     for (key, secret) in secrets {
@@ -1104,7 +1104,7 @@ async fn resolve_with_cache(
     state: std::sync::Arc<Mutex<DaemonState>>,
 ) -> Result<IndexMap<String, Option<String>>> {
     let fingerprint = config_fingerprint(config, &req.env)?;
-    let providers = config.get_providers(profile);
+    let providers = config.get_providers(profile)?;
     let default_provider = cache_policy_default_provider(config, profile, &providers);
     let mut results = IndexMap::new();
     let mut misses = IndexMap::new();
@@ -1151,6 +1151,9 @@ fn cache_policy_default_provider<'a>(
     profile: &[String],
     providers: &'a IndexMap<String, ProviderConfig>,
 ) -> Option<&'a str> {
+    let profile = config
+        .resolve_profiles(profile)
+        .unwrap_or_else(|_| profile.to_vec());
     for p in profile.iter().filter(|p| *p != "default").rev() {
         if let Some(profile_config) = config.profiles.get(p)
             && let Some(default_provider) = profile_config.default_provider()
@@ -1215,6 +1218,13 @@ fn config_fingerprint(config: &Config, env: &[(String, String)]) -> Result<Strin
     }
     if let Some(path) = &config.default_provider_source {
         paths.insert(path.clone());
+    }
+    for profile in config.profiles.values() {
+        paths.extend(profile.provider_sources.values().cloned());
+        paths.extend(profile.secret_sources.values().cloned());
+        if let Some(path) = &profile.default_provider_source {
+            paths.insert(path.clone());
+        }
     }
     if let Some(project_dir) = &config.project_dir {
         for name in crate::config::all_config_filenames(&[]) {

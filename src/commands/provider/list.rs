@@ -14,7 +14,7 @@ impl ListCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
         tracing::debug!("Listing providers");
         let profiles = Config::get_profiles(cli.profile.as_slice());
-        let providers = config.get_providers(&profiles);
+        let providers = config.get_providers(&profiles)?;
 
         if providers.is_empty() {
             return Ok(());
