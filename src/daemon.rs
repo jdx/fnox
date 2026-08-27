@@ -1151,6 +1151,9 @@ fn cache_policy_default_provider<'a>(
     profile: &[String],
     providers: &'a IndexMap<String, ProviderConfig>,
 ) -> Option<&'a str> {
+    let profile = config
+        .resolve_profiles(profile)
+        .unwrap_or_else(|_| profile.to_vec());
     for p in profile.iter().filter(|p| *p != "default").rev() {
         if let Some(profile_config) = config.profiles.get(p)
             && let Some(default_provider) = profile_config.default_provider()

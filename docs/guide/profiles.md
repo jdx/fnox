@@ -119,6 +119,39 @@ LOG_LEVEL = { default = "warn" }  # Overrides LOG_LEVEL
 # Still inherits API_TIMEOUT="30" from top level
 ```
 
+Named profiles can also inherit other profiles. Inherited profiles are applied
+in list order, followed by the profile itself, so later entries and direct
+profile settings take precedence:
+
+```toml
+[profiles.openai.secrets]
+OPENAI_API_KEY = { provider = "age", value = "encrypted-key..." }
+
+[profiles.database-local.secrets]
+DATABASE_PASSWORD = { provider = "age", value = "encrypted-password..." }
+
+[profiles.api-local]
+inherits = ["openai", "database-local"]
+
+[profiles.openai-john.secrets]
+OPENAI_API_KEY = { provider = "age-john", value = "encrypted-john-key..." }
+
+[profiles.api-local-john]
+inherits = ["api-local", "openai-john"]
+```
+
+The application can then select its complete secret set with one stable name:
+
+```bash
+fnox -P api-local exec -- ./api
+fnox -P api-local-john exec -- ./api
+```
+
+Inheritance includes secrets, providers, lease backends, and the default
+provider. Nested inheritance is supported; cycles and unknown inherited
+profiles are reported as configuration errors. `--no-defaults` still controls
+whether top-level secrets are included.
+
 This reduces duplication for secrets shared across environments.
 
 ## Profile-Specific Providers

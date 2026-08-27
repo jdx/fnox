@@ -568,6 +568,21 @@ fnox exec --profile production --no-defaults -- ./deploy.sh
 
 With `--no-defaults`, only `[profiles.<name>.secrets]` are used for the selected profile.
 
+Profiles can selectively inherit other named profiles as an ordered overlay:
+
+```toml
+[profiles.api-local]
+inherits = ["openai", "database-local", "no-log-upload"]
+
+[profiles.api-local-john]
+inherits = ["api-local", "openai-john"]
+```
+
+Inherited profiles are applied before the profile that declares `inherits`.
+Later inherited profiles override earlier ones, and declarations directly on
+the selected profile override all of them. Inheritance includes secrets,
+providers, lease backends, and `default_provider`.
+
 ## Complete Example
 
 ```toml
