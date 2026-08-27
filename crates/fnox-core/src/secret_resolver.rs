@@ -536,6 +536,20 @@ async fn resolve_secret_raw(
     key: &str,
     secret_config: &SecretConfig,
 ) -> Result<Option<String>> {
+    let value = resolve_secret_raw_value(config, profile, key, secret_config).await?;
+    if value.is_some() {
+        return Ok(value);
+    }
+
+    handle_missing_secret(key, secret_config, config)
+}
+
+async fn resolve_secret_raw_value(
+    config: &Config,
+    profile: &[String],
+    key: &str,
+    secret_config: &SecretConfig,
+) -> Result<Option<String>> {
     // Priority 1: Provider (if specified and has a value)
     let provider_value = match try_resolve_from_provider(config, profile, secret_config).await {
         Ok(value) => value,
@@ -587,8 +601,7 @@ async fn resolve_secret_raw(
         return Ok(Some(processed));
     }
 
-    // No value found - handle based on if_missing with priority chain
-    handle_missing_secret(key, secret_config, config)
+    Ok(None)
 }
 
 async fn try_resolve_from_provider(
@@ -733,10 +746,7 @@ fn handle_missing_secret(
     let if_missing = resolve_if_missing_behavior(secret_config, config);
 
     match if_missing {
-        IfMissing::Error => Err(FnoxError::Config(format!(
-            "Secret '{}' not found and no default provided",
-            key
-        ))),
+        IfMissing::Error => Err(missing_secret_error(key)),
         IfMissing::Warn => {
             eprintln!(
                 "Warning: Secret '{}' not found and no default provided",
@@ -746,6 +756,13 @@ fn handle_missing_secret(
         }
         IfMissing::Ignore => Ok(None),
     }
+}
+
+fn missing_secret_error(key: &str) -> FnoxError {
+    FnoxError::Config(format!(
+        "Secret '{}' not found and no default provided",
+        key
+    ))
 }
 
 fn resolve_default_value(
@@ -849,7 +866,7 @@ pub fn include_resolution_dependencies(
     Ok(requested)
 }
 
-/// Values and provider diagnostics collected by best-effort batch resolution.
+/// Values and diagnostics collected by best-effort batch resolution.
 #[derive(Debug, Default)]
 pub struct BestEffortBatchResolution {
     pub values: IndexMap<String, Option<String>>,
@@ -857,7 +874,7 @@ pub struct BestEffortBatchResolution {
 }
 
 /// Resolves multiple secrets while retaining successful values and per-secret diagnostics
-/// when provider-backed siblings fail. Structural configuration and post-processing errors
+/// when recoverable secret lookups fail. Structural configuration and post-processing errors
 /// still fail the batch.
 pub async fn resolve_secrets_batch_best_effort(
     config: &Config,
@@ -1236,17 +1253,26 @@ async fn resolve_level(
     let no_provider_results: Vec<Result<_>> = stream::iter(level_no_provider)
         .map(|key| async move {
             let secret_config = &secrets[&key];
-            let value =
-                resolve_no_provider_secret(config, profile, &key, secret_config, resolved_so_far)
-                    .await?;
-            Ok((key, value))
+            let (value, error) = resolve_no_provider_secret(
+                config,
+                profile,
+                &key,
+                secret_config,
+                resolved_so_far,
+                failure_mode,
+            )
+            .await?;
+            Ok((key, value, error))
         })
         .buffer_unordered(10)
         .collect()
         .await;
 
     for result in no_provider_results {
-        let (key, value) = result?;
+        let (key, value, error) = result?;
+        if let Some(error) = error {
+            level_resolution.errors.insert(key.clone(), error);
+        }
         level_resolution.values.insert(key, value);
     }
 
@@ -1259,12 +1285,24 @@ async fn resolve_no_provider_secret(
     key: &str,
     secret_config: &SecretConfig,
     resolved_so_far: &HashMap<String, Option<String>>,
-) -> Result<Option<String>> {
+    failure_mode: BatchFailureMode,
+) -> Result<(Option<String>, Option<String>)> {
     if let Some(value) = resolve_default_value(key, secret_config, resolved_so_far)? {
-        return Ok(Some(value));
+        return Ok((Some(value), None));
     }
 
-    resolve_secret_raw(config, profile, key, secret_config).await
+    let value = resolve_secret_raw_value(config, profile, key, secret_config).await?;
+    if value.is_some() {
+        return Ok((value, None));
+    }
+
+    if failure_mode == BatchFailureMode::BestEffort
+        && resolve_if_missing_behavior(secret_config, config) == IfMissing::Error
+    {
+        return Ok((None, Some(missing_secret_error(key).to_string())));
+    }
+
+    Ok((handle_missing_secret(key, secret_config, config)?, None))
 }
 
 /// Resolve all secrets for a single provider using batch operations
@@ -2278,6 +2316,46 @@ mod tests {
             Some(&Some("fallback".to_string()))
         );
         assert!(errors.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_best_effort_batch_retains_missing_no_provider_diagnostic() {
+        const MISSING: &str = "FNOX_TEST_BEST_EFFORT_MISSING";
+
+        env::remove_var(MISSING);
+        let config = Config::new();
+        let mut missing = SecretConfig::new();
+        missing.if_missing = Some(IfMissing::Error);
+        let secrets = IndexMap::from([
+            (MISSING.to_string(), missing),
+            (
+                "DEPENDENT".to_string(),
+                default_secret("after-${FNOX_TEST_BEST_EFFORT_MISSING}"),
+            ),
+        ]);
+
+        let resolution = resolve_secrets_batch_best_effort(&config, &profile("default"), &secrets)
+            .await
+            .unwrap();
+
+        assert_eq!(resolution.values.get(MISSING), Some(&None));
+        assert!(resolution.errors[MISSING].contains("not found and no default provided"));
+        assert_eq!(
+            resolution
+                .values
+                .get("DEPENDENT")
+                .and_then(|value| value.as_deref()),
+            Some("after-")
+        );
+
+        let error = resolve_secrets_batch(&config, &profile("default"), &secrets)
+            .await
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("not found and no default provided")
+        );
     }
 
     #[tokio::test]
