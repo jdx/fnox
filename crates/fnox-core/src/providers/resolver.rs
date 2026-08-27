@@ -246,18 +246,12 @@ pub fn resolve_provider_ref<'a>(
             provider_config.env_dependencies(),
             &ctx.pre_resolved,
         );
-        let value = if values.is_empty() {
-            let _access = PROVIDER_ENV_ACCESS.read().await;
+        let value = env::with_provider_env(&values, || async {
             let provider =
                 prepared_provider.instantiate(config, profile, &provider_ref.provider)?;
-            provider.get_secret(&provider_ref.value).await?
-        } else {
-            let _access = PROVIDER_ENV_ACCESS.write().await;
-            let _env = ProviderEnvOverlay::apply(&values);
-            let provider =
-                prepared_provider.instantiate(config, profile, &provider_ref.provider)?;
-            provider.get_secret(&provider_ref.value).await?
-        };
+            provider.get_secret(&provider_ref.value).await
+        })
+        .await?;
 
         Ok(Some(value))
     })
@@ -328,18 +322,12 @@ fn resolve_secret_ref<'a>(
                         secret_provider_config.env_dependencies(),
                         &ctx.pre_resolved,
                     );
-                    if values.is_empty() {
-                        let _access = PROVIDER_ENV_ACCESS.read().await;
+                    return env::with_provider_env(&values, || async {
                         let provider =
                             prepared_provider.instantiate(config, profile, secret_provider_name)?;
-                        return provider.get_secret(provider_value).await;
-                    }
-
-                    let _access = PROVIDER_ENV_ACCESS.write().await;
-                    let _env = ProviderEnvOverlay::apply(&values);
-                    let provider =
-                        prepared_provider.instantiate(config, profile, secret_provider_name)?;
-                    return provider.get_secret(provider_value).await;
+                        provider.get_secret(provider_value).await
+                    })
+                    .await;
                 } else {
                     // Find similar provider names for suggestion
                     let available_providers: Vec<_> =

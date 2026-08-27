@@ -53,6 +53,23 @@ impl ProviderEnvOverlay {
     }
 }
 
+/// Run provider work while isolating its declared process-environment values.
+/// Resolve nested provider dependencies first because this guard is not reentrant.
+pub(crate) async fn with_provider_env<T, F, Fut>(values: &[(String, String)], run: F) -> T
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = T>,
+{
+    if values.is_empty() {
+        let _access = PROVIDER_ENV_ACCESS.read().await;
+        run().await
+    } else {
+        let _access = PROVIDER_ENV_ACCESS.write().await;
+        let _env = ProviderEnvOverlay::apply(values);
+        run().await
+    }
+}
+
 impl Drop for ProviderEnvOverlay {
     fn drop(&mut self) {
         for (key, value) in self.previous.drain(..).rev() {

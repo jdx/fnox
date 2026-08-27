@@ -1,4 +1,4 @@
-use crate::auth_prompt::prompt_and_run_auth;
+use crate::auth_prompt::{prompt_for_auth_command, run_confirmed_auth_command};
 use crate::config::{Config, IfMissing, SecretConfig};
 use crate::env::{self, PROVIDER_ENV_ACCESS, ProviderEnvOverlay};
 use crate::error::{FnoxError, Result};
@@ -684,8 +684,13 @@ async fn prompt_and_run_auth_guarded(
     provider_name: &str,
     error: &FnoxError,
 ) -> Result<bool> {
-    let _access = PROVIDER_ENV_ACCESS.read().await;
-    prompt_and_run_auth(config, provider_config, provider_name, error)
+    let Some(auth_command) =
+        prompt_for_auth_command(config, provider_config, provider_name, error)?
+    else {
+        return Ok(false);
+    };
+
+    env::with_provider_env(&[], || async { run_confirmed_auth_command(auth_command) }).await
 }
 
 /// Helper to get a single secret from a provider without auth retry logic.
@@ -1581,18 +1586,20 @@ async fn prompt_and_run_batch_auth(
     ctx: &ProviderBatchContext<'_>,
     error: &FnoxError,
 ) -> Result<bool> {
+    let Some(auth_command) =
+        prompt_for_auth_command(ctx.config, ctx.provider_config, ctx.provider_name, error)?
+    else {
+        return Ok(false);
+    };
+
     let values = ProviderEnvOverlay::resolved_values(
         ctx.provider_config.env_dependencies(),
         ctx.resolved_so_far,
     );
-    if values.is_empty() {
-        let _access = PROVIDER_ENV_ACCESS.read().await;
-        prompt_and_run_auth(ctx.config, ctx.provider_config, ctx.provider_name, error)
-    } else {
-        let _access = PROVIDER_ENV_ACCESS.write().await;
-        let _env = ProviderEnvOverlay::apply(&values);
-        prompt_and_run_auth(ctx.config, ctx.provider_config, ctx.provider_name, error)
-    }
+    env::with_provider_env(&values, || async {
+        run_confirmed_auth_command(auth_command)
+    })
+    .await
 }
 
 /// Helper to get multiple secrets in batch from a provider without auth retry logic.
@@ -1625,16 +1632,11 @@ async fn try_get_secrets_batch(
         ctx.resolved_so_far,
     );
 
-    if values.is_empty() {
-        let _access = PROVIDER_ENV_ACCESS.read().await;
+    env::with_provider_env(&values, || async {
         let provider = prepared_provider.instantiate(ctx.config, ctx.profile, ctx.provider_name)?;
         Ok(provider.get_secrets_batch(provider_secrets).await)
-    } else {
-        let _access = PROVIDER_ENV_ACCESS.write().await;
-        let _env = ProviderEnvOverlay::apply(&values);
-        let provider = prepared_provider.instantiate(ctx.config, ctx.profile, ctx.provider_name)?;
-        Ok(provider.get_secrets_batch(provider_secrets).await)
-    }
+    })
+    .await
 }
 
 /// Process batch results and populate the results map
@@ -2278,8 +2280,8 @@ mod tests {
         assert!(errors.is_empty());
     }
 
-    #[test]
-    fn test_scoped_provider_env_restores_declared_dependencies() {
+    #[tokio::test]
+    async fn test_scoped_provider_env_restores_declared_dependencies() {
         const EXISTING: &str = "FNOX_TEST_SCOPED_PROVIDER_EXISTING";
         const ABSENT: &str = "FNOX_TEST_SCOPED_PROVIDER_ABSENT";
         const UNRELATED: &str = "FNOX_TEST_SCOPED_PROVIDER_UNRELATED";
@@ -2297,17 +2299,60 @@ mod tests {
         assert_eq!(values.len(), 2);
         assert!(values.iter().all(|(key, _)| key != UNRELATED));
 
-        {
-            let _guard = ProviderEnvOverlay::apply(&values);
+        env::with_provider_env(&values, || async {
             assert_eq!(env::var(EXISTING).as_deref(), Ok("replacement"));
             assert_eq!(env::var(ABSENT).as_deref(), Ok("temporary"));
             assert!(env::var_os(UNRELATED).is_none());
-        }
+        })
+        .await;
 
         assert_eq!(env::var(EXISTING).as_deref(), Ok("original"));
         assert!(env::var_os(ABSENT).is_none());
         assert!(env::var_os(UNRELATED).is_none());
         env::remove_var(EXISTING);
+    }
+
+    #[tokio::test]
+    async fn test_batch_auth_prompt_checks_before_acquiring_provider_env_access() {
+        let config = Config::new();
+        let provider_config = ProviderConfig::OnePassword {
+            vault: crate::providers::OptionStringOrSecretRef::literal("default"),
+            account: crate::providers::OptionStringOrSecretRef::none(),
+            token: crate::providers::OptionStringOrSecretRef::none(),
+            auth_command: None,
+            daemon_cache: None,
+        };
+        let secrets = IndexMap::new();
+        let profile = profile("default");
+        let resolved = HashMap::from([(
+            "OP_SERVICE_ACCOUNT_TOKEN".to_string(),
+            Some("token".to_string()),
+        )]);
+        let ctx = ProviderBatchContext {
+            config: &config,
+            profile: &profile,
+            secrets: &secrets,
+            provider_name: "1password",
+            provider_config: &provider_config,
+            resolved_so_far: &resolved,
+            failure_mode: BatchFailureMode::FailFast,
+        };
+        let error = provider_secret_not_found("TEST");
+        assert!(
+            !ProviderEnvOverlay::resolved_values(provider_config.env_dependencies(), &resolved)
+                .is_empty()
+        );
+
+        let _access = PROVIDER_ENV_ACCESS.write().await;
+        let prompted = tokio::time::timeout(
+            std::time::Duration::from_millis(20),
+            prompt_and_run_batch_auth(&ctx, &error),
+        )
+        .await
+        .expect("auth validation should not wait for provider environment access")
+        .unwrap();
+
+        assert!(!prompted);
     }
 
     #[tokio::test]

@@ -20,16 +20,31 @@ pub fn prompt_and_run_auth(
     provider_name: &str,
     error: &FnoxError,
 ) -> Result<bool> {
-    if !error.is_auth_error() {
+    let Some(auth_command) =
+        prompt_for_auth_command(config, provider_config, provider_name, error)?
+    else {
         return Ok(false);
+    };
+
+    run_confirmed_auth_command(auth_command)
+}
+
+pub(crate) fn prompt_for_auth_command<'a>(
+    config: &Config,
+    provider_config: &'a ProviderConfig,
+    provider_name: &str,
+    error: &FnoxError,
+) -> Result<Option<&'a str>> {
+    if !error.is_auth_error() {
+        return Ok(None);
     }
 
     if !config.should_prompt_auth() {
-        return Ok(false);
+        return Ok(None);
     }
 
     let Some(auth_command) = provider_config.default_auth_command() else {
-        return Ok(false);
+        return Ok(None);
     };
 
     // Show the error and prompt
@@ -45,13 +60,16 @@ pub fn prompt_and_run_auth(
         .map_err(|e| FnoxError::Provider(format!("Failed to show prompt: {}", e)))?;
 
     if !user_confirmed {
-        return Ok(false);
+        return Ok(None);
     }
 
-    // Run the auth command
+    Ok(Some(auth_command))
+}
+
+pub(crate) fn run_confirmed_auth_command(auth_command: &str) -> Result<bool> {
     eprintln!("Running: {}", auth_command);
 
-    let status = run_auth_command(auth_command);
+    let status = execute_auth_command(auth_command);
 
     match status {
         Ok(exit_status) if exit_status.success() => {
@@ -69,7 +87,7 @@ pub fn prompt_and_run_auth(
     }
 }
 
-fn run_auth_command(auth_command: &str) -> std::io::Result<std::process::ExitStatus> {
+fn execute_auth_command(auth_command: &str) -> std::io::Result<std::process::ExitStatus> {
     if cfg!(target_os = "windows") {
         Command::new("cmd")
             .args(["/C", auth_command])
@@ -133,7 +151,7 @@ mod tests {
         const MARKER: &str = "auth-command-output-marker";
 
         if std::env::var(CHILD_ENV).ok().as_deref() == Some("1") {
-            run_auth_command(&format!("echo {MARKER}")).unwrap();
+            execute_auth_command(&format!("echo {MARKER}")).unwrap();
             return;
         }
 
