@@ -377,11 +377,14 @@ pub fn handle_provider_error(
     }
 }
 
-fn log_provider_default_fallback(key: &str, error: &FnoxError) {
-    if matches!(
-        error,
-        FnoxError::ProviderNotConfigured { .. } | FnoxError::ProviderNotConfiguredWithSource { .. }
-    ) {
+fn log_provider_default_fallback(key: &str, error: &FnoxError, if_missing: IfMissing) {
+    if if_missing == IfMissing::Ignore
+        || matches!(
+            error,
+            FnoxError::ProviderNotConfigured { .. }
+                | FnoxError::ProviderNotConfiguredWithSource { .. }
+        )
+    {
         tracing::debug!(
             "Falling back to default value for secret '{}' after provider resolution failed: {}",
             key,
@@ -504,11 +507,11 @@ async fn resolve_interpolated_default_value(
         return Ok(None);
     }
 
-    let subset = collect_interpolation_closure(config, profile, key, &secrets)?;
-    let mut resolved = resolve_secrets_batch(config, profile, &subset).await?;
-    if let Some(Some(value)) = resolved.shift_remove(key) {
-        return Ok(Some(value));
-    }
+    let mut dependencies = collect_interpolation_closure(config, profile, key, &secrets)?;
+    // The caller has already attempted the root secret's provider. Resolve only
+    // the secrets referenced by its default so the provider is not retried.
+    dependencies.shift_remove(key);
+    let resolved = resolve_secrets_batch(config, profile, &dependencies).await?;
     let resolved_context: HashMap<String, Option<String>> = resolved.into_iter().collect();
     let default = render_default_template(key, default, &resolved_context)?;
     Ok(Some(apply_post_processing(default, secret_config)?))
@@ -524,7 +527,11 @@ async fn resolve_secret_raw(
     let provider_value = match try_resolve_from_provider(config, profile, secret_config).await {
         Ok(value) => value,
         Err(error) if secret_config.default.is_some() => {
-            log_provider_default_fallback(key, &error);
+            log_provider_default_fallback(
+                key,
+                &error,
+                resolve_if_missing_behavior(secret_config, config),
+            );
             None
         }
         Err(error) => return Err(error),
@@ -1117,6 +1124,7 @@ async fn resolve_provider_batch(
                 resolve_default_fallbacks(&fallback_keys, secrets, resolved_so_far, &mut results)?;
             for (key, _) in &provider_secrets {
                 if fallback_resolved.contains(key) {
+                    let secret_config = &secrets[key];
                     log_provider_default_fallback(
                         key,
                         &FnoxError::ProviderNotConfigured {
@@ -1125,6 +1133,7 @@ async fn resolve_provider_batch(
                             config_path: None,
                             suggestion: suggestion.clone(),
                         },
+                        resolve_if_missing_behavior(secret_config, config),
                     );
                     continue;
                 }
@@ -1159,12 +1168,14 @@ async fn resolve_provider_batch(
             resolve_default_fallbacks(&fallback_keys, secrets, resolved_so_far, &mut results)?;
         for (key, _) in &provider_secrets {
             if fallback_resolved.contains(key) {
+                let secret_config = &secrets[key];
                 log_provider_default_fallback(
                     key,
                     &FnoxError::Provider(format!(
                         "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
                         provider_name
                     )),
+                    resolve_if_missing_behavior(secret_config, config),
                 );
                 continue;
             }
@@ -1313,7 +1324,12 @@ fn handle_batch_error(
         resolve_default_fallbacks(&fallback_keys, secrets, resolved_so_far, results)?;
     for (key, _) in provider_secrets {
         if fallback_resolved.contains(key) {
-            log_provider_default_fallback(key, error);
+            let secret_config = &secrets[key];
+            log_provider_default_fallback(
+                key,
+                error,
+                resolve_if_missing_behavior(secret_config, config),
+            );
             continue;
         }
 
@@ -1404,7 +1420,12 @@ fn process_batch_results(
 
     for (key, e) in failed {
         if fallback_resolved.contains(&key) {
-            log_provider_default_fallback(&key, &e);
+            let secret_config = &secrets[&key];
+            log_provider_default_fallback(
+                &key,
+                &e,
+                resolve_if_missing_behavior(secret_config, config),
+            );
             continue;
         }
 

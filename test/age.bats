@@ -9,6 +9,52 @@ teardown() {
 	_common_teardown
 }
 
+@test "quiet interpolated fallback tries the unavailable age secret once" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local readwrite_keygen_output readonly_keygen_output
+	readwrite_keygen_output=$(age-keygen -o readwrite-key.txt 2>&1)
+	readonly_keygen_output=$(age-keygen -o readonly-key.txt 2>&1)
+	local readwrite_public readonly_public readwrite_private readonly_private
+	readwrite_public=$(echo "$readwrite_keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+	readonly_public=$(echo "$readonly_keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+	readwrite_private=$(grep "^AGE-SECRET-KEY" readwrite-key.txt)
+	readonly_private=$(grep "^AGE-SECRET-KEY" readonly-key.txt)
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.readwrite]
+type = "age"
+recipients = ["$readwrite_public"]
+
+[providers.readonly]
+type = "age"
+recipients = ["$readonly_public"]
+
+[secrets]
+EOF
+
+	export FNOX_AGE_KEY=$readwrite_private
+	run "$FNOX_BIN" set AZURE_STORAGE_SAS_TOKEN readwrite --provider readwrite \
+		--default '${DVC_READONLY_SAS_TOKEN}' --if-missing ignore
+	assert_success
+
+	export FNOX_AGE_KEY=$readonly_private
+	run "$FNOX_BIN" set DVC_READONLY_SAS_TOKEN readonly --provider readonly
+	assert_success
+
+	run env FNOX_DAEMON=off "$FNOX_BIN" get AZURE_STORAGE_SAS_TOKEN
+	assert_success
+	assert_output "readonly"
+
+	run env FNOX_DAEMON=off RUST_LOG=debug "$FNOX_BIN" get AZURE_STORAGE_SAS_TOKEN
+	assert_success
+	[[ $(grep -c "Falling back to default value for secret 'AZURE_STORAGE_SAS_TOKEN'" <<<"$output") -eq 1 ]]
+}
+
 @test "decrypts using FNOX_AGE_KEY environment variable" {
 	# Skip if age not installed
 	if ! command -v age-keygen >/dev/null 2>&1; then
