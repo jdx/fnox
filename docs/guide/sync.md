@@ -49,6 +49,12 @@ Now entering the directory is instant — secrets are decrypted locally from age
 4. It writes the encrypted cache into `fnox.local.toml` as a `sync` field on each secret
 
 When fnox resolves secrets, it checks for a `sync` field first and uses that instead of calling the original provider.
+When refreshing a cache created with `--local-file`, fnox omits local secret entries that
+already contain a `sync` cache while selecting refresh sources, so the previous cache snapshot
+cannot shadow current source configuration. Other local settings still apply, including
+ordinary secret overrides, target provider definitions, and profile inheritance.
+A full refresh also removes cached entries that no longer have an eligible source secret.
+Refreshes restricted by keys, `--source`, or `--filter` leave other cached entries unchanged.
 
 ## Basic Usage
 

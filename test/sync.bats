@@ -159,6 +159,305 @@ EOF
 	assert_output "remote-secret-value"
 }
 
+@test "fnox sync --local-file refreshes from updated source config" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local keygen_output
+	keygen_output=$(age-keygen -o key.txt 2>&1)
+	local public_key
+	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+	export FNOX_AGE_KEY
+	FNOX_AGE_KEY=$(grep "^AGE-SECRET-KEY" key.txt)
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.source]
+type = "plain"
+
+[secrets]
+MY_SECRET = { provider = "source", value = "first", if_missing = "error" }
+EOF
+	cat >fnox.local.toml <<EOF
+[providers.age]
+type = "age"
+recipients = ["$public_key"]
+EOF
+
+	assert_fnox_success sync -p age --local-file --force
+	assert_fnox_success get MY_SECRET
+	assert_output "first"
+
+	sed -i.bak 's/value = "first"/value = "second"/' fnox.toml
+	assert_fnox_success sync -p age --local-file --force
+	assert_fnox_success get MY_SECRET
+	assert_output "second"
+
+	sed -i.bak '/MY_SECRET =/d' fnox.toml
+	assert_fnox_success sync -p age --local-file --force
+	assert_output --partial "Removed 1 stale entries from the local cache"
+	run grep 'MY_SECRET' fnox.local.toml
+	assert_failure
+}
+
+@test "fnox sync --local-file resolves provider secret references from updated source config" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local source_public_key
+	source_public_key=$(age-keygen -o source-key.txt 2>&1 | grep "^Public key:" | cut -d' ' -f3)
+	local cache_public_key
+	cache_public_key=$(age-keygen -o cache-key.txt 2>&1 | grep "^Public key:" | cut -d' ' -f3)
+	local first_ciphertext
+	first_ciphertext=$(printf '%s' 'first' | age -r "$source_public_key" | base64 | tr -d '\n')
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.source]
+type = "plain"
+
+[providers.source-age]
+type = "age"
+recipients = ["$source_public_key"]
+key_file = { secret = "SOURCE_KEY_FILE" }
+
+[secrets]
+SOURCE_KEY_FILE = { provider = "source", value = "source-key.txt", if_missing = "error" }
+MY_SECRET = { provider = "source-age", value = "$first_ciphertext", if_missing = "error" }
+EOF
+	cat >fnox.local.toml <<EOF
+[providers.cache-age]
+type = "age"
+recipients = ["$cache_public_key"]
+key_file = { secret = "CACHE_KEY_FILE" }
+
+[secrets]
+CACHE_KEY_FILE = { default = "cache-key.txt" }
+EOF
+
+	assert_fnox_success sync -p cache-age --local-file --force
+
+	local next_source_public_key
+	next_source_public_key=$(age-keygen -o next-source-key.txt 2>&1 | grep "^Public key:" | cut -d' ' -f3)
+	local next_ciphertext
+	next_ciphertext=$(printf '%s' 'second' | age -r "$next_source_public_key" | base64 | tr -d '\n')
+	sed -i.bak 's|value = "source-key.txt"|value = "next-source-key.txt"|' fnox.toml
+	sed -i.bak "s|recipients = \[\"$source_public_key\"\]|recipients = [\"$next_source_public_key\"]|" fnox.toml
+	sed -i.bak "s|value = \"$first_ciphertext\"|value = \"$next_ciphertext\"|" fnox.toml
+
+	assert_fnox_success sync -p cache-age --local-file --force
+	assert_fnox_success get MY_SECRET
+	assert_output "second"
+}
+
+@test "fnox sync --local-file keeps profile caches distinct" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local keygen_output
+	keygen_output=$(age-keygen -o key.txt 2>&1)
+	local public_key
+	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+	export FNOX_AGE_KEY
+	FNOX_AGE_KEY=$(grep "^AGE-SECRET-KEY" key.txt)
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.source]
+type = "plain"
+
+[secrets]
+MY_SECRET = { provider = "source", value = "default", if_missing = "error" }
+
+[profiles.development.secrets]
+MY_SECRET = { provider = "source", value = "development", if_missing = "error" }
+EOF
+	cat >fnox.local.toml <<EOF
+[providers.age]
+type = "age"
+recipients = ["$public_key"]
+EOF
+
+	assert_fnox_success sync -p age --local-file --force
+	assert_fnox_success --profile development sync -p age --local-file --force
+	assert_fnox_success --profile development get MY_SECRET
+	assert_output "development"
+
+	sed -i.bak '/MY_SECRET =/d' fnox.toml
+	assert_fnox_success --profile development sync -p age --local-file --force
+	assert_output --partial "Removed 2 stale entries from the local cache"
+	run grep 'MY_SECRET' fnox.local.toml
+	assert_failure
+}
+
+@test "fnox sync --local-file preserves root local sources for profile refreshes" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local keygen_output
+	keygen_output=$(age-keygen -o key.txt 2>&1)
+	local public_key
+	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+	export FNOX_AGE_KEY
+	FNOX_AGE_KEY=$(grep "^AGE-SECRET-KEY" key.txt)
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.source]
+type = "plain"
+
+[profiles.development]
+EOF
+	cat >fnox.local.toml <<EOF
+[providers.age]
+type = "age"
+recipients = ["$public_key"]
+
+[secrets]
+LOCAL_SECRET = { provider = "source", value = "local", if_missing = "error" }
+EOF
+
+	assert_fnox_success --profile development sync -p age --local-file --force
+	assert_fnox_success --profile development sync -p age --local-file --force
+	assert_output --partial "Synced 1 secrets"
+	run grep 'LOCAL_SECRET = { provider = "source"' fnox.local.toml
+	assert_success
+}
+
+@test "fnox sync --local-file --no-defaults preserves default profile caches" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local keygen_output
+	keygen_output=$(age-keygen -o key.txt 2>&1)
+	local public_key
+	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+	export FNOX_AGE_KEY
+	FNOX_AGE_KEY=$(grep "^AGE-SECRET-KEY" key.txt)
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.source]
+type = "plain"
+
+[secrets]
+ROOT_SECRET = { provider = "source", value = "root", if_missing = "error" }
+
+[profiles.development.secrets]
+PROFILE_SECRET = { provider = "source", value = "profile", if_missing = "error" }
+
+[profiles.development.providers.age]
+type = "plain"
+EOF
+	cat >fnox.local.toml <<EOF
+[providers.age]
+type = "age"
+recipients = ["$public_key"]
+EOF
+
+	assert_fnox_success sync -p age --local-file --force
+	assert_fnox_success --profile development --no-defaults sync -p age --local-file --force
+	run grep 'ROOT_SECRET' fnox.local.toml
+	assert_success
+	run "$FNOX_BIN" --profile development --no-defaults get ROOT_SECRET
+	assert_failure
+}
+
+@test "fnox sync --local-file removes stale inherited profile caches" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local keygen_output
+	keygen_output=$(age-keygen -o key.txt 2>&1)
+	local public_key
+	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+	export FNOX_AGE_KEY
+	FNOX_AGE_KEY=$(grep "^AGE-SECRET-KEY" key.txt)
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.source]
+type = "plain"
+
+[profiles.base.secrets]
+BASE_SECRET = { provider = "source", value = "base", if_missing = "error" }
+
+[profiles.development]
+inherits = ["base"]
+
+[profiles.development.secrets]
+PROFILE_SECRET = { provider = "source", value = "profile", if_missing = "error" }
+EOF
+	cat >fnox.local.toml <<EOF
+[providers.age]
+type = "age"
+recipients = ["$public_key"]
+EOF
+
+	assert_fnox_success --profile base sync -p age --local-file --force
+	assert_fnox_success --profile development sync -p age --local-file --force
+	sed -i.bak '/BASE_SECRET =/d' fnox.toml
+	assert_fnox_success --profile development sync -p age --local-file --force
+	assert_output --partial "Removed 2 stale entries from the local cache"
+	run grep 'BASE_SECRET' fnox.local.toml
+	assert_failure
+}
+
+@test "fnox sync --local-file reconciles both local override filenames" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local keygen_output
+	keygen_output=$(age-keygen -o key.txt 2>&1)
+	local public_key
+	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+	export FNOX_AGE_KEY
+	FNOX_AGE_KEY=$(grep "^AGE-SECRET-KEY" key.txt)
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.source]
+type = "plain"
+
+[secrets]
+MY_SECRET = { provider = "source", value = "first", if_missing = "error" }
+EOF
+	cat >fnox.local.toml <<EOF
+[providers.age]
+type = "age"
+recipients = ["$public_key"]
+EOF
+
+	assert_fnox_success sync -p age --local-file --force
+	cp fnox.local.toml .fnox.local.toml
+	sed -i.bak 's/value = "first"/value = "second"/' fnox.toml
+	assert_fnox_success sync -p age --local-file --force
+	assert_fnox_success get MY_SECRET
+	assert_output "second"
+
+	sed -i.bak '/MY_SECRET =/d' fnox.toml
+	assert_fnox_success sync -p age --local-file --force
+	assert_output --partial "Removed 2 stale entries from the local cache"
+	run grep 'MY_SECRET' fnox.local.toml
+	assert_failure
+	run grep 'MY_SECRET' .fnox.local.toml
+	assert_failure
+}
+
 @test "fnox sync --local-file uses same directory as --config file" {
 	setup_sync_env
 
@@ -224,7 +523,19 @@ EOF
 
 	run "$FNOX_BIN" --config nested/custom.toml sync -p age --local-file --force
 	assert_failure
-	assert_output --partial "Configuration error: --local-file requires --config to be 'fnox.toml'"
+	assert_output --partial "nested/custom.toml"
+	[ ! -f nested/fnox.local.toml ]
+}
+
+@test "fnox sync --local-file rejects explicit default config paths" {
+	setup_sync_env
+
+	mkdir -p nested
+	mv fnox.toml nested/fnox.toml
+
+	run "$FNOX_BIN" --config nested/fnox.toml sync -p age --local-file --force
+	assert_failure
+	assert_output --partial "is an explicit"
 	[ ! -f nested/fnox.local.toml ]
 }
 
@@ -234,7 +545,8 @@ EOF
 	run "$FNOX_BIN" --config nonexistent/fnox.toml sync -p age --force
 	assert_failure
 	assert_output --partial "Failed to read configuration file:"
-	assert_output --partial "/nonexistent/fnox.toml"
+	assert_output --partial "nonexistent/"
+	assert_output --partial "fnox.toml"
 	[ ! -d nonexistent ]
 }
 
