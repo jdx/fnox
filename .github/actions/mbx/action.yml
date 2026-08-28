@@ -17,12 +17,12 @@ runs:
   steps:
     - name: Restore the fork PR cache mirror
       if: inputs.mirror-github-cache == 'true' && github.actor == 'jdx' && github.event_name == 'push' && github.ref == 'refs/heads/main'
-      uses: jdx/mr-boxington-action@ccdc5852f8bd93375379830a75f24794407443df
+      uses: jdx/mr-boxington-action@0bb0a01e0b2b3f34db827eddc8307bd4b1fb48ec
       with:
         version: 0.5.4
         backend: github
         cache-links: ${{ inputs.cache-links }}
-    - uses: jdx/mr-boxington-action@ccdc5852f8bd93375379830a75f24794407443df
+    - uses: jdx/mr-boxington-action@0bb0a01e0b2b3f34db827eddc8307bd4b1fb48ec
       with:
         version: 0.5.4
         cache-links: ${{ inputs.cache-links }}
