@@ -683,11 +683,23 @@ impl JsonSchema for EnvMode {
 impl Config {
     /// Load configuration using the appropriate strategy
     pub fn load_smart<P: AsRef<Path>>(path: P) -> Result<Self> {
+        Self::load_smart_with_local_sync(path, true)
+    }
+
+    /// Load configuration without cached sync entries from local override files.
+    pub fn load_smart_without_local_sync<P: AsRef<Path>>(path: P) -> Result<Self> {
+        Self::load_smart_with_local_sync(path, false)
+    }
+
+    fn load_smart_with_local_sync<P: AsRef<Path>>(
+        path: P,
+        include_local_sync: bool,
+    ) -> Result<Self> {
         let path_ref = path.as_ref();
 
         // If the path is one of the default config filenames, use recursive loading
         if uses_config_discovery(path_ref) {
-            Self::load_with_recursion(path_ref)
+            Self::load_with_recursion(path_ref, include_local_sync)
         } else {
             // For explicit paths, resolve relative paths against current directory first
             let resolved_path = if path_ref.is_relative() {
@@ -803,15 +815,55 @@ impl Config {
         }
     }
 
+    // A root local cache is inherited by named profiles, but an explicit
+    // profile cache in the same file must retain higher precedence.
+    fn scope_root_entries_to_profile_as_base(
+        &mut self,
+        profile_name: String,
+        include_secrets: bool,
+    ) {
+        let overlay = self.profiles.shift_remove(&profile_name);
+        let root_secrets = (!include_secrets).then(|| std::mem::take(&mut self.secrets));
+        let root_secret_sources =
+            (!include_secrets).then(|| std::mem::take(&mut self.secret_sources));
+        self.scope_root_entries_to_profile(profile_name.clone());
+        if let Some(root_secrets) = root_secrets {
+            self.secrets = root_secrets;
+        }
+        if let Some(root_secret_sources) = root_secret_sources {
+            self.secret_sources = root_secret_sources;
+        }
+
+        if let Some(overlay) = overlay {
+            let profile = self.profiles.get_mut(&profile_name).unwrap();
+            if overlay.inherits.is_some() {
+                profile.inherits = overlay.inherits;
+            }
+            profile.leases.extend(overlay.leases);
+            profile.providers.extend(overlay.providers);
+            profile.provider_sources.extend(overlay.provider_sources);
+            profile.secrets.extend(overlay.secrets);
+            profile.secret_sources.extend(overlay.secret_sources);
+            if overlay.default_provider.is_some() {
+                profile.default_provider = overlay.default_provider;
+                profile.default_provider_source = overlay.default_provider_source;
+            }
+        }
+    }
+
     /// Load configuration with recursive directory search and merging
-    fn load_with_recursion<P: AsRef<Path>>(_start_path: P) -> Result<Self> {
+    fn load_with_recursion<P: AsRef<Path>>(
+        _start_path: P,
+        include_local_sync: bool,
+    ) -> Result<Self> {
         // Start from current working directory and search upwards
         let current_dir = env::current_dir()
             .map_err(|e| FnoxError::Config(format!("Failed to get current directory: {}", e)))?;
 
         let requested_profiles = Self::get_profiles(&[]);
         let mut profiles = requested_profiles.clone();
-        let (mut config, mut found) = Self::load_recursive(&current_dir, false, &profiles)?;
+        let (mut config, mut found) =
+            Self::load_recursive(&current_dir, false, &profiles, include_local_sync)?;
 
         // Profile inheritance can select additional profile-specific files. Keep
         // loading until discovering those files no longer expands the stack.
@@ -821,7 +873,8 @@ impl Config {
                 break;
             }
             profiles = expanded;
-            (config, found) = Self::load_recursive(&current_dir, false, &profiles)?;
+            (config, found) =
+                Self::load_recursive(&current_dir, false, &profiles, include_local_sync)?;
         }
 
         if !found {
@@ -847,7 +900,12 @@ impl Config {
 
     /// Recursively search for fnox.toml files and merge them
     /// Returns (config, found_any) where found_any indicates if any config file was found
-    fn load_recursive(dir: &Path, found_any: bool, profiles: &[String]) -> Result<(Self, bool)> {
+    fn load_recursive(
+        dir: &Path,
+        found_any: bool,
+        profiles: &[String],
+        include_local_sync: bool,
+    ) -> Result<(Self, bool)> {
         let filenames = all_config_filenames(profiles);
 
         // Load all existing config files in order (later files override earlier ones)
@@ -858,10 +916,28 @@ impl Config {
             let path = dir.join(filename);
             if path.exists() {
                 let mut file_config = Self::load(&path)?;
-                if matches!(filename.as_str(), "fnox.local.toml" | ".fnox.local.toml") {
+                let is_local = matches!(filename.as_str(), "fnox.local.toml" | ".fnox.local.toml");
+                if is_local && !include_local_sync {
+                    file_config
+                        .secrets
+                        .retain(|_, secret| secret.sync.is_none());
+                    file_config
+                        .secret_sources
+                        .retain(|key, _| file_config.secrets.contains_key(key));
+                    for profile in file_config.profiles.values_mut() {
+                        profile.secrets.retain(|_, secret| secret.sync.is_none());
+                        profile
+                            .secret_sources
+                            .retain(|key, _| profile.secrets.contains_key(key));
+                    }
+                }
+                if is_local {
                     let write_profile = Self::write_profile(profiles);
                     if write_profile != "default" {
-                        file_config.scope_root_entries_to_profile(write_profile.to_string());
+                        file_config.scope_root_entries_to_profile_as_base(
+                            write_profile.to_string(),
+                            !Settings::get().no_defaults,
+                        );
                         file_config.set_source_paths(&path);
                     }
                 }
@@ -894,7 +970,8 @@ impl Config {
 
         // If we have a parent directory, recurse up and merge
         if let Some(parent_dir) = dir.parent() {
-            let (parent_config, parent_found) = Self::load_recursive(parent_dir, found, profiles)?;
+            let (parent_config, parent_found) =
+                Self::load_recursive(parent_dir, found, profiles, include_local_sync)?;
             config = Self::merge_configs(parent_config, config)?;
             found = found || parent_found;
         } else {
@@ -1348,6 +1425,16 @@ impl Config {
         profile: &str,
         target_file: &Path,
     ) -> Result<()> {
+        Self::update_secrets_in_source(secrets, &[], profile, target_file)
+    }
+
+    /// Save secrets and remove obsolete entries in one config file update.
+    pub fn update_secrets_in_source(
+        secrets: &IndexMap<String, SecretConfig>,
+        removals: &[String],
+        profile: &str,
+        target_file: &Path,
+    ) -> Result<()> {
         use toml_edit::{DocumentMut, Item, Value};
 
         // Load existing document or create new one (preserves comments)
@@ -1388,6 +1475,10 @@ impl Config {
             }
             profile_table["secrets"].as_table_mut().unwrap()
         };
+
+        for name in removals {
+            secrets_table.remove(name);
+        }
 
         // Insert/update each secret, preserving existing inline-vs-table style.
         for (name, config) in secrets {
