@@ -220,6 +220,8 @@ impl SyncCommand {
             for path in &local_cache_paths {
                 let local_config = Config::load(path)?;
                 for profile in &cache_profiles {
+                    let profile_secrets =
+                        resolution_config.get_secrets(std::slice::from_ref(profile))?;
                     let cached_secrets = if profile == "default" {
                         Some(&local_config.secrets)
                     } else {
@@ -232,7 +234,15 @@ impl SyncCommand {
                         .into_iter()
                         .flat_map(|secrets| secrets.iter())
                         .filter(|(key, secret)| {
-                            secret.sync.is_some() && !secrets_to_sync.contains_key(*key)
+                            let has_profile_source =
+                                profile_secrets.get(*key).is_some_and(|secret| {
+                                    secret.provider().is_some_and(|source_provider| {
+                                        source_provider != target_provider_name
+                                    })
+                                });
+                            secret.sync.is_some()
+                                && !secrets_to_sync.contains_key(*key)
+                                && !has_profile_source
                         })
                         .map(|(key, _)| key.clone())
                         .collect::<Vec<_>>();

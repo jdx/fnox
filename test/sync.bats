@@ -203,8 +203,8 @@ EOF
 }
 
 @test "fnox sync --local-file resolves provider secret references from updated source config" {
-	if ! command -v age-keygen >/dev/null 2>&1; then
-		skip "age-keygen not installed"
+	if ! command -v age-keygen >/dev/null 2>&1 || ! command -v age >/dev/null 2>&1; then
+		skip "age-keygen and age are required"
 	fi
 
 	local source_public_key
@@ -413,6 +413,55 @@ EOF
 	assert_output --partial "Removed 2 stale entries from the local cache"
 	run grep 'BASE_SECRET' fnox.local.toml
 	assert_failure
+}
+
+@test "fnox sync --local-file preserves inherited caches shadowed by derived profiles" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local keygen_output
+	keygen_output=$(age-keygen -o key.txt 2>&1)
+	local public_key
+	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+	export FNOX_AGE_KEY
+	FNOX_AGE_KEY=$(grep "^AGE-SECRET-KEY" key.txt)
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.source]
+type = "plain"
+
+[profiles.base.secrets]
+SHARED_SECRET = { provider = "source", value = "base", if_missing = "error" }
+
+[profiles.development]
+inherits = ["base"]
+EOF
+	cat >fnox.local.toml <<EOF
+[providers.age]
+type = "age"
+recipients = ["$public_key"]
+EOF
+
+	assert_fnox_success --profile base sync -p age --local-file --force
+	assert_fnox_success --profile development sync -p age --local-file --force
+	cat >>fnox.toml <<EOF
+
+[profiles.development.secrets]
+SHARED_SECRET = { default = "development" }
+EOF
+
+	assert_fnox_success --profile development sync -p age --local-file --force
+	assert_output --partial "Removed 1 stale entries from the local cache"
+	run grep -c 'SHARED_SECRET' fnox.local.toml
+	assert_success
+	assert_output "1"
+	assert_fnox_success --profile base get SHARED_SECRET
+	assert_output "base"
+	assert_fnox_success --profile development get SHARED_SECRET
+	assert_output "development"
 }
 
 @test "fnox sync --local-file reconciles both local override filenames" {
