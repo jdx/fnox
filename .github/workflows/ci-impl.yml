@@ -6,9 +6,6 @@ on:
       trusted:
         required: true
         type: boolean
-      mbx-backend:
-        required: true
-        type: string
     secrets:
       AGE_SECRET:
         required: false
@@ -47,9 +44,6 @@ jobs:
         with:
           cache: false
       - uses: ./.github/actions/mbx
-        with:
-          backend: ${{ inputs.mbx-backend }}
-          mirror-github-cache: "true"
       - name: Install system dependencies (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -248,9 +242,6 @@ jobs:
           cache: false
           fetch_from_github: false
       - uses: ./.github/actions/mbx
-        with:
-          backend: ${{ inputs.mbx-backend }}
-          mirror-github-cache: "true"
       - name: Check Windows build
         run: mbx check --workspace
 
@@ -275,8 +266,6 @@ jobs:
         with:
           cache: false
       - uses: ./.github/actions/mbx
-        with:
-          backend: ${{ inputs.mbx-backend }}
       - name: Install system dependencies (Ubuntu)
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
@@ -350,8 +339,6 @@ jobs:
         with:
           cache: false
       - uses: ./.github/actions/mbx
-        with:
-          backend: ${{ inputs.mbx-backend }}
       - name: Install system dependencies
         run: |
           if [ -f /etc/apt/apt-mirrors.txt ]; then

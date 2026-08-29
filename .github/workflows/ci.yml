@@ -18,7 +18,6 @@ jobs:
     uses: ./.github/workflows/ci-impl.yml
     with:
       trusted: true
-      mbx-backend: server
     secrets:
       AGE_SECRET: ${{ secrets.AGE_SECRET }}
 
@@ -29,7 +28,6 @@ jobs:
     uses: ./.github/workflows/ci-impl.yml
     with:
       trusted: false
-      mbx-backend: github
 
   final:
     name: final
