@@ -1,6 +1,7 @@
-use crate::config::Config;
+use crate::config::{Config, ProviderConfig, SecretConfig};
 use crate::error::Result;
 use crate::secret_resolver;
+use indexmap::IndexMap;
 
 use crate::commands::Cli;
 
@@ -30,6 +31,9 @@ impl CheckCommand {
                 warnings.push("No secrets defined in profile(s)".to_string());
             } else {
                 println!("Found {} secret(s) in profile(s)", secrets.len());
+                let providers = config.get_providers(&profile)?;
+                let mut age_batches: IndexMap<String, IndexMap<String, SecretConfig>> =
+                    IndexMap::new();
 
                 for (name, secret_config) in secrets {
                     // Check if secret has a value source
@@ -52,7 +56,6 @@ impl CheckCommand {
 
                     // Check provider configuration
                     if let Some(provider) = secret_config.provider() {
-                        let providers = config.get_providers(&profile)?;
                         if !providers.contains_key(provider) {
                             warnings.push(format!(
                                 "Secret '{}' references unknown provider '{}'",
@@ -73,6 +76,30 @@ impl CheckCommand {
                                         | crate::config::IfMissing::Ignore
                                 )
                             {
+                                continue;
+                            }
+
+                            let resolution_provider = secret_config
+                                .sync
+                                .as_ref()
+                                .map(|sync| sync.provider.as_str())
+                                .unwrap_or(provider);
+                            let has_provider_value =
+                                secret_config.sync.is_some() || secret_config.value().is_some();
+                            if matches!(if_missing, crate::config::IfMissing::Error)
+                                && secret_config.default.is_none()
+                                && secret_config.json_path.is_none()
+                                && secret_config.line.is_none()
+                                && has_provider_value
+                                && matches!(
+                                    providers.get(resolution_provider),
+                                    Some(ProviderConfig::AgeEncryption { .. })
+                                )
+                            {
+                                age_batches
+                                    .entry(resolution_provider.to_string())
+                                    .or_default()
+                                    .insert(name, secret_config);
                                 continue;
                             }
 
@@ -130,6 +157,56 @@ impl CheckCommand {
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+
+                for (provider, batch) in age_batches {
+                    let provider_secrets = batch
+                        .iter()
+                        .map(|(name, secret_config)| {
+                            let value = secret_config
+                                .sync
+                                .as_ref()
+                                .map(|sync| sync.value.clone())
+                                .or_else(|| secret_config.value().map(ToOwned::to_owned))
+                                .expect("batched secrets have a provider value");
+                            (name.clone(), value)
+                        })
+                        .collect::<Vec<_>>();
+                    let provider_config = providers
+                        .get(&provider)
+                        .expect("batched secrets use a configured age provider");
+                    match crate::providers::get_provider_resolved(
+                        &config,
+                        &profile,
+                        &provider,
+                        provider_config,
+                    )
+                    .await
+                    {
+                        Ok(age_provider) => {
+                            let mut values =
+                                age_provider.get_secrets_batch(&provider_secrets).await;
+                            for name in batch.keys() {
+                                match values.remove(name) {
+                                    Some(Ok(_)) => {}
+                                    Some(Err(err)) => issues.push(format!(
+                                        "Secret '{}' failed to resolve: {}",
+                                        name, err
+                                    )),
+                                    None => issues.push(format!(
+                                        "Secret '{}' could not be resolved from provider '{}'",
+                                        name, provider
+                                    )),
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            for name in batch.keys() {
+                                issues
+                                    .push(format!("Secret '{}' failed to resolve: {}", name, err));
                             }
                         }
                     }
