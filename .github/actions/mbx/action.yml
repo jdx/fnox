@@ -1,14 +1,6 @@
 name: Set up mbx
 description: Set up mbx with the GitHub Actions cache backend
 
-inputs:
-  cache-links:
-    description: Cache native links; "auto" enables this on Linux
-    default: auto
-  toolchain:
-    description: Rust toolchain named explicitly by the build
-    required: false
-
 runs:
   using: composite
   steps:
@@ -17,5 +9,3 @@ runs:
         version: 1.1.0
         backend: github
         cache-generation: v2
-        cache-links: ${{ inputs.cache-links }}
-        toolchain: ${{ inputs.toolchain }}
