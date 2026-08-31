@@ -2,7 +2,7 @@
 _.path = ["target/debug", "test/bats/bin"]
 
 [tools]
-"github:jdx/mr-boxington" = "latest"
+mr-boxington = { version = "1.1.0", postinstall = "mbx setup --global" }
 usage = "6.4.1"
 # Pinned rather than "latest" because tak is the measuring instrument: an
 # upgrade that changes how it samples would land in the series as a step change
@@ -34,7 +34,7 @@ depends = ["test:cargo", "test:bats"]
 
 [tasks."test:cargo"]
 description = "Run cargo tests only"
-run = "mbx test"
+run = "cargo test"
 
 [tasks."test:bats"]
 description = "Run bats tests only"
@@ -58,7 +58,7 @@ run = "fnox exec -- bats --jobs 16 {{arg(name='test', var=true, default='test')}
 
 [tasks.cargo-test]
 description = "Run cargo tests only"
-run = "mbx test"
+run = "cargo test"
 
 [tasks.lint]
 run = "hk check --all --slow"
@@ -68,7 +68,7 @@ run = "hk fix --all --slow"
 
 [tasks.build]
 description = "Build the project"
-run = "mbx build"
+run = "cargo build"
 
 [tasks.ci]
 description = "Run full CI check (build, test, lint)"
@@ -101,10 +101,15 @@ run = [
 # Instruction-counted benchmarks (see tak.toml). Needs valgrind for the counts;
 # without it tak reports wall clock only and says so, so this still works on
 # macOS where there is no usable cachegrind.
+[tasks."perf:build"]
+env = { MBX_DISABLE = "1" }
+run = "cargo build --release"
+
 [tasks.perf]
 dir = "{{config_root}}"
 env = { TOKIO_WORKER_THREADS = "1" }
-run = ["cargo build --release", "tak run"]
+depends = ["perf:build"]
+run = "tak run"
 
 # Same measurement, appended to refs/notes/tak for this commit. Run by the
 # `perf` workflow on every push to main; the notes are the history. Safe to run
@@ -112,4 +117,5 @@ run = ["cargo build --release", "tak run"]
 [tasks."perf:record"]
 dir = "{{config_root}}"
 env = { TOKIO_WORKER_THREADS = "1" }
-run = ["cargo build --release", "tak run --record"]
+depends = ["perf:build"]
+run = "tak run --record"
