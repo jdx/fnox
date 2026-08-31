@@ -104,7 +104,7 @@ run = [
 [tasks.perf]
 dir = "{{config_root}}"
 env = { TOKIO_WORKER_THREADS = "1" }
-run = ["cargo build --release", "tak run"]
+run = ["MBX_DISABLE=1 cargo build --release", "tak run"]
 
 # Same measurement, appended to refs/notes/tak for this commit. Run by the
 # `perf` workflow on every push to main; the notes are the history. Safe to run
@@ -112,4 +112,4 @@ run = ["cargo build --release", "tak run"]
 [tasks."perf:record"]
 dir = "{{config_root}}"
 env = { TOKIO_WORKER_THREADS = "1" }
-run = ["cargo build --release", "tak run --record"]
+run = ["MBX_DISABLE=1 cargo build --release", "tak run --record"]
