@@ -17,10 +17,12 @@ MBX_DISABLE=1 cargo check --workspace
 MBX_DISABLE=1 cargo clippy -q -- -D warnings
 # CI also runs this broader clippy check:
 MBX_DISABLE=1 cargo clippy --workspace --all-targets -- -D warnings
-cargo msrv verify
+MBX_DISABLE=1 cargo msrv verify
 ```
 
 If bypassed Cargo succeeds where the shim fails, or mbx introduces a papercut, please start a
 [mr-boxington Discussion](https://github.com/jdx/mr-boxington/discussions).
 Include the repository and commit, operating system, `mbx --version`,
-`mbx doctor`, and both commands and their output.
+`mbx doctor`, and both commands and their output. Before posting, redact
+secrets, absolute cache paths, remote URLs, namespaces, and other sensitive or
+identifying details.

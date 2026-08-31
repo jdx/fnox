@@ -2,7 +2,7 @@
 _.path = ["target/debug", "test/bats/bin"]
 
 [tools]
-mr-boxington = { version = "1.1.0", postinstall = "mbx setup --yes" }
+mr-boxington = { version = "1.1.0", postinstall = "mbx setup --global" }
 usage = "6.4.1"
 # Pinned rather than "latest" because tak is the measuring instrument: an
 # upgrade that changes how it samples would land in the series as a step change
