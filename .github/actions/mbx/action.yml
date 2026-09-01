@@ -1,11 +1,29 @@
 name: Set up mbx
-description: Set up mbx with the GitHub Actions cache backend
+description: Select the trusted jdx server or fork-safe GitHub cache backend
+
+inputs:
+  backend:
+    description: Backend selected by the structurally trusted caller
+    default: github
+  mirror-github-cache:
+    description: Mirror a trusted main build into the restore-only cache used by fork PRs
+    default: "false"
 
 runs:
   using: composite
   steps:
-    - uses: jdx/mr-boxington-action@203ebddb3bdb1b3832473207d0a837b23b660563
+    - name: Restore the fork PR cache mirror
+      if: inputs.mirror-github-cache == 'true' && inputs.backend == 'server' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: jdx/mr-boxington-action@203ebddb3bdb1b3832473207d0a837b23b660563
       with:
         version: 1.3.0
         backend: github
         cache-generation: v2
+    - uses: jdx/mr-boxington-action@203ebddb3bdb1b3832473207d0a837b23b660563
+      with:
+        version: 1.3.0
+        cache-generation: v2
+        backend: ${{ inputs.backend }}
+        server-url: https://cache.mise.jdx.dev
+        namespace: jdx/fnox
+        oidc-audience: https://cache.mise.jdx.dev
