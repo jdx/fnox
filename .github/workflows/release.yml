@@ -249,9 +249,9 @@ jobs:
 
           ## 💚 Sponsor fnox
 
-          fnox is maintained by [@jdx](https://github.com/jdx), an open source developer for [**entire.io**](https://entire.io), the title sponsor of the [jdx.dev](https://jdx.dev) open source tools including [mise](https://mise.jdx.dev/), [aube](https://aube.jdx.dev/), hk, and more. Keeping fnox secure, maintained, and free is funded by sponsors.
+          fnox is built and maintained by [@jdx](https://github.com/jdx), an open source developer at [**entire.io**](https://entire.io/), the title sponsor of his open source work.
 
-          If fnox is handling secrets or config for you or your team, please consider [sponsoring at jdx.dev](https://jdx.dev/sponsors.html). Sponsorships are what let fnox stay independent and the project keep moving.
+          If fnox handles secrets or config for you or your team, please consider becoming an [individual or company sponsor](https://jdx.dev/sponsors.html). Your support funds ongoing development and helps keep fnox secure, free, and independent.
           EOF
           gh release edit "$TAG_NAME" --notes-file /tmp/release-notes.md
 
