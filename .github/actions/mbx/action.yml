@@ -6,6 +6,6 @@ runs:
   steps:
     - uses: jdx/mr-boxington-action@203ebddb3bdb1b3832473207d0a837b23b660563
       with:
-        version: 1.1.0
+        version: 1.3.0
         backend: github
         cache-generation: v2
