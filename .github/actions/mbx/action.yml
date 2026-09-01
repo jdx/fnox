@@ -14,11 +14,11 @@ runs:
   steps:
     - name: Restore the fork PR cache mirror
       if: inputs.mirror-github-cache == 'true' && inputs.backend == 'server' && github.event_name == 'push' && github.ref == 'refs/heads/main'
-      uses: jdx/mr-boxington-action@b296cd252864fce4f84642a2e0062d54621d5b41
+      uses: jdx/mr-boxington-action@v1.2.0
       with:
         backend: github
         cache-generation: v2
-    - uses: jdx/mr-boxington-action@b296cd252864fce4f84642a2e0062d54621d5b41
+    - uses: jdx/mr-boxington-action@v1.2.0
       with:
         cache-generation: v2
         backend: ${{ inputs.backend }}
