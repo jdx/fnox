@@ -548,6 +548,7 @@ async fn start_background_for_context(
     {
         cmd.env("FNOX_DAEMON_IDLE_TIMEOUT", daemon.idle_timeout());
     }
+    cmd.current_dir("/");
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;

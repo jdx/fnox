@@ -45,6 +45,22 @@ EOF
 	assert_output --partial "cached_entries: 1"
 }
 
+@test "daemon survives deletion of its spawn directory" {
+	daemon_config
+	mkdir spawn request
+
+	cd spawn
+	run "$FNOX_BIN" get FOO
+	assert_success
+	assert_output "bar"
+
+	cd ../request
+	rmdir ../spawn
+	run "$FNOX_BIN" get FOO
+	assert_success
+	assert_output "bar"
+}
+
 @test "daemon resolves cache misses in the foreground client" {
 	mkdir -p "$TEST_TEMP_DIR/bin"
 	cat >"$TEST_TEMP_DIR/bin/pass" <<'EOF'
