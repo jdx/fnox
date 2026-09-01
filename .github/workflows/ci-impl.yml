@@ -55,7 +55,7 @@ jobs:
       - name: Install Rust components
         run: rustup component add rustfmt clippy
       - name: Build
-        run: mbx build
+        run: cargo build
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: fnox-${{ matrix.os }}
@@ -243,7 +243,7 @@ jobs:
           fetch_from_github: false
       - uses: ./.github/actions/mbx
       - name: Check Windows build
-        run: mbx check --workspace
+        run: cargo check --workspace
 
   ci-other:
     needs: build
@@ -307,7 +307,7 @@ jobs:
       - name: Clean cached Rust build artifacts
         run: cargo clean
       - name: Run tests
-        run: mbx test --workspace
+        run: cargo test --workspace
       - name: mise run render
         run: mise run render
       - name: assert render produces no diff
@@ -325,7 +325,7 @@ jobs:
           max_attempts: 3
           command: mise run lint
       - name: Run clippy
-        run: mbx clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
   msrv:
     runs-on: ${{ !inputs.trusted && 'ubuntu-latest' || 'namespace-profile-endev-linux-amd64' }}
@@ -348,7 +348,7 @@ jobs:
           sudo apt-get install -y libudev-dev
       # cargo-msrv doesn't accept --workspace; verifying the binary's MSRV
       # transitively covers fnox-core because the binary depends on it.
-      - run: mbx msrv verify
+      - run: cargo msrv verify
 
   final:
     permissions: {}
