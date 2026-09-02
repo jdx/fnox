@@ -8,35 +8,33 @@ Integrate with Infisical to retrieve secrets from your Infisical projects and en
 # 1. Install Infisical CLI
 brew install infisical/get-cli/infisical
 
-# 2. Login to Infisical
-infisical login
-
-# 3. Get a service token or universal auth token
+# 2. Authenticate with a service token or a machine identity
 # Option A: Service token (from Infisical dashboard)
 export INFISICAL_TOKEN="your-service-token"
 
 # Option B: Universal auth (machine identity)
-infisical login --method=universal-auth
+export INFISICAL_CLIENT_ID="your-client-id"
+export INFISICAL_CLIENT_SECRET="your-client-secret"
 
-# 4. Store token (optional, for bootstrap)
+# 3. Store token (optional, for bootstrap)
 fnox set INFISICAL_TOKEN "your-service-token" --provider age
 
-# 5. Configure Infisical provider
+# 4. Configure Infisical provider
 cat >> fnox.toml << 'EOF'
 [providers]
 infisical = { type = "infisical", project_id = "your-project-id", environment = "dev", path = "/" }
 EOF
 
-# 6. Add secrets to Infisical
+# 5. Add secrets to Infisical
 infisical secrets set DATABASE_PASSWORD "secret-password"
 
-# 7. Reference in fnox
+# 6. Reference in fnox
 cat >> fnox.toml << 'EOF'
 [secrets]
 DATABASE_PASSWORD = { provider = "infisical", value = "DATABASE_PASSWORD" }
 EOF
 
-# 8. Use it
+# 7. Use it
 fnox get DATABASE_PASSWORD
 ```
 
@@ -74,6 +72,8 @@ infisical login
 infisical login --domain=https://infisical.example.com
 ```
 
+`infisical login` sets up the CLI for manual commands such as `infisical secrets set`. fnox itself does not use this login session; it authenticates with the token or machine identity credentials from the next step.
+
 ### 2. Get Authentication Token
 
 #### Option A: Service Token (Recommended for CI/CD)
@@ -90,13 +90,14 @@ export INFISICAL_TOKEN="st.xxx.yyy.zzz"
 #### Option B: Universal Auth (Machine Identity)
 
 ```bash
-# Configure universal auth
-infisical login --method=universal-auth \
-  --client-id="your-client-id" \
-  --client-secret="your-client-secret"
-
-# Token is automatically managed
+# Provide the machine identity credentials. fnox runs
+# `infisical login --method=universal-auth` for you and caches the
+# resulting token for the rest of the process.
+export INFISICAL_CLIENT_ID="your-client-id"
+export INFISICAL_CLIENT_SECRET="your-client-secret"
 ```
+
+`FNOX_INFISICAL_CLIENT_ID` and `FNOX_INFISICAL_CLIENT_SECRET` are also accepted and take priority over the unprefixed variables.
 
 ### 3. Store Token (Bootstrap)
 
@@ -259,7 +260,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v4
 
       - name: Setup Infisical token
         env:
@@ -289,7 +290,7 @@ Configure the CLI to use your self-hosted instance:
 # Configure server
 infisical login --domain=https://infisical.example.com
 
-# Or set environment variable
+# Or set environment variable (FNOX_INFISICAL_API_URL also works)
 export INFISICAL_API_URL=https://infisical.example.com/api
 
 # Use normally with fnox
@@ -298,7 +299,7 @@ fnox get DATABASE_PASSWORD
 
 ## Token Management
 
-The `INFISICAL_TOKEN` is typically a service token or machine identity token.
+The `INFISICAL_TOKEN` is typically a service token or machine identity token. `FNOX_INFISICAL_TOKEN` is also accepted and takes priority over `INFISICAL_TOKEN`.
 
 ### Option 1: Set Each Time
 
@@ -338,9 +339,8 @@ export INFISICAL_TOKEN="st.xxx.yyy.zzz"
 - **Cons:** More complex setup
 
 ```bash
-infisical login --method=universal-auth \
-  --client-id="..." \
-  --client-secret="..."
+export INFISICAL_CLIENT_ID="..."
+export INFISICAL_CLIENT_SECRET="..."
 ```
 
 ## Pros
@@ -354,17 +354,20 @@ infisical login --method=universal-auth \
 
 ## Cons
 
-- ❌ Requires network access (unless self-hosted)
+- ❌ Requires network access to an Infisical instance
 - ❌ Relatively new compared to Vault or cloud providers
 
 ## Troubleshooting
 
 ### "You are not logged in"
 
+fnox does not use the CLI's login session. Set a service token or machine identity credentials:
+
 ```bash
-infisical login
-# Or set token directly
 export INFISICAL_TOKEN="st.xxx.yyy.zzz"
+# Or universal auth credentials
+export INFISICAL_CLIENT_ID="..."
+export INFISICAL_CLIENT_SECRET="..."
 ```
 
 ### "Secret not found"

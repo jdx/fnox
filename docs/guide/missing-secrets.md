@@ -1,6 +1,6 @@
 # Handling Missing Secrets
 
-Control what happens when a secret can't be resolved using the `if_missing` setting. This is especially useful for CI environments or when some secrets are optional.
+Use the `if_missing` setting to control what happens when a secret can't be resolved. This is especially useful for CI environments or when some secrets are optional.
 
 ## Available Modes
 
@@ -184,7 +184,7 @@ DATABASE_URL = { provider = "aws", value = "database-url", if_missing = "error" 
 
 ```toml
 [secrets]
-REDIS_URL = { default = "redis://localhost:6379", if_missing = "warn" }  # Warn if missing, but provide a default
+REDIS_URL = { provider = "aws", value = "redis-url", default = "redis://localhost:6379", if_missing = "warn" }  # Warn if the provider lookup fails, then fall back to the default
 ```
 
 ## Behavior Summary

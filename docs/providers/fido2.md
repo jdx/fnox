@@ -6,7 +6,7 @@ The `fido2` provider uses the FIDO2 hmac-secret extension to derive an AES-256-G
 
 The `fido2` provider ties encryption to a physical hardware device using the CTAP2 hmac-secret extension. Any FIDO2-compatible security key that supports hmac-secret can be used (YubiKey 5, SoloKeys, Nitrokey, etc.).
 
-The config is fully portable: move your `fnox.local.toml` to any machine, plug in the same FIDO2 key, and it works.
+The config is fully portable: move your `fnox.toml` to any machine, plug in the same FIDO2 key, and it works.
 
 ## Setup
 
@@ -17,7 +17,7 @@ fnox provider add secure fido2
 During setup, fnox will:
 
 1. Create a FIDO2 credential with the hmac-secret extension enabled
-2. Prompt for PIN if required by the authenticator
+2. Prompt for a PIN if required by the authenticator
 3. Generate a random salt for key derivation
 4. Verify the key works with a test assertion
 5. Store the credential ID, salt, and relying party ID in `fnox.toml`
@@ -30,6 +30,7 @@ type = "fido2"
 credential_id = "a1b2c3..."  # auto-generated hex credential ID
 salt = "d4e5f6..."           # auto-generated hex salt
 rp_id = "fnox.secure"        # relying party ID
+# pin = "1234"               # optional; if omitted, fnox prompts for the PIN when a TTY is available
 ```
 
 ## Usage

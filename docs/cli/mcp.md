@@ -4,7 +4,7 @@
 
 - **Usage:** `fnox mcp`
 
-Start an MCP server for secret-gated AI agent access
+Start an MCP server that brokers secrets to AI agents
 
 ## Flags
 

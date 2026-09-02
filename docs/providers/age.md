@@ -404,7 +404,7 @@ grep recipients fnox.toml
 
 ### "failed to decrypt"
 
-- Check that `FNOX_AGE_KEY` or `FNOX_AGE_KEY_FILE` is set
+- Check that `FNOX_AGE_KEY` or `FNOX_AGE_KEY_FILE` is set, or that the default key file `~/.config/fnox/age.txt` exists
 - Verify the key file exists and is readable
 - Ensure you're using the correct private key
 
@@ -417,5 +417,5 @@ grep recipients fnox.toml
 ## Next Steps
 
 - [Real-World Example](/guide/real-world-example) - Complete project setup with age
-- [Team Workflow Guide](/guide/profiles) - Manage team secrets effectively
+- [Profiles](/guide/profiles) - Multi-environment configuration
 - [AWS KMS](/providers/aws-kms) - Alternative with AWS-managed keys

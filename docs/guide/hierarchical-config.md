@@ -27,7 +27,7 @@ When you run fnox from `project/services/api/`, the merge order is (lowest to hi
 4. Loads `project/services/api/fnox.toml` (current)
 5. Loads `project/services/api/fnox.local.toml` (current local, if exists)
 
-Each level merges both the main config and local overrides, with child configs taking precedence over parent configs, and local configs taking precedence over main configs at the same level. Global config provides the base layer available to all projects.
+Each level merges the main config, any profile-specific file (`fnox.<profile>.toml`), and local overrides, with child configs taking precedence over parent configs, and profile and local files taking precedence over the main config at the same level. Global config provides the base layer available to all projects.
 
 ## Example Setup
 

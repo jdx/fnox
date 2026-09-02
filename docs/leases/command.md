@@ -12,12 +12,12 @@ revoke_command = "./scripts/revoke-creds.sh"  # optional
 duration = "1h"
 ```
 
-| Field            | Required | Description                                  |
-| ---------------- | -------- | -------------------------------------------- |
-| `create_command` | Yes      | Shell command to create credentials          |
-| `revoke_command` | No       | Shell command to revoke credentials          |
-| `duration`       | No       | Lease duration (e.g., `"1h"`, `"30m"`)       |
-| `timeout`        | No       | Command execution timeout (default: `"30s"`) |
+| Field            | Required | Description                                              |
+| ---------------- | -------- | -------------------------------------------------------- |
+| `create_command` | Yes      | Shell command to create credentials (run via `sh -c`)    |
+| `revoke_command` | No       | Shell command to revoke credentials (run via `sh -c`)    |
+| `duration`       | No       | Lease duration (e.g., `"1h"`, `"30m"`; default: `"15m"`) |
+| `timeout`        | No       | Command execution timeout (default: `"30s"`)             |
 
 ## Prerequisites
 
@@ -45,11 +45,11 @@ The script must output JSON on stdout:
 }
 ```
 
-| Field         | Required | Description                                                 |
-| ------------- | -------- | ----------------------------------------------------------- |
-| `credentials` | Yes      | Key-value map of env var name to credential value           |
-| `expires_at`  | No       | Expiry timestamp (RFC3339). Omit for never-expiring leases. |
-| `lease_id`    | No       | Unique lease ID. Auto-generated if omitted.                 |
+| Field         | Required | Description                                                                                          |
+| ------------- | -------- | ---------------------------------------------------------------------------------------------------- |
+| `credentials` | Yes      | Key-value map of env var name to credential value (values must be strings; at least one is required) |
+| `expires_at`  | No       | Expiry timestamp (RFC3339). Omit for never-expiring leases.                                          |
+| `lease_id`    | No       | Unique lease ID. Auto-generated if omitted.                                                          |
 
 ## Revoke Command
 

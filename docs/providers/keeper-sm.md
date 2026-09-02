@@ -50,7 +50,7 @@ fnox provider test keeper
 unset KSM_TOKEN
 ```
 
-`FNOX_KEEPER_TOKEN` takes priority over `KSM_TOKEN`. Bootstrap requires `config_file` because Keeper writes the bound client credentials during the first network request. Remove the one-time token after successful initialization.
+The `token` field in the provider configuration takes priority over both environment variables, and `FNOX_KEEPER_TOKEN` takes priority over `KSM_TOKEN`. Bootstrap requires `config_file` because Keeper writes the bound client credentials during the first network request. Remove the one-time token after successful initialization.
 
 ## Configuration
 

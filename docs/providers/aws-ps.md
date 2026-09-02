@@ -227,7 +227,7 @@ The `prefix` is prepended to the `value`:
 
 ```toml
 [providers]
-ps = { type = "aws-ps", prefix = "/myapp/prod/" }
+ps = { type = "aws-ps", region = "us-east-1", prefix = "/myapp/prod/" }
 
 [secrets]
 DATABASE_URL = { provider = "ps", value = "database-url" }  # → Fetches "/myapp/prod/database-url"
@@ -238,7 +238,7 @@ Without prefix:
 
 ```toml
 [providers]
-ps = { type = "aws-ps" }  # No prefix
+ps = { type = "aws-ps", region = "us-east-1" }  # No prefix
 
 [secrets]
 DATABASE_URL = { provider = "ps", value = "/myapp/prod/database-url" }  # → Full path
@@ -332,7 +332,7 @@ Parameter Store standard tier is free for most use cases. Use it for configurati
 | Rotation      | Manual                        | Automatic                 |
 | Versioning    | Limited                       | Full versioning           |
 | Organization  | Hierarchical paths (`/a/b/c`) | Flat with tags            |
-| Cross-account | Via Resource policies         | Via Resource policies     |
+| Cross-account | Via resource policies         | Via resource policies     |
 | Best For      | Config values, simple secrets | Complex secrets, rotation |
 
 **Use Parameter Store when:**

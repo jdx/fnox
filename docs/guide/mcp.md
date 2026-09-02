@@ -48,7 +48,7 @@ When `secrets` is omitted, all profile secrets are available (the default).
 
 ### 3. Configure your AI agent
 
-For Claude Code, add to `.claude/settings.json`:
+For Claude Code, add to `.mcp.json` in your project root:
 
 ```json
 {
@@ -87,7 +87,7 @@ Executes a command with all secrets injected as environment variables. The agent
 ## How It Works
 
 1. The MCP server starts in non-interactive mode (no stdin prompts)
-2. On the **first tool call**, all env-injectable profile secrets (`env = true` or `env = "exec"`) are resolved in a single batch — this amortizes the cost of yubikey taps or SSO prompts. Secrets configured with `env = false` are resolved on-demand when individually requested via `get_secret`.
+2. On the **first tool call**, all env-injectable profile secrets (`env = true` or `env = "exec"`) are resolved in a single batch — this amortizes the cost of YubiKey taps or SSO prompts. Secrets configured with `env = false` are resolved on-demand when individually requested via `get_secret`.
 3. Resolved secrets are cached in process memory for the session
 4. Subsequent tool calls use the cache
 5. When the agent disconnects (EOF), the process exits and all secrets are cleared from memory

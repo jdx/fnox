@@ -53,6 +53,7 @@ Daemon-backed resolution applies to read-oriented commands:
 - `fnox check`
 - `fnox tui`
 - `fnox mcp`
+- `fnox proxy run`
 - `fnox ci-redact`
 
 Mutation and admin commands still resolve directly, including `sync`, `reencrypt`, `edit`, `set`, `remove`, `provider`, and `lease create`.

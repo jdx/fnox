@@ -143,7 +143,7 @@ pub enum Commands {
     /// List all secrets
     List(list::ListCommand),
 
-    /// Start an MCP server for secret-gated AI agent access
+    /// Start an MCP server that brokers secrets to AI agents
     Mcp(mcp::McpCommand),
 
     /// List available profiles

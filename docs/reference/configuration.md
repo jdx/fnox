@@ -39,8 +39,8 @@ fnox looks for configuration files in this order (lowest to highest priority):
 Passing `-c, --config` with anything other than the bare default filename turns
 off the hierarchical search: fnox loads that one file plus any files it
 `import`s, and skips parent directories and their local overrides. The global
-config is still loaded as the base layer, the same way `root = true` stops
-recursion without disabling it.
+config is still loaded as the base layer, just as `root = true` stops
+parent-directory recursion without skipping the global config.
 
 To load a config in complete isolation, point `FNOX_CONFIG_DIR` at a directory
 with no `config.toml`:
@@ -63,8 +63,8 @@ fnox init --global
 # Add secrets to global config
 fnox set MY_TOKEN "secret-value" --global
 
-# Add providers to global config
-fnox provider add aws aws-sm --global
+# Add providers to global config (the `aws` type is AWS Secrets Manager)
+fnox provider add aws aws --global
 ```
 
 **Location**: `~/.config/fnox/config.toml` (customizable via `FNOX_CONFIG_DIR`)
@@ -114,7 +114,7 @@ if_missing = "error"  # or "warn", "ignore"
 - `"warn"` - Print warning and continue (default)
 - `"ignore"` - Silently skip missing secrets
 
-**Priority:** Lowest (overridden by secret-level, env vars, CLI flags).
+**Priority:** Overridden by secret-level `if_missing`, `FNOX_IF_MISSING`, and CLI flags. Only `FNOX_IF_MISSING_DEFAULT` and the built-in default rank lower.
 
 ### `env`
 
@@ -142,7 +142,7 @@ HOMEBREW_GITHUB_API_TOKEN = { provider = "age", value = "...", env = true }  # .
 
 Note that this limits _ambient_ exposure: processes in your shell no longer see secret values in their environment. Anyone who can run commands in your shell can still invoke `fnox get` or `fnox exec` themselves — for a hard boundary, combine this with the [MCP server allowlist](/guide/mcp) and OS-level sandboxing.
 
-### `imports`
+### `import`
 
 List of config files to import.
 
@@ -694,7 +694,7 @@ Merge order (lowest to highest priority):
 6. Child `fnox.<profile>.toml` for each active profile (in profile order)
 7. Child `fnox.local.toml`
 
-**Note**: Global config is always loaded, even when `root = true` stops parent directory recursion.
+**Note**: Setting `root = true` in a `fnox.toml` stops the parent-directory search at that file. The global config is always loaded, even when `root = true` stops parent directory recursion.
 
 ## Next Steps
 

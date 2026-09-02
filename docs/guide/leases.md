@@ -255,12 +255,11 @@ AWS_ACCESS_KEY_ID (AWS access key): AKIA...
 AWS_SECRET_ACCESS_KEY (AWS secret key): wJalr...
 AWS_SESSION_TOKEN (AWS session token (optional)):
 
-Lease created (expires in 1h0m)
-
-AWS_ACCESS_KEY_ID         ASIA...F3YQ
-AWS_SECRET_ACCESS_KEY     wJal...EKEY
-AWS_SESSION_TOKEN         FwoG...==
-Expires                   2024-01-15T10:00:00+00:00
+✓ Lease 'aws' created (expires in 1h0m)
+  AWS_ACCESS_KEY_ID         ASIA...F3YQ
+  AWS_SECRET_ACCESS_KEY     wJal...EKEY
+  AWS_SESSION_TOKEN         FwoG...IA==
+  Expires                   2024-01-15T10:00:00+00:00
 ```
 
 The credentials you paste are used once to call `sts:AssumeRole`, then discarded. Only the short-lived assumed-role credentials are cached in the lease ledger.
@@ -281,7 +280,7 @@ If you run `fnox exec` without having created a lease and without stored master 
 
 ```
 Skipping lease 'aws': AWS credentials not found. Run 'aws sso login' or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY.
-Run 'fnox lease create aws -i' to set up credentials interactively.
+Run 'fnox lease create -i aws' to set up credentials interactively.
 ```
 
 The subprocess still runs — just without the lease credentials. This means other secrets and leases that _are_ available will still be injected.
@@ -311,7 +310,7 @@ fnox lease list --expired
 # Revoke a specific lease
 fnox lease revoke <lease-id>
 
-# Clean up all expired leases
+# Revoke all expired leases that need manual cleanup (e.g. Cloudflare, Vault)
 fnox lease cleanup
 ```
 

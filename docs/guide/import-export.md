@@ -2,16 +2,21 @@
 
 fnox can import secrets from various formats and export them for use in other tools.
 
+Import requires an encryption provider (`-p`/`--provider`), such as `age`, so that
+imported values are encrypted before they are written to the config file. Remote
+storage providers (1Password, AWS Secrets Manager, etc.) are not yet supported as
+import targets.
+
 ## Import from Files
 
 ### From .env Files
 
 ```bash
-# Import from .env file
-fnox import -i .env
-
-# Import and specify provider
+# Import from .env file, encrypting with the "age" provider
 fnox import -i .env --provider age
+
+# Preview without writing anything
+fnox import -i .env --provider age --dry-run
 ```
 
 **Example .env file:**
@@ -24,12 +29,15 @@ JWT_SECRET=super-secret-jwt-key
 
 ### From stdin
 
+When reading from stdin, pass `--force` (or `--dry-run`): the confirmation prompt
+cannot read from stdin because the secrets are being read from it.
+
 ```bash
 # Pipe from another source
-cat .env | fnox import
+cat .env | fnox import --provider age --force
 
 # Using here-doc
-fnox import << 'EOF'
+fnox import --provider age --force << 'EOF'
 DATABASE_URL=postgresql://localhost/mydb
 API_KEY=sk_test_abc123
 EOF
@@ -39,13 +47,13 @@ EOF
 
 ```bash
 # JSON
-fnox import -i secrets.json json
+fnox import -i secrets.json json --provider age
 
 # YAML
-fnox import -i secrets.yaml yaml
+fnox import -i secrets.yaml yaml --provider age
 
 # TOML
-fnox import -i secrets.toml toml
+fnox import -i secrets.toml toml --provider age
 ```
 
 **Example secrets.json:**
@@ -68,14 +76,16 @@ API_KEY: sk_test_abc123
 
 ### With Provider
 
-Encrypt secrets during import:
+The provider encrypts secrets during import. It must be an encryption provider
+defined in your config (for example `age`, `aws-kms`, or a hardware-backed
+`yubikey`/`fido2` provider):
 
 ```bash
 # Import and encrypt with age
 fnox import -i .env --provider age
 
-# Import and store in AWS Secrets Manager
-fnox import -i .env --provider aws
+# Import and encrypt with an aws-kms provider named "kms"
+fnox import -i .env --provider kms
 ```
 
 ### With Filters
@@ -84,10 +94,10 @@ Import only specific secrets:
 
 ```bash
 # Import only secrets starting with "DATABASE_"
-fnox import -i .env --filter "^DATABASE_"
+fnox import -i .env --provider age --filter "^DATABASE_"
 
 # Import only API keys
-fnox import -i .env --filter "^API_"
+fnox import -i .env --provider age --filter "^API_"
 ```
 
 ### With Prefix
@@ -96,7 +106,7 @@ Add a prefix to all imported secrets:
 
 ```bash
 # Add "MYAPP_" prefix to all secrets
-fnox import -i .env --prefix "MYAPP_"
+fnox import -i .env --provider age --prefix "MYAPP_"
 
 # DATABASE_URL becomes MYAPP_DATABASE_URL
 # API_KEY becomes MYAPP_API_KEY
@@ -183,9 +193,6 @@ rm .env
 
 ```bash
 # Export current secrets to .env
-fnox exec env | grep -v '^_' > .env
-
-# Or use export command
 fnox export > .env
 ```
 
@@ -247,7 +254,7 @@ jobs:
           EOF
 
       - name: Import to fnox
-        run: fnox import -i secrets.env --provider age
+        run: fnox import -i secrets.env --provider age --force
 ```
 
 ### fnox → Docker Compose
@@ -264,10 +271,7 @@ fnox export > .env
 ### fnox → Kubernetes Secrets
 
 ```bash
-# Export as YAML
-fnox export --format yaml > secrets.yaml
-
-# Create Kubernetes secret
+# Create Kubernetes secret from .env-format output
 kubectl create secret generic app-secrets \
   --from-env-file=<(fnox export)
 ```

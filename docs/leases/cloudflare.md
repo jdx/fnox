@@ -29,7 +29,7 @@ name = "Zone Read"
 | `account_id` | No\*     | Cloudflare account ID. Also substituted into `{account_id}` placeholders in resource keys |
 | `policies`   | No       | Array of permission policies (see below); omit to inherit from parent token               |
 | `env_var`    | No       | Environment variable name for the token (default: `"CLOUDFLARE_API_TOKEN"`)               |
-| `duration`   | No       | Token lifetime (e.g., `"1h"`, `"30m"`, default: backend max of 24h)                       |
+| `duration`   | No       | Token lifetime (e.g., `"1h"`, `"30m"`; default: `"15m"`, max 24h)                         |
 
 \* Required when `token_type = "account"`.
 
@@ -84,7 +84,7 @@ type = "cloudflare"
 duration = "1h"
 ```
 
-The child token gets the same permissions as the parent. This is the simplest setup — just ensure the parent token has the **API Tokens: Edit** permission plus whatever permissions your workflow needs.
+The child token gets the same permissions as the parent, except for the **API Tokens** permission groups, which Cloudflare does not allow child tokens to inherit. This is the simplest setup — just ensure the parent token has the **API Tokens: Edit** permission plus whatever permissions your workflow needs.
 
 ### Account-owned token
 
