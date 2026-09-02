@@ -4,7 +4,7 @@ min_version = "2026.8.16"
 _.path = ["target/debug", "test/bats/bin"]
 
 [tools]
-mr-boxington = "1.4.1"
+mr-boxington = "1.5.0"
 usage = "6.6.1"
 # Pinned rather than "latest" because tak is the measuring instrument: an
 # upgrade that changes how it samples would land in the series as a step change
