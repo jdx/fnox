@@ -11,7 +11,7 @@ pub struct DaemonCommand {
 
 #[derive(Debug, usage_rs::Subcommands)]
 enum DaemonSubcommand {
-    /// Clear all running daemon caches
+    /// Clear the caches of all running daemons
     Clear,
     /// Run the daemon server in the foreground
     #[usage(hide)]

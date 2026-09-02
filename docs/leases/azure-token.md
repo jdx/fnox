@@ -1,6 +1,6 @@
 # Azure Token
 
-The `azure-token` lease backend obtains a short-lived OAuth2 bearer token from Azure Active Directory using either a service principal or the Azure CLI session.
+The `azure-token` lease backend obtains a short-lived OAuth2 bearer token from Microsoft Entra ID (formerly Azure Active Directory) using either a service principal or the Azure CLI session.
 
 ## Configuration
 
@@ -21,7 +21,7 @@ scope = "https://management.azure.com/.default"
 The backend needs Azure credentials. fnox looks for them in this order:
 
 1. Service principal environment variables: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, and `AZURE_TENANT_ID` (all three required)
-2. Azure CLI session (checks for `az` CLI)
+2. Azure CLI session (requires the `az` CLI to be installed and logged in)
 
 If none are found, fnox prints:
 

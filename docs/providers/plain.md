@@ -13,6 +13,16 @@ LOG_LEVEL = { default = "info" }  # ← Plain text
 API_TIMEOUT = { default = "30" }  # ← Plain text
 ```
 
+There is also an explicit `plain` provider (`type = "plain"`) that returns `value` verbatim, with no encryption. It is useful for tests and non-sensitive values that should still go through a provider:
+
+```toml
+[providers]
+plain = { type = "plain" }
+
+[secrets]
+LOG_LEVEL = { provider = "plain", value = "info" }
+```
+
 ## When Plain Text is Appropriate
 
 ### 1. Non-Sensitive Defaults
@@ -101,7 +111,7 @@ LOG_LEVEL = { default = "info" }
 2. **Use encryption for anything that shouldn't be public**
 3. **Use plain text only for truly non-sensitive defaults**
 4. **Review `.gitignore`** - Ensure sensitive files aren't tracked
-5. **Use** `fnox scan` **to detect secrets** - Scans for accidentally committed secrets
+5. **Use `fnox scan` to detect secrets** - Scans for accidentally committed secrets
 
 ## Scan for Secrets
 

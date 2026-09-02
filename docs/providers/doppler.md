@@ -46,13 +46,7 @@ mise use -g "github:DopplerHQ/cli"
 
 ## Setup
 
-### 1. Login to Doppler
-
-```bash
-doppler login
-```
-
-### 2. Authentication
+### 1. Authentication
 
 #### Option A: Interactive Login (Local Development)
 
@@ -68,7 +62,7 @@ Create a service token in the Doppler dashboard scoped to a specific project and
 export DOPPLER_TOKEN="dp.st.prd.xxxx"
 ```
 
-### 3. Configure Doppler Provider
+### 2. Configure Doppler Provider
 
 ```toml
 [providers]
@@ -81,7 +75,7 @@ All fields are optional. If not specified, the Doppler CLI will use its own defa
 
 - `project` - Doppler project name. If omitted, uses the project configured via `doppler setup`.
 - `config` - Doppler config (environment) name (e.g., "dev", "stg", "prd"). If omitted, uses the config configured via `doppler setup`.
-- `token` - Service token for authentication. If omitted, uses `DOPPLER_TOKEN` or `FNOX_DOPPLER_TOKEN` environment variable, or interactive login session.
+- `token` - Service token for authentication. If omitted, uses the `FNOX_DOPPLER_TOKEN` or `DOPPLER_TOKEN` environment variable (in that order), or the interactive login session.
 
 ## Referencing Secrets
 
@@ -161,7 +155,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v4
 
       - name: Deploy
         env:

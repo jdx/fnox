@@ -168,10 +168,9 @@ When rotating KMS keys:
 
 1. Create new KMS key
 2. Update fnox.toml with new `key_id`
-3. Re-encrypt all secrets:
+3. Re-encrypt all secrets with the new key:
    ```bash
-   fnox set DATABASE_URL "$(fnox get DATABASE_URL)" --provider kms
-   fnox set API_KEY "$(fnox get API_KEY)" --provider kms
+   fnox reencrypt -p kms
    ```
 
 ## Costs

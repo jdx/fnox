@@ -15,7 +15,7 @@ You're building an API that needs:
 
 **Requirements:**
 
-- **Development:** Secrets in git (encrypted) so team can clone and run
+- **Development:** Secrets in git (encrypted) so the team can clone and run
 - **Staging:** Secrets in git (encrypted) with staging values
 - **Production:** Secrets in AWS Secrets Manager (never in git)
 
@@ -95,7 +95,7 @@ git commit -m "Add encrypted development secrets"
 Add staging secrets (also encrypted):
 
 ```bash
-# Switch to staging profile
+# Target the staging profile
 fnox set DATABASE_URL "postgresql://staging.db.example.com/mydb" \
   --provider age \
   --profile staging
@@ -255,17 +255,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v3 # Installs fnox via mise
+      - uses: jdx/mise-action@v4 # Installs fnox via mise
 
-      # Decrypt dev secrets for testing
-      - name: Setup fnox
+      # Decrypt dev secrets for testing with the CI age key
+      - name: Run tests
         env:
           FNOX_AGE_KEY: ${{ secrets.FNOX_AGE_KEY }}
-        run: |
-          # Use the CI age key to decrypt secrets
-          echo "FNOX_AGE_KEY is already set from secrets"
-
-      - name: Run tests
         run: |
           fnox exec -- npm test
 
@@ -275,7 +270,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v4
 
       - name: Deploy to staging
         env:
@@ -290,7 +285,7 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v4
 
       - name: Deploy to production
         env:
@@ -342,9 +337,9 @@ echo 'eval "$(fnox activate bash)"' >> ~/.bashrc
 # Then re-encrypts all secrets:
 fnox reencrypt -p age
 
-# 8. New team member pulls and runs
+# 8. New team member pulls and re-enters the directory
 git pull
-cd my-api
+cd .
 # fnox: +4 DATABASE_URL, JWT_SECRET, STRIPE_KEY, SENDGRID_KEY
 npm run dev  # Just works!
 ```
@@ -355,12 +350,12 @@ npm run dev  # Just works!
 my-api/
 ├── .gitignore                 # fnox.local.toml, .env
 ├── fnox.toml                  # Committed (encrypted dev/staging, AWS refs for prod)
-├── fnox.local.toml           # Gitignored (personal overrides)
+├── fnox.local.toml            # Gitignored (personal overrides)
 ├── package.json
 ├── src/
 └── .github/
     └── workflows/
-        └── ci.yml            # CI/CD with fnox
+        └── ci.yml             # CI/CD with fnox
 ```
 
 ## Next Steps

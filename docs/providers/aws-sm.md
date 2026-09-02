@@ -233,7 +233,7 @@ The `prefix` is prepended to the `value`:
 
 ```toml
 [providers]
-aws = { prefix = "myapp/" }
+aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp/" }
 
 [secrets]
 DATABASE_URL = { provider = "aws", value = "database-url" }  # → Fetches "myapp/database-url"
@@ -244,7 +244,7 @@ Without prefix:
 
 ```toml
 [providers]
-aws = { }  # No prefix
+aws = { type = "aws-sm", region = "us-east-1" }  # No prefix
 
 [secrets]
 DATABASE_URL = { provider = "aws", value = "myapp/database-url" }  # → Fetches "myapp/database-url"
@@ -297,7 +297,7 @@ aws secretsmanager create-secret \
   --secret-string '{"host":"db.example.com","port":"5432","username":"admin","password":"secret"}'
 ```
 
-By default, `fnox` returns the entire JSON string. Use `json_path` to extract specific fields:
+By default, fnox returns the entire JSON string. Use `json_path` to extract specific fields:
 
 ```toml
 [providers]
@@ -318,8 +318,8 @@ fnox get DB_PASS
 
 This also supports nested JSON paths using dot notation.
 
-Literal dots need to be escaped (`\.`).
-In TOML, either literal strings have to be used (`'\.'`) or the backslash itself has to be escaped (`"\\."`):
+Literal dots in a key name need to be escaped (`\.`).
+In TOML, either use a literal string (`'\.'`) or escape the backslash itself (`"\\."`):
 
 ```bash
 # Create nested JSON secret

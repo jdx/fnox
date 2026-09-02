@@ -177,8 +177,6 @@ jobs:
       - run: fnox exec -- ./deploy.sh
 ```
 
-fnox runs `foks bot use` the first time the agent reports it's not authenticated, then retries the failed `kv` call once.
-
 If you'd rather keep `host` out of `fnox.toml`, set it via `FOKS_HOST` in the workflow env. Likewise, `bot_token` can live in the config (encrypted with a bootstrap provider like `age`) instead of the env var, but the env var is usually simpler.
 
 ## Pros

@@ -122,12 +122,12 @@ impl BitwardenProvider {
         } else {
             // BW_SESSION not found - this will cause bw to fail
             tracing::error!(
-                "BW_SESSION token not found in environment. Set BW_SESSION=$(bw unlock --raw) or FNOX_BW_SESSION_TOKEN"
+                "BW_SESSION token not found in environment. Set BW_SESSION=$(bw unlock --raw) or FNOX_BW_SESSION"
             );
             return Err(FnoxError::ProviderAuthFailed {
                 provider: "Bitwarden".to_string(),
                 details: "Session token not found".to_string(),
-                hint: "Set BW_SESSION=$(bw unlock --raw) or FNOX_BW_SESSION_TOKEN".to_string(),
+                hint: "Set BW_SESSION=$(bw unlock --raw) or FNOX_BW_SESSION".to_string(),
                 url: "https://fnox.jdx.dev/providers/bitwarden".to_string(),
             });
         };
@@ -206,7 +206,7 @@ impl BitwardenProvider {
 
         // The BW_SESSION environment variable should be set externally
         // Users should run: export BW_SESSION=$(bw unlock --raw)
-        // Or they can set FNOX_BW_SESSION_TOKEN and we'll use that
+        // Or they can set FNOX_BW_SESSION and we'll use that
 
         let cli = match self.backend {
             BitwardenBackend::Bw => "bw",
@@ -248,7 +248,7 @@ impl BitwardenProvider {
                 return Err(FnoxError::ProviderAuthFailed {
                     provider: "Bitwarden".to_string(),
                     details: stderr_str.to_string(),
-                    hint: format!("Run '{} unlock' and set BW_SESSION", cli),
+                    hint: format!("Run '{cli} unlock' and set BW_SESSION or FNOX_BW_SESSION"),
                     url: "https://fnox.jdx.dev/providers/bitwarden".to_string(),
                 });
             }

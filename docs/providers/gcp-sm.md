@@ -74,5 +74,5 @@ gcp = { type = "gcp-sm", project = "my-project-id", prefix = "myapp/" }  # prefi
 
 ## Next Steps
 
-- [GCP Cloud KMS](/providers/gcp-kms) - Encryption alternative
+- [Google Cloud KMS](/providers/gcp-kms) - Encryption alternative
 - [AWS Secrets Manager](/providers/aws-sm) - AWS equivalent

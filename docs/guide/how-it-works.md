@@ -38,12 +38,13 @@ DATABASE_URL = { provider = "aws", value = "database-url" }  # ← Just a refere
 
 When fnox resolves a secret, it checks in this order:
 
-1. **Encrypted value** (`provider = "age"`, `value = "encrypted..."`)
-2. **Provider reference** (`provider = "aws"`, `value = "secret-name"`)
-3. **Environment variable** (if already set in shell)
-4. **Default value** (`default = "fallback"`)
+1. **Provider value** — either an encrypted value (`provider = "age"`, `value = "encrypted..."`) or a remote reference (`provider = "aws"`, `value = "secret-name"`)
+2. **Default value** (`default = "fallback"`), also used as a fallback if the provider lookup fails
+3. **Environment variable** (if no provider or default value is available)
 
-First match wins!
+First match wins. Note that a provider error is only survivable when a `default` is
+configured: without one, the error is returned immediately and fnox does **not** fall
+back to the environment.
 
 ## Example Config
 
@@ -63,7 +64,7 @@ NODE_ENV = { default = "development" }  # Default value (fallback)
 
 When you run `fnox exec -- <command>`:
 
-1. fnox reads `fnox.toml` from current directory (or parent directories)
+1. fnox reads `fnox.toml` from the current directory (and parent directories)
 2. Resolves all secrets based on the active profile
 3. Decrypts encrypted secrets or fetches remote secrets
 4. Exports all secrets as environment variables

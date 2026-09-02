@@ -25,16 +25,16 @@ respond to every PR with detailed context. A rejection may be brief.
 
 ## Code Style
 
-All of these repos use [hk](https://hk.jdx.dev) for linting and formatting.
-Run the checks before opening a PR:
+fnox uses [hk](https://hk.jdx.dev) for linting and formatting. Run the checks
+before opening a PR:
 
 ```sh
 hk check --all
 hk fix --all
 ```
 
-Some repos also expose wrapper tasks such as `mise run lint` and
-`mise run lint-fix`; prefer those when they exist.
+fnox also exposes these as the wrapper tasks `mise run lint` and
+`mise run lint-fix`; prefer those.
 
 ## Commit and PR Titles
 
@@ -46,16 +46,27 @@ Use Conventional Commits for commit messages and PR titles. Examples:
 
 ## Testing
 
-Testing differs by project. Run the relevant tests for the code you changed and
-the repo's CI-style task when practical. Check `mise tasks`, `mise.toml`,
-and existing README/docs for the exact commands.
+Run the relevant tests for the code you changed, and the full CI-style task when
+practical:
+
+```sh
+mise run test:cargo   # Rust unit and integration tests
+mise run test:bats    # End-to-end CLI tests (builds first)
+mise run test         # Both
+mise run ci           # Build, test, and lint
+```
+
+Run `mise tasks` or check `mise.toml` for the complete list.
 
 ## Development
 
-Install project tools with mise:
+Install project tools with mise, then build:
 
 ```sh
 mise install
+mise run build
 ```
 
-Run the checks listed in the repository before opening a PR.
+Run the lint and test tasks above before opening a PR. See
+[CONTRIBUTING.md](https://github.com/jdx/fnox/blob/main/CONTRIBUTING.md) in the
+repository for notes on the mbx build cache.

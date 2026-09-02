@@ -15,7 +15,7 @@ Export secrets in various formats
 
   **Default:** `env`
 
-- **`-n --dry-run`** — Show what would be exported without writing to file
+- **`-n --dry-run`** — Show what would be exported without writing to a file
 - **`-o --output <OUTPUT>`** — Output file (default: stdout)
 - **`--all`** — Include secrets with env = false or env = "exec" (excluded by default)
 - **`--header`** — Include metadata comments in env and shell output

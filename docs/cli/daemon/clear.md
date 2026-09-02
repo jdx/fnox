@@ -4,7 +4,7 @@
 
 - **Usage:** `fnox daemon clear`
 
-Clear all running daemon caches
+Clear the caches of all running daemons
 
 ## Flags
 

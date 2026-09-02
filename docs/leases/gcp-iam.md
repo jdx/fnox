@@ -11,12 +11,12 @@ service_account_email = "my-sa@my-project.iam.gserviceaccount.com"
 duration = "1h"
 ```
 
-| Field                   | Required | Description                                                                     |
-| ----------------------- | -------- | ------------------------------------------------------------------------------- |
-| `service_account_email` | Yes      | Service account to impersonate                                                  |
-| `scopes`                | No       | OAuth2 scopes (default: `["https://www.googleapis.com/auth/cloud-platform"]`)   |
-| `env_var`               | No       | Environment variable name for the token (default: `CLOUDSDK_AUTH_ACCESS_TOKEN`) |
-| `duration`              | No       | Lease duration (e.g., `"1h"`, `"30m"`)                                          |
+| Field                   | Required | Description                                                                       |
+| ----------------------- | -------- | --------------------------------------------------------------------------------- |
+| `service_account_email` | Yes      | Service account to impersonate                                                    |
+| `scopes`                | No       | OAuth2 scopes (default: `["https://www.googleapis.com/auth/cloud-platform"]`)     |
+| `env_var`               | No       | Environment variable name for the token (default: `"CLOUDSDK_AUTH_ACCESS_TOKEN"`) |
+| `duration`              | No       | Lease duration (e.g., `"1h"`, `"30m"`; default: `"15m"`)                          |
 
 ## Prerequisites
 

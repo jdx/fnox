@@ -5,8 +5,8 @@ Integrate with [Bitwarden Secrets Manager](https://bitwarden.com/products/secret
 ## Quick Start
 
 ```bash
-# 1. Install bws CLI (auto-installed via mise)
-# Already available!
+# 1. Install bws CLI (see Installation below)
+brew install bws
 
 # 2. Set access token
 export BWS_ACCESS_TOKEN=<your-access-token>
@@ -31,12 +31,12 @@ fnox exec -- npm start
 ## Prerequisites
 
 - [Bitwarden Secrets Manager](https://bitwarden.com/products/secrets-manager/) account
-- [Bitwarden Secrets Manager CLI](https://bitwarden.com/help/secrets-manager-cli/) `bws` CLI (automatically installed via mise)
+- [Bitwarden Secrets Manager CLI](https://bitwarden.com/help/secrets-manager-cli/) (`bws`)
 - Access token (machine account or personal)
 
 ## Installation
 
-The `bws` CLI is installed automatically when using fnox via mise. Manual installation:
+Install the `bws` CLI:
 
 ```bash
 # macOS
@@ -171,7 +171,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v4
 
       - name: Deploy with secrets
         env:

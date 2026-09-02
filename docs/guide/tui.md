@@ -15,30 +15,31 @@ fnox tui
 The main view shows all secrets in the current profile with their status:
 
 - **Name** - The environment variable name
-- **Value Preview** - A truncated preview of the decrypted value
 - **Provider** - Which provider manages the secret
+- **Value** - Masked by default; press `V` to toggle a truncated preview of the resolved value
 
-Use arrow keys or `j`/`k` to navigate through the list.
+Use arrow keys or `j`/`k` to navigate through the list, `g`/`G` to jump to the top or bottom, and `Tab` to switch focus between the providers and secrets panes.
 
 ### Search Filtering
 
-Press `/` to enter search mode. Type to filter secrets by name. The list updates in real-time as you type. Press `Esc` to clear the search and return to the full list.
+Press `/` to enter search mode. Type to filter secrets by name. The list updates in real time as you type. Press `Enter` to leave search mode and keep the filter, or `Esc` to clear the search and return to the full list.
 
 ### Profile Switching
 
-Press `p` to open the profile picker. Select a different profile to view its secrets. This allows you to quickly compare secrets across environments (dev, staging, production).
+Press `P` to open the profile picker. Select a different profile to view its secrets. This allows you to quickly compare secrets across environments (dev, staging, production).
 
 ### Secret Details
 
-Press `Enter` on any secret to view its full details:
+Press `Enter` on any secret to view its details:
 
-- Full decrypted value
 - Provider name
+- Provider key (the secret's `value` field, if set)
 - Description (if set)
 - Default value (if set)
-- Key name in the provider (if different from env var name)
+- `if_missing` behavior and source file (if set)
+- Resolved value status (shown as a character count, not the value itself)
 
-Press `Esc` to close the detail view.
+Press `c` in the detail view to copy the value, or any other key to close it.
 
 ### Copy to Clipboard
 
@@ -46,32 +47,38 @@ Press `c` to copy the currently selected secret's value to your clipboard. A con
 
 ### Edit Secrets
 
-Press `e` to edit the selected secret's value. This opens an input field where you can modify the value. Press `Enter` to confirm or `Esc` to cancel.
+Press `e` to edit the selected secret's value, or `s` to add a new secret. This opens an input field where you can modify the value. Press `Enter` to confirm or `Esc` to cancel.
 
 ::: warning
-Edits made in the TUI are temporary and stored in memory only. They are **not** persisted to your config file. To permanently change a secret, use `fnox set`.
+Edits and new secrets created in the TUI are temporary and stored in memory only. They are **not** persisted to your config file, and `d` (delete) is not yet implemented. To permanently change a secret, use `fnox set` or `fnox remove`.
 :::
 
 ## Keyboard Shortcuts
 
-| Key          | Action                         |
-| ------------ | ------------------------------ |
-| `q` or `Esc` | Quit (or close popup)          |
-| `↑` / `k`    | Move up                        |
-| `↓` / `j`    | Move down                      |
-| `/`          | Enter search mode              |
-| `Enter`      | View secret details            |
-| `c`          | Copy secret value to clipboard |
-| `e`          | Edit secret (in memory only)   |
-| `p`          | Open profile picker            |
+| Key          | Action                                 |
+| ------------ | -------------------------------------- |
+| `q` or `Esc` | Quit (or close popup)                  |
+| `↑` / `k`    | Move up                                |
+| `↓` / `j`    | Move down                              |
+| `g` / `G`    | Jump to top / bottom                   |
+| `Tab`        | Switch focus between providers/secrets |
+| `/`          | Enter search mode                      |
+| `Enter`      | View secret details                    |
+| `c`          | Copy secret value to clipboard         |
+| `V`          | Toggle showing values in the list      |
+| `e`          | Edit secret (in memory only)           |
+| `s`          | Set a new secret (in memory only)      |
+| `r`          | Refresh secrets                        |
+| `P`          | Open profile picker                    |
+| `?`          | Show help                              |
 
 ## Mouse Support
 
 The TUI supports mouse interactions:
 
-- **Click** on a secret to select it
+- **Click** on a secret or provider to select it
 - **Scroll** to navigate through the list
-- **Click** on profile picker items to switch profiles
+- **Click** anywhere to dismiss the help or secret detail popup
 
 ## Tips
 
@@ -79,14 +86,14 @@ The TUI supports mouse interactions:
 
 1. Press `/` to search
 2. Type part of the secret name
-3. Press `Enter` to view the first match
+3. Press `Enter` to leave search mode, then `Enter` again to view the selected match
 
 ### Compare Environments
 
-1. Press `p` to open the profile picker
+1. Press `P` to open the profile picker
 2. Switch between profiles to see how secrets differ
 3. Use `c` to copy values you need
 
 ### Secure Viewing
 
-The TUI shows decrypted values only when you explicitly view them (via `Enter`). The main list shows truncated previews to reduce shoulder-surfing risk.
+The TUI masks values in the main list by default and never prints the full value on screen. Press `V` to reveal truncated previews when you need them, and use `c` to copy a value to the clipboard without displaying it.

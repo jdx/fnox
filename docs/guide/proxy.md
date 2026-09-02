@@ -48,7 +48,7 @@ fnox proxy run -- claude
 fnox proxy run -- node agent.js
 ```
 
-Fnox:
+fnox:
 
 1. Resolves secrets referenced by proxy rules and any provider authentication
    secrets they depend on.

@@ -64,6 +64,8 @@ Your `fnox.toml` config file either contains encrypted secrets or references to 
 ### 🔐 Encryption (secrets in git, encrypted)
 
 - [**age**](https://fnox.jdx.dev/providers/age) - Modern encryption (works with SSH keys!)
+- [**fido2**](https://fnox.jdx.dev/providers/fido2) - FIDO2 hmac-secret hardware-backed encryption
+- [**yubikey**](https://fnox.jdx.dev/providers/yubikey) - YubiKey HMAC-SHA1 hardware-backed encryption
 - [**aws-kms**](https://fnox.jdx.dev/providers/aws-kms) - AWS Key Management Service
 - [**azure-kms**](https://fnox.jdx.dev/providers/azure-kms) - Azure Key Vault encryption
 - [**gcp-kms**](https://fnox.jdx.dev/providers/gcp-kms) - Google Cloud KMS
@@ -78,6 +80,8 @@ Your `fnox.toml` config file either contains encrypted secrets or references to 
 - [**bitwarden-sm**](https://fnox.jdx.dev/providers/bitwarden-sm) - Bitwarden Secrets Manager
 - [**vault**](https://fnox.jdx.dev/providers/vault) - HashiCorp Vault
 - [**doppler**](https://fnox.jdx.dev/providers/doppler) - Doppler
+- [**foks**](https://fnox.jdx.dev/providers/foks) - FOKS (Federated Open Key Service)
+- [**keeper-sm**](https://fnox.jdx.dev/providers/keeper-sm) - Keeper Secrets Manager
 
 ### 🔑 Password Managers & Secret Services
 
@@ -183,7 +187,7 @@ cargo install --path .
 
 ## Development
 
-See [CLAUDE.md](./CLAUDE.md) for development guidelines.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) and [CLAUDE.md](./CLAUDE.md) for development guidelines.
 
 ```bash
 # Build

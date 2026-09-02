@@ -31,8 +31,8 @@ mkdir ($nu.data-dir | path join "vendor/autoload")
 fnox activate nu | save -f ($nu.data-dir | path join "vendor/autoload/fnox.nu")
 ```
 
-```powershell [Powershell]
-# Add this to your Powershell profile.
+```powershell [PowerShell]
+# Add this to your PowerShell profile.
 # To find your profile, see https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_profiles
 (&fnox activate pwsh) | Out-String | Invoke-Expression
 ```
@@ -41,7 +41,7 @@ fnox activate nu | save -f ($nu.data-dir | path join "vendor/autoload/fnox.nu")
 
 ## How It Works
 
-Once enabled, fnox hooks into your shell's `cd` command. When you enter a directory with `fnox.toml`:
+Once enabled, fnox installs a hook that runs before each prompt. When you enter a directory with `fnox.toml`:
 
 ```bash
 ~/projects $ cd my-app
@@ -85,7 +85,7 @@ cd my-app
 # Switch to staging
 export FNOX_PROFILE=staging
 # fnox detects the change on the next prompt automatically
-# fnox: -3 +3 DATABASE_URL, API_KEY, JWT_SECRET (from staging profile)
+# fnox: +3 -3 DATABASE_URL, API_KEY, JWT_SECRET (from staging profile)
 ```
 
 ## Hierarchical Loading

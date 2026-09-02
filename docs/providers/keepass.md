@@ -69,7 +69,7 @@ export KEEPASS_PASSWORD="your-master-password"
 ```
 
 ::: warning
-Avoid storing the password directly in the provider config. Use environment variables instead for security.
+The provider also accepts a `password` field, but avoid storing the password directly in the provider config. Use environment variables instead; they take priority over the config value.
 :::
 
 ## Reference Formats
@@ -149,7 +149,7 @@ Your `fnox.toml`:
 
 ```toml
 [secrets]
-DATABASE_URL = { provider = "keepass", value = "database-url" }
+DATABASE_URL = { provider = "keepass", value = "DATABASE_URL" }  # Entry title, not the actual secret
 ```
 
 ### Store with Specific Path
@@ -313,19 +313,16 @@ fnox auto-creates databases. If you need to pre-populate:
 3. **Organize with groups** - Use group paths for organization
 4. **Back up regularly** - Database is a single file
 5. **Use KeePassXC** - Modern GUI for database management
-6. **Gitignore the database** - Unless intentionally sharing encrypted
+6. **Gitignore the database** - Unless you intentionally share the encrypted file
 
 ## Running Tests
 
 ```bash
-# Set the test password
-export KEEPASS_PASSWORD="test-password"
-
 # Run the KeePass tests
 mise run test:bats -- test/keepass.bats
 ```
 
-Tests will automatically skip if `KEEPASS_PASSWORD` is not available.
+The tests create a temporary database with their own password, so no external setup is needed.
 
 ## Next Steps
 
