@@ -246,7 +246,7 @@ jobs:
           fetch_from_github: false
       - uses: ./.github/actions/mbx
         with:
-          backend: ${{ inputs.trusted && 'local' || 'github' }}
+          backend: github
           mirror-github-cache: "true"
       - name: Check Windows build
         run: cargo check --workspace
