@@ -40,9 +40,11 @@ When fnox resolves a secret, it checks in this order:
 
 1. **Provider value** — either an encrypted value (`provider = "age"`, `value = "encrypted..."`) or a remote reference (`provider = "aws"`, `value = "secret-name"`)
 2. **Default value** (`default = "fallback"`), also used as a fallback if the provider lookup fails
-3. **Environment variable** (if already set in shell)
+3. **Environment variable** (if no provider or default value is available)
 
-First match wins!
+First match wins. Note that a provider error is only survivable when a `default` is
+configured: without one, the error is returned immediately and fnox does **not** fall
+back to the environment.
 
 ## Example Config
 
