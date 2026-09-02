@@ -36,6 +36,7 @@ jobs:
     env:
       # Persistent appliance-local store; no remote backend is configured.
       MBX_CACHE_DIR: /var/cache/mbx
+      MBX_REMOTE_URL: ""
     name: Measure
     # Pin the image as well as tak and Rust. Absolute instruction counts shift
     # when any part of the measuring environment moves.
