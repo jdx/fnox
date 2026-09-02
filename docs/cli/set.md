@@ -22,7 +22,7 @@ Set a secret value
 - **`-g --global`** — Save to the global config file (~/.config/fnox/config.toml)
 - **`-k --key-name <KEY_NAME>`** — Key name in the provider (if different from env var name)
 - **`-n --dry-run`** — Show what would be done without making changes
-- **`-p --provider <PROVIDER>`** — Provider to fetch from
+- **`-p --provider <PROVIDER>`** — Provider to store the secret in (defaults to its existing provider, then default_provider)
 - **`--base64-encode`** — Base64 encode the secret
 - **`--default <DEFAULT>`** — Default value to use if secret is not found
 - **`--from-file <FROM_FILE>`** — Read the secret value verbatim from a UTF-8 file

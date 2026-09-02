@@ -49,7 +49,7 @@ Configuration directory path.
 export FNOX_CONFIG_DIR=~/.config/fnox
 ```
 
-**Default:** `~/.config/fnox`
+**Default:** `$XDG_CONFIG_HOME/fnox` if set, otherwise `~/.config/fnox`
 
 **Usage:**
 
@@ -58,6 +58,50 @@ export FNOX_CONFIG_DIR=~/.config/fnox
 export FNOX_CONFIG_DIR=/opt/fnox
 fnox get DATABASE_URL
 ```
+
+### `FNOX_STATE_DIR`
+
+State directory path. fnox stores the credential lease ledger under
+`$FNOX_STATE_DIR/leases/`.
+
+```bash
+export FNOX_STATE_DIR=/opt/fnox/state
+```
+
+**Default:** `$XDG_STATE_HOME/fnox` if set, otherwise `~/.local/state/fnox`
+
+### `FNOX_PROMPT_AUTH`
+
+Whether to prompt to run a provider's auth command (e.g., `aws sso login`,
+`op signin`) when provider authentication fails in a TTY. Overrides the
+`prompt_auth` config setting.
+
+```bash
+export FNOX_PROMPT_AUTH=false
+```
+
+**Default:** `true`
+
+### `FNOX_NON_INTERACTIVE`
+
+Disable prompts and browser-based auth flows; only cached or non-interactive
+auth is used. Equivalent to the `--non-interactive` flag.
+
+```bash
+export FNOX_NON_INTERACTIVE=1
+fnox exec -- ./deploy.sh
+```
+
+### `FNOX_HTTP_TIMEOUT`
+
+HTTP request timeout for lease backend API calls (Vault, GCP IAM, etc.). Set to
+`0` to disable the timeout (not recommended).
+
+```bash
+export FNOX_HTTP_TIMEOUT=60s
+```
+
+**Default:** `30s`
 
 ## Encryption Keys
 
@@ -183,7 +227,7 @@ export FNOX_DAEMON=off  # force direct resolution
 - `on`, `true`, `yes`, `1` - Enable daemon-backed resolution
 - `off`, `false`, `no`, `0` - Disable daemon-backed resolution
 
-When enabled, supported read commands auto-start the per-user daemon and fail closed if the daemon cannot be used. The `--no-daemon` flag disables daemon use for a single invocation.
+When set, this overrides the `[daemon].enabled` config setting. When enabled, supported read commands auto-start the per-user daemon and fail closed if the daemon cannot be used. The `--no-daemon` flag disables daemon use for a single invocation.
 
 See [Per-User Daemon](/guide/daemon).
 
@@ -233,7 +277,7 @@ export AWS_REGION="us-east-1"
 export AWS_PROFILE="myapp"
 ```
 
-Used by AWS providers (`aws-sm`, `aws-kms`).
+Used by AWS providers (`aws-sm`, `aws-ps`, `aws-kms`) and the `aws-sts` lease backend.
 
 ### Azure
 
@@ -243,7 +287,7 @@ export AZURE_CLIENT_SECRET="..."
 export AZURE_TENANT_ID="..."
 ```
 
-Used by Azure providers (`azure-sm`, `azure-kms`).
+Used by Azure providers (`azure-sm`, `azure-ac`, `azure-kms`) and the `azure-token` lease backend.
 
 ### Google Cloud
 
@@ -251,45 +295,46 @@ Used by Azure providers (`azure-sm`, `azure-kms`).
 export GOOGLE_APPLICATION_CREDENTIALS="/path/to/key.json"
 ```
 
-Used by GCP providers (`gcp-sm`, `gcp-kms`).
+Used by GCP providers (`gcp-sm`, `gcp-kms`) and the `gcp-iam` lease backend.
 
 ### 1Password
 
 ```bash
-export OP_SERVICE_ACCOUNT_TOKEN="ops_..."
+export OP_SERVICE_ACCOUNT_TOKEN="ops_..."  # Or FNOX_OP_SERVICE_ACCOUNT_TOKEN
 ```
 
-Used by 1Password provider.
+Used by the 1Password provider.
 
 ### Bitwarden
 
 ```bash
-export BW_SESSION="..."
+export BW_SESSION="..."  # Or FNOX_BW_SESSION
 ```
 
-Used by Bitwarden provider.
+Used by the Bitwarden provider.
 
 ### HashiCorp Vault
 
 ```bash
 export VAULT_ADDR="https://vault.example.com:8200"   # Or FNOX_VAULT_ADDR
 export VAULT_TOKEN="hvs.CAESIJ..."                # Or FNOX_VAULT_TOKEN
+export VAULT_NAMESPACE="admin/my-team"            # Or FNOX_VAULT_NAMESPACE
 ```
 
-Used by Vault provider. `FNOX_` prefixed variables take precedence over standard Vault environment variables.
+Used by the Vault provider and the `vault` lease backend. `FNOX_` prefixed variables take precedence over standard Vault environment variables.
 
 ## Editor
 
 ### `EDITOR`
 
-Editor used by `fnox edit`.
+Editor used by `fnox edit`. If `EDITOR` is unset, fnox falls back to `VISUAL`.
 
 ```bash
 export EDITOR=vim
 fnox edit
 ```
 
-**Default:** System default editor (`vi`, `nano`, etc.)
+**Default:** `vi`
 
 ## Examples
 

@@ -251,7 +251,7 @@ mod tests {
     }
 }
 
-/// Setup helpers for `fnox provider add --type fido2`
+/// Setup helpers for `fnox provider add <name> fido2`
 pub mod setup {
     use crate::error::{FnoxError, Result};
 

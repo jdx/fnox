@@ -6,13 +6,13 @@ Store secrets in your operating system's native secure storage.
 
 - **macOS:** Keychain Access (built-in)
 - **Windows:** Credential Manager (built-in)
-- **Linux:** Secret Service (via libsecret - GNOME Keyring, KWallet)
+- **Linux:** Secret Service over D-Bus (GNOME Keyring, KWallet)
 
 ## Quick Start
 
 ```bash
-# 1. Linux only: Install libsecret
-sudo apt-get install libsecret-1-0 libsecret-1-dev  # Ubuntu/Debian
+# 1. Linux only: make sure a Secret Service daemon is running
+sudo apt-get install gnome-keyring  # Ubuntu/Debian
 
 # 2. Configure provider
 cat >> fnox.toml << 'EOF'
@@ -29,20 +29,20 @@ fnox get DATABASE_URL
 
 ## Linux Setup
 
-On Linux, you need libsecret installed:
+On Linux, fnox talks to the Secret Service API directly over D-Bus, so you need a Secret Service implementation such as GNOME Keyring or KWallet running (no libsecret packages are required):
 
 ::: code-group
 
 ```bash [Ubuntu/Debian]
-sudo apt-get install libsecret-1-0 libsecret-1-dev
+sudo apt-get install gnome-keyring
 ```
 
 ```bash [Fedora/RHEL]
-sudo dnf install libsecret libsecret-devel
+sudo dnf install gnome-keyring
 ```
 
 ```bash [Arch]
-sudo pacman -S libsecret
+sudo pacman -S gnome-keyring
 ```
 
 :::
@@ -97,7 +97,7 @@ Your `fnox.toml`:
 
 ```toml
 [secrets]
-DATABASE_URL = { provider = "keychain", value = "database-url" }  # ← Keychain entry name, not the actual secret
+DATABASE_URL = { provider = "keychain", value = "DATABASE_URL" }  # ← Keychain entry name, not the actual secret
 ```
 
 The actual secret is stored in the OS keychain, encrypted.
@@ -139,7 +139,7 @@ This way:
 - Adding more secrets is free — they go into the encrypted config, not into the keychain.
 - Loss of the keychain item is recoverable from any other machine that holds the same age identity.
 
-Reach for direct `provider = "keychain"` only for the handful of bootstrap secrets that don't have anything else to decrypt them (e.g., the age key itself, an OP service account token).
+Reach for direct `provider = "keychain"` only for the handful of bootstrap secrets that don't have anything else to decrypt them (e.g., the age key itself, a 1Password service account token).
 
 ## Bootstrap Pattern
 
@@ -259,7 +259,7 @@ seahorse
 
 ### Headless Environments
 
-Keychain provider requires a GUI session and doesn't work in:
+The keychain provider needs an unlocked OS keychain or Secret Service session, which is usually unavailable in:
 
 - CI/CD (GitHub Actions, GitLab CI, etc.)
 - Docker containers (without X11/Wayland)
@@ -270,14 +270,14 @@ For CI/CD, use age encryption or cloud providers instead.
 
 ### Tests Auto-Skip in CI
 
-fnox's keychain tests automatically skip in CI environments:
+fnox's keychain tests skip automatically on macOS CI runners (where they hang) and on platforms other than macOS and Linux. On Linux CI they run against a headless `gnome-keyring-daemon`. Set `SKIP_KEYCHAIN_TESTS=1` to skip them everywhere:
 
 ```bash
 # Runs locally
-mise run test:bats
+mise run test:bats -- test/keychain.bats
 
-# Skips keychain tests in CI
-# GitHub Actions, GitLab CI, etc.
+# Skip the keychain tests
+SKIP_KEYCHAIN_TESTS=1 mise run test:bats
 ```
 
 ## Security

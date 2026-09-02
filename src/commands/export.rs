@@ -33,7 +33,7 @@ pub struct ExportCommand {
     #[usage(short, long, default = "env", value_enum)]
     format: ExportFormat,
 
-    /// Show what would be exported without writing to file
+    /// Show what would be exported without writing to a file
     #[usage(short = 'n', long)]
     dry_run: bool,
 

@@ -36,7 +36,7 @@ Create a GitHub App with device flow enabled and use its client ID. On first use
 fnox exec -- gh pr list
 ```
 
-Approve the device prompt in your browser. Subsequent runs reuse the cached token while it remains valid.
+Approve the device prompt in your browser. Subsequent runs reuse the cached token while it remains valid. In non-interactive mode (`--non-interactive` or `FNOX_NON_INTERACTIVE`), fnox fails instead of starting the device flow, so authorize once from an interactive terminal first.
 
 ## Credentials Produced
 

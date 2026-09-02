@@ -51,7 +51,7 @@ cmd config-files help="List all config files that would be loaded" {
 }
 cmd daemon help="Manage the per-user daemon" subcommand_required=#true {
     flag "-h --help" help="Print help" action=help builtin=#true
-    cmd clear help="Clear all running daemon caches" {
+    cmd clear help="Clear the caches of all running daemons" {
         flag "-h --help" help="Print help" action=help builtin=#true
     }
     cmd serve help="Run the daemon server in the foreground" hide=#true {
@@ -90,7 +90,7 @@ cmd edit help="Edit the configuration file" {
 cmd exec help="Execute a command with secrets as environment variables" {
     alias x
     alias run hide=#true
-    flag --replace help="Run the command in fnox's process, keeping the same PID and receiving signals directly; supports environment-only secrets without leases. Available on Linux, macOS, and other Unix-like systems"
+    flag --replace help="Replace the fnox process with the command so it keeps the same PID and receives signals directly. Not available with file-based secrets (as_file) or credential leases, which fnox must clean up after the command exits. Unix only"
     flag "-h --help" help="Print help" action=help builtin=#true
     arg "[COMMAND]..." help="Command to run" double_dash=automatic
     complete command type=command_args
@@ -108,7 +108,7 @@ cmd export help="Export secrets in various formats" {
             }
         }
     }
-    flag "-n --dry-run" help="Show what would be exported without writing to file"
+    flag "-n --dry-run" help="Show what would be exported without writing to a file"
     flag "-o --output" help="Output file (default: stdout)" {
         arg <OUTPUT>
     }
@@ -185,7 +185,7 @@ cmd lease help="Manage ephemeral credential leases" {
             arg <LABEL>
         }
         flag "-h --help" help="Print help" action=help builtin=#true
-        arg "[BACKEND_NAME]" help="Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted."
+        arg "[BACKEND_NAME]" help="Lease backend name (from `[leases.<name>]` config). Creates leases for all configured backends if omitted."
     }
     cmd list help="List tracked leases" {
         flag --active help="Show only active (non-expired, non-revoked) leases"
@@ -206,7 +206,7 @@ cmd list help="List all secrets" {
     flag --complete help="Output secret keys for shell completion (one per line)" hide=#true
     flag "-h --help" help="Print help" action=help builtin=#true
 }
-cmd mcp help="Start an MCP server for secret-gated AI agent access" {
+cmd mcp help="Start an MCP server that brokers secrets to AI agents" {
     flag "-h --help" help="Print help" action=help builtin=#true
 }
 cmd profiles help="List available profiles" {
@@ -340,7 +340,7 @@ cmd set help="Set a secret value" {
         arg <KEY_NAME>
     }
     flag "-n --dry-run" help="Show what would be done without making changes"
-    flag "-p --provider" help="Provider to fetch from" {
+    flag "-p --provider" help="Provider to store the secret in (defaults to its existing provider, then default_provider)" {
         arg <PROVIDER>
     }
     flag --base64-encode help="Base64 encode the secret"
@@ -388,7 +388,7 @@ cmd sync help="Sync secrets from remote providers to a local encryption provider
     flag --filter help="Only sync matching secrets (regex pattern)" {
         arg <FILTER>
     }
-    flag --local-file help="Write sync overrides to the local override file next to the config file" conflicts=--global
+    flag --local-file help="Write synced secrets to the local override file (fnox.local.toml) next to the config file" conflicts=--global
     flag "-h --help" help="Print help" action=help builtin=#true
     arg "[KEYS]..." help="Only sync these specific secret keys"
 }
@@ -403,7 +403,7 @@ cmd version help="Show version information" {
     flag "-h --help" help="Print help" action=help builtin=#true
 }
 config {
-    prop "age_key_file" type="option<path>" optional=#true since="0.1.0" help="Path to a file containing the age encryption key." long_help="Path to a file containing the age encryption key.\n\nThis can be set via: - CLI flag: --age-key-file <path> - Environment variable: FNOX_AGE_KEY_FILE\n\nPriority (highest to lowest): CLI > Environment > Default" {
+    prop "age_key_file" type="option<path>" optional=#true since="0.1.0" help="Path to a file containing the age encryption key." long_help="Path to a file containing the age encryption key.\n\nPrefer setting key_file on the age provider itself, or FNOX_AGE_KEY for inline key content. The --age-key-file flag is deprecated and hidden; the FNOX_AGE_KEY_FILE environment variable remains supported.\n\nPriority (highest to lowest): CLI > Environment > Default" {
         env "FNOX_AGE_KEY_FILE"
         cli "--age-key-file"
         example "fnox get MY_SECRET --age-key-file ~/.age/key.txt"
@@ -422,23 +422,23 @@ config {
         example "fnox exec --profile dev --no-defaults -- ./my-app"
         example "FNOX_NO_DEFAULTS=true fnox exec --profile dev -- ./my-app"
     }
-    prop "shell_integration_output" type="string" default="normal" since="0.1.0" help="Control output level for shell integration." long_help="Control output level for shell integration.\n\nAvailable modes: - \"none\" - No output from shell integration - \"normal\" - Show summary when secrets are loaded/unloaded (default) - \"debug\" - Show detailed information including early-exit reasons\n\nPriority: Environment > Default" {
+    prop "shell_integration_output" type="string" default="normal" since="0.1.0" help="Control how much the shell integration prints when it loads or unloads secrets." long_help="Control how much the shell integration prints when it loads or unloads secrets.\n\nAvailable modes: \"none\" prints nothing, \"normal\" prints a summary when secrets are loaded or unloaded (default), and \"debug\" prints detailed information, including why the hook exited early.\n\nPriority: Environment > Default" {
         env "FNOX_SHELL_OUTPUT"
         example "FNOX_SHELL_OUTPUT=none fnox activate bash"
         example "FNOX_SHELL_OUTPUT=debug fnox activate zsh"
     }
-    prop "if_missing" type="option<string>" optional=#true since="1.1.0" help="Runtime override for if_missing behavior when a secret cannot be resolved." long_help="Runtime override for if_missing behavior when a secret cannot be resolved.\n\nAvailable modes: - \"error\" - Fail the command if a secret cannot be resolved - \"warn\" - Print a warning and continue - \"ignore\" - Silently skip missing secrets\n\nPriority (highest to lowest): CLI flag > Environment > Secret level > Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)" {
+    prop "if_missing" type="option<string>" optional=#true since="1.1.0" help="Runtime override for the if_missing behavior when a secret cannot be resolved." long_help="Runtime override for the if_missing behavior when a secret cannot be resolved.\n\nAvailable modes: \"error\" fails the command, \"warn\" prints a warning and continues, and \"ignore\" silently skips the missing secret. This overrides any if_missing value set in the configuration.\n\nPriority (highest to lowest): CLI flag > Environment > Secret level > Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)" {
         env "FNOX_IF_MISSING"
         cli "--if-missing"
         example "fnox exec --if-missing error -- ./my-app"
         example "FNOX_IF_MISSING=ignore fnox exec -- ./my-app"
     }
-    prop "http_timeout" type="string" default="30s" since="1.16.0" help="HTTP request timeout in seconds for lease backend API calls (Vault, GCP IAM, etc.)." long_help="HTTP request timeout in seconds for lease backend API calls (Vault, GCP IAM, etc.).\n\nPrevents fnox exec from hanging indefinitely on slow or unreachable servers. Set to \"0\" to disable the timeout (not recommended).\n\nPriority: Environment > Default" {
+    prop "http_timeout" type="string" default="30s" since="1.16.0" help="HTTP request timeout for lease backend API calls (Vault, GCP IAM, etc.)." long_help="HTTP request timeout for lease backend API calls (Vault, GCP IAM, etc.).\n\nAccepts a duration such as \"30s\", \"2m\", or \"1h30m\". Prevents fnox exec from hanging indefinitely on slow or unreachable servers. Set to \"0\" to disable the timeout (not recommended). An unparseable value falls back to the default.\n\nPriority: Environment > Default" {
         env "FNOX_HTTP_TIMEOUT"
         example "FNOX_HTTP_TIMEOUT=60s fnox exec -- ./my-app"
         example "FNOX_HTTP_TIMEOUT=10s fnox lease create my-lease --duration 1h"
     }
-    prop "if_missing_default" type="option<string>" optional=#true since="1.1.0" help="Base default behavior when a secret cannot be resolved and not specified in config." long_help="Base default behavior when a secret cannot be resolved and not specified in config.\n\nAvailable modes: - \"error\" - Fail the command if a secret cannot be resolved - \"warn\" - Print a warning and continue (default) - \"ignore\" - Silently skip missing secrets\n\nPriority (highest to lowest): CLI flag > FNOX_IF_MISSING > Secret level > Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)" {
+    prop "if_missing_default" type="option<string>" optional=#true since="1.1.0" help="Fallback if_missing behavior for secrets that do not set one in the configuration." long_help="Fallback if_missing behavior for secrets that do not set one in the configuration.\n\nAvailable modes: \"error\" fails the command, \"warn\" prints a warning and continues (default), and \"ignore\" silently skips the missing secret. Unlike FNOX_IF_MISSING, this does not override values set in the configuration.\n\nPriority (highest to lowest): CLI flag > FNOX_IF_MISSING > Secret level > Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)" {
         env "FNOX_IF_MISSING_DEFAULT"
         example "export FNOX_IF_MISSING_DEFAULT=error  # Strict by default"
         example "export FNOX_IF_MISSING_DEFAULT=ignore  # Lenient by default"

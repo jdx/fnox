@@ -39,7 +39,7 @@ pub struct SyncCommand {
     #[usage(long)]
     filter: Option<String>,
 
-    /// Write sync overrides to the local override file next to the config file
+    /// Write synced secrets to the local override file (fnox.local.toml) next to the config file
     #[usage(long, conflicts = "--global")]
     local_file: bool,
 }

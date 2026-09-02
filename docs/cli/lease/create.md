@@ -8,7 +8,7 @@ Create a short-lived credential lease from a secret
 
 ## Arguments
 
-- **`[BACKEND_NAME]`** — Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted.
+- **`[BACKEND_NAME]`** — Lease backend name (from `[leases.<name>]` config). Creates leases for all configured backends if omitted.
 
 ## Flags
 

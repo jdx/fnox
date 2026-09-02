@@ -5,8 +5,8 @@ Integrate with Bitwarden (or self-hosted Vaultwarden) to retrieve secrets from y
 ## Quick Start
 
 ```bash
-# 1. Install Bitwarden CLI (auto-installed via mise)
-# Already available!
+# 1. Install Bitwarden CLI (see Installation below)
+brew install bitwarden-cli
 
 # 2. Login to Bitwarden
 bw login
@@ -41,11 +41,11 @@ fnox get DATABASE_PASSWORD
 ## Prerequisites
 
 - [Bitwarden account](https://bitwarden.com) (or self-hosted Vaultwarden)
-- Bitwarden CLI (automatically installed via mise)
+- [Bitwarden CLI](https://bitwarden.com/help/cli/) (`bw`)
 
 ## Installation
 
-The Bitwarden CLI is installed automatically when using fnox via mise. Manual installation:
+Install the Bitwarden CLI:
 
 ```bash
 # macOS
@@ -167,9 +167,10 @@ TOTP = { provider = "bitwarden", value = "Database/totp" }
 API_KEY = { provider = "bitwarden", value = "Database/API Key" }
 ```
 
-Supported standard fields are `username`, `password`, `notes`, `uri`, and
-`totp`. Any other field name is resolved as a custom field. Custom field names
-may contain `/` and are case-sensitive when using the default `bw` backend.
+Supported standard fields are `username`, `password`, `notes`, `uri` (or
+`url`), and `totp`. Any other field name is resolved as a custom field. Custom
+field names may contain `/` and are case-sensitive when using the default `bw`
+backend.
 
 ## Usage
 
@@ -208,7 +209,7 @@ DATABASE_URL = { provider = "bitwarden", value = "Prod Database" }
 ## Multi-profile Example
 
 `bw` supports multiple accounts, as per the [official documentation](https://bitwarden.com/help/cli/#log-in-to-multiple-accounts).
-fnox can access secrets in a specific profile supplying an optional "profile" attribute to the prov
+fnox can access secrets in a specific profile by supplying an optional `profile` attribute to the provider:
 
 ```toml
 default_provider = "bitwarden"
@@ -272,7 +273,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v4
 
       - name: Setup Bitwarden session
         env:

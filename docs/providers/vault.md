@@ -28,7 +28,7 @@ vault = { type = "vault", path = "secret/myapp" } # address and token are option
 ```
 
 - **address**: (Optional) The Vault server address. Falls back to `FNOX_VAULT_ADDR` or `VAULT_ADDR`.
-- **path**: (Required) The base path for secrets in Vault (e.g., `secret/myapp`).
+- **path**: (Optional) The base path for secrets in Vault (e.g., `secret/myapp`). Defaults to `secret`.
 - **token**: (Optional) Vault token. Falls back to `FNOX_VAULT_TOKEN` or `VAULT_TOKEN`.
 - **namespace**: (Optional) Vault namespace. Falls back to `FNOX_VAULT_NAMESPACE` or `VAULT_NAMESPACE`.
 - **credential_command**: (Optional) Shell command that prints a Vault token to stdout when no token is configured. The command is rendered as a Tera template and receives `address`, `path`, and `namespace`.
@@ -92,9 +92,11 @@ vault kv put secret/myapp/api-key value="sk_live_abc123"
 
 ```toml
 [secrets]
-DATABASE_URL = { provider = "vault", value = "database/url" }  # → secret/myapp/database/url
-API_KEY = { provider = "vault", value = "api-key/value" }  # → secret/myapp/api-key/value
+DATABASE_URL = { provider = "vault", value = "database/url" }  # → field "url" of secret/myapp/database
+API_KEY = { provider = "vault", value = "api-key" }  # → field "value" of secret/myapp/api-key
 ```
+
+A reference is `secret` or `secret/field`. Without a field, fnox reads the `value` field of the secret.
 
 ## Usage
 

@@ -6,7 +6,7 @@ The `yubikey` provider uses YubiKey HMAC-SHA1 challenge-response to derive an AE
 
 Regular age encryption protects secrets at rest, but anyone with access to the key file can decrypt them. The `yubikey` provider ties encryption to a physical hardware device. No YubiKey = no decryption.
 
-The config is fully portable: move your `fnox.local.toml` to any machine, plug in the same YubiKey, and it works.
+The config is fully portable: move your fnox config to any machine, plug in the same YubiKey, and it works.
 
 This is especially useful for protecting long-lived master credentials (like AWS IAM keys) that are used by [lease backends](/guide/leases) to create short-lived credentials.
 
@@ -66,7 +66,7 @@ role_arn = "arn:aws:iam::123456789012:role/dev-role"
 region = "us-east-1"
 ```
 
-With `env = false`, the master credentials are never injected into subprocess environment variables. They are only used internally by the lease backend to call `sts:AssumeRole`, and the resulting short-lived credentials are what gets injected.
+With `env = false`, the master credentials are never injected into subprocess environment variables. They are only used internally by the lease backend to call `sts:AssumeRole`, and only the resulting short-lived credentials are injected.
 
 ## How It Works
 
@@ -86,4 +86,4 @@ The provider name is used in key derivation (HKDF context). Renaming a provider 
 ## Requirements
 
 - A YubiKey with HMAC-SHA1 challenge-response configured on slot 1 or 2
-- Configure HMAC-SHA1 using the [YubiKey Manager](https://www.yubico.com/support/download/yubikey-manager/) or `ykman otp chalresp` command
+- Configure HMAC-SHA1 using the [YubiKey Manager](https://www.yubico.com/support/download/yubikey-manager/) or the `ykman otp chalresp` command

@@ -140,6 +140,7 @@ pass = { type = "password-store", prefix = "fnox/" }
 type = "password-store"
 prefix = "fnox/"  # Optional: prepend to all secret paths (default: none)
 store_dir = "./password-store"  # Optional: custom store location (default: ~/.password-store)
+gpg_opts = "--no-throw-keyids"  # Optional: extra GPG options, passed as PASSWORD_STORE_GPG_OPTS
 ```
 
 Relative `store_dir` paths are resolved from the config file that declares the provider. Paths beginning with `~` expand to your home directory, and absolute paths are used unchanged.
@@ -171,7 +172,7 @@ Your `fnox.toml`:
 
 ```toml
 [secrets]
-DATABASE_URL = { provider = "pass", value = "database-url" }  # Stored at fnox/database-url
+DATABASE_URL = { provider = "pass", value = "DATABASE_URL" }  # Stored at fnox/DATABASE_URL
 DB_PASSWORD = { provider = "pass", value = "database/production" }  # Stored at fnox/database/production
 ```
 
@@ -386,6 +387,8 @@ export FNOX_PASSWORD_STORE_DIR=/path/to/store  # fnox-specific
 export PASSWORD_STORE_GPG_OPTS="--no-throw-keyids"
 export FNOX_PASSWORD_STORE_GPG_OPTS="--armor"  # fnox-specific
 ```
+
+The `FNOX_*` variants take priority over the standard ones, and `store_dir`/`gpg_opts` in the provider config take priority over both.
 
 ## Sync Across Machines
 

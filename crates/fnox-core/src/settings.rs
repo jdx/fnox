@@ -26,9 +26,9 @@ use usage_rs::config::{CliLayer, EnvLayer, Layers, SourceKind, Value, resolve};
 pub struct SettingsData {
     /// Path to a file containing the age encryption key.
     ///
-    /// This can be set via:
-    /// - CLI flag: --age-key-file <path>
-    /// - Environment variable: FNOX_AGE_KEY_FILE
+    /// Prefer setting key_file on the age provider itself, or FNOX_AGE_KEY for inline key
+    /// content. The --age-key-file flag is deprecated and hidden; the FNOX_AGE_KEY_FILE
+    /// environment variable remains supported.
     ///
     /// Priority (highest to lowest): CLI > Environment > Default
     #[usage(
@@ -71,12 +71,11 @@ pub struct SettingsData {
     )]
     pub no_defaults: bool,
 
-    /// Control output level for shell integration.
+    /// Control how much the shell integration prints when it loads or unloads secrets.
     ///
-    /// Available modes:
-    /// - "none" - No output from shell integration
-    /// - "normal" - Show summary when secrets are loaded/unloaded (default)
-    /// - "debug" - Show detailed information including early-exit reasons
+    /// Available modes: "none" prints nothing, "normal" prints a summary when secrets are
+    /// loaded or unloaded (default), and "debug" prints detailed information, including
+    /// why the hook exited early.
     ///
     /// Priority: Environment > Default
     #[usage(
@@ -88,12 +87,11 @@ pub struct SettingsData {
     )]
     pub shell_integration_output: String,
 
-    /// Runtime override for if_missing behavior when a secret cannot be resolved.
+    /// Runtime override for the if_missing behavior when a secret cannot be resolved.
     ///
-    /// Available modes:
-    /// - "error" - Fail the command if a secret cannot be resolved
-    /// - "warn" - Print a warning and continue
-    /// - "ignore" - Silently skip missing secrets
+    /// Available modes: "error" fails the command, "warn" prints a warning and continues,
+    /// and "ignore" silently skips the missing secret. This overrides any if_missing value
+    /// set in the configuration.
     ///
     /// Priority (highest to lowest): CLI flag > Environment > Secret level >
     /// Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)
@@ -106,10 +104,11 @@ pub struct SettingsData {
     )]
     pub if_missing: Option<String>,
 
-    /// HTTP request timeout in seconds for lease backend API calls (Vault, GCP IAM, etc.).
+    /// HTTP request timeout for lease backend API calls (Vault, GCP IAM, etc.).
     ///
-    /// Prevents fnox exec from hanging indefinitely on slow or unreachable servers.
-    /// Set to "0" to disable the timeout (not recommended).
+    /// Accepts a duration such as "30s", "2m", or "1h30m". Prevents fnox exec from hanging
+    /// indefinitely on slow or unreachable servers. Set to "0" to disable the timeout (not
+    /// recommended). An unparseable value falls back to the default.
     ///
     /// Priority: Environment > Default
     #[usage(
@@ -121,12 +120,11 @@ pub struct SettingsData {
     )]
     pub http_timeout: String,
 
-    /// Base default behavior when a secret cannot be resolved and not specified in config.
+    /// Fallback if_missing behavior for secrets that do not set one in the configuration.
     ///
-    /// Available modes:
-    /// - "error" - Fail the command if a secret cannot be resolved
-    /// - "warn" - Print a warning and continue (default)
-    /// - "ignore" - Silently skip missing secrets
+    /// Available modes: "error" fails the command, "warn" prints a warning and continues
+    /// (default), and "ignore" silently skips the missing secret. Unlike FNOX_IF_MISSING,
+    /// this does not override values set in the configuration.
     ///
     /// Priority (highest to lowest): CLI flag > FNOX_IF_MISSING > Secret level >
     /// Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)

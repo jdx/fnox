@@ -9,7 +9,7 @@ cd your-project
 fnox init
 ```
 
-This creates a `fnox.toml` configuration file.
+This creates a `fnox.toml` configuration file. In a terminal, `fnox init` runs an interactive wizard that can also set up a provider; answer "No" (or pass `--skip-wizard`) to create a minimal config and follow the steps below.
 
 ## 2. Set a Secret
 
@@ -21,7 +21,7 @@ fnox set DATABASE_URL
 fnox set DATABASE_URL "postgresql://localhost/mydb"
 ```
 
-By default, secrets are stored as plain text defaults. For encryption, see the next section.
+Without a provider configured, secrets are stored as plain text `default` values in `fnox.toml`. For encryption, see [Add Encryption](#add-encryption-recommended) below.
 
 ## 3. Get a Secret
 
@@ -50,7 +50,7 @@ eval "$(fnox activate bash)"  # or zsh, fish
 echo 'eval "$(fnox activate bash)"' >> ~/.bashrc
 ```
 
-To enable integration in other shells (Nushell, Powershell), see the [Shell Integration](/guide/shell-integration) guide.
+To enable integration in other shells (Nushell, PowerShell), see the [Shell Integration](/guide/shell-integration) guide.
 
 Now secrets auto-load:
 

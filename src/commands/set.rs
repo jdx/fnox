@@ -68,7 +68,7 @@ pub struct SetCommand {
     #[usage(short = 'n', long)]
     pub dry_run: bool,
 
-    /// Provider to fetch from
+    /// Provider to store the secret in (defaults to its existing provider, then default_provider)
     #[usage(short = 'p', long)]
     pub provider: Option<String>,
 

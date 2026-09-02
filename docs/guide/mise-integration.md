@@ -115,7 +115,7 @@ _.fnox-env = { fnox_bin = "/usr/local/bin/fnox" }
 
 ## Environment-Specific Configuration
 
-Combine with [mise's environment system](https://mise.jdx.dev/configuration/environments.html) for different profiles per environment. Mise uses separate config files for each environment:
+Combine with [mise's environment system](https://mise.jdx.dev/configuration/environments.html) for different profiles per environment. mise uses separate config files for each environment:
 
 **`mise.toml`** (default/dev):
 

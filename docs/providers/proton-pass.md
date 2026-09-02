@@ -49,7 +49,7 @@ FULL_URI = { provider = "protonpass", value = "pass://Work/Database/password" }
 BY_ITEM_ID = { provider = "protonpass", value = "id:ITEM_ID/password" }
 ```
 
-Item-only references default to the `password` field and require `vault`.
+Item-only and `id:` references default to the `password` field and require `vault`.
 
 Use full `pass://vault/item/field` references when vault or item names contain `/`.
 

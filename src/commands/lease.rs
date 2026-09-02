@@ -36,7 +36,7 @@ pub enum OutputFormat {
 
 #[derive(Debug, usage_rs::Args)]
 pub struct LeaseCreateCommand {
-    /// Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted.
+    /// Lease backend name (from `[leases.<name>]` config). Creates leases for all configured backends if omitted.
     pub backend_name: Option<String>,
 
     /// Create leases for all configured backends

@@ -205,9 +205,10 @@ fnox profiles
 Output:
 
 ```
-default (active)
-staging
-production
+Available profiles:
+  default (2 secrets)
+  staging (2 secrets)
+  production (2 secrets)
 ```
 
 ## Common Patterns

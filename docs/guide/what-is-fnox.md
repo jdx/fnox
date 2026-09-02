@@ -4,14 +4,14 @@ fnox is a secrets management tool that works with both encrypted secrets in git 
 
 ## The Problem
 
-Secrets are typically done in 2 ways:
+Secrets are typically managed in one of two ways:
 
 1. **In git, encrypted** (hopefully)
 2. **Remote**, typically a cloud provider like AWS Secrets Manager
 
 ## The Solution
 
-fnox works with either—or both! They've got their pros and cons. Either way, fnox gives you a nice front-end to manage secrets and make them easy to work with in dev/ci/prod.
+fnox works with either—or both! Each has its pros and cons. Either way, fnox gives you a nice front-end to manage secrets and make them easy to work with in dev/CI/prod.
 
 fnox's config file, `fnox.toml`, will either contain the encrypted secrets, or a reference to a secret in a cloud provider. You can either use `fnox exec -- <command>` to run a command with the secrets, or you can use the [shell integration](/guide/shell-integration) to automatically load the secrets into your shell environment when you `cd` into a directory with a `fnox.toml` file.
 
@@ -48,6 +48,6 @@ Use profiles to manage different secrets for dev, staging, and production—all 
 
 ## Why is this a standalone CLI and not part of mise?
 
-[mise](https://mise.jdx.dev) has support for [encrypted secrets](https://mise.jdx.dev/environments/secrets/) but mise's design makes it a poor fit for remote secrets. mise reloads its environment too frequently—whenever a directory is changed, `mise x` is run, a shim is called, etc. Any other use-case like this mise leverages caching but secrets are an area where caching is a bad idea for obvious reasons. It might be possible to change mise's design to retain its environment in part to better support something like this but that's a huge challenge.
+[mise](https://mise.jdx.dev) has support for [encrypted secrets](https://mise.jdx.dev/environments/secrets/) but mise's design makes it a poor fit for remote secrets. mise reloads its environment too frequently—whenever a directory is changed, `mise x` is run, a shim is called, etc. For any other use case like this, mise leverages caching, but secrets are an area where caching is a bad idea for obvious reasons. It might be possible to change mise's design to retain its environment in part to better support something like this but that's a huge challenge.
 
 Basically it's just too hard to get remote secrets to work effectively with mise so I made this a standalone tool.

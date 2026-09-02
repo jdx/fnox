@@ -224,7 +224,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v4
 
       - name: Setup fnox age key
         env:
@@ -284,7 +284,6 @@ export OP_SERVICE_ACCOUNT_TOKEN="ops_..."
 
 ```bash
 # Personal login (interactive)
-op signin
 eval $(op signin)
 ```
 
