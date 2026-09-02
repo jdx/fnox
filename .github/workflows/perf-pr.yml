@@ -113,6 +113,8 @@ jobs:
 
       # Compile inside the pinned job container. mise's cache remains disabled:
       # mbx uses the appliance-local content-addressed store mounted above.
+      - name: Remove the stale runner mise binary
+        run: rm -f /github/home/.local/share/mise/bin/mise
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
           cache: false
