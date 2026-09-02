@@ -12,6 +12,12 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Set up mise for the local mbx install
+      if: inputs.backend == 'local'
+      uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      with:
+        install: false
+        cache: false
     - name: Mount the local mbx store on the Namespace cache volume
       if: inputs.backend == 'local'
       uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
@@ -20,7 +26,8 @@ runs:
     - name: Install mbx for local caching
       if: inputs.backend == 'local'
       shell: bash
-      run: | # zizmor: ignore[github-env] mise where returns the trusted tool install directory
+      run:
+        | # zizmor: ignore[github-env] mise where returns the trusted tool install directory
         mise install mr-boxington
         echo "$(mise where mr-boxington)" >> "$GITHUB_PATH"
         echo "MBX_REMOTE_URL=" >> "$GITHUB_ENV"
