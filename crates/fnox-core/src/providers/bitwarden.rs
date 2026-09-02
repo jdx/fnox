@@ -248,7 +248,7 @@ impl BitwardenProvider {
                 return Err(FnoxError::ProviderAuthFailed {
                     provider: "Bitwarden".to_string(),
                     details: stderr_str.to_string(),
-                    hint: format!("Run '{} unlock' and set BW_SESSION", cli),
+                    hint: format!("Run '{cli} unlock' and set BW_SESSION or FNOX_BW_SESSION"),
                     url: "https://fnox.jdx.dev/providers/bitwarden".to_string(),
                 });
             }

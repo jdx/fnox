@@ -49,7 +49,7 @@ Configuration directory path.
 export FNOX_CONFIG_DIR=~/.config/fnox
 ```
 
-**Default:** `$XDG_CONFIG_HOME/fnox` if set, otherwise `~/.config/fnox`
+**Default:** `$XDG_CONFIG_HOME/fnox` if set, otherwise `~/.config/fnox` on Unix and `%USERPROFILE%\AppData\Local\fnox` on Windows
 
 **Usage:**
 
@@ -68,7 +68,7 @@ State directory path. fnox stores the credential lease ledger under
 export FNOX_STATE_DIR=/opt/fnox/state
 ```
 
-**Default:** `$XDG_STATE_HOME/fnox` if set, otherwise `~/.local/state/fnox`
+**Default:** `$XDG_STATE_HOME/fnox` if set, otherwise `~/.local/state/fnox` on Unix and `%USERPROFILE%\AppData\Local\fnox` on Windows
 
 ### `FNOX_PROMPT_AUTH`
 

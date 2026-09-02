@@ -90,7 +90,7 @@ cmd edit help="Edit the configuration file" {
 cmd exec help="Execute a command with secrets as environment variables" {
     alias x
     alias run hide=#true
-    flag --replace help="Replace the fnox process with the command so it keeps the same PID and receives signals directly. Not available with file-based secrets (as_file) or credential leases, which fnox must clean up after the command exits. Unix only"
+    flag --replace help="Replace the fnox process with the command so it keeps the same PID and receives signals directly. Rejected when the command's environment would carry an as_file secret, or when the profile configures credential leases, since fnox must clean those up after the command exits. Unix only"
     flag "-h --help" help="Print help" action=help builtin=#true
     arg "[COMMAND]..." help="Command to run" double_dash=automatic
     complete command type=command_args
@@ -388,7 +388,7 @@ cmd sync help="Sync secrets from remote providers to a local encryption provider
     flag --filter help="Only sync matching secrets (regex pattern)" {
         arg <FILTER>
     }
-    flag --local-file help="Write synced secrets to the local override file (fnox.local.toml) next to the config file" conflicts=--global
+    flag --local-file help="Write synced secrets to the local override file next to the config file: fnox.local.toml, or .fnox.local.toml when that file exists or the config is .fnox.toml" conflicts=--global
     flag "-h --help" help="Print help" action=help builtin=#true
     arg "[KEYS]..." help="Only sync these specific secret keys"
 }

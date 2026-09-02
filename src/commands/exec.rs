@@ -10,8 +10,9 @@ use tempfile::NamedTempFile;
 #[usage(alias = "x", alias_hidden = "run")]
 pub struct ExecCommand {
     /// Replace the fnox process with the command so it keeps the same PID and receives
-    /// signals directly. Not available with file-based secrets (as_file) or credential
-    /// leases, which fnox must clean up after the command exits. Unix only
+    /// signals directly. Rejected when the command's environment would carry an as_file
+    /// secret, or when the profile configures credential leases, since fnox must clean
+    /// those up after the command exits. Unix only
     #[cfg(unix)]
     #[usage(long)]
     pub replace: bool,

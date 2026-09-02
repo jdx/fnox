@@ -266,7 +266,7 @@ The keychain provider needs an unlocked OS keychain or Secret Service session, w
 - SSH sessions (without forwarding)
 - Headless servers
 
-For CI/CD, use age encryption or cloud providers instead.
+No desktop session is required, though — only an unlocked Secret Service on the bus. If you provision one yourself, the provider works headlessly; fnox's own Linux CI does this with `gnome-keyring-daemon --unlock --components=secrets --daemonize`. That means keeping the unlock password in CI, which is the secret you were trying to protect, so for CI/CD prefer age encryption or a cloud provider.
 
 ### Tests Auto-Skip in CI
 

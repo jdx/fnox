@@ -488,8 +488,8 @@
           {
             "name": "replace",
             "usage": "--replace",
-            "help": "Replace the fnox process with the command so it keeps the same PID and receives signals directly. Not available with file-based secrets (as_file) or credential leases, which fnox must clean up after the command exits. Unix only",
-            "help_first_line": "Replace the fnox process with the command so it keeps the same PID and receives signals directly. Not available with file-based secrets (as_file) or credential leases, which fnox must clean up after the command exits. Unix only",
+            "help": "Replace the fnox process with the command so it keeps the same PID and receives signals directly. Rejected when the command's environment would carry an as_file secret, or when the profile configures credential leases, since fnox must clean those up after the command exits. Unix only",
+            "help_first_line": "Replace the fnox process with the command so it keeps the same PID and receives signals directly. Rejected when the command's environment would carry an as_file secret, or when the profile configures credential leases, since fnox must clean those up after the command exits. Unix only",
             "short": [],
             "long": ["replace"],
             "hide": false,
@@ -2492,8 +2492,8 @@
           {
             "name": "local-file",
             "usage": "--local-file",
-            "help": "Write synced secrets to the local override file (fnox.local.toml) next to the config file",
-            "help_first_line": "Write synced secrets to the local override file (fnox.local.toml) next to the config file",
+            "help": "Write synced secrets to the local override file next to the config file: fnox.local.toml, or .fnox.local.toml when that file exists or the config is .fnox.toml",
+            "help_first_line": "Write synced secrets to the local override file next to the config file: fnox.local.toml, or .fnox.local.toml when that file exists or the config is .fnox.toml",
             "short": [],
             "long": ["local-file"],
             "hide": false,
