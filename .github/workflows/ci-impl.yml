@@ -40,7 +40,7 @@ jobs:
           cache: false
       - uses: ./.github/actions/mbx
         with:
-          backend: ${{ inputs.trusted && 'local' || 'server' }}
+          backend: ${{ inputs.trusted && 'local' || 'github' }}
       - name: Install system dependencies (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -266,7 +266,7 @@ jobs:
           cache: false
       - uses: ./.github/actions/mbx
         with:
-          backend: ${{ inputs.trusted && 'local' || 'server' }}
+          backend: ${{ inputs.trusted && 'local' || 'github' }}
       - name: Install system dependencies (Ubuntu)
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
@@ -341,7 +341,7 @@ jobs:
           cache: false
       - uses: ./.github/actions/mbx
         with:
-          backend: ${{ inputs.trusted && 'local' || 'server' }}
+          backend: ${{ inputs.trusted && 'local' || 'github' }}
       - name: Install system dependencies
         run: |
           if [ -f /etc/apt/apt-mirrors.txt ]; then
