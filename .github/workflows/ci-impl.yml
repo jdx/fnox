@@ -25,9 +25,9 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            runner: namespace-profile-endev-macos-arm64
+            runner: namespace-profile-endev-macos-arm64;overrides.cache-tag=cache
           - os: ubuntu-latest
-            runner: namespace-profile-endev-linux-amd64
+            runner: namespace-profile-endev-linux-amd64;overrides.cache-tag=cache
     runs-on: ${{ !inputs.trusted && matrix.os || matrix.runner }}
     timeout-minutes: 10
     steps:
@@ -73,16 +73,16 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            runner: namespace-profile-endev-macos-arm64
+            runner: namespace-profile-endev-macos-arm64;overrides.cache-tag=cache
             tranche: 0
           - os: macos-latest
-            runner: namespace-profile-endev-macos-arm64
+            runner: namespace-profile-endev-macos-arm64;overrides.cache-tag=cache
             tranche: 1
           - os: ubuntu-latest
-            runner: namespace-profile-endev-linux-amd64
+            runner: namespace-profile-endev-linux-amd64;overrides.cache-tag=cache
             tranche: 0
           - os: ubuntu-latest
-            runner: namespace-profile-endev-linux-amd64
+            runner: namespace-profile-endev-linux-amd64;overrides.cache-tag=cache
             tranche: 1
     runs-on: ${{ !inputs.trusted && matrix.os || matrix.runner }}
     timeout-minutes: 20
@@ -258,9 +258,9 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            runner: namespace-profile-endev-macos-arm64
+            runner: namespace-profile-endev-macos-arm64;overrides.cache-tag=cache
           - os: ubuntu-latest
-            runner: namespace-profile-endev-linux-amd64
+            runner: namespace-profile-endev-linux-amd64;overrides.cache-tag=cache
     runs-on: ${{ !inputs.trusted && matrix.os || matrix.runner }}
     timeout-minutes: 20
     steps:
@@ -336,7 +336,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
   msrv:
-    runs-on: ${{ !inputs.trusted && 'ubuntu-latest' || 'namespace-profile-endev-linux-amd64' }}
+    runs-on: ${{ !inputs.trusted && 'ubuntu-latest' || 'namespace-profile-endev-linux-amd64;overrides.cache-tag=cache' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
