@@ -46,7 +46,6 @@ jobs:
       - uses: ./.github/actions/mbx
         with:
           backend: ${{ inputs.trusted && 'local' || 'github' }}
-          mirror-github-cache: "true"
       - name: Install system dependencies (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -247,7 +246,6 @@ jobs:
       - uses: ./.github/actions/mbx
         with:
           backend: github
-          mirror-github-cache: "true"
       - name: Check Windows build
         run: cargo check --workspace
 
