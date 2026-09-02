@@ -108,8 +108,7 @@ run = [
 # without it tak reports wall clock only and says so, so this still works on
 # macOS where there is no usable cachegrind.
 [tasks."perf:build"]
-env = { MBX_DISABLE = "1" }
-run = "cargo build --release"
+run = "mbx build --release"
 
 [tasks.perf]
 dir = "{{config_root}}"
