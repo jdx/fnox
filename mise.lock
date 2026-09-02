@@ -123,46 +123,38 @@ backend = "github:endevco/aube"
 
 [tools.aube."platforms.linux-arm64"]
 checksum = "sha256:167bf3749f1eac646b0096e6113e29ac154294c8fe5f8ff5ce3a440b3f73dfe2"
-url = "https://github.com/jdx/aube/releases/download/v2.0.1/aube-v2.0.1-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/jdx/aube/releases/assets/525718579"
-provenance = "github-attestations"
+url = "https://github.com/aubepkg/aube/releases/download/v2.0.1/aube-v2.0.1-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/aubepkg/aube/releases/assets/525718579"
 
 [tools.aube."platforms.linux-arm64-musl"]
 checksum = "sha256:720514470b025d3aee2eae25a5cbc354c22875e24f546146ad9a73ac95dc5443"
-url = "https://github.com/jdx/aube/releases/download/v2.0.1/aube-v2.0.1-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/jdx/aube/releases/assets/525682625"
-provenance = "github-attestations"
+url = "https://github.com/aubepkg/aube/releases/download/v2.0.1/aube-v2.0.1-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/aubepkg/aube/releases/assets/525682625"
 
 [tools.aube."platforms.linux-x64"]
 checksum = "sha256:320696667be8d64c04f559d730cea84a953e0d553d7fdb2d1dd6830e5266623d"
-url = "https://github.com/jdx/aube/releases/download/v2.0.1/aube-v2.0.1-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/jdx/aube/releases/assets/525694267"
-provenance = "github-attestations"
-provenance_verified = true
+url = "https://github.com/aubepkg/aube/releases/download/v2.0.1/aube-v2.0.1-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/aubepkg/aube/releases/assets/525694267"
 
 [tools.aube."platforms.linux-x64-musl"]
 checksum = "sha256:530ecdf99cc52fa6e603f7a69ed82ba82667a51143d9a8294cfe2755295db82e"
-url = "https://github.com/jdx/aube/releases/download/v2.0.1/aube-v2.0.1-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/jdx/aube/releases/assets/525697493"
-provenance = "github-attestations"
+url = "https://github.com/aubepkg/aube/releases/download/v2.0.1/aube-v2.0.1-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/aubepkg/aube/releases/assets/525697493"
 
 [tools.aube."platforms.macos-arm64"]
 checksum = "sha256:61eb75b7fc5e83c7a09666673c7a6310169cb49e44db3d923a27207e7b461371"
-url = "https://github.com/jdx/aube/releases/download/v2.0.1/aube-v2.0.1-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/jdx/aube/releases/assets/525744752"
-provenance = "github-attestations"
+url = "https://github.com/aubepkg/aube/releases/download/v2.0.1/aube-v2.0.1-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/aubepkg/aube/releases/assets/525744752"
 
 [tools.aube."platforms.macos-x64"]
 checksum = "sha256:d578debdd912047fae06f71ef1c2faeb7d34d378305a473a5468a79bf0928603"
-url = "https://github.com/jdx/aube/releases/download/v2.0.1/libaube-x86_64-apple-darwin.dylib"
-url_api = "https://api.github.com/repos/jdx/aube/releases/assets/525699067"
-provenance = "github-attestations"
+url = "https://github.com/aubepkg/aube/releases/download/v2.0.1/libaube-x86_64-apple-darwin.dylib"
+url_api = "https://api.github.com/repos/aubepkg/aube/releases/assets/525699067"
 
 [tools.aube."platforms.windows-x64"]
 checksum = "sha256:5383e428dc7ab02853bb37ceec1a5d72894b6455471c8d02ce9d84ed82430ab6"
-url = "https://github.com/jdx/aube/releases/download/v2.0.1/aube-v2.0.1-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/jdx/aube/releases/assets/525700617"
-provenance = "github-attestations"
+url = "https://github.com/aubepkg/aube/releases/download/v2.0.1/aube-v2.0.1-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/aubepkg/aube/releases/assets/525700617"
 
 [[tools.bitwarden]]
 version = "2026.8.0"
@@ -516,44 +508,44 @@ url = "https://github.com/jdx/hk/releases/download/v1.56.1/hk-x86_64-pc-windows-
 url_api = "https://api.github.com/repos/jdx/hk/releases/assets/525632118"
 
 [[tools.mr-boxington]]
-version = "1.4.1"
+version = "1.5.0"
 backend = "github:jdx/mr-boxington"
 
 [tools.mr-boxington."platforms.linux-arm64"]
-checksum = "sha256:7ca1deeb64ad22bd5ddc9f45c749c78d3eb32608562c363727de3f0c595df0f0"
-url = "https://github.com/jdx/mr-boxington/releases/download/v1.4.1/mbx-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/jdx/mr-boxington/releases/assets/540505948"
+checksum = "sha256:3782db0c07a47334d01d426896e9f6af2480b311def2d0f0a3ab1327b57247b2"
+url = "https://github.com/jdx/mr-boxington/releases/download/v1.5.0/mbx-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/mr-boxington/releases/assets/541628921"
 provenance = "github-attestations"
 
 [tools.mr-boxington."platforms.linux-arm64-musl"]
-checksum = "sha256:3113dfce87c8ee6d3485f7eb99f87ae130b9b9f2c73224720edf2cef7279b5d1"
-url = "https://github.com/jdx/mr-boxington/releases/download/v1.4.1/mbx-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/jdx/mr-boxington/releases/assets/540505946"
+checksum = "sha256:95e189127cf22f6586b0e7337893896dfb18b2018c7226e60844955e237234b8"
+url = "https://github.com/jdx/mr-boxington/releases/download/v1.5.0/mbx-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/jdx/mr-boxington/releases/assets/541628922"
 provenance = "github-attestations"
 
 [tools.mr-boxington."platforms.linux-x64"]
-checksum = "sha256:5bc7434333a941f664bbe73ae229edf6111c9fb5f771f959ca411a11358baf8a"
-url = "https://github.com/jdx/mr-boxington/releases/download/v1.4.1/mbx-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/jdx/mr-boxington/releases/assets/540505965"
+checksum = "sha256:83a5f4cb83a62cf028256c482a9f579911cc0793f79f1c2c06b83291c5c723d0"
+url = "https://github.com/jdx/mr-boxington/releases/download/v1.5.0/mbx-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/mr-boxington/releases/assets/541629161"
 provenance = "github-attestations"
 provenance_verified = true
 
 [tools.mr-boxington."platforms.linux-x64-musl"]
-checksum = "sha256:7277ceabefae1b444b39200c2cb944018a87da628ff77aa94291a8cc338546e6"
-url = "https://github.com/jdx/mr-boxington/releases/download/v1.4.1/mbx-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/jdx/mr-boxington/releases/assets/540505964"
+checksum = "sha256:8ffd1ffc4b53ce10ed1d0271e24d9d264e843b7be3f0a076389c4475a16e4132"
+url = "https://github.com/jdx/mr-boxington/releases/download/v1.5.0/mbx-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/jdx/mr-boxington/releases/assets/541629170"
 provenance = "github-attestations"
 
 [tools.mr-boxington."platforms.macos-arm64"]
-checksum = "sha256:57f1cac111d9972ad675aa80cbedf4c86b3423dfb11091383175db0f6341847e"
-url = "https://github.com/jdx/mr-boxington/releases/download/v1.4.1/mbx-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/jdx/mr-boxington/releases/assets/540505945"
+checksum = "sha256:d88ebea6ebf1a5b8b4a51a440a91baeb1214fdea49a6013dfe9b56e4bd4a6c84"
+url = "https://github.com/jdx/mr-boxington/releases/download/v1.5.0/mbx-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/jdx/mr-boxington/releases/assets/541628925"
 provenance = "github-attestations"
 
 [tools.mr-boxington."platforms.windows-x64"]
-checksum = "sha256:346cb0405129bbca4f7a24fc916b036cfd806d497d52ba47fc8bb0a0531b4382"
-url = "https://github.com/jdx/mr-boxington/releases/download/v1.4.1/mbx-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/jdx/mr-boxington/releases/assets/540505963"
+checksum = "sha256:970f974d3ee56b089c34a4b03fdb80dfcc0b260b3de950009a77240c9187a4c7"
+url = "https://github.com/jdx/mr-boxington/releases/download/v1.5.0/mbx-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/jdx/mr-boxington/releases/assets/541629146"
 provenance = "github-attestations"
 
 [[tools.node]]
