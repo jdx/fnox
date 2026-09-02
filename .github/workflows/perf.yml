@@ -27,14 +27,15 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
-  # Persistent appliance-local store; no remote backend is configured.
-  MBX_CACHE_DIR: /var/cache/mbx
   TAK_RUNNER: jdx-perf-v1-ubuntu24.04-x64-fnox-rust1.97.1-tokio1
   # This is a new measurement series: the compiler, runner image and Tokio
   # worker count are part of the benchmark environment, not incidental details.
 
 jobs:
   measure:
+    env:
+      # Persistent appliance-local store; no remote backend is configured.
+      MBX_CACHE_DIR: /var/cache/mbx
     name: Measure
     # Pin the image as well as tak and Rust. Absolute instruction counts shift
     # when any part of the measuring environment moves.
