@@ -249,14 +249,10 @@ export default defineConfig({
     ["link", { rel: "manifest", href: "/site.webmanifest" }],
     ["meta", { property: "og:site_name", content: "fnox" }],
     ["meta", { property: "og:type", content: "website" }],
-    [
-      "meta",
-      { property: "og:image", content: "https://fnox.jdx.dev/logo.png" },
-    ],
-    ["meta", { name: "twitter:card", content: "summary" }],
-    [
-      "meta",
-      { name: "twitter:image", content: "https://fnox.jdx.dev/logo.png" },
-    ],
+    ["meta", { property: "og:image", content: "https://fnox.jdx.dev/og.png" }],
+    ["meta", { property: "og:image:width", content: "1200" }],
+    ["meta", { property: "og:image:height", content: "630" }],
+    ["meta", { name: "twitter:card", content: "summary_large_image" }],
+    ["meta", { name: "twitter:image", content: "https://fnox.jdx.dev/og.png" }],
   ],
 });
