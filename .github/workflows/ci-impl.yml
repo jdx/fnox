@@ -244,7 +244,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2 # zizmor: ignore[cache-poisoning]
         with:
           shared-key: check-windows
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ inputs.trusted && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) }}
       - name: Check Windows build
         run: cargo check --workspace
 
@@ -268,11 +268,6 @@ jobs:
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
           cache: false
-      # save-if: only saves on main pushes, so PRs cannot poison the cache.
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2 # zizmor: ignore[cache-poisoning]
-        with:
-          shared-key: debug-${{ matrix.os }}
-          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install system dependencies (Ubuntu)
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
@@ -311,8 +306,13 @@ jobs:
           fnox ci-redact
           # shellcheck disable=SC2016
           fnox run -- sh -c 'echo MY_UNIMPORTANT_SECRET: $MY_UNIMPORTANT_SECRET'
-      - name: Clean cached Rust build artifacts
+      - name: Clean stale Rust build artifacts before restoring the cache
         run: cargo clean
+      # save-if: only trusted main and tag pushes may publish shared caches.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2 # zizmor: ignore[cache-poisoning]
+        with:
+          shared-key: debug-${{ matrix.os }}
+          save-if: ${{ inputs.trusted && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) }}
       - name: Run tests
         run: cargo test --workspace
       - name: mise run render
@@ -349,7 +349,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2 # zizmor: ignore[cache-poisoning]
         with:
           shared-key: msrv
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ inputs.trusted && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) }}
       - name: Install system dependencies
         run: |
           if [ -f /etc/apt/apt-mirrors.txt ]; then
