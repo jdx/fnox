@@ -1,5 +1,59 @@
 # Changelog
 
+## [1.35.0](https://github.com/jdx/fnox/compare/v1.34.1..v1.35.0) - 2026-09-03
+
+### 🚀 Features
+
+- **(config)** add selective profile inheritance by [@jdx](https://github.com/jdx) in [#770](https://github.com/jdx/fnox/pull/770)
+
+### 🐛 Bug Fixes
+
+- **(check)** batch Age secret resolution by [@davdroman](https://github.com/davdroman) in [#779](https://github.com/jdx/fnox/pull/779)
+- **(config)** silence intentional default fallbacks by [@jdx](https://github.com/jdx) in [#771](https://github.com/jdx/fnox/pull/771)
+- **(daemon)** detach background daemon from client cwd by [@jdx](https://github.com/jdx) in [#795](https://github.com/jdx/fnox/pull/795)
+- **(sync)** refresh local caches from current sources by [@davdroman](https://github.com/davdroman) in [#774](https://github.com/jdx/fnox/pull/774)
+
+### 📚 Documentation
+
+- fix prose and stale content in docs and cli help by [@jdx](https://github.com/jdx) in [#798](https://github.com/jdx/fnox/pull/798)
+
+### ⚡ Performance
+
+- **(ci)** reuse appliance-local mbx cache by [@jdx](https://github.com/jdx) in [#799](https://github.com/jdx/fnox/pull/799)
+- **(env)** skip redundant secret reloads by [@jdx](https://github.com/jdx) in [#766](https://github.com/jdx/fnox/pull/766)
+
+### 🛡️ Security
+
+- **(ci)** bump mr-boxington action by [@jdx](https://github.com/jdx) in [#777](https://github.com/jdx/fnox/pull/777)
+
+### 🔍 Other Changes
+
+- **(ci)** adopt mbx 0.5.4 by [@jdx](https://github.com/jdx) in [#775](https://github.com/jdx/fnox/pull/775)
+- **(ci)** pin mr-boxington-action v1.0.1 by [@jdx](https://github.com/jdx) in [#776](https://github.com/jdx/fnox/pull/776)
+- **(ci)** update mbx to 0.6.0 by [@jdx](https://github.com/jdx) in [#778](https://github.com/jdx/fnox/pull/778)
+- **(ci)** fail closed without notarization credentials by [@jdx](https://github.com/jdx) in [#781](https://github.com/jdx/fnox/pull/781)
+- **(ci)** use mbx server cache for trusted builds by [@jdx](https://github.com/jdx) in [#786](https://github.com/jdx/fnox/pull/786)
+- **(ci)** update mbx to 1.3.2 by [@jdx](https://github.com/jdx) in [#791](https://github.com/jdx/fnox/pull/791)
+- **(ci)** update mbx to 1.4.1 by [@jdx](https://github.com/jdx) in [#797](https://github.com/jdx/fnox/pull/797)
+- **(ci)** update performance runner image by [@jdx](https://github.com/jdx) in [#801](https://github.com/jdx/fnox/pull/801)
+- **(perf)** move benchmarks to dedicated runner by [@jdx](https://github.com/jdx) in [#783](https://github.com/jdx/fnox/pull/783)
+- **(perf)** bump tak to 0.0.9 by [@jdx](https://github.com/jdx) in [#784](https://github.com/jdx/fnox/pull/784)
+- **(release)** improve sponsor message by [@jdx](https://github.com/jdx) in [#787](https://github.com/jdx/fnox/pull/787)
+- back mbx with the GitHub Actions cache alone by [@jdx](https://github.com/jdx) in [#780](https://github.com/jdx/fnox/pull/780)
+- adopt mr-boxington 1.1 cargo shim by [@jdx](https://github.com/jdx) in [#782](https://github.com/jdx/fnox/pull/782)
+- update mr-boxington to 1.3.0 by [@jdx](https://github.com/jdx) in [#785](https://github.com/jdx/fnox/pull/785)
+- route mbx caching by runner provider by [@jdx](https://github.com/jdx) in [#800](https://github.com/jdx/fnox/pull/800)
+- restore rust-cache by [@jdx](https://github.com/jdx) in [#802](https://github.com/jdx/fnox/pull/802)
+
+### 📦️ Dependency Updates
+
+- bump tak and mbx by [@jdx](https://github.com/jdx) in [#772](https://github.com/jdx/fnox/pull/772)
+- update jdx/mise-action action to v4.3.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#790](https://github.com/jdx/fnox/pull/790)
+- update dependency usage to v6.6.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#789](https://github.com/jdx/fnox/pull/789)
+- update dependency @anthropic-ai/claude-code to v2.1.245 by [@renovate[bot]](https://github.com/renovate[bot]) in [#788](https://github.com/jdx/fnox/pull/788)
+- update dependency usage to v6.6.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#792](https://github.com/jdx/fnox/pull/792)
+- update dependency @anthropic-ai/claude-code to v2.1.246 by [@renovate[bot]](https://github.com/renovate[bot]) in [#794](https://github.com/jdx/fnox/pull/794)
+
 ## [1.34.1](https://github.com/jdx/fnox/compare/v1.34.0..v1.34.1) - 2026-08-26
 
 ### 🐛 Bug Fixes
