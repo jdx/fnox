@@ -67,6 +67,4 @@ mise install
 mise run build
 ```
 
-Run the lint and test tasks above before opening a PR. See
-[CONTRIBUTING.md](https://github.com/jdx/fnox/blob/main/CONTRIBUTING.md) in the
-repository for notes on the mbx build cache.
+Run the lint and test tasks above before opening a PR.

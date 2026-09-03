@@ -38,9 +38,11 @@ jobs:
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
           cache: false
-      - uses: ./.github/actions/mbx
+      # save-if: false — this job never saves to cache, only restores from main's cache.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2 # zizmor: ignore[cache-poisoning]
         with:
-          backend: ${{ inputs.trusted && 'local' || 'server' }}
+          shared-key: debug-${{ matrix.os }}
+          save-if: false
       - name: Install system dependencies (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -238,9 +240,11 @@ jobs:
         with:
           cache: false
           fetch_from_github: false
-      - uses: ./.github/actions/mbx
+      # save-if: only saves on main pushes, so PRs cannot poison the cache.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2 # zizmor: ignore[cache-poisoning]
         with:
-          backend: server
+          shared-key: check-windows
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Check Windows build
         run: cargo check --workspace
 
@@ -264,9 +268,11 @@ jobs:
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
           cache: false
-      - uses: ./.github/actions/mbx
+      # save-if: only saves on main pushes, so PRs cannot poison the cache.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2 # zizmor: ignore[cache-poisoning]
         with:
-          backend: ${{ inputs.trusted && 'local' || 'server' }}
+          shared-key: debug-${{ matrix.os }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install system dependencies (Ubuntu)
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
@@ -339,9 +345,11 @@ jobs:
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
           cache: false
-      - uses: ./.github/actions/mbx
+      # save-if: only saves on main pushes, so PRs cannot poison the cache.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2 # zizmor: ignore[cache-poisoning]
         with:
-          backend: ${{ inputs.trusted && 'local' || 'server' }}
+          shared-key: msrv
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install system dependencies
         run: |
           if [ -f /etc/apt/apt-mirrors.txt ]; then
