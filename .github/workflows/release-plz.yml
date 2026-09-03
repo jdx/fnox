@@ -16,6 +16,7 @@ concurrency:
   group: release-plz
 
 env:
+  MBX_DISABLE: "1"
   DRY_RUN: 0
 
 jobs:

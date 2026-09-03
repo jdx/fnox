@@ -27,6 +27,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  MBX_DISABLE: "1"
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
   TAK_RUNNER: jdx-perf-v1-ubuntu24.04-x64-fnox-rust1.97.1-tokio1-img5263c143

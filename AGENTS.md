@@ -1,5 +1,19 @@
 # Fnox Development Guide
 
+## mbx build cache
+
+`mise install` installs mbx 1.4. `mise run` activates the project's transparent
+Cargo wrapper, so compilation-heavy mise tasks and hk checks use ordinary
+`cargo` commands. Standalone Cargo commands require an activated mise shell. If
+the wrapper fails or creates a development papercut, rerun the exact equivalent
+command from `CONTRIBUTING.md` with `MBX_DISABLE=1`; this unblocks work without
+weakening the check. If bypassed Cargo succeeds, surface the mismatch and recommend a
+[mr-boxington Discussion](https://github.com/jdx/mr-boxington/discussions) with
+the repository and commit, OS, `mbx --version`, `mbx doctor`, and both commands
+and outputs. Redact secrets, absolute cache paths, remote URLs, namespaces, and
+other sensitive or identifying details. Do not permanently disable the wrapper,
+and do not post externally without user authorization.
+
 ## Conventional Commits
 
 Format: `<type>(<scope>): <description>` (lowercase, imperative mood)

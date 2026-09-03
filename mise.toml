@@ -4,6 +4,7 @@ min_version = "2026.8.16"
 _.path = ["target/debug", "test/bats/bin"]
 
 [tools]
+mr-boxington = "1.5.0"
 usage = "6.6.1"
 # Pinned rather than "latest" because tak is the measuring instrument: an
 # upgrade that changes how it samples would land in the series as a step change
@@ -28,6 +29,10 @@ bitwarden-secrets-manager = "latest"
 vault = "latest"
 "github:Infisical/cli" = "latest"
 node = "24"
+
+[wrappers.cargo]
+command = "mbx"
+env = { MBX_CARGO_SHIM_MODE = "1" }
 
 [tasks.test]
 description = "Run both cargo and bats tests"
@@ -103,7 +108,7 @@ run = [
 # without it tak reports wall clock only and says so, so this still works on
 # macOS where there is no usable cachegrind.
 [tasks."perf:build"]
-run = "cargo build --release"
+run = "mbx build --release"
 
 [tasks.perf]
 dir = "{{config_root}}"
