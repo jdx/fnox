@@ -1,5 +1,6 @@
 ---
 layout: home
+title: Secure secrets for development workflows
 
 hero:
   name: fnox
