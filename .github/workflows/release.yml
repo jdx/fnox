@@ -205,7 +205,7 @@ jobs:
       # A consumer that has this file can generate completions, a man page,
       # and documentation with its own copy of usage, so nothing of fnox's
       # runs on the machine it is installed on.
-      - name: Publish the CLI specification
+      - name: Publish the CLI specification and completions
         env:
           INPUTS_VERSION: ${{ inputs.version }}
         run: |
@@ -217,7 +217,14 @@ jobs:
           mkdir -p bin
           tar -xzf release-assets/fnox-x86_64-unknown-linux-gnu.tar.gz -C bin
           bin/fnox usage > fnox.usage.kdl
-          gh release upload "$TAG_NAME" fnox.usage.kdl --clobber
+          for shell in bash zsh fish powershell; do
+            bin/fnox completion "$shell" > fnox.$shell
+            test -s fnox.$shell
+            grep -Fq '__complete_word__' fnox.$shell
+            bin/fnox __complete_word__ --shell "$shell" --line 'fnox ge' | grep -Fq -- 'get'
+          done
+          bash -n fnox.bash
+          gh release upload "$TAG_NAME" fnox.usage.kdl fnox.bash fnox.zsh fnox.fish fnox.powershell --clobber
       # The packslip is this release's signed inventory: every archive's
       # digest, the executable inside it, the shared objects it needs from
       # the host, and the workflow identity that signed for all of it. It
@@ -229,7 +236,12 @@ jobs:
           tag: ${{ inputs.version != '' && format('v{0}', inputs.version) || github.ref_name }}
           artifacts: release-assets/fnox-*.tar.gz release-assets/fnox-*.tar.xz release-assets/fnox-*.zip
           bin: fnox
-          resources: cli-spec/usage=asset:fnox.usage.kdl
+          resources: |
+            cli-spec/usage=asset:fnox.usage.kdl
+            completion/bash=asset:fnox.bash
+            completion/zsh=asset:fnox.zsh
+            completion/fish=asset:fnox.fish
+            completion/powershell=asset:fnox.powershell
           token: ${{ secrets.FNOX_GH_TOKEN }}
 
   enhance-release:
