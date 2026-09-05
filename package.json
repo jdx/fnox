@@ -5,10 +5,11 @@
   "description": "Documentation for fnox",
   "scripts": {
     "docs:dev": "vitepress dev docs",
-    "docs:build": "vitepress build docs",
+    "docs:build": "node --test docs/.vitepress/social-images.test.mjs && vitepress build docs && node docs/.vitepress/check-social-images.mjs docs/.vitepress/dist",
     "docs:preview": "vitepress preview docs"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "vitepress": "^1.5.0",
     "vue": "^3.5.13"
   },
