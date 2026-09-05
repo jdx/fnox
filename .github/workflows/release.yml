@@ -205,6 +205,11 @@ jobs:
       # A consumer that has this file can generate completions, a man page,
       # and documentation with its own copy of usage, so nothing of fnox's
       # runs on the machine it is installed on.
+      - name: Install completion syntax checkers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zsh fish
+          mise install github:PowerShell/PowerShell@7.5.4
       - name: Publish the CLI specification and completions
         env:
           INPUTS_VERSION: ${{ inputs.version }}
@@ -224,6 +229,16 @@ jobs:
             bin/fnox __complete_word__ --shell "$shell" --line 'fnox ge' | grep -Fq -- 'get'
           done
           bash -n fnox.bash
+          zsh -n fnox.zsh
+          fish --no-execute fnox.fish
+          mise exec github:PowerShell/PowerShell@7.5.4 -- pwsh -NoProfile -Command - <<'POWERSHELL'
+          $ErrorActionPreference = 'Stop'
+          foreach ($script in Get-ChildItem -LiteralPath "." -Filter '*.powershell') {
+            $parseErrors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($script.FullName, [ref]$null, [ref]$parseErrors)
+            if ($parseErrors.Count) { $parseErrors | Write-Error; exit 1 }
+          }
+          POWERSHELL
           gh release upload "$TAG_NAME" fnox.usage.kdl fnox.bash fnox.zsh fnox.fish fnox.powershell --clobber
       # The packslip is this release's signed inventory: every archive's
       # digest, the executable inside it, the shared objects it needs from
