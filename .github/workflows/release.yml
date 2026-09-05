@@ -224,7 +224,7 @@ jobs:
       # lets an installer check a download against jdx/fnox's identity
       # rather than against a key this project would have to hold. See
       # https://packslip.dev.
-      - uses: jdx/packslip@433c0c0f033e64c22f12433471768c255ef2bd93 # v0.3.0
+      - uses: jdx/packslip@a6eddff2d884891faa2efbec374b48e7053df2c4 # v1.0.1
         with:
           tag: ${{ inputs.version != '' && format('v{0}', inputs.version) || github.ref_name }}
           artifacts: release-assets/fnox-*.tar.gz release-assets/fnox-*.tar.xz release-assets/fnox-*.zip
