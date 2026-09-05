@@ -33,12 +33,16 @@ if (!versionMatch) {
   console.warn("Unable to find package version in Cargo.toml");
 }
 const latestVersion = versionMatch?.[1] ?? "0.0.0";
+const siteUrl = "https://fnox.jdx.dev";
+const siteDescription =
+  "Manage development secrets with encrypted files or cloud providers, fast local sync, shell integration, profiles, and hardware-backed keys.";
 
 export default defineConfig({
   title: "fnox",
-  description: "Fort Knox for your secrets",
+  description: siteDescription,
   base: "/",
   appearance: "force-dark",
+  sitemap: { hostname: siteUrl },
 
   themeConfig: {
     logo: "/logo.svg",
@@ -247,12 +251,55 @@ export default defineConfig({
       },
     ],
     ["link", { rel: "manifest", href: "/site.webmanifest" }],
+    ["meta", { name: "theme-color", content: "#0d0221" }],
     ["meta", { property: "og:site_name", content: "fnox" }],
     ["meta", { property: "og:type", content: "website" }],
+    ["meta", { property: "og:locale", content: "en_US" }],
     ["meta", { property: "og:image", content: "https://fnox.jdx.dev/og.png" }],
     ["meta", { property: "og:image:width", content: "1200" }],
     ["meta", { property: "og:image:height", content: "630" }],
+    [
+      "meta",
+      {
+        property: "og:image:alt",
+        content: "fnox — secure secrets for development workflows",
+      },
+    ],
     ["meta", { name: "twitter:card", content: "summary_large_image" }],
+    ["meta", { name: "twitter:site", content: "@jdxcode" }],
     ["meta", { name: "twitter:image", content: "https://fnox.jdx.dev/og.png" }],
+    [
+      "meta",
+      {
+        name: "twitter:image:alt",
+        content: "fnox — secure secrets for development workflows",
+      },
+    ],
   ],
+  transformHead({ pageData, title, description }) {
+    const url = `${siteUrl}/${pageData.relativePath}`
+      .replace(/index\.md$/, "")
+      .replace(/\.md$/, ".html");
+
+    return [
+      ["link", { rel: "canonical", href: url }],
+      ["meta", { property: "og:url", content: url }],
+      ["meta", { property: "og:title", content: title }],
+      ["meta", { property: "og:description", content: description }],
+      ["meta", { name: "twitter:title", content: title }],
+      ["meta", { name: "twitter:description", content: description }],
+      [
+        "script",
+        { type: "application/ld+json" },
+        JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "WebPage",
+          name: title,
+          description,
+          url,
+          isPartOf: { "@type": "WebSite", name: "fnox", url: siteUrl },
+        }),
+      ],
+    ];
+  },
 });
