@@ -16,13 +16,20 @@ and do not post externally without user authorization.
 
 ## Conventional Commits
 
-Format: `<type>(<scope>): <description>` (lowercase, imperative mood)
+PR titles must use `<type>[optional scope][optional !]: <description>`. Intermediate commit
+subjects should use the same format. Start the description with a lowercase
+character and use imperative mood.
 
-**Types:** `feat`, `fix`, `refactor`, `docs`, `style`, `perf`, `test`, `chore`, `security`
+**Types:** `feat`, `fix`, `refactor`, `docs`, `style`, `perf`, `test`, `chore`, `ci`, `revert`, `security`
 
 **Scopes:** command names (`get`, `set`, `exec`, `list`, `provider`), provider names (`age`, `1password`, `bitwarden`, `bitwarden-sm`, `aws-kms`, `aws-sm`, `aws-ps`, `keychain`, `keepass`, `infisical`, `passwordstate`, `pass`, `proton-pass`), subsystems (`config`, `encryption`, `env`, `deps`)
 
 Examples: `fix(aws-sm): handle pagination for large secret lists`, `feat(exec): add --no-inherit flag`
+
+CI validates the pull request title and re-runs when it is edited. Intermediate
+commit subjects are not checked because pull requests are squash-merged. CI
+mechanically checks the allowed type, syntax, and lowercase-leading description;
+imperative mood remains a review rule.
 
 ## Minimum Supported Rust Version (MSRV)
 
@@ -137,7 +144,7 @@ All providers follow the same pattern: config in `fnox.toml` stores references/n
 
 ## GitHub Interactions
 
-Pull request titles must follow the same Conventional Commit format as commits: `<type>(<scope>): <description>` in lowercase imperative mood. Do not prefix PR titles with agent/tool labels such as `[codex]` or `[claude]`.
+Pull request titles must follow the same Conventional Commit format as commits: `<type>[optional scope][optional !]: <description>` in lowercase imperative mood. Do not prefix PR titles with agent/tool labels such as `[codex]` or `[claude]`.
 
 When AI contributes GitHub content—including a pull request description, review, pull request
 comment, or discussion post—append this disclosure:
