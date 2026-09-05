@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.35.1](https://github.com/jdx/fnox/compare/v1.35.0..v1.35.1) - 2026-09-05
+
+### 📚 Documentation
+
+- complete social and search metadata by [@jdx](https://github.com/jdx) in [#806](https://github.com/jdx/fnox/pull/806)
+
+### 🛡️ Security
+
+- add open graph share image by [@jdx](https://github.com/jdx) in [#803](https://github.com/jdx/fnox/pull/803)
+- configure Entire search by [@jdx](https://github.com/jdx) in [#805](https://github.com/jdx/fnox/pull/805)
+
+### 🔍 Other Changes
+
+- **(release)** publish a signed packslip with each release by [@jdx](https://github.com/jdx) in [#807](https://github.com/jdx/fnox/pull/807)
+- **(release)** bump packslip action to v1.0.0 by [@jdx](https://github.com/jdx) in [#810](https://github.com/jdx/fnox/pull/810)
+- enforce conventional commits by [@jdx](https://github.com/jdx) in [#809](https://github.com/jdx/fnox/pull/809)
+
+### 📦️ Dependency Updates
+
+- bump mr-boxington to 1.8.1 by [@jdx](https://github.com/jdx) in [#808](https://github.com/jdx/fnox/pull/808)
+
 ## [1.35.0](https://github.com/jdx/fnox/compare/v1.34.1..v1.35.0) - 2026-09-03
 
 ### 🚀 Features
