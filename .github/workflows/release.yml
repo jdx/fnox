@@ -205,6 +205,10 @@ jobs:
       # A consumer that has this file can generate completions, a man page,
       # and documentation with its own copy of usage, so nothing of fnox's
       # runs on the machine it is installed on.
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          install: false
+          cache: false
       - name: Install completion syntax checkers
         run: |
           sudo apt-get update
