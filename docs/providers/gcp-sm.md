@@ -1,29 +1,39 @@
+---
+description: "Read Google Cloud Secret Manager values with fnox. Configure project access, authentication, prefixes, and secret versions."
+---
+
 # Google Cloud Secret Manager
 
 GCP Secret Manager provides centralized secret management for Google Cloud workloads.
 
-## Quick Start
+## Quick start
 
-```bash
-# 1. Enable Secret Manager API
+```sh
+# Enable Secret Manager API
 gcloud services enable secretmanager.googleapis.com
+```
 
-# 2. Configure provider
-cat >> fnox.toml << 'EOF'
+Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+
+```toml
 [providers]
-gcp = { type = "gcp-sm", project = "my-project-id", prefix = "myapp/" }
-EOF
+gcp = { type = "gcp-sm", project = "my-project-id", prefix = "myapp-" }
+```
 
-# 3. Create secret
+```sh
+# Create secret
 echo -n "postgresql://..." | gcloud secrets create myapp-database-url --data-file=-
+```
 
-# 4. Reference in fnox
-cat >> fnox.toml << 'EOF'
+Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+
+```toml
 [secrets]
 DATABASE_URL = { provider = "gcp", value = "database-url" }
-EOF
+```
 
-# 5. Get secret
+```sh
+# Get secret
 fnox get DATABASE_URL
 ```
 
@@ -56,23 +66,14 @@ gcloud projects add-iam-policy-binding PROJECT-ID \
 
 ```toml
 [providers]
-gcp = { type = "gcp-sm", project = "my-project-id", prefix = "myapp/" }  # prefix is optional
+gcp = { type = "gcp-sm", project = "my-project-id", prefix = "myapp-" }  # prefix is optional
 ```
 
-## Pros
+## Usage notes
 
-- ✅ Integrated with GCP IAM
-- ✅ Audit logs
-- ✅ Automatic replication
-- ✅ Versioning
+The config stores a secret name in the selected project. The provider prefix is part of that name. Authentication uses Application Default Credentials; a separate gcloud CLI login is not always sufficient.
 
-## Cons
-
-- ❌ Requires GCP project
-- ❌ Costs money
-- ❌ Network access required
-
-## Next Steps
+## Next steps
 
 - [Google Cloud KMS](/providers/gcp-kms) - Encryption alternative
 - [AWS Secrets Manager](/providers/aws-sm) - AWS equivalent

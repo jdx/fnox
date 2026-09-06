@@ -1,4 +1,8 @@
-# Credential Proxy
+---
+description: "Inject credentials into matching HTTPS requests while passing placeholders to a command. Configure rules and understand the access model."
+---
+
+# Credential proxy
 
 The fnox credential proxy lets a command use API credentials without receiving
 their real values. The child process receives placeholders, and fnox substitutes
@@ -7,7 +11,7 @@ the real values only in approved HTTPS requests.
 This is useful for AI agents and other untrusted or highly automated programs
 that need to call external APIs.
 
-## Configure Rules
+## Configure rules
 
 Proxy rules refer to secrets in the active profile:
 
@@ -40,7 +44,7 @@ Inspect the effective rules without resolving secrets:
 fnox proxy rules
 ```
 
-## Run a Command
+## Run a command
 
 ```bash
 fnox proxy run -- codex
@@ -64,7 +68,7 @@ fnox:
 
 The CA private key and real secret values remain in fnox process memory.
 
-## Egress Modes
+## Egress modes
 
 `egress = "strict"` is the default. Destinations without proxy rules are
 rejected.
@@ -79,9 +83,9 @@ egress = "permissive"
 
 Strict mode is recommended for agent workloads.
 
-## Current Limits
+## Current limits
 
-This first version intentionally has a narrow protocol surface:
+The proxy currently supports the following request shapes:
 
 - Credential substitution is supported in HTTP headers.
 - Plain `http://` proxy requests are rejected.
@@ -92,13 +96,13 @@ This first version intentionally has a narrow protocol surface:
 - Domains are exact names; wildcard domains are not supported.
 - Client software must honor the standard proxy and CA environment variables.
 
-## Security Model
+## Security model
 
 The credential proxy prevents the child from receiving the real values through
 its configured environment and proxy traffic. Rules also restrict where fnox
 will inject each credential.
 
-The proxy is not yet an operating-system sandbox. A determined process running
+The proxy is not an operating-system sandbox. A determined process running
 as the same user may bypass proxy environment variables, read accessible fnox
 configuration or provider state, or invoke fnox directly. Run untrusted agents
 in a container, VM, or other sandbox that blocks direct egress and access to
@@ -106,3 +110,8 @@ credential sources.
 
 Request auditing logs method, domain, path, and injected secret names through
 fnox tracing. It never logs request headers, bodies, or secret values.
+
+## Next steps
+
+- [MCP server](/guide/mcp): expose selected secrets and command execution over stdio.
+- [Proxy commands](/cli/proxy): inspect rules and launch a command.

@@ -1,15 +1,19 @@
-# Import / Export
+---
+description: "Import secrets from environment files or structured data, export resolved values, and migrate between providers."
+---
 
-fnox can import secrets from various formats and export them for use in other tools.
+# Import and export
+
+Import existing values into an encryption provider, or export resolved secrets for another tool. Exported values are plaintext; fnox does not turn them into dummy examples.
 
 Import requires an encryption provider (`-p`/`--provider`), such as `age`, so that
 imported values are encrypted before they are written to the config file. Remote
 storage providers (1Password, AWS Secrets Manager, etc.) are not yet supported as
 import targets.
 
-## Import from Files
+## Import from files
 
-### From .env Files
+### From .env files
 
 ```bash
 # Import from .env file, encrypting with the "age" provider
@@ -43,7 +47,7 @@ API_KEY=sk_test_abc123
 EOF
 ```
 
-### From Different Formats
+### From different formats
 
 ```bash
 # JSON
@@ -72,9 +76,9 @@ DATABASE_URL: postgresql://localhost/mydb
 API_KEY: sk_test_abc123
 ```
 
-## Import Options
+## Import options
 
-### With Provider
+### With provider
 
 The provider encrypts secrets during import. It must be an encryption provider
 defined in your config (for example `age`, `aws-kms`, or a hardware-backed
@@ -88,7 +92,7 @@ fnox import -i .env --provider age
 fnox import -i .env --provider kms
 ```
 
-### With Filters
+### With filters
 
 Import only specific secrets:
 
@@ -100,7 +104,7 @@ fnox import -i .env --provider age --filter "^DATABASE_"
 fnox import -i .env --provider age --filter "^API_"
 ```
 
-### With Prefix
+### With prefix
 
 Add a prefix to all imported secrets:
 
@@ -112,7 +116,7 @@ fnox import -i .env --provider age --prefix "MYAPP_"
 # API_KEY becomes MYAPP_API_KEY
 ```
 
-### Combining Options
+### Combining options
 
 ```bash
 # Import DB secrets with encryption and prefix
@@ -125,9 +129,9 @@ fnox import -i .env \
 # DATABASE_PASSWORD → PROD_DATABASE_PASSWORD (encrypted with age)
 ```
 
-## Export Secrets
+## Export secrets
 
-### Export Formats
+### Export formats
 
 ```bash
 # Export as .env format (default)
@@ -149,7 +153,21 @@ fnox export --format toml
 fnox export --header
 ```
 
-### Save to File
+JSON, YAML, and TOML exports wrap the values in a `secrets` object and include `metadata` with the profile, export time, and count. Imports expect a flat name-to-value map instead. To produce JSON that can be imported again, extract the values with [jq](https://jqlang.org/manual/):
+
+```sh
+fnox export --format json | jq '.secrets'
+```
+
+For `as_file = true` secrets, export returns paths to temporary files rather than their contents. Export is therefore not a complete backup of configuration or file secrets.
+
+### Save to file
+
+Create private output files and keep them out of version control. In a POSIX shell, `umask 077` restricts permissions on newly created files:
+
+```sh
+umask 077
+```
 
 ```bash
 # Export to file
@@ -160,7 +178,9 @@ fnox export --format yaml > secrets.yaml
 fnox export --format toml > secrets.toml
 ```
 
-### Export with Profile
+`--dry-run` suppresses writing only when you also provide `--output`. Without an output path, export still prints the resolved values to stdout.
+
+### Export with profile
 
 ```bash
 # Export production secrets
@@ -170,72 +190,53 @@ fnox export --profile production > .env.production
 fnox export --profile staging --format json > staging.json
 ```
 
-## Migration Workflows
+## Migration workflows
 
-### From .env to fnox with Encryption
+### From .env to fnox
 
-```bash
-# 1. Set up age provider
-cat >> fnox.toml << 'EOF'
-[providers.age]
-type = "age"
-recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
-EOF
+First [configure an age provider](/guide/quick-start), then preview and import:
 
-# 2. Import and encrypt all secrets
+```sh
+fnox import -i .env --provider age --dry-run
 fnox import -i .env --provider age
-
-# 3. Remove .env file (secrets now encrypted in fnox.toml)
-rm .env
+fnox check --all
+fnox exec -- npm start
 ```
 
-### From fnox to .env (for legacy tools)
+Review the encrypted configuration before committing. Keep `.env` ignored, and remove the plaintext file when the application no longer needs it.
 
-```bash
-# Export current secrets to .env
-fnox export > .env
+### From a remote provider to local encryption
+
+To retain remote references and make a personal cache, use [`fnox sync`](/guide/sync).
+
+To migrate values into an encryption provider permanently, export and import through a pipe in Bash or Zsh:
+
+```sh
+fnox export --profile production --format json |
+  jq '.secrets' |
+  fnox import json --provider age --force
 ```
 
-### Between Providers
+This example requires `jq` and an age provider in the destination profile. It writes into the import command's active profile. Select `--profile` explicitly on each command when source and destination differ. Export follows shell injection settings; add `--all` only when you intend to include `env = false` and `env = "exec"` secrets.
 
-```bash
-# 1. Export from AWS Secrets Manager
-fnox export --profile production --format json > prod-secrets.json
+### Create an onboarding template
 
-# 2. Switch to age provider
-cat >> fnox.toml << 'EOF'
-[providers.age]
-type = "age"
-recipients = ["age1..."]
-EOF
+Write dummy values explicitly. `fnox export` returns real resolved values, even if the output filename contains `example`:
 
-# 3. Re-import with new provider
-fnox import -i prod-secrets.json json --provider age
-
-# 4. Verify
-fnox list
+```json
+{
+  "DATABASE_URL": "postgresql://localhost/example",
+  "API_KEY": "replace-me"
+}
 ```
 
-### Team Onboarding
+A teammate can fill in a private copy and import it with `fnox import -i secrets.json json --provider age`.
 
-```bash
-# 1. Export example secrets (with dummy values)
-fnox export --format json > secrets.example.json
+## CI/CD integration
 
-# 2. Team member fills in real values
-cp secrets.example.json secrets.json
-# Edit secrets.json with real credentials
+The examples below assume fnox, the target encryption provider, and the destination tools are already configured.
 
-# 3. Import with encryption
-fnox import -i secrets.json json --provider age
-
-# 4. Delete plaintext file
-rm secrets.json
-```
-
-## CI/CD Integration
-
-### GitHub Actions Secrets → fnox
+### GitHub Actions secrets → fnox
 
 ```yaml
 # .github/workflows/setup-secrets.yml
@@ -259,6 +260,8 @@ jobs:
 
 ### fnox → Docker Compose
 
+For Compose environment interpolation, you can avoid a plaintext file with `fnox exec -- docker compose up`. If your service explicitly uses `env_file`, create that file with restricted permissions:
+
 ```bash
 # Export for docker-compose
 fnox export > .env
@@ -268,7 +271,7 @@ fnox export > .env
 #   - .env
 ```
 
-### fnox → Kubernetes Secrets
+### fnox → Kubernetes secrets
 
 ```bash
 # Create Kubernetes secret from .env-format output
@@ -276,7 +279,7 @@ kubectl create secret generic app-secrets \
   --from-env-file=<(fnox export)
 ```
 
-## Next Steps
+## Next steps
 
 - [Providers](/providers/overview) - Choose providers for your secrets
 - [Profiles](/guide/profiles) - Organize secrets by environment

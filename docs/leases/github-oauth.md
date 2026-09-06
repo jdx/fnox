@@ -1,3 +1,7 @@
+---
+description: "Create GitHub OAuth access tokens with fnox through the device flow and cache them for subsequent commands."
+---
+
 # GitHub OAuth
 
 The `github-oauth` lease backend creates GitHub App user access tokens with OAuth device flow. It is useful for local automation where you want `GITHUB_TOKEN` or `GH_TOKEN` to be short-lived and tied to the signed-in GitHub user, without storing a personal access token in `fnox.toml`.
@@ -38,7 +42,11 @@ fnox exec -- gh pr list
 
 Approve the device prompt in your browser. Subsequent runs reuse the cached token while it remains valid. In non-interactive mode (`--non-interactive` or `FNOX_NON_INTERACTIVE`), fnox fails instead of starting the device flow, so authorize once from an interactive terminal first.
 
-## Credentials Produced
+## Expiry and revocation
+
+GitHub controls the returned token lifetime. Inspect the tracked lease rather than assuming the requested `duration` is enforced. This backend relies on expiry; revoking its fnox ledger entry does not provide immediate remote token revocation.
+
+## Credentials produced
 
 | Environment Variable | Description              |
 | -------------------- | ------------------------ |
@@ -72,7 +80,7 @@ keyring_cache = false
 
 With keyring caching disabled, fnox still caches active lease credentials in its lease ledger for the current project.
 
-## See Also
+## See also
 
 - [Credential Leases](/guide/leases) — overview and approaches
 - [GitHub App](/leases/github-app) — installation access tokens for automation

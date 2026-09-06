@@ -1,12 +1,16 @@
-# Hierarchical Configuration
+---
+description: "Share configuration across directories and understand how global, project, profile, and local files override one another."
+---
 
-fnox searches parent directories for `fnox.toml` (or `.fnox.toml`) files and merges them. This is perfect for monorepos and multi-service projects.
+# Hierarchical configuration
 
-## How It Works
+fnox searches parent directories for `fnox.toml` (or `.fnox.toml`) files and merges them. Use this to share providers and common settings across a monorepo.
+
+## How it works
 
 fnox builds configuration by merging multiple sources, starting with the global config and walking up the directory tree:
 
-```
+```text
 project/
 ├── fnox.toml              # Root config
 ├── fnox.local.toml        # Root local overrides (optional)
@@ -29,9 +33,9 @@ When you run fnox from `project/services/api/`, the merge order is (lowest to hi
 
 Each level merges the main config, any profile-specific file (`fnox.<profile>.toml`), and local overrides, with child configs taking precedence over parent configs, and profile and local files taking precedence over the main config at the same level. Global config provides the base layer available to all projects.
 
-## Example Setup
+## Example setup
 
-### Root Config (Common Secrets)
+### Root config (common secrets)
 
 ```toml
 # project/fnox.toml
@@ -45,7 +49,7 @@ ENVIRONMENT = { default = "development" }
 JWT_SECRET = { provider = "age", value = "encrypted-shared-jwt..." }
 ```
 
-### API Service Config
+### API service config
 
 ```toml
 # project/services/api/fnox.toml
@@ -56,7 +60,7 @@ DATABASE_URL = { provider = "age", value = "encrypted-api-db..." }
 LOG_LEVEL = { default = "debug" }  # Override shared secret - more verbose for API during dev
 ```
 
-### Worker Service Config
+### Worker service config
 
 ```toml
 # project/services/worker/fnox.toml
@@ -66,12 +70,14 @@ QUEUE_URL = { provider = "age", value = "encrypted-queue-url..." }
 WORKER_CONCURRENCY = { default = "4" }
 ```
 
-## Resulting Secrets
+## Resulting secrets
+
+The comments below summarize the resolved configuration; the CLI displays a table of names, providers, and sources.
 
 From `project/services/api/`:
 
 ```bash
-fnox list
+fnox list --sources
 # ENVIRONMENT=development       (from root)
 # JWT_SECRET=***                (from root)
 # LOG_LEVEL=debug               (from api, overrides root)
@@ -82,7 +88,7 @@ fnox list
 From `project/services/worker/`:
 
 ```bash
-fnox list
+fnox list --sources
 # ENVIRONMENT=development       (from root)
 # JWT_SECRET=***                (from root)
 # LOG_LEVEL=info                (from root)
@@ -90,7 +96,7 @@ fnox list
 # WORKER_CONCURRENCY=4          (from worker)
 ```
 
-## Imports vs Hierarchy
+## Imports vs hierarchy
 
 **Hierarchy** (automatic):
 
@@ -108,7 +114,7 @@ import = ["./shared/secrets.toml", "./envs/dev.toml"]
 
 Use hierarchy for location-based config (monorepos). Use imports for cross-cutting concerns (shared secret bundles).
 
-## Local Overrides
+## Local overrides
 
 Use `fnox.local.toml` for user-specific overrides without committing to version control:
 
@@ -140,17 +146,17 @@ EOF
 - Use explicit paths to bypass parent configs and local overrides: `fnox -c ./fnox.toml get SECRET` (the file's own `import`s and the global config are still loaded)
 - `fnox sync --local-file` only supports `fnox.toml` and `.fnox.toml`. Other config filenames are rejected because adjacent local override files are not loaded.
 
-## Global Configuration
+## Global configuration
 
-For machine-wide secrets that apply to all projects, use the global config:
+For machine-wide secrets that apply to all projects, use the global config. Configure the `age` provider and its recipient before running these write commands:
 
 ```bash
 # Initialize global config
 fnox init --global
 
 # Add secrets to global config
-fnox set GITHUB_TOKEN "ghp_..." --global
-fnox set NPM_TOKEN "npm_..." --global
+fnox set GITHUB_TOKEN --global --provider age
+fnox set NPM_TOKEN --global --provider age
 
 # Add providers to global config
 fnox provider add age age --global
@@ -176,7 +182,7 @@ fnox provider add age age --global
 - **Use `root = true` to stop recursion:** Prevents searching parent directories (but not global config)
 - **Use dotfiles to declutter:** `.fnox.toml` works the same as `fnox.toml` (same for `.fnox.local.toml`, `.fnox.staging.toml`, etc.)
 
-## Next Steps
+## Next steps
 
 - [Profiles](/guide/profiles) - Multi-environment management
 - [Real-World Example](/guide/real-world-example) - See it all together

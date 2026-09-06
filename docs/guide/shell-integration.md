@@ -1,8 +1,12 @@
-# Shell Integration
+---
+description: "Load and unload project secrets automatically in Bash, Zsh, Fish, Nushell, and PowerShell."
+---
 
-fnox can automatically load secrets when you `cd` into directories with a `fnox.toml` file.
+# Shell integration
 
-## Enable Shell Integration
+Shell integration loads secrets when you enter a project and restores the previous environment when you leave. Enable it for interactive work, or use `fnox exec -- <command>` when a single subprocess needs secrets.
+
+## Enable shell integration
 
 Add this to your shell profile:
 
@@ -39,7 +43,7 @@ fnox activate nu | save -f ($nu.data-dir | path join "vendor/autoload/fnox.nu")
 
 :::
 
-## How It Works
+## How it works
 
 Once enabled, fnox installs a hook that runs before each prompt. When you enter a directory with `fnox.toml`:
 
@@ -57,7 +61,11 @@ fnox: -3 DATABASE_URL, API_KEY, JWT_SECRET
 ~/projects $
 ```
 
-## Output Control
+## Limit shell injection
+
+Set top-level `env = "exec"` in `fnox.toml` to keep secrets out of the interactive shell while retaining subprocess injection. Individual secrets can override this with their own `env` setting. See [injection settings](/reference/configuration#env).
+
+## Output control
 
 Control what gets printed with `FNOX_SHELL_OUTPUT`:
 
@@ -72,7 +80,7 @@ export FNOX_SHELL_OUTPUT=normal
 export FNOX_SHELL_OUTPUT=debug
 ```
 
-## Using Profiles
+## Using profiles
 
 Switch environments with `FNOX_PROFILE`:
 
@@ -88,11 +96,11 @@ export FNOX_PROFILE=staging
 # fnox: +3 -3 DATABASE_URL, API_KEY, JWT_SECRET (from staging profile)
 ```
 
-## Hierarchical Loading
+## Hierarchical loading
 
 fnox searches parent directories for `fnox.toml` files and merges them:
 
-```
+```text
 project/
 ├── fnox.toml              # Common secrets (age provider, shared keys)
 └── services/
@@ -107,11 +115,11 @@ When you `cd services/api/`, fnox loads:
 1. Secrets from `project/fnox.toml`
 2. Secrets from `project/services/api/fnox.toml` (overrides parent)
 
-## Manual Reload
+## Manual reload
 
 fnox's shell hook runs on every prompt and automatically detects changes to config files and environment variables like `FNOX_PROFILE`. In most cases, no manual reload is needed.
 
-To force a full reload, temporarily disable and re-enable:
+With fnox activated, its shell function handles the deactivation output. To reset the integration in Bash:
 
 ```bash
 # Disable
@@ -121,7 +129,9 @@ fnox deactivate
 eval "$(fnox activate bash)"
 ```
 
-## Next Steps
+If a value changed in the remote vault, refresh the [sync cache](/guide/sync) or clear the [daemon cache](/guide/daemon) as appropriate. Re-enabling the hook does not refresh those caches.
+
+## Next steps
 
 - [Per-User Daemon](/guide/daemon) - Cache resolved secrets in memory for faster refreshes
 - [Profiles](/guide/profiles) - Manage multiple environments

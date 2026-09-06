@@ -1,225 +1,78 @@
-# Mise Integration
+---
+description: "Run mise tasks with fnox-managed secrets and understand the limitations of the fnox environment plugin."
+---
 
-fnox works well with [mise](https://mise.jdx.dev) as a tool installer and task
-runner. The recommended setup is to install the fnox CLI with mise, then use
-fnox directly through shell integration, `fnox exec`, or mise tasks.
+# mise integration
 
-::: warning Experimental plugin
-We do not recommend using fnox through the
-[`jdx/mise-env-fnox`](https://github.com/jdx/mise-env-fnox) env plugin. It is an
-incomplete experiment and does not track every fnox feature.
-:::
+Use [mise](https://mise.jdx.dev) to install fnox and run project tasks. Put `fnox exec` in tasks that need secrets so those tasks work from a shell, an editor, or CI.
 
-## Installation
+## Install fnox for the project
 
-Install fnox globally with mise:
-
-```bash
-mise use -g fnox
+```sh
+mise use fnox
 ```
 
-Then enable fnox shell integration if you want secrets to load automatically when
-you enter a project directory:
+This adds fnox to the project's mise configuration. To install it for all projects, use `mise use -g fnox` instead.
 
-```bash
-eval "$(fnox activate bash)"
-```
+## Run tasks with secrets
 
-See [Shell Integration](/guide/shell-integration) for zsh, fish, Nushell, and
-PowerShell setup.
-
-## Using fnox in mise Tasks
-
-For commands launched through mise, run them through `fnox exec`:
+Add tasks to `mise.toml`:
 
 ```toml
 [tasks.dev]
 run = "fnox exec -- npm run dev"
 
+[tasks.test]
+run = "fnox exec -- npm test"
+
 [tasks.deploy]
-run = "fnox exec --profile production -- ./deploy.sh"
+run = "fnox exec --profile production --if-missing error -- ./deploy.sh"
 ```
 
-This keeps secret resolution inside fnox, so options such as `env = false`,
-`as_file`, leases, profiles, and provider-specific behavior all work the same as
-they do outside mise.
+Run them normally:
 
-## Experimental Env Plugin
-
-The `jdx/mise-env-fnox` env plugin is documented here only for existing users.
-For new setups, prefer shell integration or `fnox exec`.
-
-Add the plugin to your project's `mise.toml`:
-
-```toml
-[plugins]
-fnox-env = "https://github.com/jdx/mise-env-fnox"
-
-[tools]
-fnox = "latest"
-
-[env]
-_.fnox-env = { tools = true }
+```sh
+mise run dev
+mise run test
+mise run deploy
 ```
 
-> [!IMPORTANT]
-> `tools = true` is required so the plugin can access the mise-managed fnox
-> binary. Without it, the plugin runs before mise tools are added to PATH and
-> won't be able to find fnox.
+fnox owns secret resolution, including profiles, file secrets, lease creation, and cache settings. CI must still authenticate to the configured provider before running these tasks.
 
-## How It Works
+## Load secrets in the interactive shell
 
-When mise activates your environment, the experimental fnox plugin:
-
-1. Searches for `fnox.toml` in the current directory and parent directories
-2. Resolves secrets using your configured providers
-3. Exports the secrets as environment variables
-4. Watches `fnox.toml` for changes to invalidate the cache
-
-## Configuration Options
-
-| Option     | Description                                                     | Default   |
-| ---------- | --------------------------------------------------------------- | --------- |
-| `tools`    | Use mise-managed tools (required if fnox is installed via mise) | `false`   |
-| `profile`  | fnox profile to use                                             | `default` |
-| `fnox_bin` | Path to fnox binary                                             | `fnox`    |
-
-### Examples
-
-```toml
-[plugins]
-fnox-env = "https://github.com/jdx/mise-env-fnox"
-
-[env]
-# Use default profile
-_.fnox-env = { tools = true }
-```
-
-```toml
-[plugins]
-fnox-env = "https://github.com/jdx/mise-env-fnox"
-
-[env]
-# Use production profile
-_.fnox-env = { tools = true, profile = "production" }
-```
-
-```toml
-[plugins]
-fnox-env = "https://github.com/jdx/mise-env-fnox"
-
-[env]
-# Custom fnox binary path (tools = true not needed when specifying fnox_bin)
-_.fnox-env = { fnox_bin = "/usr/local/bin/fnox" }
-```
-
-## Environment-Specific Configuration
-
-Combine with [mise's environment system](https://mise.jdx.dev/configuration/environments.html) for different profiles per environment. mise uses separate config files for each environment:
-
-**`mise.toml`** (default/dev):
-
-```toml
-[plugins]
-fnox-env = "https://github.com/jdx/mise-env-fnox"
-
-[tools]
-fnox = "latest"
-
-[env]
-_.fnox-env = { tools = true, profile = "dev" }
-```
-
-**`mise.production.toml`**:
-
-```toml
-[env]
-_.fnox-env = { tools = true, profile = "production" }
-```
-
-**`mise.staging.toml`**:
-
-```toml
-[env]
-_.fnox-env = { tools = true, profile = "staging" }
-```
-
-Then activate different environments:
+[fnox shell integration](/guide/shell-integration) can run alongside mise activation. Add the appropriate fnox activation command to your shell's startup file:
 
 ```bash
-# Development (default)
-mise env
-
-# Production
-MISE_ENV=production mise env
-
-# Staging
-MISE_ENV=staging mise env
+# Bash: ~/.bashrc
+eval "$(fnox activate bash)"
 ```
 
-## Caching
+For tasks, keep the explicit `fnox exec` wrapper even when shell integration is enabled. It makes the task's secret requirements independent of the calling shell.
 
-The fnox plugin supports mise's environment caching (when `MISE_ENV_CACHE=1`). Secrets are:
+Use top-level `env = "exec"` in `fnox.toml` if you want secrets available only to commands launched through fnox, rather than every process in the interactive shell.
 
-- Cached encrypted on disk for fast subsequent loads
-- Automatically refreshed when `fnox.toml` changes
-- Scoped to your shell session for security
+## Choose a cache
 
-To enable caching:
+If remote reads are slow, configure caching in fnox:
 
-```bash
-export MISE_ENV_CACHE=1
-```
+- [Sync](/guide/sync) creates a persistent encrypted local snapshot. Use age or another local provider for offline access.
+- The [daemon](/guide/daemon) keeps resolved values in memory during a session.
 
-## Comparison with Shell Integration
+Both work when a mise task invokes `fnox exec`.
 
-| Feature                   | Shell Integration | Experimental mise env plugin |
-| ------------------------- | ----------------- | ---------------------------- |
-| Automatic loading on `cd` | Yes               | Yes (via mise)               |
-| Works without mise        | Yes               | No                           |
-| Caching                   | No                | Yes (with env cache)         |
-| Task integration          | No                | Yes                          |
-| Tool version management   | No                | Yes                          |
-| Full fnox feature support | Yes               | No                           |
+## Experimental environment plugin
 
-Use shell integration or `fnox exec` for the maintained fnox behavior. Use the
-mise env plugin only when its current feature set is enough for your project.
+The [`jdx/mise-env-fnox`](https://github.com/jdx/mise-env-fnox) environment plugin is an incomplete experiment and does not track all fnox features. Existing users can consult its repository for its current configuration and limitations.
+
+For a maintained setup, remove the `_.fnox-env` entry from mise's `[env]` configuration and use the task wrappers or shell activation shown above. Remove the plugin registration only if nothing else in your mise configuration uses it.
 
 ## Troubleshooting
 
-### Secrets not loading
-
-1. Ensure `fnox.toml` exists in your project:
-
-   ```bash
-   ls fnox.toml
-   ```
-
-2. Test fnox directly:
-
-   ```bash
-   fnox export --format json
-   ```
-
-3. Check mise is loading the plugin:
-   ```bash
-   mise env
-   ```
-
-### Cache not invalidating
-
-If secrets aren't updating after changes to `fnox.toml`:
-
-```bash
-# Clear mise's env cache
-mise cache clear
-
-# Or use fresh flag
-mise exec --fresh-env -- your-command
+```sh
+mise exec -- fnox --version
+mise exec -- fnox config-files
+mise exec -- fnox check --all
 ```
 
-## Next Steps
-
-- [Shell Integration](/guide/shell-integration) - Alternative direct shell integration
-- [Profiles](/guide/profiles) - Managing multiple environments
-- [Hierarchical Config](/guide/hierarchical-config) - Organizing secrets across directories
+These checks distinguish tool installation, config discovery, and secret resolution problems. Continue with [fnox troubleshooting](/guide/troubleshooting) if the CLI is available but secrets do not resolve.

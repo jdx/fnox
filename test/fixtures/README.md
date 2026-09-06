@@ -6,7 +6,7 @@ This directory contains test fixtures for fnox integration tests.
 
 **File**: `vaultwarden-test.db`
 
-A pre-seeded SQLite database for vaultwarden containing a single test account.
+A pre-seeded SQLite database for the disposable Vaultwarden CI service. It contains one public test account, not production data.
 
 ### Test Account Credentials
 
@@ -18,16 +18,13 @@ A pre-seeded SQLite database for vaultwarden containing a single test account.
 
 The database was created using:
 
-```bash
-1. Start vaultwarden locally
-2. Create account via web interface at http://localhost:8080
-3. Extract database with WAL checkpoint:
-   ./test/extract-db-with-wal.sh
-```
+1. Start the test Vaultwarden service.
+2. Create the account through its web interface at `https://localhost:8080`.
+3. Extract the database with a WAL checkpoint using `./test/extract-db-with-wal.sh`.
 
 ### Usage in CI
 
-The `setup-bitwarden-ci.sh` script automatically:
+The [setup-bitwarden-ci.sh](../setup-bitwarden-ci.sh) script automatically:
 
 1. Copies this database into the vaultwarden container
 2. Restarts vaultwarden to load the database
@@ -43,7 +40,7 @@ If you need to regenerate the database (e.g., after vaultwarden version changes)
 docker compose -f test/docker-compose.bitwarden.yml up -d
 
 # 2. Create account
-open http://localhost:8080
+open https://localhost:8080
 # Register with: test@fnox.ci / TestCIPassword123!
 
 # 3. Extract database
@@ -51,7 +48,7 @@ open http://localhost:8080
 
 # 4. Commit the new database
 git add test/fixtures/vaultwarden-test.db
-git commit -m "Update vaultwarden test database"
+git commit -m "test: update vaultwarden fixture database"
 ```
 
 ### Security Note

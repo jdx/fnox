@@ -5,7 +5,7 @@
   "description": "Documentation for fnox",
   "scripts": {
     "docs:dev": "vitepress dev docs",
-    "docs:build": "node --test docs/.vitepress/social-images.test.mjs && vitepress build docs && node docs/.vitepress/check-social-images.mjs docs/.vitepress/dist",
+    "docs:build": "node --test docs/.vitepress/social-images.test.mjs && vitepress build docs && node docs/.vitepress/check-social-images.mjs docs/.vitepress/dist && node docs/.vitepress/check-links.mjs docs/.vitepress/dist",
     "docs:preview": "vitepress preview docs"
   },
   "devDependencies": {

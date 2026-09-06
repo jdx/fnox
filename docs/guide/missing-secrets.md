@@ -1,14 +1,20 @@
-# Handling Missing Secrets
+---
+description: "Choose whether missing secrets fail, warn, or stay silent, and supply non-sensitive defaults when appropriate."
+---
+
+# Handling missing secrets
 
 Use the `if_missing` setting to control what happens when a secret can't be resolved. This is especially useful for CI environments or when some secrets are optional.
 
-## Available Modes
+## Available modes
+
+These policies apply when a command resolves multiple secrets. An explicit `fnox get KEY` may still return a provider error directly. A configured `default` is tried as a fallback before a value is considered missing.
 
 - **`error`** - Fail the command if a secret cannot be resolved (strictest)
 - **`warn`** - Print a warning and continue (default)
 - **`ignore`** - Silently skip missing secrets
 
-## Priority Chain
+## Priority chain
 
 You can set `if_missing` at multiple levels. fnox uses the first match:
 
@@ -19,7 +25,7 @@ You can set `if_missing` at multiple levels. fnox uses the first match:
 5. **Base default environment variable**: `FNOX_IF_MISSING_DEFAULT=error`
 6. **Default**: `warn` (lowest priority)
 
-## Per-Secret Configuration
+## Per-secret configuration
 
 Set different behaviors for different secrets:
 
@@ -35,7 +41,7 @@ ANALYTICS_KEY = { provider = "aws", value = "analytics-key", if_missing = "ignor
 CACHE_URL = { provider = "aws", value = "cache-url", if_missing = "warn" }  # Print warning if missing
 ```
 
-## Top-Level Default
+## Top-level default
 
 Set a default for all secrets:
 
@@ -49,7 +55,7 @@ API_KEY = { provider = "age", value = "encrypted..." }  # Inherits if_missing = 
 OPTIONAL_FEATURE_FLAG = { default = "false", if_missing = "ignore" }  # Override - this one can be missing
 ```
 
-## Runtime Override with CLI
+## Runtime override with CLI
 
 Override config settings at runtime:
 
@@ -64,7 +70,7 @@ fnox exec --if-missing error -- ./deploy.sh
 fnox exec --if-missing warn -- npm start
 ```
 
-## Runtime Override with Environment Variable
+## Runtime override with environment variable
 
 ```bash
 # Set globally for a session
@@ -75,7 +81,7 @@ fnox exec -- npm start
 FNOX_IF_MISSING=error fnox exec -- ./critical-task.sh
 ```
 
-## Base Default Behavior
+## Base default behavior
 
 Set a default behavior when `if_missing` is not configured anywhere:
 
@@ -100,9 +106,11 @@ This is useful for:
 - Secret-level config
 - Top-level config
 
-## CI/CD Examples
+## CI/CD examples
 
-### Forked PRs (Secrets Unavailable)
+These workflow excerpts assume fnox and any provider CLI have been installed. Supply provider credentials for tests that require real secrets.
+
+### Forked PRs (secrets unavailable)
 
 ```yaml
 # .github/workflows/test.yml
@@ -122,7 +130,7 @@ jobs:
           fnox exec -- npm test
 ```
 
-### Production Deployment (Strict)
+### Production deployment (strict)
 
 ```yaml
 # .github/workflows/deploy.yml
@@ -147,7 +155,7 @@ jobs:
           fnox exec --profile production -- ./deploy.sh
 ```
 
-### Staging (Warn on Missing)
+### Staging (warn on missing)
 
 ```yaml
 # .github/workflows/staging.yml
@@ -162,9 +170,9 @@ jobs:
           fnox exec --profile staging -- ./deploy.sh
 ```
 
-## Use Cases
+## Use cases
 
-### Optional Analytics/Monitoring
+### Optional analytics/monitoring
 
 ```toml
 [secrets]
@@ -173,21 +181,21 @@ SENTRY_DSN = { provider = "aws", value = "sentry-dsn", if_missing = "ignore" }
 DATADOG_API_KEY = { provider = "aws", value = "datadog-key", if_missing = "ignore" }
 ```
 
-### Required Database
+### Required database
 
 ```toml
 [secrets]
 DATABASE_URL = { provider = "aws", value = "database-url", if_missing = "error" }  # Must exist or fail
 ```
 
-### Development Defaults
+### Development defaults
 
 ```toml
 [secrets]
-REDIS_URL = { provider = "aws", value = "redis-url", default = "redis://localhost:6379", if_missing = "warn" }  # Warn if the provider lookup fails, then fall back to the default
+REDIS_URL = { provider = "aws", value = "redis-url", default = "redis://localhost:6379", if_missing = "warn" }  # Fall back to the local URL if the provider lookup fails
 ```
 
-## Behavior Summary
+## Behavior summary
 
 | Mode     | Behavior                | Use Case                                  |
 | -------- | ----------------------- | ----------------------------------------- |
@@ -195,7 +203,7 @@ REDIS_URL = { provider = "aws", value = "redis-url", default = "redis://localhos
 | `warn`   | Print warning, continue | Optional but recommended secrets          |
 | `ignore` | Silent skip             | Truly optional features (analytics, etc.) |
 
-## Next Steps
+## Next steps
 
 - [Profiles](/guide/profiles) - Different secrets per environment
 - [Import/Export](/guide/import-export) - Migrate secrets between systems

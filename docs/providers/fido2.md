@@ -1,10 +1,14 @@
+---
+description: "Encrypt secrets with a FIDO2 authenticator that supports hmac-secret. Learn setup, touch requirements, and recovery limits."
+---
+
 # FIDO2
 
 The `fido2` provider uses the FIDO2 hmac-secret extension to derive an AES-256-GCM encryption key from a hardware security key. Secrets are encrypted symmetrically — decryption requires the same physical FIDO2 key.
 
-## Why?
+## When to use it
 
-The `fido2` provider ties encryption to a physical hardware device using the CTAP2 hmac-secret extension. Any FIDO2-compatible security key that supports hmac-secret can be used (YubiKey 5, SoloKeys, Nitrokey, etc.).
+The `fido2` provider ties encryption to a physical hardware device using the CTAP2 hmac-secret extension. Use a security key and firmware that support the hmac-secret extension; FIDO2 support alone is not sufficient.
 
 The config is fully portable: move your `fnox.toml` to any machine, plug in the same FIDO2 key, and it works.
 
@@ -47,7 +51,7 @@ fnox get MY_SECRET
 
 Within a single `fnox exec` invocation, the key is only touched once. The hmac-secret response is cached in memory for the duration of the process.
 
-## With Credential Leases
+## With credential leases
 
 The `fido2` provider works well with [credential leases](/guide/leases) and the `env = false` secret option:
 
@@ -68,7 +72,7 @@ role_arn = "arn:aws:iam::123456789012:role/dev-role"
 region = "us-east-1"
 ```
 
-## How It Works
+## How it works
 
 1. **Setup:** A FIDO2 credential is created with hmac-secret extension; credential ID and a random 32-byte salt are stored in config
 2. **hmac-secret:** The salt is sent to the authenticator during assertion, which returns a 32-byte HMAC derived from an internal device secret
@@ -77,19 +81,19 @@ region = "us-east-1"
 
 The HMAC response is never stored on disk. It exists only in process memory after a key touch.
 
-## Important Notes
+## Important notes
 
 ::: warning Renaming providers invalidates cached credentials
-The provider name is used in key derivation (HKDF context). Renaming a provider (e.g., from `secure` to `my_fido2`) will change the derived encryption key, making all previously encrypted secrets and cached lease credentials undecryptable. If you need to rename, re-encrypt all secrets after renaming.
+The provider name is used in key derivation (HKDF context). Renaming a provider (e.g., from `secure` to `my_fido2`) will change the derived encryption key, making all previously encrypted secrets and cached lease credentials undecryptable. To migrate, keep the old provider available, create a new provider under the new name, and read values through the old provider before storing them with the new one. Verify the new values before removing the old configuration. Renaming first prevents decryption.
 :::
 
 ## Requirements
 
 - A FIDO2-compatible security key with hmac-secret extension support
-- Most modern security keys support this: YubiKey 5 series, SoloKeys, Nitrokey FIDO2, Google Titan (v2+)
+- Confirm hmac-secret support for your device and firmware before setup
 - PIN may be required depending on your key's configuration
 
-## FIDO2 vs YubiKey Provider
+## FIDO2 vs YubiKey provider
 
 | Feature     | FIDO2             | YubiKey                      |
 | ----------- | ----------------- | ---------------------------- |
@@ -99,4 +103,9 @@ The provider name is used in key derivation (HKDF context). Renaming a provider 
 | Key output  | 32 bytes          | 20 bytes                     |
 | Slot config | N/A               | Slot 1 or 2                  |
 
-Choose `fido2` if you have any FIDO2-compatible key. Choose `yubikey` if you specifically use YubiKey's HMAC-SHA1 challenge-response (configured via `ykman otp chalresp`).
+Choose `fido2` if your key supports the hmac-secret extension. Choose `yubikey` if you specifically use YubiKey's HMAC-SHA1 challenge-response (configured via `ykman otp chalresp`).
+
+## Next steps
+
+- [Sync a local cache](/guide/sync): use the hardware provider as an encryption target.
+- [Credential leases](/guide/leases): protect credentials used to create temporary access.

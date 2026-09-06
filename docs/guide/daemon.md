@@ -1,10 +1,14 @@
-# Per-User Daemon
+---
+description: "Enable the optional fnox daemon to cache resolved secrets in memory, inspect its status, and clear stale values."
+---
+
+# Cache secrets in memory
 
 The fnox daemon keeps resolved secrets in memory for your user session. It is useful when your config points at remote providers such as 1Password, Bitwarden, AWS Secrets Manager, or Vault and repeated `fnox get`, `fnox exec`, or shell hook refreshes feel slow.
 
 The daemon is opt-in. fnox does not use it unless you enable it in config or set `FNOX_DAEMON=on`.
 
-## Enable It
+## Enable it
 
 Add a top-level `[daemon]` section:
 
@@ -41,7 +45,7 @@ Or disable it for a shell/session:
 export FNOX_DAEMON=off
 ```
 
-## What Uses It
+## What uses it
 
 Daemon-backed resolution applies to read-oriented commands:
 
@@ -50,7 +54,7 @@ Daemon-backed resolution applies to read-oriented commands:
 - `fnox hook-env`
 - `fnox export`
 - `fnox list --values`
-- `fnox check`
+- `fnox check --all`
 - `fnox tui`
 - `fnox mcp`
 - `fnox proxy run`
@@ -58,24 +62,24 @@ Daemon-backed resolution applies to read-oriented commands:
 
 Mutation and admin commands still resolve directly, including `sync`, `reencrypt`, `edit`, `set`, `remove`, `provider`, and `lease create`.
 
-## Cache Behavior
+## Cache behavior
 
 The daemon cache is memory-only. Secret values are not written to disk by the daemon.
 
-Cached values are discarded when:
+Remote changes do not automatically invalidate cached values. Run `fnox daemon clear` after changing a secret in its source provider. Cached values are also discarded when:
 
 - You run `fnox daemon clear`, which clears all running profile-scoped daemon caches
 - You run `fnox daemon stop`
 - The daemon exits after its idle timeout
 - Config files, profile settings, provider references, post-processing options, or relevant `FNOX_*` and provider environment variables change
 
-`fnox check` uses the daemon connection when daemon mode is enabled, but it does not reuse cached secret values. It still contacts providers so it can validate the current state.
+`fnox check --all` uses the daemon connection when daemon mode is enabled, but it does not reuse cached secret values. It still contacts providers so it can validate the current state.
 
 Secrets with `env = false` are not resolved during normal batch environment injection. They can still be resolved explicitly, such as with `fnox get SECRET_NAME`.
 
-## Opt Out Per Secret Or Provider
+## Opt out per secret or provider
 
-Set `daemon_cache = false` on a secret that should always resolve directly:
+Set `daemon_cache = false` on a secret that should be resolved again on each request:
 
 ```toml
 [secrets]
@@ -93,7 +97,7 @@ daemon_cache = false
 
 This disables cache reuse for those values. If daemon mode is enabled, fnox still talks to the daemon for supported read commands, but those entries are resolved again for every request.
 
-## Security Model
+## Security model
 
 The daemon is Unix-first and uses a Unix domain socket. It does not listen on TCP.
 
@@ -101,13 +105,13 @@ The socket is created in a user-owned runtime directory with strict permissions.
 
 On unsupported platforms, daemon mode returns a clear unsupported error. Use `--no-daemon` or `FNOX_DAEMON=off` to force direct resolution.
 
-## Daemon Vs Sync
+## Daemon vs sync
 
 Use the daemon when you want faster repeated reads during a session and are comfortable keeping resolved values in memory.
 
 Use [syncing secrets locally](/guide/sync) when you want an encrypted local cache that survives restarts and can work offline.
 
-## Next Steps
+## Next steps
 
 - [Shell Integration](/guide/shell-integration) - Auto-load secrets on `cd`
 - [Syncing Secrets Locally](/guide/sync) - Store an encrypted local cache

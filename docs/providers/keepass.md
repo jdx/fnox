@@ -1,23 +1,30 @@
+---
+description: "Read and write KeePass database entries with fnox. Configure the database, password, key file, and entry paths."
+---
+
 # KeePass
 
 Store secrets in a local KeePass database file (`.kdbx`), supporting KDBX4 format with read/write operations.
 
-## Quick Start
+## Quick start
 
-```bash
-# 1. Set database password
+```sh
+# Set database password
 export FNOX_KEEPASS_PASSWORD="your-master-password"
+```
 
-# 2. Configure provider
-cat >> fnox.toml << 'EOF'
+Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+
+```toml
 [providers]
 keepass = { type = "keepass", database = "~/secrets.kdbx" }
-EOF
+```
 
-# 3. Store a secret
+```sh
+# Store a secret
 fnox set DATABASE_URL "postgresql://localhost/mydb" --provider keepass
 
-# 4. Retrieve from database
+# Retrieve from database
 fnox get DATABASE_URL
 ```
 
@@ -27,28 +34,28 @@ fnox get DATABASE_URL
 [providers]
 keepass = { type = "keepass", database = "~/secrets.kdbx" }
 
-# OR with keyfile for additional security
-keepass = { type = "keepass", database = "~/secrets.kdbx", keyfile = "~/keyfile.key" }
+# A second instance using a keyfile
+keepass-with-keyfile = { type = "keepass", database = "~/secrets.kdbx", keyfile = "~/keyfile.key" }
 ```
 
-### Database Path
+### Database path
 
 The `database` field specifies the path to your `.kdbx` file. Relative paths are resolved from the config file that declares the provider, and `~` expands to your home directory:
 
 ```toml
 [providers]
-keepass = { database = "~/secrets.kdbx" }           # Home directory
-keepass = { database = "./secrets/vault.kdbx" }     # Relative to this config file
-keepass = { database = "/opt/secrets/shared.kdbx" } # Absolute path
+home-db = { type = "keepass", database = "~/secrets.kdbx" }           # Home directory
+project-db = { type = "keepass", database = "./secrets/vault.kdbx" }     # Relative to this config file
+shared-db = { type = "keepass", database = "/opt/secrets/shared.kdbx" } # Absolute path
 ```
 
-### Keyfile (Optional)
+### Keyfile (optional)
 
 For additional security, use a keyfile alongside the password:
 
 ```toml
 [providers]
-keepass = { database = "~/secrets.kdbx", keyfile = "~/keyfile.key" }
+keepass = { type = "keepass", database = "~/secrets.kdbx", keyfile = "~/keyfile.key" }
 ```
 
 Relative `keyfile` paths follow the same config-relative rule as `database`.
@@ -72,7 +79,7 @@ export KEEPASS_PASSWORD="your-master-password"
 The provider also accepts a `password` field, but avoid storing the password directly in the provider config. Use environment variables instead; they take priority over the config value.
 :::
 
-## Reference Formats
+## Reference formats
 
 KeePass supports flexible path formats:
 
@@ -83,7 +90,7 @@ KeePass supports flexible path formats:
 | Group/entry | `work/my-entry`              | Gets password from entry in group         |
 | Full path   | `work/project/api-key/notes` | Group path + entry + field                |
 
-### Simple Entry Name
+### Simple entry name
 
 ```toml
 [secrets]
@@ -92,7 +99,7 @@ DATABASE_URL = { provider = "keepass", value = "database-url" }
 
 Searches all groups for an entry with this title and returns the password field.
 
-### Entry with Field
+### Entry with field
 
 ```toml
 [secrets]
@@ -101,7 +108,7 @@ DB_PASS = { provider = "keepass", value = "database/password" }
 DB_HOST = { provider = "keepass", value = "database/url" }
 ```
 
-### Group Path
+### Group path
 
 ```toml
 [secrets]
@@ -109,7 +116,7 @@ PROD_API_KEY = { provider = "keepass", value = "production/api/my-service" }
 DEV_API_KEY = { provider = "keepass", value = "development/api/my-service" }
 ```
 
-### Full Path with Field
+### Full path with field
 
 ```toml
 [secrets]
@@ -117,7 +124,7 @@ API_USER = { provider = "keepass", value = "production/api/my-service/username" 
 API_NOTES = { provider = "keepass", value = "production/api/my-service/notes" }
 ```
 
-## Supported Fields
+## Supported fields
 
 | Field      | Description              |
 | ---------- | ------------------------ |
@@ -129,7 +136,7 @@ API_NOTES = { provider = "keepass", value = "production/api/my-service/notes" }
 
 Field names are case-insensitive (`Username`, `USERNAME`, `username` all work).
 
-## How It Works
+## How it works
 
 1. **Storage:** Secrets are stored in a local `.kdbx` database file
 2. **Config:** `fnox.toml` contains the entry name/path (not the actual secret value)
@@ -139,7 +146,7 @@ Field names are case-insensitive (`Username`, `USERNAME`, `username` all work).
 
 ## Usage
 
-### Store a Secret
+### Store a secret
 
 ```bash
 fnox set DATABASE_URL "postgresql://localhost/mydb" --provider keepass
@@ -152,28 +159,28 @@ Your `fnox.toml`:
 DATABASE_URL = { provider = "keepass", value = "DATABASE_URL" }  # Entry title, not the actual secret
 ```
 
-### Store with Specific Path
+### Store with specific path
 
 ```bash
 # Store in a specific group with specific field
 fnox set API_USER "admin" --provider keepass --key-name "production/api-service/username"
 ```
 
-### Retrieve a Secret
+### Retrieve a secret
 
 ```bash
 fnox get DATABASE_URL
 ```
 
-### Run Commands
+### Run commands
 
 ```bash
 fnox exec -- npm run dev
 ```
 
-## Example Configurations
+## Example configurations
 
-### Personal Password Database
+### Personal password database
 
 ```toml
 [providers]
@@ -184,7 +191,7 @@ GITHUB_TOKEN = { provider = "keepass", value = "github/token" }
 NPM_TOKEN = { provider = "keepass", value = "npm/token" }
 ```
 
-### Project-Specific Database
+### Project-specific database
 
 ```toml
 [providers]
@@ -195,7 +202,7 @@ DATABASE_URL = { provider = "keepass", value = "database" }
 API_KEY = { provider = "keepass", value = "api-key" }
 ```
 
-### Organized by Environment
+### Organized by environment
 
 ```toml
 [providers]
@@ -208,7 +215,7 @@ DEV_DB = { provider = "keepass", value = "development/database/password" }
 PROD_DB = { provider = "keepass", value = "production/database/password" }
 ```
 
-### With Keyfile
+### With keyfile
 
 ```toml
 [providers]
@@ -218,28 +225,13 @@ keepass = { type = "keepass", database = "~/secure.kdbx", keyfile = "~/secure.ke
 MASTER_KEY = { provider = "keepass", value = "master-key" }
 ```
 
-## Pros
+## Usage notes
 
-- ✅ Local-first - no cloud dependency
-- ✅ Industry-standard KDBX4 format
-- ✅ Works offline
-- ✅ Free and open source
-- ✅ Compatible with KeePass, KeePassXC, and other KDBX tools
-- ✅ Supports keyfile for two-factor security
-- ✅ Organized with groups/folders
-- ✅ Atomic writes prevent corruption
-
-## Cons
-
-- ❌ Database file must be accessible (not suitable for teams without sync)
-- ❌ Requires master password in environment
-- ❌ No built-in sync (use Syncthing, Dropbox, etc.)
-- ❌ No audit logs
-- ❌ No centralized management
+The provider reads and writes a local KDBX4 database. Back up the database and any required keyfile. Coordinate writes if several machines share the same file; atomic local saves do not merge concurrent changes.
 
 ## Limitations
 
-### Database Sync
+### Database sync
 
 KeePass databases are single files. For team use, sync via:
 
@@ -250,16 +242,15 @@ KeePass databases are single files. For team use, sync via:
 
 For teams, consider [1Password](/providers/1password), [Bitwarden](/providers/bitwarden), or cloud providers instead.
 
-### Title Field is Read-Only
+### Title field is read-only
 
 The `title` field cannot be modified via fnox - it's reserved for entry identification.
 
-## Security
+## Database protection
 
 - **Encryption:** KDBX4 format uses AES-256 or ChaCha20
 - **Key derivation:** Argon2d for password-based key derivation
-- **Protected fields:** Password fields stored in protected memory
-- **Atomic saves:** Prevents corruption on write failure
+- **Atomic saves:** Writes through a temporary file before replacing the database
 
 ## Troubleshooting
 
@@ -306,16 +297,7 @@ fnox auto-creates databases. If you need to pre-populate:
 2. Add entries manually
 3. Reference them in fnox.toml
 
-## Best Practices
-
-1. **Use FNOX_KEEPASS_PASSWORD** - Set via environment, not config
-2. **Consider keyfile** - Adds two-factor security
-3. **Organize with groups** - Use group paths for organization
-4. **Back up regularly** - Database is a single file
-5. **Use KeePassXC** - Modern GUI for database management
-6. **Gitignore the database** - Unless you intentionally share the encrypted file
-
-## Running Tests
+## Running tests
 
 ```bash
 # Run the KeePass tests
@@ -324,7 +306,7 @@ mise run test:bats -- test/keepass.bats
 
 The tests create a temporary database with their own password, so no external setup is needed.
 
-## Next Steps
+## Next steps
 
 - [OS Keychain](/providers/keychain) - Alternative local storage
 - [password-store](/providers/password-store) - GPG-based alternative

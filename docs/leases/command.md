@@ -1,4 +1,8 @@
-# Custom Command
+---
+description: "Use a custom command to create credentials, return expiry metadata, and optionally revoke a fnox lease."
+---
+
+# Custom command
 
 The `command` lease backend runs an arbitrary script or command to create (and optionally revoke) credentials. Use this for systems that fnox doesn't natively support.
 
@@ -23,7 +27,7 @@ duration = "1h"
 
 None — fnox can't validate prerequisites without running the command.
 
-## Create Command
+## Create command
 
 Your script receives these environment variables:
 
@@ -32,7 +36,7 @@ Your script receives these environment variables:
 | `FNOX_LEASE_DURATION` | Requested duration in seconds       |
 | `FNOX_LEASE_LABEL`    | Lease label (default: `fnox-lease`) |
 
-The script must output JSON on stdout:
+The script must output JSON on stdout and exit successfully. Send diagnostics to stderr. Ensure `expires_at` matches the real credential expiry; omitting it produces a lease with no tracked expiry, even when `duration` was requested:
 
 ```json
 {
@@ -40,7 +44,7 @@ The script must output JSON on stdout:
     "MY_TOKEN": "tok-abc123",
     "MY_SECRET": "sec-xyz789"
   },
-  "expires_at": "2024-01-15T10:00:00Z",
+  "expires_at": "2030-01-15T10:00:00Z",
   "lease_id": "my-custom-lease-1"
 }
 ```
@@ -51,7 +55,9 @@ The script must output JSON on stdout:
 | `expires_at`  | No       | Expiry timestamp (RFC3339). Omit for never-expiring leases.                                          |
 | `lease_id`    | No       | Unique lease ID. Auto-generated if omitted.                                                          |
 
-## Revoke Command
+The timestamp above is illustrative. Generate it from the actual credential response, rather than copying a fixed date into a script.
+
+## Revoke command
 
 If `revoke_command` is set, it's called when you run `fnox lease revoke` or `fnox lease cleanup`. It receives:
 
@@ -70,10 +76,11 @@ If `revoke_command` is set, it's called when you run `fnox lease revoke` or `fno
 
 ```bash
 #!/bin/bash
+set -euo pipefail
 # scripts/get-creds.sh
 
 # Call your internal API
-RESPONSE=$(curl -s https://creds.internal/api/token \
+RESPONSE=$(curl -fsS https://creds.internal/api/token \
   --header "Authorization: Bearer $INTERNAL_AUTH" \
   --data "ttl=$FNOX_LEASE_DURATION")
 
@@ -87,6 +94,7 @@ Many CLIs output credentials in non-JSON formats. Use `jq` to reshape the output
 
 ```bash
 #!/bin/bash
+set -euo pipefail
 # scripts/get-k8s-token.sh
 
 TOKEN=$(kubectl create token my-service-account \
@@ -115,6 +123,7 @@ duration = "1h"
 
 ```bash
 #!/bin/bash
+set -euo pipefail
 # scripts/get-creds.sh
 
 LEASE_ID="custom-$(date +%s)"
@@ -131,6 +140,7 @@ jq -n \
 
 ```bash
 #!/bin/bash
+set -euo pipefail
 # scripts/revoke-creds.sh
 
 my-tool revoke-token "$FNOX_LEASE_ID"
@@ -140,6 +150,7 @@ my-tool revoke-token "$FNOX_LEASE_ID"
 
 ```bash
 #!/bin/bash
+set -euo pipefail
 # scripts/assume-role.sh
 
 aws sts assume-role \
@@ -160,6 +171,7 @@ aws sts assume-role \
 
 ```bash
 #!/bin/bash
+set -euo pipefail
 # scripts/get-creds.sh
 
 # Some tools output key=value pairs
@@ -167,11 +179,11 @@ OUTPUT=$(my-tool get-creds --format=env)
 
 # Parse into JSON with jq
 echo "$OUTPUT" | jq -Rn '
-  [inputs | split("=") | {(.[0]): .[1]}] | add |
+  [inputs | capture("^(?<key>[^=]+)=(?<value>.*)$") | {(.key): .value}] | add |
   { credentials: . }
 '
 ```
 
-## See Also
+## See also
 
 - [Credential Leases](/guide/leases) — overview and approaches

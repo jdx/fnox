@@ -1,42 +1,36 @@
+---
+description: "Read Bitwarden vault items with bw or rbw. Configure authentication, item fields, and an optional local cache."
+---
+
 # Bitwarden
 
 Integrate with Bitwarden (or self-hosted Vaultwarden) to retrieve secrets from your vault.
 
-## Quick Start
+## Quick start
 
-```bash
-# 1. Install Bitwarden CLI (see Installation below)
-brew install bitwarden-cli
+Install the [Bitwarden CLI](https://bitwarden.com/help/cli/), sign in, and unlock the vault:
 
-# 2. Login to Bitwarden
+```sh
 bw login
-
-# 3. Unlock and get session token
-export BW_SESSION=$(bw unlock --raw)
-
-# 4. Store session token (optional, for bootstrap)
-fnox set BW_SESSION "$(bw unlock --raw)" --provider age
-
-# 5. Configure Bitwarden provider
-cat >> fnox.toml << 'EOF'
-[providers]
-bitwarden = { type = "bitwarden" }
-EOF
-
-# 6. Add secrets to Bitwarden
-bw create item --name "Database" \
-  --username "admin" \
-  --password "secret-password"
-
-# 7. Reference in fnox
-cat >> fnox.toml << 'EOF'
-[secrets]
-DATABASE_PASSWORD = { provider = "bitwarden", value = "Database" }
-EOF
-
-# 8. Use it
-fnox get DATABASE_PASSWORD
+export BW_SESSION="$(bw unlock --raw)"
 ```
+
+Create a login item named `Database` in the Bitwarden app, or use an existing item. Add its reference to `fnox.toml`:
+
+```toml
+[providers.bitwarden]
+type = "bitwarden"
+
+[secrets]
+DATABASE_PASSWORD = { provider = "bitwarden", value = "Database/password" }
+```
+
+```sh
+fnox provider test bitwarden
+fnox exec -- npm start
+```
+
+This is the password manager integration. For Bitwarden Secrets Manager and machine-account tokens, use [`bitwarden-sm`](/providers/bitwarden-sm).
 
 ## Prerequisites
 
@@ -71,7 +65,7 @@ bw config server https://vault.example.com
 bw login
 ```
 
-### 2. Unlock and Get Session Token
+### 2. Unlock and get session token
 
 ```bash
 # Unlock vault
@@ -82,28 +76,28 @@ bw unlock
 # Copy the session token from output
 ```
 
-### 3. Store Session Token (Bootstrap)
+### 3. Store session token (bootstrap)
 
 Optionally, store the session encrypted for easy bootstrap:
 
 ```bash
 # Store token encrypted with age
-fnox set BW_SESSION "$(bw unlock --raw)" --provider age
+bw unlock --raw | fnox set BW_SESSION --provider age
 
 # Next time, bootstrap from fnox:
 export BW_SESSION=$(fnox get BW_SESSION)
 ```
 
-### 4. Configure Bitwarden Provider
+### 4. Configure Bitwarden provider
 
 ```toml
 [providers]
 bitwarden = { type = "bitwarden", collection = "my-collection-id", organization_id = "my-org-id" }  # both optional
 ```
 
-## Adding Secrets to Bitwarden
+## Adding secrets to Bitwarden
 
-### Via Bitwarden Web Vault
+### Via Bitwarden web Vault
 
 1. Go to [vault.bitwarden.com](https://vault.bitwarden.com)
 2. Click + Add Item
@@ -113,31 +107,9 @@ bitwarden = { type = "bitwarden", collection = "my-collection-id", organization_
 
 ### Via Bitwarden CLI
 
-```bash
-# Unlock first
-export BW_SESSION=$(bw unlock --raw)
+`bw create item` accepts an encoded JSON item, rather than `--name` and `--password` flags. Follow the [Bitwarden CLI creation instructions](https://bitwarden.com/help/cli/#create) for the current item schema.
 
-# Create a login item
-bw create item \
-  --name "Database" \
-  --username "admin" \
-  --password "secret-password" \
-  --url "https://db.example.com"
-
-# Create with JSON
-echo '{
-  "type": 1,
-  "name": "API Key",
-  "login": {
-    "password": "sk_live_abc123xyz789"
-  }
-}' | bw encode | bw create item
-
-# List items
-bw list items
-```
-
-## Referencing Secrets
+## Referencing secrets
 
 Add references to `fnox.toml`:
 
@@ -148,16 +120,16 @@ DB_USERNAME = { provider = "bitwarden", value = "Database/username" }  # Specifi
 API_KEY = { provider = "bitwarden", value = "API Key" }
 ```
 
-## Reference Formats
+## Reference formats
 
-### 1. Item Name (Gets Password Field)
+### 1. Item name (gets password field)
 
 ```toml
 [secrets]
 MY_SECRET = { provider = "bitwarden", value = "My Item" }  # → Gets the 'password' field
 ```
 
-### 2. Item Name + Field
+### 2. Item name + field
 
 ```toml
 [secrets]
@@ -186,7 +158,7 @@ fnox get DATABASE_PASSWORD
 fnox exec -- npm start
 ```
 
-## Multi-Environment Example
+## Multi-environment example
 
 ```toml
 # Bootstrap session token (encrypted in git)
@@ -206,7 +178,7 @@ bitwarden = { type = "bitwarden", organization_id = "prod-org-id" }
 DATABASE_URL = { provider = "bitwarden", value = "Prod Database" }
 ```
 
-## Multi-profile Example
+## Multi-profile example
 
 `bw` supports multiple accounts, as per the [official documentation](https://bitwarden.com/help/cli/#log-in-to-multiple-accounts).
 fnox can access secrets in a specific profile by supplying an optional `profile` attribute to the provider:
@@ -242,7 +214,7 @@ The `auth_command` override ensures fnox prompts with `rbw unlock` instead of th
 
 NB: you must have set up the `rbw` CLI independently from fnox using `rbw login`.
 
-## Self-Hosted Vaultwarden
+## Self-hosted Vaultwarden
 
 Vaultwarden is a lightweight, open-source Bitwarden-compatible server:
 
@@ -260,7 +232,7 @@ export BW_SESSION=$(bw unlock --raw)
 fnox get DATABASE_PASSWORD
 ```
 
-## CI/CD Example
+## CI/CD example
 
 ### GitHub Actions
 
@@ -289,11 +261,11 @@ jobs:
           fnox exec -- npm test
 ```
 
-## Session Token Management
+## Session token management
 
-The `BW_SESSION` token expires after a period of inactivity.
+The `BW_SESSION` value represents an unlocked vault session. If the session is no longer valid, unlock again and update the environment variable.
 
-### Option 1: Unlock Each Time
+### Option 1: unlock each time
 
 ```bash
 #!/bin/bash
@@ -301,19 +273,19 @@ export BW_SESSION=$(bw unlock --raw)
 fnox exec -- npm start
 ```
 
-### Option 2: Store Encrypted (Bootstrap)
+### Option 2: store encrypted (bootstrap)
 
 ```bash
 # Store once
-fnox set BW_SESSION "$(bw unlock --raw)" --provider age
+bw unlock --raw | fnox set BW_SESSION --provider age
 
 # Use repeatedly
 export BW_SESSION=$(fnox get BW_SESSION)
 fnox exec -- npm start
 ```
 
-::: warning Token Expiration
-Bitwarden session tokens expire. You'll need to unlock periodically:
+::: tip Refresh an unavailable session
+If the vault is locked or the session is no longer usable, unlock it again:
 
 ```bash
 export BW_SESSION=$(bw unlock --raw)
@@ -321,7 +293,7 @@ export BW_SESSION=$(bw unlock --raw)
 
 :::
 
-## Collections and Organizations
+## Collections and organizations
 
 Filter secrets by collection or organization:
 
@@ -353,29 +325,19 @@ For local development without a Bitwarden account:
 source ./test/setup-bitwarden-test.sh
 
 # Follow on-screen instructions:
-# 1. Create account at https://localhost:8080 (accept self-signed certificate)
-# 2. Login: export NODE_TLS_REJECT_UNAUTHORIZED=0 && bw login
-# 3. Unlock: export BW_SESSION=$(bw unlock --raw)
+# Create account at https://localhost:8080 (accept self-signed certificate)
+# Login: export NODE_TLS_REJECT_UNAUTHORIZED=0 && bw login
+# Unlock: export BW_SESSION=$(bw unlock --raw)
 
 # Run tests
 mise run test:bats -- test/bitwarden.bats
 ```
 
-See `test/BITWARDEN_TESTING.md` for details.
+See the [local testing guide](https://github.com/jdx/fnox/blob/main/test/BITWARDEN_TESTING.md) for details.
 
-## Pros
+## Usage notes
 
-- ✅ Open source
-- ✅ Free for personal use
-- ✅ Self-hosting option (Vaultwarden)
-- ✅ Good audit logs
-- ✅ Cross-platform
-
-## Cons
-
-- ❌ UI less polished than 1Password
-- ❌ Session token expires (need to unlock regularly)
-- ❌ Requires network access (unless self-hosted locally)
+The `bw` backend needs an unlocked vault session. A self-hosted Vaultwarden server uses the same reference formats. For machine credentials in Bitwarden Secrets Manager, use the separate `bitwarden-sm` provider.
 
 ## Troubleshooting
 
@@ -407,15 +369,7 @@ Re-unlock:
 export BW_SESSION=$(bw unlock --raw)
 ```
 
-## Best Practices
-
-1. **Store session token encrypted** - Use age to encrypt `BW_SESSION`
-2. **Use collections for organization** - Group secrets logically
-3. **Self-host for full control** - Consider Vaultwarden
-4. **Unlock before long operations** - Session won't expire mid-operation
-5. **Use organizations for teams** - Better access control
-
-## Next Steps
+## Next steps
 
 - [1Password](/providers/1password) - Commercial alternative
 - [OS Keychain](/providers/keychain) - Local alternative

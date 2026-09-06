@@ -1,26 +1,33 @@
+---
+description: "Load Doppler secrets with fnox using a project, config, and local login or service token."
+---
+
 # Doppler
 
 Integrate with [Doppler](https://www.doppler.com/) to retrieve secrets from your Doppler projects and configs.
 
-## Quick Start
+## Quick start
 
-```bash
-# 1. Install Doppler CLI
+```sh
+# Install Doppler CLI
 brew install dopplerhq/cli/doppler
 
-# 2. Login to Doppler
+# Login to Doppler
 doppler login
+```
 
-# 3. Configure Doppler provider
-cat >> fnox.toml << 'EOF'
+Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+
+```toml
 [providers]
 doppler = { type = "doppler", project = "my-project", config = "prd" }
 
 [secrets]
 DATABASE_URL = { provider = "doppler", value = "DATABASE_URL" }
-EOF
+```
 
-# 4. Use it
+```sh
+# Use it
 fnox get DATABASE_URL
 ```
 
@@ -48,13 +55,13 @@ mise use -g "github:DopplerHQ/cli"
 
 ### 1. Authentication
 
-#### Option A: Interactive Login (Local Development)
+#### Option A: interactive login (local development)
 
 ```bash
 doppler login
 ```
 
-#### Option B: Service Token (CI/CD)
+#### Option B: service token (CI/CD)
 
 Create a service token in the Doppler dashboard scoped to a specific project and config:
 
@@ -62,7 +69,7 @@ Create a service token in the Doppler dashboard scoped to a specific project and
 export DOPPLER_TOKEN="dp.st.prd.xxxx"
 ```
 
-### 2. Configure Doppler Provider
+### 2. Configure Doppler provider
 
 ```toml
 [providers]
@@ -77,7 +84,7 @@ All fields are optional. If not specified, the Doppler CLI will use its own defa
 - `config` - Doppler config (environment) name (e.g., "dev", "stg", "prd"). If omitted, uses the config configured via `doppler setup`.
 - `token` - Service token for authentication. If omitted, uses the `FNOX_DOPPLER_TOKEN` or `DOPPLER_TOKEN` environment variable (in that order), or the interactive login session.
 
-## Referencing Secrets
+## Referencing secrets
 
 ```toml
 [secrets]
@@ -97,7 +104,7 @@ fnox get DATABASE_URL
 fnox exec -- npm start
 ```
 
-## Multi-Environment Example
+## Multi-environment example
 
 Use named provider instances to pull secrets from different Doppler projects or configs:
 
@@ -142,7 +149,7 @@ fnox exec --profile staging -- npm start
 fnox exec --profile production -- ./deploy.sh
 ```
 
-## CI/CD Example
+## CI/CD example
 
 ### GitHub Actions
 
@@ -169,9 +176,9 @@ jobs:
 1. Create a service token in the Doppler dashboard for the target project/config
 2. Add the token to GitHub Secrets as `DOPPLER_TOKEN`
 
-## Token Management
+## Token management
 
-### Environment Variables
+### Environment variables
 
 fnox checks for tokens in this order:
 
@@ -180,7 +187,7 @@ fnox checks for tokens in this order:
 3. `DOPPLER_TOKEN` environment variable
 4. Interactive login session (from `doppler login`)
 
-### Bootstrap Pattern
+### Bootstrap pattern
 
 Store the Doppler token encrypted for easy bootstrap:
 
@@ -193,20 +200,9 @@ export DOPPLER_TOKEN=$(fnox get DOPPLER_TOKEN)
 fnox exec -- npm start
 ```
 
-## Pros
+## Usage notes
 
-- ✅ Developer-friendly dashboard and CLI
-- ✅ Simple project/config/environment model
-- ✅ Automatic secret syncing across environments
-- ✅ Good integrations (GitHub, Vercel, AWS, etc.)
-- ✅ Secret referencing and inheritance between configs
-- ✅ Audit logs and access controls
-- ✅ Free tier available
-
-## Cons
-
-- ❌ Requires network access (cloud-only, no self-hosted option)
-- ❌ No open source option
+A provider instance selects a Doppler project and config. Use separate instances or fnox profiles when environments differ. For automation, scope the service token to the intended config.
 
 ## Troubleshooting
 
@@ -237,7 +233,7 @@ Check the secret exists in the correct project/config:
 doppler secrets --project my-project --config prd
 ```
 
-## Next Steps
+## Next steps
 
 - [Infisical](/providers/infisical) - Alternative cloud secrets manager
 - [HashiCorp Vault](/providers/vault) - Self-hosted alternative

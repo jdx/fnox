@@ -1,31 +1,41 @@
+---
+description: "Load Azure App Configuration values with fnox, including label selection, prefixes, and Azure authentication."
+---
+
 # Azure App Configuration
 
 Azure App Configuration is the Azure store for non-secret configuration: endpoints, feature toggles, tuning values. This provider reads key-values from it, so configuration your infrastructure owns can be resolved instead of hardcoded in `fnox.toml`.
 
 Read-only. Use [Azure Key Vault Secrets](/providers/azure-sm) for anything sensitive.
 
-## Quick Start
+## Quick start
 
-```bash
-# 1. Create the store
+```sh
+# Create the store
 az appconfig create --name "myapp-config" --resource-group "myapp-rg" --location westeurope
+```
 
-# 2. Configure provider
-cat >> fnox.toml << 'EOF'
+Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+
+```toml
 [providers]
 appconfig = { type = "azure-ac", endpoint = "https://myapp-config.azconfig.io" }
-EOF
+```
 
-# 3. Set a key-value
+```sh
+# Set a key-value
 az appconfig kv set --name "myapp-config" --key "api-url" --value "https://api.example.com"
+```
 
-# 4. Reference in fnox
-cat >> fnox.toml << 'EOF'
+Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+
+```toml
 [secrets]
 API_URL = { provider = "appconfig", value = "api-url" }
-EOF
+```
 
-# 5. Get value
+```sh
+# Get value
 fnox get API_URL
 ```
 
@@ -71,19 +81,11 @@ Without `label`, the key-value with no label is returned.
 
 The `endpoint` must be an HTTPS App Configuration domain: `*.azconfig.io`, or `*.azconfig.azure.us` and `*.azconfig.azure.cn` for Azure Government and Azure China. Anything else is rejected, since the endpoint is where fnox sends your Entra token. The audience follows the domain, so sovereign stores work without extra configuration.
 
-## Pros
+## Usage notes
 
-- ✅ Keeps non-secret configuration out of Key Vault
-- ✅ One key serves every environment via labels
-- ✅ Integrated with Azure RBAC
+This provider is read-only and intended for non-secret configuration. Use labels to select environment-specific values and Azure Key Vault Secrets for sensitive values.
 
-## Cons
-
-- ❌ Read-only: write key-values with `az appconfig kv set`, not `fnox set`
-- ❌ Values are not secrets: anyone with Data Reader sees them
-- ❌ Requires Azure subscription
-
-## Next Steps
+## Next steps
 
 - [Azure Key Vault Secrets](/providers/azure-sm) - For actual secrets
 - [Profiles](/guide/profiles) - Per-environment labels

@@ -1,4 +1,4 @@
-# SSL Certificates for Vaultwarden HTTPS
+# Vaultwarden test certificates
 
 This directory contains the self-signed SSL certificates used by vaultwarden for HTTPS during testing.
 
@@ -24,7 +24,7 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
 
 ## Why HTTPS?
 
-The Bitwarden CLI now requires HTTPS for all server connections. This is a security enhancement that prevents insecure HTTP connections. For local testing, we use:
+The local fixture uses HTTPS to match the Bitwarden CLI connection setup. For this disposable server, the test helper uses:
 
 1. A self-signed certificate (generated above)
 2. Vaultwarden's built-in HTTPS support via `ROCKET_TLS` environment variable

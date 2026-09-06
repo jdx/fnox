@@ -1,10 +1,14 @@
+---
+description: "Encrypt secrets with a YubiKey HMAC challenge-response slot. Configure touch requirements and plan for recovery."
+---
+
 # YubiKey
 
 The `yubikey` provider uses YubiKey HMAC-SHA1 challenge-response to derive an AES-256-GCM encryption key. Secrets are encrypted symmetrically — decryption requires the same physical YubiKey.
 
-## Why?
+## When to use it
 
-Regular age encryption protects secrets at rest, but anyone with access to the key file can decrypt them. The `yubikey` provider ties encryption to a physical hardware device. No YubiKey = no decryption.
+Regular age encryption protects secrets at rest, but anyone with access to the key file can decrypt them. The `yubikey` provider ties encryption to a physical hardware device. The derived symmetric key is present in process memory during use; the hardware protects access at rest.
 
 The config is fully portable: move your fnox config to any machine, plug in the same YubiKey, and it works.
 
@@ -46,7 +50,7 @@ fnox get MY_SECRET
 
 Within a single `fnox exec` invocation, the YubiKey is only tapped once. The HMAC response is cached in memory for the duration of the process.
 
-## With Credential Leases
+## With credential leases
 
 The `yubikey` provider works well with [credential leases](/guide/leases) and the `env = false` secret option. Store master credentials encrypted with the YubiKey, and have lease backends use them to create short-lived credentials:
 
@@ -68,7 +72,7 @@ region = "us-east-1"
 
 With `env = false`, the master credentials are never injected into subprocess environment variables. They are only used internally by the lease backend to call `sts:AssumeRole`, and only the resulting short-lived credentials are injected.
 
-## How It Works
+## How it works
 
 1. **Setup:** A random 32-byte challenge is generated and stored in config
 2. **HMAC-SHA1:** The challenge is sent to the YubiKey, which returns a 20-byte HMAC response
@@ -77,13 +81,18 @@ With `env = false`, the master credentials are never injected into subprocess en
 
 The HMAC response is never stored on disk. It exists only in process memory after a YubiKey tap.
 
-## Important Notes
+## Important notes
 
 ::: warning Renaming providers invalidates cached credentials
-The provider name is used in key derivation (HKDF context). Renaming a provider (e.g., from `secure` to `my_yubikey`) will change the derived encryption key, making all previously encrypted secrets and cached lease credentials undecryptable. If you need to rename, re-encrypt all secrets after renaming.
+The provider name is used in key derivation (HKDF context). Renaming a provider (e.g., from `secure` to `my_yubikey`) will change the derived encryption key, making all previously encrypted secrets and cached lease credentials undecryptable. To migrate, keep the old provider available, create a new provider under the new name, and read values through the old provider before storing them with the new one. Verify the new values before removing the old configuration. Renaming first prevents decryption.
 :::
 
 ## Requirements
 
 - A YubiKey with HMAC-SHA1 challenge-response configured on slot 1 or 2
 - Configure HMAC-SHA1 using the [YubiKey Manager](https://www.yubico.com/support/download/yubikey-manager/) or the `ykman otp chalresp` command
+
+## Next steps
+
+- [Sync a local cache](/guide/sync): use the hardware provider as an encryption target.
+- [Credential leases](/guide/leases): protect credentials used to create temporary access.

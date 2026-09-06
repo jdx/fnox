@@ -1,29 +1,38 @@
+---
+description: "Encrypt values in fnox.toml with Google Cloud KMS. Configure a key ring, key, credentials, and IAM permissions."
+---
+
 # Google Cloud KMS
 
 Google Cloud KMS encrypts secrets using GCP-managed keys. The encrypted ciphertext is stored in your `fnox.toml` file.
 
-## Quick Start
+## Quick start
 
-```bash
-# 1. Enable Cloud KMS and create key
+Select your Google Cloud project and configure Application Default Credentials before following this example. The identity running fnox needs access to the key.
+
+```sh
+# Enable Cloud KMS and create key
 gcloud services enable cloudkms.googleapis.com
 gcloud kms keyrings create "fnox-keyring" --location="us-central1"
 gcloud kms keys create "fnox-key" --keyring="fnox-keyring" --location="us-central1" --purpose="encryption"
+```
 
-# 2. Configure provider
-cat >> fnox.toml << 'EOF'
+Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+
+```toml
 [providers.gcpkms]
 type = "gcp-kms"
 project = "my-project-id"
 location = "us-central1"
 keyring = "fnox-keyring"
 key = "fnox-key"
-EOF
+```
 
-# 3. Encrypt a secret
+```sh
+# Encrypt a secret
 fnox set DATABASE_URL "postgresql://prod.example.com/db" --provider gcpkms
 
-# 4. Get secret (decrypts via KMS)
+# Get secret (decrypts via KMS)
 fnox get DATABASE_URL
 ```
 
@@ -50,26 +59,18 @@ keyring = "fnox-keyring"
 key = "fnox-key"
 ```
 
-## How It Works
+## How it works
 
 Similar to [AWS KMS](/providers/aws-kms):
 
 1. **Encryption:** Calls Cloud KMS, stores ciphertext in fnox.toml
 2. **Decryption:** Calls Cloud KMS to recover plaintext
 
-## Pros
+## Usage notes
 
-- ✅ Secrets in git (version control)
-- ✅ GCP-managed keys
-- ✅ GCP IAM integration
+Ciphertext lives in your config. Decryption still requires network access and IAM permission on the Cloud KMS key. Keep the required key version available for existing ciphertext.
 
-## Cons
-
-- ❌ Requires GCP project
-- ❌ Costs money
-- ❌ Network access required
-
-## Next Steps
+## Next steps
 
 - [GCP Secret Manager](/providers/gcp-sm) - Remote storage alternative
 - [Age Encryption](/providers/age) - Free local encryption

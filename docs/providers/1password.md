@@ -1,358 +1,162 @@
+---
+description: "Read 1Password vault items with fnox. Set up local or service-account authentication, field references, and an optional local cache."
+---
+
 # 1Password
 
-Integrate with 1Password to retrieve secrets from your vaults using the 1Password CLI.
+Read vault items with the 1Password CLI (`op`). Your `fnox.toml` contains item references; values remain in 1Password.
 
-## Quick Start
-
-```bash
-# 1. Install 1Password CLI
-brew install 1password-cli
-
-# 2. Create service account and get token
-# (via 1Password web interface)
-
-# 3. Store token (bootstrap with age)
-fnox set OP_SERVICE_ACCOUNT_TOKEN "ops_YOUR_TOKEN" --provider age
-
-# 4. Configure 1Password provider
-cat >> fnox.toml << 'EOF'
-[providers]
-onepass = { type = "1password", vault = "Development" }
-EOF
-
-# 5. Add secrets to 1Password (via app or CLI)
-op item create --category=login \
-  --title="Database" \
-  --vault="Development" \
-  password="super-secret-password"
-
-# 6. Reference in fnox
-cat >> fnox.toml << 'EOF'
-[secrets]
-DATABASE_PASSWORD = { provider = "onepass", value = "Database" }
-EOF
-
-# 7. Use it
-export OP_SERVICE_ACCOUNT_TOKEN=$(fnox get OP_SERVICE_ACCOUNT_TOKEN)
-fnox get DATABASE_PASSWORD
-```
+For a complete team setup with offline reads, follow [connect a vault and cache locally](/guide/golden-path).
 
 ## Prerequisites
 
-- [1Password account](https://1password.com)
-- [1Password CLI](https://developer.1password.com/docs/cli) installed
+- A 1Password account with access to the vault and items you need.
+- The [1Password CLI](https://developer.1password.com/docs/cli/) installed and available as `op`.
 
-## Installation
+## Quick start
 
-```bash
-# macOS
-brew install 1password-cli
-
-# Linux
-curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
-  sudo gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/$(dpkg --print-architecture) stable main" | \
-  sudo tee /etc/apt/sources.list.d/1password.list
-sudo apt update && sudo apt install 1password-cli
-
-# Windows (via Scoop)
-scoop install 1password-cli
-```
-
-## Setup
-
-### 1. Create a Service Account
-
-1. Go to your [1Password account](https://my.1password.com)
-2. Navigate to Settings → Integrations → Service Accounts
-3. Click "Create Service Account"
-4. Give it a name (e.g., "fnox-dev")
-5. Grant access to your vault
-6. Copy the `OP_SERVICE_ACCOUNT_TOKEN` (starts with `ops_`)
-
-### 2. Store the Token (Bootstrap)
-
-Use age encryption to store the token:
-
-```bash
-# First, set up age provider (if not already done)
-cat >> fnox.toml << 'EOF'
-[providers]
-age = { type = "age", recipients = ["age1..."] }
-EOF
-
-# Store the 1Password token encrypted in fnox
-fnox set OP_SERVICE_ACCOUNT_TOKEN "ops_YOUR_TOKEN_HERE" --provider age
-```
-
-Now you can bootstrap the token:
-
-```bash
-export OP_SERVICE_ACCOUNT_TOKEN=$(fnox get OP_SERVICE_ACCOUNT_TOKEN)
-```
-
-### 3. Configure 1Password Provider
+Authenticate with the CLI's interactive or desktop-app integration, then add an existing vault item to your config:
 
 ```toml
-[providers]
-onepass = { type = "1password", vault = "Development", account = "my.1password.com" }  # account is optional
-```
+[providers.op]
+type = "1password"
+vault = "Engineering"
 
-## Adding Secrets to 1Password
-
-### Via 1Password App
-
-1. Open 1Password app
-2. Select your vault (e.g., "Development")
-3. Click + to create new item
-4. Choose category (Login, Password, etc.)
-5. Fill in details
-6. Save
-
-### Via 1Password CLI
-
-```bash
-# Export token first
-export OP_SERVICE_ACCOUNT_TOKEN=$(fnox get OP_SERVICE_ACCOUNT_TOKEN)
-
-# Create a login item
-op item create --category=login \
-  --title="Database" \
-  --vault="Development" \
-  username="admin" \
-  password="super-secret-password"
-
-# Create an API credential
-op item create --category=password \
-  --title="Stripe API Key" \
-  --vault="Development" \
-  password="sk_live_abc123xyz789"
-
-# Create with custom fields
-op item create --category=login \
-  --title="AWS Credentials" \
-  --vault="Development" \
-  "Access Key=AKIAIOSFODNN7EXAMPLE" \
-  "Secret Key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-```
-
-## Referencing Secrets
-
-Add references to `fnox.toml`:
-
-```toml
 [secrets]
-DATABASE_PASSWORD = { provider = "onepass", value = "Database" }  # Item name (fetches 'password' field)
-DB_USERNAME = { provider = "onepass", value = "Database/username" }  # Specific field
-API_KEY = { provider = "onepass", value = "op://Development/API Keys/credential" }  # Full op:// URI
+DATABASE_URL = { provider = "op", value = "Database/url" }
 ```
 
-## Reference Formats
-
-fnox supports multiple ways to reference 1Password items:
-
-### 1. Item Name (Gets Password Field)
-
-```toml
-[secrets]
-MY_SECRET = { provider = "onepass", value = "My Item" }  # → Gets the 'password' field
-```
-
-### 2. Item Name + Field
-
-```toml
-[secrets]
-USERNAME = { provider = "onepass", value = "Database/username" }  # → Gets 'username' field
-PASSWORD = { provider = "onepass", value = "Database/password" }  # → Gets 'password' field
-```
-
-Common fields: `username`, `password`, `url`, `notes`
-
-### 3. Full op:// URI
-
-```toml
-[secrets]
-API_KEY = { provider = "onepass", value = "op://Development/API Keys/credential" }
-```
-
-Format: `op://VAULT/ITEM/FIELD`
-
-## Usage
-
-```bash
-# Export token (once per session)
-export OP_SERVICE_ACCOUNT_TOKEN=$(fnox get OP_SERVICE_ACCOUNT_TOKEN)
-
-# Get secrets
-fnox get DATABASE_PASSWORD
-fnox get DB_USERNAME
-
-# Run commands
+```sh
+fnox provider test op
+fnox get DATABASE_URL
 fnox exec -- npm start
 ```
 
-## Multi-Environment Example
+`fnox get` prints the value. Use `fnox check --all` when you only need to verify that it resolves.
 
-```toml
-# Bootstrap token (encrypted in git)
-[providers]
-age = { type = "age", recipients = ["age1..."] }
-onepass = { type = "1password", vault = "Development" }
+## Authentication
 
-[secrets]
-OP_SERVICE_ACCOUNT_TOKEN = { provider = "age", value = "encrypted-token..." }
-DATABASE_URL = { provider = "onepass", value = "Dev Database" }
+### Local development
 
-# Production: Different 1Password vault
-[profiles.production.providers]
-onepass = { type = "1password", vault = "Production" }
+Use the [CLI's supported sign-in methods](https://developer.1password.com/docs/cli/get-started/), including integration with the desktop app. Verify access with `op vault list` before running fnox.
 
-[profiles.production.secrets]
-DATABASE_URL = { provider = "onepass", value = "Prod Database" }
-```
+A service account is not required for an interactive developer session. Authentication prompts and session lifetime depend on your 1Password setup.
 
-## CI/CD Example
+### CI and automation
 
-### GitHub Actions
+Create a [1Password service account](https://developer.1password.com/docs/service-accounts/) with access to the required vaults. Supply its token through your CI secret store as `OP_SERVICE_ACCOUNT_TOKEN`. fnox also accepts `FNOX_OP_SERVICE_ACCOUNT_TOKEN`, which takes precedence.
+
+This workflow step assumes fnox and `op` are installed:
 
 ```yaml
-name: Deploy
-on: [push]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v4
-
-      - name: Setup fnox age key
-        env:
-          FNOX_AGE_KEY: ${{ secrets.FNOX_AGE_KEY }}
-        run: echo "Age key configured"
-
-      - name: Deploy with 1Password secrets
-        run: |
-          # Bootstrap 1Password token from fnox
-          export OP_SERVICE_ACCOUNT_TOKEN=$(fnox get OP_SERVICE_ACCOUNT_TOKEN)
-
-          # Now we can access 1Password secrets
-          fnox exec --profile production -- ./deploy.sh
+- name: Run tests with secrets
+  env:
+    OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+  run: fnox --non-interactive exec --if-missing error -- npm test
 ```
 
-## Team Workflow
+Scope the service account to the vaults and operations the job needs. Do not put the token in committed plaintext configuration.
 
-1. **Admin creates service account** in 1Password
-2. **Admin stores token** encrypted in fnox:
-   ```bash
-   fnox set OP_SERVICE_ACCOUNT_TOKEN "ops_..." --provider age
-   git add fnox.toml && git commit -m "Add 1Password token"
-   ```
-3. **Admin creates items** in 1Password vault
-4. **Admin adds references** to fnox.toml:
-   ```toml
-   [secrets]
-   DATABASE_URL = { provider = "onepass", value = "Database" }
-   ```
-5. **Team members pull and use**:
-   ```bash
-   git pull
-   export FNOX_AGE_KEY=...
-   export OP_SERVICE_ACCOUNT_TOKEN=$(fnox get OP_SERVICE_ACCOUNT_TOKEN)
-   fnox exec -- npm start
-   ```
+## Configuration
 
-## Service Account vs Personal Token
-
-### Service Account (Recommended)
-
-- ✅ Designed for CI/CD and automation
-- ✅ Doesn't expire
-- ✅ No MFA required
-- ✅ Scoped access to specific vaults
-
-```bash
-# Use service account token
-export OP_SERVICE_ACCOUNT_TOKEN="ops_..."
+```toml
+[providers.op]
+type = "1password"
+vault = "Engineering"
+account = "my.1password.com" # Optional account selector
 ```
 
-### Personal Token (Not Recommended)
+`op` is the fnox provider instance name. Use it in secret definitions and commands such as `fnox provider test op`.
 
-- ❌ Requires interactive login
-- ❌ Subject to MFA
-- ❌ Session expires
+## Reference formats
 
-```bash
-# Personal login (interactive)
-eval $(op signin)
+| Reference                            | What fnox reads                       |
+| ------------------------------------ | ------------------------------------- |
+| `Database`                           | The item's password field             |
+| `Database/username`                  | A named field in the configured vault |
+| `op://Engineering/Database/password` | A full 1Password secret reference     |
+
+```toml
+[secrets]
+DB_PASSWORD = { provider = "op", value = "Database" }
+DB_USER = { provider = "op", value = "Database/username" }
+API_KEY = { provider = "op", value = "op://Engineering/Service/api-key" }
 ```
 
-::: warning
-Always use service accounts for fnox, not personal tokens.
-:::
+Use the field names in your items. Full `op://` references can be copied from 1Password and are useful when a project reads from several vaults.
 
-## Pros
+## Create and update items
 
-- ✅ Beautiful UI and mobile apps
-- ✅ Excellent audit logs and access control
-- ✅ No encryption key management
-- ✅ Team-friendly
-- ✅ Multi-factor authentication
-- ✅ Service accounts for CI/CD
+Create or update items in the 1Password app or with the `op` CLI, then add their references to `fnox.toml`. For custom fields, use the exact field name in the reference.
 
-## Cons
+The configuration can be committed because it contains references. Vault names, item names, and field names are still visible to anyone who can read the repository.
 
-- ❌ Requires 1Password subscription
-- ❌ Requires network access
-- ❌ Service account token management
-- ❌ Not free (starts at $7.99/user/month for teams)
+## Separate environments
+
+Override the provider and references with a profile:
+
+```toml
+[providers.op]
+type = "1password"
+vault = "Development"
+
+[secrets]
+DATABASE_URL = { provider = "op", value = "Database/url" }
+
+[profiles.production.providers.op]
+type = "1password"
+vault = "Production"
+
+[profiles.production.secrets]
+DATABASE_URL = { provider = "op", value = "Database/url", if_missing = "error" }
+```
+
+```sh
+fnox exec --profile production -- ./deploy.sh
+```
+
+Profiles choose configuration, not authorization. The identity used by `op` must have access to the selected vault.
+
+## Store a bootstrap token with age
+
+If you need to keep a service account token locally, first configure [age](/providers/age), then store the token through the hidden prompt:
+
+```sh
+fnox set OP_SERVICE_ACCOUNT_TOKEN --provider age
+```
+
+Before resolving 1Password references in a new session:
+
+```sh
+export OP_SERVICE_ACCOUNT_TOKEN="$(fnox get OP_SERVICE_ACCOUNT_TOKEN)"
+```
+
+For interactive work, using your own 1Password sign-in avoids sharing a service account token across the team.
+
+## Cache for local use
+
+Use [`fnox sync`](/guide/sync) to store an encrypted snapshot under a personal age key, or enable the [daemon](/guide/daemon) for in-memory caching. Refresh caches when the vault value changes.
 
 ## Troubleshooting
 
-### "Authentication required"
+### Authentication required
 
-Set the token:
+Check the CLI's sign-in state and the selected account. For automation, confirm the service account token is available in the environment of the fnox process.
 
-```bash
-export OP_SERVICE_ACCOUNT_TOKEN=$(fnox get OP_SERVICE_ACCOUNT_TOKEN)
-```
+### Item or vault not found
 
-### "Item not found"
+Check the vault name, item name, field name, and account. Verify that the authenticated user or service account has vault access:
 
-Check:
-
-- Vault name is correct in fnox.toml
-- Item exists in that vault
-- Service account has access to the vault
-
-```bash
-# List items in vault
-op item list --vault "Development"
-
-# Get item details
-op item get "Database" --vault "Development"
-```
-
-### "Vault not found"
-
-Verify vault name:
-
-```bash
-# List all vaults
+```sh
 op vault list
+op item list --vault Engineering
+fnox provider test op
 ```
 
-## Best Practices
+Item listings expose names and metadata. Review output before including it in an issue.
 
-1. **Use service accounts** - Not personal tokens
-2. **One service account per environment** - Separate dev, staging, prod
-3. **Grant minimal access** - Only vaults the service account needs
-4. **Store token encrypted** - Use age provider to encrypt `OP_SERVICE_ACCOUNT_TOKEN`
-5. **Rotate tokens periodically** - Create new service account, update fnox.toml
-6. **Use descriptive item names** - Makes referencing easier
+## Next steps
 
-## Next Steps
-
-- [Bitwarden](/providers/bitwarden) - Open source alternative
-- [Real-World Example](/guide/real-world-example) - Complete setup
-- [Profiles](/guide/profiles) - Multi-environment configuration
+- [Connect a vault](/guide/golden-path): set up a personal age cache.
+- [Profiles](/guide/profiles): compose environment settings.
+- [1Password CLI documentation](https://developer.1password.com/docs/cli/): account setup and reference syntax.

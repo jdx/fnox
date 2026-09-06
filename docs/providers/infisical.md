@@ -1,14 +1,18 @@
+---
+description: "Load Infisical secrets with fnox using service tokens or universal authentication, project environments, and secret paths."
+---
+
 # Infisical
 
 Integrate with Infisical to retrieve secrets from your Infisical projects and environments.
 
-## Quick Start
+## Quick start
 
-```bash
-# 1. Install Infisical CLI
+```sh
+# Install Infisical CLI
 brew install infisical/get-cli/infisical
 
-# 2. Authenticate with a service token or a machine identity
+# Authenticate with a service token or a machine identity
 # Option A: Service token (from Infisical dashboard)
 export INFISICAL_TOKEN="your-service-token"
 
@@ -16,25 +20,31 @@ export INFISICAL_TOKEN="your-service-token"
 export INFISICAL_CLIENT_ID="your-client-id"
 export INFISICAL_CLIENT_SECRET="your-client-secret"
 
-# 3. Store token (optional, for bootstrap)
+# Store token (optional, for bootstrap)
 fnox set INFISICAL_TOKEN "your-service-token" --provider age
+```
 
-# 4. Configure Infisical provider
-cat >> fnox.toml << 'EOF'
+Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+
+```toml
 [providers]
 infisical = { type = "infisical", project_id = "your-project-id", environment = "dev", path = "/" }
-EOF
+```
 
-# 5. Add secrets to Infisical
+```sh
+# Add secrets to Infisical
 infisical secrets set DATABASE_PASSWORD "secret-password"
+```
 
-# 6. Reference in fnox
-cat >> fnox.toml << 'EOF'
+Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+
+```toml
 [secrets]
 DATABASE_PASSWORD = { provider = "infisical", value = "DATABASE_PASSWORD" }
-EOF
+```
 
-# 7. Use it
+```sh
+# Use it
 fnox get DATABASE_PASSWORD
 ```
 
@@ -74,9 +84,9 @@ infisical login --domain=https://infisical.example.com
 
 `infisical login` sets up the CLI for manual commands such as `infisical secrets set`. fnox itself does not use this login session; it authenticates with the token or machine identity credentials from the next step.
 
-### 2. Get Authentication Token
+### 2. Get authentication token
 
-#### Option A: Service Token (Recommended for CI/CD)
+#### Option A: service token (recommended for CI/CD)
 
 1. Go to your Infisical project settings
 2. Navigate to "Service Tokens"
@@ -87,7 +97,7 @@ infisical login --domain=https://infisical.example.com
 export INFISICAL_TOKEN="st.xxx.yyy.zzz"
 ```
 
-#### Option B: Universal Auth (Machine Identity)
+#### Option B: Universal Auth (machine identity)
 
 ```bash
 # Provide the machine identity credentials. fnox runs
@@ -99,7 +109,7 @@ export INFISICAL_CLIENT_SECRET="your-client-secret"
 
 `FNOX_INFISICAL_CLIENT_ID` and `FNOX_INFISICAL_CLIENT_SECRET` are also accepted and take priority over the unprefixed variables.
 
-### 3. Store Token (Bootstrap)
+### 3. Store token (bootstrap)
 
 Optionally, store the token encrypted for easy bootstrap:
 
@@ -111,7 +121,7 @@ fnox set INFISICAL_TOKEN "st.xxx.yyy.zzz" --provider age
 export INFISICAL_TOKEN=$(fnox get INFISICAL_TOKEN)
 ```
 
-### 4. Configure Infisical Provider
+### 4. Configure Infisical provider
 
 ```toml
 [providers]
@@ -126,9 +136,9 @@ All fields are optional. If not specified, the Infisical CLI will use its own de
 - `environment` - Environment slug (e.g., "dev", "staging", "prod"). If omitted, CLI defaults to "dev".
 - `path` - Secret path within the project. If omitted, CLI defaults to "/".
 
-## Adding Secrets to Infisical
+## Adding secrets to Infisical
 
-### Via Infisical Web Dashboard
+### Via Infisical web dashboard
 
 1. Go to your Infisical dashboard
 2. Select your project
@@ -159,7 +169,7 @@ infisical secrets set API_KEY "sk-abc123" \
 infisical secrets list
 ```
 
-## Referencing Secrets
+## Referencing secrets
 
 Add references to `fnox.toml`:
 
@@ -170,7 +180,7 @@ API_KEY = { provider = "infisical", value = "API_KEY" }
 DATABASE_URL = { provider = "infisical", value = "DATABASE_URL" }
 ```
 
-## Reference Format
+## Reference format
 
 ```toml
 [secrets]
@@ -192,7 +202,7 @@ fnox get DATABASE_PASSWORD
 fnox exec -- npm start
 ```
 
-## Multi-Environment Example
+## Multi-environment example
 
 ```toml
 # Bootstrap token (encrypted in git)
@@ -232,7 +242,7 @@ fnox exec --profile staging -- npm start
 fnox exec --profile production -- ./deploy.sh
 ```
 
-## Secret Paths
+## Secret paths
 
 Organize secrets with paths:
 
@@ -247,7 +257,7 @@ API_KEY = { provider = "infisical-api", value = "API_KEY" }  # → /api/API_KEY
 DATABASE_URL = { provider = "infisical-db", value = "DATABASE_URL" }  # → /database/DATABASE_URL
 ```
 
-## CI/CD Example
+## CI/CD example
 
 ### GitHub Actions
 
@@ -282,7 +292,7 @@ jobs:
 2. Add the token to GitHub Secrets as `INFISICAL_TOKEN`
 3. The workflow will automatically use it
 
-## Self-Hosted Infisical
+## Self-hosted Infisical
 
 Configure the CLI to use your self-hosted instance:
 
@@ -297,11 +307,11 @@ export INFISICAL_API_URL=https://infisical.example.com/api
 fnox get DATABASE_PASSWORD
 ```
 
-## Token Management
+## Token management
 
 The `INFISICAL_TOKEN` is typically a service token or machine identity token. `FNOX_INFISICAL_TOKEN` is also accepted and takes priority over `INFISICAL_TOKEN`.
 
-### Option 1: Set Each Time
+### Option 1: set each time
 
 ```bash
 #!/bin/bash
@@ -309,7 +319,7 @@ export INFISICAL_TOKEN="st.xxx.yyy.zzz"
 fnox exec -- npm start
 ```
 
-### Option 2: Store Encrypted (Bootstrap)
+### Option 2: store encrypted (bootstrap)
 
 ```bash
 # Store once
@@ -320,9 +330,9 @@ export INFISICAL_TOKEN=$(fnox get INFISICAL_TOKEN)
 fnox exec -- npm start
 ```
 
-## Service Token vs Universal Auth
+## Service token vs Universal Auth
 
-### Service Token (Simple)
+### Service token (simple)
 
 - **Best for:** CI/CD, simple automation
 - **Pros:** Easy to set up, just one token
@@ -332,7 +342,7 @@ fnox exec -- npm start
 export INFISICAL_TOKEN="st.xxx.yyy.zzz"
 ```
 
-### Universal Auth (Advanced)
+### Universal Auth (advanced)
 
 - **Best for:** Machine identities, advanced use cases
 - **Pros:** Automatic rotation, better audit logs, fine-grained permissions
@@ -343,19 +353,9 @@ export INFISICAL_CLIENT_ID="..."
 export INFISICAL_CLIENT_SECRET="..."
 ```
 
-## Pros
+## Usage notes
 
-- ✅ Modern, developer-friendly UI
-- ✅ Open source (self-hosting option)
-- ✅ Good API and CLI
-- ✅ Secret versioning and audit logs
-- ✅ Point-in-time recovery
-- ✅ Integrations with many platforms
-
-## Cons
-
-- ❌ Requires network access to an Infisical instance
-- ❌ Relatively new compared to Vault or cloud providers
+fnox uses a token or machine identity credentials, rather than the CLI's interactive login session. Set the project, environment, and path explicitly when one identity can access several environments.
 
 ## Troubleshooting
 
@@ -393,16 +393,7 @@ Regenerate service token in Infisical dashboard and update:
 fnox set INFISICAL_TOKEN "new-token" --provider age
 ```
 
-## Best Practices
-
-1. **Use service tokens for automation** - Create read-only tokens for CI/CD
-2. **Organize with paths** - Use paths to logically group secrets
-3. **Leverage environments** - Use dev/staging/prod environments
-4. **Store token encrypted** - Use age to encrypt `INFISICAL_TOKEN`
-5. **Self-host for sensitive workloads** - Full control over your secrets
-6. **Use secret versioning** - Track changes and rollback if needed
-
-## Next Steps
+## Next steps
 
 - [1Password](/providers/1password) - Alternative password manager
 - [Vault](/providers/vault) - More established alternative

@@ -1,0 +1,207 @@
+{
+  "activate": {
+    "note": "Enable the hook for your shell. Fish, Nushell, and PowerShell use different activation syntax; follow the shell guide for those commands.",
+    "commands": "eval \"$(fnox activate bash)\"\n# Zsh:\neval \"$(fnox activate zsh)\"",
+    "links": ["/guide/shell-integration"]
+  },
+  "deactivate": {
+    "note": "After shell activation, the fnox shell function applies this command to the current session. Remove the activation line from your startup file to disable it in future shells.",
+    "commands": "fnox deactivate",
+    "links": ["/guide/shell-integration"]
+  },
+  "check": {
+    "note": "By default, check validates required secrets. Use --all to also check secrets whose missing-value policy is warn or ignore. The command validates resolution without printing resolved values.",
+    "commands": "fnox check --all\nfnox check --all --profile production",
+    "links": ["/guide/troubleshooting", "/guide/missing-secrets"]
+  },
+  "completion": {
+    "note": "Generate completions for the named shell. Install or source the output according to that shell\u2019s completion setup; generating it alone does not change your shell.",
+    "commands": "fnox completion bash > fnox.bash\nfnox completion zsh > _fnox",
+    "links": ["/guide/shell-integration"]
+  },
+  "config-files": {
+    "note": "Inspect the effective file stack before debugging an unexpected value. An explicit config path skips directory discovery and adjacent local overrides; the global config still loads.",
+    "commands": "fnox config-files\nfnox --profile staging config-files\nfnox -c ./fnox.toml config-files",
+    "links": ["/guide/hierarchical-config"]
+  },
+  "doctor": {
+    "note": "Check the local fnox setup, then test a specific provider or resolve all configured secrets to narrow down a failure.",
+    "commands": "fnox doctor\nfnox provider test op\nfnox check --all",
+    "links": ["/guide/troubleshooting"]
+  },
+  "edit": {
+    "note": "Open configuration in your editor. Configure EDITOR (or VISUAL) first. Use fnox set for an individual value so the selected provider handles storage.",
+    "commands": "EDITOR=vim fnox edit",
+    "links": ["/reference/environment#editor", "/cli/set"]
+  },
+  "exec": {
+    "note": "Put fnox options before --. Arguments after -- belong to the child command. To expand an injected variable in a shell expression, defer expansion to a child shell with single quotes.",
+    "commands": "fnox exec -- npm start\nfnox exec --profile production --if-missing error -- ./deploy.sh\nfnox exec -- sh -c 'test -n \"$DATABASE_URL\"'",
+    "links": ["/guide/how-it-works", "/guide/profiles"]
+  },
+  "export": {
+    "note": "Exports contain real resolved values. JSON, YAML, and TOML wrap them in a secrets object; see the import/export guide before migrating. By default, export follows shell injection settings; `--all` also includes exec-only and non-injected secrets. `--dry-run` only suppresses a file write when `--output` is supplied: output to stdout still contains values.",
+    "commands": "fnox export --format json\n# Create a private plaintext file (POSIX shell)\numask 077\nfnox export --output .env",
+    "links": ["/guide/import-export", "/reference/configuration#env-1"]
+  },
+  "get": {
+    "note": "Print one resolved value to stdout. Use check --all when you only need to verify access without displaying the secret.",
+    "commands": "fnox get DATABASE_URL\nfnox get DATABASE_URL --profile staging",
+    "links": ["/guide/how-it-works", "/cli/check"]
+  },
+  "import": {
+    "note": "Configure an encryption provider first. Remote storage providers are not import targets. When stdin carries the import data, use --force because stdin cannot also answer the confirmation prompt.",
+    "commands": "fnox import --input .env --provider age --dry-run\nfnox import --input .env --provider age\ncat secrets.json | fnox import json --provider age --force",
+    "links": ["/guide/import-export"]
+  },
+  "init": {
+    "note": "In a terminal, the wizard can configure a provider and select it as the default. --skip-wizard creates a minimal config; it does not enable encryption. Configure a provider before storing sensitive values.",
+    "commands": "fnox init\nfnox init --skip-wizard",
+    "links": ["/guide/quick-start"]
+  },
+  "list": {
+    "note": "Lists the secrets configured in fnox. It does not enumerate every remote vault item. Values are hidden unless you request --values.",
+    "commands": "fnox list\nfnox list --sources\nfnox list --profile production",
+    "links": ["/guide/hierarchical-config", "/cli/tui"]
+  },
+  "mcp": {
+    "note": "Run a stdio MCP server from the project directory. Configure its secret allowlist and authenticate to providers before starting the client.",
+    "commands": "fnox mcp\nfnox --profile staging mcp",
+    "links": ["/guide/mcp"]
+  },
+  "profiles": {
+    "note": "Inspect the available profile names before selecting or composing them. Use --write-profile when writing with multiple active profiles.",
+    "commands": "fnox profiles\nfnox -P aws,staging list",
+    "links": ["/guide/profiles"]
+  },
+  "provider": {
+    "note": "Manage configured provider instances. The instance name, such as op, is distinct from the provider type, such as 1password.",
+    "commands": "fnox provider list\nfnox provider test op",
+    "links": ["/providers/overview"]
+  },
+  "provider/add": {
+    "note": "Creates a provider configuration. Some types require interactive setup; others create placeholders that you must replace before use. For this command, the aws and gcp choices correspond to the aws-sm and gcp-sm config types.",
+    "commands": "fnox provider add op 1password\nfnox provider add sync-age age --global",
+    "links": ["/providers/overview", "/guide/golden-path"]
+  },
+  "provider/list": {
+    "note": "List configured provider instances for the selected profile. To find the supported provider types, use the provider catalog.",
+    "commands": "fnox provider list\nfnox --profile production provider list",
+    "links": ["/providers/overview"]
+  },
+  "provider/remove": {
+    "note": "Remove a provider definition from the configuration. Update secrets that reference it before removing it; this command does not delete the remote vault or its items.",
+    "commands": "fnox provider remove old-vault",
+    "links": ["/providers/overview"]
+  },
+  "provider/test": {
+    "note": "Use a configured instance name, not its type. A successful connection test does not guarantee that every referenced item exists; check --all validates those references too.",
+    "commands": "fnox provider test op\nfnox provider test --all\nfnox check --all",
+    "links": ["/guide/troubleshooting"]
+  },
+  "reencrypt": {
+    "note": "After changing recipients, re-encrypt with an identity that can still decrypt the existing ciphertext. Repeat for each affected profile. This changes the encryption, not the underlying secret value.",
+    "commands": "fnox reencrypt --provider age --dry-run\nfnox reencrypt --provider age\nfnox reencrypt --provider age --profile staging",
+    "links": ["/providers/age#adding-a-new-team-member"]
+  },
+  "remove": {
+    "note": "Remove a secret definition from fnox configuration. The command does not delete or revoke the original value in a remote provider.",
+    "commands": "fnox remove OLD_TOKEN --dry-run\nfnox remove OLD_TOKEN",
+    "links": ["/cli/set", "/guide/profiles"]
+  },
+  "scan": {
+    "note": "Scan files for potential secrets using heuristics. Findings need review; a clean scan does not prove that files or git history contain no secrets.",
+    "commands": "fnox scan .\nfnox scan . --format json\nfnox scan . --ignore \"vendor/**\"",
+    "links": ["/providers/plain"]
+  },
+  "set": {
+    "note": "Configure a provider first. Omitting VALUE prompts with hidden input in a terminal or reads piped stdin. Without a selected provider, set writes a plaintext default. --from-file preserves file contents, including trailing newlines.",
+    "commands": "fnox set DATABASE_URL --provider age\nfnox set SSH_PRIVATE_KEY --provider age --from-file ~/.ssh/id_ed25519\nfnox set DATABASE_URL --profile staging --provider age",
+    "links": ["/guide/quick-start", "/reference/configuration#as-file"]
+  },
+  "sponsors": {
+    "note": "Show project sponsors in the terminal.",
+    "commands": "fnox sponsors",
+    "links": ["/contributing"]
+  },
+  "sync": {
+    "note": "Use a configured encryption provider as the target. --local-file writes a personal cache next to the project config; add that file to .gitignore. Run sync again after source values change.",
+    "commands": "fnox sync --provider sync-age --local-file --dry-run\nfnox sync --provider sync-age --local-file\nfnox sync --provider sync-age --local-file DATABASE_URL",
+    "links": ["/guide/sync"]
+  },
+  "tui": {
+    "note": "Browse and copy values in the terminal. Dashboard edits are held in memory only; use set or remove to persist changes.",
+    "commands": "fnox tui\nfnox --profile staging tui",
+    "links": ["/guide/tui"]
+  },
+  "version": {
+    "note": "Include the version when reporting a bug or comparing local and CI behavior.",
+    "commands": "fnox version\nfnox --version",
+    "links": ["/guide/troubleshooting"]
+  },
+  "daemon": {
+    "note": "The daemon is opt-in and caches resolved values in memory. Enable it in config or with FNOX_DAEMON=on to use it for supported reads.",
+    "commands": "fnox daemon status\nfnox daemon start\nFNOX_DAEMON=on fnox check --all",
+    "links": ["/guide/daemon"]
+  },
+  "daemon/start": {
+    "note": "Start the per-user daemon. Enable daemon mode in configuration or the environment for subsequent reads to use it.",
+    "commands": "fnox daemon start\nfnox daemon status",
+    "links": ["/guide/daemon"]
+  },
+  "daemon/status": {
+    "note": "Inspect the current daemon state when diagnosing cache behavior.",
+    "commands": "fnox daemon status",
+    "links": ["/guide/daemon", "/guide/troubleshooting"]
+  },
+  "daemon/clear": {
+    "note": "Clear cached values after changing a secret in its source provider. This clears running daemon caches; it does not remove encrypted sync caches.",
+    "commands": "fnox daemon clear",
+    "links": ["/guide/daemon", "/guide/sync"]
+  },
+  "daemon/stop": {
+    "note": "Stop the daemon and discard its in-memory cache. If daemon mode remains enabled, a later supported read may start it again.",
+    "commands": "fnox daemon stop",
+    "links": ["/guide/daemon"]
+  },
+  "lease": {
+    "note": "Create and manage temporary credentials from configured lease backends. fnox exec can create or reuse a lease automatically.",
+    "commands": "fnox lease list --active\nfnox exec -- aws s3 ls",
+    "links": ["/guide/leases"]
+  },
+  "lease/create": {
+    "note": "Create a lease for a configured backend. Without a backend name, all configured backends are selected. Output contains usable temporary credentials; avoid putting it in logs.",
+    "commands": "fnox lease create aws --duration 30m\nfnox lease create aws --interactive",
+    "links": ["/guide/leases"]
+  },
+  "lease/list": {
+    "note": "Inspect the local lease ledger. This is a record of leases tracked by fnox, not a complete inventory of credentials at the service.",
+    "commands": "fnox lease list --active\nfnox lease list --expired",
+    "links": ["/guide/leases#how-caching-works"]
+  },
+  "lease/revoke": {
+    "note": "Use an ID from lease list. Remote revocation depends on the backend; native-expiry backends cannot invalidate a token immediately through fnox.",
+    "commands": "fnox lease list --active\nfnox lease revoke LEASE_ID",
+    "links": ["/guide/leases#supported-backends"]
+  },
+  "lease/cleanup": {
+    "note": "Ask backends to clean up expired tracked leases that require manual revocation. Backend credentials and network access may be needed.",
+    "commands": "fnox lease cleanup",
+    "links": ["/guide/leases"]
+  },
+  "proxy": {
+    "note": "Configure destination rules before launching a command. The proxy controls credential injection; it is not an operating-system sandbox.",
+    "commands": "fnox proxy rules\nfnox proxy run -- node agent.js",
+    "links": ["/guide/proxy"]
+  },
+  "proxy/rules": {
+    "note": "Inspect effective rules without resolving their secrets. Confirm domains, methods, and paths before launching the client.",
+    "commands": "fnox proxy rules\nfnox --profile staging proxy rules",
+    "links": ["/guide/proxy"]
+  },
+  "proxy/run": {
+    "note": "The child receives placeholders and proxy/CA settings. Its HTTP client must honor those settings. Configure proxy rules before running this command.",
+    "commands": "fnox proxy run -- node agent.js",
+    "links": ["/guide/proxy"]
+  }
+}

@@ -1,40 +1,46 @@
+---
+description: "Encrypt values in fnox.toml with AWS KMS. Configure credentials, IAM permissions, keys, and key migration."
+---
+
 # AWS KMS
 
 AWS Key Management Service (KMS) encrypts secrets using AWS-managed keys. The encrypted ciphertext is stored in your `fnox.toml` file.
 
 ## Comparison: KMS vs Secrets Manager
 
-| Feature        | AWS KMS                                | AWS Secrets Manager  |
-| -------------- | -------------------------------------- | -------------------- |
-| Storage        | Local (encrypted in fnox.toml)         | Remote (in AWS)      |
-| Secrets in git | Yes (encrypted)                        | No (references only) |
-| Pricing        | $1/key/month (one key for all secrets) | $0.40/secret/month   |
-| Rotation       | Manual                                 | Automatic            |
-| Offline        | No (needs AWS API)                     | No (needs AWS API)   |
+| Feature        | AWS KMS                        | AWS Secrets Manager  |
+| -------------- | ------------------------------ | -------------------- |
+| Storage        | Local (encrypted in fnox.toml) | Remote (in AWS)      |
+| Secrets in git | Yes (encrypted)                | No (references only) |
+| Rotation       | Manual                         | Automatic            |
+| Offline        | No (needs AWS API)             | No (needs AWS API)   |
 
 **Use KMS when:** You want secrets in git with AWS-managed keys.
 
 **Use Secrets Manager when:** You want centralized storage without secrets in git.
 
-## Quick Start
+## Quick start
 
-```bash
-# 1. Create KMS key
+```sh
+# Create KMS key
 aws kms create-key --description "fnox secrets encryption"
 # Note the KeyId
+```
 
-# 2. Configure provider
-cat >> fnox.toml << 'EOF'
+Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+
+```toml
 [providers.kms]
 type = "aws-kms"
 key_id = "arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012"
 region = "us-east-1"
-EOF
+```
 
-# 3. Encrypt a secret
+```sh
+# Encrypt a secret
 fnox set DATABASE_URL "postgresql://prod.example.com/db" --provider kms
 
-# 4. Get secret (decrypts via KMS)
+# Get secret (decrypts via KMS)
 fnox get DATABASE_URL
 ```
 
@@ -45,7 +51,7 @@ fnox get DATABASE_URL
 - KMS key created
 - IAM permissions
 
-## IAM Permissions
+## IAM permissions
 
 ```json
 {
@@ -62,7 +68,7 @@ fnox get DATABASE_URL
 
 ## Setup
 
-### 1. Create KMS Key
+### 1. Create KMS key
 
 Via AWS CLI:
 
@@ -76,11 +82,11 @@ aws kms create-key \
 
 Or use [AWS Console](https://console.aws.amazon.com/kms/) → KMS → Create Key.
 
-### 2. Configure AWS Credentials
+### 2. Configure AWS credentials
 
 Same as [AWS Secrets Manager](/providers/aws-sm#configure-aws-credentials).
 
-### 3. Configure fnox Provider
+### 3. Configure fnox provider
 
 ```toml
 [providers.kms]
@@ -115,7 +121,7 @@ role_arn = "arn:aws:iam::123456789012:role/kms-user"
 
 ## Usage
 
-### Encrypt and Store
+### Encrypt and store
 
 ```bash
 fnox set DATABASE_URL "postgresql://prod.example.com/db" --provider kms
@@ -128,13 +134,13 @@ Result in `fnox.toml`:
 DATABASE_URL = { provider = "kms", value = "AQICAHhw...base64...ciphertext..." }  # ← Encrypted, safe to commit!
 ```
 
-### Decrypt and Get
+### Decrypt and get
 
 ```bash
 fnox get DATABASE_URL
 ```
 
-## How It Works
+## How it works
 
 1. **Encryption (`fnox set`):**
    - Calls AWS KMS `Encrypt` API
@@ -144,7 +150,7 @@ fnox get DATABASE_URL
    - Calls AWS KMS `Decrypt` API
    - Returns plaintext
 
-## Multi-Environment Example
+## Multi-environment example
 
 ```toml
 # Development: age encryption (free)
@@ -162,49 +168,27 @@ kms = { type = "aws-kms", key_id = "arn:aws:kms:us-east-1:123456789012:key/...",
 DATABASE_URL = { provider = "kms", value = "AQICAHhw..." }  # ← KMS encrypted ciphertext
 ```
 
-## Key Rotation
+## Key rotation
 
-When rotating KMS keys:
+Rotating key material within the same KMS key is different from switching to a new key ID. The fnox provider supplies `key_id` when decrypting, so changing it before migrating values can prevent the old ciphertext from decrypting.
 
-1. Create new KMS key
-2. Update fnox.toml with new `key_id`
-3. Re-encrypt all secrets with the new key:
-   ```bash
-   fnox reencrypt -p kms
-   ```
+To move to another KMS key, keep the old provider configured and add a second provider for the new key. Resolve each value through the old definition and store it with the new provider:
+
+```sh
+fnox get DATABASE_URL | fnox set DATABASE_URL --provider new-kms
+```
+
+Repeat for the affected secrets and profiles, verify access, then remove the old provider when it is no longer used. Rotate the underlying application secret separately if its plaintext may have been exposed.
 
 ## Costs
 
-AWS KMS pricing (as of 2024):
+Charges depend on region, storage, key type or tier, and API usage. Consult the [service pricing](https://aws.amazon.com/kms/pricing/) for current rates. fnox does not change the provider's billing model.
 
-- **$1.00 per key per month**
-- **$0.03 per 10,000 operations**
+## Usage notes
 
-Example:
+Ciphertext lives in your config, but both encryption and decryption require AWS access. IAM policies and the KMS key policy must permit the operation. Rotating the KMS key material is distinct from changing the application secret.
 
-- 1 KMS key = $1.00/month
-- 1,000 deployments × 10 secrets × 10 decrypt calls = $0.30/month
-- **Total: ~$1.30/month**
-
-Much cheaper than Secrets Manager for many secrets!
-
-## Pros
-
-- ✅ Secrets in git (version control)
-- ✅ AWS-managed encryption keys
-- ✅ IAM access control
-- ✅ CloudTrail audit logs
-- ✅ Cheaper than Secrets Manager (one key for all secrets)
-- ✅ No per-secret charges
-
-## Cons
-
-- ❌ Requires AWS account and network access
-- ❌ Costs money ($1/key/month)
-- ❌ More complex than age encryption
-- ❌ Manual rotation (vs automatic in Secrets Manager)
-
-## Next Steps
+## Next steps
 
 - [AWS Secrets Manager](/providers/aws-sm) - Remote storage alternative
 - [Age Encryption](/providers/age) - Free local encryption

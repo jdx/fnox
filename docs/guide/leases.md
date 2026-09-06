@@ -1,10 +1,14 @@
-# Credential Leases
+---
+description: "Create temporary credentials, connect lease backends, and understand caching, expiry, and revocation."
+---
 
-Credential leases let you vend short-lived credentials from cloud providers like AWS, GCP, Azure, and HashiCorp Vault. Instead of storing long-lived access keys, fnox creates temporary credentials that expire automatically.
+# Credential leases
 
-## Why Leases?
+Credential leases create temporary credentials from a configured backend. fnox uses an existing identity or bootstrap credential to request the lease, then injects the resulting credentials into `fnox exec` subprocesses. Expiry and revocation depend on the backend.
 
-Long-lived credentials are a security risk. If they leak, an attacker has access until someone rotates them. Leases flip this model: credentials are created on demand, last minutes to hours, and expire on their own.
+## Why leases?
+
+A lease limits how long a credential remains useful when the backend enforces an expiry. It does not remove the need to protect the identity that creates leases. Custom commands and some Vault responses can produce credentials without expiry; check the resulting lease metadata.
 
 fnox supports three approaches depending on your security requirements:
 
@@ -12,13 +16,13 @@ fnox supports three approaches depending on your security requirements:
 2. **Hardware-protected** — store master credentials encrypted on disk, requiring a physical security key (YubiKey or FIDO2) to decrypt
 3. **Prompt-based** — never store master credentials on the machine; paste them in when needed
 
-## Approach 1: Stored Master Credentials
+## Approach 1: stored master credentials
 
 This is the simplest setup. You store the long-lived credentials (e.g., an AWS IAM user's access key) in a fnox provider, and fnox uses them to create short-lived leases automatically via `fnox exec`.
 
 Any provider works here. Choose based on your security requirements:
 
-- **1Password / Bitwarden** — requires authentication (password, biometric, or service account token) to access secrets. Best when you want a gate on every session.
+- **1Password / Bitwarden** — use the vault's authentication and access policy. Prompt frequency depends on its session settings.
 - **OS Keychain** — unlocked at login on most systems. Convenient but offers no additional prompt after login on Linux. macOS may prompt for Touch ID/password on first access.
 - **Age / KMS** — encrypted in git. Good for CI and shared team setups.
 
@@ -33,8 +37,8 @@ vault = "Development"
 
 # Long-lived IAM credentials stored in 1Password
 [secrets]
-AWS_ACCESS_KEY_ID = { provider = "op", value = "AWS IAM/access key" }
-AWS_SECRET_ACCESS_KEY = { provider = "op", value = "AWS IAM/secret key" }
+AWS_ACCESS_KEY_ID = { provider = "op", value = "AWS IAM/access key", env = false }
+AWS_SECRET_ACCESS_KEY = { provider = "op", value = "AWS IAM/secret key", env = false }
 
 # Lease: use those credentials to assume a role and get temp creds
 [leases.aws]
@@ -59,15 +63,16 @@ You can also use `keychain` if you prefer convenience over per-session authentic
 ```toml
 [providers.keychain]
 type = "keychain"
+service = "fnox"
 
 [secrets]
-AWS_ACCESS_KEY_ID = { provider = "keychain" }
-AWS_SECRET_ACCESS_KEY = { provider = "keychain" }
+AWS_ACCESS_KEY_ID = { provider = "keychain", env = false }
+AWS_SECRET_ACCESS_KEY = { provider = "keychain", env = false }
 ```
 
 ```bash
-fnox set AWS_ACCESS_KEY_ID "AKIA..."
-fnox set AWS_SECRET_ACCESS_KEY "wJalr..."
+fnox set AWS_ACCESS_KEY_ID --provider keychain
+fnox set AWS_SECRET_ACCESS_KEY --provider keychain
 ```
 
 The temporary credentials are cached in the lease ledger and reused until they're close to expiring (within 5 minutes of expiry). When they expire, fnox automatically creates a new lease.
@@ -82,7 +87,7 @@ type = "1password"
 vault = "Development"
 
 [secrets]
-GOOGLE_APPLICATION_CREDENTIALS = { provider = "op", value = "GCP Service Account/key file", as_file = true }
+GOOGLE_APPLICATION_CREDENTIALS = { provider = "op", value = "GCP Service Account/key file", as_file = true, env = false }
 
 [leases.gcp]
 type = "gcp-iam"
@@ -105,7 +110,7 @@ type = "1password"
 vault = "Infrastructure"
 
 [secrets]
-VAULT_TOKEN = { provider = "op", value = "Vault/token" }
+VAULT_TOKEN = { provider = "op", value = "Vault/token", env = false }
 
 [leases.vault-aws]
 type = "vault"
@@ -129,18 +134,18 @@ type = "1password"
 vault = "Development"
 
 [secrets]
-AZURE_CLIENT_ID = { provider = "op", value = "Azure SP/client id" }
-AZURE_CLIENT_SECRET = { provider = "op", value = "Azure SP/client secret" }
-AZURE_TENANT_ID = { provider = "op", value = "Azure SP/tenant id" }
+AZURE_CLIENT_ID = { provider = "op", value = "Azure SP/client id", env = false }
+AZURE_CLIENT_SECRET = { provider = "op", value = "Azure SP/client secret", env = false }
+AZURE_TENANT_ID = { provider = "op", value = "Azure SP/tenant id", env = false }
 
 [leases.azure]
 type = "azure-token"
 scope = "https://management.azure.com/.default"
 ```
 
-## Approach 2: Hardware-Protected Master Credentials
+## Approach 2: hardware-protected master credentials
 
-This approach stores master credentials encrypted on disk with a hardware security key required for decryption. It combines the convenience of Approach 1 (no manual paste step each session) with stronger security — decryption is physically impossible without the key.
+This approach stores master credentials encrypted on disk with a hardware security key required for decryption. It combines the convenience of Approach 1 (no manual paste step each session) with stronger security — the hardware is needed to derive the decryption key. Derived keys and resolved values still enter process memory during use.
 
 fnox supports two hardware provider types:
 
@@ -198,17 +203,20 @@ Key points:
 
 ```bash
 # 1. Create the hardware-backed provider (choose one)
-fnox provider add secure yubikey    # YubiKey HMAC-SHA1
-fnox provider add secure fido2      # Any FIDO2 key
+fnox -c fnox.local.toml provider add secure yubikey
+# Or, for a key with hmac-secret support:
+fnox -c fnox.local.toml provider add secure fido2
 
 # 2. Store your master credentials (requires key tap)
-fnox set AWS_ACCESS_KEY_ID "AKIA..." --provider secure
-fnox set AWS_SECRET_ACCESS_KEY "wJalr..." --provider secure
+fnox -c fnox.local.toml set AWS_ACCESS_KEY_ID --provider secure
+fnox -c fnox.local.toml set AWS_SECRET_ACCESS_KEY --provider secure
 ```
+
+Set `env = false` on both stored master secrets in `fnox.local.toml`, as shown above. The explicit `-c` paths in setup keep those definitions in the local file.
 
 ### Daily workflow
 
-```bash
+```text
 $ fnox exec -- aws s3 ls
 Tap your YubiKey...
 # → Derives encryption key from hardware device (one tap per session)
@@ -220,7 +228,7 @@ Tap your YubiKey...
 
 The hardware key tap only happens once per `fnox exec` invocation, even when multiple secrets use the same provider. After the lease is cached, subsequent `fnox exec` calls reuse it without prompting until it's close to expiring.
 
-## Approach 3: Prompt-Based (No Stored Credentials)
+## Approach 3: prompt-based (no stored credentials)
 
 This approach is ideal for remote machines, shared servers, or environments where you don't want master credentials persisted to disk at all. Instead of storing credentials in a provider, you paste them in when `fnox lease create` prompts you.
 
@@ -278,27 +286,29 @@ When the lease expires, run `fnox lease create aws -i` again and paste fresh cre
 
 If you run `fnox exec` without having created a lease and without stored master credentials, it skips the lease gracefully:
 
-```
+```text
 Skipping lease 'aws': AWS credentials not found. Run 'aws sso login' or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY.
 Run 'fnox lease create -i aws' to set up credentials interactively.
 ```
 
 The subprocess still runs — just without the lease credentials. This means other secrets and leases that _are_ available will still be injected.
 
-## Supported Backends
+## Supported backends
 
-| Backend                              | Type           | Max Duration | Revocation              |
-| ------------------------------------ | -------------- | ------------ | ----------------------- |
-| [AWS STS](/leases/aws-sts)           | `aws-sts`      | 12 hours     | No-op (native TTL)      |
-| [GCP IAM](/leases/gcp-iam)           | `gcp-iam`      | 1 hour       | No-op (native TTL)      |
-| [Azure Token](/leases/azure-token)   | `azure-token`  | ~1 hour      | No-op (native TTL)      |
-| [HashiCorp Vault](/leases/vault)     | `vault`        | 24 hours     | Vault lease revocation  |
-| [Cloudflare](/leases/cloudflare)     | `cloudflare`   | 24 hours     | Token deletion          |
-| [GitHub App](/leases/github-app)     | `github-app`   | 1 hour       | No-op (native TTL)      |
-| [GitHub OAuth](/leases/github-oauth) | `github-oauth` | ~8 hours     | No-op (native TTL)      |
-| [Custom Command](/leases/command)    | `command`      | 24 hours     | Optional revoke command |
+These are the backend limits documented by fnox. Account policies or the service can impose a shorter lifetime. Revoking a ledger entry does not necessarily invalidate the remote credential immediately.
 
-## Managing Leases
+| Backend                              | Type           | Max Duration | Revocation                    |
+| ------------------------------------ | -------------- | ------------ | ----------------------------- |
+| [AWS STS](/leases/aws-sts)           | `aws-sts`      | 12 hours     | No-op (native TTL)            |
+| [GCP IAM](/leases/gcp-iam)           | `gcp-iam`      | 1 hour       | No-op (native TTL)            |
+| [Azure Token](/leases/azure-token)   | `azure-token`  | ~1 hour      | No-op (native TTL)            |
+| [HashiCorp Vault](/leases/vault)     | `vault`        | 24 hours     | Vault lease revocation        |
+| [Cloudflare](/leases/cloudflare)     | `cloudflare`   | 24 hours     | Token deletion                |
+| [GitHub App](/leases/github-app)     | `github-app`   | 1 hour       | Installation token revocation |
+| [GitHub OAuth](/leases/github-oauth) | `github-oauth` | ~8 hours     | No-op (native TTL)            |
+| [Custom Command](/leases/command)    | `command`      | 24 hours     | Optional revoke command       |
+
+## Managing leases
 
 ```bash
 # List active leases
@@ -314,7 +324,7 @@ fnox lease revoke <lease-id>
 fnox lease cleanup
 ```
 
-## How Caching Works
+## How caching works
 
 fnox caches lease credentials in a per-project ledger file (`~/.local/state/fnox/leases/<hash>.toml`). Cached leases are reused until:
 
@@ -323,3 +333,9 @@ fnox caches lease credentials in a per-project ledger file (`~/.local/state/fnox
 - They're explicitly revoked
 
 The ledger automatically prunes entries that have been expired or revoked for more than 24 hours.
+
+## Next steps
+
+- [Lease commands](/cli/lease): create, inspect, revoke, and clean up leases.
+- [Hardware providers](/providers/fido2): protect bootstrap credentials at rest.
+- [Configuration reference](/reference/configuration#lease-backend-settings): place leases in profiles.

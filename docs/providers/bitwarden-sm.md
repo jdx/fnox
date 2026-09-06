@@ -1,29 +1,39 @@
+---
+description: "Read Bitwarden Secrets Manager values with the bws CLI, a machine-account access token, and secret UUIDs."
+---
+
 # Bitwarden Secrets Manager
 
 Integrate with [Bitwarden Secrets Manager](https://bitwarden.com/products/secrets-manager/) to retrieve secrets via the `bws` CLI. This is a separate product from Bitwarden Password Manager — it's designed for DevOps and infrastructure secrets.
 
-## Quick Start
+## Quick start
 
-```bash
-# 1. Install bws CLI (see Installation below)
+Create a project and access token in Bitwarden Secrets Manager first. This provider uses `bws`, not the password manager's `bw` CLI.
+
+```sh
+# Install bws CLI (see Installation below)
 brew install bws
 
-# 2. Set access token
-export BWS_ACCESS_TOKEN=<your-access-token>
+# Set access token
+export BWS_ACCESS_TOKEN="your-access-token"
+```
 
-# 3. Configure provider
-cat >> fnox.toml << 'EOF'
+Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+
+```toml
 [providers]
 bws = { type = "bitwarden-sm", project_id = "your-project-id" }
-EOF
+```
 
-# 4. Reference secrets by name
-cat >> fnox.toml << 'EOF'
+Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+
+```toml
 [secrets]
 DATABASE_URL = { provider = "bws", value = "database-url" }
-EOF
+```
 
-# 5. Use it
+```sh
+# Use it
 fnox get DATABASE_URL
 fnox exec -- npm start
 ```
@@ -48,7 +58,7 @@ brew install bws
 
 ## Setup
 
-### 1. Create an Access Token
+### 1. Create an access token
 
 In the Bitwarden Secrets Manager web console:
 
@@ -57,17 +67,17 @@ In the Bitwarden Secrets Manager web console:
 3. Generate an access token
 4. Note the project ID you want to access
 
-### 2. Set the Access Token
+### 2. Set the access token
 
 ```bash
 # Set directly
-export BWS_ACCESS_TOKEN=<your-access-token>
+export BWS_ACCESS_TOKEN="your-access-token"
 
 # Or store encrypted with age for bootstrap
 fnox set BWS_ACCESS_TOKEN "<your-access-token>" --provider age
 ```
 
-### 3. Configure the Provider
+### 3. Configure the provider
 
 ```toml
 [providers]
@@ -76,7 +86,7 @@ bws = { type = "bitwarden-sm", project_id = "your-project-id" }
 
 The `project_id` can also be provided via the `BWS_PROJECT_ID` environment variable instead of in the config file.
 
-## Referencing Secrets
+## Referencing secrets
 
 Secrets are referenced by their key name in Bitwarden Secrets Manager:
 
@@ -86,7 +96,7 @@ DATABASE_URL = { provider = "bws", value = "database-url" }
 API_KEY = { provider = "bws", value = "stripe-api-key" }
 ```
 
-### Field Access
+### Field access
 
 By default, the secret's `value` field is returned. You can also access `key` and `note` fields:
 
@@ -104,7 +114,7 @@ MY_KEY = { provider = "bws", value = "my-secret-name/key" }
 
 Supported fields: `value` (default), `key`, `note`
 
-## Provider Configuration
+## Provider configuration
 
 ```toml
 [providers]
@@ -116,7 +126,7 @@ bws = { type = "bitwarden-sm", project_id = "...", profile = "..." }
 | `project_id` | No       | BSM project ID (or set `BWS_PROJECT_ID` env var)      |
 | `profile`    | No       | bws CLI profile (for self-hosted or multiple servers) |
 
-## Environment Variables
+## Environment variables
 
 | Variable                | Description                            |
 | ----------------------- | -------------------------------------- |
@@ -140,7 +150,7 @@ fnox list
 fnox set NEW_SECRET "secret-value" --provider bws --key-name "my-new-secret"
 ```
 
-## Multi-Environment Example
+## Multi-environment example
 
 ```toml
 [providers]
@@ -158,7 +168,7 @@ bws = { type = "bitwarden-sm", project_id = "prod-project-id" }
 DATABASE_URL = { provider = "bws", value = "prod-database-url" }
 ```
 
-## CI/CD Example
+## CI/CD example
 
 ### GitHub Actions
 
@@ -180,7 +190,7 @@ jobs:
           fnox exec -- ./deploy.sh
 ```
 
-## Bitwarden SM vs Bitwarden Password Manager
+## Bitwarden sm vs Bitwarden password manager
 
 | Feature | Bitwarden SM (`bitwarden-sm`) | Bitwarden PM (`bitwarden`) |
 | ------- | ----------------------------- | -------------------------- |
@@ -227,7 +237,7 @@ bws secret list <project-id> --output json | jq '.[].key'
 brew install bws
 ```
 
-## Next Steps
+## Next steps
 
 - [Bitwarden Password Manager](/providers/bitwarden) - For personal vault secrets
 - [AWS Secrets Manager](/providers/aws-sm) - AWS alternative

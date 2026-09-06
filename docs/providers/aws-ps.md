@@ -1,29 +1,37 @@
+---
+description: "Read and write AWS Systems Manager Parameter Store secrets with fnox, including path prefixes and environment-specific profiles."
+---
+
 # AWS Parameter Store
 
-AWS Systems Manager Parameter Store provides hierarchical secret storage with path-based organization. It's a cost-effective alternative to AWS Secrets Manager for simpler use cases.
+AWS Systems Manager Parameter Store stores values under hierarchical paths. Use the `aws-ps` provider to read and write parameters, including encrypted `SecureString` values.
 
-## Quick Start
+## Quick start
 
-```bash
-# 1. Configure provider in fnox.toml
-cat >> fnox.toml << 'EOF'
+Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+
+```toml
 [providers]
 ps = { type = "aws-ps", region = "us-east-1", prefix = "/myapp/prod/" }
-EOF
+```
 
-# 2. Create parameter in AWS
+```sh
+# Create parameter in AWS
 aws ssm put-parameter \
   --name "/myapp/prod/database-url" \
   --value "postgresql://prod.example.com/db" \
   --type "SecureString"
+```
 
-# 3. Reference in fnox.toml
-cat >> fnox.toml << 'EOF'
+Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+
+```toml
 [secrets]
 DATABASE_URL = { provider = "ps", value = "database-url" }  # With prefix, fetches "/myapp/prod/database-url"
-EOF
+```
 
-# 4. Fetch secret
+```sh
+# Fetch secret
 fnox get DATABASE_URL
 ```
 
@@ -33,9 +41,9 @@ fnox get DATABASE_URL
 - AWS credentials configured (CLI, environment variables, or IAM role)
 - IAM permissions (see below)
 
-## IAM Permissions
+## IAM permissions
 
-### Read-Only Access (Minimum)
+### Read-only access (minimum)
 
 ```json
 {
@@ -61,7 +69,7 @@ fnox get DATABASE_URL
 The `ssm:DescribeParameters` action **must** use `"Resource": "*"` and cannot be scoped to specific ARNs.
 :::
 
-### Full Access (For Testing)
+### Full access (for testing)
 
 ```json
 {
@@ -90,11 +98,11 @@ The `ssm:DescribeParameters` action **must** use `"Resource": "*"` and cannot be
 
 ## Configuration
 
-### Configure AWS Credentials
+### Configure AWS credentials
 
 Choose one:
 
-#### Option 1: Environment Variables
+#### Option 1: environment variables
 
 ```bash
 export AWS_ACCESS_KEY_ID="AKIA..."
@@ -102,7 +110,7 @@ export AWS_SECRET_ACCESS_KEY="..."
 export AWS_REGION="us-east-1"
 ```
 
-#### Option 2: AWS CLI Profile
+#### Option 2: AWS CLI profile
 
 ```bash
 aws configure
@@ -111,7 +119,7 @@ aws configure
 export AWS_PROFILE=myapp
 ```
 
-#### Option 3: IAM Role (Automatic on AWS)
+#### Option 3: IAM role (automatic on AWS)
 
 If running on EC2, ECS, Lambda, or other AWS services:
 
@@ -120,13 +128,11 @@ If running on EC2, ECS, Lambda, or other AWS services:
 # Credentials are automatic via instance metadata
 ```
 
-### Configure fnox Provider
+### Configure fnox provider
 
 ```toml
 [providers]
-ps = { type = "aws-ps", region = "us-east-1" }  # minimal config
-
-# With optional fields:
+# Include only the optional fields you need.
 ps = { type = "aws-ps", region = "us-east-1", profile = "my-aws-profile", prefix = "/myapp/prod/" }
 ```
 
@@ -146,7 +152,7 @@ Set `role_arn` to have fnox call `sts:AssumeRole` and use the resulting credenti
 ps = { type = "aws-ps", region = "eu-west-1", profile = "sso-dev", role_arn = "arn:aws:iam::123456789012:role/param-reader" }
 ```
 
-## Creating Parameters
+## Creating parameters
 
 ### Via AWS CLI
 
@@ -179,7 +185,7 @@ aws ssm put-parameter \
 fnox set DATABASE_URL "postgresql://prod.db.example.com/mydb" --provider ps
 ```
 
-### Via AWS Console
+### Via AWS console
 
 1. Go to [AWS Systems Manager Console](https://console.aws.amazon.com/systems-manager/parameters)
 2. Click "Create parameter"
@@ -188,7 +194,7 @@ fnox set DATABASE_URL "postgresql://prod.db.example.com/mydb" --provider ps
 5. Enter the value
 6. Create
 
-## Referencing Parameters
+## Referencing parameters
 
 Add references to `fnox.toml`:
 
@@ -201,27 +207,27 @@ API_KEY = { provider = "ps", value = "api-key" }  # → Fetches "/myapp/prod/api
 
 ## Usage
 
-### Get a Secret
+### Get a secret
 
 ```bash
 fnox get DATABASE_URL
 ```
 
-### Run Commands
+### Run commands
 
 ```bash
 # Fetches all secrets from Parameter Store
 fnox exec -- ./start-server.sh
 ```
 
-### Use Different Profiles
+### Use different profiles
 
 ```bash
 # Different profile for different environments
 fnox exec --profile production -- ./deploy.sh
 ```
 
-## Prefix Behavior
+## Prefix behavior
 
 The `prefix` is prepended to the `value`:
 
@@ -244,11 +250,11 @@ ps = { type = "aws-ps", region = "us-east-1" }  # No prefix
 DATABASE_URL = { provider = "ps", value = "/myapp/prod/database-url" }  # → Full path
 ```
 
-## Hierarchical Organization
+## Hierarchical organization
 
 Parameter Store supports path-based organization:
 
-```
+```text
 /myapp/
   prod/
     database/
@@ -275,7 +281,7 @@ DATABASE_URL = { provider = "prod", value = "database/url" }
 DATABASE_URL = { provider = "staging", value = "database/url" }
 ```
 
-## Multi-Environment Example
+## Multi-environment example
 
 ```toml
 # Development: age encryption
@@ -313,21 +319,12 @@ fnox get DATABASE_URL --profile production
 
 ## Costs
 
-AWS Parameter Store pricing:
-
-- **Standard parameters**: Free (up to 10,000 parameters)
-- **Advanced parameters**: $0.05 per parameter per month
-- **API calls**: Free for standard tier
-
-::: tip Cost Optimization
-Parameter Store standard tier is free for most use cases. Use it for configuration values and simple secrets. Reserve AWS Secrets Manager for secrets that need automatic rotation.
-:::
+Charges depend on region, storage, key type or tier, and API usage. Consult the [service pricing](https://aws.amazon.com/systems-manager/pricing/) for current rates. fnox does not change the provider's billing model.
 
 ## Comparison: Parameter Store vs Secrets Manager
 
 | Feature       | Parameter Store               | Secrets Manager           |
 | ------------- | ----------------------------- | ------------------------- |
-| Cost          | Free (standard tier)          | $0.40/secret/month        |
 | Max Size      | 4KB (8KB advanced)            | 64KB                      |
 | Rotation      | Manual                        | Automatic                 |
 | Versioning    | Limited                       | Full versioning           |
@@ -348,7 +345,7 @@ Parameter Store standard tier is free for most use cases. Use it for configurati
 - You have complex JSON secrets
 - You need full versioning history
 
-## CI/CD Example
+## CI/CD example
 
 ### GitHub Actions
 
@@ -376,22 +373,9 @@ jobs:
           fnox exec --profile production -- ./deploy.sh
 ```
 
-## Pros
+## Usage notes
 
-- ✅ Free for standard tier (up to 10,000 parameters)
-- ✅ Hierarchical path-based organization
-- ✅ IAM access control
-- ✅ CloudTrail audit logs
-- ✅ Secrets never in git
-- ✅ Simple and straightforward
-
-## Cons
-
-- ❌ No automatic rotation (use Secrets Manager for that)
-- ❌ Limited versioning
-- ❌ Smaller size limit (4KB standard, 8KB advanced)
-- ❌ Requires AWS account and network access
-- ❌ AWS vendor lock-in
+Use `SecureString` for sensitive parameter values. The provider applies its prefix to the configured parameter name; include the leading and trailing separators you need. Refresh any fnox cache after updating a parameter.
 
 ## Troubleshooting
 
@@ -429,7 +413,7 @@ grep region fnox.toml
 echo $AWS_REGION
 ```
 
-## Next Steps
+## Next steps
 
 - [AWS Secrets Manager](/providers/aws-sm) - For automatic rotation and complex secrets
 - [AWS KMS](/providers/aws-kms) - For encrypting secrets in git

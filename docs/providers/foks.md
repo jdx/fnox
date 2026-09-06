@@ -1,30 +1,37 @@
+---
+description: "Read and write FOKS key-value secrets with fnox using personal or team namespaces and interactive or bot authentication."
+---
+
 # FOKS
 
 Integrate with [FOKS](https://foks.pub) — the Federated Open Key Service — to store secrets in an end-to-end encrypted, self-hostable key-value store. Secrets are encrypted on the client; the server only ever sees ciphertext.
 
 FOKS pairs well with fnox for teams that want their secrets manager to be open source, federated, and free of cloud-vendor lock-in. The hosted instance at [foks.app](https://foks.app) and self-hosted FOKS servers behave identically. fnox just shells out to the `foks` CLI either way.
 
-## Quick Start
+## Quick start
 
-```bash
-# 1. Install the foks CLI
+```sh
+# Install the foks CLI
 brew install foks            # macOS / Linuxbrew
 # or: curl -fsSL https://pkgs.foks.pub/install.sh | sh && apt-get install foks  # Debian/Ubuntu
 
-# 2. Start the agent and sign up (or log in)
+# Start the agent and sign up (or log in)
 foks ctl start
 foks signup
+```
 
-# 3. Configure the FOKS provider
-cat >> fnox.toml << 'EOF'
+Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+
+```toml
 [providers]
 foks = { type = "foks", prefix = "/fnox/" }
 
 [secrets]
 DATABASE_URL = { provider = "foks", value = "DATABASE_URL" }
-EOF
+```
 
-# 4. Store a secret and read it back
+```sh
+# Store a secret and read it back
 fnox set DATABASE_URL "postgres://..." --provider foks
 fnox get DATABASE_URL
 ```
@@ -78,7 +85,7 @@ foks signup    # new user
 foks login     # existing user, new device
 ```
 
-### 3. (Optional) Create a team for shared secrets
+### 3. (Optional) create a team for shared secrets
 
 If you want to share secrets with teammates, create a FOKS team:
 
@@ -104,7 +111,7 @@ foks = { type = "foks", prefix = "/fnox/" }
 - `host` — The FOKS server hostname (e.g. `foks.app` or your self-hosted server). Required for non-interactive bot-token auth (see [CI/CD](#cicd)). Falls back to `FNOX_FOKS_HOST` / `FOKS_HOST`.
 - `bot_token` — A FOKS bot token for non-interactive auth (CI). Almost always you want to leave this unset and supply it via the `FOKS_BOT_TOKEN` env var instead, so it isn't checked into your config. Also accepts `FNOX_FOKS_BOT_TOKEN`.
 
-## Referencing Secrets
+## Referencing secrets
 
 ```toml
 [secrets]
@@ -127,7 +134,7 @@ fnox get DATABASE_URL
 fnox exec -- npm start
 ```
 
-## Personal vs Team Secrets
+## Personal vs team secrets
 
 Use named provider instances to mix personal and team-scoped secrets in the same config:
 
@@ -144,7 +151,7 @@ DEPLOY_KEY     = { provider = "ops", value = "deploy/key" }
 
 `PERSONAL_TOKEN` is read from your personal namespace; the rest are read from the `ops` team's namespace and stay accessible to teammates.
 
-## CI/CD
+## CI/CD {#cicd}
 
 For non-interactive environments, configure the provider with a `host` and let fnox handle authentication via a FOKS bot token. On the first auth failure, the provider runs `foks bot use --host <host>` with the token from the `FOKS_BOT_TOKEN` env var, then transparently retries.
 
@@ -179,19 +186,9 @@ jobs:
 
 If you'd rather keep `host` out of `fnox.toml`, set it via `FOKS_HOST` in the workflow env. Likewise, `bot_token` can live in the config (encrypted with a bootstrap provider like `age`) instead of the env var, but the env var is usually simpler.
 
-## Pros
+## Usage notes
 
-- ✅ End-to-end encrypted — the FOKS server never sees plaintext
-- ✅ Open source and self-hostable
-- ✅ Federated: a self-hosted FOKS server interoperates with the hosted service
-- ✅ Teams have first-class shared namespaces
-- ✅ Hierarchical KV paths and multiple devices per identity
-
-## Cons
-
-- ❌ Newer / smaller ecosystem than Vault, AWS Secrets Manager, etc.
-- ❌ Requires the `foks` agent to be running locally
-- ❌ CI integration requires a bot-token bootstrap step
+The provider invokes the FOKS CLI and requires its local agent. Personal and team namespaces are selected by provider configuration. CI needs the host and a bot-token bootstrap.
 
 ## Troubleshooting
 
@@ -228,7 +225,7 @@ If you set a `team` in your provider config, scope the listing to the team:
 foks kv ls --team my-team /
 ```
 
-## Next Steps
+## Next steps
 
 - [HashiCorp Vault](/providers/vault) — Closest comparable self-hosted alternative
 - [password-store](/providers/password-store) — GPG-based local alternative

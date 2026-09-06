@@ -1,72 +1,61 @@
+---
+description: "Set up a fnox development checkout, run checks, edit documentation, and prepare a contribution for review."
+---
+
 # Contributing
 
-Thank you for your interest in contributing to fnox.
+Contributions should solve a clear problem within fnox's scope. For a substantial change, discuss the direction first in [GitHub Discussions](https://github.com/jdx/fnox/discussions) or [Discord](https://discord.gg/UBa7pJUN7Z). Small, obvious fixes can go straight to a pull request.
 
-## Contribution Expectations
+## What to expect in review
 
-Before opening a PR, unless it is something obvious, consider creating a
-discussion or mentioning what you plan to do in
-[Discord](https://discord.gg/UBa7pJUN7Z). The important part is to settle the
-direction before much review happens. fnox has a specific scope and design
-taste. I am comfortable saying no to changes that do not clearly fit.
+CI must pass and automated review comments must be addressed before maintainer review. Explain the problem, the resulting behavior, and how you verified it.
 
-Before I review a PR, CI must be passing and all automated AI review comments
-must be addressed. If those are still open, assume I will wait to look at the
-PR.
+fnox has a deliberate scope and design direction. A change may be declined because it does not fit, introduces too much complexity, or is not ready for review. Maintainer time is limited across many projects, so a rejection may be brief and detailed coaching may not be available.
 
-If I am on the fence about a contribution, I will probably reject it for that
-reason alone. If I did not do this, fnox would suffer from feature bloat. I
-may also reject a PR if the quality is poor enough that I do not have confidence
-the contributor can get it across the finish line. I do not have time to coach
-contributors.
+## Development setup
 
-I get hundreds of PRs per week across my projects, so I do not have time to
-respond to every PR with detailed context. A rejection may be brief.
-
-## Code Style
-
-fnox uses [hk](https://hk.jdx.dev) for linting and formatting. Run the checks
-before opening a PR:
+Clone the repository, install its tools, and build the debug binary:
 
 ```sh
-hk check --all
-hk fix --all
-```
-
-fnox also exposes these as the wrapper tasks `mise run lint` and
-`mise run lint-fix`; prefer those.
-
-## Commit and PR Titles
-
-Use Conventional Commits for commit messages and PR titles. Examples:
-
-- `fix: handle missing config file`
-- `docs: clarify installation steps`
-- `feat: add quiet output mode`
-
-## Testing
-
-Run the relevant tests for the code you changed, and the full CI-style task when
-practical:
-
-```sh
-mise run test:cargo   # Rust unit and integration tests
-mise run test:bats    # End-to-end CLI tests (builds first)
-mise run test         # Both
-mise run ci           # Build, test, and lint
-```
-
-Run `mise tasks` or check `mise.toml` for the complete list.
-
-## Development
-
-Install project tools with mise, then build:
-
-```sh
+git clone https://github.com/jdx/fnox
+cd fnox
 mise install
 mise run build
 ```
 
-Run the lint and test tasks above before opening a PR. See
-[CONTRIBUTING.md](https://github.com/jdx/fnox/blob/main/CONTRIBUTING.md) in the
-repository for notes on the mbx build cache.
+Use the repository's mise tasks so tool versions and the Cargo build wrapper are consistent. See [CONTRIBUTING.md](https://github.com/jdx/fnox/blob/main/CONTRIBUTING.md#mbx-build-cache) for the mbx cache and bypass procedure when the wrapper fails.
+
+## Checks
+
+```sh
+mise run test:cargo
+mise run build
+mise run test:bats -- test/init.bats
+mise run lint
+```
+
+Build before running Bats tests; `test:bats` uses the existing binary. Use `mise run test` for both test suites and `mise run ci` for the full set of build, test, and lint tasks. Some provider tests require credentials or a local service; see the [test guide](https://github.com/jdx/fnox/blob/main/test/README.md).
+
+Run `mise run lint-fix` to apply formatting fixes. Run tests appropriate to the behavior you changed.
+
+## Documentation changes
+
+```sh
+aube install
+aube run docs:dev
+aube run docs:build
+```
+
+Review the affected page in a browser, including narrow layouts and both themes when changing styles. The production build checks internal links, anchors, and social metadata.
+
+CLI pages are generated. Update their source help or the maintained examples, then regenerate them; see the [documentation contributor guide](https://github.com/jdx/fnox/blob/main/docs/README.md#generated-reference).
+
+## Commit and pull request titles
+
+Use Conventional Commits with a lowercase, imperative description:
+
+- `fix(aws-sm): handle missing secrets`
+- `docs: clarify installation steps`
+- `feat(exec): add a command option`
+
+Follow the [repository conventions](https://github.com/jdx/fnox/blob/main/AGENTS.md) for accepted types and scopes, MSRV, dependency changes, and AI assistance disclosure. Keep dependency updates focused and do not raise the MSRV to accommodate a dependency.

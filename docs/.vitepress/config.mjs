@@ -1,3 +1,4 @@
+import { sidebar } from "./navigation.mjs";
 import { socialCard, writeSocialCard } from "./social-images.mjs";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -42,144 +43,44 @@ export default defineConfig({
   title: "fnox",
   description: siteDescription,
   base: "/",
-  appearance: "force-dark",
+  appearance: "dark",
   sitemap: { hostname: siteUrl },
+  srcExclude: ["README.md"],
 
   themeConfig: {
     logo: "/logo.svg",
+    outline: { level: [2, 3], label: "On this page" },
+    editLink: {
+      pattern: ({ relativePath }) =>
+        relativePath.startsWith("cli/")
+          ? "https://github.com/jdx/fnox/blob/main/docs/README.md#generated-reference"
+          : `https://github.com/jdx/fnox/edit/main/docs/${relativePath}`,
+      text: "Improve this page",
+    },
 
     nav: [
-      { text: "Guide", link: "/guide/what-is-fnox" },
+      { text: "Guide", link: "/guide/quick-start" },
       { text: "Providers", link: "/providers/overview" },
-      { text: "CLI Reference", link: "/cli/" },
-      { text: "Reference", link: "/reference/environment" },
+      {
+        text: "Leases",
+        link: "/guide/leases",
+        activeMatch: "/leases/|/guide/leases",
+      },
+      {
+        text: "Reference",
+        items: [
+          { text: "Commands", link: "/cli/" },
+          { text: "Configuration", link: "/reference/configuration" },
+          { text: "Environment variables", link: "/reference/environment" },
+        ],
+      },
       {
         text: `v${latestVersion}`,
         link: "https://github.com/jdx/fnox/releases",
       },
     ],
 
-    sidebar: [
-      {
-        text: "Introduction",
-        items: [
-          { text: "What is fnox?", link: "/guide/what-is-fnox" },
-          { text: "Installation", link: "/guide/installation" },
-          { text: "Quick Start", link: "/guide/quick-start" },
-          { text: "How It Works", link: "/guide/how-it-works" },
-          { text: "Contributing", link: "/contributing" },
-        ],
-      },
-      {
-        text: "Features",
-        items: [
-          { text: "Shell Integration", link: "/guide/shell-integration" },
-          { text: "Syncing Secrets Locally", link: "/guide/sync" },
-          { text: "Per-User Daemon", link: "/guide/daemon" },
-          { text: "Credential Proxy", link: "/guide/proxy" },
-          { text: "Mise Integration", link: "/guide/mise-integration" },
-          { text: "TUI Dashboard", link: "/guide/tui" },
-          { text: "Profiles", link: "/guide/profiles" },
-          { text: "Hierarchical Config", link: "/guide/hierarchical-config" },
-          {
-            text: "Handling Missing Secrets",
-            link: "/guide/missing-secrets",
-          },
-          { text: "Import/Export", link: "/guide/import-export" },
-          { text: "Credential Leases", link: "/guide/leases" },
-          { text: "MCP Server", link: "/guide/mcp" },
-        ],
-      },
-      {
-        text: "Lease Backends",
-        collapsed: true,
-        items: [
-          { text: "AWS STS", link: "/leases/aws-sts" },
-          { text: "GCP IAM", link: "/leases/gcp-iam" },
-          { text: "Azure Token", link: "/leases/azure-token" },
-          { text: "HashiCorp Vault", link: "/leases/vault" },
-          { text: "Custom Command", link: "/leases/command" },
-        ],
-      },
-      {
-        text: "Examples",
-        items: [
-          { text: "Golden Path Setup", link: "/guide/golden-path" },
-          { text: "Real-World Setup", link: "/guide/real-world-example" },
-        ],
-      },
-      {
-        text: "Providers",
-        items: [
-          { text: "Overview", link: "/providers/overview" },
-          {
-            text: "Encryption (in git)",
-            collapsed: true,
-            items: [
-              { text: "Age Encryption", link: "/providers/age" },
-              { text: "FIDO2", link: "/providers/fido2" },
-              { text: "YubiKey", link: "/providers/yubikey" },
-              { text: "AWS KMS", link: "/providers/aws-kms" },
-              { text: "Azure Key Vault Keys", link: "/providers/azure-kms" },
-              { text: "Google Cloud KMS", link: "/providers/gcp-kms" },
-            ],
-          },
-          {
-            text: "Cloud Secret Storage",
-            collapsed: true,
-            items: [
-              { text: "AWS Parameter Store", link: "/providers/aws-ps" },
-              { text: "AWS Secrets Manager", link: "/providers/aws-sm" },
-              { text: "Azure App Configuration", link: "/providers/azure-ac" },
-              { text: "Azure Key Vault Secrets", link: "/providers/azure-sm" },
-              { text: "Doppler", link: "/providers/doppler" },
-              { text: "FOKS", link: "/providers/foks" },
-              { text: "GCP Secret Manager", link: "/providers/gcp-sm" },
-              {
-                text: "Bitwarden Secrets Manager",
-                link: "/providers/bitwarden-sm",
-              },
-              { text: "HashiCorp Vault", link: "/providers/vault" },
-            ],
-          },
-          {
-            text: "Password Managers & Secret Services",
-            collapsed: true,
-            items: [
-              { text: "1Password", link: "/providers/1password" },
-              { text: "Bitwarden", link: "/providers/bitwarden" },
-              { text: "Infisical", link: "/providers/infisical" },
-              { text: "Proton Pass", link: "/providers/proton-pass" },
-            ],
-          },
-          {
-            text: "Local Storage",
-            collapsed: true,
-            items: [
-              { text: "OS Keychain", link: "/providers/keychain" },
-              { text: "KeePass", link: "/providers/keepass" },
-              { text: "password-store", link: "/providers/password-store" },
-              { text: "Plain Text", link: "/providers/plain" },
-            ],
-          },
-        ],
-      },
-      {
-        text: "CLI Reference",
-        link: "/cli/",
-        items: commands.map((cmd) => ({
-          text: cmd.join(" "),
-          link: `/cli/${cmd.join("/")}`,
-        })),
-      },
-      {
-        text: "Reference",
-        items: [
-          { text: "Environment Variables", link: "/reference/environment" },
-          { text: "Configuration", link: "/reference/configuration" },
-        ],
-      },
-    ],
+    sidebar: sidebar(commands),
 
     socialLinks: [{ icon: "github", link: "https://github.com/jdx/fnox" }],
 
@@ -252,7 +153,7 @@ export default defineConfig({
       },
     ],
     ["link", { rel: "manifest", href: "/site.webmanifest" }],
-    ["meta", { name: "theme-color", content: "#0d0221" }],
+    ["meta", { name: "theme-color", content: "#0b1018" }],
     ["meta", { property: "og:site_name", content: "fnox" }],
     ["meta", { property: "og:type", content: "website" }],
     ["meta", { property: "og:locale", content: "en_US" }],

@@ -101,6 +101,7 @@ run = [
   "usage g markdown -mf fnox.usage.kdl --out-dir docs/cli --url-prefix /cli --html-encode",
   "perl -pi -e 'if (/^```$/) { s/$/sh/ unless $in_fence; $in_fence = !$in_fence }' docs/cli/configuration.md",
   "usage g json -f fnox.usage.kdl > docs/cli/commands.json",
+  "node docs/.vitepress/enrich-cli.mjs",
   "prettier --write docs/cli",
 ]
 

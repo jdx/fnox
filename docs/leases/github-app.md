@@ -1,3 +1,7 @@
+---
+description: "Create scoped GitHub App installation tokens with fnox using an app ID, installation ID, and private key."
+---
+
 # GitHub App
 
 The `github-app` lease backend creates short-lived [GitHub App installation access tokens](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app) using a GitHub App's private key. Installation tokens expire after 1 hour (GitHub's hard limit) and can be scoped to specific permissions and repositories.
@@ -55,7 +59,7 @@ The backend needs a GitHub App private key. fnox looks for it in order:
 
 If neither is found, fnox prints:
 
-```
+```text
 GitHub App private key not found. Set FNOX_GITHUB_APP_PRIVATE_KEY or configure private_key_file pointing to a PEM file.
 ```
 
@@ -75,7 +79,7 @@ curl -H "Authorization: Bearer $JWT" \
 
 In your GitHub App settings, scroll to "Private keys" and click "Generate a private key". Save the downloaded PEM file to a secure location.
 
-## Credentials Produced
+## Credentials produced
 
 | Environment Variable | Description                           |
 | -------------------- | ------------------------------------- |
@@ -145,7 +149,7 @@ type = "1password"
 vault = "Infrastructure"
 
 [secrets]
-FNOX_GITHUB_APP_PRIVATE_KEY = { provider = "op", value = "GitHub App/private key" }
+FNOX_GITHUB_APP_PRIVATE_KEY = { provider = "op", value = "GitHub App/private key", env = false }
 
 [leases.github]
 type = "github-app"
@@ -153,7 +157,7 @@ app_id = "12345"
 installation_id = "67890"
 ```
 
-fnox resolves the secret first, then the lease backend picks it up from the environment.
+fnox resolves the private key for the lease backend internally. `env = false` keeps it out of normal subprocess injection; only the generated installation token is passed to the command.
 
 ### Custom env var
 
@@ -195,6 +199,6 @@ api_base = "https://github.example.com/api/v3"
 
 See the [GitHub API docs](https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app) for the full list.
 
-## See Also
+## See also
 
 - [Credential Leases](/guide/leases) — overview and approaches

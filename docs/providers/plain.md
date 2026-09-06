@@ -1,173 +1,61 @@
-# Plain Text
+---
+description: "Use plaintext defaults for non-sensitive settings and understand what fnox writes when no provider is selected."
+---
 
-Store secrets as plain text (for default values only!).
+# Plaintext defaults
 
-## Usage
+Use plaintext for non-sensitive settings such as log levels, ports, and public URLs. Plaintext values are readable by anyone with access to the config file.
 
-Plain text is the default when no provider is specified:
+## Default values
 
-```toml
-[secrets]
-NODE_ENV = { default = "development" }  # ← Plain text, safe for non-sensitive defaults
-LOG_LEVEL = { default = "info" }  # ← Plain text
-API_TIMEOUT = { default = "30" }  # ← Plain text
-```
-
-There is also an explicit `plain` provider (`type = "plain"`) that returns `value` verbatim, with no encryption. It is useful for tests and non-sensitive values that should still go through a provider:
-
-```toml
-[providers]
-plain = { type = "plain" }
-
-[secrets]
-LOG_LEVEL = { provider = "plain", value = "info" }
-```
-
-## When Plain Text is Appropriate
-
-### 1. Non-Sensitive Defaults
+A secret can provide a default without a provider:
 
 ```toml
 [secrets]
+LOG_LEVEL = { default = "info" }
 PORT = { default = "3000" }
-HOST = { default = "localhost" }
-NODE_ENV = { default = "development" }
-LOG_LEVEL = { default = "info" }
+API_URL = { default = "http://localhost:3000" }
 ```
 
-### 2. Public Configuration
+`fnox set` also writes a plaintext default when neither the secret nor the configuration selects a provider. To encrypt a value, configure an [encryption provider](/providers/overview#encryption-in-your-config) first.
+
+## Explicit plain provider
+
+The `plain` provider returns `value` unchanged:
 
 ```toml
+[providers.plain]
+type = "plain"
+
 [secrets]
-PUBLIC_API_URL = { default = "https://api.example.com" }
-CDN_URL = { default = "https://cdn.example.com" }
+LOG_LEVEL = { provider = "plain", value = "debug" }
 ```
 
-### 3. Development Fallbacks
+Use this when a test or configuration needs a provider-backed value without encryption. A `default` is usually simpler for public settings.
+
+## Fallbacks
+
+A remote or encrypted secret can have a non-sensitive fallback:
 
 ```toml
+[providers.aws]
+type = "aws-sm"
+region = "us-east-1"
+
 [secrets]
-DATABASE_URL = { provider = "age", value = "encrypted-production-db...", default = "postgresql://localhost/dev_db" }  # ← Fallback for local dev
+REDIS_URL = { provider = "aws", value = "redis-url", default = "redis://localhost:6379" }
 ```
 
-If the encrypted value can't be decrypted (e.g., missing key), falls back to the plaintext default.
+If the provider lookup fails, fnox can use the default. The default is plaintext even when the main value uses encryption. Avoid production fallbacks that would silently connect to the wrong service; use a separate [profile](/guide/profiles) when appropriate.
 
-## ❌ When NOT to Use Plain Text
+## Review before committing
 
-### Never for Passwords
+Check both `value` and `default` fields. Setting `provider = "age"` does not encrypt a string you manually type into `value`; let `fnox set` generate the ciphertext.
 
-```toml
-# ❌ BAD - Never do this!
-[secrets]
-DATABASE_PASSWORD = { default = "super-secret-password" }
+[`fnox scan`](/cli/scan) can flag potential secrets in files. It is a heuristic scan, not a guarantee that a repository or its history is free of secrets. If a real credential was exposed, rotate it at its source.
 
-# ✅ GOOD - Use encryption
-[secrets]
-DATABASE_PASSWORD = { provider = "age", value = "encrypted..." }
-```
+## Next steps
 
-### Never for API Keys
-
-```toml
-# ❌ BAD
-[secrets]
-STRIPE_KEY = { default = "sk_live_abc123xyz789" }
-
-# ✅ GOOD
-[secrets]
-STRIPE_KEY = { provider = "age", value = "encrypted..." }
-```
-
-### Never for Tokens
-
-```toml
-# ❌ BAD
-[secrets]
-JWT_SECRET = { default = "my-secret-key" }
-
-# ✅ GOOD
-[secrets]
-JWT_SECRET = { provider = "age", value = "encrypted..." }
-```
-
-## Mixing Plain and Encrypted
-
-It's common to mix plain text defaults with encrypted values:
-
-```toml
-[providers]
-age = { type = "age", recipients = ["age1..."] }
-
-[secrets]
-DATABASE_PASSWORD = { provider = "age", value = "encrypted...", default = "dev-password" }  # Encrypted sensitive values, fallback for local dev
-DATABASE_HOST = { default = "localhost" }  # Plain text non-sensitive defaults
-DATABASE_PORT = { default = "5432" }
-LOG_LEVEL = { default = "info" }
-```
-
-## Security Best Practices
-
-1. **Never commit sensitive data as plain text**
-2. **Use encryption for anything that shouldn't be public**
-3. **Use plain text only for truly non-sensitive defaults**
-4. **Review `.gitignore`** - Ensure sensitive files aren't tracked
-5. **Use `fnox scan` to detect secrets** - Scans for accidentally committed secrets
-
-## Scan for Secrets
-
-fnox can scan your codebase for accidentally committed secrets:
-
-```bash
-# Scan for potential secrets
-fnox scan
-
-# Scan specific directory
-fnox scan src/
-```
-
-## Examples
-
-### Safe Plain Text Usage
-
-```toml
-# Application settings (non-sensitive)
-[secrets]
-APP_NAME = { default = "My Application" }
-APP_VERSION = { default = "1.0.0" }
-ENVIRONMENT = { default = "development" }
-DEBUG_MODE = { default = "true" }
-TIMEOUT_MS = { default = "5000" }
-PUBLIC_SITE_URL = { default = "https://example.com" }  # Public URLs
-DOCS_URL = { default = "https://docs.example.com" }
-```
-
-### Mixed Usage (Plain + Encrypted)
-
-```toml
-[providers]
-age = { type = "age", recipients = ["age1..."] }
-
-[secrets]
-# Sensitive (encrypted)
-DATABASE_URL = { provider = "age", value = "encrypted-connection-string..." }
-API_KEY = { provider = "age", value = "encrypted-key..." }
-
-# Non-sensitive (plain)
-DATABASE_POOL_SIZE = { default = "10" }
-CACHE_TTL_SECONDS = { default = "3600" }
-FEATURE_FLAG_NEW_UI = { default = "false" }
-```
-
-## Remember
-
-- ✅ Plain text is fine for public, non-sensitive configuration
-- ✅ Use defaults for fallback values
-- ❌ Never use plain text for passwords, keys, or tokens
-- ✅ Use [age](/providers/age) or other providers for sensitive data
-- ✅ Run `fnox scan` to catch accidental secrets
-
-## Next Steps
-
-- [Age Encryption](/providers/age) - Encrypt sensitive secrets
-- [Providers Overview](/providers/overview) - Choose the right provider
-- [Configuration Reference](/reference/configuration) - Learn more about fnox.toml
+- [Age quick start](/guide/quick-start): store sensitive values with encryption.
+- [Missing secrets and defaults](/guide/missing-secrets): choose when to fall back, warn, or fail.
+- [Configuration reference](/reference/configuration#default): interpolate defaults and set provider references.

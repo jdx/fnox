@@ -11,3 +11,5 @@ new URL.
 for matching Open Graph/Twitter metadata and the exact image expected from each
 page title. Regression tests reject swapped images and empty alt text. Edit
 `social-images.mjs` to adjust colors or layout.
+
+The homepage layout lives in `theme/HomePage.vue`; the social image remains a static title-and-logo composition. Check both when changing product messaging. See [the documentation guide](../README.md) for build and preview commands.

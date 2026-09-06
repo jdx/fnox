@@ -1,4 +1,8 @@
-# Azure Token
+---
+description: "Acquire temporary Azure access tokens for a resource scope and pass them to commands that accept bearer tokens."
+---
+
+# Azure token
 
 The `azure-token` lease backend obtains a short-lived OAuth2 bearer token from Microsoft Entra ID (formerly Azure Active Directory) using either a service principal or the Azure CLI session.
 
@@ -25,11 +29,11 @@ The backend needs Azure credentials. fnox looks for them in this order:
 
 If none are found, fnox prints:
 
-```
+```text
 Azure credentials not found. Run 'az login' or set AZURE_CLIENT_ID/AZURE_CLIENT_SECRET/AZURE_TENANT_ID.
 ```
 
-## Credentials Produced
+## Credentials produced
 
 | Environment Variable | Description         |
 | -------------------- | ------------------- |
@@ -52,9 +56,9 @@ type = "1password"
 vault = "Development"
 
 [secrets]
-AZURE_CLIENT_ID = { provider = "op", value = "Azure SP/client id" }
-AZURE_CLIENT_SECRET = { provider = "op", value = "Azure SP/client secret" }
-AZURE_TENANT_ID = { provider = "op", value = "Azure SP/tenant id" }
+AZURE_CLIENT_ID = { provider = "op", value = "Azure SP/client id", env = false }
+AZURE_CLIENT_SECRET = { provider = "op", value = "Azure SP/client secret", env = false }
+AZURE_TENANT_ID = { provider = "op", value = "Azure SP/tenant id", env = false }
 
 [leases.azure]
 type = "azure-token"
@@ -62,8 +66,10 @@ scope = "https://management.azure.com/.default"
 ```
 
 ```bash
-fnox exec -- az resource list
+fnox exec -- sh -c 'curl -fsS -H "Authorization: Bearer $AZURE_ACCESS_TOKEN" "https://management.azure.com/subscriptions?api-version=2022-12-01"'
 ```
+
+The example explicitly passes the leased token to the [Azure subscriptions API](https://learn.microsoft.com/en-us/rest/api/resources/subscriptions/list?view=rest-resources-2022-12-01). Client tools must consume the configured token variable; creating `AZURE_ACCESS_TOKEN` does not make every Azure tool use it automatically.
 
 ### With Azure CLI login
 
@@ -71,7 +77,7 @@ fnox exec -- az resource list
 az login
 
 # fnox picks up the CLI session automatically
-fnox exec -- az resource list
+fnox exec -- sh -c 'curl -fsS -H "Authorization: Bearer $AZURE_ACCESS_TOKEN" "https://management.azure.com/subscriptions?api-version=2022-12-01"'
 ```
 
 ### Custom env var name
@@ -92,7 +98,7 @@ env_var = "GRAPH_TOKEN"
 | `https://database.windows.net/.default` | Azure SQL Database     |
 | `https://storage.azure.com/.default`    | Azure Storage          |
 
-## See Also
+## See also
 
 - [Credential Leases](/guide/leases) — overview and approaches
 - [Azure Key Vault Secrets provider](/providers/azure-sm) — for storing secrets in Azure

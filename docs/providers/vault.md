@@ -1,3 +1,7 @@
+---
+description: "Read HashiCorp Vault KV secrets with fnox. Configure the address, authentication, mount, paths, and field selection."
+---
+
 # HashiCorp Vault
 
 HashiCorp Vault provides advanced secret management with dynamic secrets, leasing, and fine-grained access control.
@@ -33,7 +37,7 @@ vault = { type = "vault", path = "secret/myapp" } # address and token are option
 - **namespace**: (Optional) Vault namespace. Falls back to `FNOX_VAULT_NAMESPACE` or `VAULT_NAMESPACE`.
 - **credential_command**: (Optional) Shell command that prints a Vault token to stdout when no token is configured. The command is rendered as a Tera template and receives `address`, `path`, and `namespace`.
 
-### Provider-scoped Login
+### Provider-scoped login
 
 Use `credential_command` when different Vault/OpenBao providers need different tokens:
 
@@ -50,7 +54,7 @@ fnox sets `VAULT_ADDR` and `VAULT_NAMESPACE` for the command from the provider c
 
 ## Setup
 
-### 1. Configure Vault Access
+### 1. Configure Vault access
 
 ```bash
 # Set Vault address
@@ -63,7 +67,7 @@ vault login -method=userpass username=myuser
 export VAULT_TOKEN="hvs.CAESIJ..."
 ```
 
-### 2. Create Policy
+### 2. Create policy
 
 ```hcl
 # policy.hcl
@@ -80,7 +84,7 @@ path "secret/metadata/myapp/*" {
 vault policy write fnox-policy policy.hcl
 ```
 
-### 3. Store Secrets in Vault
+### 3. Store secrets in Vault
 
 ```bash
 # KV v2 engine
@@ -111,21 +115,11 @@ fnox get DATABASE_URL
 fnox exec -- ./app
 ```
 
-## Pros
+## Usage notes
 
-- ✅ Advanced features (dynamic secrets, leasing)
-- ✅ Fine-grained access policies
-- ✅ Audit logging
-- ✅ Multi-cloud support
-- ✅ Self-hosted option
+The provider reads KV secrets. Use the separate [Vault lease backend](/leases/vault) for dynamic credentials. The provider token must have access to the configured KV path and namespace.
 
-## Cons
-
-- ❌ Complex to set up and operate
-- ❌ Requires Vault infrastructure
-- ❌ Token management
-
-## Next Steps
+## Next steps
 
 - [Vault Documentation](https://developer.hashicorp.com/vault/docs)
 - [AWS Secrets Manager](/providers/aws-sm) - Simpler cloud alternative

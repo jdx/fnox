@@ -1,38 +1,64 @@
+---
+description: "Install fnox with mise, Cargo, or a prebuilt binary, then verify and update your installation."
+---
+
 # Installation
 
-## Using mise (recommended)
+Install the fnox CLI, verify it is on your `PATH`, then [configure your first provider](/guide/quick-start).
 
-The easiest way to install fnox is with [mise](https://mise.jdx.dev):
+## With mise
 
-```bash
+If you use [mise](https://mise.jdx.dev), install fnox globally:
+
+```sh
 mise use -g fnox
 ```
 
-This installs fnox globally and keeps it up to date.
+To manage the version in a project, run `mise use fnox` from that project instead. Commit the resulting mise configuration so teammates use the same version.
 
-## Using Cargo
+To update a mise-managed installation:
 
-If you have Rust installed:
-
-```bash
-cargo install fnox
+```sh
+mise upgrade fnox
 ```
 
-## From Source
+Installing fnox does not automatically upgrade it on every run. See [mise upgrade](https://mise.jdx.dev/cli/upgrade.html) for version constraints and update options.
 
-```bash
+## With cargo
+
+With a supported Rust toolchain installed:
+
+```sh
+cargo install fnox --locked
+```
+
+This builds from source using the published lockfile. Ensure Cargo's binary directory (`~/.cargo/bin` on Unix) is on your `PATH`. Check the package's `rust-version` in [Cargo.toml](https://github.com/jdx/fnox/blob/main/Cargo.toml) for the minimum Rust version.
+
+Run the same command again to install a newer published release.
+
+## Prebuilt binaries
+
+Download the archive for your operating system and architecture from [GitHub Releases](https://github.com/jdx/fnox/releases). Extract `fnox` into a directory on your `PATH`.
+
+Provider requirements are separate from fnox installation. For example, 1Password needs `op`, Bitwarden needs `bw`, and generating an age key needs `age-keygen`. Each [provider guide](/providers/overview) lists its prerequisites.
+
+## From a checkout
+
+```sh
 git clone https://github.com/jdx/fnox
 cd fnox
-cargo install --path .
+cargo install --path . --locked
 ```
 
-## Verify Installation
+For development, use the debug build and project tasks in the [contributing guide](/contributing).
 
-```bash
+## Verify the installation
+
+```sh
 fnox --version
+fnox --help
 ```
 
-## Next Steps
+If the shell cannot find fnox, check that your install directory is on `PATH`, or that mise is [activated](https://mise.jdx.dev/getting-started.html). Open a new terminal after changing shell configuration.
 
-- [Quick Start](/guide/quick-start) - Get started with fnox in 5 minutes
-- [Shell Integration](/guide/shell-integration) - Set up automatic secret loading
+Continue with the [quick start](/guide/quick-start) for local encryption or [connect a vault](/guide/golden-path).

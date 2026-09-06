@@ -1,3 +1,7 @@
+---
+description: "Create temporary AWS role credentials with fnox, including session duration, external IDs, and SSO-backed authentication."
+---
+
 # AWS STS
 
 The `aws-sts` lease backend calls [AWS STS AssumeRole](https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html) to create short-lived AWS credentials from a long-lived IAM user or role.
@@ -30,11 +34,11 @@ The backend needs AWS credentials to call `sts:AssumeRole`. Before creating a le
 
 The AWS SDK's default credential chain then decides which of them is used. If none are found, fnox prints:
 
-```
+```text
 AWS credentials not found. Run 'aws sso login' or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY.
 ```
 
-## Credentials Produced
+## Credentials produced
 
 | Environment Variable    | Description          |
 | ----------------------- | -------------------- |
@@ -59,8 +63,8 @@ type = "1password"
 vault = "Development"
 
 [secrets]
-AWS_ACCESS_KEY_ID = { provider = "op", value = "AWS IAM/access key" }
-AWS_SECRET_ACCESS_KEY = { provider = "op", value = "AWS IAM/secret key" }
+AWS_ACCESS_KEY_ID = { provider = "op", value = "AWS IAM/access key", env = false }
+AWS_SECRET_ACCESS_KEY = { provider = "op", value = "AWS IAM/secret key", env = false }
 
 [leases.aws]
 type = "aws-sts"
@@ -94,11 +98,11 @@ If you use AWS SSO, no stored credentials are needed — just log in first:
 ```bash
 aws sso login --profile my-sso-profile
 
-# fnox picks up the SSO session automatically
-fnox exec -- aws s3 ls
+# Select the same profile used for login
+AWS_PROFILE=my-sso-profile fnox exec -- aws s3 ls
 ```
 
-## See Also
+## See also
 
 - [Credential Leases](/guide/leases) — overview and approaches
 - [AWS Secrets Manager provider](/providers/aws-sm) — for storing secrets in AWS

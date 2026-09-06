@@ -2,7 +2,7 @@
 
 ## mbx build cache
 
-`mise install` installs mbx 1.4. `mise run` activates the project's transparent
+`mise install` installs the mbx version pinned in `mise.toml`. `mise run` activates the project's transparent
 Cargo wrapper, so compilation-heavy mise tasks and hk checks use ordinary
 `cargo` commands. Standalone Cargo commands require an activated mise shell. If
 the wrapper fails or creates a development papercut, rerun the exact equivalent
@@ -57,7 +57,7 @@ will fail), pin that dependency to its last MSRV-compatible version instead.
 mise run build          # Build (debug mode, never use --release)
 mise run test           # Run all tests (cargo + bats)
 mise run test:cargo     # Cargo tests only
-mise run test:bats      # Bats tests only (depends on build)
+mise run test:bats      # Bats tests only (run build first)
 mise run test:bats -- test/init.bats  # Specific bats test file
 mise run ci             # Full CI: build + test + lint
 mise run lint           # Lint (hk)
@@ -81,12 +81,11 @@ mise run lint-fix       # Auto-fix lint issues
 
 ## Code Organization
 
-```
-src/commands/       # One file per command
-src/providers/      # Implement Provider trait
-src/encryption/     # Encryption methods
-src/config.rs       # Config parsing
-src/env.rs          # Centralized env var handling (LazyLock, FNOX_* prefix)
+```text
+src/commands/                    # One file per command
+crates/fnox-core/src/providers/  # Provider implementations and encryption
+crates/fnox-core/src/config.rs   # Config parsing and layering
+crates/fnox-core/src/env.rs      # Centralized FNOX_* environment handling
 ```
 
 - Use `mod.rs` for module exports
@@ -110,6 +109,8 @@ src/env.rs          # Centralized env var handling (LazyLock, FNOX_* prefix)
 4. `fnox.$FNOX_PROFILE.toml` (profile-specific, if not "default")
 5. `fnox.local.toml` (local overrides, gitignored)
 
+Steps 3-5 apply at each discovered directory, from outermost to innermost. A closer directory overrides its parent, including parent-local values.
+
 An explicit `-c/--config` path skips steps 2-5 (no directory recursion, no local
 overrides) but still loads the global config and the file's own `import`s.
 
@@ -122,7 +123,7 @@ overrides) but still loads the global config and the file's own `import`s.
 
 ## Provider Types
 
-All providers follow the same pattern: config in `fnox.toml` stores references/names, actual secrets live in the provider. See `src/providers/` for implementations.
+Encryption providers store ciphertext in `fnox.toml`; remote and local storage providers store references there. The plain provider returns unencrypted values. See `crates/fnox-core/src/providers/` for implementations and `docs/providers/overview.md` for the complete provider catalog.
 
 | Type                | Config `type`    | Storage                   | Key crate/CLI            |
 | ------------------- | ---------------- | ------------------------- | ------------------------ |
@@ -140,7 +141,7 @@ All providers follow the same pattern: config in `fnox.toml` stores references/n
 | password-store      | `password-store` | GPG files                 | `pass` CLI               |
 | Proton Pass         | `proton-pass`    | Proton Pass vault         | `pass-cli` CLI           |
 
-**Common provider config fields:** `type` (required), `prefix` (optional namespace), `region` (AWS providers). Most providers support `value` as item name, `item/field` for specific fields.
+**Provider fields:** `type` is required. Fields such as `prefix`, `region`, and `vault` depend on the provider type; use its schema and guide for supported fields and reference formats.
 
 ## GitHub Interactions
 

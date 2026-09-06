@@ -1,27 +1,34 @@
+---
+description: "Read Proton Pass vault items with fnox and pass-cli using vault aliases, item names, or pass:// references."
+---
+
 # Proton Pass
 
 Integrate with Proton Pass through the Proton Pass CLI (`pass-cli`) to retrieve secrets from vault items.
 
-## Quick Start
+## Quick start
 
-```bash
-# 1. Install Proton Pass CLI
+```sh
+# Install Proton Pass CLI
 # See https://proton.me/pass/download
 
-# 2. Log in once with the default browser-based flow
+# Log in once with the default browser-based flow
 pass-cli login
+```
 
-# 3. Configure fnox
-cat >> fnox.toml << 'EOF'
+Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+
+```toml
 [providers.protonpass]
 type = "proton-pass"
 vault = "Personal"
 
 [secrets]
 DATABASE_PASSWORD = { provider = "protonpass", value = "Database/password" }
-EOF
+```
 
-# 4. Retrieve the secret
+```sh
+# Retrieve the secret
 fnox get DATABASE_PASSWORD
 ```
 
@@ -53,7 +60,7 @@ Item-only and `id:` references default to the `password` field and require `vaul
 
 Use full `pass://vault/item/field` references when vault or item names contain `/`.
 
-## Personal Access Tokens
+## Personal access tokens
 
 For CI or headless use, create a Proton Pass personal access token, then log in with `pass-cli`.
 The official CLI supports either an environment variable or a login flag:
@@ -69,7 +76,7 @@ pass-cli login --personal-access-token "pst_token::key"
 
 Run `pass-cli info` after login to verify the session. `fnox` also accepts `FNOX_PROTON_PASS_PERSONAL_ACCESS_TOKEN` and passes it to `pass-cli` as `PROTON_PASS_PERSONAL_ACCESS_TOKEN`.
 
-## Agent Tokens
+## Agent tokens
 
 Proton Pass agent tokens are personal access tokens with dedicated access logging. Current `pass-cli` releases require `PROTON_PASS_AGENT_REASON` for audited agent operations, including item reads performed by `fnox`.
 
@@ -89,7 +96,7 @@ agent_reason = "fnox secret retrieval"
 
 Environment values take priority over provider config. Provider `agent_reason` values are trimmed, must be non-empty, and must be at most 300 characters to match the `pass-cli` agent reason limit.
 
-## Session and Key Storage
+## Session and key storage
 
 `fnox` passes through these Proton Pass CLI environment variables, with `FNOX_` aliases available for project-local setup:
 
@@ -119,3 +126,12 @@ Not supported:
 - `fnox set` to create or update Proton Pass items
 - Remote item listing/import
 - Item delete/archive/update flows
+
+## Troubleshooting
+
+Run `pass-cli info` to check the session, then `fnox provider test <provider-name>` for the configured instance. Confirm the vault and field in the reference, and supply an agent reason when the token requires one.
+
+## Next steps
+
+- [Profiles](/guide/profiles): separate vault configuration by environment.
+- [Sync a local cache](/guide/sync): use encrypted local copies for repeated reads.

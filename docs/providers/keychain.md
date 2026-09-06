@@ -1,33 +1,40 @@
-# OS Keychain
+---
+description: "Store local secrets in the macOS Keychain, Windows Credential Manager, or Linux Secret Service, and use them to bootstrap other providers."
+---
+
+# OS keychain
 
 Store secrets in your operating system's native secure storage.
 
-## Supported Platforms
+## Supported platforms
 
 - **macOS:** Keychain Access (built-in)
 - **Windows:** Credential Manager (built-in)
 - **Linux:** Secret Service over D-Bus (GNOME Keyring, KWallet)
 
-## Quick Start
+## Quick start
 
-```bash
-# 1. Linux only: make sure a Secret Service daemon is running
+```sh
+# Linux only: make sure a Secret Service daemon is running
 sudo apt-get install gnome-keyring  # Ubuntu/Debian
+```
 
-# 2. Configure provider
-cat >> fnox.toml << 'EOF'
+Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+
+```toml
 [providers]
 keychain = { type = "keychain", service = "fnox" }
-EOF
+```
 
-# 3. Store a secret in OS keychain
+```sh
+# Store a secret in OS keychain
 fnox set DATABASE_URL "postgresql://localhost/mydb" --provider keychain
 
-# 4. Retrieve from keychain
+# Retrieve from keychain
 fnox get DATABASE_URL
 ```
 
-## Linux Setup
+## Linux setup
 
 On Linux, fnox talks to the Secret Service API directly over D-Bus, so you need a Secret Service implementation such as GNOME Keyring or KWallet running (no libsecret packages are required):
 
@@ -56,16 +63,13 @@ macOS and Windows have built-in support—no installation needed.
 keychain = { type = "keychain", service = "fnox", prefix = "myapp/" }  # Prefix is optional
 ```
 
-### Service Name
+### Service name
 
 The `service` acts as a namespace to isolate fnox secrets from other applications:
 
 ```toml
 [providers]
-keychain = { service = "fnox" }  # All fnox secrets under "fnox" service
-
-# Or use project-specific service
-keychain = { service = "myapp" }  # All secrets under "myapp" service
+keychain = { type = "keychain", service = "myapp" }
 ```
 
 ### Prefix
@@ -74,10 +78,10 @@ Optional prefix prepended to secret names:
 
 ```toml
 [providers]
-keychain = { service = "fnox", prefix = "myapp/" }  # "database-url" becomes "myapp/database-url"
+keychain = { type = "keychain", service = "fnox", prefix = "myapp/" }  # "database-url" becomes "myapp/database-url"
 ```
 
-## How It Works
+## How it works
 
 1. **Storage:** Secrets are stored in the OS credential manager (encrypted by OS)
 2. **Config:** `fnox.toml` contains only the secret name, not the value
@@ -87,7 +91,7 @@ keychain = { service = "fnox", prefix = "myapp/" }  # "database-url" becomes "my
 
 ## Usage
 
-### Store a Secret
+### Store a secret
 
 ```bash
 fnox set DATABASE_URL "postgresql://localhost/mydb" --provider keychain
@@ -102,21 +106,21 @@ DATABASE_URL = { provider = "keychain", value = "DATABASE_URL" }  # ← Keychain
 
 The actual secret is stored in the OS keychain, encrypted.
 
-### Retrieve a Secret
+### Retrieve a secret
 
 ```bash
 fnox get DATABASE_URL
 ```
 
-### Run Commands
+### Run commands
 
 ```bash
 fnox exec -- npm run dev
 ```
 
-## Recommended: Use With Age, Not As Bulk Storage
+## Recommended: use with age, not as bulk storage
 
-The OS keychain is designed for **a few** long-lived secrets, not as the storage backend for every secret in a project. On macOS in particular, the system pops a Security dialog the first time each application accesses each keychain item — so if you store ten secrets directly in the keychain, you'll get up to ten "Always Allow / Allow / Deny" prompts the first time `fnox exec` runs.
+On macOS, access controls can prompt separately for each keychain item. If those prompts interrupt a project with many secrets, store one age identity in the keychain and use it to decrypt the rest.
 
 The pattern that scales much better is to store a single **age private key** in the keychain and encrypt all your secrets with age:
 
@@ -135,13 +139,13 @@ STRIPE_KEY   = { provider = "age", value = "encrypted..." }
 
 This way:
 
-- **One keychain item, one dialog.** Hitting "Always Allow" once authorizes the age key for that machine.
+- **One keychain item for the identity.** Access prompts depend on the keychain's application permissions.
 - Adding more secrets is free — they go into the encrypted config, not into the keychain.
 - Loss of the keychain item is recoverable from any other machine that holds the same age identity.
 
 Reach for direct `provider = "keychain"` only for the handful of bootstrap secrets that don't have anything else to decrypt them (e.g., the age key itself, a 1Password service account token).
 
-## Bootstrap Pattern
+## Bootstrap pattern
 
 A common pattern is to store provider tokens in the keychain:
 
@@ -163,20 +167,20 @@ export OP_SERVICE_ACCOUNT_TOKEN=$(fnox get OP_SERVICE_ACCOUNT_TOKEN)
 fnox exec -- ./start.sh
 ```
 
-## Example Configurations
+## Example configurations
 
-### Personal Project
+### Personal project
 
 ```toml
 [providers]
-keychain = { type = "keychain", service = "myapp" }
+app-keychain = { type = "keychain", service = "myapp" }
 
 [secrets]
 DATABASE_URL = { provider = "keychain", value = "database-url" }
 API_KEY = { provider = "keychain", value = "api-key" }
 ```
 
-### Bootstrap Tokens
+### Bootstrap tokens
 
 ```toml
 [providers]
@@ -187,7 +191,7 @@ GITHUB_TOKEN = { provider = "keychain", value = "github" }
 NPM_TOKEN = { provider = "keychain", value = "npm" }
 ```
 
-### Machine-Specific Secrets
+### Machine-specific secrets
 
 ```toml
 # fnox.local.toml (gitignored)
@@ -198,9 +202,9 @@ keychain = { type = "keychain", service = "fnox-local" }
 LAPTOP_DB_URL = { provider = "keychain", value = "laptop-db" }
 ```
 
-## Platform Details
+## Platform details
 
-### macOS Keychain
+### macOS keychain
 
 Secrets stored in:
 
@@ -238,26 +242,13 @@ sudo apt install seahorse
 seahorse
 ```
 
-## Pros
+## Usage notes
 
-- ✅ OS-managed encryption
-- ✅ Cross-platform (macOS, Windows, Linux)
-- ✅ No external dependencies
-- ✅ Free
-- ✅ Built into operating system
-- ✅ Secure by default
-
-## Cons
-
-- ❌ Requires GUI/interactive session (doesn't work in headless CI)
-- ❌ Not suitable for teams (secrets are per-machine)
-- ❌ Keyring must be unlocked
-- ❌ No audit logs
-- ❌ No centralized management
+Access depends on the current user and an available, unlocked credential store. macOS may prompt for access to individual items. Linux needs a Secret Service implementation on D-Bus; headless setups must provide one explicitly.
 
 ## Limitations
 
-### Headless Environments
+### Headless environments
 
 The keychain provider needs an unlocked OS keychain or Secret Service session, which is usually unavailable in:
 
@@ -268,7 +259,7 @@ The keychain provider needs an unlocked OS keychain or Secret Service session, w
 
 No desktop session is required, though — only an unlocked Secret Service on the bus. If you provision one yourself, the provider works headlessly; fnox's own Linux CI does this with `gnome-keyring-daemon --unlock --components=secrets --daemonize`. That means keeping the unlock password in CI, which is the secret you were trying to protect, so for CI/CD prefer age encryption or a cloud provider.
 
-### Tests Auto-Skip in CI
+### Tests auto-skip in CI
 
 fnox's keychain tests skip automatically on macOS CI runners (where they hang) and on platforms other than macOS and Linux. On Linux CI they run against a headless `gnome-keyring-daemon`. Set `SKIP_KEYCHAIN_TESTS=1` to skip them everywhere:
 
@@ -282,10 +273,10 @@ SKIP_KEYCHAIN_TESTS=1 mise run test:bats
 
 ## Security
 
-- **Encryption:** OS handles encryption (typically AES-256)
+- **Encryption:** Managed by the platform credential store
 - **Access control:** OS enforces access (user/session isolation)
 - **Keyring unlock:** May require password entry on first access
-- **Memory protection:** OS manages secure memory handling
+- **Resolved values:** fnox and the receiving process still handle plaintext in memory
 
 ## Troubleshooting
 
@@ -329,15 +320,7 @@ gnome-keyring-daemon --start
 sudo apt-get install kwalletmanager
 ```
 
-## Best Practices
-
-1. **Use for local development only** - Not for teams or CI
-2. **Bootstrap provider tokens** - Store 1Password/AWS tokens
-3. **Machine-specific overrides** - Use in `fnox.local.toml`
-4. **Descriptive service names** - Use project-specific services
-5. **Keep keyring unlocked** - Unlock on login for convenience
-
-## Next Steps
+## Next steps
 
 - [Age Encryption](/providers/age) - Team-friendly alternative
 - [Hierarchical Config](/guide/hierarchical-config) - Per-machine configuration with fnox.local.toml

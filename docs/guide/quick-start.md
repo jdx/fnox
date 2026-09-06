@@ -1,106 +1,106 @@
-# Quick Start
+---
+description: "Encrypt your first secret with age, check access, and run an application with fnox. No cloud account required."
+---
 
-Get started with fnox in 5 minutes.
+# Quick start
 
-## 1. Initialize fnox
+Store your first secret with age encryption, then make it available to a command. This walkthrough uses a local key file and needs no cloud account.
 
-```bash
-cd your-project
-fnox init
+Already have a vault? Use [1Password with a local cache](/guide/golden-path), or choose another [provider](/providers/overview).
+
+## 1. Install fnox and age
+
+With [mise](https://mise.jdx.dev):
+
+```sh
+mise use -g fnox age
+fnox --version
 ```
 
-This creates a `fnox.toml` configuration file. In a terminal, `fnox init` runs an interactive wizard that can also set up a provider; answer "No" (or pass `--skip-wizard`) to create a minimal config and follow the steps below.
+See [installation](/guide/installation) for other fnox installation methods. The age CLI supplies `age-keygen`; fnox handles encryption itself.
 
-## 2. Set a Secret
+## 2. Create your encryption key
 
-```bash
-# Set a secret (prompts for value)
-fnox set DATABASE_URL
-
-# Or provide the value directly
-fnox set DATABASE_URL "postgresql://localhost/mydb"
-```
-
-Without a provider configured, secrets are stored as plain text `default` values in `fnox.toml`. For encryption, see [Add Encryption](#add-encryption-recommended) below.
-
-## 3. Get a Secret
-
-```bash
-fnox get DATABASE_URL
-```
-
-## 4. Run Commands with Secrets
-
-```bash
-# Secrets are loaded as environment variables
-fnox exec -- npm start
-fnox exec -- python app.py
-fnox exec -- ./my-script.sh
-```
-
-## 5. Enable Shell Integration (Optional)
-
-Automatically load secrets when you `cd` into a directory:
-
-```bash
-# Enable for your shell
-eval "$(fnox activate bash)"  # or zsh, fish
-
-# Add to your shell profile for persistence
-echo 'eval "$(fnox activate bash)"' >> ~/.bashrc
-```
-
-To enable integration in other shells (Nushell, PowerShell), see the [Shell Integration](/guide/shell-integration) guide.
-
-Now secrets auto-load:
-
-```bash
-~/projects $ cd my-app
-fnox: +3 DATABASE_URL, API_KEY, JWT_SECRET
-~/projects/my-app $
-```
-
-## Add Encryption (Recommended)
-
-For production use, encrypt your secrets:
-
-### Using age encryption
-
-```bash
-# 1. Generate an age key
+```sh
+mkdir -p ~/.config/fnox
 age-keygen -o ~/.config/fnox/age.txt
+age-keygen -y ~/.config/fnox/age.txt
+```
 
-# 2. Get your public key
-grep "public key:" ~/.config/fnox/age.txt
-# Output: age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
+The last command prints your public recipient, beginning with `age1`. Copy it for the next step. If you already have `age.txt`, reuse it and run only the last command.
 
-# 3. Configure the age provider in fnox.toml
-cat >> fnox.toml << 'EOF'
+Keep `age.txt` private and back it up. The public recipient can go in git; the private key file cannot. fnox automatically reads `age.txt` from its [configuration directory](/reference/environment#fnox-config-dir). If you use a different directory, set the provider's [`key_file`](/providers/age#configuration).
+
+## 3. Configure the project
+
+From your project directory:
+
+```sh
+fnox init --skip-wizard
+```
+
+Edit the new `fnox.toml` to contain the following, replacing `age1...` with the public recipient you copied:
+
+```toml
+#:schema https://fnox.jdx.dev/schema.json
+default_provider = "age"
+
 [providers.age]
 type = "age"
-recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
-EOF
-
-# 4. Set your decryption key
-export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)
-
-# 5. Encrypt a secret
-fnox set DATABASE_URL "postgresql://prod.example.com/db" --provider age
+recipients = ["age1..."] # Replace with your public recipient
 ```
 
-The secret is now encrypted in `fnox.toml` and safe to commit to git!
+`--skip-wizard` creates an empty configuration. These provider settings are what enable encryption; initialization alone does not encrypt secrets.
 
-::: tip Using a password manager or cloud vault?
-Encrypted-in-git is great for solo and open source projects. If your team keeps
-secrets in a vault like 1Password, follow [the golden path](/guide/golden-path)
-instead: commit references to the vault and cache secrets locally with
-[`fnox sync`](/guide/sync).
-:::
+## 4. Store and check a secret
 
-## Next Steps
+```sh
+fnox set DATABASE_URL
+```
 
-- [Golden Path Setup](/guide/golden-path) - The recommended workflow: a remote vault plus a local encrypted cache
-- [How It Works](/guide/how-it-works) - Understand fnox's architecture
-- [Providers](/providers/overview) - Explore all available providers
-- [Shell Integration](/guide/shell-integration) - Deep dive into shell integration
-- [Real-World Example](/guide/real-world-example) - See a complete setup with multiple environments
+At the hidden prompt, enter a value such as `postgresql://localhost/mydb`. fnox uses `default_provider = "age"` and writes encrypted ciphertext into `fnox.toml`.
+
+```sh
+# Verify that configured secrets can be resolved
+fnox check --all
+
+# Inspect names and providers without displaying resolved values
+fnox list
+```
+
+Use `fnox get DATABASE_URL` when you need the value itself. It prints the decrypted secret to stdout.
+
+## 5. Run a command
+
+```sh
+fnox exec -- npm start
+# Or:
+fnox exec -- python app.py
+```
+
+The command receives `DATABASE_URL` as an environment variable. Your parent shell is unchanged. To verify injection without an application or printing the value:
+
+```sh
+fnox exec -- sh -c 'test -n "$DATABASE_URL" && printf "Database secret is available\n"'
+```
+
+Put fnox options before `--`; everything after it belongs to the command.
+
+## 6. Commit the configuration
+
+Add these entries to your existing `.gitignore`:
+
+```text
+fnox.local.toml
+.fnox.local.toml
+.env
+```
+
+Review `fnox.toml`, then commit it with `.gitignore`. The age secret's `value` is ciphertext. Any `default` values remain plaintext, so reserve them for non-sensitive configuration.
+
+## Where to go next
+
+- [Shell integration](/guide/shell-integration): load secrets automatically when you enter a project.
+- [Profiles](/guide/profiles): use separate development, staging, and production values.
+- [Age team setup](/providers/age#team-workflow): add teammates and re-encrypt for their keys.
+- [Troubleshooting](/guide/troubleshooting): diagnose configuration and authentication problems.

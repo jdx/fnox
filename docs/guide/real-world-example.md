@@ -1,365 +1,165 @@
-# Real-World Example
+---
+description: "Build an example development, staging, and production setup using age encryption, AWS Secrets Manager, and profiles."
+---
 
-Let's build a complete setup for a typical web application with development, staging, and production environments.
+# From development to production
 
-This example keeps dev/staging secrets encrypted in git with age. If your team keeps secrets in a vault like 1Password instead, see the [Golden Path Setup](/guide/golden-path).
+Use age-encrypted development and staging values in git, then switch to AWS Secrets Manager for production. This example shows how the pieces fit together without requiring the application to know which provider it uses.
 
-## The Scenario
+If all environments use an existing vault, start with [connect a vault](/guide/golden-path) instead.
 
-You're building an API that needs:
+## Prerequisites
 
-- Database URL
-- API keys (Stripe, SendGrid)
-- JWT secret
-- External service URLs
+- fnox and age installed; see the [quick start](/guide/quick-start).
+- A project with a development command, such as `npm start`.
+- An age identity for each teammate and for CI.
+- AWS credentials, an AWS region, and permission to read the production secrets.
 
-**Requirements:**
+The example uses two secrets, `DATABASE_URL` and `JWT_SECRET`, plus the non-sensitive `LOG_LEVEL` setting. Replace names and commands with those used by your application.
 
-- **Development:** Secrets in git (encrypted) so the team can clone and run
-- **Staging:** Secrets in git (encrypted) with staging values
-- **Production:** Secrets in AWS Secrets Manager (never in git)
+## 1. Configure development encryption
 
-## Step 1: Initialize
-
-```bash
-cd my-api
-fnox init
-git init
-```
-
-## Step 2: Set Up Age Encryption (for Dev/Staging)
-
-```bash
-# Generate age key
-age-keygen -o ~/.config/fnox/age.txt
-
-# Get your public key
-grep "public key:" ~/.config/fnox/age.txt
-# Output: age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
-
-# For teams: collect everyone's public keys and add them all
-```
-
-Add to `fnox.toml`:
+Create the project configuration with `fnox init --skip-wizard`, then edit `fnox.toml`:
 
 ```toml
-# Shared age provider for dev and staging
+#:schema https://fnox.jdx.dev/schema.json
+default_provider = "age"
+
 [providers.age]
 type = "age"
-recipients = [
-  "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",  # alice
-  "age1pr3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqabc123",  # bob
-  "age1zr3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqdxf456"   # ci
-]
-```
-
-Set decryption key:
-
-```bash
-# Add to ~/.bashrc or ~/.zshrc
-export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)
-```
-
-## Step 3: Add Development Secrets
-
-```bash
-# Encrypt development secrets
-fnox set DATABASE_URL "postgresql://localhost/mydb" --provider age
-fnox set JWT_SECRET "$(openssl rand -hex 32)" --provider age
-fnox set STRIPE_KEY "sk_test_abc123" --provider age
-fnox set SENDGRID_KEY "SG.test123" --provider age
-```
-
-Your `fnox.toml` now contains encrypted secrets:
-
-```toml
-[providers]
-age = { type = "age", recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"] }
+recipients = ["age1..."] # Replace with the public recipients of your team and CI
 
 [secrets]
-DATABASE_URL = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..." }
-JWT_SECRET = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..." }
-STRIPE_KEY = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..." }
-SENDGRID_KEY = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..." }
+LOG_LEVEL = { default = "debug" }
 ```
 
-**Commit this!** It's encrypted and safe.
+Each teammate keeps their own private identity outside the repository. fnox reads `age.txt` from its configuration directory by default. See [age team setup](/providers/age#team-workflow) for other identity locations and multiple recipients.
 
-```bash
-git add fnox.toml
-git commit -m "Add encrypted development secrets"
+Store the development values using hidden prompts:
+
+```sh
+fnox set DATABASE_URL
+fnox set JWT_SECRET
+fnox check --all
+fnox exec -- npm start
 ```
 
-## Step 4: Add Staging Profile
+`fnox set` adds encrypted values to `fnox.toml`. Review the file, then commit it. `LOG_LEVEL` remains plaintext because it is a default.
 
-Add staging secrets (also encrypted):
+## 2. Add staging values
 
-```bash
-# Target the staging profile
-fnox set DATABASE_URL "postgresql://staging.db.example.com/mydb" \
-  --provider age \
-  --profile staging
+Select the staging profile when writing:
 
-fnox set JWT_SECRET "$(openssl rand -hex 32)" \
-  --provider age \
-  --profile staging
-
-fnox set STRIPE_KEY "sk_test_staging_xyz" \
-  --provider age \
-  --profile staging
-
-fnox set SENDGRID_KEY "SG.staging456" \
-  --provider age \
-  --profile staging
+```sh
+fnox set DATABASE_URL --profile staging --provider age
+fnox set JWT_SECRET --profile staging --provider age
 ```
 
-Your `fnox.toml` now has a staging profile:
+fnox writes under `[profiles.staging.secrets]`. Staging inherits `LOG_LEVEL` and the age provider from the top level.
+
+```sh
+fnox check --all --profile staging
+fnox exec --profile staging -- ./deploy.sh
+```
+
+A profile changes configuration; it does not restrict who can decrypt. Use separate encryption providers and recipients if staging requires a different access boundary.
+
+## 3. Reference production secrets
+
+Create `myapi/database-url` and `myapi/jwt-secret` in AWS Secrets Manager using your normal provisioning process. Add the provider and references:
 
 ```toml
-[providers]
-age = { type = "age", recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"] }
-
-# Development (default profile)
-[secrets]
-DATABASE_URL = { provider = "age", value = "..." }
-JWT_SECRET = { provider = "age", value = "..." }
-# ... other dev secrets ...
-
-# Staging profile
-[profiles.staging.secrets]
-DATABASE_URL = { provider = "age", value = "..." }
-JWT_SECRET = { provider = "age", value = "..." }
-# ... other staging secrets ...
-```
-
-## Step 5: Add Production Profile (AWS Secrets Manager)
-
-Add production configuration (secrets stored in AWS):
-
-```toml
-# Add to fnox.toml
-
-[profiles.production.providers]
-aws = { type = "aws-sm", region = "us-east-1", prefix = "myapi/" }
+[profiles.production.providers.aws]
+type = "aws-sm"
+region = "us-east-1"
+prefix = "myapi/"
 
 [profiles.production.secrets]
-DATABASE_URL = { provider = "aws", value = "database-url", if_missing = "error" }  # Critical secret
+DATABASE_URL = { provider = "aws", value = "database-url", if_missing = "error" }
 JWT_SECRET = { provider = "aws", value = "jwt-secret", if_missing = "error" }
-STRIPE_KEY = { provider = "aws", value = "stripe-key", if_missing = "error" }
-SENDGRID_KEY = { provider = "aws", value = "sendgrid-key", if_missing = "error" }
+LOG_LEVEL = { default = "info" }
 ```
 
-Create secrets in AWS:
+These values are names, not ciphertext. No production plaintext goes into the config.
 
-```bash
-aws secretsmanager create-secret \
-  --name "myapi/database-url" \
-  --secret-string "postgresql://prod.rds.amazonaws.com/mydb"
+After authenticating to AWS:
 
-aws secretsmanager create-secret \
-  --name "myapi/jwt-secret" \
-  --secret-string "$(openssl rand -base64 64)"
-
-aws secretsmanager create-secret \
-  --name "myapi/stripe-key" \
-  --secret-string "sk_live_REAL_KEY_HERE"
-
-aws secretsmanager create-secret \
-  --name "myapi/sendgrid-key" \
-  --secret-string "SG.REAL_KEY_HERE"
+```sh
+fnox check --all --profile production
+fnox exec --profile production --if-missing error -- ./deploy.sh
 ```
 
-Commit the production references:
+Use [`--no-defaults`](/guide/profiles#profile-inheritance) when you want production to include only its selected profile secrets. Otherwise it inherits any top-level secrets it does not override.
 
-```bash
-git add fnox.toml
-git commit -m "Add production profile (AWS Secrets Manager)"
-```
+## 4. Keep personal overrides local
 
-## Step 6: Local Overrides
+Add these patterns to the project's existing `.gitignore`:
 
-Create `.gitignore`:
-
-```bash
-cat > .gitignore << 'EOF'
+```text
 fnox.local.toml
+.fnox.local.toml
 .env
-EOF
 ```
 
-Each developer can create personal overrides:
+A developer can create `fnox.local.toml`:
 
 ```toml
-# fnox.local.toml (not committed)
-
 [secrets]
-DATABASE_URL = { default = "postgresql://localhost/alice_db" }  # Personal DB
-DEBUG_MODE = { default = "true" }  # Enable debugging
+DATABASE_URL = { default = "postgresql://localhost/alice_db" }
 ```
 
-## Step 7: Use It
+This local example has no password. Use an encryption provider or vault reference for a sensitive override.
 
-### Development
+Inspect which files and definitions are active:
 
-```bash
-# Enable shell integration
-eval "$(fnox activate bash)"
-echo 'eval "$(fnox activate bash)"' >> ~/.bashrc
-
-# Navigate to project (secrets auto-load)
-cd my-api
-# fnox: +4 DATABASE_URL, JWT_SECRET, STRIPE_KEY, SENDGRID_KEY
-
-# Run the app
-npm run dev
+```sh
+fnox config-files
+fnox list --sources
 ```
 
-Or explicitly:
+## 5. Run in CI
 
-```bash
-fnox exec -- npm run dev
-```
+Install fnox and the application toolchain in the workflow before these steps. If mise manages the project tools, include fnox in `mise.toml` so the installation step knows to install it.
 
-### Staging
-
-```bash
-# Deploy to staging
-fnox exec --profile staging -- ./deploy.sh
-
-# Or set profile for session
-export FNOX_PROFILE=staging
-fnox exec -- ./deploy.sh
-```
-
-### Production
-
-```bash
-# Ensure AWS credentials are set
-export AWS_REGION=us-east-1
-
-# Deploy to production
-fnox exec --profile production -- ./deploy.sh
-```
-
-## Step 8: CI/CD Setup
-
-### GitHub Actions
+For development tests, supply the dedicated CI age identity through the CI secret store:
 
 ```yaml
-# .github/workflows/ci.yml
-name: CI
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v4 # Installs fnox via mise
-
-      # Decrypt dev secrets for testing with the CI age key
-      - name: Run tests
-        env:
-          FNOX_AGE_KEY: ${{ secrets.FNOX_AGE_KEY }}
-        run: |
-          fnox exec -- npm test
-
-  deploy-staging:
-    if: github.ref == 'refs/heads/develop'
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v4
-
-      - name: Deploy to staging
-        env:
-          FNOX_AGE_KEY: ${{ secrets.FNOX_AGE_KEY }}
-        run: |
-          fnox exec --profile staging -- ./deploy.sh
-
-  deploy-production:
-    if: github.ref == 'refs/heads/main'
-    needs: test
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v4
-
-      - name: Deploy to production
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: us-east-1
-          FNOX_IF_MISSING: error # Fail if any secret is missing
-        run: |
-          fnox exec --profile production -- ./deploy.sh
+- name: Test
+  env:
+    FNOX_AGE_KEY: ${{ secrets.FNOX_AGE_KEY }}
+  run: fnox --non-interactive exec --if-missing error -- npm test
 ```
 
-### Set GitHub Secrets
+The CI public recipient must have been included when the development secrets were encrypted. Adding it later requires re-encryption by someone who can already decrypt.
 
-1. Go to your repo → Settings → Secrets → Actions
-2. Add `FNOX_AGE_KEY`:
-   ```bash
-   # Copy the CI age secret key (from the CI recipient's age.txt)
-   grep "AGE-SECRET-KEY" ~/.config/fnox/ci-age.txt
+For production, authenticate the runner to AWS first, then run:
+
+```yaml
+- name: Deploy
+  run: fnox --non-interactive exec --profile production --if-missing error -- ./deploy.sh
+```
+
+The [AWS Secrets Manager guide](/providers/aws-sm) covers credentials and read permissions. Never assume that setting `AWS_REGION` alone authenticates a runner.
+
+## 6. Onboard a teammate
+
+1. The teammate installs fnox and creates a personal age identity.
+2. They share only the public recipient, from `age-keygen -y ~/.config/fnox/age.txt`.
+3. A teammate with existing decryption access adds the recipient and re-encrypts each affected profile:
+
+   ```sh
+   fnox reencrypt --provider age --profile default
+   fnox reencrypt --provider age --profile staging
    ```
-3. Add `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` for production
 
-## Step 9: Team Onboarding
+4. Commit the new recipients and ciphertext. The new teammate pulls the changes and runs `fnox check --all`.
+5. Grant production vault access separately if their role requires it.
 
-New team member joins:
+Removing an age recipient affects future ciphertext only. Previously accessible secrets in git history remain decryptable, so rotate the underlying values when access must end.
 
-```bash
-# 1. Clone the repo
-git clone https://github.com/myorg/my-api
-cd my-api
+## Next steps
 
-# 2. Install fnox (via mise)
-mise install
-
-# 3. Generate age key
-age-keygen -o ~/.config/fnox/age.txt
-
-# 4. Share public key with team
-grep "public key:" ~/.config/fnox/age.txt
-# Send to team lead to add to fnox.toml recipients
-
-# 5. Set decryption key
-echo 'export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)' >> ~/.bashrc
-source ~/.bashrc
-
-# 6. Enable shell integration
-echo 'eval "$(fnox activate bash)"' >> ~/.bashrc
-
-# 7. Team lead updates fnox.toml with new recipient
-# Then re-encrypts all secrets:
-fnox reencrypt -p age
-
-# 8. New team member pulls and re-enters the directory
-git pull
-cd .
-# fnox: +4 DATABASE_URL, JWT_SECRET, STRIPE_KEY, SENDGRID_KEY
-npm run dev  # Just works!
-```
-
-## File Structure
-
-```
-my-api/
-├── .gitignore                 # fnox.local.toml, .env
-├── fnox.toml                  # Committed (encrypted dev/staging, AWS refs for prod)
-├── fnox.local.toml            # Gitignored (personal overrides)
-├── package.json
-├── src/
-└── .github/
-    └── workflows/
-        └── ci.yml             # CI/CD with fnox
-```
-
-## Next Steps
-
-- [Providers](/providers/overview) - Explore other providers
-- [Shell Integration](/guide/shell-integration) - Advanced shell setup
-- [Hierarchical Config](/guide/hierarchical-config) - Organize larger projects
+- [Shell integration](/guide/shell-integration): load development secrets on directory change.
+- [Hierarchical configuration](/guide/hierarchical-config): split common and service-specific settings.
+- [Import and export](/guide/import-export): migrate existing `.env` values.
+- [Credential leases](/guide/leases): use temporary credentials for supported services.

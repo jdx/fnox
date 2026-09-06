@@ -1,3 +1,7 @@
+---
+description: "Impersonate a Google Cloud service account to create a temporary access token for a command."
+---
+
 # GCP IAM
 
 The `gcp-iam` lease backend calls the [IAM Credentials API](https://cloud.google.com/iam/docs/reference/credentials/rest/v1/projects.serviceAccounts/generateAccessToken) to generate a short-lived OAuth2 access token by impersonating a service account.
@@ -28,29 +32,29 @@ The backend needs GCP credentials to call the IAM Credentials API. fnox looks fo
 
 If none are found, fnox prints:
 
-```
+```text
 GCP credentials not found. Run 'gcloud auth application-default login' or set GOOGLE_APPLICATION_CREDENTIALS.
 ```
 
-## Credentials Produced
+## Credentials produced
 
 | Environment Variable         | Description         |
 | ---------------------------- | ------------------- |
 | `CLOUDSDK_AUTH_ACCESS_TOKEN` | OAuth2 access token |
 
-The default `CLOUDSDK_AUTH_ACCESS_TOKEN` is read by the `gcloud` CLI. GCP client libraries (Python, Java, Go, Node.js) typically read `GOOGLE_OAUTH_ACCESS_TOKEN` instead. Set `env_var` to match your target tool:
+The default `CLOUDSDK_AUTH_ACCESS_TOKEN` is used by the `gcloud` CLI. For a custom application, configure an environment variable and explicitly pass its value to the application's authentication library; do not assume every Google Cloud SDK reads an OAuth token from the environment.
 
 ```toml
-# For GCP SDKs (not gcloud CLI):
-env_var = "GOOGLE_OAUTH_ACCESS_TOKEN"
+# Field within [leases.gcp]
+env_var = "MY_GCP_ACCESS_TOKEN"
 ```
 
 ## Limits
 
-- **Max duration:** 1 hour (can be extended to 12h with an [org policy](https://cloud.google.com/iam/docs/creating-short-lived-service-account-credentials#sa-credentials-oauth))
+- **Max duration:** 1 hour for this backend
 - **Revocation:** No-op — tokens expire automatically
 
-## IAM Setup
+## IAM setup
 
 The calling identity needs the **Service Account Token Creator** role on the target service account:
 
@@ -77,7 +81,7 @@ type = "1password"
 vault = "Development"
 
 [secrets]
-GOOGLE_APPLICATION_CREDENTIALS = { provider = "op", value = "GCP SA/key file", as_file = true }
+GOOGLE_APPLICATION_CREDENTIALS = { provider = "op", value = "GCP SA/key file", as_file = true, env = false }
 
 [leases.gcp]
 type = "gcp-iam"
@@ -110,7 +114,7 @@ scopes = [
 ]
 ```
 
-## See Also
+## See also
 
 - [Credential Leases](/guide/leases) — overview and approaches
 - [GCP Secret Manager provider](/providers/gcp-sm) — for storing secrets in GCP

@@ -1,8 +1,12 @@
+---
+description: "Read Keeper Secrets Manager records with fnox using application configuration, one-time token bootstrap, and Keeper notation."
+---
+
 # Keeper Secrets Manager
 
 Use [Keeper Secrets Manager](https://docs.keeper.io/keeperpam/secrets-manager) through Keeper's official Rust SDK. The provider is read-only: fnox retrieves secrets but does not create or update Keeper records.
 
-## Quick Start
+## Quick start
 
 Create a Keeper Secrets Manager application and client device, then download its JSON configuration file.
 
@@ -66,7 +70,7 @@ The `token` field can reference a bootstrap secret managed by another fnox provi
 keeper = { type = "keeper-sm", config_file = "~/.keeper/ksm-config.json", token = { secret = "KEEPER_BOOTSTRAP_TOKEN" } }
 ```
 
-## Keeper Notation
+## Keeper notation
 
 The secret `value` is passed to Keeper's notation resolver. Common selectors include:
 
@@ -80,7 +84,7 @@ TITLE = { provider = "keeper", value = "RECORD_UID/title" }
 
 String fields are returned directly. Structured Keeper values are serialized as compact JSON strings.
 
-## Environment Variables
+## Environment variables
 
 | Variable             | Description                                       |
 | -------------------- | ------------------------------------------------- |
@@ -98,3 +102,8 @@ fnox provider test keeper
 ```
 
 The test asks Keeper for all records accessible to the configured application. Confirm that the application has access to the shared folder containing the referenced record and that the client configuration is readable.
+
+## Next steps
+
+- [Profiles](/guide/profiles): select the application configuration for an environment.
+- [Sync a local cache](/guide/sync): cache accessible records under a personal encryption key.

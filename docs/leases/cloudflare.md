@@ -1,8 +1,12 @@
+---
+description: "Create temporary Cloudflare API tokens with fnox, using user or account ownership, scoped policies, and expiry."
+---
+
 # Cloudflare
 
 The `cloudflare` lease backend creates short-lived, scoped Cloudflare API tokens using the [Cloudflare API Tokens API](https://developers.cloudflare.com/api/resources/user/subresources/tokens/methods/create/). A parent token with the **API Tokens: Edit** permission creates child tokens that automatically expire.
 
-By default, the child token inherits the same policies (permissions and resource scopes) as the parent token. You can override this by specifying explicit `policies` in the configuration.
+By default, the child token inherits the parent's policies except the API Tokens permission groups that cannot be delegated. You can override this by specifying explicit `policies` in the configuration.
 
 Set `token_type = "account"` to use [account-owned tokens](https://developers.cloudflare.com/fundamentals/api/get-started/account-owned-tokens/) (`/accounts/{id}/tokens`) instead of user tokens. Account tokens are ideal for CI/CD and team workflows since they aren't tied to an individual user.
 
@@ -16,7 +20,7 @@ duration = "1h"
 
 [[leases.cf.policies]]
 effect = "allow"
-resources = { "com.cloudflare.api.account.abc123def456" = "*" }
+resources = { "com.cloudflare.api.account.zone.*" = "*" }
 
 [[leases.cf.policies.permission_groups]]
 id = "c8fed203ed3043cba015a93ad1616f1f"
@@ -57,11 +61,11 @@ The backend needs a parent API token that can create other tokens. fnox looks fo
 
 The parent token must have the **API Tokens: Edit** permission. If not found, fnox prints:
 
-```
+```text
 Cloudflare API token not found. Set CLOUDFLARE_API_TOKEN with a token that has 'API Tokens: Edit' permission.
 ```
 
-## Credentials Produced
+## Credentials produced
 
 | Environment Variable   | Description                  |
 | ---------------------- | ---------------------------- |
@@ -104,7 +108,7 @@ type = "1password"
 vault = "Development"
 
 [secrets]
-CLOUDFLARE_API_TOKEN = { provider = "op", value = "Cloudflare/api token" }
+CLOUDFLARE_API_TOKEN = { provider = "op", value = "Cloudflare/api token", env = false }
 
 [leases.cf]
 type = "cloudflare"
@@ -113,7 +117,7 @@ duration = "1h"
 
 [[leases.cf.policies]]
 effect = "allow"
-resources = { "com.cloudflare.api.account.abc123def456" = "*" }
+resources = { "com.cloudflare.api.account.zone.*" = "*" }
 
 [[leases.cf.policies.permission_groups]]
 id = "c8fed203ed3043cba015a93ad1616f1f"
@@ -125,7 +129,7 @@ name = "DNS Read"
 ```
 
 ```bash
-fnox exec -- wrangler deploy
+fnox exec -- sh -c 'curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" https://api.cloudflare.com/client/v4/zones'
 ```
 
 ### Using {account_id} placeholder
@@ -175,6 +179,6 @@ name = "Zone Read"
 
 Use the permission groups API to find the full list for your account.
 
-## See Also
+## See also
 
 - [Credential Leases](/guide/leases) — overview and approaches

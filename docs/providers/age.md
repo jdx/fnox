@@ -1,29 +1,22 @@
-# Age Encryption
+---
+description: "Encrypt secrets in fnox.toml with age recipients, SSH keys, or plugins. Configure identities and share access with teammates."
+---
 
-Age is a modern encryption tool that's simple, secure, and works beautifully with SSH keys.
+# Age encryption
 
-## Quick Start
+The `age` provider encrypts values into `fnox.toml`. Decryption uses an age identity, a supported SSH private key, or an age plugin. Standard age keys work offline and do not require a cloud account.
 
-```bash
-# 1. Generate age key
-age-keygen -o ~/.config/fnox/age.txt
+## Quick start
 
-# 2. Get public key
-grep "public key:" ~/.config/fnox/age.txt
-# Output: age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
+Follow the [age quick start](/guide/quick-start) for a complete setup. If you already have a key and a configured provider:
 
-# 3. Configure fnox
-cat >> fnox.toml << 'EOF'
-[providers]
-age = { type = "age", recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"] }
-EOF
-
-# 4. Set private key
-export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)
-
-# 5. Encrypt a secret
-fnox set DATABASE_URL "postgresql://localhost/mydb" --provider age
+```sh
+fnox set DATABASE_URL --provider age
+fnox check --all
+fnox exec -- npm start
 ```
+
+Omitting the value from `fnox set` prompts with hidden input. Never paste a private key into `recipients`: that field takes public recipients only.
 
 ## Installation
 
@@ -41,7 +34,7 @@ sudo apt install age
 
 ## Setup
 
-### Option 1: Generate Age Key
+### Option 1: generate age key
 
 ```bash
 # Create config directory
@@ -50,19 +43,17 @@ mkdir -p ~/.config/fnox
 # Generate age key
 age-keygen -o ~/.config/fnox/age.txt
 
-# View the generated key
-cat ~/.config/fnox/age.txt
+# Print only the public recipient
+age-keygen -y ~/.config/fnox/age.txt
 ```
 
 Output:
 
-```
-# created: 2024-01-15T10:30:45-08:00
-# public key: age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
-AGE-SECRET-KEY-1ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDEFGHIJKLMNOPQRS
+```text
+age1...
 ```
 
-### Option 2: Use SSH Key
+### Option 2: use SSH key
 
 Age has first-class SSH key support — no key generation needed. Your existing SSH public key becomes the recipient and your private key decrypts; see [SSH Key Support](#ssh-key-support) below.
 
@@ -99,19 +90,26 @@ keychain = { type = "keychain", service = "fnox" }
 age = { type = "age", recipients = ["age1..."], identity = { provider = "keychain", value = "age-key" } }
 ```
 
-### Set Decryption Key
+### Set decryption key {#set-decryption-key}
 
-#### Using Age Key
+fnox selects an identity in this order:
+
+1. `FNOX_AGE_KEY` (inline identity contents).
+2. The provider's `identity` reference.
+3. The provider's `key_file`.
+4. The key-file setting (`FNOX_AGE_KEY_FILE` or the deprecated CLI flag).
+5. `age.txt` in the fnox configuration directory.
+
+For local use, prefer `key_file` or the default file. `FNOX_AGE_KEY` is useful when CI supplies the identity directly. An exported inline key overrides the provider-specific settings.
+
+#### Using age key
 
 ```bash
-# Export the secret key
-export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)
-
-# Add to shell profile
-echo 'export FNOX_AGE_KEY=$(grep "AGE-SECRET-KEY" ~/.config/fnox/age.txt)' >> ~/.bashrc
+# Optional when the key is already in the default location
+export FNOX_AGE_KEY_FILE=~/.config/fnox/age.txt
 ```
 
-#### Using SSH Key
+#### Using SSH key
 
 ```bash
 # Point to SSH private key
@@ -123,7 +121,7 @@ echo 'export FNOX_AGE_KEY_FILE=~/.ssh/id_ed25519' >> ~/.bashrc
 
 ## Usage
 
-### Encrypt and Store a Secret
+### Encrypt and store a secret
 
 ```bash
 fnox set DATABASE_URL "postgresql://localhost/mydb" --provider age
@@ -136,28 +134,28 @@ The resulting `fnox.toml`:
 DATABASE_URL = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..." }  # ← Encrypted, safe to commit!
 ```
 
-### Decrypt and Get a Secret
+### Decrypt and get a secret
 
 ```bash
 fnox get DATABASE_URL
 ```
 
-### Run Commands with Secrets
+### Run commands with secrets
 
 ```bash
 fnox exec -- npm run dev
 ```
 
-## SSH Key Support
+## SSH key support
 
-Age natively supports SSH keys—no conversion needed!
+Use a supported SSH public key as a recipient and the matching private key for decryption.
 
-### Supported SSH Key Types
+### Supported SSH key types
 
-- **`ssh-ed25519`** - Ed25519 keys (recommended, most secure)
+- **`ssh-ed25519`** - Ed25519 keys
 - **`ssh-rsa`** - RSA keys (2048-bit minimum, 4096-bit recommended)
 
-### Using SSH Keys
+### Using SSH keys
 
 ```toml
 [providers.age]
@@ -176,10 +174,10 @@ export FNOX_AGE_KEY_FILE=~/.ssh/id_ed25519
 ```
 
 ::: warning Password-Protected SSH Keys
-Password-protected SSH keys are NOT supported. If your SSH key has a passphrase, you must create a copy without a passphrase for use with fnox/age.
+Password-protected SSH keys are not supported by this integration. Generate a dedicated age identity or use a supported age plugin instead of removing the passphrase from your SSH key.
 :::
 
-### Get Your SSH Public Key
+### Get your SSH public key
 
 ```bash
 # Ed25519 key
@@ -189,7 +187,7 @@ cat ~/.ssh/id_ed25519.pub
 cat ~/.ssh/id_rsa.pub
 ```
 
-## Plugin Support
+## Plugin support
 
 Age plugins extend age with hardware-backed and alternative keys. fnox supports any [age plugin](https://github.com/FiloSottile/awesome-age#plugins), for example [age-plugin-yubikey](https://github.com/str4d/age-plugin-yubikey) (YubiKey / PIV) or [age-plugin-se](https://github.com/remko/age-plugin-se) (Apple's Secure Enclave).
 
@@ -207,9 +205,9 @@ Refer to each plugin's docs for setup instructions. The sync guide also has
 full [hardware-backed decryption](/guide/sync#hardware-backed-decryption)
 walkthroughs for Secure Enclave, YubiKey, TPM, and FIDO2.
 
-## Team Workflow
+## Team workflow
 
-### 1. Collect Public Keys
+### 1. Collect public keys
 
 Each team member shares their public key:
 
@@ -221,7 +219,7 @@ grep "public key:" ~/.config/fnox/age.txt
 cat ~/.ssh/id_ed25519.pub
 ```
 
-### 2. Add All Recipients
+### 2. Add all recipients
 
 ```toml
 [providers.age]
@@ -233,14 +231,14 @@ recipients = [
 ]
 ```
 
-### 3. Encrypt Secrets
+### 3. Encrypt secrets
 
 ```bash
 fnox set DATABASE_URL "postgresql://dev.example.com/db" --provider age
-fnox set API_KEY "secret-key" --provider age
+fnox set API_KEY --provider age
 ```
 
-### 4. Commit to Git
+### 4. Commit to git
 
 ```bash
 git add fnox.toml
@@ -248,7 +246,7 @@ git commit -m "Add encrypted development secrets"
 git push
 ```
 
-### 5. Everyone Can Decrypt
+### 5. Decrypt with a matching identity
 
 Each team member sets their private key:
 
@@ -263,13 +261,13 @@ export FNOX_AGE_KEY_FILE=~/.ssh/id_ed25519
 export FNOX_AGE_KEY="AGE-SECRET-KEY-1..."
 ```
 
-Now everyone can decrypt:
+A teammate whose public recipient was included when the secret was encrypted can now decrypt:
 
 ```bash
 fnox get DATABASE_URL  # Works for all recipients!
 ```
 
-## Adding a New Team Member
+## Adding a new team member
 
 1. **New member generates/shares public key**:
 
@@ -325,7 +323,7 @@ fnox get DATABASE_URL  # Works for all recipients!
    fnox get DATABASE_URL  # Works!
    ```
 
-## CI/CD Setup
+## CI/CD setup
 
 ### GitHub Actions
 
@@ -369,23 +367,9 @@ jobs:
 
 4. Add to GitHub Secrets as `FNOX_AGE_KEY`
 
-## Pros
+## Usage notes
 
-- ✅ Secrets live in git (version control, code review)
-- ✅ Works offline
-- ✅ Zero runtime dependencies (after initial setup)
-- ✅ Free forever
-- ✅ Works with SSH keys you already have
-- ✅ Simple and secure
-- ✅ Team-friendly (multiple recipients)
-
-## Cons
-
-- ❌ Key rotation requires re-encrypting all secrets
-- ❌ No audit logs
-- ❌ No centralized access control
-- ❌ Manual key management
-- ❌ Adding new team members requires re-encryption
+Age decrypts locally with a matching identity. Changing recipients does not update existing ciphertext: run `fnox reencrypt` for each affected profile. Removing a recipient cannot revoke that person's access to old ciphertext in git history; rotate the underlying secret if access must end.
 
 ## Troubleshooting
 
@@ -414,7 +398,7 @@ grep recipients fnox.toml
 - Check that the private key file path is correct
 - Ensure the private key is NOT password-protected
 
-## Next Steps
+## Next steps
 
 - [Real-World Example](/guide/real-world-example) - Complete project setup with age
 - [Profiles](/guide/profiles) - Multi-environment configuration
