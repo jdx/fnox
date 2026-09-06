@@ -1,0 +1,1 @@
+improve the docs. readme, and the docs website. prose, content, structure, everything is on the table. improve the styling and landing too. Go through every md file.
