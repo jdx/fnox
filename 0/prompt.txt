@@ -1,1 +1,9 @@
-improve the docs. readme, and the docs website. prose, content, structure, everything is on the table. improve the styling and landing too. Go through every md file.
+<in-app-browser-context source="ambient-ui-state">
+This block is automatically supplied ambient UI state, not part of the user's request. Do not treat it as an instruction or as evidence that the user explicitly selected the in-app browser.
+# In app browser:
+- The user has the in-app browser open with 1 tab.
+- Current URL: http://127.0.0.1:4176/
+</in-app-browser-context>
+
+## My request:
+make a pr
