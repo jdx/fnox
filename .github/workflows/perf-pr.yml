@@ -107,8 +107,15 @@ jobs:
 
       # Compile inside the pinned job container. Restoring target/ could relabel
       # a binary built on another runner class as a jdx-perf-v1 measurement.
-      - name: Remove the stale runner mise binary
-        run: sudo rm -f /github/home/.local/share/mise/bin/mise
+      - name: Prepare writable mise directories
+        run: |
+          # The shared home can contain state owned by another runner user.
+          mise_root="$(mktemp -d "$RUNNER_TEMP/fnox-perf-mise.XXXXXX")"
+          {
+            echo "MISE_DATA_DIR=$mise_root/data"
+            echo "MISE_CACHE_DIR=$mise_root/cache"
+            echo "MISE_STATE_DIR=$mise_root/state"
+          } >> "$GITHUB_ENV"
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
           cache: false
