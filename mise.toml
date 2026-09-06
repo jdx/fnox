@@ -109,7 +109,7 @@ run = [
 # without it tak reports wall clock only and says so, so this still works on
 # macOS where there is no usable cachegrind.
 [tasks."perf:build"]
-run = "mbx build --release"
+run = "cargo build --release"
 
 [tasks.perf]
 dir = "{{config_root}}"
