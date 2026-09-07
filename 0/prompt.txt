@@ -1,0 +1,5 @@
+edit claude.md to say that version numbers and changelogs should not be touched in non-release prs
+
+---
+
+edit claude.md to say that version numbers and changelogs should not be touched in non-release prs
