@@ -393,6 +393,47 @@ EOF
 	assert_output --partial "$HOME/.config/fnox/imported.toml"
 }
 
+@test "config-files fails when a global import is missing" {
+	mkdir -p "$HOME/.config/fnox"
+	cat >"$HOME/.config/fnox/config.toml" <<EOF
+import = ["missing.toml"]
+EOF
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.plain]
+type = "plain"
+EOF
+
+	run "$FNOX_BIN" config-files
+	assert_failure
+	assert_output --partial "Import file not found"
+}
+
+@test "global config imports are listed even when a project import reaches the global config first" {
+	mkdir -p "$HOME/.config/fnox"
+	cat >"$HOME/.config/fnox/shared.toml" <<EOF
+[secrets]
+SHARED_SECRET = { description = "Shared secret", default = "shared-value" }
+EOF
+	cat >"$HOME/.config/fnox/config.toml" <<EOF
+import = ["shared.toml"]
+EOF
+
+	cat >fnox.toml <<EOF
+root = true
+import = ["$HOME/.config/fnox/config.toml"]
+
+[providers.plain]
+type = "plain"
+EOF
+
+	run "$FNOX_BIN" config-files
+	assert_success
+	assert_output --partial "$HOME/.config/fnox/shared.toml"
+}
+
 # Tests for --global flag on commands
 
 @test "fnox init --global creates global config" {
