@@ -147,6 +147,8 @@ Encryption providers store ciphertext in `fnox.toml`; remote and local storage p
 
 Pull request titles must follow the same Conventional Commit format as commits: `<type>[optional scope][optional !]: <description>` in lowercase imperative mood. Do not prefix PR titles with agent/tool labels such as `[codex]` or `[claude]`.
 
+Do not modify version numbers or changelogs in non-release pull requests.
+
 When AI contributes GitHub content—including a pull request description, review, pull request
 comment, or discussion post—append this disclosure:
 
