@@ -366,6 +366,33 @@ EOF
 	assert_output --partial "project-value"
 }
 
+@test "global config import is loaded" {
+	mkdir -p "$HOME/.config/fnox"
+	cat >"$HOME/.config/fnox/imported.toml" <<EOF
+[providers.plain]
+type = "plain"
+
+[secrets]
+IMPORTED_SECRET = { description = "Imported secret", default = "imported-value" }
+EOF
+	cat >"$HOME/.config/fnox/config.toml" <<EOF
+import = ["imported.toml"]
+EOF
+
+	cat >fnox.toml <<EOF
+root = true
+EOF
+
+	run "$FNOX_BIN" get IMPORTED_SECRET
+	assert_success
+	assert_output --partial "imported-value"
+
+	run "$FNOX_BIN" config-files
+	assert_success
+	assert_output --partial "$HOME/.config/fnox/config.toml"
+	assert_output --partial "$HOME/.config/fnox/imported.toml"
+}
+
 # Tests for --global flag on commands
 
 @test "fnox init --global creates global config" {

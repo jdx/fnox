@@ -58,9 +58,7 @@ impl ConfigFilesCommand {
 
         // Global config is always checked
         let global = Config::global_config_path();
-        if global.exists() && printed.insert(global.clone()) {
-            println!("{}", global.display());
-        }
+        self.collect_file(&global, &mut printed)?;
 
         Ok(())
     }
