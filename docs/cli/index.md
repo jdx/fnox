@@ -6,8 +6,6 @@ description: "Find fnox commands for reading secrets, running applications, conf
 
 # `fnox`
 
-**Usage:** `fnox [FLAGS] <SUBCOMMAND>`
-
 **Version:** 1.35.1
 
 - **Usage:** `fnox [FLAGS] <SUBCOMMAND>`
@@ -70,7 +68,7 @@ New to fnox? Follow the [quick start](/guide/quick-start). Put fnox options befo
 - [`fnox get [--base64-decode] <KEY>`](/cli/get.md)
 - [`fnox import <FLAGS> [FORMAT]`](/cli/import.md)
 - [`fnox init [FLAGS]`](/cli/init.md)
-- [`fnox lease <SUBCOMMAND>`](/cli/lease.md)
+- [`fnox lease [SUBCOMMAND]`](/cli/lease.md)
 - [`fnox lease cleanup`](/cli/lease/cleanup.md)
 - [`fnox lease create [FLAGS] [BACKEND_NAME]`](/cli/lease/create.md)
 - [`fnox lease list [--active] [--expired]`](/cli/lease/list.md)
@@ -78,7 +76,7 @@ New to fnox? Follow the [quick start](/guide/quick-start). Put fnox options befo
 - [`fnox list [FLAGS]`](/cli/list.md)
 - [`fnox mcp`](/cli/mcp.md)
 - [`fnox profiles`](/cli/profiles.md)
-- [`fnox provider <SUBCOMMAND>`](/cli/provider.md)
+- [`fnox provider [SUBCOMMAND]`](/cli/provider.md)
 - [`fnox provider add [-g --global] [--vault <VAULT>] <PROVIDER> <PROVIDER_TYPE>`](/cli/provider/add.md)
 - [`fnox provider list`](/cli/provider/list.md)
 - [`fnox provider remove [-g --global] <PROVIDER>`](/cli/provider/remove.md)

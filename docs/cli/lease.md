@@ -6,7 +6,7 @@ description: "Usage and examples for fnox lease. Create and manage temporary cre
 
 # `fnox lease`
 
-- **Usage:** `fnox lease <SUBCOMMAND>`
+- **Usage:** `fnox lease [SUBCOMMAND]`
 
 Manage ephemeral credential leases
 

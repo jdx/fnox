@@ -6,7 +6,7 @@ description: "Usage and examples for fnox provider. Manage configured provider i
 
 # `fnox provider`
 
-- **Usage:** `fnox provider <SUBCOMMAND>`
+- **Usage:** `fnox provider [SUBCOMMAND]`
 
 Manage providers (defaults to list)
 
