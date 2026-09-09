@@ -3,3 +3,7 @@ investigate [https://github.com/jdx/fnox/discussions/837](https://github.com/jdx
 ---
 
 so the fix is in but not released?
+
+---
+
+ok make a pr to fix, post a reply to the discussion
