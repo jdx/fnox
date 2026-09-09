@@ -1,0 +1,5 @@
+investigate [https://github.com/jdx/fnox/discussions/837](https://github.com/jdx/fnox/discussions/837)
+
+---
+
+so the fix is in but not released?
