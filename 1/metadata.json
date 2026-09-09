@@ -1,0 +1,78 @@
+{
+  "cli_version": "0.10.5",
+  "checkpoint_id": "01M2362P68KYYKZ0914J162127",
+  "session_id": "01a08655-8940-7fb1-b1a7-be45067fa312",
+  "strategy": "manual-commit",
+  "created_at": "2026-09-09T13:35:24.112394Z",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [
+    "docs/cli/commands.json"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-sol",
+  "turn_id": "938f8aa58de8",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 104493,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 3419136,
+    "output_tokens": 9574,
+    "api_call_count": 48
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-09-09T13:35:23.974611Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 1320,
+    "human_modified": 97,
+    "human_removed": 0,
+    "total_committed": 1320,
+    "total_lines_changed": 1423,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 16,
+      "user_lines_removed": 16,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".github/workflows/release.yml": 3,
+        "README.md": 2,
+        "communique.toml": 1,
+        "docs/.vitepress/theme/EndevFooter.vue": 3,
+        "docs/.vitepress/theme/EndevSponsors.vue": 2,
+        "docs/cli/commands.json": 1,
+        "docs/cli/sponsors.md": 1,
+        "fnox.usage.kdl": 1,
+        "src/commands/mod.rs": 1,
+        "src/commands/sponsors.rs": 1
+      },
+      "user_removed_per_file": {
+        ".github/workflows/release.yml": 3,
+        "README.md": 2,
+        "communique.toml": 1,
+        "docs/.vitepress/theme/EndevFooter.vue": 3,
+        "docs/.vitepress/theme/EndevSponsors.vue": 2,
+        "docs/cli/commands.json": 1,
+        "docs/cli/sponsors.md": 1,
+        "fnox.usage.kdl": 1,
+        "src/commands/mod.rs": 1,
+        "src/commands/sponsors.rs": 1
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 16,
+      "agent_lines_removed": 16
+    }
+  ]
+}
