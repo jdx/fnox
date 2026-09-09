@@ -1097,6 +1097,7 @@ fn apply_request_settings(
     crate::env::set_non_interactive(non_interactive);
 }
 
+/// Resolve cache misses while making cached dependency values available to providers.
 async fn resolve_with_cache(
     config: &Config,
     profile: &[String],

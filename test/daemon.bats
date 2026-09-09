@@ -107,12 +107,16 @@ EOF
 	assert_equal "$(wc -l <"$PASS_PPID_FILE" | tr -d ' ')" "1"
 }
 
-@test "daemon cache hits satisfy provider dependencies for cache misses" {
+@test "daemon cache hits satisfy provider dependencies without exposing unrelated secrets" {
 	mkdir -p "$TEST_TEMP_DIR/bin"
 	cat >"$TEST_TEMP_DIR/bin/op" <<'EOF'
 #!/bin/sh
 if [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
 	echo "not signed in" >&2
+	exit 1
+fi
+if [ -n "${HIDDEN:-}" ]; then
+	echo "unrelated hidden secret leaked" >&2
 	exit 1
 fi
 printf 'remote-value\n'
@@ -136,17 +140,20 @@ vault = "test"
 [secrets]
 OP_SERVICE_ACCOUNT_TOKEN = { provider = "bootstrap", value = "token-from-provider" }
 REMOTE = { provider = "op", value = "item/password", daemon_cache = false }
+HIDDEN = { default = "${REMOTE}", env = false }
 EOF
 
-	# The first resolution caches the provider credential but not REMOTE.
-	run env -u OP_SERVICE_ACCOUNT_TOKEN "$FNOX_BIN" hook-env -s bash
+	# The first resolution caches the provider credential and hidden interpolation,
+	# but not REMOTE.
+	run env -u OP_SERVICE_ACCOUNT_TOKEN "$FNOX_BIN" exec -- sh -c 'printf "%s\n" "$REMOTE"'
 	assert_success
-	assert_output --partial "export REMOTE=remote-value"
+	assert_output "remote-value"
 
-	# The cached credential must be available while resolving the REMOTE cache miss.
-	run env -u OP_SERVICE_ACCOUNT_TOKEN "$FNOX_BIN" hook-env -s bash
+	# Only the cached credential, not the unrelated hidden secret, may be exposed
+	# while resolving the REMOTE cache miss.
+	run env -u OP_SERVICE_ACCOUNT_TOKEN "$FNOX_BIN" exec -- sh -c 'printf "%s\n" "$REMOTE"'
 	assert_success
-	assert_output --partial "export REMOTE=remote-value"
+	assert_output "remote-value"
 }
 
 @test "daemon clear removes cached entries" {
