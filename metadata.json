@@ -1,0 +1,15 @@
+{
+  "cli_version": "0.10.5",
+  "checkpoint_id": "01M2362P68KYYKZ0914J162127",
+  "strategy": "manual-commit",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/cli/commands.json"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "prompt": ""
+    }
+  ]
+}
