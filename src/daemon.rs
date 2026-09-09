@@ -1128,7 +1128,8 @@ async fn resolve_with_cache(
     }
 
     if !misses.is_empty() {
-        let resolved = resolve_secrets_batch(config, profile, &misses).await?;
+        let resolved =
+            resolve_secrets_batch_with_pre_resolved(config, profile, &misses, &results).await?;
         let mut state = state.lock().await;
         for (key, value) in resolved {
             if let Some(cache_key) = miss_keys.remove(&key) {
