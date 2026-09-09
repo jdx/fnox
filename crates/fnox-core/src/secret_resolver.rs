@@ -834,11 +834,13 @@ pub async fn resolve_secrets_batch_with_pre_resolved(
 
     // Build dependency graph and compute resolution levels using Kahn's algorithm.
     let mut deps_for_secret: HashMap<String, Vec<String>> = HashMap::new();
+    let mut provider_env_dependencies = HashSet::new();
     for (key, (provider_name, _)) in &secret_provider {
         let deps = providers
             .get(provider_name)
             .map(|pc| pc.env_dependencies())
             .unwrap_or(&[]);
+        provider_env_dependencies.extend(deps.iter().copied());
         deps_for_secret.insert(
             key.clone(),
             deps.iter().map(|dep| dep.to_string()).collect(),
@@ -866,7 +868,9 @@ pub async fn resolve_secrets_batch_with_pre_resolved(
     let mut temp_results: HashMap<String, Option<String>> =
         pre_resolved.clone().into_iter().collect();
     for (key, value) in pre_resolved {
-        if let Some(value) = value {
+        if provider_env_dependencies.contains(key.as_str())
+            && let Some(value) = value
+        {
             env::set_var(key, value);
         }
     }
