@@ -965,7 +965,7 @@
       },
       "lease": {
         "full_cmd": ["lease"],
-        "usage": "lease <SUBCOMMAND>",
+        "usage": "lease [SUBCOMMAND]",
         "subcommands": {
           "cleanup": {
             "full_cmd": ["lease", "cleanup"],
@@ -1383,7 +1383,7 @@
       },
       "provider": {
         "full_cmd": ["provider"],
-        "usage": "provider <SUBCOMMAND>",
+        "usage": "provider [SUBCOMMAND]",
         "subcommands": {
           "add": {
             "full_cmd": ["provider", "add"],
