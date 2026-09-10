@@ -3,3 +3,7 @@ investigate [https://github.com/jdx/fnox/discussions/837#discussioncomment-18375
 ---
 
 make a pr to fix your bug and post that feedback
+
+---
+
+address pr feedback and failing checks until it settles
