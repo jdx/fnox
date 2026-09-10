@@ -1,0 +1,5 @@
+investigate [https://github.com/jdx/fnox/discussions/837#discussioncomment-18375088](https://github.com/jdx/fnox/discussions/837#discussioncomment-18375088)
+
+---
+
+make a pr to fix your bug and post that feedback
