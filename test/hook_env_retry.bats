@@ -1,5 +1,6 @@
 #!/usr/bin/env bats
 
+# Create isolated mock providers and configuration for hook recovery tests.
 setup() {
 	load 'test_helper/common_setup'
 	_common_setup
@@ -34,6 +35,7 @@ PROXMOX_URL = { provider = "op", value = "proxmox/url" }
 CONFIG
 }
 
+# Stop the test daemon before removing its temporary directory.
 teardown() {
 	"$FNOX_BIN" daemon stop >/dev/null 2>&1 || true
 	_common_teardown
@@ -82,7 +84,10 @@ CONFIG
 	assert_output ""
 }
 
-@test "hook retry bypasses a daemon-cached missing value" {
+# Exercise recovery and a subsequent reload against the same daemon cache.
+daemon_retry() {
+	# Keep credential-dependent cache fingerprints identical across attempts.
+	export OP_SERVICE_ACCOUNT_TOKEN=test-token
 	export FNOX_DAEMON=auto
 	cat >>fnox.toml <<'CONFIG'
 [daemon]
@@ -92,8 +97,27 @@ CONFIG
 	[ -z "${PROXMOX_URL:-}" ]
 	run "$FNOX_BIN" daemon status
 	assert_success
-	assert_output --partial "cached_entries: 2"
+	assert_output --partial "cached_entries: 1"
 	touch provider-ready
 	eval "$("$FNOX_BIN" hook-env -s bash)"
 	[ "$PROXMOX_URL" = mock-url ]
+	run "$FNOX_BIN" daemon status
+	assert_success
+	assert_output --partial "cached_entries: 2"
+
+	# Force a later reload with the same daemon cache key. The recovered
+	# value must remain available even if the provider goes offline again.
+	rm provider-ready
+	unset __FNOX_SESSION
+	eval "$("$FNOX_BIN" hook-env -s bash)"
+	[ "$PROXMOX_URL" = mock-url ]
+}
+
+@test "hook retry fills the daemon cache and survives a later reload" {
+	daemon_retry
+}
+
+@test "non-interactive hook retry fills the daemon cache and survives a later reload" {
+	export FNOX_NON_INTERACTIVE=true
+	daemon_retry
 }

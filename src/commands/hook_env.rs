@@ -277,12 +277,9 @@ async fn load_secrets_from_config(cli: &Cli) -> Result<LoadedSecrets> {
         .get_secrets(profile_name)
         .map_err(|e| anyhow::anyhow!("Failed to get secrets: {}", e))?;
 
-    // A daemon may have cached missing values from the failed attempt.
-    // Retry in the foreground so recovery does not depend on clearing its cache.
-    let mut context = crate::daemon::ResolveContext::from_cli(cli);
-    context.no_daemon |= PREV_SESSION.needs_retry;
-    let resolved = match crate::daemon::resolve_batch_with_context(
-        &context,
+    // Use batch resolution for better performance.
+    let resolved = match crate::daemon::resolve_batch(
+        cli,
         &config,
         profile_name,
         &profile_secrets,
