@@ -1,0 +1,13 @@
+# zizmor configuration, discovered automatically from .github/.
+rules:
+  # `self-repository` asks for GitHub's `$/` self-repository `uses:` syntax in
+  # place of `./`. GitHub accepts `$/`, but actionlint does not yet
+  # (rhysd/actionlint#711; support sits in the unmerged #732), so adopting it
+  # fails the lint job.
+  #
+  # Disabled rather than ignored per location: the audit is only about which
+  # spelling of a local reference is used and carries no security signal, and
+  # a per-location ignore would need an entry for every reusable workflow call.
+  # Revisit once actionlint ships `$/` support.
+  self-repository:
+    disable: true
