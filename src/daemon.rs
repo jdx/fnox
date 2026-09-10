@@ -201,6 +201,7 @@ struct CacheKey(String);
 
 #[derive(Default)]
 struct DaemonState {
+    // Missing values are not cache hits: a provider may recover between requests.
     cache: HashMap<CacheKey, Option<String>>,
 }
 
@@ -1031,12 +1032,12 @@ async fn foreground_resolution_if_needed(
     let mut keys = Vec::new();
     for (key, secret) in secrets {
         if secret_is_cacheable(&providers, default_provider, secret, req)
-            && let Some(value) =
+            && let Some(Some(value)) =
                 state
                     .cache
                     .get(&cache_key(&fingerprint, profile, key, secret, req))
         {
-            cached_values.insert(key.clone(), value.clone());
+            cached_values.insert(key.clone(), Some(value.clone()));
         } else {
             keys.push(key.clone());
         }
@@ -1072,10 +1073,10 @@ async fn store_resolved_values(
     let mut state = state.lock().await;
     for (key, secret) in secrets {
         if secret_is_cacheable(&providers, default_provider, secret, req)
-            && let Some(value) = values.swap_remove(key)
+            && let Some(Some(value)) = values.swap_remove(key)
         {
             let cache_key = cache_key(&fingerprint, profile, key, secret, req);
-            state.cache.insert(cache_key, value);
+            state.cache.insert(cache_key, Some(value));
         }
     }
     Ok(())
@@ -1118,8 +1119,8 @@ async fn resolve_with_cache(
             let cacheable = secret_is_cacheable(&providers, default_provider, secret, req);
             if cacheable {
                 let cache_key = cache_key(&fingerprint, profile, key, secret, req);
-                if let Some(value) = state.cache.get(&cache_key) {
-                    results.insert(key.clone(), value.clone());
+                if let Some(Some(value)) = state.cache.get(&cache_key) {
+                    results.insert(key.clone(), Some(value.clone()));
                     continue;
                 }
                 miss_keys.insert(key.clone(), cache_key);
@@ -1133,7 +1134,9 @@ async fn resolve_with_cache(
             resolve_secrets_batch_with_pre_resolved(config, profile, &misses, &results).await?;
         let mut state = state.lock().await;
         for (key, value) in resolved {
-            if let Some(cache_key) = miss_keys.remove(&key) {
+            if let Some(cache_key) = miss_keys.remove(&key)
+                && value.is_some()
+            {
                 state.cache.insert(cache_key, value.clone());
             }
             results.insert(key, value);
@@ -1298,8 +1301,9 @@ fn socket_path(cli: &Cli) -> Result<PathBuf> {
 
 /// Wire-protocol version tag included in the socket path hash.
 /// Incrementing this ensures new clients don't connect to stale daemons
-/// running an incompatible wire format.
-const WIRE_VERSION: u8 = 3;
+/// running an incompatible wire format or resolution behavior.
+/// Version 4 requires missing values to remain cache misses, including after upgrades.
+const WIRE_VERSION: u8 = 4;
 
 fn socket_path_for_context(ctx: &ResolveContext) -> Result<PathBuf> {
     let mut hasher = blake3::Hasher::new();

@@ -91,6 +91,7 @@ impl HookEnvCommand {
                     LoadedSecrets {
                         secrets: HashMap::new(),
                         temp_files: HashMap::new(),
+                        needs_retry: true,
                     }
                 }
             }
@@ -98,6 +99,7 @@ impl HookEnvCommand {
             LoadedSecrets {
                 secrets: HashMap::new(),
                 temp_files: HashMap::new(),
+                needs_retry: false,
             }
         };
 
@@ -114,12 +116,14 @@ impl HookEnvCommand {
 
         // Create new session
         let current_dir = std::env::current_dir().ok();
-        let session = HookEnvSession::new(
+        let mut session = HookEnvSession::new(
             current_dir,
             config_path,
             loaded_data.secrets,
             loaded_data.temp_files,
         )?;
+
+        session.needs_retry = loaded_data.needs_retry;
 
         // Export session state for next invocation
         let session_encoded = session.encode()?;
@@ -221,6 +225,8 @@ struct LoadedSecrets {
     secrets: HashMap<String, String>,
     /// Temp file paths for file-based secrets
     temp_files: HashMap<String, String>,
+    /// At least one shell secret could not be loaded.
+    needs_retry: bool,
 }
 
 /// Load all secrets from a fnox.toml config file
@@ -271,7 +277,7 @@ async fn load_secrets_from_config(cli: &Cli) -> Result<LoadedSecrets> {
         .get_secrets(profile_name)
         .map_err(|e| anyhow::anyhow!("Failed to get secrets: {}", e))?;
 
-    // Use batch resolution for better performance
+    // Use batch resolution for better performance.
     let resolved = match crate::daemon::resolve_batch(
         cli,
         &config,
@@ -289,6 +295,7 @@ async fn load_secrets_from_config(cli: &Cli) -> Result<LoadedSecrets> {
             return Ok(LoadedSecrets {
                 secrets: HashMap::new(),
                 temp_files: HashMap::new(),
+                needs_retry: true,
             });
         }
     };
@@ -296,6 +303,7 @@ async fn load_secrets_from_config(cli: &Cli) -> Result<LoadedSecrets> {
     // Process secrets: create temp files for file-based secrets
     let mut loaded_secrets = HashMap::new();
     let mut temp_files = HashMap::new();
+    let mut needs_retry = false;
 
     for (key, value_opt) in resolved {
         // Skip secrets unless their env mode allows shell injection —
@@ -318,6 +326,7 @@ async fn load_secrets_from_config(cli: &Cli) -> Result<LoadedSecrets> {
                             temp_files.insert(key, file_path);
                         }
                         Err(e) => {
+                            needs_retry = true;
                             tracing::warn!(
                                 "failed to create temp file for secret '{}': {}",
                                 key,
@@ -332,12 +341,15 @@ async fn load_secrets_from_config(cli: &Cli) -> Result<LoadedSecrets> {
             } else {
                 loaded_secrets.insert(key, value);
             }
+        } else {
+            needs_retry = true;
         }
     }
 
     Ok(LoadedSecrets {
         secrets: loaded_secrets,
         temp_files,
+        needs_retry,
     })
 }
 
