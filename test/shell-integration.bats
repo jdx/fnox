@@ -280,6 +280,8 @@ teardown() {
 @test "fnox hook-env with same directory and config exits early" {
 	cd "$TEST_TEMP_DIR"
 	cat >fnox.toml <<-EOF
+		root = true
+
 		[providers.plain]
 		type = "plain"
 
@@ -308,6 +310,8 @@ teardown() {
 	mkdir -p "$project_dir/inner"
 	cd "$project_dir"
 	cat >fnox.toml <<-EOF
+		root = true
+
 		[providers.plain]
 		type = "plain"
 

@@ -40,6 +40,9 @@ pub struct HookEnvSession {
     /// Temp directory used to create file-based secrets
     #[serde(default)]
     pub hook_temp_dir: Option<PathBuf>,
+    /// Retry incomplete loads even when config and environment are unchanged.
+    #[serde(default)]
+    pub needs_retry: bool,
 }
 
 /// Global previous session state, loaded from __FNOX_SESSION env var
@@ -115,6 +118,7 @@ impl HookEnvSession {
             config_files_hash,
             temp_files,
             hook_temp_dir,
+            needs_retry: false,
         })
     }
 
@@ -154,6 +158,11 @@ pub fn hash_secret_value_with_session(session: &HookEnvSession, key: &str, value
 /// Check if we should exit early (optimization)
 /// Returns true if nothing changed and we can skip work
 pub fn should_exit_early() -> bool {
+    if PREV_SESSION.needs_retry {
+        tracing::debug!("previous secret load was incomplete, must run hook-env");
+        return false;
+    }
+
     // Check if fnox.toml was modified
     if has_config_been_modified() {
         tracing::debug!("fnox.toml modified, must run hook-env");
