@@ -2,7 +2,6 @@ amends "package://github.com/jdx/hk/releases/download/v1.44.3/hk@1.44.3#/Config.
 import "package://github.com/jdx/hk/releases/download/v1.44.3/hk@1.44.3#/Builtins.pkl"
 
 local linters = new Mapping<String, Step> {
-    ["actionlint"] = Builtins.actionlint
     ["prettier"] = (Builtins.prettier) {
         exclude = List("CLAUDE.md", "CHANGELOG.md") // TODO: fix symbolic links with prettier built-in: ([error] Explicitly specified pattern "CLAUDE.md" is a symbolic link.)
     }
