@@ -1,0 +1,68 @@
+{
+  "cli_version": "0.10.5",
+  "checkpoint_id": "01M28ZB6YV44CN9C2B0ATVWWD1",
+  "session_id": "01a091f3-bd39-70b1-98eb-0aa8fb6dab3c",
+  "strategy": "manual-commit",
+  "created_at": "2026-09-11T19:33:08.236538Z",
+  "branch": "codex/chore-ignore-aws-renovate",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".github/renovate.json"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-sol",
+  "turn_id": "b30d5055d39e",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 78394,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 674304,
+    "output_tokens": 3038,
+    "api_call_count": 14
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-09-11T19:33:08.206384Z",
+    "agent_lines": 0,
+    "agent_removed": 4,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 0,
+    "total_lines_changed": 4,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 16,
+      "user_lines_removed": 16,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".github/workflows/release.yml": 3,
+        "README.md": 2,
+        "communique.toml": 1,
+        "docs/.vitepress/theme/EndevFooter.vue": 3,
+        "docs/.vitepress/theme/EndevSponsors.vue": 2,
+        "docs/cli/commands.json": 1,
+        "docs/cli/sponsors.md": 1,
+        "fnox.usage.kdl": 1,
+        "src/commands/mod.rs": 1,
+        "src/commands/sponsors.rs": 1
+      },
+      "user_removed_per_file": {
+        ".github/workflows/release.yml": 3,
+        "README.md": 2,
+        "communique.toml": 1,
+        "docs/.vitepress/theme/EndevFooter.vue": 3,
+        "docs/.vitepress/theme/EndevSponsors.vue": 2,
+        "docs/cli/commands.json": 1,
+        "docs/cli/sponsors.md": 1,
+        "fnox.usage.kdl": 1,
+        "src/commands/mod.rs": 1,
+        "src/commands/sponsors.rs": 1
+      }
+    }
+  ]
+}
