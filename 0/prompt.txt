@@ -1,0 +1,5 @@
+make a pr to exclude these from renovate in the future
+
+---
+
+[https://github.com/jdx/fnox/pull/796#issue-comment-box](https://github.com/jdx/fnox/pull/796#issue-comment-box)
