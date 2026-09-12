@@ -1,0 +1,1 @@
+huh are the untrusted builds running on namespace? [https://github.com/jdx/fnox/actions/runs/34663183645/job/103470985317?pr=818](https://github.com/jdx/fnox/actions/runs/34663183645/job/103470985317?pr=818)
