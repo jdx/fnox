@@ -1,5 +1,47 @@
 # Changelog
 
+## [1.35.2](https://github.com/jdx/fnox/compare/v1.35.1..v1.35.2) - 2026-09-12
+
+### 🐛 Bug Fixes
+
+- **(config)** clarify ci matrix job names by [@jdx](https://github.com/jdx) in [#845](https://github.com/jdx/fnox/pull/845)
+- **(env)** preserve dependencies across daemon cache hits by [@jdx](https://github.com/jdx) in [#838](https://github.com/jdx/fnox/pull/838)
+- **(env)** retry incomplete shell secret loads by [@jdx](https://github.com/jdx) in [#839](https://github.com/jdx/fnox/pull/839)
+
+### 📚 Documentation
+
+- overhaul guides and redesign the documentation site by [@jdx](https://github.com/jdx) in [#817](https://github.com/jdx/fnox/pull/817)
+- reserve version and changelog updates for releases by [@jdx](https://github.com/jdx) in [e1f60e3](https://github.com/jdx/fnox/commit/e1f60e30ff0fde14b0dcc8e7c380a8ade6e1d8b6)
+- write PR titles and descriptions for release notes by [@jdx](https://github.com/jdx) in [#842](https://github.com/jdx/fnox/pull/842)
+
+### 🛡️ Security
+
+- **(deps)** update dependency @anthropic-ai/claude-code to v2.1.252 by [@renovate[bot]](https://github.com/renovate[bot]) in [#826](https://github.com/jdx/fnox/pull/826)
+
+### 🔍 Other Changes
+
+- **(ci)** isolate mise state in performance jobs by [@jdx](https://github.com/jdx) in [#815](https://github.com/jdx/fnox/pull/815)
+- **(ci)** use self-repository workflow references by [@jdx](https://github.com/jdx) in [#840](https://github.com/jdx/fnox/pull/840)
+- **(release)** publish native completions in packslip by [@jdx](https://github.com/jdx) in [#814](https://github.com/jdx/fnox/pull/814)
+
+### 📦️ Dependency Updates
+
+- bump mr-boxington to 1.8.3 by [@jdx](https://github.com/jdx) in [#816](https://github.com/jdx/fnox/pull/816)
+- update rust crate indexmap to v2.14.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#821](https://github.com/jdx/fnox/pull/821)
+- update zizmorcore/zizmor-action action to v0.6.3 by [@renovate[bot]](https://github.com/renovate[bot]) in [#825](https://github.com/jdx/fnox/pull/825)
+- update rust crate which to v8.0.6 by [@renovate[bot]](https://github.com/renovate[bot]) in [#824](https://github.com/jdx/fnox/pull/824)
+- update rust crate rmcp to v3.2.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#832](https://github.com/jdx/fnox/pull/832)
+- update rust crate rcgen to v0.14.10 by [@renovate[bot]](https://github.com/renovate[bot]) in [#823](https://github.com/jdx/fnox/pull/823)
+- update rust crate google-cloud-secretmanager-v1 to v1.13.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#828](https://github.com/jdx/fnox/pull/828)
+- update rust crate tera to v2.3.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#833](https://github.com/jdx/fnox/pull/833)
+- update jdx/renovate-config digest to 8cabc2e by [@renovate[bot]](https://github.com/renovate[bot]) in [#830](https://github.com/jdx/fnox/pull/830)
+- update dependency @anthropic-ai/claude-code to v2.1.258 by [@renovate[bot]](https://github.com/renovate[bot]) in [#834](https://github.com/jdx/fnox/pull/834)
+- update rust crate usage-rs to v6.6.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#835](https://github.com/jdx/fnox/pull/835)
+- update dependency usage to v6.8.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#827](https://github.com/jdx/fnox/pull/827)
+- update actions/deploy-pages action to v5 by [@renovate[bot]](https://github.com/renovate[bot]) in [#836](https://github.com/jdx/fnox/pull/836)
+- ignore aws sdk renovate updates by [@jdx](https://github.com/jdx) in [#843](https://github.com/jdx/fnox/pull/843)
+- update communique to v1.4.0 by [@jdx](https://github.com/jdx) in [#844](https://github.com/jdx/fnox/pull/844)
+
 ## [1.35.1](https://github.com/jdx/fnox/compare/v1.35.0..v1.35.1) - 2026-09-05
 
 ### 📚 Documentation
@@ -14,6 +56,7 @@
 
 ### 🔍 Other Changes
 
+- **(ci)** bump packslip to v1.1.1 by [@jdx](https://github.com/jdx) in [#812](https://github.com/jdx/fnox/pull/812)
 - **(release)** publish a signed packslip with each release by [@jdx](https://github.com/jdx) in [#807](https://github.com/jdx/fnox/pull/807)
 - **(release)** bump packslip action to v1.0.0 by [@jdx](https://github.com/jdx) in [#810](https://github.com/jdx/fnox/pull/810)
 - enforce conventional commits by [@jdx](https://github.com/jdx) in [#809](https://github.com/jdx/fnox/pull/809)

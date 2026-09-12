@@ -6,7 +6,7 @@ description: "Find fnox commands for reading secrets, running applications, conf
 
 # `fnox`
 
-**Version:** 1.35.1
+**Version:** 1.35.2
 
 - **Usage:** `fnox [FLAGS] <SUBCOMMAND>`
 
