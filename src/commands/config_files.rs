@@ -56,10 +56,27 @@ impl ConfigFilesCommand {
             }
         }
 
-        // Global config is always checked
+        // Global config is always checked. Its imports are resolved strictly,
+        // matching `Config::load_global()`'s runtime behavior, the same way
+        // the explicit --config path above already does. This runs even
+        // when a project import already printed the global config path, so
+        // the global config's own imports are still listed.
         let global = Config::global_config_path();
-        if global.exists() && printed.insert(global.clone()) {
-            println!("{}", global.display());
+        if global.exists() {
+            let config = Config::load(&global)?;
+            if printed.insert(global.clone()) {
+                println!("{}", global.display());
+            }
+
+            let dir = global.parent().unwrap_or_else(|| Path::new(""));
+            for import_path in &config.import {
+                Config::load_import(import_path, dir)?;
+                let import =
+                    crate::config_path::resolve_relative_to_dir(import_path, Some(dir));
+                if printed.insert(import.clone()) {
+                    println!("{}", import.display());
+                }
+            }
         }
 
         Ok(())

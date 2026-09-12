@@ -1017,7 +1017,16 @@ impl Config {
                 "Loading global config from {}",
                 global_config_path.display()
             );
-            let config = Self::load(&global_config_path)?;
+            let mut config = Self::load(&global_config_path)?;
+
+            let dir = global_config_path
+                .parent()
+                .unwrap_or_else(|| Path::new(""));
+            for import_path in &config.import.clone() {
+                let import_config = Self::load_import(import_path, dir)?;
+                config = Self::merge_configs(import_config, config)?;
+            }
+
             Ok((config, true))
         } else {
             Ok((Self::new(), false))
