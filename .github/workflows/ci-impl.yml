@@ -21,6 +21,7 @@ env:
 
 jobs:
   build:
+    name: build (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -62,6 +63,7 @@ jobs:
           path: target/debug/fnox
 
   ci-bats:
+    name: ci-bats (${{ matrix.os }}, tranche ${{ matrix.tranche }})
     needs: build
     permissions:
       contents: read
@@ -250,6 +252,7 @@ jobs:
         run: cargo check --workspace
 
   ci-other:
+    name: ci-other (${{ matrix.os }})
     needs: build
     strategy:
       fail-fast: false
