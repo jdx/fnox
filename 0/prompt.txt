@@ -1,0 +1,9 @@
+huh are the untrusted builds running on namespace? [https://github.com/jdx/fnox/actions/runs/34663183645/job/103470985317?pr=818](https://github.com/jdx/fnox/actions/runs/34663183645/job/103470985317?pr=818)
+
+---
+
+lol make a pr to fix that, also see if it's a problem on other jdx.dev clis
+
+---
+
+oh wait, i think you got this backwards. that pr i linked was untrusted and i thought it ran on namespace. we want to save namespace for *my* work, where forked prs i want to run on github
