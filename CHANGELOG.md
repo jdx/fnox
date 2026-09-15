@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.35.3](https://github.com/jdx/fnox/compare/v1.35.2..v1.35.3) - 2026-09-15
+
+### 🛡️ Security
+
+- **(deps)** update dependency @anthropic-ai/claude-code to v2.1.263 by [@renovate[bot]](https://github.com/renovate[bot]) in [#852](https://github.com/jdx/fnox/pull/852)
+- **(deps)** update dependency aube to latest by [@renovate[bot]](https://github.com/renovate[bot]) in [#860](https://github.com/jdx/fnox/pull/860)
+- **(deps)** update node.js to 24 by [@renovate[bot]](https://github.com/renovate[bot]) in [#866](https://github.com/jdx/fnox/pull/866)
+
+### 📦️ Dependency Updates
+
+- bump mbx to 1.11.1 by [@jdx](https://github.com/jdx) in [6fead09](https://github.com/jdx/fnox/commit/6fead09c613698dc6b51e4ca00e59376d9e34c8d)
+- update rust crate indexmap to v2.14.2 by [@renovate[bot]](https://github.com/renovate[bot]) in [#849](https://github.com/jdx/fnox/pull/849)
+- update dependency github:jdx/tak to v0.0.10 by [@renovate[bot]](https://github.com/renovate[bot]) in [#848](https://github.com/jdx/fnox/pull/848)
+- update rust crate rustls to v0.23.44 by [@renovate[bot]](https://github.com/renovate[bot]) in [#850](https://github.com/jdx/fnox/pull/850)
+- update rust crate dirs to v7 by [@renovate[bot]](https://github.com/renovate[bot]) in [#857](https://github.com/jdx/fnox/pull/857)
+- update rust crate tokio-rustls to v0.26.5 by [@renovate[bot]](https://github.com/renovate[bot]) in [#851](https://github.com/jdx/fnox/pull/851)
+- update rust crate usage-rs to v6.8.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#855](https://github.com/jdx/fnox/pull/855)
+- update dependency github:infisical/cli to latest by [@renovate[bot]](https://github.com/renovate[bot]) in [#859](https://github.com/jdx/fnox/pull/859)
+- update rust crate ctap-hid-fido2 to v3.6.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#854](https://github.com/jdx/fnox/pull/854)
+- update rust crate tabled to 0.22 by [@renovate[bot]](https://github.com/renovate[bot]) in [#856](https://github.com/jdx/fnox/pull/856)
+- update dependency age to latest by [@renovate[bot]](https://github.com/renovate[bot]) in [#858](https://github.com/jdx/fnox/pull/858)
+- update dependency cargo-binstall to latest by [@renovate[bot]](https://github.com/renovate[bot]) in [#861](https://github.com/jdx/fnox/pull/861)
+- update dependency git-cliff to latest by [@renovate[bot]](https://github.com/renovate[bot]) in [#862](https://github.com/jdx/fnox/pull/862)
+- update dependency hk to v2 by [@renovate[bot]](https://github.com/renovate[bot]) in [#867](https://github.com/jdx/fnox/pull/867)
+- update dependency vault to latest by [@renovate[bot]](https://github.com/renovate[bot]) in [#865](https://github.com/jdx/fnox/pull/865)
+- update dependency shfmt to latest by [@renovate[bot]](https://github.com/renovate[bot]) in [#864](https://github.com/jdx/fnox/pull/864)
+- update dependency usage to v6.9.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#853](https://github.com/jdx/fnox/pull/853)
+
 ## [1.35.2](https://github.com/jdx/fnox/compare/v1.35.1..v1.35.2) - 2026-09-13
 
 ### 🐛 Bug Fixes
