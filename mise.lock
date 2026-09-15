@@ -427,7 +427,7 @@ url_api = "https://api.github.com/repos/jdx/tak/releases/assets/545781790"
 provenance = "github-attestations"
 
 [[tools.hk]]
-version = "1.56.1"
+version = "1.58.1"
 backend = "aqua:jdx/hk"
 
 [tools.hk."platforms.linux-arm64"]
