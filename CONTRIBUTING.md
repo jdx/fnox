@@ -36,18 +36,4 @@ The build checks internal links and social previews as well as rendering the sit
 
 ## mbx build cache
 
-`mise install` installs the mbx version pinned in [mise.toml](mise.toml). `mise run` activates the transparent Cargo wrapper for compilation tasks and lint checks. Standalone Cargo commands require an activated mise shell.
-
-If the wrapper fails, bypass it for the equivalent check without weakening that check:
-
-```sh
-MBX_DISABLE=1 cargo build
-MBX_DISABLE=1 cargo test
-MBX_DISABLE=1 cargo check --workspace
-MBX_DISABLE=1 cargo clippy -q -- -D warnings
-# CI's broader clippy check:
-MBX_DISABLE=1 cargo clippy --workspace --all-targets -- -D warnings
-MBX_DISABLE=1 cargo msrv verify
-```
-
-If bypassed Cargo succeeds where the wrapper fails, report the mismatch in a [mr-boxington Discussion](https://github.com/jdx/mr-boxington/discussions). Include the repository and commit, OS, `mbx --version`, `mbx doctor`, and both commands and their output. Redact secrets, absolute cache paths, remote URLs, namespaces, and other sensitive or identifying details before posting. Keep the wrapper enabled in project configuration.
+mise wraps `cargo` with [mbx](https://mr-boxington.jdx.dev), so compiled work is shared across checkouts. `mise run` tasks and `mise exec -- cargo …` always use the wrapper; plain `cargo` does too once mise is activated in your shell (`mise activate`).

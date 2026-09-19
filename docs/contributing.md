@@ -23,7 +23,7 @@ mise install
 mise run build
 ```
 
-Use the repository's mise tasks so tool versions and the Cargo build wrapper are consistent. See [CONTRIBUTING.md](https://github.com/jdx/fnox/blob/main/CONTRIBUTING.md#mbx-build-cache) for the mbx cache and bypass procedure when the wrapper fails.
+Use the repository's mise tasks so tool versions and the Cargo build wrapper are consistent.
 
 ## Checks
 
