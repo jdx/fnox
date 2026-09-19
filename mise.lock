@@ -116,44 +116,44 @@ url = "https://github.com/aubepkg/aube/releases/download/v2.2.17/aube-v2.2.17-x8
 signer = "sigstore-oidc:https://github.com/aubepkg/aube/.github/workflows/release-plz.yml"
 
 [[tools.bitwarden]]
-version = "2026.8.0"
+version = "2026.9.0"
 backend = "aqua:bitwarden/clients"
 specifiers = ["latest"]
 
 [tools.bitwarden."platforms.linux-arm64"]
-checksum = "sha256:74d822a5dceda5896ed8fc07bc61925b29afd98d96a6a3e9e525ae556c3083a8"
-url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.8.0/bw-linux-arm64-2026.8.0.zip"
-url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/522478224"
+checksum = "sha256:3f474cc34b701a1cebdd486009870038b034343afb83095607422cdad4c3653a"
+url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.9.0/bw-linux-arm64-2026.9.0.zip"
+url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/570320369"
 
 [tools.bitwarden."platforms.linux-arm64-musl"]
-checksum = "sha256:74d822a5dceda5896ed8fc07bc61925b29afd98d96a6a3e9e525ae556c3083a8"
-url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.8.0/bw-linux-arm64-2026.8.0.zip"
-url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/522478224"
+checksum = "sha256:3f474cc34b701a1cebdd486009870038b034343afb83095607422cdad4c3653a"
+url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.9.0/bw-linux-arm64-2026.9.0.zip"
+url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/570320369"
 
 [tools.bitwarden."platforms.linux-x64"]
-checksum = "sha256:367f618e9fcccaac4980ec12c7bafd01df739b5f3cb1af31bc9045cf75eea1d6"
-url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.8.0/bw-linux-2026.8.0.zip"
-url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/522478170"
+checksum = "sha256:580c1deec8345b19dbac7f8b02babb6cc4fe250c69c567e29061f727f1e40768"
+url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.9.0/bw-linux-2026.9.0.zip"
+url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/570320307"
 
 [tools.bitwarden."platforms.linux-x64-musl"]
-checksum = "sha256:367f618e9fcccaac4980ec12c7bafd01df739b5f3cb1af31bc9045cf75eea1d6"
-url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.8.0/bw-linux-2026.8.0.zip"
-url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/522478170"
+checksum = "sha256:580c1deec8345b19dbac7f8b02babb6cc4fe250c69c567e29061f727f1e40768"
+url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.9.0/bw-linux-2026.9.0.zip"
+url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/570320307"
 
 [tools.bitwarden."platforms.macos-arm64"]
-checksum = "sha256:73414942357644605eefd3f4afaf0b41b71772ad6574e8e3c72e0b6d237104c8"
-url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.8.0/bw-macos-arm64-2026.8.0.zip"
-url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/522478010"
+checksum = "sha256:014bc4c093e586197013fac79b9d0f1df1da6004003293c8930406bf1ffde45b"
+url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.9.0/bw-macos-arm64-2026.9.0.zip"
+url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/570320204"
 
 [tools.bitwarden."platforms.macos-x64"]
-checksum = "sha256:c5d57f70d5394f8c348f6c3bf53683ad6d15e6acfe55e7c1e0a8f376482d8e71"
-url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.8.0/bw-macos-2026.8.0.zip"
-url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/522477971"
+checksum = "sha256:d2a1865c2c1f49c34e6f1b38a42c5b95dcf22e34f81121c4962ebda32f708a3e"
+url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.9.0/bw-macos-2026.9.0.zip"
+url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/570320154"
 
 [tools.bitwarden."platforms.windows-x64"]
-checksum = "sha256:26a6bb9a88ca9eeaad9e59db1816dcceb3ce6cc80a30b33e1324b0642f4a0f32"
-url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.8.0/bw-windows-2026.8.0.zip"
-url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/522477842"
+checksum = "sha256:09f58bdfc9d3b7ba04277042db4804dd932e581c972f740f37b9d12106096424"
+url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.9.0/bw-windows-2026.9.0.zip"
+url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/570319949"
 
 [[tools.bitwarden-secrets-manager]]
 version = "2.1.0"
@@ -284,44 +284,44 @@ url = "https://github.com/orhun/git-cliff/releases/download/v2.14.1/git-cliff-2.
 url_api = "https://api.github.com/repos/orhun/git-cliff/releases/assets/539702434"
 
 [[tools."github:Infisical/cli"]]
-version = "0.43.130"
+version = "0.43.132"
 backend = "github:Infisical/cli"
 specifiers = ["latest"]
 
 [tools."github:Infisical/cli"."platforms.linux-arm64"]
-checksum = "sha256:caf5e11156a7a5cb716dce2c6d085f94084674ba0ae1f5ed7fac04e9cdac9d4d"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.130/cli_0.43.130_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/551145796"
+checksum = "sha256:0dc149b0673ef92693796203ba3b34ae2adda74c4912f589325431515dbcc5a6"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558558930"
 
 [tools."github:Infisical/cli"."platforms.linux-arm64-musl"]
-checksum = "sha256:caf5e11156a7a5cb716dce2c6d085f94084674ba0ae1f5ed7fac04e9cdac9d4d"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.130/cli_0.43.130_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/551145796"
+checksum = "sha256:0dc149b0673ef92693796203ba3b34ae2adda74c4912f589325431515dbcc5a6"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558558930"
 
 [tools."github:Infisical/cli"."platforms.linux-x64"]
-checksum = "sha256:5b41b94a37620005d6b2e7ccd69d82dd969815cd971bcceacf8173b92398b3f6"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.130/cli_0.43.130_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/551145882"
+checksum = "sha256:4c141a0b3ad82467497b68c5ed63137a3a62a9cfc46705aa14bd34826f3c98f6"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558558938"
 
 [tools."github:Infisical/cli"."platforms.linux-x64-musl"]
-checksum = "sha256:5b41b94a37620005d6b2e7ccd69d82dd969815cd971bcceacf8173b92398b3f6"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.130/cli_0.43.130_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/551145882"
+checksum = "sha256:4c141a0b3ad82467497b68c5ed63137a3a62a9cfc46705aa14bd34826f3c98f6"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558558938"
 
 [tools."github:Infisical/cli"."platforms.macos-arm64"]
-checksum = "sha256:3148b84d8404287b21d9fec35d6ac3ed972aad980469ce372d59b5c5dd05d045"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.130/cli_0.43.130_darwin_arm64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/551136311"
+checksum = "sha256:2f7cea2d789ba5dc6a94d7655bde0245998caeef53bb5725630b82411bf98818"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558551375"
 
 [tools."github:Infisical/cli"."platforms.macos-x64"]
-checksum = "sha256:e457ebfec5ad90511b290ca5f3a46851a3f4b743fbbee53db6aef718602cb0bb"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.130/cli_0.43.130_darwin_amd64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/551136310"
+checksum = "sha256:b1ca573839316bc9f9f4a8afeb8eb55eb7eda814d19d8c7319d3378ba0130a10"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_darwin_amd64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558551379"
 
 [tools."github:Infisical/cli"."platforms.windows-x64"]
-checksum = "sha256:62304f5e3b0225ddecffe761505348292c4be7e909e004fb21356721794cfac9"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.130/cli_0.43.130_windows_amd64.zip"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/551145874"
+checksum = "sha256:103eed6d549ef94701621208512a487c8ece601088a31647bed7521d3648317e"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_windows_amd64.zip"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558558957"
 
 [[tools."github:foresterre/cargo-msrv"]]
 version = "0.19.3"
@@ -538,8 +538,8 @@ url = "https://github.com/apple/pkl/releases/download/0.32.1/pkl-windows-amd64.e
 url_api = "https://api.github.com/repos/apple/pkl/releases/assets/487426668"
 
 [[tools.prettier]]
-version = "3.9.6"
-aube = { path = ".mise/locks/prettier/3.9.6", digest = "sha256:2713c3c98701fa080a728710d5ffc1fd688e231373b202ebfedd8997711157e5" }
+version = "3.9.8"
+aube = { path = ".mise/locks/prettier/3.9.8", digest = "sha256:5c76115168054cd13c6ad573ac7befc182bce737bc8bca3ed27b8287e2611eeb" }
 backend = "npm:prettier"
 specifiers = ["latest"]
 
@@ -664,34 +664,34 @@ url = "https://github.com/jdx/usage/releases/download/v6.9.1/usage-x86_64-pc-win
 signer = "sigstore-oidc:https://github.com/jdx/usage/.github/workflows/publish-cli.yml"
 
 [[tools.vault]]
-version = "2.1.0"
+version = "2.1.1"
 backend = "aqua:hashicorp/vault"
 specifiers = ["latest"]
 
 [tools.vault."platforms.linux-arm64"]
-checksum = "sha256:319b3eb7b0c2ad218453f5d1af5c23cac81a024db3a07ccd2494ecd31f2090c3"
-url = "https://releases.hashicorp.com/vault/2.1.0/vault_2.1.0_linux_arm64.zip"
+checksum = "sha256:c2c74e111ffbc83b3d29c6f0c0215a5e53d738c9fad045f7797bcdcde3156067"
+url = "https://releases.hashicorp.com/vault/2.1.1/vault_2.1.1_linux_arm64.zip"
 
 [tools.vault."platforms.linux-arm64-musl"]
-checksum = "sha256:319b3eb7b0c2ad218453f5d1af5c23cac81a024db3a07ccd2494ecd31f2090c3"
-url = "https://releases.hashicorp.com/vault/2.1.0/vault_2.1.0_linux_arm64.zip"
+checksum = "sha256:c2c74e111ffbc83b3d29c6f0c0215a5e53d738c9fad045f7797bcdcde3156067"
+url = "https://releases.hashicorp.com/vault/2.1.1/vault_2.1.1_linux_arm64.zip"
 
 [tools.vault."platforms.linux-x64"]
-checksum = "sha256:08e8a13d29d20c5e28ef5e2c187bf3a2e84712a43615de1b3d24701ad9aab972"
-url = "https://releases.hashicorp.com/vault/2.1.0/vault_2.1.0_linux_amd64.zip"
+checksum = "sha256:8aa90f9cea46f541fc7baa3d0ec692fc06afde9a248cc1f2dcac46a567c6f56b"
+url = "https://releases.hashicorp.com/vault/2.1.1/vault_2.1.1_linux_amd64.zip"
 
 [tools.vault."platforms.linux-x64-musl"]
-checksum = "sha256:08e8a13d29d20c5e28ef5e2c187bf3a2e84712a43615de1b3d24701ad9aab972"
-url = "https://releases.hashicorp.com/vault/2.1.0/vault_2.1.0_linux_amd64.zip"
+checksum = "sha256:8aa90f9cea46f541fc7baa3d0ec692fc06afde9a248cc1f2dcac46a567c6f56b"
+url = "https://releases.hashicorp.com/vault/2.1.1/vault_2.1.1_linux_amd64.zip"
 
 [tools.vault."platforms.macos-arm64"]
-checksum = "sha256:c6589dc658f72ebd2792b1fba7b2e53413367ad673ae2513cfdec6422ed4da2c"
-url = "https://releases.hashicorp.com/vault/2.1.0/vault_2.1.0_darwin_arm64.zip"
+checksum = "sha256:95d100472b726d889ee380c9335191abdf5b3e6f3108cde48f4f962bfea4f009"
+url = "https://releases.hashicorp.com/vault/2.1.1/vault_2.1.1_darwin_arm64.zip"
 
 [tools.vault."platforms.macos-x64"]
-checksum = "sha256:4ec95a88b3ab2a4f367da41ab98946204d5d85b36b26b71c6685db997dfde36e"
-url = "https://releases.hashicorp.com/vault/2.1.0/vault_2.1.0_darwin_amd64.zip"
+checksum = "sha256:1310ccba498a08fa9bfe09c698f54f38b6d9c2ae45bae08cf91f02bc10d295b6"
+url = "https://releases.hashicorp.com/vault/2.1.1/vault_2.1.1_darwin_amd64.zip"
 
 [tools.vault."platforms.windows-x64"]
-checksum = "sha256:a05bc197946951c131c907aa553829746b5d7fc8598879d3e3a9770b9488ebfc"
-url = "https://releases.hashicorp.com/vault/2.1.0/vault_2.1.0_windows_amd64.zip"
+checksum = "sha256:e07a39059d7c7380d6dc776fb5bee2183cbc3344cf9387d4cf11309b83c0dce3"
+url = "https://releases.hashicorp.com/vault/2.1.1/vault_2.1.1_windows_amd64.zip"
