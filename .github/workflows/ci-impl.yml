@@ -86,7 +86,8 @@ jobs:
     runs-on: ${{ !inputs.trusted && matrix.os || matrix.runner }}
     timeout-minutes: 20
     steps:
-      - run: brew install parallel hashicorp/tap/vault
+      # bats --jobs needs GNU parallel. vault comes from mise.toml.
+      - run: brew install parallel
         if: ${{ matrix.os == 'macos-latest' }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

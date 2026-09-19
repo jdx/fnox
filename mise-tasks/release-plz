@@ -36,9 +36,16 @@ if [ "$version" = "v$cur_version" ]; then
 fi
 
 # Bump the workspace version; both `fnox` and `fnox-core` inherit it via
-# `version.workspace = true`, and the path-dep version pin in fnox's
-# Cargo.toml is updated automatically.
-cargo set-version --workspace "${version#v}"
+# `version.workspace = true`. Like `cargo set-version --workspace`, also move
+# fnox's major-only `fnox-core` requirement to the new major. Done with sed
+# because cargo-edit has no prebuilt binary and compiling it slowed every CI job.
+new_version="${version#v}"
+sed -i.bak \
+  -e "/^\[workspace\.package\]/,/^\[/ s/^version = \".*\"/version = \"$new_version\"/" \
+  -e "s/^\(fnox-core = {.*version = \"\)[0-9]*\"/\1${new_version%%.*}\"/" \
+  Cargo.toml
+rm Cargo.toml.bak
+cargo update --workspace
 
 git config user.name mise-en-dev
 git config user.email 123107610+mise-en-dev@users.noreply.github.com

@@ -1,4 +1,4 @@
-min_version = "2026.9.2"
+min_version = "2026.9.7"
 
 [env]
 _.path = ["target/debug", "test/bats/bin"]
@@ -13,9 +13,7 @@ usage = "6.9.1"
 aube = "latest"
 age = "latest"
 "github:foresterre/cargo-msrv" = "latest"
-cargo-binstall = "latest"
 communique = "latest"
-"cargo:cargo-edit" = "latest"
 git-cliff = "latest"
 hk = "latest"
 pkl = "latest"
