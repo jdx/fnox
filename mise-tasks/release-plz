@@ -40,9 +40,14 @@ fi
 # fnox's major-only `fnox-core` requirement to the new major. Done with sed
 # because cargo-edit has no prebuilt binary and compiling it slowed every CI job.
 target_version="${version#v}"
+# Also keeps sed metacharacters out of the replacements below.
+if ! [[ "$target_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
+  echo "error: unexpected version from git cliff: $version" >&2
+  exit 1
+fi
 sed -i.bak \
   -e "/^\[workspace\.package\]/,/^\[/ s/^\(version[[:space:]]*=[[:space:]]*\)\"[^\"]*\"/\1\"$target_version\"/" \
-  -e "s/^\(fnox-core[[:space:]]*=[[:space:]]*{.*version[[:space:]]*=[[:space:]]*\"\)[0-9]*\"/\1${target_version%%.*}\"/" \
+  -e "s/^\(fnox-core[[:space:]]*=[[:space:]]*{.*version[[:space:]]*=[[:space:]]*\"\)[0-9][0-9]*\"/\1${target_version%%.*}\"/" \
   Cargo.toml
 rm Cargo.toml.bak
 cargo update --workspace
