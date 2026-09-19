@@ -36,9 +36,34 @@ if [ "$version" = "v$cur_version" ]; then
 fi
 
 # Bump the workspace version; both `fnox` and `fnox-core` inherit it via
-# `version.workspace = true`, and the path-dep version pin in fnox's
-# Cargo.toml is updated automatically.
-cargo set-version --workspace "${version#v}"
+# `version.workspace = true`. Like `cargo set-version --workspace`, also move
+# fnox's major-only `fnox-core` requirement to the new major. Done with sed
+# because cargo-edit has no prebuilt binary and compiling it slowed every CI job.
+target_version="${version#v}"
+# Also keeps sed metacharacters out of the replacements below.
+if ! [[ "$target_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
+  echo "error: unexpected version from git cliff: $version" >&2
+  exit 1
+fi
+sed -i.bak \
+  -e "/^\[workspace\.package\]/,/^\[/ s/^\(version[[:space:]]*=[[:space:]]*\)\"[^\"]*\"/\1\"$target_version\"/" \
+  -e "s/^\(fnox-core[[:space:]]*=[[:space:]]*{.*version[[:space:]]*=[[:space:]]*\"\)[0-9][0-9]*\"/\1${target_version%%.*}\"/" \
+  Cargo.toml
+rm Cargo.toml.bak
+# Resolving the workspace syncs the fnox and fnox-core Cargo.lock entries
+# without upgrading any dependency, the same lockfile effect `cargo set-version`
+# had.
+cargo metadata --format-version 1 >/dev/null
+# sed exits 0 even when nothing matched, so confirm cargo sees the new version
+# before releasing. A missed fnox-core requirement on a major bump already
+# fails `cargo metadata` above.
+for crate in fnox fnox-core; do
+  new_version="$(cargo pkgid "$crate" | cut -d# -f2 | cut -d@ -f2)"
+  if [ "$new_version" != "$target_version" ]; then
+    echo "error: $crate is at $new_version after the bump, expected $target_version; check [workspace.package] in Cargo.toml" >&2
+    exit 1
+  fi
+done
 
 git config user.name mise-en-dev
 git config user.email 123107610+mise-en-dev@users.noreply.github.com
