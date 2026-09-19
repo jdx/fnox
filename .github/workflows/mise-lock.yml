@@ -1,0 +1,39 @@
+name: mise-lock
+
+# Regenerates mise.lock on Renovate branches. Renovate's mise manager rewrites
+# the `version =` line in mise.lock but never the per-platform URLs and
+# checksums, so mise-action's `mise install --locked` fails on every CI job
+# until someone relocks by hand. The hosted Mend app this org uses does not run
+# postUpgradeTasks, so the regeneration has to happen here rather than in
+# Renovate's own config. This is the mise sibling of aube-lock.yml. See
+# jdx/renovate-config for the workflow implementation.
+
+on:
+  push:
+    branches: ["renovate/**"]
+
+permissions: {}
+
+jobs:
+  mise-lock:
+    permissions:
+      # Pushes the regenerated lockfile back onto the Renovate branch. The
+      # shared workflow gates itself on the sender being renovate[bot], so our
+      # own fix-up push cannot re-enter it.
+      contents: write # commit mise.lock and the regenerated render output
+    uses: jdx/renovate-config/.github/workflows/mise-lock.yml@64eb824cc68fce06c1842df1b513ee40f23bf076 # main
+    with:
+      # ci runs `mise run render` and fails the branch if it produces a diff.
+      # render:usage and render:schema format their output with the
+      # mise-managed prettier, so a prettier bump has to regenerate these in
+      # the same commit, otherwise the lockfile fix just trades one red check
+      # for another.
+      post_update_task: render
+      # render's tracked outputs.
+      post_update_paths: |
+        fnox.usage.kdl
+        docs/cli
+        docs/public/schema.json
+    secrets:
+      MISE_LOCK_APP_ID: ${{ secrets.MISE_LOCK_APP_ID }}
+      MISE_LOCK_APP_PRIVATE_KEY: ${{ secrets.MISE_LOCK_APP_PRIVATE_KEY }}
