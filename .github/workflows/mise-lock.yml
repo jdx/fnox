@@ -1,0 +1,45 @@
+name: mise-lock
+
+# Regenerates mise.lock on Renovate branches. Renovate's mise manager rewrites
+# the `version =` line in mise.lock but never the per-platform URLs and
+# checksums, so mise-action's `mise install --locked` fails on every CI job
+# until someone relocks by hand. The hosted Mend app this org uses does not run
+# postUpgradeTasks, so the regeneration has to happen here rather than in
+# Renovate's own config. This is the mise sibling of aube-lock.yml. See
+# jdx/renovate-config for the workflow implementation.
+
+on:
+  push:
+    branches: ["renovate/**"]
+
+permissions: {}
+
+jobs:
+  mise-lock:
+    permissions:
+      # Pushes the regenerated lockfile back onto the Renovate branch. The
+      # shared workflow gates itself on the sender being renovate[bot], so our
+      # own fix-up push cannot re-enter it.
+      contents: write # commit the regenerated mise.lock
+    #
+    # Deliberately no `post_update_task: render`. fnox's `render` depends on
+    # `build`, and building fnox on Linux needs libudev-dev and libdbus-1-dev
+    # (ctap-hid-fido2 → hidapi), which every fnox workflow that compiles
+    # installs itself. The shared workflow runs on a plain ubuntu-latest with
+    # no way to request system packages, so the render step would fail and take
+    # the lockfile commit down with it. The tradeoff: if a bump to a tool that
+    # renders tracked files (prettier, usage) changes their output, the
+    # Renovate branch still goes red on ci's `assert render produces no diff`
+    # and someone runs `mise run render` by hand — visible, not silent. Adding
+    # a system-packages input to the shared workflow would let this be
+    # automated too.
+    uses: jdx/renovate-config/.github/workflows/mise-lock.yml@64eb824cc68fce06c1842df1b513ee40f23bf076 # main
+    secrets:
+      # Optional. With them the lockfile commit is pushed with a short-lived
+      # GitHub App token, so the Renovate PR's checks re-run on the fixed
+      # lockfile. Without them the shared workflow falls back to GITHUB_TOKEN:
+      # the lockfile is still repaired, but GitHub's recursion guard suppresses
+      # the workflow re-run, so the PR's failed checks have to be re-run by
+      # hand. aube-lock.yml uses the same pattern with AUBE_LOCK_APP_*.
+      MISE_LOCK_APP_ID: ${{ secrets.MISE_LOCK_APP_ID }}
+      MISE_LOCK_APP_PRIVATE_KEY: ${{ secrets.MISE_LOCK_APP_PRIVATE_KEY }}
