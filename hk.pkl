@@ -1,5 +1,5 @@
-amends "package://github.com/jdx/hk/releases/download/v1.44.3/hk@1.44.3#/Config.pkl"
-import "package://github.com/jdx/hk/releases/download/v1.44.3/hk@1.44.3#/Builtins.pkl"
+amends "package://github.com/jdx/hk/releases/download/v2.0.1/hk@2.0.1#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.0.1/hk@2.0.1#/Builtins.pkl"
 
 local linters = new Mapping<String, Step> {
     ["prettier"] = (Builtins.prettier) {
@@ -9,11 +9,19 @@ local linters = new Mapping<String, Step> {
     ["cargo-clippy"] = (Builtins.cargo_clippy) {
         check = "cargo clippy -q -- -D warnings"
     }
+    // hk 2's shfmt and shellcheck builtins select files with `match_any`, which
+    // cannot be combined with a top-level `glob`. Replacing the selector list
+    // keeps the same file set these steps matched under hk 1: *.bats in
+    // addition to *.sh and *.bash, and nothing else.
     ["shfmt"] = (Builtins.shfmt) {
-        glob = List("**/*.bats", "**/*.sh", "**/*.bash")
+        match_any = List(new FileSelector {
+            glob = List("**/*.bats", "**/*.sh", "**/*.bash")
+        })
     }
     ["shellcheck"] = (Builtins.shellcheck) {
-        glob = List("**/*.bats", "**/*.sh", "**/*.bash")
+        match_any = List(new FileSelector {
+            glob = List("**/*.bats", "**/*.sh", "**/*.bash")
+        })
     }
 
     // define a custom linter
