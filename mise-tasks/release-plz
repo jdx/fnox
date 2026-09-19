@@ -50,10 +50,13 @@ sed -i.bak \
   -e "s/^\(fnox-core[[:space:]]*=[[:space:]]*{.*version[[:space:]]*=[[:space:]]*\"\)[0-9][0-9]*\"/\1${target_version%%.*}\"/" \
   Cargo.toml
 rm Cargo.toml.bak
-cargo update --workspace
+# Resolving the workspace syncs the fnox and fnox-core Cargo.lock entries
+# without upgrading any dependency, the same lockfile effect `cargo set-version`
+# had.
+cargo metadata --format-version 1 >/dev/null
 # sed exits 0 even when nothing matched, so confirm cargo sees the new version
 # before releasing. A missed fnox-core requirement on a major bump already
-# fails `cargo update` above.
+# fails `cargo metadata` above.
 for crate in fnox fnox-core; do
   new_version="$(cargo pkgid "$crate" | cut -d# -f2 | cut -d@ -f2)"
   if [ "$new_version" != "$target_version" ]; then
