@@ -248,37 +248,53 @@ impl ReencryptCommand {
             }
         }
 
-        // Re-encrypt each secret and group by (source file, effective profile)
-        let mut by_source: IndexMap<(PathBuf, String), IndexMap<String, SecretConfig>> =
-            IndexMap::new();
-        let mut reencrypted_count = 0;
-
-        for (key, plaintext) in &resolved {
+        // Batch by effective provider so hardware-backed providers can share
+        // one encryption operation across all selected secrets.
+        let mut by_provider: IndexMap<&str, Vec<(String, String)>> = IndexMap::new();
+        for (key, plaintext) in resolved {
             let Some(plaintext) = plaintext else {
                 return Err(FnoxError::ReencryptDecryptFailed {
-                    key: key.clone(),
+                    key,
                     details: "resolver returned no value for this secret".to_string(),
                 });
             };
 
-            let (provider_name, secret_config) = &secrets_to_reencrypt[key];
+            let (provider_name, _) = &secrets_to_reencrypt[&key];
+            by_provider
+                .entry(provider_name.as_str())
+                .or_default()
+                .push((key, plaintext));
+        }
 
-            let provider = provider_cache.get(provider_name.as_str()).ok_or_else(|| {
+        // Collect every encrypted value before saving any source file.
+        let mut by_source: IndexMap<(PathBuf, String), IndexMap<String, SecretConfig>> =
+            IndexMap::new();
+        let mut reencrypted_count = 0;
+
+        for (provider_name, plaintext_secrets) in by_provider {
+            let provider = provider_cache.get(provider_name).ok_or_else(|| {
                 FnoxError::ProviderNotConfigured {
-                    provider: provider_name.clone(),
+                    provider: provider_name.to_string(),
                     profile: profile_display.clone(),
                     config_path: None,
                     suggestion: None,
                 }
             })?;
+            let mut encrypted_secrets = provider.encrypt_secrets_batch(&plaintext_secrets).await;
 
-            match provider.encrypt(plaintext).await {
-                Ok(encrypted) => {
-                    let mut updated = secret_config.clone();
-                    updated.set_value(Some(encrypted));
-                    updated.sync = None; // Clear stale sync cache
+            for (key, _) in plaintext_secrets {
+                let (_, secret_config) = &secrets_to_reencrypt[&key];
+                match encrypted_secrets.remove(&key).unwrap_or_else(|| {
+                    Err(FnoxError::Provider(format!(
+                        "provider did not return an encrypted value for '{key}'"
+                    )))
+                }) {
+                    Ok(encrypted) => {
+                        let mut updated = secret_config.clone();
+                        updated.set_value(Some(encrypted));
+                        updated.sync = None; // Clear stale sync cache
 
-                    let source_path =
+                        let source_path =
                         secret_config.source_path.clone().ok_or_else(|| {
                             FnoxError::Config(format!(
                                 "Secret '{}' has no known source file; cannot write back re-encrypted value",
@@ -286,26 +302,27 @@ impl ReencryptCommand {
                             ))
                         })?;
 
-                    // Use source_profile to determine the correct TOML section.
-                    // Secrets loaded from root [secrets] must be saved back there,
-                    // not to [profiles.X.secrets].
-                    let save_profile = secret_config
-                        .source_profile
-                        .clone()
-                        .unwrap_or_else(|| "default".to_string());
+                        // Use source_profile to determine the correct TOML section.
+                        // Secrets loaded from root [secrets] must be saved back there,
+                        // not to [profiles.X.secrets].
+                        let save_profile = secret_config
+                            .source_profile
+                            .clone()
+                            .unwrap_or_else(|| "default".to_string());
 
-                    by_source
-                        .entry((source_path, save_profile))
-                        .or_default()
-                        .insert(key.clone(), updated);
-                    reencrypted_count += 1;
-                }
-                Err(e) => {
-                    return Err(FnoxError::ReencryptEncryptionFailed {
-                        key: key.clone(),
-                        provider: provider_name.clone(),
-                        details: e.to_string(),
-                    });
+                        by_source
+                            .entry((source_path, save_profile))
+                            .or_default()
+                            .insert(key.clone(), updated);
+                        reencrypted_count += 1;
+                    }
+                    Err(e) => {
+                        return Err(FnoxError::ReencryptEncryptionFailed {
+                            key: key.clone(),
+                            provider: provider_name.to_string(),
+                            details: e.to_string(),
+                        });
+                    }
                 }
             }
         }

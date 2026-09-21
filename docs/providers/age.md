@@ -371,6 +371,14 @@ jobs:
 
 Age decrypts locally with a matching identity. Changing recipients does not update existing ciphertext: run `fnox reencrypt` for each affected profile. Removing a recipient cannot revoke that person's access to old ciphertext in git history; rotate the underlying secret if access must end.
 
+`reencrypt` groups selected secrets by provider. Age encrypts each group with one shared wrapped key, so batch resolution through `fnox exec` needs to unlock that key only once. To consolidate separately encrypted values, including secrets added with `fnox set`, run:
+
+```sh
+fnox reencrypt --provider age
+```
+
+The command uses the provider's current recipients and preserves each secret's source file and profile. Decrypting the existing values during re-encryption can still require multiple hardware approvals. Key or regex filters consolidate only the selected secrets; other values remain unchanged.
+
 ## Troubleshooting
 
 ### "no identity matched any of the recipients"
