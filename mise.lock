@@ -619,43 +619,43 @@ url = "https://github.com/mvdan/sh/releases/download/v3.14.1/shfmt_v3.14.1_windo
 url_api = "https://api.github.com/repos/mvdan/sh/releases/assets/547320827"
 
 [[tools.usage]]
-version = "6.9.1"
+version = "6.11.0"
 backend = "packslip:github.com/jdx/usage"
-specifiers = ["6.9.1"]
+specifiers = ["6.11.0"]
 
 [tools.usage."platforms.linux-arm64"]
-checksum = "sha256:d4b65dfac2073007bb77cc8d9248900b59d4388eaaa73eb6137c8faba0ff030f"
-url = "https://github.com/jdx/usage/releases/download/v6.9.1/usage-aarch64-unknown-linux-gnu.tar.gz"
+checksum = "sha256:84fae7251a458d804d1b574ce2b46f483fa5859b773c4a8c5012d9d86c68e7c4"
+url = "https://github.com/jdx/usage/releases/download/v6.11.0/usage-aarch64-unknown-linux-gnu.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/usage/.github/workflows/publish-cli.yml"
 
 [tools.usage."platforms.linux-arm64-musl"]
-checksum = "sha256:313143922a8ce05214ef4b55b9ae0f7ff5585da966bba65224c7bab3428c5aef"
-url = "https://github.com/jdx/usage/releases/download/v6.9.1/usage-aarch64-unknown-linux-musl.tar.gz"
+checksum = "sha256:e52a21f240c58890265e9c74f75e2d329f68220159abcf51aee0ef33f37e4990"
+url = "https://github.com/jdx/usage/releases/download/v6.11.0/usage-aarch64-unknown-linux-musl.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/usage/.github/workflows/publish-cli.yml"
 
 [tools.usage."platforms.linux-x64"]
-checksum = "sha256:8e1cafb10fe2ddee8c18076c09dea4c89ee2d25ac2c0ec5158fda5b8d4e02222"
-url = "https://github.com/jdx/usage/releases/download/v6.9.1/usage-x86_64-unknown-linux-gnu.tar.gz"
+checksum = "sha256:2ebc293d1645a80e3b7c4d87cd2cca35d34c6582733260fe1d13e537bb3d1e2e"
+url = "https://github.com/jdx/usage/releases/download/v6.11.0/usage-x86_64-unknown-linux-gnu.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/usage/.github/workflows/publish-cli.yml"
 
 [tools.usage."platforms.linux-x64-musl"]
-checksum = "sha256:3132b763f01e3cd346ebfedeff2e4e78f9a098eec1f3754b6db4ccfcda79aaf2"
-url = "https://github.com/jdx/usage/releases/download/v6.9.1/usage-x86_64-unknown-linux-musl.tar.gz"
+checksum = "sha256:bbc05d7cf1e3f5d7f00bf97217e910898b6914283e5a0cd8c2224c4ce3c49f31"
+url = "https://github.com/jdx/usage/releases/download/v6.11.0/usage-x86_64-unknown-linux-musl.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/usage/.github/workflows/publish-cli.yml"
 
 [tools.usage."platforms.macos-arm64"]
-checksum = "sha256:ddbb2c29ec16aca2cb44e0b0f64ba204b603ec50ed773ffda3db723e9aae73fe"
-url = "https://github.com/jdx/usage/releases/download/v6.9.1/usage-universal-apple-darwin.tar.gz"
+checksum = "sha256:0277664d5a7f615ec427cfc312e175684f027bf69e43e76964f086aaf5e51d3f"
+url = "https://github.com/jdx/usage/releases/download/v6.11.0/usage-universal-apple-darwin.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/usage/.github/workflows/publish-cli.yml"
 
 [tools.usage."platforms.macos-x64"]
-checksum = "sha256:ddbb2c29ec16aca2cb44e0b0f64ba204b603ec50ed773ffda3db723e9aae73fe"
-url = "https://github.com/jdx/usage/releases/download/v6.9.1/usage-universal-apple-darwin.tar.gz"
+checksum = "sha256:0277664d5a7f615ec427cfc312e175684f027bf69e43e76964f086aaf5e51d3f"
+url = "https://github.com/jdx/usage/releases/download/v6.11.0/usage-universal-apple-darwin.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/usage/.github/workflows/publish-cli.yml"
 
 [tools.usage."platforms.windows-x64"]
-checksum = "sha256:932008a3f68f0b72fb2012443980d04b01029af9ba2d31a5af0601a76e7e5870"
-url = "https://github.com/jdx/usage/releases/download/v6.9.1/usage-x86_64-pc-windows-msvc.zip"
+checksum = "sha256:49f78fdeb1678986a89fabffc10b9e01c1dee4d3f8f001cd245af0471df9d9be"
+url = "https://github.com/jdx/usage/releases/download/v6.11.0/usage-x86_64-pc-windows-msvc.zip"
 signer = "sigstore-oidc:https://github.com/jdx/usage/.github/workflows/publish-cli.yml"
 
 [[tools.vault]]
