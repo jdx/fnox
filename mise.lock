@@ -279,44 +279,44 @@ url = "https://github.com/orhun/git-cliff/releases/download/v2.14.1/git-cliff-2.
 url_api = "https://api.github.com/repos/orhun/git-cliff/releases/assets/539702434"
 
 [[tools."github:Infisical/cli"]]
-version = "0.43.130"
+version = "0.43.132"
 backend = "github:Infisical/cli"
 specifiers = ["latest"]
 
 [tools."github:Infisical/cli"."platforms.linux-arm64"]
-checksum = "sha256:caf5e11156a7a5cb716dce2c6d085f94084674ba0ae1f5ed7fac04e9cdac9d4d"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.130/cli_0.43.130_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/551145796"
+checksum = "sha256:0dc149b0673ef92693796203ba3b34ae2adda74c4912f589325431515dbcc5a6"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558558930"
 
 [tools."github:Infisical/cli"."platforms.linux-arm64-musl"]
-checksum = "sha256:caf5e11156a7a5cb716dce2c6d085f94084674ba0ae1f5ed7fac04e9cdac9d4d"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.130/cli_0.43.130_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/551145796"
+checksum = "sha256:0dc149b0673ef92693796203ba3b34ae2adda74c4912f589325431515dbcc5a6"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558558930"
 
 [tools."github:Infisical/cli"."platforms.linux-x64"]
-checksum = "sha256:5b41b94a37620005d6b2e7ccd69d82dd969815cd971bcceacf8173b92398b3f6"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.130/cli_0.43.130_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/551145882"
+checksum = "sha256:4c141a0b3ad82467497b68c5ed63137a3a62a9cfc46705aa14bd34826f3c98f6"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558558938"
 
 [tools."github:Infisical/cli"."platforms.linux-x64-musl"]
-checksum = "sha256:5b41b94a37620005d6b2e7ccd69d82dd969815cd971bcceacf8173b92398b3f6"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.130/cli_0.43.130_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/551145882"
+checksum = "sha256:4c141a0b3ad82467497b68c5ed63137a3a62a9cfc46705aa14bd34826f3c98f6"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558558938"
 
 [tools."github:Infisical/cli"."platforms.macos-arm64"]
-checksum = "sha256:3148b84d8404287b21d9fec35d6ac3ed972aad980469ce372d59b5c5dd05d045"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.130/cli_0.43.130_darwin_arm64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/551136311"
+checksum = "sha256:2f7cea2d789ba5dc6a94d7655bde0245998caeef53bb5725630b82411bf98818"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558551375"
 
 [tools."github:Infisical/cli"."platforms.macos-x64"]
-checksum = "sha256:e457ebfec5ad90511b290ca5f3a46851a3f4b743fbbee53db6aef718602cb0bb"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.130/cli_0.43.130_darwin_amd64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/551136310"
+checksum = "sha256:b1ca573839316bc9f9f4a8afeb8eb55eb7eda814d19d8c7319d3378ba0130a10"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_darwin_amd64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558551379"
 
 [tools."github:Infisical/cli"."platforms.windows-x64"]
-checksum = "sha256:62304f5e3b0225ddecffe761505348292c4be7e909e004fb21356721794cfac9"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.130/cli_0.43.130_windows_amd64.zip"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/551145874"
+checksum = "sha256:103eed6d549ef94701621208512a487c8ece601088a31647bed7521d3648317e"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_windows_amd64.zip"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558558957"
 
 [[tools."github:foresterre/cargo-msrv"]]
 version = "0.19.3"
