@@ -191,7 +191,7 @@ url = "https://github.com/bitwarden/sdk-sm/releases/download/bws-v2.1.0/bws-x86_
 url_api = "https://api.github.com/repos/bitwarden/sdk-sm/releases/assets/426507247"
 
 [[tools.communique]]
-version = "1.4.0"
+version = "1.4.1"
 backend = "github:jdx/communique"
 specifiers = ["latest"]
 
