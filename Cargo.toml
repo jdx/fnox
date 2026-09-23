@@ -55,7 +55,7 @@ hkdf = "0.13"
 ignore = "0.4"
 indexmap = { version = "2", features = ["serde"] }
 jsonwebtoken = { version = "11", features = ["aws_lc_rs"] }
-keepass = { version = "0.14", features = ["save_kdbx4"] }
+keepass = { version = "0.15", features = ["save_kdbx4"] }
 keeper-secrets-manager-core = { version = "17", default-features = false, features = ["blocking"] }
 keyring-core = "1"
 apple-native-keyring-store = { version = "1", features = ["keychain"] }
