@@ -4,18 +4,18 @@ min_version = "2026.9.7"
 _.path = ["target/debug", "test/bats/bin"]
 
 [tools]
-mr-boxington = "1.14.0"
-usage = "6.11.0"
+mr-boxington = { version = "latest", minimum_release_age = "0s" }
+usage = { version = "latest", minimum_release_age = "0s" }
 # Pinned rather than "latest" because tak is the measuring instrument: an
 # upgrade that changes how it samples would land in the series as a step change
 # in fnox's numbers, indistinguishable from a real regression. Bump deliberately.
-"github:jdx/tak" = "v0.0.10"
-aube = "latest"
+tak = { version = "latest", minimum_release_age = "0s" }
+aube = { version = "latest", minimum_release_age = "0s" }
 age = "latest"
 "github:foresterre/cargo-msrv" = "latest"
-communique = "latest"
+communique = { version = "latest", minimum_release_age = "0s" }
 git-cliff = "latest"
-hk = "latest"
+hk = { version = "latest", minimum_release_age = "0s" }
 pkl = "latest"
 prettier = "latest"
 shellcheck = "latest"
