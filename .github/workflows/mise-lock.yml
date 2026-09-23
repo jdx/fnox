@@ -33,7 +33,7 @@ jobs:
     # and someone runs `mise run render` by hand — visible, not silent. Adding
     # a system-packages input to the shared workflow would let this be
     # automated too.
-    uses: jdx/renovate-config/.github/workflows/mise-lock.yml@c7361498df70199180841a52ce12658565eca58f # main
+    uses: jdx/renovate-config/.github/workflows/mise-lock.yml@aa49efc3545650fa660ac796e7f856dbee0681ee # main
     secrets:
       # Optional. With them the lockfile commit is pushed with a short-lived
       # GitHub App token, so the Renovate PR's checks re-run on the fixed
