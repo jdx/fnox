@@ -76,7 +76,7 @@ url_api = "https://api.github.com/repos/FiloSottile/age/releases/assets/53554193
 provenance = "github-attestations"
 
 [[tools.aube]]
-version = "2.2.17"
+version = "2.3.0"
 backend = "github:endevco/aube"
 specifiers = ["latest"]
 
