@@ -17,13 +17,11 @@ async function copyInstall() {
   <main class="fnox-home">
     <section class="home-hero" aria-labelledby="home-title">
       <div class="hero-copy">
-        <h1 id="home-title">
-          Secret management for development and CI
-        </h1>
+        <h1 id="home-title">Secret management for development and CI</h1>
         <p class="hero-lead">
-          Load secrets from encrypted files, password managers, and cloud services
-          into your application’s environment. Configure where each value comes
-          from in <code>fnox.toml</code>.
+          Load secrets from encrypted files, password managers, and cloud
+          services into your application’s environment. Configure where each
+          value comes from in <code>fnox.toml</code>.
         </p>
         <div class="hero-actions">
           <a class="home-button primary" href="/guide/quick-start"
@@ -136,9 +134,7 @@ value = <span class="code-string">"YWdlLWVuY3J5cHRpb24…"</span></code></pre>
     <section class="home-section" aria-labelledby="workflow-title">
       <div class="section-heading">
         <div>
-          <h2 id="workflow-title">
-            Choose where secrets are stored
-          </h2>
+          <h2 id="workflow-title">Choose where secrets are stored</h2>
         </div>
         <p>
           Each secret can use a different provider, so you can combine encrypted
