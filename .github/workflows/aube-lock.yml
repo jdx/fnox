@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   aube-lock:
-    uses: jdx/renovate-config/.github/workflows/aube-lock.yml@aa49efc3545650fa660ac796e7f856dbee0681ee # main
+    uses: jdx/renovate-config/.github/workflows/aube-lock.yml@5b4643284bcbb1330637e10e3924258fb1559e93 # main
     secrets:
       AUBE_LOCK_APP_ID: ${{ secrets.AUBE_LOCK_APP_ID }}
       AUBE_LOCK_APP_PRIVATE_KEY: ${{ secrets.AUBE_LOCK_APP_PRIVATE_KEY }}
