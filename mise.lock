@@ -190,6 +190,36 @@ checksum = "sha256:8d6f2b51beb6f992b5b1de8b85a98bdf18de74096b724d17fa06219fc23f2
 url = "https://github.com/bitwarden/sdk-sm/releases/download/bws-v2.1.0/bws-x86_64-pc-windows-msvc-2.1.0.zip"
 url_api = "https://api.github.com/repos/bitwarden/sdk-sm/releases/assets/426507247"
 
+[[tools.cargo-msrv]]
+version = "0.19.3"
+backend = "aqua:foresterre/cargo-msrv"
+specifiers = ["latest"]
+
+[tools.cargo-msrv."platforms.linux-x64"]
+checksum = "sha256:6f9a0011ca8ad959d304185b9090390fd1ad87e2d764007fbb0abe043afa9ff5"
+url = "https://github.com/foresterre/cargo-msrv/releases/download/v0.19.3/cargo-msrv-x86_64-unknown-linux-gnu-v0.19.3.tgz"
+url_api = "https://api.github.com/repos/foresterre/cargo-msrv/releases/assets/380850047"
+
+[tools.cargo-msrv."platforms.linux-x64-musl"]
+checksum = "sha256:441ddbf85c589062029ac33fcfcfc33ddd4e87f04984d91b16ea4ae02e4d779d"
+url = "https://github.com/foresterre/cargo-msrv/releases/download/v0.19.3/cargo-msrv-x86_64-unknown-linux-musl-v0.19.3.tgz"
+url_api = "https://api.github.com/repos/foresterre/cargo-msrv/releases/assets/380849992"
+
+[tools.cargo-msrv."platforms.macos-arm64"]
+checksum = "sha256:bf42f653b5a7c426972f728b38a3756529a105b6598c2fdc89bc25ac056726f1"
+url = "https://github.com/foresterre/cargo-msrv/releases/download/v0.19.3/cargo-msrv-aarch64-apple-darwin-v0.19.3.tgz"
+url_api = "https://api.github.com/repos/foresterre/cargo-msrv/releases/assets/380850630"
+
+[tools.cargo-msrv."platforms.macos-x64"]
+checksum = "sha256:2427399177872d74b822b46a2f52817bfab5fb1ff6d8e5e6faaafc82a66f2351"
+url = "https://github.com/foresterre/cargo-msrv/releases/download/v0.19.3/cargo-msrv-x86_64-apple-darwin-v0.19.3.tgz"
+url_api = "https://api.github.com/repos/foresterre/cargo-msrv/releases/assets/380858063"
+
+[tools.cargo-msrv."platforms.windows-x64"]
+checksum = "sha256:e437443331865218763d44089680f4d36547353e8c3c8b394c24859203e6cd05"
+url = "https://github.com/foresterre/cargo-msrv/releases/download/v0.19.3/cargo-msrv-x86_64-pc-windows-msvc-v0.19.3.zip"
+url_api = "https://api.github.com/repos/foresterre/cargo-msrv/releases/assets/380851496"
+
 [[tools.communique]]
 version = "1.4.2"
 backend = "packslip:github.com/jdx/communique"
@@ -265,76 +295,6 @@ checksum = "sha256:791aa263079aa7894e24d4e2f8e978aa6214e9dd9dbf04f79ae5f3565758f
 url = "https://github.com/orhun/git-cliff/releases/download/v2.14.1/git-cliff-2.14.1-x86_64-pc-windows-msvc.zip"
 url_api = "https://api.github.com/repos/orhun/git-cliff/releases/assets/539702434"
 
-[[tools."github:Infisical/cli"]]
-version = "0.43.132"
-backend = "github:Infisical/cli"
-specifiers = ["latest"]
-
-[tools."github:Infisical/cli"."platforms.linux-arm64"]
-checksum = "sha256:0dc149b0673ef92693796203ba3b34ae2adda74c4912f589325431515dbcc5a6"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558558930"
-
-[tools."github:Infisical/cli"."platforms.linux-arm64-musl"]
-checksum = "sha256:0dc149b0673ef92693796203ba3b34ae2adda74c4912f589325431515dbcc5a6"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558558930"
-
-[tools."github:Infisical/cli"."platforms.linux-x64"]
-checksum = "sha256:4c141a0b3ad82467497b68c5ed63137a3a62a9cfc46705aa14bd34826f3c98f6"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558558938"
-
-[tools."github:Infisical/cli"."platforms.linux-x64-musl"]
-checksum = "sha256:4c141a0b3ad82467497b68c5ed63137a3a62a9cfc46705aa14bd34826f3c98f6"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558558938"
-
-[tools."github:Infisical/cli"."platforms.macos-arm64"]
-checksum = "sha256:2f7cea2d789ba5dc6a94d7655bde0245998caeef53bb5725630b82411bf98818"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_darwin_arm64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558551375"
-
-[tools."github:Infisical/cli"."platforms.macos-x64"]
-checksum = "sha256:b1ca573839316bc9f9f4a8afeb8eb55eb7eda814d19d8c7319d3378ba0130a10"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_darwin_amd64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558551379"
-
-[tools."github:Infisical/cli"."platforms.windows-x64"]
-checksum = "sha256:103eed6d549ef94701621208512a487c8ece601088a31647bed7521d3648317e"
-url = "https://github.com/Infisical/cli/releases/download/v0.43.132/cli_0.43.132_windows_amd64.zip"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/558558957"
-
-[[tools."github:foresterre/cargo-msrv"]]
-version = "0.19.3"
-backend = "github:foresterre/cargo-msrv"
-specifiers = ["latest"]
-
-[tools."github:foresterre/cargo-msrv"."platforms.linux-x64"]
-checksum = "sha256:6f9a0011ca8ad959d304185b9090390fd1ad87e2d764007fbb0abe043afa9ff5"
-url = "https://github.com/foresterre/cargo-msrv/releases/download/v0.19.3/cargo-msrv-x86_64-unknown-linux-gnu-v0.19.3.tgz"
-url_api = "https://api.github.com/repos/foresterre/cargo-msrv/releases/assets/380850047"
-
-[tools."github:foresterre/cargo-msrv"."platforms.linux-x64-musl"]
-checksum = "sha256:441ddbf85c589062029ac33fcfcfc33ddd4e87f04984d91b16ea4ae02e4d779d"
-url = "https://github.com/foresterre/cargo-msrv/releases/download/v0.19.3/cargo-msrv-x86_64-unknown-linux-musl-v0.19.3.tgz"
-url_api = "https://api.github.com/repos/foresterre/cargo-msrv/releases/assets/380849992"
-
-[tools."github:foresterre/cargo-msrv"."platforms.macos-arm64"]
-checksum = "sha256:bf42f653b5a7c426972f728b38a3756529a105b6598c2fdc89bc25ac056726f1"
-url = "https://github.com/foresterre/cargo-msrv/releases/download/v0.19.3/cargo-msrv-aarch64-apple-darwin-v0.19.3.tgz"
-url_api = "https://api.github.com/repos/foresterre/cargo-msrv/releases/assets/380850630"
-
-[tools."github:foresterre/cargo-msrv"."platforms.macos-x64"]
-checksum = "sha256:2427399177872d74b822b46a2f52817bfab5fb1ff6d8e5e6faaafc82a66f2351"
-url = "https://github.com/foresterre/cargo-msrv/releases/download/v0.19.3/cargo-msrv-x86_64-apple-darwin-v0.19.3.tgz"
-url_api = "https://api.github.com/repos/foresterre/cargo-msrv/releases/assets/380858063"
-
-[tools."github:foresterre/cargo-msrv"."platforms.windows-x64"]
-checksum = "sha256:e437443331865218763d44089680f4d36547353e8c3c8b394c24859203e6cd05"
-url = "https://github.com/foresterre/cargo-msrv/releases/download/v0.19.3/cargo-msrv-x86_64-pc-windows-msvc-v0.19.3.zip"
-url_api = "https://api.github.com/repos/foresterre/cargo-msrv/releases/assets/380851496"
-
 [[tools.hk]]
 version = "2.1.0"
 backend = "packslip:github.com/jdx/hk"
@@ -369,6 +329,49 @@ signer = "sigstore-oidc:https://github.com/jdx/hk/.github/workflows/release.yml"
 checksum = "sha256:c0344c09c76f7e25985c4770148130881b19313393d238949e5512ec3691fac3"
 url = "https://github.com/jdx/hk/releases/download/v2.1.0/hk-x86_64-pc-windows-msvc.zip"
 signer = "sigstore-oidc:https://github.com/jdx/hk/.github/workflows/release.yml"
+
+[[tools.infisical]]
+version = "0.43.134"
+backend = "github:Infisical/cli"
+specifiers = ["latest"]
+
+[tools.infisical.options]
+asset_pattern = "cli_{{ version }}_{{ os(macos='darwin') }}_{{ arch(x64='amd64') }}.tar.gz"
+
+[tools.infisical."platforms.linux-arm64"]
+checksum = "sha256:7dc7b23453388fc49f638ec0358d315d12d85d4f431dd328524ca0c38d82a20b"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.134/cli_0.43.134_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/581633939"
+
+[tools.infisical."platforms.linux-arm64-musl"]
+checksum = "sha256:7dc7b23453388fc49f638ec0358d315d12d85d4f431dd328524ca0c38d82a20b"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.134/cli_0.43.134_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/581633939"
+
+[tools.infisical."platforms.linux-x64"]
+checksum = "sha256:46eba00a6b29d5ff30a9de67b62aa26c0042c8ad0ca233b5e9a5e516ac44ea52"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.134/cli_0.43.134_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/581633921"
+
+[tools.infisical."platforms.linux-x64-musl"]
+checksum = "sha256:46eba00a6b29d5ff30a9de67b62aa26c0042c8ad0ca233b5e9a5e516ac44ea52"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.134/cli_0.43.134_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/581633921"
+
+[tools.infisical."platforms.macos-arm64"]
+checksum = "sha256:02299c8ef3581f5b8bc710f018bb61b581ea11c19263b1541b45120f6b63eef2"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.134/cli_0.43.134_darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/581623304"
+
+[tools.infisical."platforms.macos-x64"]
+checksum = "sha256:bee6d4bf0704ff22727490fec009c960edeb8c1eceb208208b92766e43f43eb7"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.134/cli_0.43.134_darwin_amd64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/581623303"
+
+[tools.infisical."platforms.windows-x64"]
+checksum = "sha256:57da1e19421e3e61175e8185d1f26a946091b2c2d263574dc18a8a9c22a48c7e"
+url = "https://github.com/Infisical/cli/releases/download/v0.43.134/cli_0.43.134_windows_amd64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/581632615"
 
 [[tools.mr-boxington]]
 version = "1.16.0"
