@@ -570,7 +570,7 @@ fn redact_secrets(text: &str, secret_values: &[(String, String)]) -> Result<Stri
 /// filter the tool list based on mcp_config.tools at listing time (not just
 /// at call time).
 impl ServerHandler for FnoxMcpServer {
-    fn get_info(&self) -> ServerInfo {
+    fn get_info(&self) -> ServerConfig {
         let tools = self.mcp_config.tools();
         let has_get_secret = tools.contains(&McpTool::GetSecret);
         let has_exec = tools.contains(&McpTool::Exec);
@@ -588,7 +588,7 @@ impl ServerHandler for FnoxMcpServer {
             "fnox MCP server — no tools are currently enabled."
         };
 
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(Implementation::new("fnox-mcp", env!("CARGO_PKG_VERSION")))
             .with_protocol_version(ProtocolVersion::V_2024_11_05)
             .with_instructions(instructions.to_string())
