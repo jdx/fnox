@@ -1,7 +1,7 @@
 ---
 layout: home
-title: Your secrets, where you need them
-description: Load secrets from encrypted files, password managers, and cloud services into your commands. One configuration for development and CI.
+title: Secret management for development and CI
+description: Load secrets from encrypted files, password managers, and cloud services into your application’s environment with fnox.
 ---
 
 <script setup>

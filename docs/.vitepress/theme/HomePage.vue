@@ -17,16 +17,13 @@ async function copyInstall() {
   <main class="fnox-home">
     <section class="home-hero" aria-labelledby="home-title">
       <div class="hero-copy">
-        <p class="eyebrow">
-          <span aria-hidden="true" class="status-dot"></span> Fort Knox for your
-          secrets
-        </p>
         <h1 id="home-title">
-          Your secrets.<br /><span>Where you need them.</span>
+          Secret management for development and CI
         </h1>
         <p class="hero-lead">
-          From your vault to your terminal. Load secrets from encrypted files,
-          password managers, and cloud services with one command.
+          Load secrets from encrypted files, password managers, and cloud services
+          into your application’s environment. Configure where each value comes
+          from in <code>fnox.toml</code>.
         </p>
         <div class="hero-actions">
           <a class="home-button primary" href="/guide/quick-start"
@@ -113,7 +110,7 @@ value = <span class="code-string">"YWdlLWVuY3J5cHRpb24…"</span></code></pre>
         <p class="demo-caption">
           {{
             storage === "vault"
-              ? "The reference goes in git. The value stays in your vault."
+              ? "Commit the vault reference without putting the secret value in git."
               : "Ciphertext and recipient are abbreviated. Keep your private key outside git."
           }}
         </p>
@@ -121,7 +118,7 @@ value = <span class="code-string">"YWdlLWVuY3J5cHRpb24…"</span></code></pre>
     </section>
 
     <section class="provider-strip" aria-label="Supported providers">
-      <span class="strip-label">BRING YOUR OWN VAULT</span>
+      <span class="strip-label">SUPPORTED PROVIDERS</span>
       <div>
         <a href="/providers/age">age</a>
         <a href="/providers/1password">1Password</a>
@@ -139,20 +136,19 @@ value = <span class="code-string">"YWdlLWVuY3J5cHRpb24…"</span></code></pre>
     <section class="home-section" aria-labelledby="workflow-title">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">ONE INTERFACE. YOUR INFRASTRUCTURE.</p>
           <h2 id="workflow-title">
-            Keep your workflow.<br />Give secrets a home.
+            Choose where secrets are stored
           </h2>
         </div>
         <p>
-          Choose how to store each value. Your application keeps reading the
-          same environment variables.
+          Each secret can use a different provider, so you can combine encrypted
+          values with references to your team’s existing vaults.
         </p>
       </div>
       <div class="workflow-grid">
         <a class="workflow" href="/guide/quick-start">
           <span class="workflow-number" aria-hidden="true">01 / ENCRYPT</span>
-          <h3>A config you can commit.</h3>
+          <h3>Encrypted values in git</h3>
           <p>
             Encrypt with age, a hardware key, or cloud KMS. Review configuration
             alongside your code and share access through public recipients or
@@ -164,7 +160,7 @@ value = <span class="code-string">"YWdlLWVuY3J5cHRpb24…"</span></code></pre>
         </a>
         <a class="workflow" href="/guide/golden-path">
           <span class="workflow-number" aria-hidden="true">02 / CONNECT</span>
-          <h3>Your vault, in your terminal.</h3>
+          <h3>Existing vaults</h3>
           <p>
             Reference the secrets your team already manages. Add a personal
             encrypted cache with fnox sync for local, offline access using age.
@@ -175,7 +171,7 @@ value = <span class="code-string">"YWdlLWVuY3J5cHRpb24…"</span></code></pre>
         </a>
         <a class="workflow" href="/guide/profiles">
           <span class="workflow-number" aria-hidden="true">03 / RUN</span>
-          <h3>Local today. CI tomorrow.</h3>
+          <h3>Environment profiles</h3>
           <p>
             Use profiles for development, staging, and production. Change the
             secret source without changing the way you launch your application.
@@ -189,11 +185,10 @@ value = <span class="code-string">"YWdlLWVuY3J5cHRpb24…"</span></code></pre>
 
     <section class="home-section everyday" aria-labelledby="everyday-title">
       <div class="everyday-intro">
-        <p class="eyebrow">LESS SECRET SHUFFLING</p>
-        <h2 id="everyday-title">Ready for the<br />daily routine.</h2>
+        <h2 id="everyday-title">Use secrets in your workflow</h2>
         <p>
-          From a single project to a monorepo, keep secret handling close to the
-          tools you use.
+          Load secrets when you enter a project, cache repeated reads, or issue
+          temporary credentials when a service supports them.
         </p>
         <a class="text-link" href="/guide/how-it-works"
           >See how fnox works <span aria-hidden="true">→</span></a
@@ -202,7 +197,7 @@ value = <span class="code-string">"YWdlLWVuY3J5cHRpb24…"</span></code></pre>
       <div class="capability-list">
         <a href="/guide/shell-integration"
           ><div>
-            <h3>Enter a directory. Load its secrets.</h3>
+            <h3>Shell integration</h3>
             <p>
               Shell hooks load and unload values as you move between projects.
             </p>
@@ -211,7 +206,7 @@ value = <span class="code-string">"YWdlLWVuY3J5cHRpb24…"</span></code></pre>
         >
         <a href="/guide/daemon"
           ><div>
-            <h3>Make repeated reads faster.</h3>
+            <h3>In-memory caching</h3>
             <p>
               An opt-in daemon keeps resolved values in memory during your
               session.
@@ -221,7 +216,7 @@ value = <span class="code-string">"YWdlLWVuY3J5cHRpb24…"</span></code></pre>
         >
         <a href="/guide/leases"
           ><div>
-            <h3>Give credentials an expiry.</h3>
+            <h3>Temporary credentials</h3>
             <p>
               Create temporary credentials with AWS STS, GitHub Apps, Vault, and
               more.
@@ -231,7 +226,7 @@ value = <span class="code-string">"YWdlLWVuY3J5cHRpb24…"</span></code></pre>
         >
         <a href="/guide/proxy"
           ><div>
-            <h3>Scope credentials to requests.</h3>
+            <h3>Credentials for agent requests</h3>
             <p>
               Pass placeholders to an agent and inject real values into matching
               HTTPS requests.
@@ -245,7 +240,7 @@ value = <span class="code-string">"YWdlLWVuY3J5cHRpb24…"</span></code></pre>
     <section class="home-start" aria-labelledby="start-title">
       <img src="/logo.svg" alt="" width="64" height="64" loading="lazy" />
       <div>
-        <h2 id="start-title">Start with one secret.</h2>
+        <h2 id="start-title">Set up your first provider</h2>
         <p>Install fnox, configure a provider, and run your first command.</p>
       </div>
       <a class="home-button primary" href="/guide/quick-start"
