@@ -527,8 +527,8 @@ fn build_frame(payload: &[u8; DATA_SIZE], command: u8) -> [u8; FRAME_SIZE] {
     let mut frame = [0u8; FRAME_SIZE];
     frame[..DATA_SIZE].copy_from_slice(payload);
     frame[DATA_SIZE] = command;
-    // CRC covers payload + command byte (65 bytes), per YubiKey protocol spec
-    let crc = crc16(&frame[..DATA_SIZE + 1]).to_le_bytes();
+    // CRC covers the 64-byte payload only (matches ykman/ykpers)
+    let crc = crc16(&frame[..DATA_SIZE]).to_le_bytes();
     frame[DATA_SIZE + 1] = crc[0];
     frame[DATA_SIZE + 2] = crc[1];
     // filler bytes remain 0
@@ -585,4 +585,18 @@ pub fn challenge_response_hmac(challenge: &[u8], slot: u8) -> Result<[u8; 20]> {
     let mut hmac = [0u8; 20];
     hmac.copy_from_slice(&response[..20]);
     Ok(hmac)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn frame_crc_covers_payload_only() {
+        // Reference frame tail from yubikit's _format_frame(0x38, payload)
+        let mut payload = [0u8; DATA_SIZE];
+        payload[..4].copy_from_slice(&[0xde, 0xad, 0xbe, 0xef]);
+        let frame = build_frame(&payload, CHALLENGE_HMAC2);
+        assert_eq!(frame[DATA_SIZE..DATA_SIZE + 3], [0x38, 0x04, 0x85]);
+    }
 }
