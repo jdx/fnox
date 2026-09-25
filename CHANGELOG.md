@@ -1,6 +1,54 @@
 # Changelog
 
-## [1.35.3](https://github.com/jdx/fnox/compare/v1.35.2..v1.35.3) - 2026-09-20
+## [1.35.4](https://github.com/jdx/fnox/compare/v1.35.3..v1.35.4) - 2026-09-25
+
+### 🐛 Bug Fixes
+
+- **(reencrypt)** batch encryption by provider by [@davdroman](https://github.com/davdroman) in [#880](https://github.com/jdx/fnox/pull/880)
+- **(yubikey)** compute HMAC challenge frame CRC over payload only by [@mufasa71](https://github.com/mufasa71) in [#905](https://github.com/jdx/fnox/pull/905)
+
+### 🛡️ Security
+
+- **(deps)** update dependency @anthropic-ai/claude-code to v2.1.272 by [@renovate[bot]](https://github.com/renovate[bot]) in [#889](https://github.com/jdx/fnox/pull/889)
+- explain secret providers and development workflows plainly by [@jdx](https://github.com/jdx) in [#899](https://github.com/jdx/fnox/pull/899)
+- remove Entire trail runners by [@jdx](https://github.com/jdx) in [#902](https://github.com/jdx/fnox/pull/902)
+
+### 🔍 Other Changes
+
+- **(ci)** comment on a discussion when the PR implementing it merges by [@jdx](https://github.com/jdx) in [#882](https://github.com/jdx/fnox/pull/882)
+- float jdx tools and aube on latest without a release-age delay by [@jdx](https://github.com/jdx) in [#903](https://github.com/jdx/fnox/pull/903)
+- accept pull request titles whose description starts with an acronym by [@jdx](https://github.com/jdx) in [24d33bf](https://github.com/jdx/fnox/commit/24d33bf030f94ff1b096640e0777f18a16fe374c)
+
+### 📦️ Dependency Updates
+
+- update rust crate usage-rs to v6.9.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#890](https://github.com/jdx/fnox/pull/890)
+- update rust crate console to v0.16.6 by [@renovate[bot]](https://github.com/renovate[bot]) in [#885](https://github.com/jdx/fnox/pull/885)
+- update dependency usage to v6.11.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#891](https://github.com/jdx/fnox/pull/891)
+- update zizmorcore/zizmor-action action to v0.6.4 by [@renovate[bot]](https://github.com/renovate[bot]) in [#888](https://github.com/jdx/fnox/pull/888)
+- update dependency communique to latest by [@renovate[bot]](https://github.com/renovate[bot]) in [#883](https://github.com/jdx/fnox/pull/883)
+- update jdx/packslip action to v1.2.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#892](https://github.com/jdx/fnox/pull/892)
+- update rust crate rmcp to v3.3.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#894](https://github.com/jdx/fnox/pull/894)
+- update dependency github:infisical/cli to latest by [@renovate[bot]](https://github.com/renovate[bot]) in [#884](https://github.com/jdx/fnox/pull/884)
+- update rust crate toml_edit to v0.25.15 by [@renovate[bot]](https://github.com/renovate[bot]) in [#887](https://github.com/jdx/fnox/pull/887)
+- update rust crate rustls to v0.23.45 by [@renovate[bot]](https://github.com/renovate[bot]) in [#886](https://github.com/jdx/fnox/pull/886)
+- update rust crate tera to v2.4.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#895](https://github.com/jdx/fnox/pull/895)
+- update rust crate keepass to 0.14 by [@renovate[bot]](https://github.com/renovate[bot]) in [#893](https://github.com/jdx/fnox/pull/893)
+- update dependency aube to latest by [@renovate[bot]](https://github.com/renovate[bot]) in [#897](https://github.com/jdx/fnox/pull/897)
+- move to keepass 0.15 and rmcp 3.4 so fnox builds again by [@jdx](https://github.com/jdx) in [#898](https://github.com/jdx/fnox/pull/898)
+- bump jdx/renovate-config workflows to c736149 by [@jdx](https://github.com/jdx) in [f87b0e5](https://github.com/jdx/fnox/commit/f87b0e5faeb32c7f150e855ece5715e94d8ba381)
+- update rust crate usage-rs to v6.11.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#900](https://github.com/jdx/fnox/pull/900)
+- bump jdx/renovate-config workflows to aa49efc by [@jdx](https://github.com/jdx) in [5ff5b72](https://github.com/jdx/fnox/commit/5ff5b72bacbe4c1f6d4e46289aacfd44123b50d8)
+- bump jdx/renovate-config workflows to 5b46432 by [@jdx](https://github.com/jdx) in [e2d92df](https://github.com/jdx/fnox/commit/e2d92df801c1b1a6d325b489e05ac737c548c11a)
+- pin jdx/renovate-config workflows to v1.0.0 by [@jdx](https://github.com/jdx) in [8c052ae](https://github.com/jdx/fnox/commit/8c052ae3e588757e4163d49ac45f97254fe0e672)
+- update communique to 1.4.2 in mise.lock by [@jdx](https://github.com/jdx) in [0f5d166](https://github.com/jdx/fnox/commit/0f5d1664b476838ac7ef009a80dcf0fa7afb5ef2)
+- update rust crate demand to v2.2.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#904](https://github.com/jdx/fnox/pull/904)
+- update rust crate demand to v2.3.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#906](https://github.com/jdx/fnox/pull/906)
+
+### New Contributors
+
+- @mufasa71 made their first contribution in [#905](https://github.com/jdx/fnox/pull/905)
+
+## [1.35.3](https://github.com/jdx/fnox/compare/v1.35.2..v1.35.3) - 2026-09-21
 
 ### 🛡️ Security
 
