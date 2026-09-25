@@ -4,7 +4,7 @@
 
 PR titles must use `<type>[optional scope][optional !]: <description>`. Intermediate commit
 subjects should use the same format. Start the description with a lowercase
-character and use imperative mood.
+character or an acronym such as `CLI`, and use imperative mood.
 
 **Types:** `feat`, `fix`, `refactor`, `docs`, `style`, `perf`, `test`, `chore`, `ci`, `revert`, `security`
 
@@ -14,7 +14,7 @@ Examples: `fix(aws-sm): handle pagination for large secret lists`, `feat(exec): 
 
 CI validates the pull request title and re-runs when it is edited. Intermediate
 commit subjects are not checked because pull requests are squash-merged. CI
-mechanically checks the allowed type, syntax, and lowercase-leading description;
+mechanically checks the allowed type, syntax, and lowercase- or acronym-leading description;
 imperative mood remains a review rule.
 
 ## Minimum Supported Rust Version (MSRV)
@@ -172,7 +172,7 @@ requirements.
 
 ## GitHub Interactions
 
-Pull request titles must follow the same Conventional Commit format as commits: `<type>[optional scope][optional !]: <description>` in lowercase imperative mood. Do not prefix PR titles with agent/tool labels such as `[codex]` or `[claude]`.
+Pull request titles must follow the same Conventional Commit format as commits: `<type>[optional scope][optional !]: <description>` in imperative mood, starting lowercase or with an acronym such as `CLI`. Do not prefix PR titles with agent/tool labels such as `[codex]` or `[claude]`.
 
 Do not modify version numbers or changelogs in non-release pull requests.
 
