@@ -2341,7 +2341,7 @@ dependencies = [
 
 [[package]]
 name = "fnox"
-version = "1.35.3"
+version = "1.35.4"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -2391,7 +2391,7 @@ dependencies = [
 
 [[package]]
 name = "fnox-core"
-version = "1.35.3"
+version = "1.35.4"
 dependencies = [
  "aes-gcm 0.11.1",
  "age",
