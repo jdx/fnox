@@ -165,6 +165,18 @@ pub fn hash_secret_value_with_session(session: &HookEnvSession, key: &str, value
 /// output (`FNOX_SHELL_OUTPUT=debug`, `RUST_LOG`) to the normal path, which
 /// reports why it exited.
 pub fn can_exit_before_startup(args: &[std::ffi::OsString]) -> bool {
+    let shell_output = crate::env::var("FNOX_SHELL_OUTPUT").ok();
+    let rust_log = crate::env::var_os("RUST_LOG").is_some();
+    startup_exit_allowed(args, shell_output.as_deref(), rust_log) && should_exit_early()
+}
+
+/// The part of [`can_exit_before_startup`] decided by the command line and the
+/// output settings alone, before looking at the session.
+fn startup_exit_allowed(
+    args: &[std::ffi::OsString],
+    shell_output: Option<&str>,
+    rust_log: bool,
+) -> bool {
     let shell = match args {
         [command, flag, shell] if command == "hook-env" && (flag == "-s" || flag == "--shell") => {
             shell
@@ -177,12 +189,9 @@ pub fn can_exit_before_startup(args: &[std::ffi::OsString]) -> bool {
     {
         return false;
     }
-    let debug_output = std::env::var("FNOX_SHELL_OUTPUT")
-        .is_ok_and(|mode| matches!(mode.to_lowercase().as_str(), "debug" | "verbose"));
-    if debug_output || std::env::var_os("RUST_LOG").is_some() {
-        return false;
-    }
-    should_exit_early()
+    let debug_output = shell_output
+        .is_some_and(|mode| matches!(mode.to_lowercase().as_str(), "debug" | "verbose"));
+    !debug_output && !rust_log
 }
 
 /// Check if we should exit early (optimization)
@@ -347,4 +356,70 @@ pub fn find_config() -> Option<PathBuf> {
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::startup_exit_allowed;
+    use std::ffi::OsString;
+
+    fn args(values: &[&str]) -> Vec<OsString> {
+        values.iter().map(OsString::from).collect()
+    }
+
+    #[test]
+    fn startup_exit_answers_the_shell_hook_command_lines() {
+        for shell in ["bash", "zsh", "fish", "nu", "pwsh"] {
+            assert!(startup_exit_allowed(
+                &args(&["hook-env", "-s", shell]),
+                None,
+                false
+            ));
+            assert!(startup_exit_allowed(
+                &args(&["hook-env", "--shell", shell]),
+                Some("normal"),
+                false
+            ));
+        }
+        assert!(startup_exit_allowed(
+            &args(&["hook-env", "-s", "bash"]),
+            Some("none"),
+            false
+        ));
+    }
+
+    #[test]
+    fn startup_exit_leaves_other_command_lines_to_the_cli() {
+        assert!(!startup_exit_allowed(&args(&[]), None, false));
+        assert!(!startup_exit_allowed(&args(&["hook-env"]), None, false));
+        assert!(!startup_exit_allowed(
+            &args(&["get", "-s", "bash"]),
+            None,
+            false
+        ));
+        assert!(!startup_exit_allowed(
+            &args(&["hook-env", "-s", "bash", "--verbose"]),
+            None,
+            false
+        ));
+        assert!(!startup_exit_allowed(
+            &args(&["hook-env", "--shell=bash"]),
+            None,
+            false
+        ));
+        // An unsupported shell reports its error through the normal path.
+        assert!(!startup_exit_allowed(
+            &args(&["hook-env", "-s", "tcsh"]),
+            None,
+            false
+        ));
+    }
+
+    #[test]
+    fn startup_exit_leaves_debug_output_to_the_cli() {
+        let hook = args(&["hook-env", "-s", "bash"]);
+        assert!(!startup_exit_allowed(&hook, Some("debug"), false));
+        assert!(!startup_exit_allowed(&hook, Some("VERBOSE"), false));
+        assert!(!startup_exit_allowed(&hook, None, true));
+    }
 }
