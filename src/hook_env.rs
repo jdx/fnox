@@ -155,6 +155,36 @@ pub fn hash_secret_value_with_session(session: &HookEnvSession, key: &str, value
     hash_secret_with_key(&session.hash_key, key, value)
 }
 
+/// Whether `fnox hook-env` can finish before the CLI starts up.
+///
+/// The shell hooks run `fnox hook-env -s <shell>` before every prompt, and
+/// nearly every time nothing has changed. Starting the async runtime (a worker
+/// thread per core), parsing the command line and setting up logging cost more
+/// than [`should_exit_early`] itself, so `main` asks this first. It only answers
+/// for the command line the hooks run, with a supported shell, and leaves debug
+/// output (`FNOX_SHELL_OUTPUT=debug`, `RUST_LOG`) to the normal path, which
+/// reports why it exited.
+pub fn can_exit_before_startup(args: &[std::ffi::OsString]) -> bool {
+    let shell = match args {
+        [command, flag, shell] if command == "hook-env" && (flag == "-s" || flag == "--shell") => {
+            shell
+        }
+        _ => return false,
+    };
+    if shell
+        .to_str()
+        .is_none_or(|shell| crate::shell::get_shell(Some(shell)).is_err())
+    {
+        return false;
+    }
+    let debug_output = std::env::var("FNOX_SHELL_OUTPUT")
+        .is_ok_and(|mode| matches!(mode.to_lowercase().as_str(), "debug" | "verbose"));
+    if debug_output || std::env::var_os("RUST_LOG").is_some() {
+        return false;
+    }
+    should_exit_early()
+}
+
 /// Check if we should exit early (optimization)
 /// Returns true if nothing changed and we can skip work
 pub fn should_exit_early() -> bool {
