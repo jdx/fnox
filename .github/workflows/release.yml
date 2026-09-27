@@ -61,6 +61,10 @@ jobs:
           p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
           p12-password: ${{ secrets.CERTIFICATES_P12_PASS }}
       - uses: taiki-e/upload-rust-binary-action@f0d45ae91ee7b8ee928de7a9d04d893a08bcbec6 # v1
+        env:
+          # Links the Linux GNU executable non-PIE (see build.rs); ignored for
+          # every other target.
+          FNOX_NO_PIE: "1"
         with:
           bin: fnox
           target: ${{ matrix.target }}
@@ -151,6 +155,16 @@ jobs:
             exit 1
           fi
           echo "notarized: submission $id"
+      - name: Check the Linux GNU binary is linked non-PIE
+        if: contains(matrix.target, '-linux-gnu')
+        shell: bash
+        env:
+          BINARY: target/${{ matrix.target }}/release/fnox
+        run: |
+          if ! readelf -h "$BINARY" | grep -q 'Type:.*EXEC'; then
+            echo "::error::$BINARY is not linked non-PIE; FNOX_NO_PIE did not reach build.rs"
+            exit 1
+          fi
       - name: Upload binary artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
