@@ -2,8 +2,16 @@ use fnox::commands::Cli;
 use fnox::settings;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+fn main() -> miette::Result<()> {
+    let argv: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+    if fnox::hook_env::can_exit_before_startup(&argv) {
+        return Ok(());
+    }
+    run(argv)
+}
+
 #[tokio::main]
-async fn main() -> miette::Result<()> {
+async fn run(argv: Vec<std::ffi::OsString>) -> miette::Result<()> {
     // Restore the default SIGPIPE handler. Rust inherits SIG_IGN from libc,
     // so writes to a closed pipe return EPIPE and `println!` panics — e.g.
     // `fnox get FOO | head -c 0` would crash with "failed printing to stdout".
@@ -22,7 +30,6 @@ async fn main() -> miette::Result<()> {
 
     miette::set_panic_hook();
 
-    let argv: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
     if let Some(answer) = fnox::commands::completion_app()
         .completion_request(&argv)
         .await
