@@ -409,6 +409,22 @@ EOF
 	assert_output "fnox-env-value"
 }
 
+@test "keepass prompts once for multiple secrets in fnox exec" {
+	create_keepass_config
+	run "$FNOX_BIN" set FIRST "first-value" --provider keepass
+	assert_success
+	run "$FNOX_BIN" set SECOND "second-value" --provider keepass
+	assert_success
+
+	unset KEEPASS_PASSWORD FNOX_KEEPASS_PASSWORD
+	run "$FNOX_BIN" --non-interactive get FIRST
+	assert_failure
+	assert_output --partial "auth_failed"
+
+	run "${PYTHON3:-python3}" "$BATS_TEST_DIRNAME/keepass_prompt.py" "$FNOX_BIN"
+	assert_success
+}
+
 @test "fnox set fails when writing to title field" {
 	create_keepass_config
 

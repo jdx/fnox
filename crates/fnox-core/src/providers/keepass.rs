@@ -1,3 +1,4 @@
+use crate::env;
 use crate::error::{FnoxError, Result};
 use crate::providers::ProviderCapability;
 use async_trait::async_trait;
@@ -6,6 +7,7 @@ use keepass::db::{Database, EntryId, GroupId, GroupRef};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use tempfile::NamedTempFile;
 
 /// Provider that reads and writes secrets from KeePass database files (.kdbx)
@@ -13,6 +15,7 @@ pub struct KeePassProvider {
     database_path: PathBuf,
     keyfile_path: Option<PathBuf>,
     password: Option<String>,
+    prompted_password: Mutex<Option<String>>,
 }
 
 impl KeePassProvider {
@@ -25,12 +28,13 @@ impl KeePassProvider {
             database_path: crate::config_path::resolve_relative_to_file(&database, None),
             keyfile_path: keyfile.map(|k| crate::config_path::resolve_relative_to_file(&k, None)),
             password,
+            prompted_password: Mutex::new(None),
         })
     }
 
-    /// Get the password from environment variable or config
+    /// Get the password from the environment, config, or a terminal prompt.
     fn get_password(&self) -> Result<String> {
-        // Priority: env var > config
+        // Priority: env var > config > prompt.
         if let Some(password) = keepass_password() {
             return Ok(password);
         }
@@ -39,10 +43,37 @@ impl KeePassProvider {
             return Ok(password.clone());
         }
 
+        // The same provider can open and save a database in one command, or
+        // resolve several entries concurrently. Hold the lock while prompting
+        // so only one password is requested for this provider instance.
+        let mut prompted = self
+            .prompted_password
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(password) = prompted.as_ref() {
+            return Ok(password.clone());
+        }
+        if !env::is_non_interactive()
+            && (atty::is(atty::Stream::Stdin) || atty::is(atty::Stream::Stderr))
+        {
+            let password = rpassword::prompt_password(format!(
+                "KeePass password for {}: ",
+                self.database_path.display()
+            ))
+            .map_err(|e| FnoxError::ProviderAuthFailed {
+                provider: "KeePass".to_string(),
+                details: format!("Could not read database password from terminal: {e}"),
+                hint: "Set FNOX_KEEPASS_PASSWORD or KEEPASS_PASSWORD instead".to_string(),
+                url: "https://fnox.jdx.dev/providers/keepass".to_string(),
+            })?;
+            *prompted = Some(password.clone());
+            return Ok(password);
+        }
+
         Err(FnoxError::ProviderAuthFailed {
             provider: "KeePass".to_string(),
             details: "Database password not set".to_string(),
-            hint: "Set FNOX_KEEPASS_PASSWORD or KEEPASS_PASSWORD environment variable, or configure password in provider config".to_string(),
+            hint: "Run in a terminal to enter the password, or set FNOX_KEEPASS_PASSWORD or KEEPASS_PASSWORD".to_string(),
             url: "https://fnox.jdx.dev/providers/keepass".to_string(),
         })
     }

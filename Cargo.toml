@@ -74,6 +74,7 @@ rand = "0.10"
 ratatui = "0.30"
 regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
+rpassword = "7"
 rcgen = { version = "0.14", default-features = false, features = ["aws_lc_rs", "pem"] }
 rmcp = { version = "3", features = ["server", "transport-io", "macros"] }
 rmp-serde = "1"
