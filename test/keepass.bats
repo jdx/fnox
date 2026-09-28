@@ -415,6 +415,17 @@ EOF
 	assert_success
 	run "$FNOX_BIN" set SECOND "second-value" --provider keepass
 	assert_success
+	# A fallback reference puts SECOND in a later resolution level and creates a
+	# second KeePass provider instance during the same exec invocation.
+	cat >"$FNOX_CONFIG_FILE" <<EOF
+[providers.keepass]
+type = "keepass"
+database = "$KEEPASS_DB"
+
+[secrets]
+FIRST = { provider = "keepass", value = "FIRST" }
+SECOND = { provider = "keepass", value = "SECOND", default = "\${FIRST}" }
+EOF
 
 	unset KEEPASS_PASSWORD FNOX_KEEPASS_PASSWORD
 	run "$FNOX_BIN" --non-interactive get FIRST
@@ -422,6 +433,10 @@ EOF
 	assert_output --partial "auth_failed"
 
 	run "${PYTHON3:-python3}" "$BATS_TEST_DIRNAME/keepass_prompt.py" "$FNOX_BIN"
+	assert_success
+	run "${PYTHON3:-python3}" "$BATS_TEST_DIRNAME/keepass_prompt.py" "$FNOX_BIN" exec-redirected
+	assert_success
+	run "${PYTHON3:-python3}" "$BATS_TEST_DIRNAME/keepass_prompt.py" "$FNOX_BIN" hook-env
 	assert_success
 }
 

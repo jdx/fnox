@@ -4,18 +4,26 @@ use crate::providers::ProviderCapability;
 use async_trait::async_trait;
 use keepass::DatabaseKey;
 use keepass::db::{Database, EntryId, GroupId, GroupRef};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 use tempfile::NamedTempFile;
+
+type PasswordCacheKey = (PathBuf, Option<PathBuf>);
+
+// Provider instances are recreated for separate resolution levels. Cache only
+// prompted passwords for the lifetime of this process, keyed by the database
+// and keyfile, so one command asks once even across those levels.
+static PROMPTED_PASSWORDS: LazyLock<Mutex<HashMap<PasswordCacheKey, String>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Provider that reads and writes secrets from KeePass database files (.kdbx)
 pub struct KeePassProvider {
     database_path: PathBuf,
     keyfile_path: Option<PathBuf>,
     password: Option<String>,
-    prompted_password: Mutex<Option<String>>,
 }
 
 impl KeePassProvider {
@@ -28,7 +36,6 @@ impl KeePassProvider {
             database_path: crate::config_path::resolve_relative_to_file(&database, None),
             keyfile_path: keyfile.map(|k| crate::config_path::resolve_relative_to_file(&k, None)),
             password,
-            prompted_password: Mutex::new(None),
         })
     }
 
@@ -43,19 +50,16 @@ impl KeePassProvider {
             return Ok(password.clone());
         }
 
-        // The same provider can open and save a database in one command, or
-        // resolve several entries concurrently. Hold the lock while prompting
-        // so only one password is requested for this provider instance.
-        let mut prompted = self
-            .prompted_password
+        // Hold the lock while prompting so concurrent resolutions of the same
+        // database do not each request the password.
+        let mut prompted = PROMPTED_PASSWORDS
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if let Some(password) = prompted.as_ref() {
+        let cache_key = (self.database_path.clone(), self.keyfile_path.clone());
+        if let Some(password) = prompted.get(&cache_key) {
             return Ok(password.clone());
         }
-        if !env::is_non_interactive()
-            && (atty::is(atty::Stream::Stdin) || atty::is(atty::Stream::Stderr))
-        {
+        if !env::is_non_interactive() {
             let password = rpassword::prompt_password(format!(
                 "KeePass password for {}: ",
                 self.database_path.display()
@@ -66,7 +70,7 @@ impl KeePassProvider {
                 hint: "Set FNOX_KEEPASS_PASSWORD or KEEPASS_PASSWORD instead".to_string(),
                 url: "https://fnox.jdx.dev/providers/keepass".to_string(),
             })?;
-            *prompted = Some(password.clone());
+            prompted.insert(cache_key, password.clone());
             return Ok(password);
         }
 

@@ -59,7 +59,7 @@ Relative `keyfile` paths follow the same config-relative rule as `database`.
 
 ## Authentication
 
-When a password is not configured, fnox prompts for it in a terminal. The prompt reads from the terminal even when standard input is piped, so `fnox exec -- mycmd` can prompt before starting `mycmd`. One prompt is used for the entries resolved from the same provider during a command.
+When a password is not configured, fnox prompts for it in a terminal. The prompt reads from the terminal even when standard input is piped, so `fnox exec -- mycmd` can prompt before starting `mycmd`. One prompt is used for the entries resolved from the same provider during a command. Automatic shell hooks do not prompt; use an environment variable for secrets loaded by `fnox hook-env`.
 
 For unattended use, set the database password via environment variable:
 
