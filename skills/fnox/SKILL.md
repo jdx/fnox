@@ -88,16 +88,14 @@ to warn or ignore when missing. It resolves secrets without printing their
 values. For unattended commands, add `--non-interactive` to prevent prompts and
 browser authentication flows; provider credentials must already be available.
 
-For profile-specific diagnosis, set `FNOX_PROFILE` for both commands:
+For profile-specific diagnosis, select the same profile for both commands:
 
 ```sh
-FNOX_PROFILE=staging fnox config-files
-FNOX_PROFILE=staging fnox list --sources
+fnox --profile staging config-files
+fnox --profile staging list --sources
 ```
 
-`config-files` currently selects profiles from the environment and does not honor
-`-P`; using only that flag can show a different file set from `list --sources`.
-Use the same profile environment for `fnox doctor`, `fnox provider test <name>`,
-and `fnox check --all` to distinguish configuration, authentication, and
-resolution problems. Preserve redaction when reporting results; verify presence
-or command success without echoing a credential.
+Use the same `--profile` or `FNOX_PROFILE` selection for `fnox doctor`,
+`fnox provider test <name>`, and `fnox check --all` to distinguish configuration,
+authentication, and resolution problems. Preserve redaction when reporting
+results; verify presence or command success without echoing a credential.
