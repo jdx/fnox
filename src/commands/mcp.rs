@@ -3,12 +3,11 @@ use crate::config::Config;
 use crate::error::Result;
 use crate::mcp_server::FnoxMcpServer;
 use crate::{env, error::FnoxError};
-use clap::Args;
 use rmcp::service::RunningService;
 use rmcp::{RoleServer, ServiceExt};
 
-#[derive(Debug, Args)]
-pub struct McpCommand {}
+#[derive(Debug, usage_rs::Args)]
+pub struct McpCommand;
 
 impl McpCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
@@ -29,7 +28,7 @@ impl McpCommand {
             }
             let allowed_set: std::collections::HashSet<&str> =
                 allowlist.iter().map(|s| s.as_str()).collect();
-            let providers = config.get_providers(&profile);
+            let providers = config.get_providers(&profile)?;
             for name in allowlist {
                 if !all_secrets.contains_key(name) {
                     tracing::warn!(

@@ -114,14 +114,23 @@ export INFISICAL_TOKEN="$MACHINE_TOKEN"
 
 # Create a test project using the API
 echo "Creating test project..."
-PROJECT_RESPONSE=$(curl -sf "$INFISICAL_URL/api/v2/workspace" \
+PROJECT_RESPONSE_FILE=/tmp/infisical-project-response.json
+if ! curl --fail-with-body --silent --show-error \
+	--output "$PROJECT_RESPONSE_FILE" \
+	"$INFISICAL_URL/api/v1/projects" \
 	-H "Authorization: Bearer $MACHINE_TOKEN" \
 	-H "Content-Type: application/json" \
 	-d "{
 		\"projectName\": \"$INFISICAL_PROJECT_NAME\",
 		\"type\": \"secret-manager\",
 		\"shouldCreateDefaultEnvs\": true
-	}")
+	}"; then
+	echo "Error: Failed to create project"
+	cat "$PROJECT_RESPONSE_FILE"
+	exit 1
+fi
+PROJECT_RESPONSE=$(<"$PROJECT_RESPONSE_FILE")
+rm -f "$PROJECT_RESPONSE_FILE"
 
 if [ -z "$PROJECT_RESPONSE" ]; then
 	echo "Error: Failed to create project"

@@ -144,8 +144,9 @@ Remove-Item -ErrorAction SilentlyContinue -LiteralPath 'Env:__FNOX_SESSION'
     }
 
     fn set_env(&self, key: &str, value: &str) -> String {
+        let k = powershell_escape(key.into());
         let v = powershell_escape(value.into());
-        format!("${{Env:{key}}}='{v}'\n")
+        format!("Set-Item -LiteralPath 'Env:{k}' -Value '{v}'\n")
     }
 
     fn unset_env(&self, key: &str) -> String {

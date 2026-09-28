@@ -1,3 +1,5 @@
+import { sidebar } from "./navigation.mjs";
+import { socialCard, writeSocialCard } from "./social-images.mjs";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,149 +35,52 @@ if (!versionMatch) {
   console.warn("Unable to find package version in Cargo.toml");
 }
 const latestVersion = versionMatch?.[1] ?? "0.0.0";
+const siteUrl = "https://fnox.jdx.dev";
+const siteDescription =
+  "Manage development secrets with encrypted files or cloud providers, fast local sync, shell integration, profiles, and hardware-backed keys.";
 
 export default defineConfig({
   title: "fnox",
-  description: "Fort Knox for your secrets",
+  description: siteDescription,
   base: "/",
-  appearance: "force-dark",
+  appearance: "dark",
+  sitemap: { hostname: siteUrl },
+  srcExclude: ["README.md"],
 
   themeConfig: {
     logo: "/logo.svg",
+    outline: { level: [2, 3], label: "On this page" },
+    editLink: {
+      pattern: ({ relativePath }) =>
+        relativePath.startsWith("cli/")
+          ? "https://github.com/jdx/fnox/blob/main/docs/README.md#generated-reference"
+          : `https://github.com/jdx/fnox/edit/main/docs/${relativePath}`,
+      text: "Improve this page",
+    },
 
     nav: [
-      { text: "Guide", link: "/guide/what-is-fnox" },
+      { text: "Guide", link: "/guide/quick-start" },
       { text: "Providers", link: "/providers/overview" },
-      { text: "CLI Reference", link: "/cli/" },
-      { text: "Reference", link: "/reference/environment" },
+      {
+        text: "Leases",
+        link: "/guide/leases",
+        activeMatch: "/leases/|/guide/leases",
+      },
+      {
+        text: "Reference",
+        items: [
+          { text: "Commands", link: "/cli/" },
+          { text: "Configuration", link: "/reference/configuration" },
+          { text: "Environment variables", link: "/reference/environment" },
+        ],
+      },
       {
         text: `v${latestVersion}`,
         link: "https://github.com/jdx/fnox/releases",
       },
     ],
 
-    sidebar: [
-      {
-        text: "Introduction",
-        items: [
-          { text: "What is fnox?", link: "/guide/what-is-fnox" },
-          { text: "Installation", link: "/guide/installation" },
-          { text: "Quick Start", link: "/guide/quick-start" },
-          { text: "Contributing", link: "/contributing" },
-          { text: "How It Works", link: "/guide/how-it-works" },
-        ],
-      },
-      {
-        text: "Features",
-        items: [
-          { text: "Shell Integration", link: "/guide/shell-integration" },
-          { text: "Per-User Daemon", link: "/guide/daemon" },
-          { text: "Credential Proxy", link: "/guide/proxy" },
-          { text: "Mise Integration", link: "/guide/mise-integration" },
-          { text: "TUI Dashboard", link: "/guide/tui" },
-          { text: "Profiles", link: "/guide/profiles" },
-          { text: "Hierarchical Config", link: "/guide/hierarchical-config" },
-          {
-            text: "Handling Missing Secrets",
-            link: "/guide/missing-secrets",
-          },
-          { text: "Import/Export", link: "/guide/import-export" },
-          { text: "Syncing Secrets Locally", link: "/guide/sync" },
-          { text: "Credential Leases", link: "/guide/leases" },
-          { text: "MCP Server", link: "/guide/mcp" },
-        ],
-      },
-      {
-        text: "Lease Backends",
-        collapsed: true,
-        items: [
-          { text: "AWS STS", link: "/leases/aws-sts" },
-          { text: "GCP IAM", link: "/leases/gcp-iam" },
-          { text: "Azure Token", link: "/leases/azure-token" },
-          { text: "HashiCorp Vault", link: "/leases/vault" },
-          { text: "Pulumi ESC", link: "/leases/pulumi-esc" },
-          { text: "Custom Command", link: "/leases/command" },
-        ],
-      },
-      {
-        text: "Examples",
-        items: [
-          { text: "Real-World Setup", link: "/guide/real-world-example" },
-        ],
-      },
-      {
-        text: "Providers",
-        items: [
-          { text: "Overview", link: "/providers/overview" },
-          {
-            text: "Encryption (in git)",
-            collapsed: true,
-            items: [
-              { text: "Age Encryption", link: "/providers/age" },
-              { text: "FIDO2", link: "/providers/fido2" },
-              { text: "YubiKey", link: "/providers/yubikey" },
-              { text: "AWS KMS", link: "/providers/aws-kms" },
-              { text: "Azure Key Vault Keys", link: "/providers/azure-kms" },
-              { text: "Google Cloud KMS", link: "/providers/gcp-kms" },
-            ],
-          },
-          {
-            text: "Cloud Secret Storage",
-            collapsed: true,
-            items: [
-              { text: "AWS Parameter Store", link: "/providers/aws-ps" },
-              { text: "AWS Secrets Manager", link: "/providers/aws-sm" },
-              { text: "Azure App Configuration", link: "/providers/azure-ac" },
-              { text: "Azure Key Vault Secrets", link: "/providers/azure-sm" },
-              { text: "Doppler", link: "/providers/doppler" },
-              { text: "FOKS", link: "/providers/foks" },
-              { text: "GCP Secret Manager", link: "/providers/gcp-sm" },
-              {
-                text: "Bitwarden Secrets Manager",
-                link: "/providers/bitwarden-sm",
-              },
-              { text: "Pulumi ESC", link: "/providers/pulumi-esc" },
-              { text: "HashiCorp Vault", link: "/providers/vault" },
-            ],
-          },
-          {
-            text: "Password Managers & Secret Services",
-            collapsed: true,
-            items: [
-              { text: "1Password", link: "/providers/1password" },
-              { text: "Bitwarden", link: "/providers/bitwarden" },
-              { text: "Infisical", link: "/providers/infisical" },
-              { text: "Proton Pass", link: "/providers/proton-pass" },
-            ],
-          },
-          {
-            text: "Local Storage",
-            collapsed: true,
-            items: [
-              { text: "OS Keychain", link: "/providers/keychain" },
-              { text: "KeePass", link: "/providers/keepass" },
-              { text: "password-store", link: "/providers/password-store" },
-              { text: "Plain Text", link: "/providers/plain" },
-            ],
-          },
-        ],
-      },
-      {
-        text: "CLI Reference",
-        link: "/cli/",
-        items: commands.map((cmd) => ({
-          text: cmd.join(" "),
-          link: `/cli/${cmd.join("/")}`,
-        })),
-      },
-      {
-        text: "Reference",
-        items: [
-          { text: "Environment Variables", link: "/reference/environment" },
-          { text: "Configuration", link: "/reference/configuration" },
-        ],
-      },
-    ],
+    sidebar: sidebar(commands),
 
     socialLinks: [{ icon: "github", link: "https://github.com/jdx/fnox" }],
 
@@ -186,6 +91,39 @@ export default defineConfig({
     },
   },
   head: [
+    [
+      "script",
+      {},
+      `(function () {
+  try {
+    var d = document.documentElement;
+    var c = JSON.parse(localStorage.getItem("jdx-banner-cache") || "null");
+    var expires = c && c.expires ? Date.parse(c.expires) : NaN;
+    var now = Date.now();
+    var metadataValid =
+      c &&
+      typeof c.id === "string" &&
+      typeof c.height === "string" &&
+      /^[1-9]\\d*(?:\\.\\d+)?px$/.test(c.height) &&
+      Number.isFinite(c.width) &&
+      typeof c.fontSize === "string" &&
+      Number.isFinite(c.pixelRatio) &&
+      Number.isFinite(c.cachedAt) &&
+      c.cachedAt <= now &&
+      now - c.cachedAt < 300000 &&
+      (!c.expires || (typeof c.expires === "string" && Number.isFinite(expires) && now < expires));
+    var contextMatches =
+      metadataValid &&
+      c.width === innerWidth &&
+      c.fontSize === getComputedStyle(d).fontSize &&
+      c.pixelRatio === devicePixelRatio;
+    if (contextMatches && localStorage.getItem("jdx-banner-dismissed") !== c.id)
+      d.style.setProperty("--vp-layout-top-height", c.height);
+    else if (c && !metadataValid)
+      localStorage.removeItem("jdx-banner-cache");
+  } catch (e) {}
+})();`,
+    ],
     ["link", { rel: "icon", href: "/favicon.ico", sizes: "any" }],
     [
       "link",
@@ -215,16 +153,51 @@ export default defineConfig({
       },
     ],
     ["link", { rel: "manifest", href: "/site.webmanifest" }],
+    ["meta", { name: "theme-color", content: "#0b1018" }],
     ["meta", { property: "og:site_name", content: "fnox" }],
     ["meta", { property: "og:type", content: "website" }],
-    [
-      "meta",
-      { property: "og:image", content: "https://fnox.jdx.dev/logo.png" },
-    ],
-    ["meta", { name: "twitter:card", content: "summary" }],
-    [
-      "meta",
-      { name: "twitter:image", content: "https://fnox.jdx.dev/logo.png" },
-    ],
+    ["meta", { property: "og:locale", content: "en_US" }],
+    ["meta", { property: "og:image:width", content: "1200" }],
+    ["meta", { property: "og:image:height", content: "630" }],
+    ["meta", { name: "twitter:card", content: "summary_large_image" }],
+    ["meta", { name: "twitter:site", content: "@jdxcode" }],
   ],
+  transformHead({ pageData, title, description, siteConfig }) {
+    const heading =
+      pageData.relativePath === "index.md"
+        ? "Encrypted and remote secrets"
+        : pageData.title || "fnox";
+    const card = socialCard(heading);
+    writeSocialCard(siteConfig.outDir, card);
+    const image = new URL(card.path, `${siteUrl}/`).toString();
+    const imageAlt = `${heading} — fnox docs`;
+    const url = `${siteUrl}/${pageData.relativePath}`
+      .replace(/index\.md$/, "")
+      .replace(/\.md$/, ".html");
+
+    return [
+      ["link", { rel: "canonical", href: url }],
+      ["meta", { property: "og:url", content: url }],
+      ["meta", { property: "og:image", content: image }],
+      ["meta", { property: "og:image:alt", content: imageAlt }],
+      ["meta", { name: "twitter:image", content: image }],
+      ["meta", { name: "twitter:image:alt", content: imageAlt }],
+      ["meta", { property: "og:title", content: title }],
+      ["meta", { property: "og:description", content: description }],
+      ["meta", { name: "twitter:title", content: title }],
+      ["meta", { name: "twitter:description", content: description }],
+      [
+        "script",
+        { type: "application/ld+json" },
+        JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "WebPage",
+          name: title,
+          description,
+          url,
+          isPartOf: { "@type": "WebSite", name: "fnox", url: siteUrl },
+        }),
+      ],
+    ];
+  },
 });

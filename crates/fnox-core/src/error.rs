@@ -122,6 +122,24 @@ pub enum FnoxError {
     // ========================================================================
     // Profile Errors
     // ========================================================================
+    #[error("Profile '{profile}' not found")]
+    #[diagnostic(
+        code(fnox::profile::not_found),
+        help("Available profiles: {}", available_profiles.join(", ")),
+        url("https://fnox.jdx.dev/guide/profiles")
+    )]
+    ProfileNotFound {
+        profile: String,
+        available_profiles: Vec<String>,
+    },
+
+    #[error("Profile inheritance cycle detected: {cycle}")]
+    #[diagnostic(
+        code(fnox::profile::inheritance_cycle),
+        help("Remove one of the inherits entries in the cycle"),
+        url("https://fnox.jdx.dev/guide/profiles")
+    )]
+    ProfileInheritanceCycle { cycle: String },
 
     // ========================================================================
     // Secret Errors
@@ -632,6 +650,17 @@ pub enum FnoxError {
     #[error("Failed to read from stdin")]
     #[diagnostic(code(fnox::io::stdin_read_failed))]
     StdinReadFailed {
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("Failed to read secret file: {}", path.display())]
+    #[diagnostic(
+        code(fnox::io::secret_file_read_failed),
+        help("Ensure the file exists, contains valid UTF-8, and you have read permissions")
+    )]
+    SecretFileReadFailed {
+        path: std::path::PathBuf,
         #[source]
         source: std::io::Error,
     },

@@ -1,41 +1,21 @@
 use crate::commands::Cli;
 use crate::error::Result;
-use std::process::Command;
 
-#[derive(clap::Args)]
-#[command(about = "Generate shell completions")]
-#[command(aliases = ["complete", "completions"])]
+#[derive(usage_rs::Args)]
+#[usage(about = "Generate shell completions")]
+#[usage(alias_hidden("complete", "completions"))]
 pub struct CompletionCommand {
     /// Shell type to generate completions for
-    #[arg(value_name = "SHELL")]
+    #[usage(arg, name = "SHELL")]
     pub shell: String,
 }
 
 impl CompletionCommand {
     pub async fn run(&self, _cli: &Cli) -> Result<()> {
-        let output = Command::new("usage")
-            .args([
-                "g",
-                "completion",
-                &self.shell,
-                "fnox",
-                "--usage-cmd",
-                "fnox usage",
-                "--cache-key",
-                env!("CARGO_PKG_VERSION"),
-            ])
-            .output()?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(crate::error::FnoxError::Config(format!(
-                "Failed to generate completions: {}",
-                stderr
-            )));
-        }
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        print!("{}", stdout);
+        let shell = usage_rs::complete::Shell::from_name(&self.shell).ok_or_else(|| {
+            crate::error::FnoxError::Config(format!("Unsupported shell: {}", self.shell))
+        })?;
+        print!("{}", super::completion_app().completion_script(shell));
 
         Ok(())
     }

@@ -7,6 +7,7 @@ use std::path::PathBuf;
 pub mod age;
 pub mod aws_kms;
 pub mod aws_ps;
+mod aws_shared;
 pub mod aws_sm;
 pub mod azure_ac;
 pub mod azure_kms;
@@ -22,6 +23,7 @@ pub mod gcp_sm;
 pub mod hw_encrypt;
 pub mod infisical;
 pub mod keepass;
+pub mod keeper_sm;
 pub mod keychain;
 pub mod onepassword;
 pub mod password_store;
@@ -146,7 +148,7 @@ mod generated {
         use super::super::fido2;
         use super::super::{
             age, aws_kms, aws_ps, aws_sm, azure_ac, azure_kms, azure_sm, bitwarden, bitwarden_sm,
-            doppler, foks, gcp_kms, gcp_sm, infisical, keepass, keychain, onepassword,
+            doppler, foks, gcp_kms, gcp_sm, infisical, keepass, keeper_sm, keychain, onepassword,
             password_store, passwordstate, plain, proton_pass, pulumi_esc, vault, yubikey,
         };
         include!(concat!(
@@ -197,6 +199,21 @@ pub trait Provider: Send + Sync {
         Err(crate::error::FnoxError::Provider(
             "This provider does not support encryption".to_string(),
         ))
+    }
+
+    /// Encrypt multiple values in a batch.
+    ///
+    /// Providers that need user interaction can override this to perform that
+    /// interaction once for the entire batch.
+    async fn encrypt_secrets_batch(
+        &self,
+        secrets: &[(String, String)],
+    ) -> HashMap<String, Result<String>> {
+        let mut encrypted = HashMap::with_capacity(secrets.len());
+        for (key, value) in secrets {
+            encrypted.insert(key.clone(), self.encrypt(value).await);
+        }
+        encrypted
     }
 
     /// Store a secret and return the value to save in config
@@ -393,6 +410,17 @@ pub(crate) fn get_provider_from_resolved_with_context_and_identity_cycle_guard(
         };
         return get_provider_from_resolved(provider_name, &resolved);
     }
+    if let ResolvedProviderConfig::KeeperSecretsManager { config_file, token } = resolved {
+        let provider_source = provider_source_path(config, profile, provider_name);
+        let resolved = ResolvedProviderConfig::KeeperSecretsManager {
+            config_file: crate::config_path::resolve_optional_string_relative_to_file(
+                config_file.clone(),
+                provider_source.as_deref(),
+            ),
+            token: token.clone(),
+        };
+        return get_provider_from_resolved(provider_name, &resolved);
+    }
     get_provider_from_resolved(provider_name, resolved)
 }
 
@@ -401,6 +429,9 @@ fn provider_source_path(
     profiles: &[String],
     provider_name: &str,
 ) -> Option<PathBuf> {
+    let profiles = config
+        .resolve_profiles(profiles)
+        .unwrap_or_else(|_| profiles.to_vec());
     for profile in profiles.iter().filter(|p| *p != "default").rev() {
         if let Some(profile_config) = config.profiles.get(profile)
             && profile_config.providers.contains_key(provider_name)
@@ -482,6 +513,35 @@ mod tests {
         assert_eq!(
             provider_source_path(&config, &["prod".to_string()], "pass"),
             Some(PathBuf::from("/home/user/project/fnox.toml")),
+        );
+    }
+
+    #[test]
+    fn keeper_config_file_resolves_relative_to_provider_source() {
+        let mut config = Config::new();
+        config.provider_sources.insert(
+            "keeper".to_string(),
+            PathBuf::from("/home/user/project/fnox.toml"),
+        );
+        let resolved = ResolvedProviderConfig::KeeperSecretsManager {
+            config_file: Some("./keeper/ksm-config.json".to_string()),
+            token: None,
+        };
+
+        let error = match get_provider_from_resolved_with_context(
+            &config,
+            &["default".to_string()],
+            "keeper",
+            &resolved,
+        ) {
+            Ok(_) => panic!("missing Keeper configuration unexpectedly initialized"),
+            Err(error) => error,
+        };
+
+        assert!(
+            error
+                .to_string()
+                .contains("/home/user/project/./keeper/ksm-config.json")
         );
     }
 }

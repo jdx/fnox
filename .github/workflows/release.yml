@@ -61,6 +61,10 @@ jobs:
           p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
           p12-password: ${{ secrets.CERTIFICATES_P12_PASS }}
       - uses: taiki-e/upload-rust-binary-action@f0d45ae91ee7b8ee928de7a9d04d893a08bcbec6 # v1
+        env:
+          # Links the Linux GNU executable non-PIE (see build.rs); ignored for
+          # every other target.
+          FNOX_NO_PIE: "1"
         with:
           bin: fnox
           target: ${{ matrix.target }}
@@ -68,7 +72,99 @@ jobs:
           token: ${{ secrets.FNOX_GH_TOKEN }}
           codesign: "Developer ID Application: Jeffrey Dickey (4993Y37DX6)"
           codesign_prefix: dev.jdx.
+          # Apple will not notarize a binary without the hardened runtime.
+          codesign_options: runtime
           dry-run: true # Always dry-run to just build without uploading
+      # Signing settles who built the binary; notarization is what Gatekeeper
+      # demands once an archive carries the quarantine bit, which is to say
+      # whenever someone downloads it in a browser rather than with curl.
+      # Without a ticket it is blocked behind a "cannot be verified" dialog that
+      # only a deliberate override gets past.
+      #
+      # The ticket lives on Apple's side and is keyed to the binary's cdhash, so
+      # nothing here rewrites what was already built or uploaded -- stapling
+      # would, but `stapler` only writes into bundles, disk images, and
+      # installer packages, and this is a bare Mach-O in an archive. Gatekeeper
+      # resolves the ticket online instead.
+      - name: Notarize macOS binary
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        env:
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          BINARIES: target/${{ matrix.target }}/release/fnox
+        run: |
+          set -euo pipefail
+
+          if [ -z "$APPLE_API_KEY_P8" ] || [ -z "$APPLE_API_KEY_ID" ] || [ -z "$APPLE_API_ISSUER_ID" ]; then
+            echo "::error title=Notarization credentials missing::App Store Connect credentials are required for macOS releases."
+            exit 1
+          fi
+
+          # Outside the workspace, so no later step can sweep the key into an
+          # artifact, and removed even when notarization fails.
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+          printf '%s' "$APPLE_API_KEY_P8" | base64 --decode > "$work/key.p8"
+
+          # notarytool takes a container, never a bare executable. Copies are
+          # fine: a Mach-O carries its signature inline, so the cdhash the
+          # ticket is keyed to is the one already shipped.
+          mkdir "$work/stage"
+          for binary in $BINARIES; do
+            cp "$binary" "$work/stage/"
+          done
+          # Apple rejects a binary without the hardened runtime or a secure
+          # timestamp. Naming a missing one here turns an opaque Invalid verdict
+          # into a diagnosis; Apple stays the authority on whether to accept.
+          for binary in $BINARIES; do
+            details="$(codesign --display --verbose=4 "$binary" 2>&1 || true)"
+            case "$details" in
+              *runtime*) ;;
+              *) echo "::warning title=No hardened runtime::$binary is signed without --options runtime, which Apple requires; expect an Invalid verdict below." ;;
+            esac
+            case "$details" in
+              *Timestamp=*) ;;
+              *) echo "::warning title=No secure timestamp::$binary carries no secure timestamp, which Apple requires; expect an Invalid verdict below." ;;
+            esac
+          done
+
+          ditto -c -k --norsrc --noextattr "$work/stage" "$work/submission.zip"
+
+          # `--wait` is not a gate on its own: it can return zero on an Invalid
+          # submission, so the reported status is what decides. plutil reads
+          # JSON and ships with macOS, which keeps this off jq.
+          result="$(xcrun notarytool submit "$work/submission.zip" \
+            --key "$work/key.p8" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER_ID" \
+            --output-format json \
+            --timeout 30m \
+            --wait)"
+          echo "$result"
+
+          status="$(printf '%s' "$result" | plutil -extract status raw -o - -)"
+          id="$(printf '%s' "$result" | plutil -extract id raw -o - -)"
+          if [ "$status" != "Accepted" ]; then
+            echo "::error::notarization returned $status for submission $id"
+            xcrun notarytool log "$id" \
+              --key "$work/key.p8" \
+              --key-id "$APPLE_API_KEY_ID" \
+              --issuer "$APPLE_API_ISSUER_ID" || true
+            exit 1
+          fi
+          echo "notarized: submission $id"
+      - name: Check the Linux GNU binary is linked non-PIE
+        if: contains(matrix.target, '-linux-gnu')
+        shell: bash
+        env:
+          BINARY: target/${{ matrix.target }}/release/fnox
+        run: |
+          if ! readelf -h "$BINARY" | grep -q 'Type:.*EXEC'; then
+            echo "::error::$BINARY is not linked non-PIE; FNOX_NO_PIE did not reach build.rs"
+            exit 1
+          fi
       - name: Upload binary artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -84,6 +180,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # The packslip is signed with this job's OIDC identity and its
+      # artifacts are attested; neither is possible without these.
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -112,9 +212,74 @@ jobs:
           gh release create "$TAG_NAME" \
             --title "$TAG_NAME" \
             --notes-file release-notes.md \
+            --draft \
             release-assets/*
         env:
           INPUTS_VERSION: ${{ inputs.version }}
+      # The spec supports documentation generation without running the binary.
+      # Native completion scripts call the installed binary on each completion.
+      - name: Install completion syntax checkers
+        timeout-minutes: 5
+        run: |
+          if [[ -f /etc/apt/apt-mirrors.txt ]]; then
+            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/apt-mirrors.txt
+          fi
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y zsh fish
+          # Hosted runners include PowerShell; Namespace images have its signed apt repository.
+          if ! command -v pwsh >/dev/null 2>&1; then
+            sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y powershell
+          fi
+      - name: Publish the CLI specification and completions
+        env:
+          INPUTS_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ -n "${INPUTS_VERSION}" ]]; then
+            TAG_NAME="v${INPUTS_VERSION}"
+          else
+            TAG_NAME="${GITHUB_REF_NAME}"
+          fi
+          mkdir -p bin
+          tar -xzf release-assets/fnox-x86_64-unknown-linux-gnu.tar.gz -C bin
+          bin/fnox usage > fnox.usage.kdl
+          for shell in bash zsh fish powershell; do
+            bin/fnox completion "$shell" > fnox.$shell
+            test -s fnox.$shell
+            grep -Fq '__complete_word__' fnox.$shell
+            bin/fnox __complete_word__ --shell "$shell" --line 'fnox ge' | grep -Fq -- 'get'
+          done
+          bash -n fnox.bash
+          zsh -n fnox.zsh
+          fish --no-execute fnox.fish
+          cat > completion-syntax-check.ps1 <<'POWERSHELL'
+          $ErrorActionPreference = 'Stop'
+          foreach ($script in Get-ChildItem -LiteralPath "." -Filter '*.powershell') {
+            $parseErrors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($script.FullName, [ref]$null, [ref]$parseErrors)
+            if ($parseErrors.Count) { $parseErrors | Write-Error; exit 1 }
+          }
+          POWERSHELL
+          pwsh -NoProfile -NonInteractive -File completion-syntax-check.ps1
+          gh release upload "$TAG_NAME" fnox.usage.kdl fnox.bash fnox.zsh fnox.fish fnox.powershell --clobber
+      # The packslip is this release's signed inventory: every archive's
+      # digest, the executable inside it, the shared objects it needs from
+      # the host, and the workflow identity that signed for all of it. It
+      # lets an installer check a download against jdx/fnox's identity
+      # rather than against a key this project would have to hold. See
+      # https://packslip.dev.
+      - uses: jdx/packslip@87479dfc6443253dff69601cace5fc6ea07e6df5 # v1.4.0
+        with:
+          tag: ${{ inputs.version != '' && format('v{0}', inputs.version) || github.ref_name }}
+          artifacts: release-assets/fnox-*.tar.gz release-assets/fnox-*.tar.xz release-assets/fnox-*.zip
+          bin: fnox
+          resources: |
+            skill/fnox=repo:skills/fnox
+            cli-spec/usage=asset:fnox.usage.kdl
+            completion/bash=asset:fnox.bash
+            completion/zsh=asset:fnox.zsh
+            completion/fish=asset:fnox.fish
+            completion/powershell=asset:fnox.powershell
+          token: ${{ secrets.FNOX_GH_TOKEN }}
 
   enhance-release:
     needs: [create-release]
@@ -126,7 +291,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4.2.1
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
           experimental: true
           cache: false
@@ -166,8 +331,26 @@ jobs:
 
           ## 💚 Sponsor fnox
 
-          fnox is maintained by [@jdx](https://github.com/jdx), an open source developer for [**entire.io**](https://entire.io), the title sponsor of the [jdx.dev](https://jdx.dev) open source tools including [mise](https://mise.jdx.dev/), [aube](https://aube.jdx.dev/), hk, and more. Keeping fnox secure, maintained, and free is funded by sponsors.
+          fnox is built and maintained by [@jdx](https://github.com/jdx), an open source developer at [**entire.io**](https://entire.io/), the title sponsor of his open source work.
 
-          If fnox is handling secrets or config for you or your team, please consider [sponsoring at jdx.dev](https://jdx.dev/sponsors.html). Sponsorships are what let fnox stay independent and the project keep moving.
+          If fnox handles secrets or config for you or your team, please consider becoming an [individual or company sponsor](https://jdx.dev/sponsors.html). Your support funds ongoing development and helps keep fnox secure, free, and independent.
           EOF
           gh release edit "$TAG_NAME" --notes-file /tmp/release-notes.md
+
+  publish-release:
+    needs: [enhance-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.FNOX_GH_TOKEN }}
+          INPUTS_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ -n "${INPUTS_VERSION}" ]]; then
+            TAG_NAME="v${INPUTS_VERSION}"
+          else
+            TAG_NAME="${GITHUB_REF_NAME}"
+          fi
+          gh release edit "$TAG_NAME" --repo "${{ github.repository }}" --draft=false

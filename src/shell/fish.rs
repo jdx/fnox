@@ -75,16 +75,24 @@ end
 
     fn set_env(&self, key: &str, value: &str) -> String {
         // Fish uses different quoting
+        let key = fish_escape(key);
         let value = value
             .replace('\\', "\\\\")
             .replace('"', "\\\"")
             .replace('$', "\\$");
-        format!("set -gx {} \"{}\"\n", key, value)
+        format!("set -gx \"{}\" \"{}\"\n", key, value)
     }
 
     fn unset_env(&self, key: &str) -> String {
-        format!("set -e {}\n", key)
+        format!("set -e \"{}\"\n", fish_escape(key))
     }
+}
+
+fn fish_escape(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('$', "\\$")
 }
 
 impl fmt::Display for Fish {

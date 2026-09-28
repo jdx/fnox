@@ -2,7 +2,6 @@ use crate::commands::Cli;
 use crate::config::{Config, ProxyConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
 use crate::proxy::{ProxyPlan, RunningProxy};
-use clap::{Args, Subcommand, ValueHint};
 use indexmap::IndexMap;
 use std::process::Stdio;
 
@@ -17,6 +16,10 @@ const AMBIENT_CREDENTIAL_ENV_VARS: &[&str] = &[
     "PASSWORDSTATE_API_KEY",
     "DOPPLER_TOKEN",
     "FNOX_DOPPLER_TOKEN",
+    "KSM_CONFIG",
+    "FNOX_KEEPER_CONFIG",
+    "KSM_TOKEN",
+    "FNOX_KEEPER_TOKEN",
     "FOKS_BOT_TOKEN",
     "FNOX_FOKS_BOT_TOKEN",
     "GOOGLE_APPLICATION_CREDENTIALS",
@@ -95,13 +98,13 @@ const AMBIENT_CREDENTIAL_ENV_VARS: &[&str] = &[
     "FNOX_PROTON_PASS_LINUX_KEYRING",
 ];
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct ProxyCommand {
-    #[command(subcommand)]
+    #[usage(subcommand)]
     command: ProxySubcommand,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, usage_rs::Subcommands)]
 enum ProxySubcommand {
     /// Show the effective credential proxy rules
     Rules,
@@ -110,10 +113,14 @@ enum ProxySubcommand {
     Run(ProxyRunCommand),
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_rs::Args)]
 struct ProxyRunCommand {
     /// Command to run
-    #[arg(trailing_var_arg = true, allow_hyphen_values = true, value_hint = ValueHint::CommandWithArguments)]
+    #[usage(
+        arg,
+        double_dash = "automatic",
+        value_hint = usage_rs::ValueHint::CommandWithArguments
+    )]
     command: Vec<String>,
 }
 
@@ -165,7 +172,7 @@ fn collect_requested_secrets(
     proxy: &ProxyConfig,
     all_secrets: &IndexMap<String, SecretConfig>,
 ) -> Result<IndexMap<String, SecretConfig>> {
-    let providers = config.get_providers(profile);
+    let providers = config.get_providers(profile)?;
     let default_provider = config.get_default_provider(profile)?;
     let mut requested = IndexMap::new();
 
@@ -276,7 +283,7 @@ impl ProxyRunCommand {
         for key in AMBIENT_CREDENTIAL_ENV_VARS {
             command.env_remove(key);
         }
-        for provider in config.get_providers(&profile).values() {
+        for provider in config.get_providers(&profile)?.values() {
             for dependency in provider.env_dependencies() {
                 command.env_remove(dependency);
             }
@@ -375,6 +382,10 @@ domain = "api.example.com"
     #[test]
     fn ambient_credential_scrub_covers_provider_chains() {
         for key in [
+            "KSM_CONFIG",
+            "FNOX_KEEPER_CONFIG",
+            "KSM_TOKEN",
+            "FNOX_KEEPER_TOKEN",
             "AWS_PROFILE",
             "AWS_REGION",
             "AWS_WEB_IDENTITY_TOKEN_FILE",

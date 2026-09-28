@@ -2,24 +2,27 @@ use crate::error::{FnoxError, Result};
 use crate::lease::{self, LeaseLedger};
 use crate::temp_file_secrets::create_ephemeral_secret_file;
 use crate::{commands::Cli, config::Config};
-use clap::{Args, ValueHint};
 use std::collections::HashSet;
 use std::process::Command;
 use tempfile::NamedTempFile;
 
-#[derive(Debug, Args)]
-#[command(visible_alias = "x", alias = "run")]
+#[derive(Debug, usage_rs::Args)]
+#[usage(alias = "x", alias_hidden = "run")]
 pub struct ExecCommand {
-    /// Run the command in fnox's process, keeping the same PID and receiving signals
-    /// directly; supports environment-only secrets without leases and does not inherit
-    /// ambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux,
-    /// macOS, and other Unix-like systems
+    /// Replace the fnox process with the command so it keeps the same PID and receives
+    /// signals directly. Rejected when the command's environment would carry an as_file
+    /// secret, or when the profile configures credential leases, since fnox must clean
+    /// those up after the command exits. Unix only
     #[cfg(unix)]
-    #[arg(long)]
+    #[usage(long)]
     pub replace: bool,
 
     /// Command to run
-    #[arg(trailing_var_arg = true, allow_hyphen_values = true, value_hint = ValueHint::CommandWithArguments)]
+    #[usage(
+        arg,
+        double_dash = "automatic",
+        value_hint = usage_rs::ValueHint::CommandWithArguments
+    )]
     pub command: Vec<String>,
 }
 
@@ -42,7 +45,7 @@ impl ExecCommand {
 
         // Get the profile secrets
         let profile_secrets = config.get_secrets(&profile)?;
-        let leases = config.get_leases(&profile);
+        let leases = config.get_leases(&profile)?;
 
         #[cfg(unix)]
         if self.replace {
@@ -69,6 +72,12 @@ impl ExecCommand {
         let cmd_path = cmd_name;
 
         let mut cmd = Command::new(cmd_path);
+
+        // The target should not inherit the age identity that decrypts other
+        // values in the configuration. Explicit secrets and lease credentials
+        // with these names are intentionally applied after this ambient scrub.
+        cmd.env_remove("FNOX_AGE_KEY");
+        cmd.env_remove("FNOX_AGE_KEY_FILE");
 
         if self.command.len() > 1 {
             cmd.args(&self.command[1..]);
@@ -149,15 +158,6 @@ impl ExecCommand {
                     cmd.env(cred_key, cred_value);
                 }
             }
-        }
-
-        // The target should receive resolved secrets, not the age identity that
-        // decrypts other values in the configuration. Explicitly configured
-        // secrets with these names are added back by the loop below.
-        #[cfg(unix)]
-        if self.replace {
-            cmd.env_remove("FNOX_AGE_KEY");
-            cmd.env_remove("FNOX_AGE_KEY_FILE");
         }
 
         // Add resolved secrets as environment variables

@@ -2,26 +2,25 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
 use crate::providers::{OptionProviderSecretRef, OptionStringOrSecretRef, StringOrSecretRef};
-use clap::Args;
 
 use super::ProviderType;
 
-#[derive(Debug, Args)]
-#[command(visible_aliases = ["a", "set"])]
+#[derive(Debug, usage_rs::Args)]
+#[usage(alias("a", "set"))]
 pub struct AddCommand {
     /// Provider name
     pub provider: String,
 
     /// Provider type
-    #[arg(value_enum)]
+    #[usage(arg, value_enum)]
     pub provider_type: ProviderType,
 
     /// Add to the global config file (~/.config/fnox/config.toml)
-    #[arg(short = 'g', long)]
+    #[usage(short = 'g', long)]
     pub global: bool,
 
     /// Default Proton Pass vault name (only valid with provider type proton-pass)
-    #[arg(long)]
+    #[usage(long)]
     pub vault: Option<String>,
 }
 
@@ -109,6 +108,7 @@ impl AddCommand {
             ProviderType::Aws => crate::config::ProviderConfig::AwsSecretsManager {
                 region: StringOrSecretRef::from("us-east-1"),
                 profile: OptionStringOrSecretRef::none(),
+                role_arn: OptionStringOrSecretRef::none(),
                 prefix: OptionStringOrSecretRef::none(),
                 endpoint: OptionStringOrSecretRef::none(),
                 auth_command: None,
@@ -132,6 +132,8 @@ impl AddCommand {
             ProviderType::AwsKms => crate::config::ProviderConfig::AwsKms {
                 region: StringOrSecretRef::from("us-east-1"),
                 key_id: StringOrSecretRef::from("alias/my-key"),
+                profile: OptionStringOrSecretRef::none(),
+                role_arn: OptionStringOrSecretRef::none(),
                 endpoint: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
@@ -139,6 +141,7 @@ impl AddCommand {
             ProviderType::AwsParameterStore => crate::config::ProviderConfig::AwsParameterStore {
                 region: StringOrSecretRef::from("us-east-1"),
                 profile: OptionStringOrSecretRef::none(),
+                role_arn: OptionStringOrSecretRef::none(),
                 prefix: OptionStringOrSecretRef::literal("/myapp/prod/"),
                 endpoint: OptionStringOrSecretRef::none(),
                 auth_command: None,
@@ -261,6 +264,14 @@ impl AddCommand {
                 auth_command: None,
                 daemon_cache: None,
             },
+            ProviderType::KeeperSecretsManager => {
+                crate::config::ProviderConfig::KeeperSecretsManager {
+                    config_file: OptionStringOrSecretRef::literal("~/.keeper/ksm-config.json"),
+                    token: OptionStringOrSecretRef::none(),
+                    auth_command: None,
+                    daemon_cache: None,
+                }
+            }
             ProviderType::Keychain => crate::config::ProviderConfig::Keychain {
                 service: StringOrSecretRef::from("fnox"),
                 prefix: OptionStringOrSecretRef::none(),

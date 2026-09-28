@@ -1,0 +1,3 @@
+# mise verifies lock sidecars by the SHA-256 of their exact bytes, so CRLF
+# conversion on Windows checkouts would break `mise install --locked`.
+.mise/locks/** -text

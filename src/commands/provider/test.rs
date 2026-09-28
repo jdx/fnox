@@ -1,16 +1,15 @@
 use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
-use clap::Args;
 
-#[derive(Debug, Args)]
-#[command(visible_aliases = ["t"])]
+#[derive(Debug, usage_rs::Args)]
+#[usage(alias("t"))]
 pub struct TestCommand {
     /// Provider name (optional when using --all)
     pub provider: Option<String>,
 
     /// Test all configured providers
-    #[arg(short = 'a', long)]
+    #[usage(short = 'a', long)]
     pub all: bool,
 }
 
@@ -38,7 +37,7 @@ impl TestCommand {
     ) -> Result<()> {
         tracing::debug!("Testing provider '{}'", provider_name);
 
-        let providers = config.get_providers(profile);
+        let providers = config.get_providers(profile)?;
         let provider_config = providers
             .get(provider_name)
             .ok_or_else(|| FnoxError::Config(format!("Provider '{}' not found", provider_name)))?;
@@ -67,7 +66,7 @@ impl TestCommand {
         config: &Config,
         profile: &[String],
     ) -> Result<()> {
-        let providers = config.get_providers(profile);
+        let providers = config.get_providers(profile)?;
 
         if providers.is_empty() {
             println!("No providers configured");

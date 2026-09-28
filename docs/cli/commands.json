@@ -30,15 +30,30 @@
             "long": ["no-hook-env"],
             "hide": false,
             "global": false
+          },
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Output shell activation code to enable automatic secret loading",
         "name": "activate",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "check": {
         "full_cmd": ["check"],
@@ -55,29 +70,60 @@
             "long": ["all"],
             "hide": false,
             "global": false
+          },
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Check if all required secrets are defined and configured",
         "name": "check",
         "aliases": ["c"],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "ci-redact": {
         "full_cmd": ["ci-redact"],
         "usage": "ci-redact",
         "subcommands": {},
         "args": [],
-        "flags": [],
+        "flags": [
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": true,
+        "args_override_self": true,
         "help": "Redact secrets in CI/CD output (GitHub Actions mask)",
         "name": "ci-redact",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "completion": {
         "full_cmd": ["completion"],
@@ -94,28 +140,60 @@
             "hide": false
           }
         ],
-        "flags": [],
+        "flags": [
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Generate shell completions",
         "name": "completion",
         "aliases": [],
         "hidden_aliases": ["complete", "completions"],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "config-files": {
         "full_cmd": ["config-files"],
         "usage": "config-files",
         "subcommands": {},
         "args": [],
-        "flags": [],
+        "flags": [
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "List all config files that would be loaded",
         "name": "config-files",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "daemon": {
         "full_cmd": ["daemon"],
@@ -126,124 +204,269 @@
             "usage": "daemon clear",
             "subcommands": {},
             "args": [],
-            "flags": [],
+            "flags": [
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
+              }
+            ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
-            "help": "Clear all running daemon caches",
+            "args_override_self": true,
+            "help": "Clear the caches of all running daemons",
             "name": "clear",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": []
+            "examples": [],
+            "headings": []
           },
           "serve": {
             "full_cmd": ["daemon", "serve"],
             "usage": "daemon serve",
             "subcommands": {},
             "args": [],
-            "flags": [],
+            "flags": [
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
+              }
+            ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": true,
+            "args_override_self": true,
             "help": "Run the daemon server in the foreground",
             "name": "serve",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": []
+            "examples": [],
+            "headings": []
           },
           "start": {
             "full_cmd": ["daemon", "start"],
             "usage": "daemon start",
             "subcommands": {},
             "args": [],
-            "flags": [],
+            "flags": [
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
+              }
+            ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Start the per-user daemon in the background",
             "name": "start",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": []
+            "examples": [],
+            "headings": []
           },
           "status": {
             "full_cmd": ["daemon", "status"],
             "usage": "daemon status",
             "subcommands": {},
             "args": [],
-            "flags": [],
+            "flags": [
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
+              }
+            ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Show daemon status",
             "name": "status",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": []
+            "examples": [],
+            "headings": []
           },
           "stop": {
             "full_cmd": ["daemon", "stop"],
             "usage": "daemon stop",
             "subcommands": {},
             "args": [],
-            "flags": [],
+            "flags": [
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
+              }
+            ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Stop the daemon",
             "name": "stop",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": []
+            "examples": [],
+            "headings": []
           }
         },
         "args": [],
-        "flags": [],
+        "flags": [
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
         "subcommand_required": true,
+        "args_override_self": true,
         "help": "Manage the per-user daemon",
         "name": "daemon",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "deactivate": {
         "full_cmd": ["deactivate"],
         "usage": "deactivate",
         "subcommands": {},
         "args": [],
-        "flags": [],
+        "flags": [
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Disable fnox shell integration in the current shell session",
+        "help_long": "Disable fnox shell integration in the current shell session\n\nThis removes the hook that automatically loads secrets when entering\ndirectories with fnox.toml files. It also restores environment variables\nto their state before fnox was activated.\n\nNote: This only affects the current shell session. To re-enable fnox,\nrun the activation command again for your shell.",
         "name": "deactivate",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "doctor": {
         "full_cmd": ["doctor"],
         "usage": "doctor",
         "subcommands": {},
         "args": [],
-        "flags": [],
+        "flags": [
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Show diagnostic information about the current fnox state",
         "name": "doctor",
         "aliases": ["dr"],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "edit": {
         "full_cmd": ["edit"],
         "usage": "edit",
         "subcommands": {},
         "args": [],
-        "flags": [],
+        "flags": [
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Edit the configuration file",
         "name": "edit",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "exec": {
         "full_cmd": ["exec"],
@@ -265,21 +488,42 @@
           {
             "name": "replace",
             "usage": "--replace",
-            "help": "Run the command in fnox's process, keeping the same PID and receiving signals directly; supports environment-only secrets without leases and does not inherit ambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux, macOS, and other Unix-like systems",
-            "help_first_line": "Run the command in fnox's process, keeping the same PID and receiving signals directly; supports environment-only secrets without leases and does not inherit ambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux, macOS, and other Unix-like systems",
+            "help": "Replace the fnox process with the command so it keeps the same PID and receives signals directly. Rejected when the command's environment would carry an as_file secret, or when the profile configures credential leases, since fnox must clean those up after the command exits. Unix only",
+            "help_first_line": "Replace the fnox process with the command so it keeps the same PID and receives signals directly. Rejected when the command's environment would carry an as_file secret, or when the profile configures credential leases, since fnox must clean those up after the command exits. Unix only",
             "short": [],
             "long": ["replace"],
             "hide": false,
             "global": false
+          },
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Execute a command with secrets as environment variables",
         "name": "exec",
         "aliases": ["x"],
         "hidden_aliases": ["run"],
-        "examples": []
+        "examples": [],
+        "headings": [],
+        "complete": {
+          "command": {
+            "name": "command",
+            "type_": "command_args"
+          }
+        }
       },
       "export": {
         "full_cmd": ["export"],
@@ -303,7 +547,29 @@
               "double_dash": "Optional",
               "hide": false,
               "choices": {
-                "choices": ["env", "shell", "json", "yaml", "toml"]
+                "choices": ["env", "shell", "json", "yaml", "toml"],
+                "details": [
+                  {
+                    "value": "env",
+                    "help": "Environment variable format (KEY=value)"
+                  },
+                  {
+                    "value": "shell",
+                    "help": "POSIX shell format (export KEY=value)"
+                  },
+                  {
+                    "value": "json",
+                    "help": "JSON format"
+                  },
+                  {
+                    "value": "yaml",
+                    "help": "YAML format"
+                  },
+                  {
+                    "value": "toml",
+                    "help": "TOML format"
+                  }
+                ]
               }
             },
             "default": ["env"]
@@ -311,8 +577,8 @@
           {
             "name": "dry-run",
             "usage": "-n --dry-run",
-            "help": "Show what would be exported without writing to file",
-            "help_first_line": "Show what would be exported without writing to file",
+            "help": "Show what would be exported without writing to a file",
+            "help_first_line": "Show what would be exported without writing to a file",
             "short": ["n"],
             "long": ["dry-run"],
             "hide": false,
@@ -354,15 +620,30 @@
             "long": ["header"],
             "hide": false,
             "global": false
+          },
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Export secrets in various formats",
         "name": "export",
         "aliases": ["ex"],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "get": {
         "full_cmd": ["get"],
@@ -389,15 +670,30 @@
             "long": ["base64-decode"],
             "hide": false,
             "global": false
+          },
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Get a secret value",
         "name": "get",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "hook-env": {
         "full_cmd": ["hook-env"],
@@ -421,15 +717,30 @@
               "double_dash": "Optional",
               "hide": false
             }
+          },
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": true,
+        "args_override_self": true,
         "help": "Internal command used by shell hooks to load secrets",
         "name": "hook-env",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "import": {
         "full_cmd": ["import"],
@@ -446,7 +757,25 @@
             "hide": false,
             "default": ["env"],
             "choices": {
-              "choices": ["env", "json", "yaml", "toml"]
+              "choices": ["env", "json", "yaml", "toml"],
+              "details": [
+                {
+                  "value": "env",
+                  "help": "Environment variable format (KEY=value)"
+                },
+                {
+                  "value": "json",
+                  "help": "JSON format"
+                },
+                {
+                  "value": "yaml",
+                  "help": "YAML format"
+                },
+                {
+                  "value": "toml",
+                  "help": "TOML format"
+                }
+              ]
             }
           }
         ],
@@ -549,15 +878,30 @@
               "double_dash": "Optional",
               "hide": false
             }
+          },
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Import secrets from various sources",
         "name": "import",
         "aliases": ["im"],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "init": {
         "full_cmd": ["init"],
@@ -594,33 +938,64 @@
             "long": ["skip-wizard"],
             "hide": false,
             "global": false
+          },
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Initialize a new fnox configuration file",
         "name": "init",
         "aliases": ["i"],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "lease": {
         "full_cmd": ["lease"],
-        "usage": "lease <SUBCOMMAND>",
+        "usage": "lease [SUBCOMMAND]",
         "subcommands": {
           "cleanup": {
             "full_cmd": ["lease", "cleanup"],
             "usage": "lease cleanup",
             "subcommands": {},
             "args": [],
-            "flags": [],
+            "flags": [
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
+              }
+            ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Revoke all expired leases that need manual cleanup",
             "name": "cleanup",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": []
+            "examples": [],
+            "headings": []
           },
           "create": {
             "full_cmd": ["lease", "create"],
@@ -630,8 +1005,8 @@
               {
                 "name": "BACKEND_NAME",
                 "usage": "[BACKEND_NAME]",
-                "help": "Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted",
-                "help_first_line": "Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted",
+                "help": "Lease backend name (from `[leases.<name>]` config). Creates leases for all configured backends if omitted.",
+                "help_first_line": "Lease backend name (from `[leases.<name>]` config). Creates leases for all configured backends if omitted.",
                 "required": false,
                 "double_dash": "Optional",
                 "hide": false
@@ -681,7 +1056,18 @@
                   "double_dash": "Optional",
                   "hide": false,
                   "choices": {
-                    "choices": ["shell", "json", "env"]
+                    "choices": ["shell", "json", "env"],
+                    "details": [
+                      {
+                        "value": "shell"
+                      },
+                      {
+                        "value": "json"
+                      },
+                      {
+                        "value": "env"
+                      }
+                    ]
                   }
                 },
                 "default": ["shell"]
@@ -713,15 +1099,30 @@
                   "hide": false
                 },
                 "default": ["fnox-lease"]
+              },
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
               }
             ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Create a short-lived credential lease from a secret",
             "name": "create",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": []
+            "examples": [],
+            "headings": []
           },
           "list": {
             "full_cmd": ["lease", "list"],
@@ -748,15 +1149,30 @@
                 "long": ["expired"],
                 "hide": false,
                 "global": false
+              },
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
               }
             ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "List tracked leases",
             "name": "list",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": []
+            "examples": [],
+            "headings": []
           },
           "revoke": {
             "full_cmd": ["lease", "revoke"],
@@ -773,25 +1189,57 @@
                 "hide": false
               }
             ],
-            "flags": [],
+            "flags": [
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
+              }
+            ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Revoke a lease by ID",
             "name": "revoke",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": []
+            "examples": [],
+            "headings": []
           }
         },
         "args": [],
-        "flags": [],
+        "flags": [
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Manage ephemeral credential leases",
         "name": "lease",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "list": {
         "full_cmd": ["list"],
@@ -838,29 +1286,60 @@
             "long": ["complete"],
             "hide": true,
             "global": false
+          },
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "List all secrets",
         "name": "list",
         "aliases": ["ls", "secrets"],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "mcp": {
         "full_cmd": ["mcp"],
         "usage": "mcp",
         "subcommands": {},
         "args": [],
-        "flags": [],
+        "flags": [
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
-        "help": "Start an MCP server for secret-gated AI agent access",
+        "args_override_self": true,
+        "help": "Start an MCP server that brokers secrets to AI agents",
         "name": "mcp",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "profiles": {
         "full_cmd": ["profiles"],
@@ -877,19 +1356,34 @@
             "long": ["complete"],
             "hide": true,
             "global": false
+          },
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "List available profiles",
         "name": "profiles",
         "aliases": [],
         "hidden_aliases": ["profile"],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "provider": {
         "full_cmd": ["provider"],
-        "usage": "provider <SUBCOMMAND>",
+        "usage": "provider [SUBCOMMAND]",
         "subcommands": {
           "add": {
             "full_cmd": ["provider", "add"],
@@ -932,6 +1426,7 @@
                     "bitwarden-sm",
                     "infisical",
                     "keepass",
+                    "keeper-sm",
                     "keychain",
                     "password-store",
                     "passwordstate",
@@ -940,6 +1435,112 @@
                     "pulumi-esc",
                     "vault",
                     "yubikey"
+                  ],
+                  "details": [
+                    {
+                      "value": "1password",
+                      "help": "1Password"
+                    },
+                    {
+                      "value": "age",
+                      "help": "Age encryption"
+                    },
+                    {
+                      "value": "aws",
+                      "help": "AWS Secrets Manager"
+                    },
+                    {
+                      "value": "aws-kms",
+                      "help": "AWS KMS"
+                    },
+                    {
+                      "value": "aws-ps",
+                      "help": "AWS Parameter Store"
+                    },
+                    {
+                      "value": "azure-ac",
+                      "help": "Azure App Configuration"
+                    },
+                    {
+                      "value": "azure-kms",
+                      "help": "Azure Key Vault KMS"
+                    },
+                    {
+                      "value": "azure-sm",
+                      "help": "Azure Key Vault Secrets Manager"
+                    },
+                    {
+                      "value": "gcp",
+                      "help": "Google Cloud Secret Manager"
+                    },
+                    {
+                      "value": "gcp-kms",
+                      "help": "Google Cloud KMS"
+                    },
+                    {
+                      "value": "fido2",
+                      "help": "FIDO2 hmac-secret hardware-backed encryption"
+                    },
+                    {
+                      "value": "bitwarden",
+                      "help": "Bitwarden Password Manager"
+                    },
+                    {
+                      "value": "doppler",
+                      "help": "Doppler secrets manager"
+                    },
+                    {
+                      "value": "foks",
+                      "help": "FOKS (Federated Open Key Service)"
+                    },
+                    {
+                      "value": "bitwarden-sm",
+                      "help": "Bitwarden Secrets Manager"
+                    },
+                    {
+                      "value": "infisical",
+                      "help": "Infisical"
+                    },
+                    {
+                      "value": "keepass",
+                      "help": "KeePass"
+                    },
+                    {
+                      "value": "keeper-sm",
+                      "help": "Keeper Secrets Manager"
+                    },
+                    {
+                      "value": "keychain",
+                      "help": "OS Keychain"
+                    },
+                    {
+                      "value": "password-store",
+                      "help": "password-store (pass)"
+                    },
+                    {
+                      "value": "passwordstate",
+                      "help": "Click Studios Passwordstate"
+                    },
+                    {
+                      "value": "plain",
+                      "help": "Plain text provider"
+                    },
+                    {
+                      "value": "proton-pass",
+                      "help": "Proton Pass"
+                    },
+                    {
+                      "value": "pulumi-esc",
+                      "help": "Pulumi ESC (Environments, Secrets, and Configuration)"
+                    },
+                    {
+                      "value": "vault",
+                      "help": "HashiCorp Vault"
+                    },
+                    {
+                      "value": "yubikey",
+                      "help": "YubiKey HMAC-SHA1 hardware-backed encryption"
+                    }
                   ]
                 }
               }
@@ -971,15 +1572,30 @@
                   "double_dash": "Optional",
                   "hide": false
                 }
+              },
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
               }
             ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Add a new provider",
             "name": "add",
             "aliases": ["a", "set"],
             "hidden_aliases": [],
-            "examples": []
+            "examples": [],
+            "headings": []
           },
           "list": {
             "full_cmd": ["provider", "list"],
@@ -996,15 +1612,30 @@
                 "long": ["complete"],
                 "hide": true,
                 "global": false
+              },
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
               }
             ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "List available providers",
             "name": "list",
             "aliases": ["ls"],
             "hidden_aliases": [],
-            "examples": []
+            "examples": [],
+            "headings": []
           },
           "remove": {
             "full_cmd": ["provider", "remove"],
@@ -1031,15 +1662,30 @@
                 "long": ["global"],
                 "hide": false,
                 "global": false
+              },
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
               }
             ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Remove a provider",
             "name": "remove",
             "aliases": ["rm", "delete"],
             "hidden_aliases": [],
-            "examples": []
+            "examples": [],
+            "headings": []
           },
           "test": {
             "full_cmd": ["provider", "test"],
@@ -1066,26 +1712,57 @@
                 "long": ["all"],
                 "hide": false,
                 "global": false
+              },
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
               }
             ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Test a provider connection",
             "name": "test",
             "aliases": ["t"],
             "hidden_aliases": [],
-            "examples": []
+            "examples": [],
+            "headings": []
           }
         },
         "args": [],
-        "flags": [],
+        "flags": [
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Manage providers (defaults to list)",
         "name": "provider",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "proxy": {
         "full_cmd": ["proxy"],
@@ -1096,14 +1773,30 @@
             "usage": "proxy rules",
             "subcommands": {},
             "args": [],
-            "flags": [],
+            "flags": [
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
+              }
+            ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Show the effective credential proxy rules",
             "name": "rules",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": []
+            "examples": [],
+            "headings": []
           },
           "run": {
             "full_cmd": ["proxy", "run"],
@@ -1121,26 +1814,64 @@
                 "hide": false
               }
             ],
-            "flags": [],
+            "flags": [
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
+              }
+            ],
             "mounts": [],
+            "unknown_flags": null,
             "hide": false,
+            "args_override_self": true,
             "help": "Run a command with placeholder credentials through the local proxy",
             "name": "run",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": []
+            "examples": [],
+            "headings": [],
+            "complete": {
+              "command": {
+                "name": "command",
+                "type_": "command_args"
+              }
+            }
           }
         },
         "args": [],
-        "flags": [],
+        "flags": [
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
         "subcommand_required": true,
+        "args_override_self": true,
         "help": "Broker credentials into destination-scoped HTTPS requests",
         "name": "proxy",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "reencrypt": {
         "full_cmd": ["reencrypt"],
@@ -1212,15 +1943,31 @@
               "double_dash": "Optional",
               "hide": false
             }
+          },
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Re-encrypt secrets with current provider configuration",
+        "help_long": "Re-encrypt secrets with current provider configuration\n\nWhen you add or remove recipients from an encryption provider (e.g. age), existing secrets remain encrypted with the old recipient set. This command decrypts and re-encrypts all matching secrets with the current provider configuration.",
         "name": "reencrypt",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "remove": {
         "full_cmd": ["remove"],
@@ -1257,15 +2004,30 @@
             "long": ["dry-run"],
             "hide": false,
             "global": false
+          },
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Remove a secret",
         "name": "remove",
         "aliases": ["rm", "delete"],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "scan": {
         "full_cmd": ["scan"],
@@ -1286,7 +2048,7 @@
         "flags": [
           {
             "name": "ignore",
-            "usage": "-i --ignore… <IGNORE>",
+            "usage": "-i --ignore <IGNORE>",
             "help": "Skip files matching this glob pattern (can be used multiple times)",
             "help_first_line": "Skip files matching this glob pattern (can be used multiple times)",
             "short": ["i"],
@@ -1318,7 +2080,15 @@
               "double_dash": "Optional",
               "hide": false,
               "choices": {
-                "choices": ["human", "json"]
+                "choices": ["human", "json"],
+                "details": [
+                  {
+                    "value": "human"
+                  },
+                  {
+                    "value": "json"
+                  }
+                ]
               }
             },
             "default": ["human"]
@@ -1332,29 +2102,66 @@
             "long": ["quiet"],
             "hide": false,
             "global": false
+          },
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Scan repository for potential secrets",
         "name": "scan",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": [],
+        "complete": {
+          "dir": {
+            "name": "dir",
+            "type_": "dir"
+          }
+        }
       },
       "schema": {
         "full_cmd": ["schema"],
         "usage": "schema",
         "subcommands": {},
         "args": [],
-        "flags": [],
+        "flags": [
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": true,
+        "args_override_self": true,
         "help": "Generate JSON Schema for fnox configuration",
         "name": "schema",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "set": {
         "full_cmd": ["set"],
@@ -1373,9 +2180,9 @@
           {
             "name": "VALUE",
             "usage": "[VALUE]",
-            "help": "Secret value to store",
+            "help": "Secret value to store.",
             "help_long": "Secret value to store.\n\nIf omitted: reads from stdin when piped (`echo \"x\" | fnox set KEY`), or prompts interactively with hidden input.\n\nPassing secrets as arguments exposes them in shell history and `ps` output. For sensitive values, prefer stdin or the interactive prompt.",
-            "help_first_line": "Secret value to store",
+            "help_first_line": "Secret value to store.",
             "required": false,
             "double_dash": "Optional",
             "hide": false
@@ -1439,8 +2246,8 @@
           {
             "name": "provider",
             "usage": "-p --provider <PROVIDER>",
-            "help": "Provider to fetch from",
-            "help_first_line": "Provider to fetch from",
+            "help": "Provider to store the secret in (defaults to its existing provider, then default_provider)",
+            "help_first_line": "Provider to store the secret in (defaults to its existing provider, then default_provider)",
             "short": ["p"],
             "long": ["provider"],
             "hide": false,
@@ -1481,6 +2288,24 @@
             }
           },
           {
+            "name": "from-file",
+            "usage": "--from-file <FROM_FILE>",
+            "help": "Read the secret value verbatim from a UTF-8 file",
+            "help_first_line": "Read the secret value verbatim from a UTF-8 file",
+            "short": [],
+            "long": ["from-file"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "FROM_FILE",
+              "usage": "<FROM_FILE>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            },
+            "conflicts": ["VALUE"]
+          },
+          {
             "name": "if-missing",
             "usage": "--if-missing <IF_MISSING>",
             "help": "What to do if the secret is missing (error, warn, ignore)",
@@ -1496,32 +2321,80 @@
               "double_dash": "Optional",
               "hide": false,
               "choices": {
-                "choices": ["error", "warn", "ignore"]
+                "choices": ["error", "warn", "ignore"],
+                "details": [
+                  {
+                    "value": "error"
+                  },
+                  {
+                    "value": "warn"
+                  },
+                  {
+                    "value": "ignore"
+                  }
+                ]
               }
             }
+          },
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Set a secret value",
         "name": "set",
         "aliases": ["s"],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": [],
+        "complete": {
+          "from_file": {
+            "name": "from_file",
+            "type_": "path"
+          }
+        }
       },
       "sponsors": {
         "full_cmd": ["sponsors"],
         "usage": "sponsors",
         "subcommands": {},
         "args": [],
-        "flags": [],
+        "flags": [
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Show the companies sponsoring fnox and the jdx.dev open source tools",
         "name": "sponsors",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "sync": {
         "full_cmd": ["sync"],
@@ -1624,63 +2497,127 @@
           {
             "name": "local-file",
             "usage": "--local-file",
-            "help": "Write sync overrides to the local override file next to the config file",
-            "help_first_line": "Write sync overrides to the local override file next to the config file",
+            "help": "Write synced secrets to the local override file next to the config file: fnox.local.toml, or .fnox.local.toml when that file exists or the config is .fnox.toml",
+            "help_first_line": "Write synced secrets to the local override file next to the config file: fnox.local.toml, or .fnox.local.toml when that file exists or the config is .fnox.toml",
             "short": [],
             "long": ["local-file"],
             "hide": false,
-            "global": false
+            "global": false,
+            "conflicts": ["--global"]
+          },
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
           }
         ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Sync secrets from remote providers to a local encryption provider",
         "name": "sync",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "tui": {
         "full_cmd": ["tui"],
         "usage": "tui",
         "subcommands": {},
         "args": [],
-        "flags": [],
+        "flags": [
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Interactive TUI dashboard for managing secrets",
         "name": "tui",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "usage": {
         "full_cmd": ["usage"],
         "usage": "usage",
         "subcommands": {},
         "args": [],
-        "flags": [],
+        "flags": [
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": true,
+        "args_override_self": true,
         "help": "Generate usage specification",
         "name": "usage",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       },
       "version": {
         "full_cmd": ["version"],
         "usage": "version",
         "subcommands": {},
         "args": [],
-        "flags": [],
+        "flags": [
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
         "mounts": [],
+        "unknown_flags": null,
         "hide": false,
+        "args_override_self": true,
         "help": "Show version information",
         "name": "version",
         "aliases": ["v"],
         "hidden_aliases": [],
-        "examples": []
+        "examples": [],
+        "headings": []
       }
     },
     "args": [],
@@ -1705,9 +2642,9 @@
       },
       {
         "name": "profile",
-        "usage": "-P --profile… <PROFILE>",
-        "help": "Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones",
-        "help_first_line": "Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones",
+        "usage": "-P --profile <PROFILE>",
+        "help": "Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones.",
+        "help_first_line": "Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones.",
         "short": ["P"],
         "long": ["profile"],
         "var": true,
@@ -1803,13 +2740,14 @@
         "short": [],
         "long": ["non-interactive"],
         "hide": false,
-        "global": true
+        "global": true,
+        "env": "FNOX_NON_INTERACTIVE"
       },
       {
         "name": "write-profile",
         "usage": "--write-profile <WRITE_PROFILE>",
-        "help": "Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise",
-        "help_first_line": "Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise",
+        "help": "Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise.",
+        "help_first_line": "Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise.",
         "short": [],
         "long": ["write-profile"],
         "hide": false,
@@ -1821,20 +2759,297 @@
           "double_dash": "Optional",
           "hide": false
         }
+      },
+      {
+        "name": "help",
+        "usage": "-h --help",
+        "help": "Print help",
+        "help_first_line": "Print help",
+        "short": ["h"],
+        "long": ["help"],
+        "hide": false,
+        "global": false,
+        "action": "help",
+        "builtin": true
+      },
+      {
+        "name": "version",
+        "usage": "-V --version",
+        "help": "Print version",
+        "help_first_line": "Print version",
+        "short": ["V"],
+        "long": ["version"],
+        "hide": false,
+        "global": false,
+        "action": "version",
+        "builtin": true
       }
     ],
     "mounts": [],
+    "unknown_flags": null,
     "hide": false,
+    "subcommand_required": true,
+    "args_override_self": true,
     "name": "fnox",
     "aliases": [],
     "hidden_aliases": [],
-    "examples": []
+    "examples": [],
+    "headings": []
   },
   "config": {
-    "props": {}
+    "props": {
+      "age_key_file": {
+        "optional": true,
+        "default": null,
+        "default_note": null,
+        "data_type": "null",
+        "value_type": {
+          "kind": "option",
+          "of": {
+            "kind": "base",
+            "of": "path"
+          }
+        },
+        "env": "FNOX_AGE_KEY_FILE",
+        "envs": ["FNOX_AGE_KEY_FILE"],
+        "cli": ["--age-key-file"],
+        "bindings": {},
+        "help": "Path to a file containing the age encryption key.",
+        "long_help": "Path to a file containing the age encryption key.\n\nPrefer setting key_file on the age provider itself, or FNOX_AGE_KEY for inline key content. The --age-key-file flag is deprecated and hidden; the FNOX_AGE_KEY_FILE environment variable remains supported.\n\nPriority (highest to lowest): CLI > Environment > Default",
+        "help_heading": null,
+        "choices": [],
+        "merge": "replace",
+        "scope": "any",
+        "deprecated": null,
+        "deprecated_warn_at": null,
+        "deprecated_remove_at": null,
+        "renamed_to": null,
+        "hide": false,
+        "since": "0.1.0",
+        "parse": null,
+        "writes_to": null,
+        "examples": [
+          "fnox get MY_SECRET --age-key-file ~/.age/key.txt",
+          "FNOX_AGE_KEY_FILE=~/.age/key.txt fnox get MY_SECRET"
+        ],
+        "default_list": [],
+        "extensions": []
+      },
+      "http_timeout": {
+        "default": "30s",
+        "default_note": null,
+        "data_type": "string",
+        "value_type": {
+          "kind": "base",
+          "of": "string"
+        },
+        "env": "FNOX_HTTP_TIMEOUT",
+        "envs": ["FNOX_HTTP_TIMEOUT"],
+        "cli": [],
+        "bindings": {},
+        "help": "HTTP request timeout for lease backend API calls (Vault, GCP IAM, etc.).",
+        "long_help": "HTTP request timeout for lease backend API calls (Vault, GCP IAM, etc.).\n\nAccepts a duration such as \"30s\", \"2m\", or \"1h30m\". Prevents fnox exec from hanging indefinitely on slow or unreachable servers. Set to \"0\" to disable the timeout (not recommended). An unparseable value falls back to the default.\n\nPriority: Environment > Default",
+        "help_heading": null,
+        "choices": [],
+        "merge": "replace",
+        "scope": "any",
+        "deprecated": null,
+        "deprecated_warn_at": null,
+        "deprecated_remove_at": null,
+        "renamed_to": null,
+        "hide": false,
+        "since": "1.16.0",
+        "parse": null,
+        "writes_to": null,
+        "examples": [
+          "FNOX_HTTP_TIMEOUT=60s fnox exec -- ./my-app",
+          "FNOX_HTTP_TIMEOUT=10s fnox lease create my-lease --duration 1h"
+        ],
+        "default_list": [],
+        "extensions": []
+      },
+      "if_missing": {
+        "optional": true,
+        "default": null,
+        "default_note": null,
+        "data_type": "string",
+        "value_type": {
+          "kind": "option",
+          "of": {
+            "kind": "base",
+            "of": "string"
+          }
+        },
+        "env": "FNOX_IF_MISSING",
+        "envs": ["FNOX_IF_MISSING"],
+        "cli": ["--if-missing"],
+        "bindings": {},
+        "help": "Runtime override for the if_missing behavior when a secret cannot be resolved.",
+        "long_help": "Runtime override for the if_missing behavior when a secret cannot be resolved.\n\nAvailable modes: \"error\" fails the command, \"warn\" prints a warning and continues, and \"ignore\" silently skips the missing secret. This overrides any if_missing value set in the configuration.\n\nPriority (highest to lowest): CLI flag > Environment > Secret level > Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)",
+        "help_heading": null,
+        "choices": [],
+        "merge": "replace",
+        "scope": "any",
+        "deprecated": null,
+        "deprecated_warn_at": null,
+        "deprecated_remove_at": null,
+        "renamed_to": null,
+        "hide": false,
+        "since": "1.1.0",
+        "parse": null,
+        "writes_to": null,
+        "examples": [
+          "fnox exec --if-missing error -- ./my-app",
+          "FNOX_IF_MISSING=ignore fnox exec -- ./my-app"
+        ],
+        "default_list": [],
+        "extensions": []
+      },
+      "if_missing_default": {
+        "optional": true,
+        "default": null,
+        "default_note": null,
+        "data_type": "string",
+        "value_type": {
+          "kind": "option",
+          "of": {
+            "kind": "base",
+            "of": "string"
+          }
+        },
+        "env": "FNOX_IF_MISSING_DEFAULT",
+        "envs": ["FNOX_IF_MISSING_DEFAULT"],
+        "cli": [],
+        "bindings": {},
+        "help": "Fallback if_missing behavior for secrets that do not set one in the configuration.",
+        "long_help": "Fallback if_missing behavior for secrets that do not set one in the configuration.\n\nAvailable modes: \"error\" fails the command, \"warn\" prints a warning and continues (default), and \"ignore\" silently skips the missing secret. Unlike FNOX_IF_MISSING, this does not override values set in the configuration.\n\nPriority (highest to lowest): CLI flag > FNOX_IF_MISSING > Secret level > Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)",
+        "help_heading": null,
+        "choices": [],
+        "merge": "replace",
+        "scope": "any",
+        "deprecated": null,
+        "deprecated_warn_at": null,
+        "deprecated_remove_at": null,
+        "renamed_to": null,
+        "hide": false,
+        "since": "1.1.0",
+        "parse": null,
+        "writes_to": null,
+        "examples": [
+          "export FNOX_IF_MISSING_DEFAULT=error  # Strict by default",
+          "export FNOX_IF_MISSING_DEFAULT=ignore  # Lenient by default"
+        ],
+        "default_list": [],
+        "extensions": []
+      },
+      "no_defaults": {
+        "default": false,
+        "default_note": null,
+        "data_type": "boolean",
+        "value_type": {
+          "kind": "base",
+          "of": "bool"
+        },
+        "env": "FNOX_NO_DEFAULTS",
+        "envs": ["FNOX_NO_DEFAULTS"],
+        "cli": ["--no-defaults"],
+        "bindings": {},
+        "help": "When a non-default profile is selected, do not merge top-level [secrets] into the profile. Only [profiles.<name>.secrets] will be used.",
+        "long_help": "When a non-default profile is selected, do not merge top-level [secrets] into the profile. Only [profiles.<name>.secrets] will be used.\n\nPriority (highest to lowest): CLI > Environment > Default",
+        "help_heading": null,
+        "choices": [],
+        "merge": "replace",
+        "scope": "any",
+        "deprecated": null,
+        "deprecated_warn_at": null,
+        "deprecated_remove_at": null,
+        "renamed_to": null,
+        "hide": false,
+        "since": "1.12.0",
+        "parse": null,
+        "writes_to": null,
+        "examples": [
+          "fnox exec --profile dev --no-defaults -- ./my-app",
+          "FNOX_NO_DEFAULTS=true fnox exec --profile dev -- ./my-app"
+        ],
+        "default_list": [],
+        "extensions": []
+      },
+      "profile": {
+        "default": null,
+        "default_note": null,
+        "data_type": "null",
+        "value_type": {
+          "kind": "list",
+          "of": {
+            "kind": "base",
+            "of": "string"
+          }
+        },
+        "env": "FNOX_PROFILE",
+        "envs": ["FNOX_PROFILE"],
+        "cli": ["--profile", "-P"],
+        "bindings": {},
+        "help": "Configuration profile to use for secrets retrieval.",
+        "long_help": "Configuration profile to use for secrets retrieval.\n\nProfiles allow you to maintain multiple configurations (e.g., dev, staging, prod) in a single fnox.toml file.\n\nPriority (highest to lowest): CLI > Environment > Default",
+        "help_heading": null,
+        "choices": [],
+        "merge": "replace",
+        "scope": "any",
+        "deprecated": null,
+        "deprecated_warn_at": null,
+        "deprecated_remove_at": null,
+        "renamed_to": null,
+        "hide": false,
+        "since": "0.1.0",
+        "parse": "list_by_comma",
+        "writes_to": null,
+        "examples": [
+          "fnox get MY_SECRET --profile production",
+          "FNOX_PROFILE=staging fnox get MY_SECRET"
+        ],
+        "default_list": ["default"],
+        "extensions": []
+      },
+      "shell_integration_output": {
+        "default": "normal",
+        "default_note": null,
+        "data_type": "string",
+        "value_type": {
+          "kind": "base",
+          "of": "string"
+        },
+        "env": "FNOX_SHELL_OUTPUT",
+        "envs": ["FNOX_SHELL_OUTPUT"],
+        "cli": [],
+        "bindings": {},
+        "help": "Control how much the shell integration prints when it loads or unloads secrets.",
+        "long_help": "Control how much the shell integration prints when it loads or unloads secrets.\n\nAvailable modes: \"none\" prints nothing, \"normal\" prints a summary when secrets are loaded or unloaded (default), and \"debug\" prints detailed information, including why the hook exited early.\n\nPriority: Environment > Default",
+        "help_heading": null,
+        "choices": [],
+        "merge": "replace",
+        "scope": "any",
+        "deprecated": null,
+        "deprecated_warn_at": null,
+        "deprecated_remove_at": null,
+        "renamed_to": null,
+        "hide": false,
+        "since": "0.1.0",
+        "parse": null,
+        "writes_to": null,
+        "examples": [
+          "FNOX_SHELL_OUTPUT=none fnox activate bash",
+          "FNOX_SHELL_OUTPUT=debug fnox activate zsh"
+        ],
+        "default_list": [],
+        "extensions": []
+      }
+    },
+    "sources": {},
+    "files": []
   },
-  "version": "1.31.1",
-  "usage": "Usage: fnox [OPTIONS] <COMMAND>",
+  "version": "1.36.0",
+  "usage": "",
   "complete": {
     "key": {
       "name": "key",
@@ -1854,5 +3069,6 @@
     }
   },
   "about": "A flexible secret management tool by @jdx",
-  "min_usage_version": "1.3"
+  "min_usage_version": "1.3",
+  "unknown_flags": "error"
 }

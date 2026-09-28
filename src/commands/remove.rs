@@ -1,20 +1,19 @@
 use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
-use clap::Args;
 
-#[derive(Debug, Args)]
-#[command(visible_aliases = ["rm", "delete"])]
+#[derive(Debug, usage_rs::Args)]
+#[usage(alias("rm", "delete"))]
 pub struct RemoveCommand {
     /// Secret key to remove
     pub key: String,
 
     /// Remove from the global config file (~/.config/fnox/config.toml)
-    #[arg(short = 'g', long)]
+    #[usage(short = 'g', long)]
     pub global: bool,
 
     /// Show what would be removed without making changes
-    #[arg(short = 'n', long)]
+    #[usage(short = 'n', long)]
     pub dry_run: bool,
 }
 
@@ -53,12 +52,9 @@ impl RemoveCommand {
 
         let config = Config::load(&target_path)?;
 
-        // Check existence in the write-target profile. For profile-specific
-        // files (fnox.<profile>.toml), secrets are at top-level [secrets].
-        let has_profile_section =
-            write_profile != "default" && !crate::config::is_profile_file(&target_path);
-
-        let found = if has_profile_section {
+        // Config::load scopes top-level entries from fnox.<profile>.toml into
+        // that profile, so named-profile lookups always use the profile map.
+        let found = if write_profile != "default" {
             config
                 .profiles
                 .get(&write_profile)

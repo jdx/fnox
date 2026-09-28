@@ -32,6 +32,9 @@ teardown() {
 	assert_output --partial "_fnox_hook()"
 	assert_output --partial "precmd_functions"
 	assert_output --partial "chpwd_functions"
+	assert_output --partial 'export __FNOX_ZSH_PID=$$'
+	assert_output --partial "add-zsh-hook zshexit _fnox_cleanup"
+	assert_output --partial 'return $status'
 }
 
 @test "fnox activate fish generates valid fish code" {
@@ -179,6 +182,23 @@ teardown() {
 	assert_output --partial 'export SECRET_THREE=value-three'
 }
 
+@test "fnox hook-env rejects command injection in secret names" {
+	cd "$TEST_TEMP_DIR"
+	marker="$TEST_TEMP_DIR/fnox-hook-injected"
+	cat >fnox.toml <<-EOF
+		root = true
+
+		[secrets]
+		"X; touch $marker #" = { default = "harmless" }
+	EOF
+
+	run bash -c 'eval "$("$1" hook-env -s bash)"' _ "$FNOX_BIN"
+
+	assert_success
+	assert_output --partial "Configuration validation failed"
+	assert_file_not_exists "$marker"
+}
+
 @test "fnox hook-env generates fish-compatible output" {
 	cd "$TEST_TEMP_DIR"
 	cat >fnox.toml <<-EOF
@@ -193,8 +213,8 @@ teardown() {
 	run "$FNOX_BIN" hook-env -s fish
 
 	assert_success
-	assert_output --partial 'set -gx FISH_SECRET "fish-value"'
-	assert_output --partial 'set -gx __FNOX_SESSION'
+	assert_output --partial 'set -gx "FISH_SECRET" "fish-value"'
+	assert_output --partial 'set -gx "__FNOX_SESSION"'
 }
 
 @test "fnox hook-env generates powershell-compatible output" {
@@ -211,8 +231,8 @@ teardown() {
 	run "$FNOX_BIN" hook-env -s pwsh
 
 	assert_success
-	assert_output --partial "\${Env:PWSH_SECRET}='pwsh-value'"
-	assert_output --partial '${Env:__FNOX_SESSION}='
+	assert_output --partial "Set-Item -LiteralPath 'Env:PWSH_SECRET' -Value 'pwsh-value'"
+	assert_output --partial "Set-Item -LiteralPath 'Env:__FNOX_SESSION' -Value"
 }
 
 @test "fnox hook-env escapes single quotes for powershell" {
@@ -229,7 +249,7 @@ teardown() {
 	run "$FNOX_BIN" hook-env -s pwsh
 
 	assert_success
-	assert_output --partial "\${Env:PWSH_QUOTE}='it''s a value'"
+	assert_output --partial "Set-Item -LiteralPath 'Env:PWSH_QUOTE' -Value 'it''s a value'"
 }
 
 @test "fnox hook-env finds config in parent directory" {
@@ -260,6 +280,8 @@ teardown() {
 @test "fnox hook-env with same directory and config exits early" {
 	cd "$TEST_TEMP_DIR"
 	cat >fnox.toml <<-EOF
+		root = true
+
 		[providers.plain]
 		type = "plain"
 
@@ -277,6 +299,35 @@ teardown() {
 
 	# Second run with session - should exit early (no output)
 	export __FNOX_SESSION="$session"
+	run "$FNOX_BIN" hook-env -s bash
+
+	assert_success
+	assert_output ""
+}
+
+@test "fnox hook-env exits early when moving within the same config hierarchy" {
+	project_dir="$TEST_TEMP_DIR/project"
+	mkdir -p "$project_dir/inner"
+	cd "$project_dir"
+	cat >fnox.toml <<-EOF
+		root = true
+
+		[providers.plain]
+		type = "plain"
+
+		[secrets.CACHED_SECRET]
+		provider = "plain"
+		value = "cached-value"
+	EOF
+
+	# First run from the project root loads the secret and creates the session
+	output1=$("$FNOX_BIN" hook-env -s bash)
+	echo "$output1" | grep -q 'export CACHED_SECRET=cached-value'
+	session=$(echo "$output1" | grep '__FNOX_SESSION=' | sed -E "s/^export __FNOX_SESSION=//; s/^'(.*)'\$/\\1/")
+
+	# Moving into an empty child keeps the same effective config hierarchy
+	export __FNOX_SESSION="$session"
+	cd inner
 	run "$FNOX_BIN" hook-env -s bash
 
 	assert_success
@@ -393,7 +444,7 @@ teardown() {
 	assert_output --partial 'unset TEMPORARY_SECRET'
 }
 
-@test "fnox hook-env reloads when directory changes" {
+@test "fnox hook-env reloads when moving to a different config hierarchy" {
 	# Create first directory with config
 	dir1="$TEST_TEMP_DIR/dir1"
 	mkdir -p "$dir1"
@@ -425,7 +476,7 @@ teardown() {
 		value = "dir2-value"
 	EOF
 
-	# Second run in dir2 with session from dir1 - should detect directory change
+	# Second run in dir2 with session from dir1 - should detect the config change
 	export __FNOX_SESSION="$session"
 	run "$FNOX_BIN" hook-env -s bash
 
@@ -497,6 +548,24 @@ teardown() {
 	assert_success
 	assert_output --partial 'export DEV_SECRET=dev-value'
 	assert_output --partial 'export DEFAULT_SECRET=default-value'
+}
+
+@test "fnox hook-env does not load defaults for an unknown profile" {
+	cd "$TEST_TEMP_DIR"
+	cat >fnox.toml <<-EOF
+		[providers.plain]
+		type = "plain"
+
+		[secrets.DEFAULT_SECRET]
+		provider = "plain"
+		value = "default-value"
+	EOF
+
+	export FNOX_PROFILE="typo"
+	run "$FNOX_BIN" hook-env -s bash
+
+	assert_success
+	refute_output --partial 'DEFAULT_SECRET'
 }
 
 # ============================================================================

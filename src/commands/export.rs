@@ -3,7 +3,6 @@ use crate::config::Config;
 use crate::error::{FnoxError, Result};
 use crate::shell;
 use crate::temp_file_secrets::create_persistent_secret_file;
-use clap::{Args, ValueEnum};
 use console;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -11,7 +10,7 @@ use std::path::PathBuf;
 use strum::{Display, EnumString, VariantNames};
 
 /// Supported export formats
-#[derive(Debug, Clone, Copy, ValueEnum, Display, EnumString, VariantNames)]
+#[derive(Debug, Clone, Copy, usage_rs::ValueEnum, Display, EnumString, VariantNames)]
 #[strum(serialize_all = "lowercase")]
 pub enum ExportFormat {
     /// Environment variable format (KEY=value)
@@ -27,27 +26,27 @@ pub enum ExportFormat {
 }
 
 /// Export secrets in various formats
-#[derive(Args)]
-#[command(visible_aliases = ["ex"])]
+#[derive(usage_rs::Args)]
+#[usage(alias("ex"))]
 pub struct ExportCommand {
     /// Export format
-    #[arg(short, long, default_value = "env", value_enum)]
+    #[usage(short, long, default = "env", value_enum)]
     format: ExportFormat,
 
-    /// Show what would be exported without writing to file
-    #[arg(short = 'n', long)]
+    /// Show what would be exported without writing to a file
+    #[usage(short = 'n', long)]
     dry_run: bool,
 
     /// Output file (default: stdout)
-    #[arg(short = 'o', long)]
+    #[usage(short = 'o', long)]
     output: Option<PathBuf>,
 
     /// Include secrets with env = false or env = "exec" (excluded by default)
-    #[arg(long)]
+    #[usage(long)]
     all: bool,
 
     /// Include metadata comments in env and shell output
-    #[arg(long)]
+    #[usage(long)]
     header: bool,
 }
 
@@ -233,8 +232,29 @@ fn dotenv_quote(value: &str) -> String {
         return value.to_string();
     }
 
-    // Dotenv parsers treat `$` and backticks literally; use `--format shell`
-    // for sourceable shell output.
+    // Docker Compose interpolates `$` in unquoted and double-quoted dotenv
+    // values. Single quotes keep secret values literal.
+    if value.contains('$') && is_single_quote_safe(value) {
+        return format!("'{}'", value.replace('\'', "\\'"));
+    }
+
+    // Use `--format shell` for sourceable shell output.
+    dotenv_double_quote(value, value.contains('$'))
+}
+
+fn is_single_quote_safe(value: &str) -> bool {
+    let mut backslashes = 0;
+    for c in value.chars() {
+        match c {
+            '\\' => backslashes += 1,
+            '\'' if backslashes % 2 == 1 => return false,
+            _ => backslashes = 0,
+        }
+    }
+    backslashes % 2 == 0
+}
+
+fn dotenv_double_quote(value: &str, escape_dollars: bool) -> String {
     let mut quoted = String::with_capacity(value.len() + 2);
     quoted.push('"');
     for c in value.chars() {
@@ -244,6 +264,7 @@ fn dotenv_quote(value: &str) -> String {
             '\n' => quoted.push_str("\\n"),
             '\r' => quoted.push_str("\\r"),
             '\t' => quoted.push_str("\\t"),
+            '$' if escape_dollars => quoted.push_str("\\$"),
             _ => quoted.push(c),
         }
     }
@@ -268,6 +289,21 @@ mod tests {
     fn dotenv_quote_escapes_special_values() {
         assert_eq!(dotenv_quote("value with spaces"), "\"value with spaces\"");
         assert_eq!(dotenv_quote("it's \"fine\""), "\"it's \\\"fine\\\"\"");
-        assert_eq!(dotenv_quote("a\nb\t$c`d"), "\"a\\nb\\t$c`d\"");
+        assert_eq!(dotenv_quote("a\nb\tc`d"), "\"a\\nb\\tc`d\"");
+    }
+
+    #[test]
+    fn dotenv_quote_single_quotes_dollar_values() {
+        assert_eq!(dotenv_quote("secret$value"), "'secret$value'");
+        assert_eq!(dotenv_quote("${TOKEN:-fallback}"), "'${TOKEN:-fallback}'");
+        assert_eq!(dotenv_quote("$$test"), "'$$test'");
+        assert_eq!(dotenv_quote("it's $5"), "'it\\'s $5'");
+        assert_eq!(dotenv_quote("a\n$b"), "'a\n$b'");
+        assert_eq!(dotenv_quote("secret$value\\"), "\"secret\\$value\\\\\"");
+        assert_eq!(dotenv_quote("a\\'b $5"), "\"a\\\\'b \\$5\"");
+        assert_eq!(
+            dotenv_quote("prefix\\'$value\ncontinuation"),
+            "\"prefix\\\\'\\$value\\ncontinuation\""
+        );
     }
 }

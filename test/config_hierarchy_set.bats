@@ -259,6 +259,9 @@ EOF
 [secrets]
 STAGING_EXISTING = { default = "staging" }
 EOF
+	cat >fnox.extra.toml <<EOF
+# Empty profile used to exercise a composed write target.
+EOF
 
 	# Multiple profiles without --write-profile should error
 	run "$FNOX_BIN" -P staging -P extra set NEW_SECRET "new-value"

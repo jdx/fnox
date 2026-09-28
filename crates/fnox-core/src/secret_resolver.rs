@@ -267,7 +267,7 @@ fn create_provider_not_configured_error(
     config: &Config,
 ) -> FnoxError {
     // Find similar provider names for suggestion
-    let providers = config.get_providers(profile);
+    let providers = config.get_providers(profile).unwrap_or_default();
     let available_providers: Vec<_> = providers.keys().map(|s| s.as_str()).collect();
     let similar = find_similar(provider_name, available_providers);
     let suggestion = format_suggestions(&similar);
@@ -377,11 +377,14 @@ pub fn handle_provider_error(
     }
 }
 
-fn log_provider_default_fallback(key: &str, error: &FnoxError) {
-    if matches!(
-        error,
-        FnoxError::ProviderNotConfigured { .. } | FnoxError::ProviderNotConfiguredWithSource { .. }
-    ) {
+fn log_provider_default_fallback(key: &str, error: &FnoxError, if_missing: IfMissing) {
+    if if_missing == IfMissing::Ignore
+        || matches!(
+            error,
+            FnoxError::ProviderNotConfigured { .. }
+                | FnoxError::ProviderNotConfiguredWithSource { .. }
+        )
+    {
         tracing::debug!(
             "Falling back to default value for secret '{}' after provider resolution failed: {}",
             key,
@@ -504,7 +507,17 @@ async fn resolve_interpolated_default_value(
         return Ok(None);
     }
 
-    let subset = collect_interpolation_closure(config, profile, key, &secrets)?;
+    let mut subset = collect_interpolation_closure(config, profile, key, &secrets)?;
+    // The caller has already attempted the root secret's provider. Keep the
+    // root in the dependency graph for cycle detection, but remove the source
+    // that would cause the provider to be retried.
+    let root = subset
+        .get_mut(key)
+        .expect("interpolation closure contains its root");
+    root.set_provider(None);
+    root.set_value(None);
+    root.sync = None;
+
     let mut resolved = resolve_secrets_batch(config, profile, &subset).await?;
     if let Some(Some(value)) = resolved.shift_remove(key) {
         return Ok(Some(value));
@@ -524,7 +537,11 @@ async fn resolve_secret_raw(
     let provider_value = match try_resolve_from_provider(config, profile, secret_config).await {
         Ok(value) => value,
         Err(error) if secret_config.default.is_some() => {
-            log_provider_default_fallback(key, &error);
+            log_provider_default_fallback(
+                key,
+                &error,
+                resolve_if_missing_behavior(secret_config, config),
+            );
             None
         }
         Err(error) => return Err(error),
@@ -597,7 +614,7 @@ async fn try_resolve_from_provider(
     };
 
     // Get the provider config
-    let providers = config.get_providers(profile);
+    let providers = config.get_providers(profile)?;
     let provider_config = providers.get(&provider_name).ok_or_else(|| {
         create_provider_not_configured_error(&provider_name, profile, secret_config, config)
     })?;
@@ -731,13 +748,28 @@ pub async fn resolve_secrets_batch(
     profile: &[String],
     secrets: &IndexMap<String, SecretConfig>,
 ) -> Result<IndexMap<String, Option<String>>> {
+    resolve_secrets_batch_with_pre_resolved(config, profile, secrets, &IndexMap::new()).await
+}
+
+/// Resolves multiple secrets while treating previously resolved values as
+/// dependencies that are already available.
+pub async fn resolve_secrets_batch_with_pre_resolved(
+    config: &Config,
+    profile: &[String],
+    secrets: &IndexMap<String, SecretConfig>,
+    pre_resolved: &IndexMap<String, Option<String>>,
+) -> Result<IndexMap<String, Option<String>>> {
     // Classify each secret: provider-backed vs no-provider
     let mut secret_provider: HashMap<String, (String, String)> = HashMap::new(); // key -> (provider_name, provider_value)
     let mut no_provider = Vec::new();
 
-    let providers = config.get_providers(profile);
+    let providers = config.get_providers(profile)?;
     let all_keys: Vec<String> = secrets.keys().cloned().collect();
-    let secret_keys: HashSet<&str> = all_keys.iter().map(|k| k.as_str()).collect();
+    let secret_keys: HashSet<&str> = all_keys
+        .iter()
+        .map(|key| key.as_str())
+        .chain(pre_resolved.keys().map(|key| key.as_str()))
+        .collect();
     let mut default_deps: HashMap<String, Vec<String>> = HashMap::new();
     let mut hard_default_deps: HashMap<String, Vec<String>> = HashMap::new();
 
@@ -802,11 +834,13 @@ pub async fn resolve_secrets_batch(
 
     // Build dependency graph and compute resolution levels using Kahn's algorithm.
     let mut deps_for_secret: HashMap<String, Vec<String>> = HashMap::new();
+    let mut provider_env_dependencies = HashSet::new();
     for (key, (provider_name, _)) in &secret_provider {
         let deps = providers
             .get(provider_name)
             .map(|pc| pc.env_dependencies())
             .unwrap_or(&[]);
+        provider_env_dependencies.extend(deps.iter().copied());
         deps_for_secret.insert(
             key.clone(),
             deps.iter().map(|dep| dep.to_string()).collect(),
@@ -831,7 +865,15 @@ pub async fn resolve_secrets_batch(
     let (levels, cycle) = compute_resolution_levels(&all_keys, &deps_for_secret, &no_provider_set);
 
     // Resolve each level in order
-    let mut temp_results: HashMap<String, Option<String>> = HashMap::new();
+    let mut temp_results: HashMap<String, Option<String>> =
+        pre_resolved.clone().into_iter().collect();
+    for (key, value) in pre_resolved {
+        if provider_env_dependencies.contains(key.as_str())
+            && let Some(value) = value
+        {
+            env::set_var(key, value);
+        }
+    }
 
     for ready in &levels {
         let level_results = resolve_level(
@@ -1078,7 +1120,7 @@ async fn resolve_provider_batch(
     );
 
     // Get the provider config
-    let providers = config.get_providers(profile);
+    let providers = config.get_providers(profile)?;
     let provider_config = match providers.get(provider_name) {
         Some(config) => config,
         None => {
@@ -1096,6 +1138,7 @@ async fn resolve_provider_batch(
                 resolve_default_fallbacks(&fallback_keys, secrets, resolved_so_far, &mut results)?;
             for (key, _) in &provider_secrets {
                 if fallback_resolved.contains(key) {
+                    let secret_config = &secrets[key];
                     log_provider_default_fallback(
                         key,
                         &FnoxError::ProviderNotConfigured {
@@ -1104,6 +1147,7 @@ async fn resolve_provider_batch(
                             config_path: None,
                             suggestion: suggestion.clone(),
                         },
+                        resolve_if_missing_behavior(secret_config, config),
                     );
                     continue;
                 }
@@ -1138,12 +1182,14 @@ async fn resolve_provider_batch(
             resolve_default_fallbacks(&fallback_keys, secrets, resolved_so_far, &mut results)?;
         for (key, _) in &provider_secrets {
             if fallback_resolved.contains(key) {
+                let secret_config = &secrets[key];
                 log_provider_default_fallback(
                     key,
                     &FnoxError::Provider(format!(
                         "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
                         provider_name
                     )),
+                    resolve_if_missing_behavior(secret_config, config),
                 );
                 continue;
             }
@@ -1292,7 +1338,12 @@ fn handle_batch_error(
         resolve_default_fallbacks(&fallback_keys, secrets, resolved_so_far, results)?;
     for (key, _) in provider_secrets {
         if fallback_resolved.contains(key) {
-            log_provider_default_fallback(key, error);
+            let secret_config = &secrets[key];
+            log_provider_default_fallback(
+                key,
+                error,
+                resolve_if_missing_behavior(secret_config, config),
+            );
             continue;
         }
 
@@ -1383,7 +1434,12 @@ fn process_batch_results(
 
     for (key, e) in failed {
         if fallback_resolved.contains(&key) {
-            log_provider_default_fallback(&key, &e);
+            let secret_config = &secrets[&key];
+            log_provider_default_fallback(
+                &key,
+                &e,
+                resolve_if_missing_behavior(secret_config, config),
+            );
             continue;
         }
 
@@ -1710,6 +1766,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_interpolated_default_can_use_pre_resolved_reference() {
+        let config = Config::new();
+        let secrets = IndexMap::from([(
+            "DATABASE_URL".to_string(),
+            default_secret("postgres://${POSTGRES_USER}@localhost/fnox"),
+        )]);
+        let pre_resolved =
+            IndexMap::from([("POSTGRES_USER".to_string(), Some("cached-user".to_string()))]);
+
+        let resolved = resolve_secrets_batch_with_pre_resolved(
+            &config,
+            &profile("default"),
+            &secrets,
+            &pre_resolved,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            resolved
+                .get("DATABASE_URL")
+                .and_then(|value| value.as_ref()),
+            Some(&"postgres://cached-user@localhost/fnox".to_string())
+        );
+    }
+
+    #[tokio::test]
     async fn test_provider_value_wins_over_interpolated_default() {
         let mut config = Config::new();
         config.providers.insert(
@@ -1997,6 +2080,54 @@ mod tests {
             .unwrap();
 
         assert_eq!(resolved, Some("postgres://localhost/fnox".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_secret_preserves_cycle_through_root_fallback() {
+        use crate::providers::OptionStringOrSecretRef;
+
+        let mut config = Config::new();
+        config.providers.insert(
+            "onepassword".to_string(),
+            ProviderConfig::OnePassword {
+                vault: OptionStringOrSecretRef::none(),
+                account: OptionStringOrSecretRef::none(),
+                token: OptionStringOrSecretRef::none(),
+                auth_command: None,
+                daemon_cache: None,
+            },
+        );
+
+        let mut root = default_secret("${DEPENDENT_SECRET}");
+        root.set_provider(Some("missing-provider".to_string()));
+        root.set_value(Some("encrypted-root".to_string()));
+        root.if_missing = Some(IfMissing::Ignore);
+        config
+            .secrets
+            .insert("OP_SERVICE_ACCOUNT_TOKEN".to_string(), root);
+
+        let mut dependent = SecretConfig::new();
+        dependent.set_provider(Some("onepassword".to_string()));
+        dependent.set_value(Some("op://vault/item/field".to_string()));
+        config
+            .secrets
+            .insert("DEPENDENT_SECRET".to_string(), dependent);
+
+        let root_config = &config.secrets["OP_SERVICE_ACCOUNT_TOKEN"];
+        let err = resolve_secret(
+            &config,
+            &profile("default"),
+            "OP_SERVICE_ACCOUNT_TOKEN",
+            root_config,
+        )
+        .await
+        .unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("Interpolation dependency cycle among secrets"),
+            "unexpected error: {err}"
+        );
     }
 
     #[tokio::test]

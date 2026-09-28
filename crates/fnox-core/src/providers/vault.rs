@@ -2,9 +2,85 @@ use crate::env;
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
 use serde_json::json;
+use std::process::Stdio;
+use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
 const URL: &str = "https://fnox.jdx.dev/providers/vault";
+const PROVIDER_NAME: &str = "HashiCorp Vault";
+
+fn parse_secret_reference(value: &str) -> Result<(&str, &str)> {
+    match value.split_once('/') {
+        None => Ok((value, "value")),
+        Some((secret, field))
+            if !secret.is_empty() && !field.is_empty() && !field.contains('/') =>
+        {
+            Ok((secret, field))
+        }
+        _ => Err(FnoxError::ProviderInvalidResponse {
+            provider: PROVIDER_NAME.to_string(),
+            details: format!("Invalid secret reference format: '{value}'"),
+            hint: "Expected 'secret' or 'secret/field'".to_string(),
+            url: URL.to_string(),
+        }),
+    }
+}
+
+fn is_missing_secret_error(error: &FnoxError) -> bool {
+    let FnoxError::ProviderCliFailed { details, .. } = error else {
+        return false;
+    };
+    let details = details.to_ascii_lowercase();
+    details.contains("no data found")
+        || details.contains("no value found")
+        || details.contains("code: 404")
+}
+
+fn deleted_secret_version(metadata: &str) -> Result<Option<u64>> {
+    let metadata: serde_json::Value =
+        serde_json::from_str(metadata).map_err(|error| FnoxError::ProviderInvalidResponse {
+            provider: PROVIDER_NAME.to_string(),
+            details: format!("Invalid Vault metadata response: {error}"),
+            hint: "Check that the Vault CLI returned JSON metadata".to_string(),
+            url: URL.to_string(),
+        })?;
+    let data = metadata
+        .get("data")
+        .ok_or_else(|| FnoxError::ProviderInvalidResponse {
+            provider: PROVIDER_NAME.to_string(),
+            details: "Vault metadata response did not contain data".to_string(),
+            hint: "Check that the Vault CLI returned KV v2 metadata".to_string(),
+            url: URL.to_string(),
+        })?;
+    let current_version = data
+        .get("current_version")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| FnoxError::ProviderInvalidResponse {
+            provider: PROVIDER_NAME.to_string(),
+            details: "Vault metadata response did not contain current_version".to_string(),
+            hint: "Check that the Vault CLI returned KV v2 metadata".to_string(),
+            url: URL.to_string(),
+        })?;
+    let version = data
+        .get("versions")
+        .and_then(|versions| versions.get(current_version.to_string()))
+        .ok_or_else(|| FnoxError::ProviderInvalidResponse {
+            provider: PROVIDER_NAME.to_string(),
+            details: format!("Vault metadata did not contain version {current_version}"),
+            hint: "Check that the Vault CLI returned KV v2 metadata".to_string(),
+            url: URL.to_string(),
+        })?;
+    let deleted = version
+        .get("deletion_time")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|time| !time.is_empty())
+        || version
+            .get("destroyed")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+
+    Ok(deleted.then_some(current_version))
+}
 
 pub struct HashiCorpVaultProvider {
     address: Option<String>,
@@ -75,6 +151,15 @@ impl HashiCorpVaultProvider {
 
     /// Execute vault CLI command with proper authentication
     async fn execute_vault_command(&self, args: &[&str]) -> Result<String> {
+        self.execute_vault_command_with_stdin(args, None).await
+    }
+
+    /// Execute a vault CLI command, optionally supplying its standard input.
+    async fn execute_vault_command_with_stdin(
+        &self,
+        args: &[&str],
+        stdin: Option<&str>,
+    ) -> Result<String> {
         tracing::debug!("Executing vault command with args: {:?}", args);
 
         let mut cmd = Command::new("vault");
@@ -112,9 +197,16 @@ impl HashiCorpVaultProvider {
         );
         cmd.env("VAULT_TOKEN", token);
 
-        cmd.args(args);
+        cmd.args(args)
+            .stdin(if stdin.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
 
-        let output = cmd.output().await.map_err(|e| {
+        let mut child = cmd.spawn().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 FnoxError::ProviderCliNotFound {
                     provider: "HashiCorp Vault".to_string(),
@@ -131,6 +223,38 @@ impl HashiCorpVaultProvider {
                 }
             }
         })?;
+
+        if let Some(input) = stdin {
+            let mut child_stdin =
+                child
+                    .stdin
+                    .take()
+                    .ok_or_else(|| FnoxError::ProviderCliFailed {
+                        provider: PROVIDER_NAME.to_string(),
+                        details: "Vault child process did not expose piped stdin".to_string(),
+                        hint: "This is an internal error".to_string(),
+                        url: URL.to_string(),
+                    })?;
+            child_stdin.write_all(input.as_bytes()).await.map_err(|e| {
+                FnoxError::ProviderCliFailed {
+                    provider: PROVIDER_NAME.to_string(),
+                    details: format!("Failed to write secret to Vault stdin: {e}"),
+                    hint: "This is an internal error".to_string(),
+                    url: URL.to_string(),
+                }
+            })?;
+            drop(child_stdin);
+        }
+
+        let output = child
+            .wait_with_output()
+            .await
+            .map_err(|e| FnoxError::ProviderCliFailed {
+                provider: PROVIDER_NAME.to_string(),
+                details: format!("Failed to wait for Vault command: {e}"),
+                hint: "Check your Vault configuration".to_string(),
+                url: URL.to_string(),
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -167,6 +291,12 @@ impl HashiCorpVaultProvider {
 
         Ok(stdout.trim().to_string())
     }
+
+    async fn deleted_secret_version(&self, secret_path: &str) -> Result<Option<u64>> {
+        let args = ["kv", "metadata", "get", "-format=json", secret_path];
+        let metadata = self.execute_vault_command(&args).await?;
+        deleted_secret_version(&metadata)
+    }
 }
 
 #[async_trait]
@@ -178,22 +308,7 @@ impl crate::providers::Provider for HashiCorpVaultProvider {
     async fn get_secret(&self, value: &str) -> Result<String> {
         tracing::debug!("Getting secret '{}' from HashiCorp Vault", value);
 
-        // Parse value as "secret-name/field" or just "secret-name"
-        // Default field is "value" if not specified (Vault KV v2 convention)
-        let parts: Vec<&str> = value.split('/').collect();
-
-        let (secret_name, field_name) = match parts.len() {
-            1 => (parts[0], "value"),
-            2 => (parts[0], parts[1]),
-            _ => {
-                return Err(FnoxError::ProviderInvalidResponse {
-                    provider: "HashiCorp Vault".to_string(),
-                    details: format!("Invalid secret reference format: '{}'", value),
-                    hint: "Expected 'secret' or 'secret/field'".to_string(),
-                    url: URL.to_string(),
-                });
-            }
-        };
+        let (secret_name, field_name) = parse_secret_reference(value)?;
 
         let secret_path = self.get_secret_path(secret_name);
 
@@ -229,15 +344,66 @@ impl crate::providers::Provider for HashiCorpVaultProvider {
     }
 
     async fn put_secret(&self, key: &str, value: &str) -> Result<String> {
-        let secret_path = self.get_secret_path(key);
+        let (secret_name, field_name) = parse_secret_reference(key)?;
+        let secret_path = self.get_secret_path(secret_name);
 
         tracing::debug!("Writing secret '{}' to HashiCorp Vault", secret_path);
 
-        // Use vault kv put command: vault kv put <path> value=<value>
-        let value_arg = format!("value={}", value);
-        let args = vec!["kv", "put", &secret_path, &value_arg];
+        // Patch explicit fields so updating one value does not replace its siblings.
+        // Passing values through stdin prevents Vault from interpreting leading
+        // `@` as file input or `-` as an instruction to read uncontrolled stdin.
+        let value_arg = format!("{field_name}=-");
+        if key.contains('/') {
+            let patch_args = vec!["kv", "patch", &secret_path, &value_arg];
+            if let Err(error) = self
+                .execute_vault_command_with_stdin(&patch_args, Some(value))
+                .await
+            {
+                if !is_missing_secret_error(&error) {
+                    return Err(error);
+                }
+                let put_args = vec!["kv", "put", "-cas=0", &secret_path, &value_arg];
+                if self
+                    .execute_vault_command_with_stdin(&put_args, Some(value))
+                    .await
+                    .is_err()
+                {
+                    // A concurrent writer may have created the secret after the
+                    // failed patch. Retry the non-destructive patch in that case.
+                    if let Err(retry_error) = self
+                        .execute_vault_command_with_stdin(&patch_args, Some(value))
+                        .await
+                    {
+                        if !is_missing_secret_error(&retry_error) {
+                            return Err(retry_error);
+                        }
 
-        self.execute_vault_command(&args).await?;
+                        // CAS 0 cannot write over a soft-deleted KV v2 path. Use
+                        // its deleted current version without risking a live path.
+                        if let Some(version) = self.deleted_secret_version(&secret_path).await? {
+                            let cas_arg = format!("-cas={version}");
+                            let recreate_args =
+                                vec!["kv", "put", &cas_arg, &secret_path, &value_arg];
+                            if self
+                                .execute_vault_command_with_stdin(&recreate_args, Some(value))
+                                .await
+                                .is_err()
+                            {
+                                self.execute_vault_command_with_stdin(&patch_args, Some(value))
+                                    .await?;
+                            }
+                        } else {
+                            self.execute_vault_command_with_stdin(&patch_args, Some(value))
+                                .await?;
+                        }
+                    }
+                }
+            }
+        } else {
+            let put_args = vec!["kv", "put", &secret_path, &value_arg];
+            self.execute_vault_command_with_stdin(&put_args, Some(value))
+                .await?;
+        }
 
         tracing::debug!("Successfully wrote secret '{}' to Vault", secret_path);
 
@@ -273,4 +439,58 @@ fn vault_namespace() -> Option<String> {
     env::var("FNOX_VAULT_NAMESPACE")
         .or_else(|_| env::var("VAULT_NAMESPACE"))
         .ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_secret_references() {
+        assert_eq!(
+            parse_secret_reference("database").unwrap(),
+            ("database", "value")
+        );
+        assert_eq!(
+            parse_secret_reference("database/password").unwrap(),
+            ("database", "password")
+        );
+        assert!(parse_secret_reference("database/nested/password").is_err());
+    }
+
+    #[test]
+    fn recognizes_missing_secret_errors() {
+        let error = FnoxError::ProviderCliFailed {
+            provider: PROVIDER_NAME.to_string(),
+            details: "No data found at secret/data/database".to_string(),
+            hint: String::new(),
+            url: URL.to_string(),
+        };
+        assert!(is_missing_secret_error(&error));
+
+        let error = FnoxError::ProviderCliFailed {
+            provider: PROVIDER_NAME.to_string(),
+            details: "Error making API request. Code: 404. Errors:".to_string(),
+            hint: String::new(),
+            url: URL.to_string(),
+        };
+        assert!(is_missing_secret_error(&error));
+
+        let error = FnoxError::ProviderCliFailed {
+            provider: PROVIDER_NAME.to_string(),
+            details: "permission denied".to_string(),
+            hint: String::new(),
+            url: URL.to_string(),
+        };
+        assert!(!is_missing_secret_error(&error));
+    }
+
+    #[test]
+    fn recognizes_deleted_metadata_versions() {
+        let deleted = r#"{"data":{"current_version":2,"versions":{"2":{"deletion_time":"2026-08-12T00:00:00Z","destroyed":false}}}}"#;
+        assert_eq!(deleted_secret_version(deleted).unwrap(), Some(2));
+
+        let live = r#"{"data":{"current_version":3,"versions":{"3":{"deletion_time":"","destroyed":false}}}}"#;
+        assert_eq!(deleted_secret_version(live).unwrap(), None);
+    }
 }

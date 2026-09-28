@@ -2,9 +2,13 @@ use crate::env;
 use crate::error::{FnoxError, Result};
 use crate::providers::OptionProviderSecretRef;
 use async_trait::async_trait;
+use std::collections::HashMap;
 use std::io::Read;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+
+const BATCH_VALUE_PREFIX: &str = "fnox-age-batch-v1:";
+const BATCH_KEY_CONTEXT: &[u8] = b"fnox-age-batch-v1";
 
 pub fn env_dependencies() -> &'static [&'static str] {
     &[]
@@ -86,6 +90,31 @@ impl AgeEncryptionProvider {
             identity_cycle_guard,
         )
         .await
+    }
+
+    fn parse_batch_value(value: &str) -> Option<(&str, &str)> {
+        let value = value.strip_prefix(BATCH_VALUE_PREFIX)?;
+        value.split_once(':')
+    }
+
+    async fn decrypt_batch_key(&self, wrapped_key: &str) -> Result<Vec<u8>> {
+        use base64::Engine;
+
+        let encoded_key = self.decrypt_age_value(wrapped_key).await?;
+        let key = base64::engine::general_purpose::STANDARD
+            .decode(encoded_key)
+            .map_err(|e| FnoxError::AgeDecryptionFailed {
+                details: format!("Failed to decode batch key: {e}"),
+            })?;
+        if key.len() != 32 {
+            return Err(FnoxError::AgeDecryptionFailed {
+                details: format!(
+                    "Invalid batch key length: expected 32 bytes, got {}",
+                    key.len()
+                ),
+            });
+        }
+        Ok(key)
     }
 }
 
@@ -249,7 +278,93 @@ impl crate::providers::Provider for AgeEncryptionProvider {
         Ok(encrypted_base64)
     }
 
+    async fn encrypt_secrets_batch(
+        &self,
+        secrets: &[(String, String)],
+    ) -> HashMap<String, Result<String>> {
+        use base64::Engine;
+
+        if secrets.is_empty() {
+            return HashMap::new();
+        }
+
+        let mut batch_key = [0u8; 32];
+        rand::fill(&mut batch_key);
+        let encoded_key = base64::engine::general_purpose::STANDARD.encode(batch_key);
+        let wrapped_key = match self.encrypt(&encoded_key).await {
+            Ok(value) => value,
+            Err(error) => {
+                let message = error.to_string();
+                return secrets
+                    .iter()
+                    .map(|(key, _)| {
+                        (
+                            key.clone(),
+                            Err(FnoxError::AgeEncryptionFailed {
+                                details: message.clone(),
+                            }),
+                        )
+                    })
+                    .collect();
+            }
+        };
+
+        secrets
+            .iter()
+            .map(|(key, plaintext)| {
+                let encrypted =
+                    super::hw_encrypt::encrypt(&batch_key, BATCH_KEY_CONTEXT, plaintext).map(
+                        |ciphertext| format!("{BATCH_VALUE_PREFIX}{wrapped_key}:{ciphertext}"),
+                    );
+                (key.clone(), encrypted)
+            })
+            .collect()
+    }
+
     async fn get_secret(&self, value: &str) -> Result<String> {
+        if let Some((wrapped_key, ciphertext)) = Self::parse_batch_value(value) {
+            let batch_key = self.decrypt_batch_key(wrapped_key).await?;
+            return super::hw_encrypt::decrypt(&batch_key, BATCH_KEY_CONTEXT, ciphertext);
+        }
+
+        self.decrypt_age_value(value).await
+    }
+
+    async fn get_secrets_batch(
+        &self,
+        secrets: &[(String, String)],
+    ) -> HashMap<String, Result<String>> {
+        let mut results = HashMap::with_capacity(secrets.len());
+        let mut batch_keys: HashMap<String, Result<Vec<u8>>> = HashMap::new();
+
+        for (key, value) in secrets {
+            let result = if let Some((wrapped_key, ciphertext)) = Self::parse_batch_value(value) {
+                if !batch_keys.contains_key(wrapped_key) {
+                    batch_keys.insert(
+                        wrapped_key.to_string(),
+                        self.decrypt_batch_key(wrapped_key).await,
+                    );
+                }
+                match batch_keys.get(wrapped_key).expect("batch key was inserted") {
+                    Ok(batch_key) => {
+                        super::hw_encrypt::decrypt(batch_key, BATCH_KEY_CONTEXT, ciphertext)
+                    }
+                    Err(error) => Err(FnoxError::AgeDecryptionFailed {
+                        details: error.to_string(),
+                    }),
+                }
+            } else {
+                self.decrypt_age_value(value).await
+            };
+            results.insert(key.clone(), result);
+        }
+
+        results
+    }
+}
+
+impl AgeEncryptionProvider {
+    async fn decrypt_age_value(&self, value: &str) -> Result<String> {
         // value contains the encrypted blob (might be base64 encoded or raw)
 
         // Try to decode as base64 first, if that fails, treat as raw bytes
@@ -371,6 +486,25 @@ impl crate::providers::Provider for AgeEncryptionProvider {
 mod tests {
     use super::*;
     use crate::providers::Provider;
+    use age::secrecy::ExposeSecret;
+
+    fn test_provider() -> (AgeEncryptionProvider, tempfile::TempPath) {
+        let identity = age::x25519::Identity::generate();
+        let key_file = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(key_file.path(), identity.to_string().expose_secret()).unwrap();
+        let key_path = key_file.path().to_string_lossy().into_owned();
+        let key_file = key_file.into_temp_path();
+
+        (
+            AgeEncryptionProvider::new(
+                vec![identity.to_public().to_string()],
+                Some(key_path),
+                OptionProviderSecretRef::none(),
+            )
+            .unwrap(),
+            key_file,
+        )
+    }
 
     /// Regression test for the "incorrect HRP" failure on age plugin recipients
     /// (e.g. age-plugin-yubikey). A plugin recipient must now be recognized and
@@ -397,5 +531,30 @@ mod tests {
                 "plugin recipient should parse successfully: {message}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn batch_encryption_wraps_one_shared_key_and_round_trips() {
+        let (provider, _key_file) = test_provider();
+        let plaintext = vec![
+            ("FIRST".to_string(), "one".to_string()),
+            ("SECOND".to_string(), "two".to_string()),
+        ];
+
+        let encrypted = provider.encrypt_secrets_batch(&plaintext).await;
+        let first = encrypted["FIRST"].as_ref().unwrap();
+        let second = encrypted["SECOND"].as_ref().unwrap();
+        let (first_wrapped_key, _) = AgeEncryptionProvider::parse_batch_value(first).unwrap();
+        let (second_wrapped_key, _) = AgeEncryptionProvider::parse_batch_value(second).unwrap();
+        assert_eq!(first_wrapped_key, second_wrapped_key);
+
+        let ciphertexts = encrypted
+            .into_iter()
+            .map(|(key, value)| (key, value.unwrap()))
+            .collect::<Vec<_>>();
+        let decrypted = provider.get_secrets_batch(&ciphertexts).await;
+
+        assert_eq!(decrypted["FIRST"].as_ref().unwrap(), "one");
+        assert_eq!(decrypted["SECOND"].as_ref().unwrap(), "two");
     }
 }

@@ -2,18 +2,91 @@ import "./banner.css";
 
 const ENDPOINT = "https://jdx.dev/banner.json";
 const STORAGE_KEY = "jdx-banner-dismissed";
+const CACHE_KEY = "jdx-banner-cache";
+let activeBanner;
+
+function getDismissedId() {
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
 
 export function initBanner() {
   if (typeof window === "undefined") return;
-  fetch(ENDPOINT)
-    .then((r) => (r.ok ? r.json() : null))
+  const cachedBanner = readCachedBanner();
+  if (cachedBanner) render(cachedBanner, false);
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 5000);
+  fetch(ENDPOINT, { signal: controller.signal })
+    .then((r) => {
+      if (!r.ok) throw new Error(`banner request failed: ${r.status}`);
+      return r.json();
+    })
     .then((b) => {
-      if (!b || !b.enabled) return;
-      if (isExpired(b.expires)) return;
-      if (localStorage.getItem(STORAGE_KEY) === b.id) return;
+      if (
+        !b ||
+        !b.enabled ||
+        isExpired(b.expires) ||
+        getDismissedId() === b.id
+      ) {
+        removeActiveBanner();
+        clearReserved();
+        return;
+      }
+      if (activeBanner?.id === b.id) {
+        activeBanner.update(b);
+        return;
+      }
       render(b);
     })
-    .catch(() => {});
+    .catch(() => {
+      clearCachedReservation();
+      if (!activeBanner) clearCurrentReservation();
+    })
+    .finally(() => window.clearTimeout(timeout));
+}
+
+function readCachedBanner() {
+  if (
+    !document.documentElement.style.getPropertyValue("--vp-layout-top-height")
+  ) {
+    return null;
+  }
+  try {
+    const cached = JSON.parse(localStorage.getItem(CACHE_KEY) ?? "null");
+    const b = cached?.banner;
+    return b &&
+      typeof b.id === "string" &&
+      typeof b.enabled === "boolean" &&
+      typeof b.message === "string" &&
+      (!b.link || typeof b.link === "string") &&
+      (!b.linkText || typeof b.linkText === "string") &&
+      (!b.expires || typeof b.expires === "string")
+      ? b
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearCachedReservation() {
+  try {
+    localStorage.removeItem(CACHE_KEY);
+  } catch {
+    // localStorage unavailable — nothing cached to clear.
+  }
+}
+
+function clearCurrentReservation() {
+  document.documentElement.style.removeProperty("--vp-layout-top-height");
+}
+
+function clearReserved() {
+  clearCurrentReservation();
+  clearCachedReservation();
 }
 
 function isExpired(expires) {
@@ -32,50 +105,133 @@ function isHttpUrl(value) {
   }
 }
 
-function render(b) {
+function cacheBanner(b, height) {
+  try {
+    localStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({
+        id: b.id,
+        height: `${height}px`,
+        width: window.innerWidth,
+        fontSize: getComputedStyle(document.documentElement).fontSize,
+        pixelRatio: window.devicePixelRatio,
+        cachedAt: Date.now(),
+        expires: b.expires ?? null,
+        banner: b,
+      }),
+    );
+  } catch {
+    // localStorage unavailable — skip caching.
+  }
+}
+
+function removeActiveBanner() {
+  activeBanner?.cancelExpiration();
+  activeBanner?.observer?.disconnect();
+  activeBanner?.element.remove();
+  activeBanner = undefined;
+}
+
+function render(b, persist = true) {
+  removeActiveBanner();
+  let currentBanner = b;
+  let shouldPersist = persist;
   const el = document.createElement("div");
   el.className = "jdx-banner";
   el.setAttribute("role", "region");
   el.setAttribute("aria-label", "Site announcement");
 
   const msg = document.createElement("span");
-  msg.textContent = b.message;
   el.appendChild(msg);
 
-  if (b.link && isHttpUrl(b.link)) {
-    const a = document.createElement("a");
-    a.href = b.link;
-    a.target = "_blank";
-    a.rel = "noopener";
-    a.textContent = b.linkText || "Learn more";
-    el.appendChild(a);
-  }
+  const link = document.createElement("a");
+  link.target = "_blank";
+  link.rel = "noopener";
+  el.appendChild(link);
+
+  const updateContent = (next) => {
+    currentBanner = next;
+    msg.textContent = next.message;
+    if (next.link && isHttpUrl(next.link)) {
+      link.href = next.link;
+      link.textContent = next.linkText || "Learn more";
+      link.hidden = false;
+    } else {
+      link.removeAttribute("href");
+      link.textContent = "";
+      link.hidden = true;
+    }
+  };
+  updateContent(b);
 
   const syncHeight = () => {
     document.documentElement.style.setProperty(
       "--vp-layout-top-height",
       `${el.offsetHeight}px`,
     );
+    if (shouldPersist) cacheBanner(currentBanner, el.offsetHeight);
   };
 
   const observer =
     typeof ResizeObserver !== "undefined"
       ? new ResizeObserver(syncHeight)
       : null;
+  let expirationTimer;
+  const cancelExpiration = () => {
+    if (expirationTimer !== undefined) window.clearTimeout(expirationTimer);
+    expirationTimer = undefined;
+  };
+  const scheduleExpiration = () => {
+    cancelExpiration();
+    if (!currentBanner.expires) return;
+    const expiresAt = Date.parse(currentBanner.expires);
+    if (Number.isNaN(expiresAt)) return;
+    const expire = () => {
+      if (activeBanner?.element !== el) return;
+      const remaining = expiresAt - Date.now();
+      if (remaining <= 0) {
+        removeActiveBanner();
+        clearReserved();
+        return;
+      }
+      expirationTimer = window.setTimeout(
+        expire,
+        Math.min(remaining, 2_147_483_647),
+      );
+    };
+    expire();
+  };
+  const update = (next) => {
+    shouldPersist = true;
+    updateContent(next);
+    scheduleExpiration();
+    requestAnimationFrame(syncHeight);
+  };
 
   const btn = document.createElement("button");
   btn.type = "button";
   btn.setAttribute("aria-label", "Dismiss");
   btn.textContent = "\u00d7";
   btn.addEventListener("click", () => {
-    localStorage.setItem(STORAGE_KEY, b.id);
-    observer?.disconnect();
-    el.remove();
-    document.documentElement.style.removeProperty("--vp-layout-top-height");
+    try {
+      localStorage.setItem(STORAGE_KEY, currentBanner.id);
+    } catch {
+      // Dismiss for this page even when localStorage is unavailable.
+    }
+    removeActiveBanner();
+    clearReserved();
   });
   el.appendChild(btn);
 
   document.body.prepend(el);
+  activeBanner = {
+    id: b.id,
+    element: el,
+    observer,
+    update,
+    cancelExpiration,
+  };
+  scheduleExpiration();
 
   requestAnimationFrame(syncHeight);
   observer?.observe(el);

@@ -20,6 +20,18 @@ pub enum BitwardenBackend {
     Rbw,
 }
 
+#[derive(Debug, Deserialize)]
+struct BitwardenItem {
+    #[serde(default)]
+    fields: Vec<BitwardenField>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BitwardenField {
+    name: Option<String>,
+    value: Option<String>,
+}
+
 impl fmt::Display for BitwardenBackend {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -30,6 +42,10 @@ impl fmt::Display for BitwardenBackend {
 }
 
 impl BitwardenProvider {
+    fn parse_reference(value: &str) -> (&str, &str) {
+        value.split_once('/').unwrap_or((value, "password"))
+    }
+
     pub fn new(
         collection: Option<String>,
         organization_id: Option<String>,
@@ -78,7 +94,6 @@ impl BitwardenProvider {
                 // For custom fields, we need the full item JSON
                 cmd.arg("item");
                 cmd.arg(item_name);
-                cmd.args(["--output", "json"]);
                 None // Special case handled, no field type needed
             }
         };
@@ -107,12 +122,12 @@ impl BitwardenProvider {
         } else {
             // BW_SESSION not found - this will cause bw to fail
             tracing::error!(
-                "BW_SESSION token not found in environment. Set BW_SESSION=$(bw unlock --raw) or FNOX_BW_SESSION_TOKEN"
+                "BW_SESSION token not found in environment. Set BW_SESSION=$(bw unlock --raw) or FNOX_BW_SESSION"
             );
             return Err(FnoxError::ProviderAuthFailed {
                 provider: "Bitwarden".to_string(),
                 details: "Session token not found".to_string(),
-                hint: "Set BW_SESSION=$(bw unlock --raw) or FNOX_BW_SESSION_TOKEN".to_string(),
+                hint: "Set BW_SESSION=$(bw unlock --raw) or FNOX_BW_SESSION".to_string(),
                 url: "https://fnox.jdx.dev/providers/bitwarden".to_string(),
             });
         };
@@ -172,9 +187,8 @@ impl BitwardenProvider {
                 // rbw uses a separate subcommand for TOTP
                 cmd.args(["code", item_name]);
             }
-            Some(_) => {
-                // custom field path: fetch full JSON; later code can still error out
-                cmd.args(["get", item_name, "--raw"]);
+            Some(field) => {
+                cmd.args(["get", item_name, "--field", field]);
             }
         }
 
@@ -192,7 +206,7 @@ impl BitwardenProvider {
 
         // The BW_SESSION environment variable should be set externally
         // Users should run: export BW_SESSION=$(bw unlock --raw)
-        // Or they can set FNOX_BW_SESSION_TOKEN and we'll use that
+        // Or they can set FNOX_BW_SESSION and we'll use that
 
         let cli = match self.backend {
             BitwardenBackend::Bw => "bw",
@@ -234,7 +248,7 @@ impl BitwardenProvider {
                 return Err(FnoxError::ProviderAuthFailed {
                     provider: "Bitwarden".to_string(),
                     details: stderr_str.to_string(),
-                    hint: format!("Run '{} unlock' and set BW_SESSION", cli),
+                    hint: format!("Run '{cli} unlock' and set BW_SESSION or FNOX_BW_SESSION"),
                     url: "https://fnox.jdx.dev/providers/bitwarden".to_string(),
                 });
             }
@@ -257,6 +271,47 @@ impl BitwardenProvider {
 
         Ok(stdout.trim().to_string())
     }
+
+    fn extract_custom_field(
+        &self,
+        item_name: &str,
+        field_name: &str,
+        json: &str,
+    ) -> Result<String> {
+        let item: BitwardenItem =
+            serde_json::from_str(json).map_err(|e| FnoxError::ProviderInvalidResponse {
+                provider: "Bitwarden".to_string(),
+                details: format!("Failed to parse item '{}': {}", item_name, e),
+                hint: "Check that the Bitwarden CLI returned a valid item".to_string(),
+                url: "https://fnox.jdx.dev/providers/bitwarden".to_string(),
+            })?;
+
+        let field = item
+            .fields
+            .into_iter()
+            .find(|field| field.name.as_deref() == Some(field_name))
+            .ok_or_else(|| FnoxError::ProviderInvalidResponse {
+                provider: "Bitwarden".to_string(),
+                details: format!(
+                    "Custom field '{}' not found in item '{}'",
+                    field_name, item_name
+                ),
+                hint: "Check the custom field name and capitalization".to_string(),
+                url: "https://fnox.jdx.dev/providers/bitwarden".to_string(),
+            })?;
+
+        field
+            .value
+            .ok_or_else(|| FnoxError::ProviderInvalidResponse {
+                provider: "Bitwarden".to_string(),
+                details: format!(
+                    "Custom field '{}' in item '{}' has no value",
+                    field_name, item_name
+                ),
+                hint: "Set a value for the custom field in Bitwarden".to_string(),
+                url: "https://fnox.jdx.dev/providers/bitwarden".to_string(),
+            })
+    }
 }
 
 #[async_trait]
@@ -266,20 +321,7 @@ impl crate::providers::Provider for BitwardenProvider {
 
         // Parse value as "item/field" or just "item"
         // Default field is "password" if not specified
-        let parts: Vec<&str> = value.split('/').collect();
-
-        let (item_name, field_name) = match parts.len() {
-            1 => (parts[0], "password"),
-            2 => (parts[0], parts[1]),
-            _ => {
-                return Err(FnoxError::ProviderInvalidResponse {
-                    provider: "Bitwarden".to_string(),
-                    details: format!("Invalid secret reference format: '{}'", value),
-                    hint: "Expected 'item' or 'item/field'".to_string(),
-                    url: "https://fnox.jdx.dev/providers/bitwarden".to_string(),
-                });
-            }
-        };
+        let (item_name, field_name) = Self::parse_reference(value);
 
         tracing::debug!(
             "Reading Bitwarden item '{}' field '{}'",
@@ -287,8 +329,18 @@ impl crate::providers::Provider for BitwardenProvider {
             field_name
         );
 
+        let is_custom_field = !matches!(
+            field_name,
+            "password" | "username" | "notes" | "uri" | "url" | "totp"
+        );
         let mut cmd = self.build_command(Some(field_name), item_name)?;
-        self.execute_command(&mut cmd).await
+        let output = self.execute_command(&mut cmd).await?;
+
+        if is_custom_field && self.backend == BitwardenBackend::Bw {
+            self.extract_custom_field(item_name, field_name, &output)
+        } else {
+            Ok(output)
+        }
     }
 }
 
@@ -300,4 +352,60 @@ fn bw_session_token() -> Option<String> {
     env::var("FNOX_BW_SESSION")
         .or_else(|_| env::var("BW_SESSION"))
         .ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn provider(backend: BitwardenBackend) -> BitwardenProvider {
+        BitwardenProvider::new(None, None, None, Some(backend)).unwrap()
+    }
+
+    #[test]
+    fn extracts_custom_field_from_bw_item() {
+        let json = r#"{
+            "fields": [
+                {"name": "API/Key", "value": "secret-value", "type": 1},
+                {"name": "Region", "value": "us-east-1", "type": 0}
+            ]
+        }"#;
+
+        let value = provider(BitwardenBackend::Bw)
+            .extract_custom_field("Database", "API/Key", json)
+            .unwrap();
+
+        assert_eq!(value, "secret-value");
+    }
+
+    #[test]
+    fn errors_when_custom_field_is_missing() {
+        let error = provider(BitwardenBackend::Bw)
+            .extract_custom_field("Database", "Missing", r#"{"fields": []}"#)
+            .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("Custom field 'Missing' not found")
+        );
+    }
+
+    #[test]
+    fn rbw_uses_field_flag_for_custom_fields() {
+        let command = provider(BitwardenBackend::Rbw)
+            .build_rbw_command(Some("API/Key"), "Database")
+            .unwrap();
+        let args: Vec<_> = command.as_std().get_args().collect();
+
+        assert_eq!(args, ["get", "Database", "--field", "API/Key"]);
+    }
+
+    #[test]
+    fn parses_custom_field_name_with_slashes() {
+        assert_eq!(
+            BitwardenProvider::parse_reference("Database/API/Key"),
+            ("Database", "API/Key")
+        );
+    }
 }

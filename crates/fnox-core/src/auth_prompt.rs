@@ -51,11 +51,7 @@ pub fn prompt_and_run_auth(
     // Run the auth command
     eprintln!("Running: {}", auth_command);
 
-    let status = if cfg!(target_os = "windows") {
-        Command::new("cmd").args(["/C", auth_command]).status()
-    } else {
-        Command::new("sh").args(["-c", auth_command]).status()
-    };
+    let status = run_auth_command(auth_command);
 
     match status {
         Ok(exit_status) if exit_status.success() => {
@@ -70,6 +66,20 @@ pub fn prompt_and_run_auth(
             "Failed to run auth command: {}",
             e
         ))),
+    }
+}
+
+fn run_auth_command(auth_command: &str) -> std::io::Result<std::process::ExitStatus> {
+    if cfg!(target_os = "windows") {
+        Command::new("cmd")
+            .args(["/C", auth_command])
+            .stdout(std::io::stderr())
+            .status()
+    } else {
+        Command::new("sh")
+            .args(["-c", auth_command])
+            .stdout(std::io::stderr())
+            .status()
     }
 }
 
@@ -115,5 +125,30 @@ mod tests {
         };
         let result = prompt_and_run_auth(&config, &provider_config, "1password", &error);
         assert!(!result.unwrap());
+    }
+
+    #[test]
+    fn auth_command_stdout_is_redirected_to_stderr() {
+        const CHILD_ENV: &str = "FNOX_TEST_AUTH_COMMAND_STDOUT";
+        const MARKER: &str = "auth-command-output-marker";
+
+        if std::env::var(CHILD_ENV).ok().as_deref() == Some("1") {
+            run_auth_command(&format!("echo {MARKER}")).unwrap();
+            return;
+        }
+
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "auth_prompt::tests::auth_command_stdout_is_redirected_to_stderr",
+                "--nocapture",
+            ])
+            .env(CHILD_ENV, "1")
+            .output()
+            .unwrap();
+
+        assert!(output.status.success());
+        assert!(!String::from_utf8_lossy(&output.stdout).contains(MARKER));
+        assert!(String::from_utf8_lossy(&output.stderr).contains(MARKER));
     }
 }

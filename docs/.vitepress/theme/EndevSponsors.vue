@@ -153,8 +153,15 @@ onMounted(async () => {
 
 .EndevSponsorsLogo img {
   display: block;
-  max-height: 22px;
+  height: 22px;
   max-width: 120px;
+  object-fit: contain;
+  width: auto;
+  filter: brightness(0) opacity(0.82);
+}
+
+:global(.dark) .EndevSponsorsLogo img {
+  filter: none;
 }
 
 .EndevSponsorsCta {

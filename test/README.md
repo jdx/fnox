@@ -1,70 +1,74 @@
-# Fnox E2E Test Suite
+# End-to-end tests
 
-This directory contains the end-to-end test suite for Fnox, using the [Bats](https://github.com/bats-core/bats-core) testing framework.
+fnox uses [Bats](https://github.com/bats-core/bats-core) for end-to-end CLI tests. Run commands from the repository root with the project tools available through mise.
 
-## Running Tests
+## Build and run
 
-```bash
-# Run all e2e tests
-bats test/
-
-# Run specific test file
-bats test/version.bats
-
-# Run specific test by name
-bats test/version.bats --filter "fnox --version prints version"
-
-# Run with verbose output
-bats test/ --verbose
-
-# Run with timing information
-bats test/ --timing
+```sh
+mise install
+mise run build
+mise run test:bats
 ```
 
-## Writing Tests
+`test:bats` uses an existing binary. Rebuild after Rust changes so the tests exercise your changes.
 
-Tests are written using Bats syntax. Each test file should:
+For a focused run:
 
-1. Include the common setup:
+```sh
+mise run test:bats -- test/version.bats
+```
+
+In an activated mise shell, invoke Bats directly for a name filter or timing:
+
+```sh
+bats test/version.bats --filter "fnox --version prints version"
+bats test/version.bats --timing
+```
+
+The mise task resolves configured test credentials through `fnox exec` and runs Bats in parallel. Direct Bats invocations use the environment you supply.
+
+## Provider prerequisites
+
+Provider tests skip when required credentials or services are unavailable. A skipped provider test does not validate that integration.
+
+- [Bitwarden with Vaultwarden](BITWARDEN_TESTING.md): local Docker service and an unlocked `BW_SESSION`.
+- [HashiCorp Vault](VAULT_TESTING.md): local dev server and a test token.
+- 1Password: `OP_SERVICE_ACCOUNT_TOKEN` with access to the test vault.
+- Infisical: `INFISICAL_TOKEN` or the credentials required by the test setup.
+- KeePass: tests create temporary databases and use test passwords.
+- Passwordstate: `PASSWORDSTATE_BASE_URL`, `PASSWORDSTATE_API_KEY`, and `PASSWORDSTATE_LIST_ID`.
+
+See the individual `.bats` file for the exact setup and skip conditions before running a provider test.
+
+## Write a test
+
+Use the shared setup and teardown so config and temporary files are isolated:
 
 ```bash
 setup() {
-    load 'test_helper/common_setup'
-    _common_setup
+  load 'test_helper/common_setup'
+  _common_setup
 }
 
 teardown() {
-    _common_teardown
+  _common_teardown
+}
+
+@test "fnox --version prints a version" {
+  run fnox --version
+  assert_success
+  assert_output --regexp '^fnox [0-9]+\.[0-9]+\.[0-9]+'
 }
 ```
 
-2. Define tests using `@test`:
+Pass `--git` to `_common_setup` only when the test needs a repository. Follow adjacent tests for the behavior being exercised.
 
-```bash
-@test "description of test" {
-    # test code here
-    run fnox --version
-    assert_success
-    assert_output --regexp "^fnox\ [0-9]+\.[0-9]+\.[0-9]+$"
-}
-```
+The shared setup selects `target/debug/fnox` when available, sets `$FNOX_BIN`, creates an isolated config environment, and puts test artifacts under [`tmp/`](../tmp/README.md). Teardown removes those artifacts unless Bats preservation options are enabled.
 
-See existing test files for examples of different testing patterns.
+## Helpers and fixtures
 
-## Test Helper Functions
+- [Assertions](test_helper/assertions.bash): config, secret, and command assertions.
+- [Common setup](test_helper/common_setup.bash): environment isolation and binary selection.
+- [Fixtures](fixtures/README.md): disposable provider data and certificates.
 
-The `test_helper/assertions.bash` file provides custom assertion helpers:
-
-- `assert_fnox_success` - Assert fnox command succeeds
-- `assert_fnox_failure` - Assert fnox command fails
-- `assert_config_contains` - Assert config file contains content
-- `assert_config_not_contains` - Assert config file doesn't contain content
-- `assert_secret_exists` - Assert secret exists in config
-- `assert_secret_not_exists` - Assert secret doesn't exist in config
-
-## Test Environment
-
-- Each test runs in a temporary directory
-- Git repository is initialized for tests that need it
-- `$FNOX_BIN` points to the fnox binary under test
-- Test configs are isolated per test
+Keep fixtures free of real credentials. Test failures should show enough context to identify the first substantive error without dumping resolved secrets.

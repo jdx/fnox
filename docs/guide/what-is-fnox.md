@@ -1,43 +1,52 @@
+---
+description: "Learn how fnox connects encrypted files and secret stores to your shell, applications, and CI jobs."
+---
+
 # What is fnox?
 
-fnox is a secrets management tool that works with both encrypted secrets in git and remote cloud providers.
+fnox is a command-line tool that loads secrets from encrypted files, password managers, and cloud services. It gives your application environment variables while keeping the storage and authentication choices in a versioned `fnox.toml` file.
 
-## The Problem
+```sh
+fnox exec -- npm start
+```
 
-Secrets are typically done in 2 ways:
+Your application reads its usual environment variables. fnox resolves them before starting the command.
 
-1. **In git, encrypted** (hopefully)
-2. **Remote**, typically a cloud provider like AWS Secrets Manager
+## Choose where secrets live
 
-## The Solution
+| Storage model             | What goes in `fnox.toml`                                    | What you need to read it                                   |
+| ------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------- |
+| Encrypted in the config   | Ciphertext and public encryption settings                   | A matching age key, hardware token, or access to a KMS key |
+| In a vault or local store | The provider configuration and item reference               | Access to that provider                                    |
+| Non-sensitive defaults    | Plaintext values such as `LOG_LEVEL = { default = "info" }` | No credentials                                             |
 
-fnox works with either—or both! They've got their pros and cons. Either way, fnox gives you a nice front-end to manage secrets and make them easy to work with in dev/ci/prod.
+You can mix these models within a project. A development profile might use age while production reads AWS Secrets Manager. Cloning the repository gives you the configuration; access still depends on your keys or provider permissions.
 
-fnox's config file, `fnox.toml`, will either contain the encrypted secrets, or a reference to a secret in a cloud provider. You can either use `fnox exec -- <command>` to run a command with the secrets, or you can use the [shell integration](/guide/shell-integration) to automatically load the secrets into your shell environment when you `cd` into a directory with a `fnox.toml` file.
+See [how resolution works](/guide/how-it-works) and the [provider catalog](/providers/overview).
 
-## Why Choose fnox?
+## The golden path
 
-### Works with Your Existing Infrastructure
+For a team that already uses a remote vault, a useful workflow is:
 
-Already using AWS Secrets Manager? 1Password? age encryption? fnox integrates with all of them. Mix and match providers based on your needs.
+1. Keep secrets in the vault and commit their references in `fnox.toml`.
+2. Run [`fnox sync`](/guide/sync) to encrypt a personal copy into the gitignored `fnox.local.toml` using a local provider such as age.
+3. Use `fnox exec` or [shell integration](/guide/shell-integration) to read that copy without contacting the vault.
 
-### Secrets in Version Control (Done Right)
+The vault remains the source of truth. The cache is a snapshot: run sync again after a secret changes. A personal age key can also use [hardware-backed decryption](/guide/sync#hardware-backed-decryption).
 
-Store encrypted secrets in git using age, AWS KMS, Azure KMS, or GCP KMS. Your team can clone the repo and immediately have access to development secrets.
+Follow the [vault and local cache walkthrough](/guide/golden-path). If you want to start without a vault, follow the [age quick start](/guide/quick-start).
 
-### Multi-Environment Made Easy
+## Choose how commands receive secrets
 
-Use profiles to manage different secrets for dev, staging, and production—all in the same config file.
+- **One command:** `fnox exec -- <command>` resolves secrets for that subprocess.
+- **Your shell:** [shell integration](/guide/shell-integration) loads and unloads values as you change directories.
+- **A file-based tool:** [`as_file = true`](/reference/configuration#as-file) supplies a temporary file path instead of the value.
+- **An API client or agent:** the [credential proxy](/guide/proxy) supplies placeholders and injects credentials into matching requests. The [MCP server](/guide/mcp) offers selected secret retrieval and command execution.
 
-### Developer Experience First
+Use [profiles](/guide/profiles) for environment-specific settings and [hierarchical configuration](/guide/hierarchical-config) to share configuration across directories.
 
-- Simple TOML configuration
-- Shell integration for automatic secret loading
-- Works offline (with encrypted secrets)
-- No vendor lock-in
+## Why a standalone CLI?
 
-## Why is this a standalone CLI and not part of mise?
+Secret resolution has its own lifecycle: authentication prompts, remote reads, local decryption, cache refreshes, and credential expiry. Keeping that lifecycle in fnox lets it work with any shell, task runner, or CI system.
 
-[mise](https://mise.jdx.dev) has support for [encrypted secrets](https://mise.jdx.dev/environments/secrets/) but mise's design makes it a poor fit for remote secrets. mise reloads its environment too frequently—whenever a directory is changed, `mise x` is run, a shim is called, etc. Any other use-case like this mise leverages caching but secrets are an area where caching is a bad idea for obvious reasons. It might be possible to change mise's design to retain its environment in part to better support something like this but that's a huge challenge.
-
-Basically it's just too hard to get remote secrets to work effectively with mise so I made this a standalone tool.
+[mise](/guide/mise-integration) can install fnox and run tasks through `fnox exec`. fnox handles secret resolution, including its optional [memory cache](/guide/daemon) and [encrypted sync cache](/guide/sync).

@@ -1,4 +1,11 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["local>jdx/renovate-config"]
+  "extends": ["local>jdx/renovate-config"],
+  "ignoreDeps": [
+    "aws-config",
+    "aws-sdk-kms",
+    "aws-sdk-secretsmanager",
+    "aws-sdk-ssm",
+    "aws-sdk-sts"
+  ]
 }

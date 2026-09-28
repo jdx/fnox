@@ -25,6 +25,11 @@ const PER_STREAM_LIMIT: usize = (MAX_OUTPUT_BYTES / 2) + 1;
 /// Default execution timeout (5 minutes)
 const DEFAULT_EXEC_TIMEOUT_SECS: u64 = 300;
 
+fn scrub_age_identity(cmd: &mut tokio::process::Command) {
+    cmd.env_remove("FNOX_AGE_KEY");
+    cmd.env_remove("FNOX_AGE_KEY_FILE");
+}
+
 /// MCP tool parameter: request a secret by name
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct GetSecretParams {
@@ -82,6 +87,20 @@ impl FnoxMcpServer {
             resolved: Arc::new(OnceCell::new()),
             tool_router: Self::tool_router(),
         }
+    }
+
+    fn list_tools_result(&self) -> ListToolsResult {
+        let all_tools = self.tool_router.list_all();
+        let tools = self.mcp_config.tools();
+        let enabled: Vec<&str> = tools.iter().map(|t| t.tool_name()).collect();
+        let filtered = all_tools
+            .into_iter()
+            .filter(|t| enabled.contains(&t.name.as_ref()))
+            .collect();
+
+        ListToolsResult::with_all_items(filtered)
+            .with_ttl_ms(0)
+            .with_cache_scope(CacheScope::Private)
     }
 
     /// Ensure env-injectable secrets are resolved and cached. First call
@@ -339,6 +358,10 @@ impl FnoxMcpServer {
         let cmd_path = cmd_name;
 
         let mut cmd = tokio::process::Command::new(cmd_path);
+        // MCP subprocesses must receive resolved secrets, not the ambient age
+        // identity that can decrypt other values in the configuration.
+        // Explicitly configured secrets with these names are injected below.
+        scrub_age_identity(&mut cmd);
         if params.command.len() > 1 {
             cmd.args(&params.command[1..]);
         }
@@ -547,7 +570,7 @@ fn redact_secrets(text: &str, secret_values: &[(String, String)]) -> Result<Stri
 /// filter the tool list based on mcp_config.tools at listing time (not just
 /// at call time).
 impl ServerHandler for FnoxMcpServer {
-    fn get_info(&self) -> ServerInfo {
+    fn get_info(&self) -> ServerConfig {
         let tools = self.mcp_config.tools();
         let has_get_secret = tools.contains(&McpTool::GetSecret);
         let has_exec = tools.contains(&McpTool::Exec);
@@ -565,7 +588,7 @@ impl ServerHandler for FnoxMcpServer {
             "fnox MCP server — no tools are currently enabled."
         };
 
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(Implementation::new("fnox-mcp", env!("CARGO_PKG_VERSION")))
             .with_protocol_version(ProtocolVersion::V_2024_11_05)
             .with_instructions(instructions.to_string())
@@ -576,18 +599,7 @@ impl ServerHandler for FnoxMcpServer {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
-        let all_tools = self.tool_router.list_all();
-        let tools = self.mcp_config.tools();
-        let enabled: Vec<&str> = tools.iter().map(|t| t.tool_name()).collect();
-        let filtered = all_tools
-            .into_iter()
-            .filter(|t| enabled.contains(&t.name.as_ref()))
-            .collect();
-        Ok(ListToolsResult {
-            tools: filtered,
-            meta: None,
-            next_cursor: None,
-        })
+        Ok(self.list_tools_result())
     }
 
     fn get_tool(&self, name: &str) -> Option<Tool> {
@@ -603,7 +615,7 @@ impl ServerHandler for FnoxMcpServer {
         &self,
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
-    ) -> Result<CallToolResult, McpError> {
+    ) -> Result<CallToolResponse, McpError> {
         let tools = self.mcp_config.tools();
         let enabled: Vec<&str> = tools.iter().map(|t| t.tool_name()).collect();
         if !enabled.contains(&request.name.as_ref()) {
@@ -623,6 +635,43 @@ impl ServerHandler for FnoxMcpServer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn list_tools_includes_conservative_cache_hints() {
+        let server = FnoxMcpServer::new(
+            Config::default(),
+            vec!["default".into()],
+            McpConfig::default(),
+            ResolveContext {
+                config: "fnox.toml".into(),
+                profile: vec!["default".into()],
+                age_key_file: None,
+                if_missing: None,
+                no_defaults: false,
+                non_interactive: true,
+                no_daemon: true,
+            },
+            IndexMap::new(),
+        );
+
+        let result = server.list_tools_result();
+        assert_eq!(result.ttl_ms, Some(0));
+        assert_eq!(result.cache_scope, Some(CacheScope::Private));
+    }
+
+    #[test]
+    fn mcp_exec_command_scrubs_ambient_age_identity() {
+        let mut cmd = tokio::process::Command::new("unused");
+        scrub_age_identity(&mut cmd);
+
+        let removed = cmd
+            .as_std()
+            .get_envs()
+            .filter_map(|(key, value)| value.is_none().then_some(key.to_string_lossy()))
+            .collect::<Vec<_>>();
+        assert!(removed.iter().any(|key| key == "FNOX_AGE_KEY"));
+        assert!(removed.iter().any(|key| key == "FNOX_AGE_KEY_FILE"));
+    }
 
     #[test]
     fn redact_replaces_secret_values() {

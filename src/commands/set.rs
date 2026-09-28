@@ -1,11 +1,44 @@
 use crate::commands::Cli;
 use crate::config::{self, Config, IfMissing};
 use crate::error::{FnoxError, Result};
-use clap::Args;
 use std::io::{self, Read};
+use std::path::{Path, PathBuf};
 
-#[derive(Debug, Args)]
-#[command(visible_aliases = ["s"])]
+/// Resolve a remote key without carrying a reference across providers.
+fn resolve_remote_key_name<'a>(
+    key: &'a str,
+    key_name: Option<&'a str>,
+    existing_secret: Option<&'a config::SecretConfig>,
+    provider_name: &str,
+) -> &'a str {
+    key_name
+        .or_else(|| {
+            existing_secret
+                .filter(|secret| secret.provider() == Some(provider_name))
+                .and_then(config::SecretConfig::value)
+        })
+        .unwrap_or(key)
+}
+
+/// Return whether a loaded secret came from the table this command will update.
+fn secret_belongs_to_target(
+    secret: &config::SecretConfig,
+    target_path: &Path,
+    write_profile: &str,
+) -> bool {
+    if secret.source_path.as_deref() != Some(target_path) {
+        return false;
+    }
+
+    if write_profile == "default" {
+        !secret.source_is_profile
+    } else {
+        secret.source_profile.as_deref() == Some(write_profile)
+    }
+}
+
+#[derive(Debug, usage_rs::Args)]
+#[usage(alias("s"))]
 pub struct SetCommand {
     /// Secret key (environment variable name)
     pub key: String,
@@ -20,40 +53,50 @@ pub struct SetCommand {
     pub value: Option<String>,
 
     /// Description of the secret
-    #[arg(short = 'd', long)]
+    #[usage(short = 'd', long)]
     pub description: Option<String>,
 
     /// Save to the global config file (~/.config/fnox/config.toml)
-    #[arg(short = 'g', long)]
+    #[usage(short = 'g', long)]
     pub global: bool,
 
     /// Key name in the provider (if different from env var name)
-    #[arg(short = 'k', long)]
+    #[usage(short = 'k', long)]
     pub key_name: Option<String>,
 
     /// Show what would be done without making changes
-    #[arg(short = 'n', long)]
+    #[usage(short = 'n', long)]
     pub dry_run: bool,
 
-    /// Provider to fetch from
-    #[arg(short = 'p', long)]
+    /// Provider to store the secret in (defaults to its existing provider, then default_provider)
+    #[usage(short = 'p', long)]
     pub provider: Option<String>,
 
     /// Base64 encode the secret
-    #[arg(long)]
+    #[usage(long)]
     pub base64_encode: bool,
 
     /// Default value to use if secret is not found
-    #[arg(long)]
+    #[usage(long)]
     pub default: Option<String>,
 
+    /// Read the secret value verbatim from a UTF-8 file
+    #[usage(
+        long,
+        conflicts = "value",
+        value_hint = usage_rs::ValueHint::FilePath
+    )]
+    pub from_file: Option<PathBuf>,
+
     /// What to do if the secret is missing (error, warn, ignore)
-    #[arg(long)]
+    #[usage(long, value_enum)]
     pub if_missing: Option<IfMissing>,
 }
 
 impl SetCommand {
     pub async fn run(&self, cli: &Cli, mut config: Config) -> Result<()> {
+        config::validate_secret_name(&self.key)?;
+
         let profile = Config::get_profiles(cli.profile.as_slice());
         let write_profile = Config::resolve_write_profile(&profile, cli.write_profile.as_deref())?;
         tracing::debug!(
@@ -62,12 +105,35 @@ impl SetCommand {
             write_profile
         );
 
+        let target_path = if self.global {
+            Config::global_config_path()
+        } else {
+            let current_dir = std::env::current_dir().map_err(|e| {
+                FnoxError::Config(format!("Failed to get current directory: {}", e))
+            })?;
+            // Only use auto-detection when --config is the clap default ("fnox.toml").
+            // Any other value means the user explicitly chose a config file.
+            if cli.config == std::path::Path::new(config::DEFAULT_CONFIG_FILENAME) {
+                config::find_local_config(&current_dir, std::slice::from_ref(&write_profile))
+            } else {
+                current_dir.join(&cli.config)
+            }
+        };
+        let write_profile_stack = vec![write_profile.clone()];
+
         // Check if we're only setting metadata (no actual secret value)
         let has_metadata =
             self.description.is_some() || self.if_missing.is_some() || self.default.is_some();
 
         // Get the secret value if provided
-        let secret_value = if let Some(ref v) = self.value {
+        let secret_value = if let Some(ref path) = self.from_file {
+            Some(std::fs::read_to_string(path).map_err(|source| {
+                FnoxError::SecretFileReadFailed {
+                    path: path.clone(),
+                    source,
+                }
+            })?)
+        } else if let Some(ref v) = self.value {
             // Value provided as argument
             Some(v.clone())
         } else if has_metadata && self.key_name.is_none() {
@@ -91,18 +157,24 @@ impl SetCommand {
             Some(value)
         };
 
+        let effective_secret = config.get_secret(&write_profile_stack, &self.key)?.cloned();
+        let existing_secret = effective_secret
+            .as_ref()
+            .filter(|secret| secret_belongs_to_target(secret, &target_path, &write_profile))
+            .cloned();
+
         // Determine which provider to use
         let provider_name_to_use = if let Some(ref provider_name) = self.provider {
             Some(provider_name.clone())
-        } else if let Some(existing) = config
-            .get_secret(&profile, &self.key)
+        } else if let Some(existing) = effective_secret
+            .as_ref()
             .and_then(|s| s.provider().map(str::to_string))
         {
             Some(existing)
         } else {
             // Try to use default provider if available, but it's OK if there isn't one
             // (will store as plaintext)
-            config.get_default_provider(&profile)?
+            config.get_default_provider(&write_profile_stack)?
         };
 
         // Check if secret should be base64 encoded
@@ -118,12 +190,12 @@ impl SetCommand {
         let (encrypted_value, remote_key_name) = if let Some(ref value) = secret_value {
             if let Some(ref provider_name) = provider_name_to_use {
                 // Get the provider config
-                let providers = config.get_providers(&profile);
+                let providers = config.get_providers(&write_profile_stack)?;
                 if let Some(provider_config) = providers.get(provider_name) {
                     // Get the provider (resolving any secret refs) and check its capabilities
                     let provider = crate::providers::get_provider_resolved(
                         &config,
-                        &profile,
+                        &write_profile_stack,
                         provider_name,
                         provider_config,
                     )
@@ -165,13 +237,18 @@ impl SetCommand {
                             provider_name
                         );
 
+                        let key_name = resolve_remote_key_name(
+                            &self.key,
+                            self.key_name.as_deref(),
+                            existing_secret.as_ref(),
+                            provider_name,
+                        );
+
                         if self.dry_run {
                             // In dry-run mode, skip actual remote storage
-                            let key_name = self.key_name.as_deref().unwrap_or(&self.key);
                             (None, Some(key_name.to_string()))
                         } else {
                             // Use the already-resolved provider to store the secret
-                            let key_name = self.key_name.as_deref().unwrap_or(&self.key);
                             let stored_key = provider.put_secret(key_name, value).await?;
 
                             // Store just the key name (without prefix) in config
@@ -197,11 +274,18 @@ impl SetCommand {
 
         // Now update the config — use the resolved write_profile, not the
         // full stack, so the secret lands in the correct TOML section.
-        let write_profile_stack = vec![write_profile.clone()];
         let profile_secrets = config.get_secrets_mut(&write_profile_stack);
 
-        // Get or create the secret config
-        let secret_config = profile_secrets.entry(self.key.clone()).or_default();
+        // A metadata-only update to an inherited secret creates a local
+        // override. Seed it from the effective secret so the override retains
+        // the inherited value/provider instead of shadowing it with an empty
+        // entry.
+        let inherited_secret = (secret_value.is_none() && existing_secret.is_none())
+            .then(|| effective_secret.clone())
+            .flatten();
+        let secret_config = profile_secrets
+            .entry(self.key.clone())
+            .or_insert_with(|| inherited_secret.unwrap_or_default());
 
         // Update metadata
         if let Some(ref desc) = self.description {
@@ -247,11 +331,9 @@ impl SetCommand {
         let _ = profile_secrets; // Release the mutable borrow
 
         // Save the secret to the appropriate config file
-        let target_path = if self.global {
-            // Save to global config
-            let global_path = Config::global_config_path();
+        if self.global {
             // Create parent directory if it doesn't exist
-            if let Some(parent) = global_path.parent()
+            if let Some(parent) = target_path.parent()
                 && !self.dry_run
             {
                 std::fs::create_dir_all(parent).map_err(|e| {
@@ -262,19 +344,7 @@ impl SetCommand {
                     ))
                 })?;
             }
-            global_path
-        } else {
-            let current_dir = std::env::current_dir().map_err(|e| {
-                FnoxError::Config(format!("Failed to get current directory: {}", e))
-            })?;
-            // Only use auto-detection when --config is the clap default ("fnox.toml").
-            // Any other value means the user explicitly chose a config file.
-            if cli.config == std::path::Path::new(config::DEFAULT_CONFIG_FILENAME) {
-                config::find_local_config(&current_dir, std::slice::from_ref(&write_profile))
-            } else {
-                current_dir.join(&cli.config)
-            }
-        };
+        }
 
         if self.dry_run {
             // Show what would be done
@@ -341,5 +411,73 @@ impl SetCommand {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn secret(provider: &str, value: &str) -> config::SecretConfig {
+        let mut secret = config::SecretConfig::default();
+        secret.set_provider(Some(provider.to_string()));
+        secret.set_value(Some(value.to_string()));
+        secret
+    }
+
+    #[test]
+    fn remote_key_name_prefers_explicit_key_name() {
+        let existing = secret("gcp", "existing-name");
+
+        assert_eq!(
+            resolve_remote_key_name("ENV_NAME", Some("explicit-name"), Some(&existing), "gcp"),
+            "explicit-name"
+        );
+    }
+
+    #[test]
+    fn remote_key_name_reuses_existing_value_for_same_provider() {
+        let existing = secret("gcp", "existing-name");
+
+        assert_eq!(
+            resolve_remote_key_name("ENV_NAME", None, Some(&existing), "gcp"),
+            "existing-name"
+        );
+    }
+
+    #[test]
+    fn remote_key_name_uses_env_key_when_switching_providers() {
+        let existing = secret("aws", "existing-name");
+
+        assert_eq!(
+            resolve_remote_key_name("ENV_NAME", None, Some(&existing), "gcp"),
+            "ENV_NAME"
+        );
+    }
+
+    #[test]
+    fn inherited_secret_does_not_supply_remote_key_name() {
+        let mut existing = secret("gcp", "shared-name");
+        existing.source_path = Some("/parent/fnox.toml".into());
+
+        assert!(!secret_belongs_to_target(
+            &existing,
+            Path::new("/child/fnox.toml"),
+            "default"
+        ));
+    }
+
+    #[test]
+    fn profile_file_secret_belongs_to_named_profile_target() {
+        let mut existing = secret("plain", "value");
+        existing.source_path = Some("/project/fnox.app.toml".into());
+        existing.source_is_profile = true;
+        existing.source_profile = Some("app".to_string());
+
+        assert!(secret_belongs_to_target(
+            &existing,
+            Path::new("/project/fnox.app.toml"),
+            "app"
+        ));
     }
 }

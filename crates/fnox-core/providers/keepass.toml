@@ -7,7 +7,7 @@ description = "Local KeePass database (.kdbx)"
 default_name = "keepass"
 setup_instructions = """
 Requires a KeePass database file (.kdbx).
-Set password via FNOX_KEEPASS_PASSWORD or KEEPASS_PASSWORD env var."""
+Enter the database password when prompted, or set FNOX_KEEPASS_PASSWORD or KEEPASS_PASSWORD."""
 
 [fields.database]
 type = "required"

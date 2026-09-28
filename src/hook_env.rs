@@ -37,6 +37,12 @@ pub struct HookEnvSession {
     /// Paths to temporary files for file-based secrets (key -> file_path)
     #[serde(default)]
     pub temp_files: HashMap<String, String>,
+    /// Temp directory used to create file-based secrets
+    #[serde(default)]
+    pub hook_temp_dir: Option<PathBuf>,
+    /// Retry incomplete loads even when config and environment are unchanged.
+    #[serde(default)]
+    pub needs_retry: bool,
 }
 
 /// Global previous session state, loaded from __FNOX_SESSION env var
@@ -98,6 +104,9 @@ impl HookEnvSession {
             .iter()
             .map(|(k, v)| (k.clone(), hash_secret_with_key(&hash_key, k, v)))
             .collect();
+        let hook_temp_dir = temp_files
+            .values()
+            .find_map(|path| Path::new(path).parent().map(Path::to_path_buf));
 
         Ok(Self {
             dir,
@@ -108,6 +117,8 @@ impl HookEnvSession {
             env_var_hash,
             config_files_hash,
             temp_files,
+            hook_temp_dir,
+            needs_retry: false,
         })
     }
 
@@ -144,12 +155,50 @@ pub fn hash_secret_value_with_session(session: &HookEnvSession, key: &str, value
     hash_secret_with_key(&session.hash_key, key, value)
 }
 
+/// Whether `fnox hook-env` can finish before the CLI starts up.
+///
+/// The shell hooks run `fnox hook-env -s <shell>` before every prompt, and
+/// nearly every time nothing has changed. Starting the async runtime (a worker
+/// thread per core), parsing the command line and setting up logging cost more
+/// than [`should_exit_early`] itself, so `main` asks this first. It only answers
+/// for the command line the hooks run, with a supported shell, and leaves debug
+/// output (`FNOX_SHELL_OUTPUT=debug`, `RUST_LOG`) to the normal path, which
+/// reports why it exited.
+pub fn can_exit_before_startup(args: &[std::ffi::OsString]) -> bool {
+    let shell_output = crate::env::var("FNOX_SHELL_OUTPUT").ok();
+    let rust_log = crate::env::var_os("RUST_LOG").is_some();
+    startup_exit_allowed(args, shell_output.as_deref(), rust_log) && should_exit_early()
+}
+
+/// The part of [`can_exit_before_startup`] decided by the command line and the
+/// output settings alone, before looking at the session.
+fn startup_exit_allowed(
+    args: &[std::ffi::OsString],
+    shell_output: Option<&str>,
+    rust_log: bool,
+) -> bool {
+    let shell = match args {
+        [command, flag, shell] if command == "hook-env" && (flag == "-s" || flag == "--shell") => {
+            shell
+        }
+        _ => return false,
+    };
+    if shell
+        .to_str()
+        .is_none_or(|shell| crate::shell::get_shell(Some(shell)).is_err())
+    {
+        return false;
+    }
+    let debug_output = shell_output
+        .is_some_and(|mode| matches!(mode.to_lowercase().as_str(), "debug" | "verbose"));
+    !debug_output && !rust_log
+}
+
 /// Check if we should exit early (optimization)
 /// Returns true if nothing changed and we can skip work
 pub fn should_exit_early() -> bool {
-    // Check if directory changed
-    if has_directory_changed() {
-        tracing::debug!("directory changed, must run hook-env");
+    if PREV_SESSION.needs_retry {
+        tracing::debug!("previous secret load was incomplete, must run hook-env");
         return false;
     }
 
@@ -167,12 +216,6 @@ pub fn should_exit_early() -> bool {
 
     tracing::debug!("no changes detected, exiting early");
     true
-}
-
-/// Check if current directory is different from previous session
-fn has_directory_changed() -> bool {
-    let current_dir = std::env::current_dir().ok();
-    PREV_SESSION.dir != current_dir
 }
 
 /// Check if any config files in the hierarchy have been modified since last run
@@ -313,4 +356,70 @@ pub fn find_config() -> Option<PathBuf> {
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::startup_exit_allowed;
+    use std::ffi::OsString;
+
+    fn args(values: &[&str]) -> Vec<OsString> {
+        values.iter().map(OsString::from).collect()
+    }
+
+    #[test]
+    fn startup_exit_answers_the_shell_hook_command_lines() {
+        for shell in ["bash", "zsh", "fish", "nu", "pwsh"] {
+            assert!(startup_exit_allowed(
+                &args(&["hook-env", "-s", shell]),
+                None,
+                false
+            ));
+            assert!(startup_exit_allowed(
+                &args(&["hook-env", "--shell", shell]),
+                Some("normal"),
+                false
+            ));
+        }
+        assert!(startup_exit_allowed(
+            &args(&["hook-env", "-s", "bash"]),
+            Some("none"),
+            false
+        ));
+    }
+
+    #[test]
+    fn startup_exit_leaves_other_command_lines_to_the_cli() {
+        assert!(!startup_exit_allowed(&args(&[]), None, false));
+        assert!(!startup_exit_allowed(&args(&["hook-env"]), None, false));
+        assert!(!startup_exit_allowed(
+            &args(&["get", "-s", "bash"]),
+            None,
+            false
+        ));
+        assert!(!startup_exit_allowed(
+            &args(&["hook-env", "-s", "bash", "--verbose"]),
+            None,
+            false
+        ));
+        assert!(!startup_exit_allowed(
+            &args(&["hook-env", "--shell=bash"]),
+            None,
+            false
+        ));
+        // An unsupported shell reports its error through the normal path.
+        assert!(!startup_exit_allowed(
+            &args(&["hook-env", "-s", "tcsh"]),
+            None,
+            false
+        ));
+    }
+
+    #[test]
+    fn startup_exit_leaves_debug_output_to_the_cli() {
+        let hook = args(&["hook-env", "-s", "bash"]);
+        assert!(!startup_exit_allowed(&hook, Some("debug"), false));
+        assert!(!startup_exit_allowed(&hook, Some("VERBOSE"), false));
+        assert!(!startup_exit_allowed(&hook, None, true));
+    }
 }

@@ -3,7 +3,6 @@ use crate::config::Config;
 use crate::hook_env::PREV_SESSION;
 use crate::shell;
 use anyhow::Result;
-use clap::Parser;
 
 /// Disable fnox shell integration in the current shell session
 ///
@@ -13,9 +12,9 @@ use clap::Parser;
 ///
 /// Note: This only affects the current shell session. To re-enable fnox,
 /// run the activation command again for your shell.
-#[derive(Debug, Clone, Parser)]
-#[clap(verbatim_doc_comment)]
-pub struct DeactivateCommand {}
+#[derive(Debug, Clone, usage_rs::Args)]
+#[usage(verbatim_doc_comment)]
+pub struct DeactivateCommand;
 
 impl DeactivateCommand {
     pub async fn run(&self, _cli: &Cli, _config: Config) -> Result<()> {
@@ -28,6 +27,10 @@ impl DeactivateCommand {
         }
 
         let shell = shell::get_shell(None)?;
+
+        // Persistent as_file secrets outlive the hook-env process. Remove the
+        // files before the shell discards __FNOX_SESSION, which owns their paths.
+        super::hook_env::cleanup_session_temp_files()?;
 
         // Generate deactivation output via the shell's trait method.
         // Eval-based shells produce shell code; structured shells (nushell)

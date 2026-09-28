@@ -193,7 +193,7 @@ pub fn resolve_provider_ref_with_identity_cycle_guard<'a>(
             return Ok(None);
         };
 
-        let providers = config.get_providers(profile);
+        let providers = config.get_providers(profile)?;
         let Some(provider_config) = providers.get(&provider_ref.provider) else {
             let available_providers: Vec<_> = providers.keys().map(|s| s.as_str()).collect();
             let similar = find_similar(&provider_ref.provider, available_providers);
@@ -248,7 +248,7 @@ fn resolve_secret_ref<'a>(
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send + 'a>> {
     Box::pin(async move {
         // First, try to find the secret in config
-        let secrets = config.get_secrets(profile).unwrap_or_default();
+        let secrets = config.get_secrets(profile)?;
 
         if let Some(secret_config) = secrets.get(secret_name) {
             // Secret found in config - resolve it
@@ -256,7 +256,7 @@ fn resolve_secret_ref<'a>(
                 && let Some(provider_value) = secret_config.value()
             {
                 // This secret uses a provider - need to resolve that provider first
-                let providers = config.get_providers(profile);
+                let providers = config.get_providers(profile)?;
                 if let Some(secret_provider_config) = providers.get(secret_provider_name) {
                     if env::is_non_interactive()
                         && secret_provider_config.requires_interactive_auth()
@@ -354,5 +354,34 @@ mod tests {
         ctx.push("c");
 
         assert_eq!(ctx.path_string(), "a -> b -> c");
+    }
+
+    #[tokio::test]
+    async fn secret_ref_propagates_profile_inheritance_errors() {
+        let config: Config = toml_edit::de::from_str(
+            r#"
+[profiles.a]
+inherits = ["b"]
+
+[profiles.b]
+inherits = ["a"]
+"#,
+        )
+        .unwrap();
+        let mut ctx = ResolutionContext::new();
+
+        let error = resolve_secret_ref(
+            &config,
+            &["a".to_string()],
+            "provider",
+            "FNOX_CYCLE_TEST_SECRET",
+            &mut ctx,
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            FnoxError::ProfileInheritanceCycle { cycle } if cycle == "a -> b -> a"
+        ));
     }
 }

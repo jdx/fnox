@@ -28,7 +28,7 @@ base64 = { workspace = true }
 blake3 = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
-clap = { workspace = true }
+usage-rs = { workspace = true }
 demand = { workspace = true }
 dirs = { workspace = true }
 futures = { workspace = true }
@@ -40,6 +40,7 @@ hkdf = { workspace = true }
 indexmap = { workspace = true }
 jsonwebtoken = { workspace = true }
 keepass = { workspace = true }
+keeper-secrets-manager-core = { workspace = true }
 keyring-core = { workspace = true }
 libloading = { workspace = true }
 miette = { workspace = true }
@@ -47,6 +48,7 @@ pluralizer = { workspace = true }
 rand = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
+rpassword = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

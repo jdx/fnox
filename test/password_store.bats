@@ -202,7 +202,8 @@ EOF
 	# Try to get non-existent secret
 	run "$FNOX_BIN" get NONEXISTENT
 	assert_failure
-	assert_output --partial "password-store CLI command failed"
+	assert_output --partial "password-store: secret"
+	assert_output --partial "not found"
 }
 
 @test "fnox set with special characters" {

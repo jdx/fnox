@@ -2,13 +2,20 @@
 
 ## Conventional Commits
 
-Format: `<type>(<scope>): <description>` (lowercase, imperative mood)
+PR titles must use `<type>[optional scope][optional !]: <description>`. Intermediate commit
+subjects should use the same format. Start the description with a lowercase
+character or an acronym such as `CLI`, and use imperative mood.
 
-**Types:** `feat`, `fix`, `refactor`, `docs`, `style`, `perf`, `test`, `chore`, `security`
+**Types:** `feat`, `fix`, `refactor`, `docs`, `style`, `perf`, `test`, `chore`, `ci`, `revert`, `security`
 
 **Scopes:** command names (`get`, `set`, `exec`, `list`, `provider`), provider names (`age`, `1password`, `bitwarden`, `bitwarden-sm`, `aws-kms`, `aws-sm`, `aws-ps`, `keychain`, `keepass`, `infisical`, `passwordstate`, `pass`, `proton-pass`), subsystems (`config`, `encryption`, `env`, `deps`)
 
 Examples: `fix(aws-sm): handle pagination for large secret lists`, `feat(exec): add --no-inherit flag`
+
+CI validates the pull request title and re-runs when it is edited. Intermediate
+commit subjects are not checked because pull requests are squash-merged. CI
+mechanically checks the allowed type, syntax, and lowercase- or acronym-leading description;
+imperative mood remains a review rule.
 
 ## Minimum Supported Rust Version (MSRV)
 
@@ -24,13 +31,19 @@ will fail), pin that dependency to its last MSRV-compatible version instead.
 `.cargo/config.toml` sets `resolver.incompatible-rust-versions = "fallback"` so
 `cargo update`/`cargo add` prefer MSRV-compatible versions automatically.
 
+## Dependency Updates
+
+- Use the lowest compatibility-significant specificity in `Cargo.toml` (for example, `"1"` for stable 1.x dependencies).
+- When the existing manifest requirement accepts a routine dependency update, change only `Cargo.lock`.
+- Keep lockfile updates focused and avoid unrelated transitive dependency churn.
+
 ## Build & Test
 
 ```bash
 mise run build          # Build (debug mode, never use --release)
 mise run test           # Run all tests (cargo + bats)
 mise run test:cargo     # Cargo tests only
-mise run test:bats      # Bats tests only (depends on build)
+mise run test:bats      # Bats tests only (run build first)
 mise run test:bats -- test/init.bats  # Specific bats test file
 mise run ci             # Full CI: build + test + lint
 mise run lint           # Lint (hk)
@@ -54,12 +67,11 @@ mise run lint-fix       # Auto-fix lint issues
 
 ## Code Organization
 
-```
-src/commands/       # One file per command
-src/providers/      # Implement Provider trait
-src/encryption/     # Encryption methods
-src/config.rs       # Config parsing
-src/env.rs          # Centralized env var handling (LazyLock, FNOX_* prefix)
+```text
+src/commands/                    # One file per command
+crates/fnox-core/src/providers/  # Provider implementations and encryption
+crates/fnox-core/src/config.rs   # Config parsing and layering
+crates/fnox-core/src/env.rs      # Centralized FNOX_* environment handling
 ```
 
 - Use `mod.rs` for module exports
@@ -83,6 +95,8 @@ src/env.rs          # Centralized env var handling (LazyLock, FNOX_* prefix)
 4. `fnox.$FNOX_PROFILE.toml` (profile-specific, if not "default")
 5. `fnox.local.toml` (local overrides, gitignored)
 
+Steps 3-5 apply at each discovered directory, from outermost to innermost. A closer directory overrides its parent, including parent-local values.
+
 An explicit `-c/--config` path skips steps 2-5 (no directory recursion, no local
 overrides) but still loads the global config and the file's own `import`s.
 
@@ -95,7 +109,7 @@ overrides) but still loads the global config and the file's own `import`s.
 
 ## Provider Types
 
-All providers follow the same pattern: config in `fnox.toml` stores references/names, actual secrets live in the provider. See `src/providers/` for implementations.
+Encryption providers store ciphertext in `fnox.toml`; remote and local storage providers store references there. The plain provider returns unencrypted values. See `crates/fnox-core/src/providers/` for implementations and `docs/providers/overview.md` for the complete provider catalog.
 
 | Type                | Config `type`    | Storage                   | Key crate/CLI            |
 | ------------------- | ---------------- | ------------------------- | ------------------------ |
@@ -113,11 +127,54 @@ All providers follow the same pattern: config in `fnox.toml` stores references/n
 | password-store      | `password-store` | GPG files                 | `pass` CLI               |
 | Proton Pass         | `proton-pass`    | Proton Pass vault         | `pass-cli` CLI           |
 
-**Common provider config fields:** `type` (required), `prefix` (optional namespace), `region` (AWS providers). Most providers support `value` as item name, `item/field` for specific fields.
+**Provider fields:** `type` is required. Fields such as `prefix`, `region`, and `vault` depend on the provider type; use its schema and guide for supported fields and reference formats.
+
+## PR titles and descriptions are release-note inputs
+
+PR titles and descriptions are source material for release notes, including those
+generated by Communique. Write them for a fnox user who has not read the diff
+or this conversation.
+
+- **Describe the final result.** Before requesting review and again after feedback
+  changes the implementation, compare the title and body with the complete current
+  diff. Rewrite both when the scope changes. Remove abandoned approaches, stale
+  requirements, and claims that the final code or validation no longer supports.
+- **Lead with the user-visible change.** Keep the conventional commit format, but
+  name the affected behavior and outcome in the title. Open the body with the
+  problem or use case and what users can now do. Avoid titles such as "address
+  feedback" or "fix CI" when the PR's actual purpose is a feature or behavior fix.
+  For internal-only work, explain the concrete maintainer or contributor benefit
+  without inventing a user-facing impact.
+- **Make the change concrete.** For new configuration, commands, or APIs, include
+  a small, valid example and explain its result. For a bug fix, describe the trigger
+  and before/after behavior. For visible UI or output changes, include actual
+  before/after screenshots or a short recording when they help reviewers assess the
+  change; CLI input/output snippets are often clearer than terminal screenshots.
+  Use measured results for performance claims and state how they were measured.
+- **Keep the essential facts in text.** Caption screenshots and explain examples.
+  A reader or release-note generator should understand the change without opening
+  an image, following an external link, or reading the diff. Do not fabricate
+  screenshots, output, measurements, or validation results.
+- **State adoption details when relevant.** Include new flags or settings, defaults,
+  supported platforms, experimental status, required dependency versions, and any
+  compatibility changes or migration steps that affect using the feature. Distinguish
+  current behavior from planned follow-ups; do not advertise unfinished work.
+- **Keep review details proportionate.** Summarize meaningful validation and its
+  limitations. Include implementation details only when they explain behavior or a
+  tradeoff reviewers need to assess. Omit agent work logs, intermediate commit
+  summaries, and exhaustive test-command lists. A small fix can be a short paragraph
+  and a test result; screenshots and sections are not mandatory for every PR.
+
+For a hypothetical fix, prefer `fix(get): resolve secrets from the selected profile`
+over `fix: address review feedback`. Its description should show a profile selection that previously returned the wrong secret and describe the corrected lookup; use redacted output.
+These rules supplement the repository's existing commit, release, and disclosure
+requirements.
 
 ## GitHub Interactions
 
-Pull request titles must follow the same Conventional Commit format as commits: `<type>(<scope>): <description>` in lowercase imperative mood. Do not prefix PR titles with agent/tool labels such as `[codex]` or `[claude]`.
+Pull request titles must follow the same Conventional Commit format as commits: `<type>[optional scope][optional !]: <description>` in imperative mood, starting lowercase or with an acronym such as `CLI`. Do not prefix PR titles with agent/tool labels such as `[codex]` or `[claude]`.
+
+Do not modify version numbers or changelogs in non-release pull requests.
 
 When AI contributes GitHub content—including a pull request description, review, pull request
 comment, or discussion post—append this disclosure:

@@ -1,7 +1,6 @@
 use crate::commands::Cli;
 use crate::config::{self, Config};
 use crate::error::{FnoxError, Result};
-use clap::{Args, ValueEnum};
 use console;
 use indexmap::IndexMap;
 use miette::{NamedSource, SourceSpan};
@@ -12,7 +11,7 @@ use std::{collections::HashMap, path::PathBuf};
 use strum::{Display, EnumString, VariantNames};
 
 /// Supported import formats
-#[derive(Debug, Clone, Copy, ValueEnum, Display, EnumString, VariantNames)]
+#[derive(Debug, Clone, Copy, usage_rs::ValueEnum, Display, EnumString, VariantNames)]
 #[strum(serialize_all = "lowercase")]
 pub enum ImportFormat {
     /// Environment variable format (KEY=value)
@@ -26,39 +25,39 @@ pub enum ImportFormat {
 }
 
 /// Import secrets from various sources
-#[derive(Args)]
-#[command(visible_aliases = ["im"])]
+#[derive(usage_rs::Args)]
+#[usage(alias("im"))]
 pub struct ImportCommand {
     /// Import source format
-    #[arg(default_value = "env", value_enum)]
+    #[usage(arg, default = "env", value_enum)]
     format: ImportFormat,
 
     /// Skip confirmation prompts
-    #[arg(short, long)]
+    #[usage(short, long)]
     force: bool,
 
     /// Import to the global config file (~/.config/fnox/config.toml)
-    #[arg(short = 'g', long)]
+    #[usage(short = 'g', long)]
     global: bool,
 
     /// Source file or path to import from (default: stdin)
-    #[arg(short = 'i', long)]
+    #[usage(short = 'i', long)]
     input: Option<PathBuf>,
 
     /// Show what would be imported without making changes
-    #[arg(short = 'n', long)]
+    #[usage(short = 'n', long)]
     dry_run: bool,
 
     /// Provider to use for encrypting/storing imported secrets (required)
-    #[arg(short = 'p', long)]
+    #[usage(short = 'p', long)]
     provider: String,
 
     /// Only import matching secrets (regex pattern)
-    #[arg(long)]
+    #[usage(long)]
     filter: Option<String>,
 
     /// Prefix to add to imported secret names
-    #[arg(long)]
+    #[usage(long)]
     prefix: Option<String>,
 }
 
@@ -101,13 +100,22 @@ impl ImportCommand {
             secrets = prefixed_secrets;
         }
 
+        // Reject names after filtering and prefixing, before provider lookup or
+        // encryption can perform any side effects. Otherwise import could
+        // persist a config that fails as soon as secrets are resolved.
+        let mut secret_names = secrets.keys().collect::<Vec<_>>();
+        secret_names.sort_unstable();
+        for key in secret_names {
+            config::validate_secret_name(key)?;
+        }
+
         if secrets.is_empty() {
             println!("No secrets to import");
             return Ok(());
         }
 
         // Verify provider exists (use merged config to find providers from any source)
-        let providers = merged_config.get_providers(&profile);
+        let providers = merged_config.get_providers(&profile)?;
         let provider_config =
             providers
                 .get(&self.provider)
@@ -302,20 +310,33 @@ impl ImportCommand {
 
     fn parse_env(&self, input: &str) -> Result<HashMap<String, String>> {
         let mut secrets = HashMap::new();
+        let mut lines = input.lines();
 
-        for line in input.lines() {
-            let line = line.trim();
+        while let Some(line) = lines.next() {
+            let mut line = line.trim_start().to_string();
 
             // Skip empty lines and comments
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
 
+            // Docker Compose permits literal newlines inside single-quoted
+            // dotenv values. Reassemble them before parsing the assignment.
+            while has_unclosed_single_quoted_value(&line) {
+                let Some(next_line) = lines.next() else {
+                    return Err(FnoxError::Config(
+                        "Unterminated single-quoted ENV value".to_string(),
+                    ));
+                };
+                line.push('\n');
+                line.push_str(next_line);
+            }
+
             // Parse export statements and simple KEY=VALUE
             if let Some(export_key_value) = line.strip_prefix("export ") {
                 self.parse_key_value(export_key_value, &mut secrets)?;
             } else {
-                self.parse_key_value(line, &mut secrets)?;
+                self.parse_key_value(&line, &mut secrets)?;
             }
         }
 
@@ -333,7 +354,7 @@ impl ImportCommand {
                 unescape_double_quoted_env_value(inner)
             } else if let Some(inner) = value.strip_prefix('\'').and_then(|v| v.strip_suffix('\''))
             {
-                inner.to_string()
+                unescape_single_quoted_env_value(inner)
             } else {
                 value.to_string()
             };
@@ -478,6 +499,25 @@ impl ImportCommand {
     }
 }
 
+fn has_unclosed_single_quoted_value(line: &str) -> bool {
+    let line = line.strip_prefix("export ").unwrap_or(line);
+    let Some((_, value)) = line.split_once('=') else {
+        return false;
+    };
+    let Some(value) = value.trim_start().strip_prefix('\'') else {
+        return false;
+    };
+
+    let mut escaped = false;
+    for c in value.chars() {
+        if c == '\'' && !escaped {
+            return false;
+        }
+        escaped = c == '\\' && !escaped;
+    }
+    true
+}
+
 fn unescape_double_quoted_env_value(value: &str) -> String {
     let mut unescaped = String::with_capacity(value.len());
     let mut chars = value.chars();
@@ -491,6 +531,7 @@ fn unescape_double_quoted_env_value(value: &str) -> String {
         match chars.next() {
             Some('\\') => unescaped.push('\\'),
             Some('"') => unescaped.push('"'),
+            Some('$') => unescaped.push('$'),
             Some('n') => unescaped.push('\n'),
             Some('r') => unescaped.push('\r'),
             Some('t') => unescaped.push('\t'),
@@ -505,9 +546,57 @@ fn unescape_double_quoted_env_value(value: &str) -> String {
     unescaped
 }
 
+fn unescape_single_quoted_env_value(value: &str) -> String {
+    value.replace("\\'", "'")
+}
+
 #[cfg(test)]
 mod tests {
-    use super::unescape_double_quoted_env_value;
+    use super::{
+        ImportCommand, ImportFormat, has_unclosed_single_quoted_value,
+        unescape_double_quoted_env_value, unescape_single_quoted_env_value,
+    };
+
+    fn import_command() -> ImportCommand {
+        ImportCommand {
+            format: ImportFormat::Env,
+            force: true,
+            global: false,
+            input: None,
+            dry_run: false,
+            provider: String::new(),
+            filter: None,
+            prefix: None,
+        }
+    }
+
+    #[test]
+    fn detects_multiline_single_quoted_values() {
+        assert!(has_unclosed_single_quoted_value("VALUE='first"));
+        assert!(has_unclosed_single_quoted_value("VALUE='it\\'s first"));
+        assert!(!has_unclosed_single_quoted_value("VALUE='first'"));
+        assert!(!has_unclosed_single_quoted_value("VALUE=first"));
+    }
+
+    #[test]
+    fn parse_env_preserves_multiline_spaces_and_double_quoted_fallbacks() {
+        let secrets = import_command()
+            .parse_env("SPACES='first  \nsecond'\nFALLBACK=\"prefix\\\\'\\$value\\ncontinuation\"")
+            .unwrap();
+
+        assert_eq!(secrets["SPACES"], "first  \nsecond");
+        assert_eq!(secrets["FALLBACK"], "prefix\\'$value\ncontinuation");
+    }
+
+    #[test]
+    fn parse_env_rejects_unterminated_single_quoted_values() {
+        let error = import_command().parse_env("KEY='secret").unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "Configuration error: Unterminated single-quoted ENV value"
+        );
+    }
 
     #[test]
     fn unescape_double_quoted_env_value_handles_export_escapes() {
@@ -515,13 +604,26 @@ mod tests {
             unescape_double_quoted_env_value(r#"line1\nline2\t\"quoted\"\\path"#),
             "line1\nline2\t\"quoted\"\\path"
         );
+        assert_eq!(
+            unescape_double_quoted_env_value(r"secret\$value\\"),
+            "secret$value\\"
+        );
+        assert_eq!(
+            unescape_double_quoted_env_value("secret$$value"),
+            "secret$$value"
+        );
     }
 
     #[test]
     fn unescape_double_quoted_env_value_preserves_unknown_escapes() {
         assert_eq!(
             unescape_double_quoted_env_value(r#"secret\$value\`tick"#),
-            r#"secret\$value\`tick"#
+            r#"secret$value\`tick"#
         );
+    }
+
+    #[test]
+    fn unescape_single_quoted_env_value_handles_apostrophes() {
+        assert_eq!(unescape_single_quoted_env_value(r"it\'s $5"), "it's $5");
     }
 }

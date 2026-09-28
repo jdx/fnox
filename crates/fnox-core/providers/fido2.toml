@@ -12,7 +12,7 @@ default_name = "fido2"
 setup_instructions = """
 FIDO2 provider uses the hmac-secret extension to derive an encryption key.
 Secrets are encrypted with AES-256-GCM — decryption requires the same FIDO2 key.
-Run: fnox provider add --type fido2"""
+Run: fnox provider add <name> fido2"""
 
 [fields.credential_id]
 type = "required"

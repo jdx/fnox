@@ -1,10 +1,17 @@
-use clap::Parser;
 use fnox::commands::Cli;
 use fnox::settings;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+fn main() -> miette::Result<()> {
+    let argv: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+    if fnox::hook_env::can_exit_before_startup(&argv) {
+        return Ok(());
+    }
+    run(argv)
+}
+
 #[tokio::main]
-async fn main() -> miette::Result<()> {
+async fn run(argv: Vec<std::ffi::OsString>) -> miette::Result<()> {
     // Restore the default SIGPIPE handler. Rust inherits SIG_IGN from libc,
     // so writes to a closed pipe return EPIPE and `println!` panics — e.g.
     // `fnox get FOO | head -c 0` would crash with "failed printing to stdout".
@@ -23,18 +30,22 @@ async fn main() -> miette::Result<()> {
 
     miette::set_panic_hook();
 
+    if let Some(answer) = fnox::commands::completion_app()
+        .completion_request(&argv)
+        .await
+    {
+        print!("{answer}");
+        return Ok(());
+    }
+
     // Initialize rustls crypto provider for GCP SDKs
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
 
-    let cli = Cli::parse();
+    let (cli, settings_layer) = Cli::parse_with_settings();
 
-    // Set CLI snapshot for settings system
-    settings::Settings::set_cli_snapshot(settings::CliSnapshot {
-        age_key_file: cli.age_key_file.clone(),
-        profile: cli.profile.clone(),
-        if_missing: cli.if_missing.clone(),
-        no_defaults: cli.no_defaults,
-    });
+    // Hand the settings system the command line as the parser saw it: what was given
+    // contributes, what was left off does not, and nothing here copies fields by hand.
+    settings::Settings::set_cli_layer(settings_layer);
     fnox::env::set_non_interactive(cli.non_interactive);
 
     // Handle --no-color flag

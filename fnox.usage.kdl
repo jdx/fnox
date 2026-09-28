@@ -1,17 +1,18 @@
 min_usage_version "1.3"
 name fnox
 bin fnox
-version "1.31.1"
+version "1.36.0"
 about "A flexible secret management tool by @jdx"
-usage "Usage: fnox [OPTIONS] <COMMAND>"
+unknown_flags error
+subcommand_required #true
 flag "-c --config" help="Path to the configuration file (default: fnox.toml, searches parent directories)" global=#true default=fnox.toml {
     arg <CONFIG>
 }
-flag "-P --profile" help="Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones" var=#true global=#true {
+flag "-P --profile" help="Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones." global=#true var=#true {
     arg <PROFILE>
 }
 flag "-v --verbose" help="Enable verbose logging" global=#true
-flag --age-key-file help="Path to age key file for decryption (deprecated: use provider config instead)" hide=#true global=#true {
+flag --age-key-file help="Path to age key file for decryption (deprecated: use provider config instead)" global=#true hide=#true {
     arg <AGE_KEY_FILE>
 }
 flag --if-missing help="What to do if a secret is missing (error, warn, ignore)" global=#true {
@@ -20,64 +21,111 @@ flag --if-missing help="What to do if a secret is missing (error, warn, ignore)"
 flag --no-color help="Disable colored output" global=#true
 flag --no-daemon help="Disable daemon-backed resolution for this invocation" global=#true
 flag --no-defaults help="Do not merge top-level secrets into the selected profile" global=#true
-flag --non-interactive help="Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)" global=#true
-flag --write-profile help="Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise" global=#true {
+flag --non-interactive help="Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)" global=#true env=FNOX_NON_INTERACTIVE
+flag --write-profile help="Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise." global=#true {
     arg <WRITE_PROFILE>
 }
+flag "-h --help" help="Print help" action=help builtin=#true
+flag "-V --version" help="Print version" action=version builtin=#true
 cmd activate help="Output shell activation code to enable automatic secret loading" {
     flag --no-hook-env help="Don't automatically invoke hook-env (for testing)"
-    arg "[SHELL]" help="Shell to generate activation code for (bash, zsh, fish, nu, pwsh)" required=#false
+    flag "-h --help" help="Print help" action=help builtin=#true
+    arg "[SHELL]" help="Shell to generate activation code for (bash, zsh, fish, nu, pwsh)"
 }
 cmd check help="Check if all required secrets are defined and configured" {
     alias c
     flag "-a --all" help="Check all secrets including those with if_missing=warn or if_missing=ignore"
+    flag "-h --help" help="Print help" action=help builtin=#true
 }
-cmd ci-redact hide=#true help="Redact secrets in CI/CD output (GitHub Actions mask)"
+cmd ci-redact help="Redact secrets in CI/CD output (GitHub Actions mask)" hide=#true {
+    flag "-h --help" help="Print help" action=help builtin=#true
+}
 cmd completion help="Generate shell completions" {
-    alias complete completions hide=#true
+    alias complete hide=#true
+    alias completions hide=#true
+    flag "-h --help" help="Print help" action=help builtin=#true
     arg <SHELL> help="Shell type to generate completions for"
 }
-cmd config-files help="List all config files that would be loaded"
-cmd daemon subcommand_required=#true help="Manage the per-user daemon" {
-    cmd clear help="Clear all running daemon caches"
-    cmd serve hide=#true help="Run the daemon server in the foreground"
-    cmd start help="Start the per-user daemon in the background"
-    cmd status help="Show daemon status"
-    cmd stop help="Stop the daemon"
+cmd config-files help="List all config files that would be loaded" {
+    flag "-h --help" help="Print help" action=help builtin=#true
 }
-cmd deactivate help="Disable fnox shell integration in the current shell session"
+cmd daemon help="Manage the per-user daemon" subcommand_required=#true {
+    flag "-h --help" help="Print help" action=help builtin=#true
+    cmd clear help="Clear the caches of all running daemons" {
+        flag "-h --help" help="Print help" action=help builtin=#true
+    }
+    cmd serve help="Run the daemon server in the foreground" hide=#true {
+        flag "-h --help" help="Print help" action=help builtin=#true
+    }
+    cmd start help="Start the per-user daemon in the background" {
+        flag "-h --help" help="Print help" action=help builtin=#true
+    }
+    cmd status help="Show daemon status" {
+        flag "-h --help" help="Print help" action=help builtin=#true
+    }
+    cmd stop help="Stop the daemon" {
+        flag "-h --help" help="Print help" action=help builtin=#true
+    }
+}
+cmd deactivate help="Disable fnox shell integration in the current shell session" {
+    long_help #"""
+Disable fnox shell integration in the current shell session
+
+This removes the hook that automatically loads secrets when entering
+directories with fnox.toml files. It also restores environment variables
+to their state before fnox was activated.
+
+Note: This only affects the current shell session. To re-enable fnox,
+run the activation command again for your shell.
+"""#
+    flag "-h --help" help="Print help" action=help builtin=#true
+}
 cmd doctor help="Show diagnostic information about the current fnox state" {
     alias dr
+    flag "-h --help" help="Print help" action=help builtin=#true
 }
-cmd edit help="Edit the configuration file"
+cmd edit help="Edit the configuration file" {
+    flag "-h --help" help="Print help" action=help builtin=#true
+}
 cmd exec help="Execute a command with secrets as environment variables" {
     alias x
     alias run hide=#true
-    flag --replace help="Run the command in fnox's process, keeping the same PID and receiving signals directly; supports environment-only secrets without leases and does not inherit ambient FNOX_AGE_KEY or FNOX_AGE_KEY_FILE values. Available on Linux, macOS, and other Unix-like systems"
-    arg "[COMMAND]…" help="Command to run" required=#false double_dash=automatic var=#true
+    flag --replace help="Replace the fnox process with the command so it keeps the same PID and receives signals directly. Rejected when the command's environment would carry an as_file secret, or when the profile configures credential leases, since fnox must clean those up after the command exits. Unix only"
+    flag "-h --help" help="Print help" action=help builtin=#true
+    arg "[COMMAND]..." help="Command to run" double_dash=automatic
+    complete command type=command_args
 }
 cmd export help="Export secrets in various formats" {
     alias ex
     flag "-f --format" help="Export format" default=env {
         arg <FORMAT> {
-            choices env shell json yaml toml
+            choices {
+                choice env help="Environment variable format (KEY=value)"
+                choice shell help="POSIX shell format (export KEY=value)"
+                choice json help="JSON format"
+                choice yaml help="YAML format"
+                choice toml help="TOML format"
+            }
         }
     }
-    flag "-n --dry-run" help="Show what would be exported without writing to file"
+    flag "-n --dry-run" help="Show what would be exported without writing to a file"
     flag "-o --output" help="Output file (default: stdout)" {
         arg <OUTPUT>
     }
     flag --all help="Include secrets with env = false or env = \"exec\" (excluded by default)"
     flag --header help="Include metadata comments in env and shell output"
+    flag "-h --help" help="Print help" action=help builtin=#true
 }
 cmd get help="Get a secret value" {
     flag --base64-decode help="Base64 decode the secret"
+    flag "-h --help" help="Print help" action=help builtin=#true
     arg <KEY> help="Secret key to retrieve"
 }
-cmd hook-env hide=#true help="Internal command used by shell hooks to load secrets" {
+cmd hook-env help="Internal command used by shell hooks to load secrets" hide=#true {
     flag "-s --shell" help="Shell type (bash, zsh, fish, nu, pwsh)" {
         arg <SHELL>
     }
+    flag "-h --help" help="Print help" action=help builtin=#true
 }
 cmd import help="Import secrets from various sources" {
     alias im
@@ -96,8 +144,14 @@ cmd import help="Import secrets from various sources" {
     flag --prefix help="Prefix to add to imported secret names" {
         arg <PREFIX>
     }
-    arg "[FORMAT]" help="Import source format" required=#false default=env {
-        choices env json yaml toml
+    flag "-h --help" help="Print help" action=help builtin=#true
+    arg "[FORMAT]" help="Import source format" default=env {
+        choices {
+            choice env help="Environment variable format (KEY=value)"
+            choice json help="JSON format"
+            choice yaml help="YAML format"
+            choice toml help="TOML format"
+        }
     }
 }
 cmd init help="Initialize a new fnox configuration file" {
@@ -105,9 +159,13 @@ cmd init help="Initialize a new fnox configuration file" {
     flag "-f --force" help="Overwrite existing configuration file"
     flag "-g --global" help="Initialize the global config file (~/.config/fnox/config.toml)"
     flag --skip-wizard help="Skip the interactive wizard and create a minimal config"
+    flag "-h --help" help="Print help" action=help builtin=#true
 }
 cmd lease help="Manage ephemeral credential leases" {
-    cmd cleanup help="Revoke all expired leases that need manual cleanup"
+    flag "-h --help" help="Print help" action=help builtin=#true
+    cmd cleanup help="Revoke all expired leases that need manual cleanup" {
+        flag "-h --help" help="Print help" action=help builtin=#true
+    }
     cmd create help="Create a short-lived credential lease from a secret" {
         flag "-a --all" help="Create leases for all configured backends"
         flag "-d --duration" help="Lease duration (e.g., \"15m\", \"1h\", \"2h30m\"); overrides config duration" {
@@ -115,69 +173,125 @@ cmd lease help="Manage ephemeral credential leases" {
         }
         flag "-f --format" help="Output format" default=shell {
             arg <FORMAT> {
-                choices shell json env
+                choices {
+                    choice shell
+                    choice json
+                    choice env
+                }
             }
         }
         flag "-i --interactive" help="Prompt interactively for missing credentials"
         flag "-l --label" help="Label for the lease (e.g., session purpose)" default=fnox-lease {
             arg <LABEL>
         }
-        arg "[BACKEND_NAME]" help="Lease backend name (from `[leases.<name>]` config). Creates all backends if omitted" required=#false
+        flag "-h --help" help="Print help" action=help builtin=#true
+        arg "[BACKEND_NAME]" help="Lease backend name (from `[leases.<name>]` config). Creates leases for all configured backends if omitted."
     }
     cmd list help="List tracked leases" {
         flag --active help="Show only active (non-expired, non-revoked) leases"
         flag --expired help="Show only expired leases"
+        flag "-h --help" help="Print help" action=help builtin=#true
     }
     cmd revoke help="Revoke a lease by ID" {
+        flag "-h --help" help="Print help" action=help builtin=#true
         arg <LEASE_ID> help="Lease ID to revoke"
     }
 }
 cmd list help="List all secrets" {
-    alias ls secrets
+    alias ls
+    alias secrets
     flag "-f --full" help="Show full provider keys without truncation"
     flag "-s --sources" help="Show source file paths where secrets are defined"
     flag "-V --values" help="Show secret values (if available)"
     flag --complete help="Output secret keys for shell completion (one per line)" hide=#true
+    flag "-h --help" help="Print help" action=help builtin=#true
 }
-cmd mcp help="Start an MCP server for secret-gated AI agent access"
+cmd mcp help="Start an MCP server that brokers secrets to AI agents" {
+    flag "-h --help" help="Print help" action=help builtin=#true
+}
 cmd profiles help="List available profiles" {
     alias profile hide=#true
     flag --complete help="Output profile names for shell completion (one per line)" hide=#true
+    flag "-h --help" help="Print help" action=help builtin=#true
 }
 cmd provider help="Manage providers (defaults to list)" {
+    flag "-h --help" help="Print help" action=help builtin=#true
     cmd add help="Add a new provider" {
-        alias a set
+        alias a
+        alias set
         flag "-g --global" help="Add to the global config file (~/.config/fnox/config.toml)"
         flag --vault help="Default Proton Pass vault name (only valid with provider type proton-pass)" {
             arg <VAULT>
         }
+        flag "-h --help" help="Print help" action=help builtin=#true
         arg <PROVIDER> help="Provider name"
         arg <PROVIDER_TYPE> help="Provider type" {
-            choices "1password" age aws aws-kms aws-ps azure-ac azure-kms azure-sm gcp gcp-kms fido2 bitwarden doppler foks bitwarden-sm infisical keepass keychain password-store passwordstate plain proton-pass pulumi-esc vault yubikey
+            choices {
+                choice "1password" help="1Password"
+                choice age help="Age encryption"
+                choice aws help="AWS Secrets Manager"
+                choice aws-kms help="AWS KMS"
+                choice aws-ps help="AWS Parameter Store"
+                choice azure-ac help="Azure App Configuration"
+                choice azure-kms help="Azure Key Vault KMS"
+                choice azure-sm help="Azure Key Vault Secrets Manager"
+                choice gcp help="Google Cloud Secret Manager"
+                choice gcp-kms help="Google Cloud KMS"
+                choice fido2 help="FIDO2 hmac-secret hardware-backed encryption"
+                choice bitwarden help="Bitwarden Password Manager"
+                choice doppler help="Doppler secrets manager"
+                choice foks help="FOKS (Federated Open Key Service)"
+                choice bitwarden-sm help="Bitwarden Secrets Manager"
+                choice infisical help=Infisical
+                choice keepass help=KeePass
+                choice keeper-sm help="Keeper Secrets Manager"
+                choice keychain help="OS Keychain"
+                choice password-store help="password-store (pass)"
+                choice passwordstate help="Click Studios Passwordstate"
+                choice plain help="Plain text provider"
+                choice proton-pass help="Proton Pass"
+                choice pulumi-esc help="Pulumi ESC (Environments, Secrets, and Configuration)"
+                choice vault help="HashiCorp Vault"
+                choice yubikey help="YubiKey HMAC-SHA1 hardware-backed encryption"
+            }
         }
     }
     cmd list help="List available providers" {
         alias ls
         flag --complete help="Output provider names for shell completion (one per line)" hide=#true
+        flag "-h --help" help="Print help" action=help builtin=#true
     }
     cmd remove help="Remove a provider" {
-        alias rm delete
+        alias rm
+        alias delete
         flag "-g --global" help="Remove from the global config file (~/.config/fnox/config.toml)"
+        flag "-h --help" help="Print help" action=help builtin=#true
         arg <PROVIDER> help="Provider name"
     }
     cmd test help="Test a provider connection" {
         alias t
         flag "-a --all" help="Test all configured providers"
-        arg "[PROVIDER]" help="Provider name (optional when using --all)" required=#false
+        flag "-h --help" help="Print help" action=help builtin=#true
+        arg "[PROVIDER]" help="Provider name (optional when using --all)"
     }
 }
-cmd proxy subcommand_required=#true help="Broker credentials into destination-scoped HTTPS requests" {
-    cmd rules help="Show the effective credential proxy rules"
+cmd proxy help="Broker credentials into destination-scoped HTTPS requests" subcommand_required=#true {
+    flag "-h --help" help="Print help" action=help builtin=#true
+    cmd rules help="Show the effective credential proxy rules" {
+        flag "-h --help" help="Print help" action=help builtin=#true
+    }
     cmd run help="Run a command with placeholder credentials through the local proxy" {
-        arg "[COMMAND]…" help="Command to run" required=#false double_dash=automatic var=#true
+        flag "-h --help" help="Print help" action=help builtin=#true
+        arg "[COMMAND]..." help="Command to run" double_dash=automatic
+        complete command type=command_args
     }
 }
 cmd reencrypt help="Re-encrypt secrets with current provider configuration" {
+    long_help #"""
+Re-encrypt secrets with current provider configuration
+
+When you add or remove recipients from an encryption provider (e.g. age), existing secrets remain encrypted with the old recipient set. This command decrypts and re-encrypts all matching secrets with the current provider configuration.
+"""#
     flag "-f --force" help="Skip confirmation prompt"
     flag "-n --dry-run" help="Show what would be done without making changes"
     flag "-p --provider" help="Only re-encrypt secrets from this provider" {
@@ -186,12 +300,15 @@ cmd reencrypt help="Re-encrypt secrets with current provider configuration" {
     flag --filter help="Only re-encrypt matching secrets (regex pattern)" {
         arg <FILTER>
     }
-    arg "[KEYS]…" help="Only re-encrypt these specific secret keys" required=#false var=#true
+    flag "-h --help" help="Print help" action=help builtin=#true
+    arg "[KEYS]..." help="Only re-encrypt these specific secret keys"
 }
 cmd remove help="Remove a secret" {
-    alias rm delete
+    alias rm
+    alias delete
     flag "-g --global" help="Remove from the global config file (~/.config/fnox/config.toml)"
     flag "-n --dry-run" help="Show what would be removed without making changes"
+    flag "-h --help" help="Print help" action=help builtin=#true
     arg <KEY> help="Secret key to remove"
 }
 cmd scan help="Scan repository for potential secrets" {
@@ -200,13 +317,20 @@ cmd scan help="Scan repository for potential secrets" {
     }
     flag --format help="Output format" default=human {
         arg <FORMAT> {
-            choices human json
+            choices {
+                choice human
+                choice json
+            }
         }
     }
     flag "-q --quiet" help="Show only files with potential secrets"
-    arg "[DIR]" help="Directory to scan (default: current directory)" required=#false default=.
+    flag "-h --help" help="Print help" action=help builtin=#true
+    arg "[DIR]" help="Directory to scan (default: current directory)" default=.
+    complete dir type=dir
 }
-cmd schema hide=#true help="Generate JSON Schema for fnox configuration"
+cmd schema help="Generate JSON Schema for fnox configuration" hide=#true {
+    flag "-h --help" help="Print help" action=help builtin=#true
+}
 cmd set help="Set a secret value" {
     alias s
     flag "-d --description" help="Description of the secret" {
@@ -217,28 +341,41 @@ cmd set help="Set a secret value" {
         arg <KEY_NAME>
     }
     flag "-n --dry-run" help="Show what would be done without making changes"
-    flag "-p --provider" help="Provider to fetch from" {
+    flag "-p --provider" help="Provider to store the secret in (defaults to its existing provider, then default_provider)" {
         arg <PROVIDER>
     }
     flag --base64-encode help="Base64 encode the secret"
     flag --default help="Default value to use if secret is not found" {
         arg <DEFAULT>
     }
+    flag --from-file help="Read the secret value verbatim from a UTF-8 file" conflicts=VALUE {
+        arg <FROM_FILE>
+    }
     flag --if-missing help="What to do if the secret is missing (error, warn, ignore)" {
         arg <IF_MISSING> {
-            choices error warn ignore
+            choices {
+                choice error
+                choice warn
+                choice ignore
+            }
         }
     }
+    flag "-h --help" help="Print help" action=help builtin=#true
     arg <KEY> help="Secret key (environment variable name)"
-    arg "[VALUE]" help="Secret value to store" help_long=#"""
+    arg "[VALUE]" help="Secret value to store." {
+        long_help #"""
 Secret value to store.
 
 If omitted: reads from stdin when piped (`echo "x" | fnox set KEY`), or prompts interactively with hidden input.
 
 Passing secrets as arguments exposes them in shell history and `ps` output. For sensitive values, prefer stdin or the interactive prompt.
-"""# required=#false
+"""#
+    }
+    complete from_file type=path
 }
-cmd sponsors help="Show the companies sponsoring fnox and the jdx.dev open source tools"
+cmd sponsors help="Show the companies sponsoring fnox and the jdx.dev open source tools" {
+    flag "-h --help" help="Print help" action=help builtin=#true
+}
 cmd sync help="Sync secrets from remote providers to a local encryption provider" {
     flag "-f --force" help="Skip confirmation prompt"
     flag "-g --global" help="Write to global config (~/.config/fnox/config.toml)"
@@ -252,13 +389,61 @@ cmd sync help="Sync secrets from remote providers to a local encryption provider
     flag --filter help="Only sync matching secrets (regex pattern)" {
         arg <FILTER>
     }
-    flag --local-file help="Write sync overrides to the local override file next to the config file"
-    arg "[KEYS]…" help="Only sync these specific secret keys" required=#false var=#true
+    flag --local-file help="Write synced secrets to the local override file next to the config file: fnox.local.toml, or .fnox.local.toml when that file exists or the config is .fnox.toml" conflicts=--global
+    flag "-h --help" help="Print help" action=help builtin=#true
+    arg "[KEYS]..." help="Only sync these specific secret keys"
 }
-cmd tui help="Interactive TUI dashboard for managing secrets"
-cmd usage hide=#true help="Generate usage specification"
+cmd tui help="Interactive TUI dashboard for managing secrets" {
+    flag "-h --help" help="Print help" action=help builtin=#true
+}
+cmd usage help="Generate usage specification" hide=#true {
+    flag "-h --help" help="Print help" action=help builtin=#true
+}
 cmd version help="Show version information" {
     alias v
+    flag "-h --help" help="Print help" action=help builtin=#true
+}
+config {
+    prop "age_key_file" type="option<path>" optional=#true since="0.1.0" help="Path to a file containing the age encryption key." long_help="Path to a file containing the age encryption key.\n\nPrefer setting key_file on the age provider itself, or FNOX_AGE_KEY for inline key content. The --age-key-file flag is deprecated and hidden; the FNOX_AGE_KEY_FILE environment variable remains supported.\n\nPriority (highest to lowest): CLI > Environment > Default" {
+        env "FNOX_AGE_KEY_FILE"
+        cli "--age-key-file"
+        example "fnox get MY_SECRET --age-key-file ~/.age/key.txt"
+        example "FNOX_AGE_KEY_FILE=~/.age/key.txt fnox get MY_SECRET"
+    }
+    prop "profile" type="list<string>" parse="list_by_comma" since="0.1.0" help="Configuration profile to use for secrets retrieval." long_help="Configuration profile to use for secrets retrieval.\n\nProfiles allow you to maintain multiple configurations (e.g., dev, staging, prod) in a single fnox.toml file.\n\nPriority (highest to lowest): CLI > Environment > Default" {
+        default "default"
+        env "FNOX_PROFILE"
+        cli "--profile" "-P"
+        example "fnox get MY_SECRET --profile production"
+        example "FNOX_PROFILE=staging fnox get MY_SECRET"
+    }
+    prop "no_defaults" type="bool" default=#false since="1.12.0" help="When a non-default profile is selected, do not merge top-level [secrets] into the profile. Only [profiles.<name>.secrets] will be used." long_help="When a non-default profile is selected, do not merge top-level [secrets] into the profile. Only [profiles.<name>.secrets] will be used.\n\nPriority (highest to lowest): CLI > Environment > Default" {
+        env "FNOX_NO_DEFAULTS"
+        cli "--no-defaults"
+        example "fnox exec --profile dev --no-defaults -- ./my-app"
+        example "FNOX_NO_DEFAULTS=true fnox exec --profile dev -- ./my-app"
+    }
+    prop "shell_integration_output" type="string" default="normal" since="0.1.0" help="Control how much the shell integration prints when it loads or unloads secrets." long_help="Control how much the shell integration prints when it loads or unloads secrets.\n\nAvailable modes: \"none\" prints nothing, \"normal\" prints a summary when secrets are loaded or unloaded (default), and \"debug\" prints detailed information, including why the hook exited early.\n\nPriority: Environment > Default" {
+        env "FNOX_SHELL_OUTPUT"
+        example "FNOX_SHELL_OUTPUT=none fnox activate bash"
+        example "FNOX_SHELL_OUTPUT=debug fnox activate zsh"
+    }
+    prop "if_missing" type="option<string>" optional=#true since="1.1.0" help="Runtime override for the if_missing behavior when a secret cannot be resolved." long_help="Runtime override for the if_missing behavior when a secret cannot be resolved.\n\nAvailable modes: \"error\" fails the command, \"warn\" prints a warning and continues, and \"ignore\" silently skips the missing secret. This overrides any if_missing value set in the configuration.\n\nPriority (highest to lowest): CLI flag > Environment > Secret level > Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)" {
+        env "FNOX_IF_MISSING"
+        cli "--if-missing"
+        example "fnox exec --if-missing error -- ./my-app"
+        example "FNOX_IF_MISSING=ignore fnox exec -- ./my-app"
+    }
+    prop "http_timeout" type="string" default="30s" since="1.16.0" help="HTTP request timeout for lease backend API calls (Vault, GCP IAM, etc.)." long_help="HTTP request timeout for lease backend API calls (Vault, GCP IAM, etc.).\n\nAccepts a duration such as \"30s\", \"2m\", or \"1h30m\". Prevents fnox exec from hanging indefinitely on slow or unreachable servers. Set to \"0\" to disable the timeout (not recommended). An unparseable value falls back to the default.\n\nPriority: Environment > Default" {
+        env "FNOX_HTTP_TIMEOUT"
+        example "FNOX_HTTP_TIMEOUT=60s fnox exec -- ./my-app"
+        example "FNOX_HTTP_TIMEOUT=10s fnox lease create my-lease --duration 1h"
+    }
+    prop "if_missing_default" type="option<string>" optional=#true since="1.1.0" help="Fallback if_missing behavior for secrets that do not set one in the configuration." long_help="Fallback if_missing behavior for secrets that do not set one in the configuration.\n\nAvailable modes: \"error\" fails the command, \"warn\" prints a warning and continues (default), and \"ignore\" silently skips the missing secret. Unlike FNOX_IF_MISSING, this does not override values set in the configuration.\n\nPriority (highest to lowest): CLI flag > FNOX_IF_MISSING > Secret level > Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)" {
+        env "FNOX_IF_MISSING_DEFAULT"
+        example "export FNOX_IF_MISSING_DEFAULT=error  # Strict by default"
+        example "export FNOX_IF_MISSING_DEFAULT=ignore  # Lenient by default"
+    }
 }
 // Dynamic completions for fnox commands
 

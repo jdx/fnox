@@ -1,3 +1,7 @@
+---
+description: "Request dynamic credentials from HashiCorp Vault and configure field mapping, lease duration, and revocation."
+---
+
 # HashiCorp Vault
 
 The `vault` lease backend reads dynamic secrets from a HashiCorp Vault secret engine. This works with any Vault dynamic secret backend — AWS, database, PKI, etc. You configure which Vault response fields map to which environment variables.
@@ -15,16 +19,16 @@ username = "DB_USER"
 password = "DB_PASSWORD"
 ```
 
-| Field                | Required | Description                                                         |
-| -------------------- | -------- | ------------------------------------------------------------------- |
-| `secret_path`        | Yes      | Vault API path for the dynamic secret                               |
-| `env_map`            | Yes      | Map of Vault response field names to environment variables          |
-| `address`            | No       | Vault server URL (falls back to `VAULT_ADDR`)                       |
-| `token`              | No       | Vault auth token (falls back to `VAULT_TOKEN`)                      |
-| `credential_command` | No       | Shell command that prints a Vault token when no token is configured |
-| `namespace`          | No       | Vault namespace (for Vault Enterprise / HCP Vault)                  |
-| `duration`           | No       | Requested lease TTL (e.g., `"1h"`, `"30m"`)                         |
-| `method`             | No       | HTTP method: `"get"` (default) or `"post"` (for pki/issue)          |
+| Field                | Required | Description                                                                                                     |
+| -------------------- | -------- | --------------------------------------------------------------------------------------------------------------- |
+| `secret_path`        | Yes      | Vault API path for the dynamic secret                                                                           |
+| `env_map`            | Yes      | Map of Vault response field names to environment variables                                                      |
+| `address`            | No       | Vault server URL (falls back to `FNOX_VAULT_ADDR`, then `VAULT_ADDR`)                                           |
+| `token`              | No       | Vault auth token (falls back to `FNOX_VAULT_TOKEN`, then `VAULT_TOKEN`)                                         |
+| `credential_command` | No       | Shell command that prints a Vault token when no token is configured                                             |
+| `namespace`          | No       | Vault namespace for Vault Enterprise / HCP Vault (falls back to `FNOX_VAULT_NAMESPACE`, then `VAULT_NAMESPACE`) |
+| `duration`           | No       | Requested lease TTL (e.g., `"1h"`, `"30m"`; default: `"15m"`)                                                   |
+| `method`             | No       | HTTP method: `"get"` (default) or `"post"` (for pki/issue)                                                      |
 
 ## Prerequisites
 
@@ -37,15 +41,15 @@ The backend needs a Vault address and token. fnox resolves them in this order:
 
 If the address or token is missing, fnox prints one of:
 
-```
+```text
 Vault address and token not found. Set VAULT_ADDR and VAULT_TOKEN.
 Vault address not found. Set VAULT_ADDR.
 Vault token not found. Set VAULT_TOKEN.
 ```
 
-When `credential_command` is configured, fnox runs it through the platform shell and uses trimmed stdout as the token. The command is rendered as a Tera template with `address`, `secret_path`, and `namespace`, and fnox sets `VAULT_ADDR` and `VAULT_NAMESPACE` for the command from the lease config. Output is cached briefly for the current fnox process so repeated lease operations do not repeat the login.
+When `credential_command` is configured, fnox runs it through the platform shell and uses its trimmed stdout as the token. The command is rendered as a [Tera](https://keats.github.io/tera/) template with `address`, `secret_path`, and `namespace` variables, and fnox sets `VAULT_ADDR` and `VAULT_NAMESPACE` in the command's environment from the lease config. Output is cached for five minutes within the current fnox process so repeated lease operations do not repeat the login, and the cache is cleared if Vault rejects the token. The command must finish within 30 seconds.
 
-## Credentials Produced
+## Credentials produced
 
 Determined by the `env_map` configuration. The keys are field names from the Vault response, and the values are the environment variable names to inject.
 
@@ -85,10 +89,12 @@ password = "DB_PASSWORD"
 ```
 
 ```bash
-fnox exec -- psql -h db.example.com -U "$DB_USER" mydb
+fnox exec -- sh -c 'PGPASSWORD="$DB_PASSWORD" psql -h db.example.com -U "$DB_USER" mydb'
 ```
 
 ### PKI certificates
+
+This backend selects the method and maps response fields, but does not expose arbitrary request-body parameters. Use it only with a role that can issue with these defaults; use a [custom command](/leases/command) if your request needs fields such as `common_name`.
 
 PKI and some other engines require POST requests. Set `method = "post"`:
 
@@ -113,7 +119,7 @@ type = "1password"
 vault = "Infrastructure"
 
 [secrets]
-VAULT_TOKEN = { provider = "op", value = "Vault/token" }
+VAULT_TOKEN = { provider = "op", value = "Vault/token", env = false }
 
 [leases.vault-aws]
 type = "vault"
@@ -126,7 +132,7 @@ secret_key = "AWS_SECRET_ACCESS_KEY"
 security_token = "AWS_SESSION_TOKEN"
 ```
 
-### With namespace (Enterprise / HCP)
+### With namespace (enterprise / HCP)
 
 ```toml
 [leases.vault-db]
@@ -158,9 +164,10 @@ password = "DB_PASSWORD"
 ## Notes
 
 - **TTL is advisory.** The `duration` field is sent to Vault as a TTL hint, but many engines (database, pki, rabbitmq) ignore it and use the role's configured default TTL instead. fnox warns if the actual `lease_duration` returned by Vault differs significantly from the requested value.
+- **Static KV secrets never expire.** KV v2 responses (`data.data`) are unwrapped automatically, and a `lease_duration` of `0` is treated as "no expiry", so the lease stays active until you revoke it.
 - **GET vs POST.** Most Vault dynamic secret engines use GET (e.g., `aws/creds`, `database/creds`). Some engines like `pki/issue` require POST — set `method = "post"` for those.
 
-## See Also
+## See also
 
 - [Credential Leases](/guide/leases) — overview and approaches
 - [HashiCorp Vault provider](/providers/vault) — for reading static KV secrets

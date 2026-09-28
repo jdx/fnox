@@ -155,7 +155,7 @@ impl App {
     ) -> Result<Self> {
         let profile = Config::display_profiles(&profile_stack);
         let providers: Vec<String> = config
-            .get_providers(&profile_stack)
+            .get_providers(&profile_stack)?
             .keys()
             .cloned()
             .collect();
@@ -810,24 +810,22 @@ impl App {
 
         // Try to load secrets first before committing to the change
         let profile_stack = vec![new_profile.clone()];
-        match self.config.get_secrets(&profile_stack) {
-            Ok(secrets) => {
+        match (
+            self.config.get_secrets(&profile_stack),
+            self.config.get_providers(&profile_stack),
+        ) {
+            (Ok(secrets), Ok(providers)) => {
                 // Success - now update all state
                 self.profile = new_profile;
                 self.profile_stack = profile_stack.clone();
-                self.providers = self
-                    .config
-                    .get_providers(&profile_stack)
-                    .keys()
-                    .cloned()
-                    .collect();
+                self.providers = providers.keys().cloned().collect();
                 self.provider_index = 0;
                 self.secrets = secrets;
                 self.secret_index = 0;
                 self.search_filter.clear();
                 self.refresh();
             }
-            Err(e) => {
+            (Err(e), _) | (_, Err(e)) => {
                 // Failed - don't change anything, just show error
                 self.error_message = Some(format!("Failed to load profile: {}", e));
             }

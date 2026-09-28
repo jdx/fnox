@@ -1,29 +1,39 @@
-# Azure Key Vault Secrets
+---
+description: "Read Azure Key Vault secrets with fnox. Configure vault access, authentication, prefixes, and profiles."
+---
+
+# Azure Key Vault secrets
 
 Azure Key Vault Secrets provides centralized secret management for Azure workloads.
 
-## Quick Start
+## Quick start
 
-```bash
-# 1. Create Key Vault
+```sh
+# Create Key Vault
 az keyvault create --name "myapp-vault" --resource-group "myapp-rg"
+```
 
-# 2. Configure provider
-cat >> fnox.toml << 'EOF'
+Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+
+```toml
 [providers]
-azure = { type = "azure-sm", vault_url = "https://myapp-vault.vault.azure.net/", prefix = "myapp/" }
-EOF
+azure = { type = "azure-sm", vault_url = "https://myapp-vault.vault.azure.net/", prefix = "myapp-" }
+```
 
-# 3. Create secret
+```sh
+# Create secret
 az keyvault secret set --vault-name "myapp-vault" --name "myapp-database-url" --value "postgresql://..."
+```
 
-# 4. Reference in fnox
-cat >> fnox.toml << 'EOF'
+Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+
+```toml
 [secrets]
 DATABASE_URL = { provider = "azure", value = "database-url" }
-EOF
+```
 
-# 5. Get secret
+```sh
+# Get secret
 fnox get DATABASE_URL
 ```
 
@@ -59,22 +69,14 @@ az role assignment create \
 
 ```toml
 [providers]
-azure = { type = "azure-sm", vault_url = "https://myapp-vault.vault.azure.net/", prefix = "myapp/" }  # prefix is optional
+azure = { type = "azure-sm", vault_url = "https://myapp-vault.vault.azure.net/", prefix = "myapp-" }  # prefix is optional
 ```
 
-## Pros
+## Usage notes
 
-- ✅ Integrated with Azure RBAC
-- ✅ Audit logs
-- ✅ Managed rotation
+The config stores a secret name. Keep the configured prefix consistent with the actual name in Key Vault, and refresh any fnox cache after a value changes.
 
-## Cons
-
-- ❌ Requires Azure subscription
-- ❌ Costs money
-- ❌ Network access required
-
-## Next Steps
+## Next steps
 
 - [Azure Key Vault Keys](/providers/azure-kms) - Encryption alternative
 - [AWS Secrets Manager](/providers/aws-sm) - AWS equivalent

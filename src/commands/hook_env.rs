@@ -5,9 +5,9 @@ use crate::settings::Settings;
 use crate::shell;
 use crate::temp_file_secrets::create_persistent_secret_file;
 use anyhow::Result;
-use clap::Parser;
 use std::collections::HashMap;
 use std::fs;
+use std::path::Path;
 
 /// Output mode for shell integration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,16 +35,20 @@ impl OutputMode {
     }
 }
 
-#[derive(Debug, Parser)]
-#[command(about = "Internal command used by shell hooks to load secrets")]
+#[derive(Debug, usage_rs::Args)]
+#[usage(about = "Internal command used by shell hooks to load secrets")]
 pub struct HookEnvCommand {
     /// Shell type (bash, zsh, fish, nu, pwsh)
-    #[arg(short = 's', long)]
+    #[usage(short = 's', long)]
     pub shell: Option<String>,
 }
 
 impl HookEnvCommand {
     pub async fn run(&self, cli: &Cli) -> Result<()> {
+        // Shell hooks run automatically during activation and at each prompt.
+        // Missing credentials must never open an interactive provider prompt.
+        crate::env::set_non_interactive(true);
+
         // Get settings for output mode
         let settings =
             Settings::try_get().map_err(|e| anyhow::anyhow!("Failed to get settings: {}", e))?;
@@ -91,6 +95,7 @@ impl HookEnvCommand {
                     LoadedSecrets {
                         secrets: HashMap::new(),
                         temp_files: HashMap::new(),
+                        needs_retry: true,
                     }
                 }
             }
@@ -98,6 +103,7 @@ impl HookEnvCommand {
             LoadedSecrets {
                 secrets: HashMap::new(),
                 temp_files: HashMap::new(),
+                needs_retry: false,
             }
         };
 
@@ -114,12 +120,14 @@ impl HookEnvCommand {
 
         // Create new session
         let current_dir = std::env::current_dir().ok();
-        let session = HookEnvSession::new(
+        let mut session = HookEnvSession::new(
             current_dir,
             config_path,
             loaded_data.secrets,
             loaded_data.temp_files,
         )?;
+
+        session.needs_retry = loaded_data.needs_retry;
 
         // Export session state for next invocation
         let session_encoded = session.encode()?;
@@ -131,6 +139,52 @@ impl HookEnvCommand {
         print!("{}", output);
 
         Ok(())
+    }
+}
+
+/// Remove hook temp files owned by the current shell session.
+///
+/// Session data comes from the environment, so only remove files whose paths
+/// match the location and prefix used by hook-created secret files.
+pub(crate) fn cleanup_session_temp_files() -> Result<()> {
+    let temp_dir = PREV_SESSION.hook_temp_dir.as_deref().or_else(|| {
+        PREV_SESSION
+            .temp_files
+            .values()
+            .find_map(|path| Path::new(path).parent())
+    });
+    let mut errors = Vec::new();
+
+    for (key, path) in &PREV_SESSION.temp_files {
+        let path = Path::new(path);
+        let is_hook_temp_file = path.parent() == temp_dir
+            && path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("fnox-hook-"));
+
+        if !is_hook_temp_file {
+            errors.push(format!(
+                "refusing to clean up invalid temp file path for '{key}': {}",
+                path.display()
+            ));
+            continue;
+        }
+
+        match fs::remove_file(path) {
+            Ok(()) => tracing::debug!("cleaned up temp file for secret '{}'", key),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => errors.push(format!(
+                "failed to clean up temp file for '{key}' at {}: {e}",
+                path.display()
+            )),
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        anyhow::bail!(errors.join("; "))
     }
 }
 
@@ -175,6 +229,8 @@ struct LoadedSecrets {
     secrets: HashMap<String, String>,
     /// Temp file paths for file-based secrets
     temp_files: HashMap<String, String>,
+    /// At least one shell secret could not be loaded.
+    needs_retry: bool,
 }
 
 /// Load all secrets from a fnox.toml config file
@@ -216,13 +272,16 @@ async fn load_secrets_from_config(cli: &Cli) -> Result<LoadedSecrets> {
 
     // Get the active profile (settings was already loaded above)
     let profile_name = &settings.profile;
+    config
+        .validate_profiles(profile_name, None)
+        .map_err(|e| anyhow::anyhow!(e))?;
 
     // Get secrets for the profile using the Config method (inherits top-level secrets)
     let profile_secrets = config
         .get_secrets(profile_name)
         .map_err(|e| anyhow::anyhow!("Failed to get secrets: {}", e))?;
 
-    // Use batch resolution for better performance
+    // Use batch resolution for better performance.
     let resolved = match crate::daemon::resolve_batch(
         cli,
         &config,
@@ -240,6 +299,7 @@ async fn load_secrets_from_config(cli: &Cli) -> Result<LoadedSecrets> {
             return Ok(LoadedSecrets {
                 secrets: HashMap::new(),
                 temp_files: HashMap::new(),
+                needs_retry: true,
             });
         }
     };
@@ -247,6 +307,7 @@ async fn load_secrets_from_config(cli: &Cli) -> Result<LoadedSecrets> {
     // Process secrets: create temp files for file-based secrets
     let mut loaded_secrets = HashMap::new();
     let mut temp_files = HashMap::new();
+    let mut needs_retry = false;
 
     for (key, value_opt) in resolved {
         // Skip secrets unless their env mode allows shell injection —
@@ -269,6 +330,7 @@ async fn load_secrets_from_config(cli: &Cli) -> Result<LoadedSecrets> {
                             temp_files.insert(key, file_path);
                         }
                         Err(e) => {
+                            needs_retry = true;
                             tracing::warn!(
                                 "failed to create temp file for secret '{}': {}",
                                 key,
@@ -283,12 +345,15 @@ async fn load_secrets_from_config(cli: &Cli) -> Result<LoadedSecrets> {
             } else {
                 loaded_secrets.insert(key, value);
             }
+        } else {
+            needs_retry = true;
         }
     }
 
     Ok(LoadedSecrets {
         secrets: loaded_secrets,
         temp_files,
+        needs_retry,
     })
 }
 

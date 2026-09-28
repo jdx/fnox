@@ -1,207 +1,678 @@
-/**
- * Customize default theme styling by overriding CSS variables:
- * https://github.com/vuejs/vitepress/blob/main/src/client/theme-default/styles/vars.css
- */
-@import url("https://fonts.googleapis.com/css2?family=Black+Ops+One&display=swap");
-
-/**
- * Colors - Fort Knox theme (dark blue/gold)
- * -------------------------------------------------------------------------- */
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("../fonts/SpaceGrotesk.ttf") format("truetype");
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
-  /* Brand colors - vault/security theme */
-  --vp-c-brand-1: #d4af37; /* Gold */
-  --vp-c-brand-2: #c5a028;
-  --vp-c-brand-3: #b8911a;
-  --vp-c-brand-soft: rgba(212, 175, 55, 0.14);
-
-  /* Background - dark vault */
-  --vp-c-bg: #0a0e1a;
-  --vp-c-bg-alt: #0f1420;
-  --vp-c-bg-elv: #161b2e;
-  --vp-c-bg-soft: #1a2035;
-
-  /* Text */
-  --vp-c-text-1: #e8e6e3;
-  --vp-c-text-2: #c9c6c1;
-  --vp-c-text-3: #8e8b86;
-
-  /* Borders */
-  --vp-c-border: #2d3548;
-  --vp-c-divider: #232938;
-  --vp-c-gutter: #1a2035;
-
-  /* Component colors */
-  --vp-c-default-1: #2d3548;
-  --vp-c-default-2: #232938;
-  --vp-c-default-3: #1a2035;
-  --vp-c-default-soft: rgba(45, 53, 72, 0.14);
-
-  /* Sidebar */
+  --vp-font-family-base:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --fnox-font-display: "Space Grotesk", var(--vp-font-family-base);
+  --vp-c-brand-1: #80600e;
+  --vp-c-brand-2: #967319;
+  --vp-c-brand-3: #d4af37;
+  --vp-c-brand-soft: rgba(160, 124, 24, 0.1);
+  --vp-c-bg: #fcfbf8;
+  --vp-c-bg-alt: #f3f1ea;
+  --vp-c-bg-elv: #fff;
+  --vp-c-bg-soft: #f2f0e9;
+  --vp-c-text-1: #222a35;
+  --vp-c-text-2: #515a65;
+  --vp-c-text-3: #666e77;
+  --vp-c-border: #d2d1c9;
+  --vp-c-divider: #e0ded6;
+  --vp-c-gutter: #e0ded6;
   --vp-sidebar-bg-color: var(--vp-c-bg-alt);
-
-  /* Code blocks */
-  --vp-code-block-bg: #0d1117;
-  --vp-code-tab-divider: var(--vp-c-border);
-  --vp-code-copy-code-hover-bg: rgba(212, 175, 55, 0.1);
-}
-
-/**
- * Component: Button
- * -------------------------------------------------------------------------- */
-
-:root {
+  --vp-code-block-bg: #f1efe8;
   --vp-button-brand-border: transparent;
-  --vp-button-brand-text: #1a1a1a;
-  --vp-button-brand-bg: var(--vp-c-brand-1);
-  --vp-button-brand-hover-border: transparent;
-  --vp-button-brand-hover-text: #1a1a1a;
-  --vp-button-brand-hover-bg: var(--vp-c-brand-2);
-  --vp-button-brand-active-border: transparent;
-  --vp-button-brand-active-text: #1a1a1a;
-  --vp-button-brand-active-bg: var(--vp-c-brand-3);
-}
-
-/**
- * Component: Home
- * -------------------------------------------------------------------------- */
-
-:root {
-  --vp-home-hero-name-color: transparent;
-  --vp-home-hero-name-background: linear-gradient(
-    135deg,
-    var(--vp-c-brand-1) 0%,
-    #8b7355 100%
-  );
-
-  --vp-home-hero-image-background-image: linear-gradient(
-    -45deg,
-    rgba(212, 175, 55, 0.3) 50%,
-    rgba(45, 53, 72, 0.3) 50%
-  );
-  --vp-home-hero-image-filter: blur(44px);
-}
-
-/**
- * Component: Custom Block
- * -------------------------------------------------------------------------- */
-
-:root {
-  --vp-custom-block-tip-border: transparent;
+  --vp-button-brand-text: #121820;
+  --vp-button-brand-bg: #e5bf52;
+  --vp-button-brand-hover-text: #121820;
+  --vp-button-brand-hover-bg: #f1cf70;
+  --vp-button-brand-active-text: #121820;
+  --vp-button-brand-active-bg: #d4af37;
+  --vp-custom-block-tip-border: var(--vp-c-brand-soft);
+  --vp-custom-block-tip-bg: var(--vp-c-brand-soft);
   --vp-custom-block-tip-text: var(--vp-c-text-1);
-  --vp-custom-block-tip-bg: rgba(212, 175, 55, 0.1);
-  --vp-custom-block-tip-code-bg: rgba(212, 175, 55, 0.05);
+  --vp-custom-block-tip-code-bg: var(--vp-c-brand-soft);
+  --vp-layout-max-width: 1440px;
 }
 
-/**
- * Component: Algolia (Search)
- * -------------------------------------------------------------------------- */
-
-.DocSearch {
-  --docsearch-primary-color: var(--vp-c-brand-1) !important;
-  --docsearch-highlight-color: var(--vp-c-brand-1) !important;
-  --docsearch-text-color: var(--vp-c-text-1) !important;
-  --docsearch-muted-color: var(--vp-c-text-2) !important;
-  --docsearch-container-background: rgba(10, 14, 26, 0.8) !important;
-  --docsearch-modal-background: var(--vp-c-bg-alt) !important;
-  --docsearch-searchbox-background: var(--vp-c-bg) !important;
-  --docsearch-searchbox-focus-background: var(--vp-c-bg) !important;
-  --docsearch-hit-color: var(--vp-c-text-2) !important;
-  --docsearch-hit-active-color: var(--vp-c-text-1) !important;
-  --docsearch-hit-background: var(--vp-c-bg) !important;
-  --docsearch-footer-background: var(--vp-c-bg) !important;
+.dark {
+  --vp-c-brand-1: #e5bf52;
+  --vp-c-brand-2: #edcc75;
+  --vp-c-brand-3: #d4af37;
+  --vp-c-brand-soft: rgba(229, 191, 82, 0.1);
+  --vp-c-bg: #0b1018;
+  --vp-c-bg-alt: #101620;
+  --vp-c-bg-elv: #151d29;
+  --vp-c-bg-soft: #151d29;
+  --vp-c-text-1: #eeeee9;
+  --vp-c-text-2: #b0b8c4;
+  --vp-c-text-3: #8c97a7;
+  --vp-c-border: #323c4a;
+  --vp-c-divider: #26303d;
+  --vp-c-gutter: #1c2531;
+  --vp-code-block-bg: #101620;
 }
 
-/**
- * Custom styles
- * -------------------------------------------------------------------------- */
-
-/* Add subtle texture to code blocks */
-.vp-code-group .tabs {
-  background: linear-gradient(to bottom, rgba(212, 175, 55, 0.05), transparent);
+.VPNavBarTitle .title {
+  font-family: var(--fnox-font-display);
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: -1px;
 }
 
-/* Enhance link styling */
+.VPNavBarTitle .logo {
+  width: 28px;
+  height: 28px;
+}
+.VPNavBar {
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+.VPDoc .content-container {
+  max-width: 780px !important;
+}
+.vp-doc {
+  line-height: 1.8;
+}
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3 {
+  font-family: var(--fnox-font-display);
+}
+.vp-doc h1 {
+  letter-spacing: -1.1px;
+  line-height: 1.2;
+}
+.vp-doc h2 {
+  letter-spacing: -0.5px;
+  margin-top: 48px;
+  padding-top: 28px;
+}
+.vp-doc h3 {
+  line-height: 1.4;
+}
+.vp-doc p,
+.vp-doc li {
+  line-height: 1.8;
+}
 .vp-doc a {
-  text-decoration: underline;
-  text-decoration-color: rgba(212, 175, 55, 0.3);
-  text-underline-offset: 2px;
-  transition: text-decoration-color 0.2s;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
 }
-
-.vp-doc a:hover {
-  text-decoration-color: var(--vp-c-brand-1);
+.vp-doc :not(pre) > code {
+  overflow-wrap: anywhere;
 }
-
-/* Sidebar active item */
+.vp-doc table {
+  font-size: 14px;
+}
+.vp-doc th {
+  background: var(--vp-c-bg-alt);
+  text-align: left;
+}
+.vp-doc td,
+.vp-doc th {
+  padding: 11px 16px;
+}
+.vp-doc div[class*="language-"] {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 10px;
+}
 .VPSidebarItem.is-active > .item > .link {
-  color: var(--vp-c-brand-1);
   font-weight: 600;
 }
-
-/* Enhanced navbar */
-.VPNavBar {
-  border-bottom: 1px solid rgba(212, 175, 55, 0.1);
-  background: rgba(10, 14, 26, 0.8);
-  backdrop-filter: blur(8px);
+:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 4px;
+}
+::selection {
+  background: var(--vp-c-brand-soft);
 }
 
-/* Black Ops One branding */
-.VPNavBarTitle .title {
-  font-family: "Black Ops One", cursive;
-  font-size: 1.5rem;
-  color: var(--vp-c-brand-1) !important;
+/* Product homepage. Keep these rules out of the documentation layout. */
+.VPHome {
+  margin-bottom: 0 !important;
 }
-
-.VPHero .name {
-  font-family: "Black Ops One", cursive !important;
-  font-size: 4rem !important;
-  font-weight: 400 !important;
+.VPHome .vp-doc.container {
+  max-width: 1200px;
+  padding-top: 0;
 }
-
-.VPSocialLinks a[href*="github.com/jdx/fnox"] {
-  display: inline-flex !important;
-  flex-direction: column;
+.fnox-home {
+  padding: 0 0 48px;
+}
+.fnox-home h1,
+.fnox-home h2,
+.fnox-home h3,
+.fnox-home p {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.fnox-home a {
+  text-decoration: none;
+}
+.fnox-home .eyebrow {
+  color: var(--vp-c-brand-1);
+  font: 600 11px/1.5 var(--vp-font-family-mono);
+  letter-spacing: 1.6px;
+}
+.home-hero {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  gap: 64px;
+  align-items: center;
+  padding: 88px 0 76px;
+}
+.hero-copy .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 25px;
+  text-transform: uppercase;
+}
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--vp-c-brand-1);
+  box-shadow: 0 0 0 5px var(--vp-c-brand-soft);
+}
+.fnox-home h1 {
+  font-size: clamp(42px, 4.4vw, 62px);
+  line-height: 1.08;
+  letter-spacing: -2.8px;
+  font-weight: 600;
+}
+.fnox-home h1 span {
+  color: var(--vp-c-brand-1);
+}
+.fnox-home .hero-lead {
+  font-size: 18px;
+  line-height: 1.75;
+  color: var(--vp-c-text-2);
+  margin-top: 26px;
+  max-width: 470px;
+}
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 30px;
+}
+.home-button {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0;
-  position: relative;
-  padding-bottom: 12px !important;
-  margin-bottom: -12px !important;
+  gap: 20px;
+  min-height: 48px;
+  padding: 10px 20px;
+  border: 1px solid var(--vp-c-border);
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
-
-.VPSocialLinks a[href*="github.com/jdx/fnox"] svg {
-  display: block !important;
-  width: 20px;
-  height: 20px;
-  margin-top: 2px;
+.fnox-home .home-button.primary {
+  background: var(--vp-button-brand-bg);
+  border-color: transparent;
+  color: var(--vp-button-brand-text);
+}
+.fnox-home .home-button.primary:hover {
+  background: var(--vp-button-brand-hover-bg);
+}
+.fnox-home .home-button.secondary {
+  color: var(--vp-c-text-1);
+}
+.fnox-home .home-button.secondary:hover {
+  background: var(--vp-c-bg-soft);
+  border-color: var(--vp-c-brand-1);
+}
+.install-command {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 28px;
+  font-size: 13px;
+}
+.fnox-home .install-command code {
+  padding: 0;
+  color: var(--vp-c-text-2);
+  background: transparent;
+  font-size: 13px;
+}
+.install-command button {
+  border-left: 1px solid var(--vp-c-divider);
+  padding: 0 12px;
+  color: var(--vp-c-text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+.install-command button:hover {
+  color: var(--vp-c-brand-1);
+}
+.fnox-home .install-note {
+  min-height: 20px;
+  color: var(--vp-c-text-3);
+  font-size: 12px;
+  margin-top: 10px;
+}
+.prompt {
+  color: var(--vp-c-brand-1);
+  user-select: none;
+}
+.hero-demo {
+  min-width: 0;
+  border: 1px solid var(--vp-c-border);
+  border-radius: 12px;
+  background: var(--vp-c-bg-alt);
+  box-shadow: 0 24px 64px -32px rgba(0, 0, 0, 0.35);
+  position: relative;
+}
+.hero-demo::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -28px;
+  background-image: radial-gradient(var(--vp-c-border) 1px, transparent 1px);
+  background-size: 16px 16px;
+  mask-image: linear-gradient(135deg, transparent, #000 45%, transparent);
+}
+.demo-topbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 17px 22px;
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+.demo-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 12px var(--vp-font-family-mono);
+  color: var(--vp-c-text-1);
+}
+.demo-label {
+  color: var(--vp-c-text-3);
+  font: 10px/1.4 var(--vp-font-family-mono);
+  letter-spacing: 1px;
+}
+.storage-switch {
+  display: flex;
+  gap: 4px;
+  margin: 18px 22px 0;
+}
+.storage-switch button {
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--vp-c-text-2);
+  font-size: 11px;
+  line-height: 1.7;
+  cursor: pointer;
+}
+.storage-switch button[aria-pressed="true"] {
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+  border-color: var(--vp-c-divider);
+}
+.storage-switch button:hover {
+  border-color: var(--vp-c-brand-1);
+}
+.fnox-home .hero-demo pre {
+  margin: 0;
+  padding: 20px 22px 26px;
+  background: transparent;
+  overflow-x: auto;
+}
+.fnox-home .hero-demo code {
+  color: var(--vp-c-text-1);
+  font-size: 12px;
+  line-height: 1.95;
+  white-space: pre;
+}
+.code-comment {
+  color: var(--vp-c-text-3);
+}
+.code-section {
+  color: var(--vp-c-brand-1);
+}
+.code-string {
+  color: #38694d;
+}
+.dark .code-string {
+  color: #a7cbb1;
+}
+.demo-run {
+  border-top: 1px solid var(--vp-c-divider);
+  padding: 18px 22px;
+  background: var(--vp-c-bg);
+}
+.fnox-home .demo-run pre {
+  padding: 10px 0 4px;
+}
+.fnox-home .demo-run p {
+  color: var(--vp-c-text-2);
+  font-size: 11px;
+}
+.fnox-home .demo-run p span {
+  color: var(--vp-c-brand-1);
+  padding-right: 7px;
+}
+.fnox-home .demo-caption {
+  padding: 11px 22px;
+  font-size: 11px;
+  line-height: 1.65;
+  color: var(--vp-c-text-3);
+  border-top: 1px solid var(--vp-c-divider);
+}
+.provider-strip {
+  border-top: 1px solid var(--vp-c-divider);
+  border-bottom: 1px solid var(--vp-c-divider);
+  padding: 22px 0;
+}
+.strip-label {
+  font: 10px var(--vp-font-family-mono);
+  letter-spacing: 1.6px;
+  color: var(--vp-c-text-3);
+}
+.provider-strip > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  align-items: center;
+  margin-top: 12px;
+}
+.provider-strip a {
+  color: var(--vp-c-text-2);
+  font: 500 16px/1.6 var(--fnox-font-display);
+}
+.provider-strip a:hover {
+  color: var(--vp-c-brand-1);
+}
+.provider-strip .all-providers {
+  color: var(--vp-c-brand-1);
+  font: 12px var(--vp-font-family-base);
+  margin-left: auto;
+}
+.home-section {
+  padding-top: 80px;
+}
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 32px;
+  margin-bottom: 32px;
+}
+.fnox-home h2 {
+  font-size: 34px;
+  line-height: 1.2;
+  letter-spacing: -1.2px;
+  font-weight: 500;
+}
+.fnox-home .eyebrow + h2 {
+  margin-top: 18px;
+}
+.section-heading > p {
+  max-width: 340px;
+  color: var(--vp-c-text-2);
+  font-size: 15px;
+}
+.workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.fnox-home .workflow {
+  display: flex;
+  flex-direction: column;
+  padding: 30px;
+  color: var(--vp-c-text-1);
+  background: var(--vp-c-bg-alt);
+}
+.workflow + .workflow {
+  border-left: 1px solid var(--vp-c-divider);
+}
+.workflow:hover {
+  background: var(--vp-c-bg-soft);
+}
+.workflow-number {
+  font: 11px/1.5 var(--vp-font-family-mono);
+  letter-spacing: 1px;
+  color: var(--vp-c-brand-1);
+}
+.fnox-home .workflow h3 {
+  margin: 32px 0 14px;
+  font-size: 21px;
+  line-height: 1.3;
+  letter-spacing: -0.5px;
+}
+.fnox-home .workflow p {
+  color: var(--vp-c-text-2);
+  font-size: 14px;
+  line-height: 1.8;
+  margin-bottom: 24px;
+}
+.fnox-home .text-link {
+  color: var(--vp-c-brand-1);
+  font-size: 13px;
+  font-weight: 600;
+}
+.text-link span {
+  margin-left: 8px;
+}
+.workflow .text-link {
+  margin-top: auto;
+}
+.everyday {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr;
+  gap: 72px;
+}
+.fnox-home .everyday-intro > p:not(.eyebrow) {
+  color: var(--vp-c-text-2);
+  font-size: 15px;
+  margin: 22px 0;
+  max-width: 320px;
+}
+.capability-list > a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 0;
+  color: var(--vp-c-text-1);
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+.capability-list > a:first-child {
+  padding-top: 0;
+}
+.fnox-home .capability-list h3 {
+  font-size: 18px;
+  font-weight: 500;
+}
+.fnox-home .capability-list p {
+  color: var(--vp-c-text-2);
+  font-size: 14px;
+  margin-top: 6px;
+}
+.capability-list > a > span,
+.capability-list > a:hover h3 {
+  color: var(--vp-c-brand-1);
+}
+.home-start {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  margin-top: 80px;
+  padding: 32px;
+  background: var(--vp-c-brand-soft);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 10px;
+}
+.fnox-home .home-start h2 {
+  font-size: 26px;
+}
+.fnox-home .home-start p {
+  margin-top: 7px;
+  font-size: 14px;
+  color: var(--vp-c-text-2);
+}
+.home-start .home-button {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.home-start img {
+  flex-shrink: 0;
 }
 
 .VPSocialLinks .star-count {
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.6rem;
-  font-weight: 600;
-  color: var(--vp-c-text-3);
-  font-family: var(--vp-font-family-mono);
+  font: 10px var(--vp-font-family-mono);
+  color: var(--vp-c-text-2);
+  margin-left: 5px;
   white-space: nowrap;
-  line-height: 1;
 }
-
-.VPSocialLinks .star-count .star-glyph {
-  font-family: -apple-system, "Segoe UI Symbol", sans-serif;
-  line-height: 1;
-  margin-right: 0.2em;
-}
-
-.VPSocialLinks a[href*="github.com/jdx/fnox"]:hover .star-count {
+.VPSocialLinks .star-glyph {
+  margin-right: 2px;
   color: var(--vp-c-brand-1);
 }
+.VPSocialLinks a[href*="github.com/jdx/fnox"] {
+  width: auto;
+  min-width: 36px;
+}
 
-@media (max-width: 640px) {
-  .VPSocialLinks .star-count {
+@media (max-width: 1100px) {
+  .home-hero {
+    gap: 32px;
+  }
+  .fnox-home h1 {
+    font-size: 48px;
+  }
+  .demo-label {
+    font-size: 9px;
+  }
+  .home-start {
+    flex-wrap: wrap;
+  }
+  .home-start .home-button {
+    margin-left: 88px;
+  }
+}
+@media (max-width: 800px) {
+  .home-hero {
+    grid-template-columns: 1fr;
+    padding-top: 52px;
+    gap: 38px;
+  }
+  .hero-copy {
+    max-width: 560px;
+  }
+  .fnox-home h1 {
+    font-size: clamp(40px, 7vw, 60px);
+  }
+  .hero-demo {
+    max-width: 600px;
+    width: 100%;
+  }
+  .hero-demo::before {
+    inset: -16px;
+  }
+  .provider-strip .all-providers {
+    margin-left: 0;
+  }
+  .section-heading {
+    display: block;
+  }
+  .section-heading > p {
+    margin-top: 20px;
+    max-width: 480px;
+  }
+  .workflow-grid {
+    grid-template-columns: 1fr;
+  }
+  .workflow + .workflow {
+    border-left: 0;
+    border-top: 1px solid var(--vp-c-divider);
+  }
+  .fnox-home .workflow h3 {
+    margin-top: 20px;
+  }
+  .everyday {
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
+  .home-section {
+    padding-top: 56px;
+  }
+  .home-start {
+    margin-top: 56px;
+    padding: 24px;
+  }
+}
+@media (max-width: 480px) {
+  .fnox-home h1 {
+    font-size: 40px;
+    letter-spacing: -1.8px;
+  }
+  .fnox-home h2 {
+    font-size: 29px;
+  }
+  .fnox-home .hero-lead {
+    font-size: 16px;
+  }
+  .hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .demo-topbar {
+    padding: 14px 16px;
+  }
+  .demo-topbar .demo-label {
     display: none;
+  }
+  .storage-switch {
+    margin-left: 12px;
+    margin-right: 12px;
+  }
+  .fnox-home .hero-demo > pre {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .demo-run {
+    padding: 16px;
+  }
+  .fnox-home .demo-caption {
+    padding: 12px 16px;
+  }
+  .fnox-home .workflow {
+    padding: 24px;
+  }
+  .home-start {
+    display: block;
+  }
+  .home-start img {
+    margin-bottom: 20px;
+  }
+  .home-start .home-button {
+    margin: 24px 0 0;
+    width: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
 }

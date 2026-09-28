@@ -45,6 +45,117 @@ EOF
 	assert_output --partial "cached_entries: 1"
 }
 
+@test "daemon survives deletion of its spawn directory" {
+	daemon_config
+	mkdir spawn request
+
+	cd spawn
+	run "$FNOX_BIN" get FOO
+	assert_success
+	assert_output "bar"
+	run "$FNOX_BIN" daemon status
+	assert_success
+	first_pid="$(printf '%s\n' "$output" | sed -n 's/^pid: //p')"
+
+	cd ../request
+	rmdir ../spawn
+	run "$FNOX_BIN" get FOO
+	assert_success
+	assert_output "bar"
+	run "$FNOX_BIN" daemon status
+	assert_success
+	second_pid="$(printf '%s\n' "$output" | sed -n 's/^pid: //p')"
+	assert_equal "$second_pid" "$first_pid"
+}
+
+@test "daemon resolves cache misses in the foreground client" {
+	mkdir -p "$TEST_TEMP_DIR/bin"
+	cat >"$TEST_TEMP_DIR/bin/pass" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$PPID" >>"$PASS_PPID_FILE"
+printf 'foreground-value\n'
+EOF
+	chmod +x "$TEST_TEMP_DIR/bin/pass"
+	export PATH="$TEST_TEMP_DIR/bin:$PATH"
+	export PASS_PPID_FILE="$TEST_TEMP_DIR/pass-pids"
+
+	cat >fnox.toml <<'EOF'
+root = true
+
+[daemon]
+enabled = true
+
+[providers.pass]
+type = "password-store"
+
+[secrets]
+FOO = { provider = "pass", value = "foo" }
+EOF
+
+	run "$FNOX_BIN" get FOO
+	assert_success
+	assert_output "foreground-value"
+
+	run "$FNOX_BIN" daemon status
+	assert_success
+	daemon_pid="$(printf '%s\n' "$output" | sed -n 's/^pid: //p')"
+	[ "$(cat "$PASS_PPID_FILE")" != "$daemon_pid" ]
+
+	run "$FNOX_BIN" get FOO
+	assert_success
+	assert_output "foreground-value"
+	assert_equal "$(wc -l <"$PASS_PPID_FILE" | tr -d ' ')" "1"
+}
+
+@test "daemon cache hits satisfy provider dependencies without exposing unrelated secrets" {
+	mkdir -p "$TEST_TEMP_DIR/bin"
+	cat >"$TEST_TEMP_DIR/bin/op" <<'EOF'
+#!/bin/sh
+if [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+	echo "not signed in" >&2
+	exit 1
+fi
+if [ -n "${HIDDEN:-}" ]; then
+	echo "unrelated hidden secret leaked" >&2
+	exit 1
+fi
+printf 'remote-value\n'
+EOF
+	chmod +x "$TEST_TEMP_DIR/bin/op"
+	export PATH="$TEST_TEMP_DIR/bin:$PATH"
+
+	cat >fnox.toml <<'EOF'
+root = true
+
+[daemon]
+enabled = true
+
+[providers.bootstrap]
+type = "plain"
+
+[providers.op]
+type = "1password"
+vault = "test"
+
+[secrets]
+OP_SERVICE_ACCOUNT_TOKEN = { provider = "bootstrap", value = "token-from-provider" }
+REMOTE = { provider = "op", value = "item/password", daemon_cache = false }
+HIDDEN = { default = "${REMOTE}", env = false }
+EOF
+
+	# The first resolution caches the provider credential and hidden interpolation,
+	# but not REMOTE.
+	run env -u OP_SERVICE_ACCOUNT_TOKEN "$FNOX_BIN" exec -- sh -c 'printf "%s\n" "$REMOTE"'
+	assert_success
+	assert_output "remote-value"
+
+	# Only the cached credential, not the unrelated hidden secret, may be exposed
+	# while resolving the REMOTE cache miss.
+	run env -u OP_SERVICE_ACCOUNT_TOKEN "$FNOX_BIN" exec -- sh -c 'printf "%s\n" "$REMOTE"'
+	assert_success
+	assert_output "remote-value"
+}
+
 @test "daemon clear removes cached entries" {
 	daemon_config
 

@@ -94,7 +94,7 @@ impl crate::providers::Provider for YubikeyProvider {
     }
 }
 
-/// Setup helpers for `fnox provider add --type yubikey`
+/// Setup helpers for `fnox provider add <name> yubikey`
 pub mod setup {
     use super::yubikey_usb;
     use crate::error::{FnoxError, Result};

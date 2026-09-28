@@ -81,8 +81,12 @@ EOF
 	# Create a .env file with quoted values
 	cat >.env <<'EOF'
 SINGLE_QUOTED='value with spaces'
+SINGLE_QUOTED_APOSTROPHE='it\'s $5'
+SINGLE_QUOTED_MULTILINE='first line
+$second line'
 DOUBLE_QUOTED="another value with spaces"
 DOUBLE_QUOTED_ESCAPES="quoted \"value\" with \\ backslash and \n newline"
+DOUBLE_QUOTED_DOLLAR_ESCAPE="secret\$value\\"
 DOLLAR_AND_BACKTICK="secret$value`tick`"
 UNQUOTED=no_spaces
 EOF
@@ -92,11 +96,20 @@ EOF
 	assert_fnox_success get SINGLE_QUOTED --age-key-file key.txt
 	assert_output "value with spaces"
 
+	assert_fnox_success get SINGLE_QUOTED_APOSTROPHE --age-key-file key.txt
+	assert_output 'it'\''s $5'
+
+	assert_fnox_success get SINGLE_QUOTED_MULTILINE --age-key-file key.txt
+	assert_output $'first line\n$second line'
+
 	assert_fnox_success get DOUBLE_QUOTED --age-key-file key.txt
 	assert_output "another value with spaces"
 
 	assert_fnox_success get DOUBLE_QUOTED_ESCAPES --age-key-file key.txt
 	assert_output $'quoted "value" with \\ backslash and \n newline'
+
+	assert_fnox_success get DOUBLE_QUOTED_DOLLAR_ESCAPE --age-key-file key.txt
+	assert_output "secret\$value\\"
 
 	assert_fnox_success get DOLLAR_AND_BACKTICK --age-key-file key.txt
 	assert_output 'secret$value`tick`'
@@ -198,6 +211,19 @@ EOF
 	# Should not be accessible without prefix
 	assert_fnox_failure get DATABASE_URL
 	assert_fnox_failure get API_KEY
+}
+
+@test "fnox import rejects invalid secret names after prefixing" {
+	setup_age_provider
+
+	cat >.env <<EOF
+API_KEY=secret-key-xyz
+EOF
+
+	assert_fnox_failure import -i .env --prefix "INVALID-" --provider age --force
+	assert_output --partial "Secret name 'INVALID-API_KEY'"
+	assert_output --partial "not a valid environment variable name"
+	assert_config_not_contains "INVALID-API_KEY"
 }
 
 @test "fnox import requires confirmation by default" {

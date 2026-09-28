@@ -4,7 +4,6 @@ use std::fs;
 use std::io::Write as _;
 use std::process::Command;
 
-use clap::Args;
 use indexmap::IndexMap;
 use tempfile::NamedTempFile;
 use toml_edit::{DocumentMut, Table, Value};
@@ -25,7 +24,7 @@ const TEMP_FILE_HEADER: &str = "\
 
 ";
 
-#[derive(Debug, Args)]
+#[derive(Debug, usage_rs::Args)]
 pub struct EditCommand;
 
 /// Represents a secret with its metadata for tracking during editing
@@ -209,7 +208,7 @@ impl EditCommand {
 
             let (is_read_only, resolved_provider_name) = if let Some(ref prov_name) = provider_name
             {
-                let providers = config.get_providers(&profile_stack);
+                let providers = config.get_providers(&profile_stack)?;
                 if let Some(provider_config) = providers.get(prov_name) {
                     let provider =
                         get_provider_resolved(config, &profile_stack, prov_name, provider_config)
@@ -479,7 +478,7 @@ impl EditCommand {
                     config.get_default_provider(&profile_stack)?
                 };
                 let encrypted_value = if let Some(provider_name) = provider_to_use {
-                    let providers = config.get_providers(&profile_stack);
+                    let providers = config.get_providers(&profile_stack)?;
                     if let Some(provider_config) = providers.get(&provider_name) {
                         let provider = get_provider_resolved(
                             config,
@@ -516,7 +515,7 @@ impl EditCommand {
                 };
 
                 // Encrypt with the provider from this secret's profile
-                let providers = config.get_providers(&profile_stack);
+                let providers = config.get_providers(&profile_stack)?;
                 let Some(provider_config) = providers.get(&provider_name) else {
                     return Err(FnoxError::Config(format!(
                         "Provider '{}' not found for new secret '{}'",
