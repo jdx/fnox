@@ -273,6 +273,7 @@ jobs:
           artifacts: release-assets/fnox-*.tar.gz release-assets/fnox-*.tar.xz release-assets/fnox-*.zip
           bin: fnox
           resources: |
+            skill/fnox=repo:skills/fnox
             cli-spec/usage=asset:fnox.usage.kdl
             completion/bash=asset:fnox.bash
             completion/zsh=asset:fnox.zsh
