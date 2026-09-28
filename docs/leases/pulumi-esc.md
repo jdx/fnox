@@ -20,11 +20,10 @@ duration = "1h"
 | -------------- | -------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `organization` | Yes      | Pulumi organization name                                                                                                  |
 | `environment`  | Yes      | ESC environment name                                                                                                      |
-| `project`      | No       | ESC project name (omit for legacy `<org>/<env>` envs)                                                                     |
+| `project`      | No       | ESC project name (default `default`, as the `esc` CLI uses for `<org>/<env>` references)                                  |
 | `token`        | No       | Pulumi access token (falls back to `FNOX_PULUMI_ACCESS_TOKEN` / `PULUMI_ACCESS_TOKEN` / `~/.pulumi/credentials.json`)     |
 | `env_vars`     | No       | Filter: only surface these keys from `environmentVariables`. Required for auto-routing individual env vars to this lease. |
-| `interpolate`  | No       | Single char sigil (e.g. `"%"`) to enable `<sigil>{path}` reference resolution. See [Interpolation](#interpolation) below. |
-| `duration`     | No       | Advisory lease TTL (e.g. `"1h"`)                                                                                          |
+| `duration`     | No       | Lease TTL (e.g. `"1h"`); keep it at or below the lifetime of credentials the environment mints                           |
 
 ## Prerequisites
 
@@ -34,31 +33,9 @@ duration = "1h"
 
 Whatever keys appear under `environmentVariables` in the opened ESC environment. When `env_vars` is set, only those keys are surfaced (missing keys are logged as warnings). Non-string scalars (booleans, numbers) are coerced to their JSON-string form so they can be exported as env vars.
 
-## Interpolation
-
-ESC supports composing and importing environments, but variable references like `%{anthropic.api_key}` are resolved at environment-definition time. The `interpolate` option gives you late binding instead: fnox walks the resolved `properties` tree and substitutes references at lease-creation time.
-
-```toml
-[leases.clara]
-type = "pulumi-esc"
-organization = "my-org"
-project = "dev"
-environment = "main"
-interpolate = "%"
-env_vars = ["ANTHROPIC_API_KEY"]
-```
-
-If the ESC environment defines `ANTHROPIC_API_KEY = "%{anthropic.api_key}"` in its `environmentVariables` block, fnox resolves the reference to the value at `properties.anthropic.value.api_key.value` before handing the credential to the subprocess.
-
-**Rules:**
-
-- The sigil is a single char (`"%"`, `"$"`, etc.) — you choose.
-- Missing references are a hard error.
-- Single pass only: `%{foo.%{bar}}` parses as `%{foo.%{bar}` (path `foo.%{bar`) and errors on lookup. No recursion into the replaced text.
-
 ## Limits
 
-- **Max duration:** 1 hour. ESC-minted credentials are bounded by the underlying integration (AWS STS, GCP IAM, etc.), which typically cap at 1 hour.
+- **Max duration:** 1 hour. `duration` sets the ESC open-session length and the lease expiry, but credentials minted inside the environment (e.g. `fn::open::aws-login`) keep the lifetime configured there. If that is shorter than `duration`, fnox will reuse expired credentials until the lease expires — set `duration` no longer than the environment's credential lifetime.
 - **Revocation:** No-op. ESC credentials are already short-lived; there is no server-side lease to revoke.
 
 ## Examples
@@ -98,9 +75,9 @@ fnox lease create everything
 
 ## Notes
 
-- `organization`, `project`, and `environment` combine into the ESC reference: `<org>/<project>/<env>` or legacy `<org>/<env>`.
+- `organization`, `project`, and `environment` combine into the ESC reference `<org>/<project>/<env>`; `project` defaults to `default`.
 - fnox opens the environment once per lease creation and reads the `environmentVariables` block from the response.
-- The Pulumi Cloud API base URL comes from `PULUMI_BACKEND_URL` (env-var auth path) or the `current` field in `~/.pulumi/credentials.json` — self-hosted Pulumi Cloud works without extra config.
+- The Pulumi Cloud API base URL is `PULUMI_BACKEND_URL`, else the `current` field in `~/.pulumi/credentials.json`, else `https://api.pulumi.com`. Non-HTTP backends (`s3://`, `file://`, ...) are skipped, since they aren't Pulumi Cloud.
 
 ## See Also
 

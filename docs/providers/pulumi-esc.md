@@ -41,7 +41,7 @@ fnox resolves the access token in this order:
 3. `PULUMI_ACCESS_TOKEN` environment variable
 4. `$PULUMI_HOME/credentials.json` (default: `~/.pulumi/credentials.json`) — written by `esc login`
 
-The credentials file's `current` field also determines the API base URL, so self-hosted Pulumi Cloud works without extra config. The env-var path honors `PULUMI_BACKEND_URL` (default `https://api.pulumi.com`).
+The API base URL is `PULUMI_BACKEND_URL`, else the credentials file's `current` account, else `https://api.pulumi.com`, so self-hosted Pulumi Cloud works without extra config. Non-HTTP backends (`s3://`, `file://`, ...) are skipped, since they aren't Pulumi Cloud.
 
 For CI, create a team or personal access token in the Pulumi Cloud console and set `PULUMI_ACCESS_TOKEN` on the runner.
 
@@ -53,13 +53,13 @@ pulumi-esc = { type = "pulumi-esc", organization = "my-org", project = "my-proje
 **Options:**
 
 - `organization` (required) — Pulumi organization name.
-- `project` (optional) — Pulumi project name. Omit for legacy `<org>/<env>` environments.
+- `project` (optional) — Pulumi project name. Defaults to `default`, as the `esc` CLI does for `<org>/<env>` references.
 - `environment` (required) — ESC environment name.
 - `token` (optional) — access token. Overrides `PULUMI_ACCESS_TOKEN`.
 
 ## Referencing Secrets
 
-The `value` of each secret is a [property path](https://www.pulumi.com/docs/esc/environments/working-with-environments/) into the ESC environment's resolved values, using dot notation.
+The `value` of each secret is a dot-separated path into the ESC environment's resolved values. Numeric segments index arrays (`hosts.0`); the path must end at a string, number, or boolean.
 
 ```toml
 [secrets]
