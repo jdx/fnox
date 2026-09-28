@@ -8,11 +8,6 @@ Store secrets in a local KeePass database file (`.kdbx`), supporting KDBX4 forma
 
 ## Quick start
 
-```sh
-# Set database password
-export FNOX_KEEPASS_PASSWORD="your-master-password"
-```
-
 Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
 
 ```toml
@@ -27,6 +22,8 @@ fnox set DATABASE_URL "postgresql://localhost/mydb" --provider keepass
 # Retrieve from database
 fnox get DATABASE_URL
 ```
+
+fnox prompts for the database password without showing what you type. You can also set `FNOX_KEEPASS_PASSWORD` to use fnox without a prompt.
 
 ## Configuration
 
@@ -62,7 +59,9 @@ Relative `keyfile` paths follow the same config-relative rule as `database`.
 
 ## Authentication
 
-Set the database password via environment variable:
+When a password is not configured, fnox prompts for it in a terminal. The prompt reads from the terminal even when standard input is piped, so `fnox exec -- mycmd` can prompt before starting `mycmd`. One prompt is used for the entries resolved from the same provider during a command. Automatic shell hooks do not prompt; use an environment variable for secrets loaded by `fnox hook-env`.
+
+For unattended use, set the database password via environment variable:
 
 - `FNOX_KEEPASS_PASSWORD` (preferred)
 - `KEEPASS_PASSWORD` (fallback)
@@ -76,7 +75,7 @@ export KEEPASS_PASSWORD="your-master-password"
 ```
 
 ::: warning
-The provider also accepts a `password` field, but avoid storing the password directly in the provider config. Use environment variables instead; they take priority over the config value.
+The provider also accepts a `password` field, but avoid storing the password directly in the provider config. Environment variables take priority over the config value; both take priority over the prompt. In non-interactive mode, a missing password produces an authentication error.
 :::
 
 ## Reference formats

@@ -45,6 +45,10 @@ pub struct HookEnvCommand {
 
 impl HookEnvCommand {
     pub async fn run(&self, cli: &Cli) -> Result<()> {
+        // Shell hooks run automatically during activation and at each prompt.
+        // Missing credentials must never open an interactive provider prompt.
+        crate::env::set_non_interactive(true);
+
         // Get settings for output mode
         let settings =
             Settings::try_get().map_err(|e| anyhow::anyhow!("Failed to get settings: {}", e))?;

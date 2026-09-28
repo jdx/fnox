@@ -2437,6 +2437,7 @@ dependencies = [
  "rand 0.10.2",
  "regex",
  "reqwest 0.13.5",
+ "rpassword",
  "schemars 1.2.2",
  "serde",
  "serde_json",

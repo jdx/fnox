@@ -1,12 +1,23 @@
+use crate::env;
 use crate::error::{FnoxError, Result};
 use crate::providers::ProviderCapability;
 use async_trait::async_trait;
 use keepass::DatabaseKey;
 use keepass::db::{Database, EntryId, GroupId, GroupRef};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{LazyLock, Mutex};
 use tempfile::NamedTempFile;
+
+type PasswordCacheKey = (PathBuf, Option<PathBuf>);
+
+// Provider instances are recreated for separate resolution levels. Cache only
+// prompted passwords for the lifetime of this process, keyed by the database
+// and keyfile, so one command asks once even across those levels.
+static PROMPTED_PASSWORDS: LazyLock<Mutex<HashMap<PasswordCacheKey, String>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Provider that reads and writes secrets from KeePass database files (.kdbx)
 pub struct KeePassProvider {
@@ -28,9 +39,9 @@ impl KeePassProvider {
         })
     }
 
-    /// Get the password from environment variable or config
+    /// Get the password from the environment, config, or a terminal prompt.
     fn get_password(&self) -> Result<String> {
-        // Priority: env var > config
+        // Priority: env var > config > prompt.
         if let Some(password) = keepass_password() {
             return Ok(password);
         }
@@ -39,10 +50,34 @@ impl KeePassProvider {
             return Ok(password.clone());
         }
 
+        // Hold the lock while prompting so concurrent resolutions of the same
+        // database do not each request the password.
+        let mut prompted = PROMPTED_PASSWORDS
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let cache_key = (self.database_path.clone(), self.keyfile_path.clone());
+        if let Some(password) = prompted.get(&cache_key) {
+            return Ok(password.clone());
+        }
+        if !env::is_non_interactive() {
+            let password = rpassword::prompt_password(format!(
+                "KeePass password for {}: ",
+                self.database_path.display()
+            ))
+            .map_err(|e| FnoxError::ProviderAuthFailed {
+                provider: "KeePass".to_string(),
+                details: format!("Could not read database password from terminal: {e}"),
+                hint: "Set FNOX_KEEPASS_PASSWORD or KEEPASS_PASSWORD instead".to_string(),
+                url: "https://fnox.jdx.dev/providers/keepass".to_string(),
+            })?;
+            prompted.insert(cache_key, password.clone());
+            return Ok(password);
+        }
+
         Err(FnoxError::ProviderAuthFailed {
             provider: "KeePass".to_string(),
             details: "Database password not set".to_string(),
-            hint: "Set FNOX_KEEPASS_PASSWORD or KEEPASS_PASSWORD environment variable, or configure password in provider config".to_string(),
+            hint: "Run in a terminal to enter the password, or set FNOX_KEEPASS_PASSWORD or KEEPASS_PASSWORD".to_string(),
             url: "https://fnox.jdx.dev/providers/keepass".to_string(),
         })
     }
