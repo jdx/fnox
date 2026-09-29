@@ -20,10 +20,7 @@
     "template": "You summarize code changes for reviewers. Analyze branch \"{{branch}}\" compared to \"{{base_branch}}\".\n\nRun `git diff origin/{{base_branch}}...HEAD`, then write a short Problem -> Solution summary in Markdown. Start with the `**Problem:**` line and include a `**Solution:**` line. Return Markdown only."
   },
   "select": {
-    "trigger_types": [
-      "api",
-      "push"
-    ]
+    "trigger_types": ["api", "push"]
   },
   "output": {
     "adapter": "markdown",
