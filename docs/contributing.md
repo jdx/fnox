@@ -4,6 +4,8 @@ description: "Set up a fnox development checkout, run checks, edit documentation
 
 # Contributing
 
+## Community Participation
+
 ::: danger AI replies to Discussions and Issues are restricted
 You may only use AI to reply to a [Discussion](https://github.com/jdx/fnox/discussions) or [Issue](https://github.com/jdx/fnox/issues) if you
 created it, you opened a PR that fixes it, or you have already had a contribution merged into
@@ -16,8 +18,11 @@ does not post to threads you are not allowed to reply to, and never let it sweep
 threads at once.
 :::
 
-Using AI to help write and file your own Discussion or Issue is fine. If you are allowed to use AI to
-reply, review and verify anything before posting it, and disclose that AI contributed.
+Using AI to help write and file your own Discussion or Issue is fine. Review it before posting, and
+disclose that AI contributed. If you are allowed to use AI to reply, review and verify the reply before
+posting it, and disclose that AI contributed.
+
+## Contribution expectations
 
 Contributions should solve a clear problem within fnox's scope. For a substantial change, discuss the direction first in [GitHub Discussions](https://github.com/jdx/fnox/discussions) or [Discord](https://discord.gg/UBa7pJUN7Z). Small, obvious fixes can go straight to a pull request.
 
