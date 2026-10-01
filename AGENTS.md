@@ -9,6 +9,7 @@
 - Never batch-post, loop over, or sweep Discussions or Issues to answer several of them, even for a merged contributor.
 - Lightly edited, human-reviewed, or disclosed model output does not create an exception. The disclosure footer does not make an AI reply acceptable on its own.
 - Permitted replies may be AI-assisted. The user must review and verify the reply before it is posted.
+- Creating a new Discussion or Issue with AI assistance is fine and is not restricted. The user should review it first, and it needs the AI disclosure below.
 
 When you do post AI-contributed GitHub content, append the disclosure described in this file's GitHub Interactions section (if present) or `*AI-assisted — Tool: <tool>; model: <provider>/<model>; version: <version-or-unavailable>.*`.
 

@@ -16,8 +16,8 @@ does not post to threads you are not allowed to reply to, and never let it sweep
 threads at once.
 :::
 
-If you are allowed to use AI to reply, review and verify anything before posting it, and disclose
-that AI contributed.
+Using AI to help write and file your own Discussion or Issue is fine. If you are allowed to use AI to
+reply, review and verify anything before posting it, and disclose that AI contributed.
 
 Contributions should solve a clear problem within fnox's scope. For a substantial change, discuss the direction first in [GitHub Discussions](https://github.com/jdx/fnox/discussions) or [Discord](https://discord.gg/UBa7pJUN7Z). Small, obvious fixes can go straight to a pull request.
 
