@@ -8,8 +8,7 @@ description: "Set up a fnox development checkout, run checks, edit documentation
 
 ::: danger AI replies to Discussions and Issues are restricted
 You may only use AI to reply to a [Discussion](https://github.com/jdx/fnox/discussions) or [Issue](https://github.com/jdx/fnox/issues) if you
-created it, you opened a PR that fixes it, or you have already had a contribution merged into
-fnox. Everyone else is not allowed to use AI to reply. This is a growing problem, and **doing it is
+created it, you opened a PR that fixes it, or you have already had a contribution, attributed to your GitHub account, merged into the default branch of fnox. Everyone else is not allowed to use AI to reply. This is a growing problem, and **doing it is
 an instant ban across all of jdx's projects.**
 
 This includes raw, lightly edited, reviewed, and disclosed model output. Adding an "AI-assisted"
