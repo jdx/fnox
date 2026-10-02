@@ -78,6 +78,7 @@ const providerGroups = [
       ["FOKS", "foks"],
       ["HashiCorp Vault", "vault"],
       ["Keeper Secrets Manager", "keeper-sm"],
+      ["Pulumi ESC", "pulumi-esc"],
     ],
   ],
   [
@@ -127,6 +128,7 @@ const leases = [
       ["GitHub App", "github-app"],
       ["GitHub OAuth", "github-oauth"],
       ["HashiCorp Vault", "vault"],
+      ["Pulumi ESC", "pulumi-esc"],
       ["Custom command", "command"],
     ].map(([name, slug]) => page(name, `/leases/${slug}`)),
   },

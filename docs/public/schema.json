@@ -364,6 +364,39 @@
           "required": ["type", "client_id"]
         },
         {
+          "description": "Pulumi ESC Environment (dynamic credentials via the ESC REST API)",
+          "type": "object",
+          "properties": {
+            "organization": {
+              "type": "string"
+            },
+            "project": {
+              "type": ["string", "null"]
+            },
+            "environment": {
+              "type": "string"
+            },
+            "token": {
+              "type": ["string", "null"]
+            },
+            "env_vars": {
+              "description": "Optional filter: only surface these env var names from the ESC environment.\nWhen omitted, all `environmentVariables` entries are surfaced.",
+              "type": ["array", "null"],
+              "items": {
+                "type": "string"
+              }
+            },
+            "duration": {
+              "type": ["string", "null"]
+            },
+            "type": {
+              "type": "string",
+              "const": "pulumi-esc"
+            }
+          },
+          "required": ["type", "organization", "environment"]
+        },
+        {
           "description": "Generic Command Backend",
           "type": "object",
           "properties": {
@@ -1060,6 +1093,35 @@
           },
           "additionalProperties": false,
           "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "organization": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "project": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "environment": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "token": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
+            "type": {
+              "type": "string",
+              "const": "pulumi-esc"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "organization", "environment"]
         },
         {
           "type": "object",

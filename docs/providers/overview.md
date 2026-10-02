@@ -47,6 +47,7 @@ A provider connects a secret name to its storage. Configure an instance under `[
 | [FOKS](/providers/foks)                              | `foks`         | A key in a personal or team namespace                  |
 | [Bitwarden Secrets Manager](/providers/bitwarden-sm) | `bitwarden-sm` | A secret key in a project                              |
 | [Keeper Secrets Manager](/providers/keeper-sm)       | `keeper-sm`    | A record and field using Keeper notation               |
+| [Pulumi ESC](/providers/pulumi-esc)                  | `pulumi-esc`   | A value path in an ESC environment                     |
 
 ## Password managers and secret services
 

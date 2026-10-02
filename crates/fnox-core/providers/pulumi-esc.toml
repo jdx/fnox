@@ -1,0 +1,35 @@
+# Pulumi ESC provider - retrieves secrets from Pulumi ESC environments
+display_name = "Pulumi ESC"
+serde_rename = "pulumi-esc"
+rust_variant = "PulumiEsc"
+category = "CloudSecretsManager"
+description = "Pulumi ESC (Environments, Secrets, and Configuration)"
+default_name = "pulumi-esc"
+setup_instructions = """
+fnox talks to the Pulumi Cloud REST API directly — no esc CLI required.
+Authenticate one of two ways:
+  1. export PULUMI_ACCESS_TOKEN=pul-xxx (create at https://app.pulumi.com/account/tokens)
+  2. Run `esc login` once to populate ~/.pulumi/credentials.json (CLI not needed at runtime)"""
+
+[fields.organization]
+type = "required"
+placeholder = "my-org"
+label = "Organization:"
+wizard = true
+
+[fields.project]
+type = "optional"
+placeholder = "my-project"
+label = "Project (optional, omit for legacy org/env format):"
+wizard = true
+
+[fields.environment]
+type = "required"
+placeholder = "dev"
+label = "Environment:"
+wizard = true
+
+[fields.token]
+type = "optional"
+placeholder = ""
+label = "Access token (optional, uses PULUMI_ACCESS_TOKEN if not set):"

@@ -1432,6 +1432,7 @@
                     "passwordstate",
                     "plain",
                     "proton-pass",
+                    "pulumi-esc",
                     "vault",
                     "yubikey"
                   ],
@@ -1527,6 +1528,10 @@
                     {
                       "value": "proton-pass",
                       "help": "Proton Pass"
+                    },
+                    {
+                      "value": "pulumi-esc",
+                      "help": "Pulumi ESC (Environments, Secrets, and Configuration)"
                     },
                     {
                       "value": "vault",

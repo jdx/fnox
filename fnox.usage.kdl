@@ -250,6 +250,7 @@ cmd provider help="Manage providers (defaults to list)" {
                 choice passwordstate help="Click Studios Passwordstate"
                 choice plain help="Plain text provider"
                 choice proton-pass help="Proton Pass"
+                choice pulumi-esc help="Pulumi ESC (Environments, Secrets, and Configuration)"
                 choice vault help="HashiCorp Vault"
                 choice yubikey help="YubiKey HMAC-SHA1 hardware-backed encryption"
             }

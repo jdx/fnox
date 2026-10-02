@@ -101,6 +101,10 @@ pub enum ProviderType {
     #[usage(name = "proton-pass")]
     #[strum(serialize = "proton-pass")]
     ProtonPass,
+    /// Pulumi ESC (Environments, Secrets, and Configuration)
+    #[usage(name = "pulumi-esc")]
+    #[strum(serialize = "pulumi-esc")]
+    PulumiEsc,
     /// HashiCorp Vault
     #[usage(name = "vault")]
     Vault,
