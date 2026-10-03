@@ -24,6 +24,7 @@ gcpsm|gcp|gcp-sm
 gcpkms|gcp-kms|gcp-kms
 bitwarden|bitwarden|bitwarden
 bws|bitwarden-sm|bitwarden-sm
+enpass|enpass|enpass
 infisical|infisical|infisical
 keepass|keepass|keepass
 keychain|keychain|keychain

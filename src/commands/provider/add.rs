@@ -241,6 +241,13 @@ impl AddCommand {
                 auth_command: None,
                 daemon_cache: None,
             },
+            ProviderType::Enpass => crate::config::ProviderConfig::Enpass {
+                vault: StringOrSecretRef::from("~/Documents/Enpass/Vaults/primary"),
+                keyfile: OptionStringOrSecretRef::none(),
+                password: OptionStringOrSecretRef::none(),
+                auth_command: None,
+                daemon_cache: None,
+            },
             ProviderType::Foks => crate::config::ProviderConfig::Foks {
                 prefix: OptionStringOrSecretRef::literal("/fnox/"),
                 team: OptionStringOrSecretRef::none(),

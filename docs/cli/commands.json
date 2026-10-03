@@ -1422,6 +1422,7 @@
                     "fido2",
                     "bitwarden",
                     "doppler",
+                    "enpass",
                     "foks",
                     "bitwarden-sm",
                     "infisical",
@@ -1487,6 +1488,10 @@
                     {
                       "value": "doppler",
                       "help": "Doppler secrets manager"
+                    },
+                    {
+                      "value": "enpass",
+                      "help": "Enpass vault (read-only)"
                     },
                     {
                       "value": "foks",
