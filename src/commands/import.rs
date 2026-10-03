@@ -202,13 +202,6 @@ impl ImportCommand {
         // Determine the target config file path
         let target_path = if self.global {
             let global_path = Config::global_config_path();
-            // Create parent directory if it doesn't exist
-            if let Some(parent) = global_path.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| FnoxError::CreateDirFailed {
-                    path: parent.to_path_buf(),
-                    source: e,
-                })?;
-            }
             global_path
         } else {
             // Match set.rs: use find_local_config when --config is the default,
@@ -222,6 +215,17 @@ impl ImportCommand {
                 cli.config.clone()
             }
         };
+
+        // Explicit project paths may live under `.config/`; create their
+        // parent directory just as we do for the global config.
+        if let Some(parent) = target_path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            std::fs::create_dir_all(parent).map_err(|e| FnoxError::CreateDirFailed {
+                path: parent.to_path_buf(),
+                source: e,
+            })?;
+        }
 
         // Load existing target config to preserve metadata on re-import
         let mut existing_config = if target_path.exists() {

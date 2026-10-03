@@ -53,19 +53,23 @@ pub fn validate_secret_name(name: &str) -> Result<()> {
 
 /// Returns all config filenames in load order (first = lowest priority, last = highest priority).
 ///
-/// Order: main configs → profile configs (in the order given) → local configs
-/// Within each group, non-dotfiles come first (lower priority); dotfiles follow (higher priority).
+/// Order: main configs → profile configs (in the order given) → local configs.
+/// Within each group, root-level files come first (lower priority), followed by
+/// hidden files and then project `.config` files (higher priority).
 pub fn all_config_filenames(profiles: &[String]) -> Vec<String> {
     let mut files = vec![
         DEFAULT_CONFIG_FILENAME.to_string(),
         ".fnox.toml".to_string(),
+        ".config/fnox.toml".to_string(),
     ];
     for p in profiles.iter().filter(|p| *p != "default") {
         files.push(format!("fnox.{p}.toml"));
         files.push(format!(".fnox.{p}.toml"));
+        files.push(format!(".config/fnox.{p}.toml"));
     }
     files.push("fnox.local.toml".to_string());
     files.push(".fnox.local.toml".to_string());
+    files.push(".config/fnox.local.toml".to_string());
     files
 }
 
@@ -76,14 +80,16 @@ pub fn all_config_filenames(profiles: &[String]) -> Vec<String> {
 /// explicit path and loads just that file, its imports, and the global
 /// config.
 pub fn uses_config_discovery(path: &Path) -> bool {
-    all_config_filenames(&[])
-        .iter()
-        .any(|f| path == Path::new(f))
+    path.components().count() == 1
+        && all_config_filenames(&[])
+            .iter()
+            .any(|f| path == Path::new(f))
 }
 
 /// Returns the local override filename for a supported config basename.
 ///
-/// Only `fnox.toml` and `.fnox.toml` have corresponding local override files.
+/// Standard and hidden config basenames have corresponding local override files,
+/// including when they are stored under a project `.config` directory.
 pub fn local_override_filename(path: &Path) -> Option<&'static str> {
     match path.file_name().and_then(|name| name.to_str()) {
         Some("fnox.toml") => Some("fnox.local.toml"),
@@ -107,6 +113,7 @@ pub fn find_local_config(dir: &Path, profiles: &[String]) -> PathBuf {
         for name in [
             format!("fnox.{write_profile}.toml"),
             format!(".fnox.{write_profile}.toml"),
+            format!(".config/fnox.{write_profile}.toml"),
         ] {
             let path = dir.join(&name);
             if path.exists() {
@@ -117,17 +124,21 @@ pub fn find_local_config(dir: &Path, profiles: &[String]) -> PathBuf {
 
     // Fall back to lowest-priority existing base file.
     // When a non-default profile is active, exclude local files
-    // (fnox.local.toml, .fnox.local.toml) to avoid silently routing profile-scoped
-    // secrets into a gitignored local-override file.
+    // (including their `.config` variants) to avoid silently routing
+    // profile-scoped secrets into a gitignored local-override file.
     let is_profiled = profiles.iter().any(|p| p != "default");
-    for name in &["fnox.toml", ".fnox.toml"] {
+    for name in &["fnox.toml", ".fnox.toml", ".config/fnox.toml"] {
         let path = dir.join(name);
         if path.exists() {
             return path;
         }
     }
     if !is_profiled {
-        for name in &["fnox.local.toml", ".fnox.local.toml"] {
+        for name in &[
+            "fnox.local.toml",
+            ".fnox.local.toml",
+            ".config/fnox.local.toml",
+        ] {
             let path = dir.join(name);
             if path.exists() {
                 return path;
@@ -916,7 +927,7 @@ impl Config {
             let path = dir.join(filename);
             if path.exists() {
                 let mut file_config = Self::load(&path)?;
-                let is_local = matches!(filename.as_str(), "fnox.local.toml" | ".fnox.local.toml");
+                let is_local = local_override_filename(&path).is_some();
                 if is_local && !include_local_sync {
                     file_config
                         .secrets
@@ -2657,6 +2668,7 @@ root = true
         // Anything with a directory component, or a non-default name, is an
         // explicit path
         assert!(!uses_config_discovery(Path::new("./fnox.toml")));
+        assert!(!uses_config_discovery(Path::new(".config/fnox.toml")));
         assert!(!uses_config_discovery(Path::new("../fnox.toml")));
         assert!(!uses_config_discovery(Path::new("/etc/fnox.toml")));
         assert!(!uses_config_discovery(Path::new("custom.toml")));
@@ -2806,6 +2818,24 @@ root = true
         std::fs::write(dir.path().join(".fnox.toml"), "").unwrap();
         let result = super::find_local_config(dir.path(), &[]);
         assert_eq!(result, dir.path().join(".fnox.toml"));
+    }
+
+    #[test]
+    fn test_find_local_config_only_project_config_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join(".config")).unwrap();
+        std::fs::write(dir.path().join(".config/fnox.toml"), "").unwrap();
+        let result = super::find_local_config(dir.path(), &[]);
+        assert_eq!(result, dir.path().join(".config/fnox.toml"));
+    }
+
+    #[test]
+    fn test_find_local_config_project_config_dir_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join(".config")).unwrap();
+        std::fs::write(dir.path().join(".config/fnox.staging.toml"), "").unwrap();
+        let result = super::find_local_config(dir.path(), &["staging".to_string()]);
+        assert_eq!(result, dir.path().join(".config/fnox.staging.toml"));
     }
 
     #[test]
