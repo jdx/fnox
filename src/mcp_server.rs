@@ -28,6 +28,9 @@ const DEFAULT_EXEC_TIMEOUT_SECS: u64 = 300;
 fn scrub_age_identity(cmd: &mut tokio::process::Command) {
     cmd.env_remove("FNOX_AGE_KEY");
     cmd.env_remove("FNOX_AGE_KEY_FILE");
+    for key in fnox_core::providers::enpass::env_dependencies() {
+        cmd.env_remove(key);
+    }
 }
 
 /// MCP tool parameter: request a secret by name
@@ -671,6 +674,8 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(removed.iter().any(|key| key == "FNOX_AGE_KEY"));
         assert!(removed.iter().any(|key| key == "FNOX_AGE_KEY_FILE"));
+        assert!(removed.iter().any(|key| key == "FNOX_ENPASS_PASSWORD"));
+        assert!(removed.iter().any(|key| key == "ENPASS_PASSWORD"));
     }
 
     #[test]

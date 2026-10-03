@@ -197,7 +197,7 @@ import = ["./shared/base.toml", "./envs/dev.toml"]
 
 ### Path values
 
-Paths declared in config files are resolved relative to the config file that declares them. This applies to imports and provider filesystem paths such as `age.key_file`, `keepass.database`, `keepass.keyfile`, `password-store.store_dir`, and `foks.home`.
+Paths declared in config files are resolved relative to the config file that declares them. This applies to imports and provider filesystem paths such as `age.key_file`, `enpass.vault`, `enpass.keyfile`, `keepass.database`, `keepass.keyfile`, `password-store.store_dir`, and `foks.home`.
 
 ```toml
 # project/fnox.toml
