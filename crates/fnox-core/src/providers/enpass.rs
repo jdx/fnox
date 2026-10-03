@@ -290,8 +290,13 @@ impl EnpassProvider {
             .cloned()
     }
 
-    /// Every live (not deleted, not trashed) item, read once per unlock.
+    /// Every live (not deleted, not trashed) item, read once per unlock. This
+    /// also opens a read transaction that lasts until the connection is dropped,
+    /// so the item and field reads of a batch see one consistent vault state even
+    /// if Enpass writes to it meanwhile.
     fn load_items(conn: &Connection) -> Result<Vec<Item>> {
+        conn.execute_batch("BEGIN")
+            .map_err(|e| Self::invalid(format!("Could not read the vault: {e}"), ""))?;
         let read_err =
             |e: rusqlite::Error| Self::invalid(format!("Could not read the vault: {e}"), "");
         let mut stmt = conn
