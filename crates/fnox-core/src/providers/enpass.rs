@@ -514,9 +514,14 @@ mod tests {
         let iterations = 2;
         std::fs::write(
             dir.join(INFO_FILE),
-            format!(
-                r#"{{"kdf_algo":"pbkdf2","kdf_iter":{iterations},"encryption_algo":"aes-256-cbc","version":6}}"#
-            ),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "kdf_algo": "pbkdf2",
+                "kdf_iter": iterations,
+                "encryption_algo": "aes-256-cbc",
+                "version": 6,
+            }))
+            .unwrap()
+                + "\n",
         )
         .unwrap();
         let salt = [0x5a; SALT_LEN];
