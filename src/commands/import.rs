@@ -201,8 +201,7 @@ impl ImportCommand {
 
         // Determine the target config file path
         let target_path = if self.global {
-            let global_path = Config::global_config_path();
-            global_path
+            Config::global_config_path()
         } else {
             // Match set.rs: use find_local_config when --config is the default,
             // so profile-specific files (fnox.<profile>.toml) are found.
