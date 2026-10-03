@@ -39,6 +39,10 @@ type CacheKey = (PathBuf, Option<PathBuf>);
 static PROMPTED_PASSWORDS: LazyLock<Mutex<HashMap<CacheKey, String>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
+// Only one password prompt at a time, so prompts for different vaults don't
+// share the terminal's input.
+static PROMPT_LOCK: Mutex<()> = Mutex::new(());
+
 // Serializes opens of the same vault so a command that resolves several secrets
 // in parallel shows a single password prompt. Other vaults are not held up.
 static OPEN_LOCKS: LazyLock<Mutex<HashMap<CacheKey, Arc<Mutex<()>>>>> =
@@ -60,6 +64,14 @@ struct VaultInfo {
     kdf_iter: u32,
     #[serde(default)]
     encryption_algo: String,
+}
+
+/// A live Enpass item, as stored.
+struct Item {
+    uuid: String,
+    title: String,
+    folded_title: String,
+    key: Vec<u8>,
 }
 
 /// One field of an Enpass item, as stored.
@@ -120,6 +132,9 @@ impl EnpassProvider {
             return Ok((password.clone(), false));
         }
         if !env::is_non_interactive() {
+            let _prompt = PROMPT_LOCK
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             let password = rpassword::prompt_password(format!(
                 "Enpass master password for {}: ",
                 self.vault_dir.display()
@@ -275,38 +290,49 @@ impl EnpassProvider {
             .cloned()
     }
 
-    /// The live (not deleted, not trashed) item with this title and its fields,
-    /// or None if there is no such item. Titles match case-insensitively; this is
-    /// done here rather than with SQLite's `lower()`, which only folds ASCII.
-    fn fields_for(conn: &Connection, title: &str) -> Result<Option<(String, Vec<Field>)>> {
+    /// Every live (not deleted, not trashed) item, read once per unlock.
+    fn load_items(conn: &Connection) -> Result<Vec<Item>> {
         let read_err =
             |e: rusqlite::Error| Self::invalid(format!("Could not read the vault: {e}"), "");
-        let wanted = title.to_lowercase();
         let mut stmt = conn
             .prepare("SELECT uuid, title, key FROM item WHERE deleted = 0 AND trashed = 0")
             .map_err(|e| Self::invalid(format!("Unexpected vault schema: {e}"), ""))?;
-        let mut items = stmt
-            .query_map([], |r| {
-                Ok((
-                    r.get::<_, String>(0)?,
-                    r.get::<_, Option<String>>(1)?.unwrap_or_default(),
-                    r.get::<_, Option<Vec<u8>>>(2)?.unwrap_or_default(),
-                ))
+        stmt.query_map([], |r| {
+            let title = r.get::<_, Option<String>>(1)?.unwrap_or_default();
+            Ok(Item {
+                uuid: r.get(0)?,
+                folded_title: title.to_lowercase(),
+                title,
+                key: r.get::<_, Option<Vec<u8>>>(2)?.unwrap_or_default(),
             })
-            .map_err(read_err)?
-            .collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(read_err)?;
-        items.retain(|(_, t, _)| t.to_lowercase() == wanted);
-        let (uuid, item_title, item_key) = match items.len() {
-            0 => return Ok(None),
-            1 => items.remove(0),
-            _ => {
-                return Err(Self::invalid(
-                    format!("More than one item is titled {title:?}"),
-                    "Rename one of them in Enpass so the title is unique",
-                ));
-            }
+        })
+        .map_err(read_err)?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(read_err)
+    }
+
+    /// The item with this title and its fields, or None if there is no such
+    /// item. Titles match case-insensitively; this is done here rather than with
+    /// SQLite's `lower()`, which only folds ASCII.
+    fn fields_for(
+        conn: &Connection,
+        items: &[Item],
+        title: &str,
+    ) -> Result<Option<(String, Vec<Field>)>> {
+        let read_err =
+            |e: rusqlite::Error| Self::invalid(format!("Could not read the vault: {e}"), "");
+        let wanted = title.to_lowercase();
+        let mut matches = items.iter().filter(|i| i.folded_title == wanted);
+        let Some(item) = matches.next() else {
+            return Ok(None);
         };
+        if matches.next().is_some() {
+            return Err(Self::invalid(
+                format!("More than one item is titled {title:?}"),
+                "Rename one of them in Enpass so the title is unique",
+            ));
+        }
+        let (uuid, item_title, item_key) = (&item.uuid, &item.title, &item.key);
         let mut stmt = conn
             .prepare(
                 "SELECT label, type, value FROM itemfield
@@ -314,7 +340,7 @@ impl EnpassProvider {
             )
             .map_err(|e| Self::invalid(format!("Unexpected vault schema: {e}"), ""))?;
         let fields = stmt
-            .query_map([&uuid], |r| {
+            .query_map([uuid], |r| {
                 Ok(Field {
                     uuid: uuid.clone(),
                     label: r.get::<_, Option<String>>(0)?.unwrap_or_default(),
@@ -326,7 +352,7 @@ impl EnpassProvider {
             .map_err(read_err)?
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(read_err)?;
-        Ok(Some((item_title, fields)))
+        Ok(Some((item_title.clone(), fields)))
     }
 
     /// Parse "title" or "title/field". The field matches a field label or a
@@ -338,13 +364,13 @@ impl EnpassProvider {
         }
     }
 
-    fn lookup(conn: &Connection, value: &str) -> Result<String> {
+    fn lookup(conn: &Connection, items: &[Item], value: &str) -> Result<String> {
         // Try the whole reference as a title first, so titles containing "/" work.
-        let (field, found_item) = match Self::fields_for(conn, value)? {
+        let (field, found_item) = match Self::fields_for(conn, items, value)? {
             Some(item) => (None, Some(item)),
             None => {
                 let (title, field) = Self::parse_reference(value);
-                (field, Self::fields_for(conn, title)?)
+                (field, Self::fields_for(conn, items, title)?)
             }
         };
         let Some((item_title, fields)) = found_item else {
@@ -410,10 +436,16 @@ impl EnpassProvider {
     /// One unlock for the whole batch.
     fn lookup_all(&self, secrets: &[(String, String)]) -> HashMap<String, Result<String>> {
         match self.open() {
-            Ok(conn) => secrets
-                .iter()
-                .map(|(key, value)| (key.clone(), Self::lookup(&conn, value)))
-                .collect(),
+            Ok(conn) => match Self::load_items(&conn) {
+                Ok(items) => secrets
+                    .iter()
+                    .map(|(key, value)| (key.clone(), Self::lookup(&conn, &items, value)))
+                    .collect(),
+                Err(e) => secrets
+                    .iter()
+                    .map(|(key, _)| (key.clone(), Err(replicate_error(&e))))
+                    .collect(),
+            },
             Err(e) => secrets
                 .iter()
                 .map(|(key, _)| (key.clone(), Err(replicate_error(&e))))
@@ -512,8 +544,11 @@ impl crate::providers::Provider for EnpassProvider {
             self.vault_dir.display()
         );
         let value = value.to_string();
-        self.blocking(move |p| Self::lookup(&p.open()?, &value))
-            .await
+        self.blocking(move |p| {
+            let conn = p.open()?;
+            Self::lookup(&conn, &Self::load_items(&conn)?, &value)
+        })
+        .await
     }
 
     async fn get_secrets_batch(
