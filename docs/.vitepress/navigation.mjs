@@ -85,6 +85,7 @@ const providerGroups = [
     [
       ["1Password", "1password"],
       ["Bitwarden", "bitwarden"],
+      ["Enpass", "enpass"],
       ["Infisical", "infisical"],
       ["Passwordstate", "passwordstate"],
       ["Proton Pass", "proton-pass"],

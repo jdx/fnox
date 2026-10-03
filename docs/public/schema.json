@@ -662,6 +662,32 @@
         {
           "type": "object",
           "properties": {
+            "vault": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "keyfile": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "password": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
+            "type": {
+              "type": "string",
+              "const": "enpass"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "vault"]
+        },
+        {
+          "type": "object",
+          "properties": {
             "project_id": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
