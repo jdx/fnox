@@ -65,7 +65,6 @@ struct VaultInfo {
 /// One field of an Enpass item, as stored.
 struct Field {
     uuid: String,
-    title: String,
     label: String,
     field_type: String,
     value: String,
@@ -318,7 +317,6 @@ impl EnpassProvider {
             .query_map([&uuid], |r| {
                 Ok(Field {
                     uuid: uuid.clone(),
-                    title: item_title.clone(),
                     label: r.get::<_, Option<String>>(0)?.unwrap_or_default(),
                     field_type: r.get::<_, Option<String>>(1)?.unwrap_or_default(),
                     value: r.get::<_, Option<String>>(2)?.unwrap_or_default(),
