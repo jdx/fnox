@@ -466,6 +466,7 @@ fn enpass_password() -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::providers::Provider;
 
     #[test]
     fn parse_reference_splits_last_segment() {
@@ -482,5 +483,310 @@ mod tests {
         // PBKDF2-HMAC-SHA512, P="password", S="salt", c=1 (well-known test vector)
         let out = pbkdf2_sha512(b"password", b"salt", 1);
         assert_eq!(hex::encode(&out[..16]), "867f70cf1ade02cff3752599a3a53dc4");
+    }
+
+    #[test]
+    fn pbkdf2_matches_multi_iteration_vector() {
+        let out = pbkdf2_sha512(b"password", b"salt", 4096);
+        assert_eq!(hex::encode(&out[..16]), "d197b1b33db0143e018b12f3d1d1479e");
+    }
+
+    #[test]
+    fn keyfile_accepts_xml_and_bare_hex() {
+        let dir = tempfile::tempdir().unwrap();
+        let xml = dir.path().join("vault.enpasskey");
+        std::fs::write(
+            &xml,
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Key>\n  0a0b0c\n</Key>\n",
+        )
+        .unwrap();
+        assert_eq!(read_keyfile(&xml).unwrap(), vec![0x0a, 0x0b, 0x0c]);
+        let bare = dir.path().join("bare.key");
+        std::fs::write(&bare, "ff00\n").unwrap();
+        assert_eq!(read_keyfile(&bare).unwrap(), vec![0xff, 0x00]);
+    }
+
+    const PASSWORD: &str = "correct horse battery staple";
+
+    type TestField<'a> = (&'a str, &'a str, &'a str);
+
+    fn build_vault(dir: &Path, password: &str, keyfile: Option<&[u8]>, compat: u8) {
+        let iterations = 2;
+        std::fs::write(
+            dir.join(INFO_FILE),
+            format!(
+                r#"{{"kdf_algo":"pbkdf2","kdf_iter":{iterations},"encryption_algo":"aes-256-cbc","version":6}}"#
+            ),
+        )
+        .unwrap();
+        let salt = [0x5a; SALT_LEN];
+        let mut master = password.as_bytes().to_vec();
+        master.extend(keyfile.unwrap_or_default());
+        let key = pbkdf2_sha512(&master, &salt, iterations);
+        let conn = Connection::open(dir.join(DB_FILE)).unwrap();
+        // Raw key + salt makes SQLCipher write the salt as the file header.
+        conn.pragma_update(
+            None,
+            "key",
+            format!("x'{}{}'", hex::encode(&key[..32]), hex::encode(salt)),
+        )
+        .unwrap();
+        conn.pragma_update(None, "cipher_compatibility", compat)
+            .unwrap();
+        conn.execute_batch(
+            "CREATE TABLE item (uuid TEXT PRIMARY KEY, title TEXT, key BLOB,
+                                deleted INTEGER DEFAULT 0, trashed INTEGER DEFAULT 0);
+             CREATE TABLE itemfield (item_uuid TEXT, label TEXT, type TEXT, value TEXT,
+                                     deleted INTEGER DEFAULT 0, orde INTEGER);",
+        )
+        .unwrap();
+
+        let github: &[TestField] = &[
+            ("Username", "username", "octocat"),
+            ("Password", "password", "hunter2"),
+            ("API Token", "password", "ghp_example"),
+            ("Old password", "password", "stale"),
+        ];
+        add_item(
+            &conn,
+            "11111111-2222-4333-8444-555555555555",
+            "GitHub",
+            github,
+            false,
+        );
+        conn.execute(
+            "UPDATE itemfield SET deleted = 1 WHERE label = 'Old password'",
+            [],
+        )
+        .unwrap();
+        add_item(
+            &conn,
+            "21111111-2222-4333-8444-555555555555",
+            "Prod/DB",
+            &[("Password", "password", "slash-title")],
+            false,
+        );
+        for uuid in [
+            "31111111-2222-4333-8444-555555555555",
+            "41111111-2222-4333-8444-555555555555",
+        ] {
+            add_item(&conn, uuid, "Twin", &[("Password", "password", "x")], false);
+        }
+        add_item(
+            &conn,
+            "51111111-2222-4333-8444-555555555555",
+            "Binned",
+            &[("Password", "password", "gone")],
+            true,
+        );
+    }
+
+    fn add_item(conn: &Connection, uuid: &str, title: &str, fields: &[TestField], trashed: bool) {
+        let item_key: Vec<u8> = (0u8..44)
+            .map(|b| b.wrapping_mul(7) ^ uuid.as_bytes()[0])
+            .collect();
+        conn.execute(
+            "INSERT INTO item (uuid, title, key, trashed) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![uuid, title, item_key, trashed as i64],
+        )
+        .unwrap();
+        let cipher = Aes256Gcm::new_from_slice(&item_key[..32]).unwrap();
+        let nonce: [u8; 12] = item_key[32..44].try_into().unwrap();
+        let aad = hex::decode(uuid.replace('-', "")).unwrap();
+        for (order, (label, field_type, value)) in fields.iter().enumerate() {
+            let stored = if *field_type == "password" {
+                let sealed = cipher
+                    .encrypt(
+                        &Nonce::from(nonce),
+                        Payload {
+                            msg: value.as_bytes(),
+                            aad: &aad,
+                        },
+                    )
+                    .unwrap();
+                hex::encode(sealed)
+            } else {
+                value.to_string()
+            };
+            conn.execute(
+                "INSERT INTO itemfield (item_uuid, label, type, value, orde)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                rusqlite::params![uuid, label, field_type, stored, order as i64],
+            )
+            .unwrap();
+        }
+    }
+
+    fn provider(dir: &Path, password: &str, keyfile: Option<&Path>) -> EnpassProvider {
+        EnpassProvider::new(
+            dir.display().to_string(),
+            keyfile.map(|k| k.display().to_string()),
+            Some(password.to_string()),
+        )
+        .unwrap()
+    }
+
+    fn env_password_set() -> bool {
+        if enpass_password().is_some() {
+            eprintln!("skipping: FNOX_ENPASS_PASSWORD or ENPASS_PASSWORD is set");
+            return true;
+        }
+        false
+    }
+
+    fn test_vault(compat: u8) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        build_vault(dir.path(), PASSWORD, None, compat);
+        dir
+    }
+
+    #[tokio::test]
+    async fn reads_fields_from_a_vault() {
+        if env_password_set() {
+            return;
+        }
+        let dir = test_vault(4);
+        let p = provider(dir.path(), PASSWORD, None);
+        p.test_connection().await.unwrap();
+
+        assert_eq!(p.get_secret("GitHub").await.unwrap(), "hunter2");
+        assert_eq!(p.get_secret("GitHub/username").await.unwrap(), "octocat");
+        assert_eq!(
+            p.get_secret("github/api token").await.unwrap(),
+            "ghp_example"
+        );
+        assert_eq!(p.get_secret("Prod/DB").await.unwrap(), "slash-title");
+        assert_eq!(
+            p.get_secret("Prod/DB/password").await.unwrap(),
+            "slash-title"
+        );
+    }
+
+    #[tokio::test]
+    async fn opens_sqlcipher3_vaults() {
+        if env_password_set() {
+            return;
+        }
+        let dir = test_vault(3);
+        let p = provider(dir.path(), PASSWORD, None);
+        assert_eq!(p.get_secret("GitHub").await.unwrap(), "hunter2");
+    }
+
+    #[tokio::test]
+    async fn reports_missing_ambiguous_and_trashed_items() {
+        if env_password_set() {
+            return;
+        }
+        let dir = test_vault(4);
+        let p = provider(dir.path(), PASSWORD, None);
+
+        assert!(matches!(
+            p.get_secret("Nope").await,
+            Err(FnoxError::ProviderSecretNotFound { .. })
+        ));
+        assert!(matches!(
+            p.get_secret("Binned").await,
+            Err(FnoxError::ProviderSecretNotFound { .. })
+        ));
+        let err = p.get_secret("Twin").await.unwrap_err().to_string();
+        assert!(err.contains("More than one item"), "{err}");
+        let err = p
+            .get_secret("GitHub/Old password")
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("has no Old password field"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn wrong_password_is_an_auth_failure_for_single_and_batch() {
+        if env_password_set() {
+            return;
+        }
+        let dir = test_vault(4);
+        let p = provider(dir.path(), "wrong", None);
+
+        assert!(matches!(
+            p.get_secret("GitHub").await,
+            Err(FnoxError::ProviderAuthFailed { .. })
+        ));
+        let batch = p
+            .get_secrets_batch(&[
+                ("A".to_string(), "GitHub".to_string()),
+                ("B".to_string(), "Prod/DB".to_string()),
+            ])
+            .await;
+        assert_eq!(batch.len(), 2);
+        for result in batch.values() {
+            assert!(
+                matches!(result, Err(FnoxError::ProviderAuthFailed { .. })),
+                "{result:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn batch_resolves_each_reference() {
+        if env_password_set() {
+            return;
+        }
+        let dir = test_vault(4);
+        let p = provider(dir.path(), PASSWORD, None);
+        let batch = p
+            .get_secrets_batch(&[
+                ("USER".to_string(), "GitHub/username".to_string()),
+                ("PASS".to_string(), "GitHub".to_string()),
+                ("MISSING".to_string(), "Nope".to_string()),
+            ])
+            .await;
+        assert_eq!(batch["USER"].as_ref().unwrap(), "octocat");
+        assert_eq!(batch["PASS"].as_ref().unwrap(), "hunter2");
+        assert!(matches!(
+            batch["MISSING"],
+            Err(FnoxError::ProviderSecretNotFound { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn keyfile_is_part_of_the_master_key() {
+        if env_password_set() {
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let key_bytes = [0xab_u8; 32];
+        build_vault(dir.path(), PASSWORD, Some(&key_bytes), 4);
+        let keyfile = dir.path().join("vault.enpasskey");
+        std::fs::write(&keyfile, format!("<Key>{}</Key>", hex::encode(key_bytes))).unwrap();
+
+        let with_key = provider(dir.path(), PASSWORD, Some(&keyfile));
+        assert_eq!(with_key.get_secret("GitHub").await.unwrap(), "hunter2");
+        let without_key = provider(dir.path(), PASSWORD, None);
+        assert!(matches!(
+            without_key.get_secret("GitHub").await,
+            Err(FnoxError::ProviderAuthFailed { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_unsupported_vault_formats() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join(INFO_FILE),
+            r#"{"kdf_algo":"argon2","kdf_iter":3,"encryption_algo":"aes-256-cbc"}"#,
+        )
+        .unwrap();
+        let p = provider(dir.path(), PASSWORD, None);
+        let err = p.vault_info().err().unwrap().to_string();
+        assert!(err.contains("Unsupported vault format"), "{err}");
+    }
+
+    /// `FNOX_ENPASS_FIXTURE_DIR=$PWD/test/fixtures/enpass cargo test -p fnox-core write_bats_fixture -- --ignored`
+    #[test]
+    #[ignore]
+    fn write_bats_fixture() {
+        let dir = PathBuf::from(std::env::var("FNOX_ENPASS_FIXTURE_DIR").unwrap());
+        std::fs::create_dir_all(&dir).unwrap();
+        let _ = std::fs::remove_file(dir.join(DB_FILE));
+        build_vault(&dir, PASSWORD, None, 4);
     }
 }

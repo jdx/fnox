@@ -1,0 +1,1 @@
+{"kdf_algo":"pbkdf2","kdf_iter":2,"encryption_algo":"aes-256-cbc","version":6}
