@@ -358,10 +358,10 @@ impl crate::providers::Provider for ProtonPassProvider {
     async fn test_connection(&self) -> Result<()> {
         tracing::debug!("Testing connection to Proton Pass");
 
-        // Use 'pass-cli test' for connection testing
-        let output = self.execute_pass_cli_command(&["test"], None).await?;
+        // Use 'pass-cli info' for connection testing
+        let output = self.execute_pass_cli_command(&["info"], None).await?;
 
-        tracing::debug!("Proton Pass test output: {}", output);
+        tracing::debug!("Proton Pass info output: {}", output);
 
         Ok(())
     }
