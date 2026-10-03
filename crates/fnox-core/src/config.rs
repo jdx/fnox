@@ -927,7 +927,20 @@ impl Config {
             let path = dir.join(filename);
             if path.exists() {
                 let mut file_config = Self::load(&path)?;
-                let is_local = local_override_filename(&path).is_some();
+
+                // Resolve each file's imports from that file's directory.
+                // This matters for `.config/fnox.toml`, whose sibling imports
+                // are not relative to the project root.
+                let import_dir = path.parent().unwrap_or_else(|| Path::new(""));
+                for import_path in &file_config.import.clone() {
+                    let import_config = Self::load_import(import_path, import_dir)?;
+                    file_config = Self::merge_configs(import_config, file_config)?;
+                }
+
+                let is_local = matches!(
+                    path.file_name().and_then(|name| name.to_str()),
+                    Some("fnox.local.toml" | ".fnox.local.toml")
+                );
                 if is_local && !include_local_sync {
                     file_config
                         .secrets
@@ -959,11 +972,6 @@ impl Config {
 
         // If this config marks root, stop recursion but still load global config
         if config.root {
-            // Load imports if any
-            for import_path in &config.import.clone() {
-                let import_config = Self::load_import(import_path, dir)?;
-                config = Self::merge_configs(import_config, config)?;
-            }
             // Load global config as the base even for root configs
             let (global_config, global_found) = Self::load_global()?;
             if global_found {
@@ -971,12 +979,6 @@ impl Config {
                 found = true;
             }
             return Ok((config, found));
-        }
-
-        // Load imports first (they get overridden by local config)
-        for import_path in &config.import.clone() {
-            let import_config = Self::load_import(import_path, dir)?;
-            config = Self::merge_configs(import_config, config)?;
         }
 
         // If we have a parent directory, recurse up and merge

@@ -51,6 +51,24 @@ EOF
 	assert_output "config-dir"
 }
 
+@test "project .config imports resolve relative to the config directory" {
+	mkdir -p .config
+	cat >.config/shared.toml <<'EOF'
+[secrets]
+IMPORTED_SECRET = { default = "imported-value" }
+EOF
+	cat >.config/fnox.toml <<'EOF'
+root = true
+import = ["./shared.toml"]
+
+[providers.plain]
+type = "plain"
+EOF
+
+	assert_fnox_success get IMPORTED_SECRET
+	assert_output "imported-value"
+}
+
 @test "project .config supports profile and local overlays" {
 	mkdir -p .config
 	cat >.config/fnox.toml <<'EOF'
