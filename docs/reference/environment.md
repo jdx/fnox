@@ -283,6 +283,7 @@ Provider configuration may override environment credentials. Follow the linked g
 | Bitwarden                 | `FNOX_BW_SESSION`, `BW_SESSION`                                                                | [Bitwarden](/providers/bitwarden)                                 |
 | Bitwarden Secrets Manager | `FNOX_BWS_ACCESS_TOKEN`, `BWS_ACCESS_TOKEN`, `BWS_PROJECT_ID`                                  | [Bitwarden SM](/providers/bitwarden-sm#environment-variables)     |
 | Doppler                   | `FNOX_DOPPLER_TOKEN`, `DOPPLER_TOKEN`                                                          | [Doppler](/providers/doppler#token-management)                    |
+| Enpass                    | `FNOX_ENPASS_PASSWORD`, `ENPASS_PASSWORD`                                                      | [Enpass](/providers/enpass#authentication)                        |
 | FOKS                      | `FOKS_BOT_TOKEN`, `FOKS_HOST`, `FOKS_HOME` and `FNOX_` equivalents                             | [FOKS](/providers/foks#cicd)                                      |
 | Infisical                 | `INFISICAL_TOKEN`, `INFISICAL_CLIENT_ID`, `INFISICAL_CLIENT_SECRET` and `FNOX_` equivalents    | [Infisical](/providers/infisical)                                 |
 | KeePass                   | `FNOX_KEEPASS_PASSWORD`, `KEEPASS_PASSWORD`                                                    | [KeePass](/providers/keepass#authentication)                      |

@@ -1,0 +1,19 @@
+{
+  "creating_device": "fnox test device",
+  "encryption_algo": "aes-256-cbc",
+  "have_keyfile": 0,
+  "kdf_algo": "pbkdf2",
+  "kdf_iter": 320000,
+  "last_modified_by_user": "local",
+  "last_modified_device": "fnox test device",
+  "last_modified_time": 1791031047,
+  "last_password_changed_by": "local",
+  "last_password_changed_time": 1791030972,
+  "last_password_changing_device": "fnox test device",
+  "vault_att_count": 0,
+  "vault_icon": "vault/v4",
+  "vault_items_count": 2,
+  "vault_name": "testvault",
+  "vault_uuid": "0a9c6b8b-f300-4e77-9744-175792fefbaf",
+  "version": 6
+}

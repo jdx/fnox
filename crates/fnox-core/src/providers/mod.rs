@@ -15,6 +15,7 @@ pub mod azure_sm;
 pub mod bitwarden;
 pub mod bitwarden_sm;
 pub mod doppler;
+pub mod enpass;
 #[cfg(not(target_env = "musl"))]
 pub mod fido2;
 pub mod foks;
@@ -147,8 +148,8 @@ mod generated {
         use super::super::fido2;
         use super::super::{
             age, aws_kms, aws_ps, aws_sm, azure_ac, azure_kms, azure_sm, bitwarden, bitwarden_sm,
-            doppler, foks, gcp_kms, gcp_sm, infisical, keepass, keeper_sm, keychain, onepassword,
-            password_store, passwordstate, plain, proton_pass, vault, yubikey,
+            doppler, enpass, foks, gcp_kms, gcp_sm, infisical, keepass, keeper_sm, keychain,
+            onepassword, password_store, passwordstate, plain, proton_pass, vault, yubikey,
         };
         include!(concat!(
             env!("OUT_DIR"),
@@ -361,6 +362,26 @@ pub(crate) fn get_provider_from_resolved_with_context_and_identity_cycle_guard(
         let resolved = ResolvedProviderConfig::KeePass {
             database: crate::config_path::resolve_string_relative_to_file(
                 database.clone(),
+                provider_source.as_deref(),
+            ),
+            keyfile: crate::config_path::resolve_optional_string_relative_to_file(
+                keyfile.clone(),
+                provider_source.as_deref(),
+            ),
+            password: password.clone(),
+        };
+        return get_provider_from_resolved(provider_name, &resolved);
+    }
+    if let ResolvedProviderConfig::Enpass {
+        vault,
+        keyfile,
+        password,
+    } = resolved
+    {
+        let provider_source = provider_source_path(config, profile, provider_name);
+        let resolved = ResolvedProviderConfig::Enpass {
+            vault: crate::config_path::resolve_string_relative_to_file(
+                vault.clone(),
                 provider_source.as_deref(),
             ),
             keyfile: crate::config_path::resolve_optional_string_relative_to_file(

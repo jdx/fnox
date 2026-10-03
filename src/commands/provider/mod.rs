@@ -66,6 +66,10 @@ pub enum ProviderType {
     /// Doppler secrets manager
     #[usage(name = "doppler")]
     Doppler,
+    /// Enpass vault (read-only)
+    #[usage(name = "enpass")]
+    #[strum(serialize = "enpass")]
+    Enpass,
     /// FOKS (Federated Open Key Service)
     #[usage(name = "foks")]
     Foks,

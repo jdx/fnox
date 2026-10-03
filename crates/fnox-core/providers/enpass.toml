@@ -1,0 +1,30 @@
+# Enpass provider - reads the live Enpass vault (read-only)
+display_name = "Enpass"
+serde_rename = "enpass"
+rust_variant = "Enpass"
+category = "PasswordManager"
+description = "Enpass vault, read live from its vault file (read-only)"
+default_name = "enpass"
+setup_instructions = """
+Point it at an Enpass vault directory (the one holding vault.enpassdb and vault.json),
+e.g. ~/Documents/Enpass/Vaults/primary. Enter the master password when prompted, or set
+FNOX_ENPASS_PASSWORD or ENPASS_PASSWORD. Secrets are looked up by item title, optionally
+"title/field" (default field: the item's password)."""
+
+[fields.vault]
+type = "required"
+placeholder = "~/Documents/Enpass/Vaults/primary"
+label = "Vault directory:"
+wizard = true
+
+[fields.keyfile]
+type = "optional"
+placeholder = ""
+label = "Key file (optional):"
+wizard = true
+
+[fields.password]
+type = "optional"
+placeholder = ""
+label = ""
+wizard = false

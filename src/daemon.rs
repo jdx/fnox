@@ -1277,6 +1277,7 @@ fn provider_env_key(key: &str) -> bool {
             | "AZURE_CLIENT_ID"
             | "AZURE_CLIENT_SECRET"
             | "AZURE_TENANT_ID"
+            | "ENPASS_PASSWORD"
             | "INFISICAL_TOKEN"
             | "KEEPASS_PASSWORD"
             | "PASSWORDSTATE_API_KEY"

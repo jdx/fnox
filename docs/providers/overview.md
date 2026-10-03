@@ -56,6 +56,7 @@ These providers use an existing vault or service account. Follow the individual 
 | ----------------------------------------- | --------------- | --------------------------------------------- |
 | [1Password](/providers/1password)         | `1password`     | `op` CLI; item and field references           |
 | [Bitwarden](/providers/bitwarden)         | `bitwarden`     | `bw` CLI, or the experimental `rbw` backend   |
+| [Enpass](/providers/enpass)               | `enpass`        | Reads the local vault file; item and field    |
 | [Infisical](/providers/infisical)         | `infisical`     | Infisical CLI; project, environment, and path |
 | [Passwordstate](/providers/passwordstate) | `passwordstate` | HTTP API; password ID or title and field      |
 | [Proton Pass](/providers/proton-pass)     | `proton-pass`   | `pass-cli`; vault, item, and field            |

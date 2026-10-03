@@ -240,6 +240,7 @@ cmd provider help="Manage providers (defaults to list)" {
                 choice fido2 help="FIDO2 hmac-secret hardware-backed encryption"
                 choice bitwarden help="Bitwarden Password Manager"
                 choice doppler help="Doppler secrets manager"
+                choice enpass help="Enpass vault (read-only)"
                 choice foks help="FOKS (Federated Open Key Service)"
                 choice bitwarden-sm help="Bitwarden Secrets Manager"
                 choice infisical help=Infisical
