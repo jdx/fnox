@@ -4,7 +4,7 @@ description: "Share configuration across directories and understand how global, 
 
 # Hierarchical configuration
 
-fnox searches parent directories for `fnox.toml` (or `.fnox.toml`) files and merges them. Use this to share providers and common settings across a monorepo.
+fnox searches parent directories for `fnox.toml`, `.fnox.toml`, and `.config/fnox.toml` files and merges them. Use this to share providers and common settings across a monorepo.
 
 ## How it works
 
@@ -31,7 +31,7 @@ When you run fnox from `project/services/api/`, the merge order is (lowest to hi
 4. Loads `project/services/api/fnox.toml` (current)
 5. Loads `project/services/api/fnox.local.toml` (current local, if exists)
 
-Each level merges the main config, any profile-specific file (`fnox.<profile>.toml`), and local overrides, with child configs taking precedence over parent configs, and profile and local files taking precedence over the main config at the same level. Global config provides the base layer available to all projects.
+Each level merges the main config, any profile-specific file (`fnox.<profile>.toml`), and local overrides, with child configs taking precedence over parent configs, and profile and local files taking precedence over the main config at the same level. If more than one location exists at a level, root-level files load first, then hidden files, then `.config` files. Global config provides the base layer available to all projects.
 
 ## Example setup
 
@@ -144,7 +144,7 @@ EOF
 - Always add `fnox.local.toml` to `.gitignore`
 - Provide a `fnox.local.toml.example` (committed) for team guidance
 - Use explicit paths to bypass parent configs and local overrides: `fnox -c ./fnox.toml get SECRET` (the file's own `import`s and the global config are still loaded)
-- `fnox sync --local-file` only supports `fnox.toml` and `.fnox.toml`. Other config filenames are rejected because adjacent local override files are not loaded.
+- `fnox sync --local-file` writes an adjacent local override for discovered configs, including `.config/fnox.toml`.
 
 ## Global configuration
 
@@ -180,7 +180,7 @@ fnox provider add age age --global
 - **Use global config for personal tokens:** Machine-wide secrets like `GITHUB_TOKEN`
 - **Profile inheritance works too:** Each level can define profile-specific overrides
 - **Use `root = true` to stop recursion:** Prevents searching parent directories (but not global config)
-- **Use dotfiles to declutter:** `.fnox.toml` works the same as `fnox.toml` (same for `.fnox.local.toml`, `.fnox.staging.toml`, etc.)
+- **Use a project config directory to declutter:** `.config/fnox.toml` works the same as `fnox.toml`; profile and local variants such as `.config/fnox.staging.toml` and `.config/fnox.local.toml` are supported too. Initialize a new one with `fnox --config .config/fnox.toml init`.
 
 ## Next steps
 

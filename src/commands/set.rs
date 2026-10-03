@@ -331,19 +331,19 @@ impl SetCommand {
         let _ = profile_secrets; // Release the mutable borrow
 
         // Save the secret to the appropriate config file
-        if self.global {
-            // Create parent directory if it doesn't exist
-            if let Some(parent) = target_path.parent()
-                && !self.dry_run
-            {
-                std::fs::create_dir_all(parent).map_err(|e| {
-                    FnoxError::Config(format!(
-                        "Failed to create config directory '{}': {}",
-                        parent.display(),
-                        e
-                    ))
-                })?;
-            }
+        // Configs selected explicitly may live under `.config/`. Create the
+        // target's parent before writing, including for project configs.
+        if let Some(parent) = target_path.parent()
+            && !parent.as_os_str().is_empty()
+            && !self.dry_run
+        {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                FnoxError::Config(format!(
+                    "Failed to create config directory '{}': {}",
+                    parent.display(),
+                    e
+                ))
+            })?;
         }
 
         if self.dry_run {
