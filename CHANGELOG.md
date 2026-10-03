@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.37.0](https://github.com/jdx/fnox/compare/v1.36.0..v1.37.0) - 2026-10-03
+
+### 🚀 Features
+
+- **(config)** support project .config files by [@jdx](https://github.com/jdx) in [#925](https://github.com/jdx/fnox/pull/925)
+- **(keepass)** prompt for database password when unset by [@jdx](https://github.com/jdx) in [#912](https://github.com/jdx/fnox/pull/912)
+- **(provider)** add read-only Enpass vault provider by [@jdx](https://github.com/jdx) in [#928](https://github.com/jdx/fnox/pull/928)
+
+### 📚 Documentation
+
+- restrict AI replies on Discussions and Issues and note the instant ban by [@jdx](https://github.com/jdx) in [#923](https://github.com/jdx/fnox/pull/923)
+
+### 🛡️ Security
+
+- **(deps)** update rust crates by [@renovate[bot]](https://github.com/renovate[bot]) in [#918](https://github.com/jdx/fnox/pull/918)
+
+### 🔍 Other Changes
+
+- **(entire)** store checkpoints in a private repository by [@jdx](https://github.com/jdx) in [9876031](https://github.com/jdx/fnox/commit/9876031ac60bf6fd9429acc56899c0924b43df1e)
+- **(entire)** commit codex session hooks by [@jdx](https://github.com/jdx) in [eb8f990](https://github.com/jdx/fnox/commit/eb8f9908ba5e9c5bb6aa1055031c1cb50722e1e8)
+- **(entire)** commit claude session hooks by [@jdx](https://github.com/jdx) in [77df3e4](https://github.com/jdx/fnox/commit/77df3e4854b03c3dfc68eb9eb327f434f4a05a2f)
+- **(entire)** restore lower-cost trail findings by [@jdx](https://github.com/jdx) in [c7b83a8](https://github.com/jdx/fnox/commit/c7b83a8419bcdcda7a5fd778589e1cfb0206a357)
+- **(entire)** format trail runner configs with prettier by [@jdx](https://github.com/jdx) in [#920](https://github.com/jdx/fnox/pull/920)
+- limit each contributor to one open draft PR by [@jdx](https://github.com/jdx) in [#921](https://github.com/jdx/fnox/pull/921)
+
+### 📦️ Dependency Updates
+
+- update rust crate usage-rs to v6.12.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#914](https://github.com/jdx/fnox/pull/914)
+- update jdx/renovate-config action to v1.0.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#917](https://github.com/jdx/fnox/pull/917)
+- update dependency @anthropic-ai/claude-code to v2.1.278 by [@renovate[bot]](https://github.com/renovate[bot]) in [#919](https://github.com/jdx/fnox/pull/919)
+
 ## [1.36.0](https://github.com/jdx/fnox/compare/v1.35.3..v1.36.0) - 2026-09-28
 
 ### 🚀 Features
