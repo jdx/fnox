@@ -927,6 +927,7 @@ impl Config {
             let path = dir.join(filename);
             if path.exists() {
                 let mut file_config = Self::load(&path)?;
+                let file_is_root = file_config.root;
 
                 // Resolve each file's imports from that file's directory.
                 // This matters for `.config/fnox.toml`, whose sibling imports
@@ -936,6 +937,10 @@ impl Config {
                     let import_config = Self::load_import(import_path, import_dir)?;
                     file_config = Self::merge_configs(import_config, file_config)?;
                 }
+                // Only a configuration discovered in this directory can stop
+                // parent traversal. `root` in an imported configuration only
+                // applies to that import's own discovery context.
+                file_config.root = file_is_root;
 
                 let is_local = matches!(
                     path.file_name().and_then(|name| name.to_str()),
@@ -2859,6 +2864,29 @@ root = true
             config.profiles["staging"].provider_sources["imported"],
             imported
         );
+    }
+
+    #[test]
+    fn imported_root_does_not_stop_parent_traversal() {
+        let dir = tempfile::tempdir().unwrap();
+        let child = dir.path().join("child");
+        std::fs::create_dir(&child).unwrap();
+        std::fs::write(
+            dir.path().join("fnox.toml"),
+            "[providers.parent]\ntype = \"plain\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            child.join("shared.toml"),
+            "root = true\n[providers.imported]\ntype = \"plain\"\n",
+        )
+        .unwrap();
+        std::fs::write(child.join("fnox.toml"), "import = [\"shared.toml\"]\n").unwrap();
+
+        let (config, _) = Config::load_recursive(&child, false, &[], true).unwrap();
+
+        assert!(config.providers.contains_key("imported"));
+        assert!(config.providers.contains_key("parent"));
     }
 
     #[test]
