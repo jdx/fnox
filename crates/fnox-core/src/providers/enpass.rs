@@ -419,18 +419,37 @@ impl crate::providers::Provider for EnpassProvider {
                 .iter()
                 .map(|(key, value)| (key.clone(), Self::lookup(&conn, value)))
                 .collect(),
-            Err(e) => {
-                let msg = e.to_string();
-                secrets
-                    .iter()
-                    .map(|(key, _)| (key.clone(), Err(FnoxError::Provider(msg.clone()))))
-                    .collect()
-            }
+            Err(e) => secrets
+                .iter()
+                .map(|(key, _)| (key.clone(), Err(replicate_error(&e))))
+                .collect(),
         }
     }
 
     async fn test_connection(&self) -> Result<()> {
         self.open().map(|_| ())
+    }
+}
+
+fn replicate_error(e: &FnoxError) -> FnoxError {
+    match e {
+        FnoxError::ProviderAuthFailed {
+            details, hint, url, ..
+        } => FnoxError::ProviderAuthFailed {
+            provider: PROVIDER.to_string(),
+            details: details.clone(),
+            hint: hint.clone(),
+            url: url.clone(),
+        },
+        FnoxError::ProviderInvalidResponse {
+            details, hint, url, ..
+        } => FnoxError::ProviderInvalidResponse {
+            provider: PROVIDER.to_string(),
+            details: details.clone(),
+            hint: hint.clone(),
+            url: url.clone(),
+        },
+        other => FnoxError::Provider(other.to_string()),
     }
 }
 
