@@ -962,7 +962,6 @@ impl Config {
                             write_profile.to_string(),
                             !Settings::get().no_defaults,
                         );
-                        file_config.set_source_paths(&path);
                     }
                 }
                 config = Self::merge_configs(config, file_config)?;
@@ -2838,6 +2837,28 @@ root = true
         std::fs::write(dir.path().join(".config/fnox.staging.toml"), "").unwrap();
         let result = super::find_local_config(dir.path(), &["staging".to_string()]);
         assert_eq!(result, dir.path().join(".config/fnox.staging.toml"));
+    }
+
+    #[test]
+    fn local_profile_imports_preserve_their_source_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let shared_dir = dir.path().join("shared");
+        std::fs::create_dir(&shared_dir).unwrap();
+        let imported = shared_dir.join("providers.toml");
+        std::fs::write(&imported, "[providers.imported]\ntype = \"plain\"\n").unwrap();
+        std::fs::write(
+            dir.path().join("fnox.local.toml"),
+            "root = true\nimport = [\"shared/providers.toml\"]\n",
+        )
+        .unwrap();
+
+        let (config, _) =
+            Config::load_recursive(dir.path(), false, &["staging".to_string()], true).unwrap();
+
+        assert_eq!(
+            config.profiles["staging"].provider_sources["imported"],
+            imported
+        );
     }
 
     #[test]
