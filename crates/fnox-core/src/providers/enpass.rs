@@ -141,7 +141,8 @@ impl EnpassProvider {
         })?;
         let info: VaultInfo = serde_json::from_str(&text)
             .map_err(|e| Self::invalid(format!("Could not parse {}: {e}", path.display()), ""))?;
-        if info.kdf_algo != "pbkdf2" || info.encryption_algo != "aes-256-cbc" || info.kdf_iter == 0 {
+        if info.kdf_algo != "pbkdf2" || info.encryption_algo != "aes-256-cbc" || info.kdf_iter == 0
+        {
             return Err(Self::invalid(
                 format!(
                     "Unsupported vault format (kdf {} x{}, cipher {})",
@@ -196,7 +197,11 @@ impl EnpassProvider {
             let ok = conn
                 .pragma_update(None, "key", format!("x'{hex_key}'"))
                 .and_then(|_| conn.pragma_update(None, "cipher_compatibility", compat))
-                .and_then(|_| conn.query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get::<_, i64>(0)))
+                .and_then(|_| {
+                    conn.query_row("SELECT count(*) FROM sqlite_master", [], |r| {
+                        r.get::<_, i64>(0)
+                    })
+                })
                 .is_ok();
             if ok {
                 return Ok(Some(conn));
@@ -273,8 +278,9 @@ impl EnpassProvider {
             return Err(FnoxError::ProviderSecretNotFound {
                 provider: PROVIDER.to_string(),
                 secret: value.to_string(),
-                hint: "No item with that title in the vault (deleted and trashed items are skipped)"
-                    .to_string(),
+                hint:
+                    "No item with that title in the vault (deleted and trashed items are skipped)"
+                        .to_string(),
                 url: DOCS_URL.to_string(),
             });
         }
@@ -286,13 +292,23 @@ impl EnpassProvider {
             ));
         }
         let wanted = |f: &&Field| match field {
-            Some(name) => f.label.eq_ignore_ascii_case(name) || f.field_type.eq_ignore_ascii_case(name),
+            Some(name) => {
+                f.label.eq_ignore_ascii_case(name) || f.field_type.eq_ignore_ascii_case(name)
+            }
             None => f.field_type == "password",
         };
         let found = fields.iter().find(wanted).ok_or_else(|| {
-            let names: Vec<&str> = fields.iter().map(|f| f.label.as_str()).filter(|l| !l.is_empty()).collect();
+            let names: Vec<&str> = fields
+                .iter()
+                .map(|f| f.label.as_str())
+                .filter(|l| !l.is_empty())
+                .collect();
             Self::invalid(
-                format!("Item {:?} has no {} field", fields[0].title, field.unwrap_or("password")),
+                format!(
+                    "Item {:?} has no {} field",
+                    fields[0].title,
+                    field.unwrap_or("password")
+                ),
                 format!("Its fields: {}", names.join(", ")),
             )
         })?;
@@ -306,7 +322,10 @@ fn decrypt_field(field: &Field) -> Result<String> {
         return Ok(field.value.clone());
     }
     if field.item_key.len() < 44 {
-        return Err(EnpassProvider::invalid("Item key is missing or truncated", ""));
+        return Err(EnpassProvider::invalid(
+            "Item key is missing or truncated",
+            "",
+        ));
     }
     let ciphertext = hex::decode(&field.value)
         .map_err(|e| EnpassProvider::invalid(format!("Field value isn't hex: {e}"), ""))?;
@@ -318,7 +337,13 @@ fn decrypt_field(field: &Field) -> Result<String> {
         .try_into()
         .map_err(|_| EnpassProvider::invalid("Bad item nonce", ""))?;
     let plaintext = cipher
-        .decrypt(&Nonce::from(nonce_arr), Payload { msg: &ciphertext, aad: &aad })
+        .decrypt(
+            &Nonce::from(nonce_arr),
+            Payload {
+                msg: &ciphertext,
+                aad: &aad,
+            },
+        )
         .map_err(|_| EnpassProvider::invalid("Could not decrypt the field", ""))?;
     String::from_utf8(plaintext)
         .map_err(|e| EnpassProvider::invalid(format!("Field isn't UTF-8: {e}"), ""))
@@ -351,11 +376,18 @@ fn pbkdf2_sha512(password: &[u8], salt: &[u8], iterations: u32) -> [u8; 64] {
 /// An Enpass keyfile is XML whose inner text is the key in hex.
 fn read_keyfile(path: &Path) -> Result<Vec<u8>> {
     let text = std::fs::read_to_string(path).map_err(|e| {
-        EnpassProvider::invalid(format!("Could not read keyfile {}: {e}", path.display()), "")
+        EnpassProvider::invalid(
+            format!("Could not read keyfile {}: {e}", path.display()),
+            "",
+        )
     })?;
     let inner = text
         .find("<Key>")
-        .and_then(|start| text[start + 5..].find("</Key>").map(|end| &text[start + 5..start + 5 + end]))
+        .and_then(|start| {
+            text[start + 5..]
+                .find("</Key>")
+                .map(|end| &text[start + 5..start + 5 + end])
+        })
         .unwrap_or(text.as_str())
         .trim();
     hex::decode(inner).map_err(|e| EnpassProvider::invalid(format!("Keyfile isn't hex: {e}"), ""))
@@ -368,7 +400,11 @@ impl crate::providers::Provider for EnpassProvider {
     }
 
     async fn get_secret(&self, value: &str) -> Result<String> {
-        tracing::debug!("Getting Enpass secret '{}' from '{}'", value, self.vault_dir.display());
+        tracing::debug!(
+            "Getting Enpass secret '{}' from '{}'",
+            value,
+            self.vault_dir.display()
+        );
         let conn = self.open()?;
         Self::lookup(&conn, value)
     }
@@ -396,7 +432,6 @@ impl crate::providers::Provider for EnpassProvider {
     async fn test_connection(&self) -> Result<()> {
         self.open().map(|_| ())
     }
-
 }
 
 pub fn env_dependencies() -> &'static [&'static str] {
@@ -416,7 +451,10 @@ mod tests {
     #[test]
     fn parse_reference_splits_last_segment() {
         assert_eq!(EnpassProvider::parse_reference("GitHub"), ("GitHub", None));
-        assert_eq!(EnpassProvider::parse_reference("GitHub/username"), ("GitHub", Some("username")));
+        assert_eq!(
+            EnpassProvider::parse_reference("GitHub/username"),
+            ("GitHub", Some("username"))
+        );
         assert_eq!(EnpassProvider::parse_reference("a/b/c"), ("a/b", Some("c")));
     }
 
@@ -424,9 +462,6 @@ mod tests {
     fn pbkdf2_matches_rfc_vector() {
         // PBKDF2-HMAC-SHA512, P="password", S="salt", c=1 (well-known test vector)
         let out = pbkdf2_sha512(b"password", b"salt", 1);
-        assert_eq!(
-            hex::encode(&out[..16]),
-            "867f70cf1ade02cff3752599a3a53dc4"
-        );
+        assert_eq!(hex::encode(&out[..16]), "867f70cf1ade02cff3752599a3a53dc4");
     }
 }
