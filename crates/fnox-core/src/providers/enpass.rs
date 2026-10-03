@@ -40,6 +40,7 @@ static PROMPTED_PASSWORDS: LazyLock<Mutex<HashMap<CacheKey, String>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Provider that reads secrets from an Enpass vault directory.
+#[derive(Clone)]
 pub struct EnpassProvider {
     vault_dir: PathBuf,
     keyfile_path: Option<PathBuf>,
@@ -291,18 +292,31 @@ impl EnpassProvider {
                 "Rename one of them in Enpass so the title is unique",
             ));
         }
-        let wanted = |f: &&Field| match field {
-            Some(name) => {
-                f.label.eq_ignore_ascii_case(name) || f.field_type.eq_ignore_ascii_case(name)
-            }
-            None => f.field_type == "password",
-        };
-        let found = fields.iter().find(wanted).ok_or_else(|| {
-            let names: Vec<&str> = fields
+        let found = match field {
+            Some(name) => fields
                 .iter()
-                .map(|f| f.label.as_str())
-                .filter(|l| !l.is_empty())
+                .find(|f| f.label.eq_ignore_ascii_case(name))
+                .or_else(|| {
+                    fields
+                        .iter()
+                        .find(|f| f.field_type.eq_ignore_ascii_case(name))
+                }),
+            None => fields.iter().find(|f| f.field_type == "password"),
+        };
+        let found = found.ok_or_else(|| {
+            // Built-in fields are stored without a label, so name those by type.
+            let mut names: Vec<&str> = fields
+                .iter()
+                .map(|f| {
+                    if f.label.is_empty() {
+                        f.field_type.as_str()
+                    } else {
+                        f.label.as_str()
+                    }
+                })
+                .filter(|n| !n.is_empty() && *n != "section")
                 .collect();
+            names.dedup();
             Self::invalid(
                 format!(
                     "Item {:?} has no {} field",
@@ -313,6 +327,33 @@ impl EnpassProvider {
             )
         })?;
         decrypt_field(found)
+    }
+}
+
+impl EnpassProvider {
+    /// Key derivation and SQLCipher are slow, synchronous work; keep them off the runtime.
+    async fn blocking<T: Send + 'static>(
+        &self,
+        f: impl FnOnce(&EnpassProvider) -> Result<T> + Send + 'static,
+    ) -> Result<T> {
+        let provider = self.clone();
+        tokio::task::spawn_blocking(move || f(&provider))
+            .await
+            .map_err(|e| FnoxError::Provider(format!("Enpass task failed: {e}")))?
+    }
+
+    /// One unlock for the whole batch.
+    fn lookup_all(&self, secrets: &[(String, String)]) -> HashMap<String, Result<String>> {
+        match self.open() {
+            Ok(conn) => secrets
+                .iter()
+                .map(|(key, value)| (key.clone(), Self::lookup(&conn, value)))
+                .collect(),
+            Err(e) => secrets
+                .iter()
+                .map(|(key, _)| (key.clone(), Err(replicate_error(&e))))
+                .collect(),
+        }
     }
 }
 
@@ -405,20 +446,18 @@ impl crate::providers::Provider for EnpassProvider {
             value,
             self.vault_dir.display()
         );
-        let conn = self.open()?;
-        Self::lookup(&conn, value)
+        let value = value.to_string();
+        self.blocking(move |p| Self::lookup(&p.open()?, &value))
+            .await
     }
 
     async fn get_secrets_batch(
         &self,
         secrets: &[(String, String)],
     ) -> HashMap<String, Result<String>> {
-        // One unlock for the whole batch.
-        match self.open() {
-            Ok(conn) => secrets
-                .iter()
-                .map(|(key, value)| (key.clone(), Self::lookup(&conn, value)))
-                .collect(),
+        let owned = secrets.to_vec();
+        match self.blocking(move |p| Ok(p.lookup_all(&owned))).await {
+            Ok(results) => results,
             Err(e) => secrets
                 .iter()
                 .map(|(key, _)| (key.clone(), Err(replicate_error(&e))))
@@ -427,7 +466,7 @@ impl crate::providers::Provider for EnpassProvider {
     }
 
     async fn test_connection(&self) -> Result<()> {
-        self.open().map(|_| ())
+        self.blocking(|p| p.open().map(|_| ())).await
     }
 }
 
@@ -458,8 +497,8 @@ pub fn env_dependencies() -> &'static [&'static str] {
 }
 
 fn enpass_password() -> Option<String> {
-    std::env::var("FNOX_ENPASS_PASSWORD")
-        .or_else(|_| std::env::var("ENPASS_PASSWORD"))
+    env::var("FNOX_ENPASS_PASSWORD")
+        .or_else(|_| env::var("ENPASS_PASSWORD"))
         .ok()
 }
 
@@ -571,6 +610,16 @@ mod tests {
             &[("Password", "password", "slash-title")],
             false,
         );
+        add_item(
+            &conn,
+            "61111111-2222-4333-8444-555555555555",
+            "Labels",
+            &[
+                ("", "password", "built-in"),
+                ("Password", "text", "labelled"),
+            ],
+            false,
+        );
         for uuid in [
             "31111111-2222-4333-8444-555555555555",
             "41111111-2222-4333-8444-555555555555",
@@ -660,6 +709,8 @@ mod tests {
             p.get_secret("github/api token").await.unwrap(),
             "ghp_example"
         );
+        assert_eq!(p.get_secret("Labels").await.unwrap(), "built-in");
+        assert_eq!(p.get_secret("Labels/password").await.unwrap(), "labelled");
         assert_eq!(p.get_secret("Prod/DB").await.unwrap(), "slash-title");
         assert_eq!(
             p.get_secret("Prod/DB/password").await.unwrap(),
