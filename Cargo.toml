@@ -51,11 +51,14 @@ globset = "0.4"
 google-cloud-kms = { version = "0.6" }
 google-cloud-secretmanager-v1 = { version = "1" }
 hex = "0.4"
+hmac = "0.13"
 hkdf = "0.13"
 ignore = "0.4"
 indexmap = { version = "2", features = ["serde"] }
 jsonwebtoken = { version = "11", features = ["aws_lc_rs"] }
 keepass = { version = "0.15", features = ["save_kdbx4"] }
+# Enpass vaults are SQLCipher databases; reuse the vendored OpenSSL.
+rusqlite = { version = "0.37", features = ["bundled-sqlcipher-vendored-openssl"] }
 keeper-secrets-manager-core = { version = "17", default-features = false, features = ["blocking"] }
 keyring-core = "1"
 apple-native-keyring-store = { version = "1", features = ["keychain"] }

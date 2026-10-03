@@ -36,10 +36,12 @@ gcp_auth = { workspace = true }
 google-cloud-kms = { workspace = true }
 google-cloud-secretmanager-v1 = { workspace = true }
 hex = { workspace = true }
+hmac = { workspace = true }
 hkdf = { workspace = true }
 indexmap = { workspace = true }
 jsonwebtoken = { workspace = true }
 keepass = { workspace = true }
+rusqlite = { workspace = true }
 keeper-secrets-manager-core = { workspace = true }
 keyring-core = { workspace = true }
 libloading = { workspace = true }
