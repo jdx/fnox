@@ -23,7 +23,7 @@ use sha2::Sha512;
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 
 const PROVIDER: &str = "Enpass";
 const DOCS_URL: &str = "https://fnox.jdx.dev/providers/enpass";
@@ -39,9 +39,10 @@ type CacheKey = (PathBuf, Option<PathBuf>);
 static PROMPTED_PASSWORDS: LazyLock<Mutex<HashMap<CacheKey, String>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-// Serializes vault opens so a command that resolves several secrets in parallel
-// shows a single password prompt.
-static OPEN_LOCK: Mutex<()> = Mutex::new(());
+// Serializes opens of the same vault so a command that resolves several secrets
+// in parallel shows a single password prompt. Other vaults are not held up.
+static OPEN_LOCKS: LazyLock<Mutex<HashMap<CacheKey, Arc<Mutex<()>>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Provider that reads secrets from an Enpass vault directory.
 #[derive(Clone)]
@@ -221,60 +222,113 @@ impl EnpassProvider {
         Ok(None)
     }
 
-    /// Open the live vault with the master password. Opens are serialized so
-    /// concurrent lookups prompt once, and a typed password is cached only after
-    /// it has unlocked the vault.
+    /// Open the live vault with the master password. Opens of one vault are
+    /// serialized so concurrent lookups prompt once, and a typed password is
+    /// cached only after it has unlocked the vault. If a cached password no
+    /// longer works (it was changed in Enpass), drop it and prompt again.
     fn open(&self) -> Result<Connection> {
-        let _guard = OPEN_LOCK
+        let lock = OPEN_LOCKS
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let (password, prompted) = self.get_password()?;
-        let hex_key = self.derive_hex_key(&password)?;
-        if let Some(conn) = self.open_with_key(&hex_key)? {
-            if prompted {
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .entry(self.cache_key())
+            .or_default()
+            .clone();
+        let _guard = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut retried = false;
+        loop {
+            let cached = self.cached_password();
+            let (password, prompted) = self.get_password()?;
+            let hex_key = self.derive_hex_key(&password)?;
+            if let Some(conn) = self.open_with_key(&hex_key)? {
+                if prompted {
+                    PROMPTED_PASSWORDS
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .insert(self.cache_key(), password);
+                }
+                return Ok(conn);
+            }
+            // A wrong password must not stay cached for the rest of the process.
+            let was_cached = cached.as_deref() == Some(password.as_str());
+            if was_cached {
                 PROMPTED_PASSWORDS
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner())
-                    .insert(self.cache_key(), password);
+                    .remove(&self.cache_key());
             }
-            return Ok(conn);
+            if was_cached && !retried && !env::is_non_interactive() {
+                retried = true;
+                continue;
+            }
+            return Err(Self::auth_error(
+                "Could not unlock the vault",
+                "Check the master password (and keyfile, if the vault uses one)",
+            ));
         }
-        // A wrong password must not stay cached for the rest of the process.
+    }
+
+    /// The password typed earlier in this process for this vault, if any.
+    fn cached_password(&self) -> Option<String> {
         PROMPTED_PASSWORDS
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .remove(&self.cache_key());
-        Err(Self::auth_error(
-            "Could not unlock the vault",
-            "Check the master password (and keyfile, if the vault uses one)",
-        ))
+            .get(&self.cache_key())
+            .cloned()
     }
 
-    /// Fields of live (not deleted, not trashed) items whose title matches.
-    fn fields_for(conn: &Connection, title: &str) -> Result<Vec<Field>> {
+    /// The live (not deleted, not trashed) item with this title and its fields,
+    /// or None if there is no such item. Titles match case-insensitively; this is
+    /// done here rather than with SQLite's `lower()`, which only folds ASCII.
+    fn fields_for(conn: &Connection, title: &str) -> Result<Option<(String, Vec<Field>)>> {
+        let read_err =
+            |e: rusqlite::Error| Self::invalid(format!("Could not read the vault: {e}"), "");
+        let wanted = title.to_lowercase();
+        let mut stmt = conn
+            .prepare("SELECT uuid, title, key FROM item WHERE deleted = 0 AND trashed = 0")
+            .map_err(|e| Self::invalid(format!("Unexpected vault schema: {e}"), ""))?;
+        let mut items = stmt
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    r.get::<_, Option<Vec<u8>>>(2)?.unwrap_or_default(),
+                ))
+            })
+            .map_err(read_err)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(read_err)?;
+        items.retain(|(_, t, _)| t.to_lowercase() == wanted);
+        let (uuid, item_title, item_key) = match items.len() {
+            0 => return Ok(None),
+            1 => items.remove(0),
+            _ => {
+                return Err(Self::invalid(
+                    format!("More than one item is titled {title:?}"),
+                    "Rename one of them in Enpass so the title is unique",
+                ));
+            }
+        };
         let mut stmt = conn
             .prepare(
-                "SELECT item.uuid, item.title, itemfield.label, itemfield.type, itemfield.value, item.key
-                 FROM item INNER JOIN itemfield ON item.uuid = itemfield.item_uuid
-                 WHERE item.deleted = 0 AND item.trashed = 0 AND itemfield.deleted = 0
-                   AND lower(item.title) = lower(?1)
-                 ORDER BY item.uuid, itemfield.orde",
+                "SELECT label, type, value FROM itemfield
+                 WHERE item_uuid = ?1 AND deleted = 0 ORDER BY orde",
             )
             .map_err(|e| Self::invalid(format!("Unexpected vault schema: {e}"), ""))?;
-        let rows = stmt
-            .query_map([title], |r| {
+        let fields = stmt
+            .query_map([&uuid], |r| {
                 Ok(Field {
-                    uuid: r.get(0)?,
-                    title: r.get(1)?,
-                    label: r.get::<_, Option<String>>(2)?.unwrap_or_default(),
-                    field_type: r.get::<_, Option<String>>(3)?.unwrap_or_default(),
-                    value: r.get::<_, Option<String>>(4)?.unwrap_or_default(),
-                    item_key: r.get::<_, Option<Vec<u8>>>(5)?.unwrap_or_default(),
+                    uuid: uuid.clone(),
+                    title: item_title.clone(),
+                    label: r.get::<_, Option<String>>(0)?.unwrap_or_default(),
+                    field_type: r.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    value: r.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                    item_key: item_key.clone(),
                 })
             })
-            .map_err(|e| Self::invalid(format!("Could not read the vault: {e}"), ""))?;
-        rows.collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(|e| Self::invalid(format!("Could not read the vault: {e}"), ""))
+            .map_err(read_err)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(read_err)?;
+        Ok(Some((item_title, fields)))
     }
 
     /// Parse "title" or "title/field". The field matches a field label or a
@@ -288,16 +342,14 @@ impl EnpassProvider {
 
     fn lookup(conn: &Connection, value: &str) -> Result<String> {
         // Try the whole reference as a title first, so titles containing "/" work.
-        let (title, field, fields) = {
-            let whole = Self::fields_for(conn, value)?;
-            if !whole.is_empty() {
-                (value, None, whole)
-            } else {
+        let (field, found_item) = match Self::fields_for(conn, value)? {
+            Some(item) => (None, Some(item)),
+            None => {
                 let (title, field) = Self::parse_reference(value);
-                (title, field, Self::fields_for(conn, title)?)
+                (field, Self::fields_for(conn, title)?)
             }
         };
-        if fields.is_empty() {
+        let Some((item_title, fields)) = found_item else {
             return Err(FnoxError::ProviderSecretNotFound {
                 provider: PROVIDER.to_string(),
                 secret: value.to_string(),
@@ -306,22 +358,15 @@ impl EnpassProvider {
                         .to_string(),
                 url: DOCS_URL.to_string(),
             });
-        }
-        let first_uuid = fields[0].uuid.clone();
-        if fields.iter().any(|f| f.uuid != first_uuid) {
-            return Err(Self::invalid(
-                format!("More than one item is titled {title:?}"),
-                "Rename one of them in Enpass so the title is unique",
-            ));
-        }
+        };
         let found = match field {
             Some(name) => fields
                 .iter()
-                .find(|f| f.label.eq_ignore_ascii_case(name))
+                .find(|f| f.label.to_lowercase() == name.to_lowercase())
                 .or_else(|| {
                     fields
                         .iter()
-                        .find(|f| f.field_type.eq_ignore_ascii_case(name))
+                        .find(|f| f.field_type.to_lowercase() == name.to_lowercase())
                 }),
             None => fields.iter().find(|f| f.field_type == "password"),
         };
@@ -342,7 +387,7 @@ impl EnpassProvider {
             Self::invalid(
                 format!(
                     "Item {:?} has no {} field",
-                    fields[0].title,
+                    item_title,
                     field.unwrap_or("password")
                 ),
                 format!("Its fields: {}", names.join(", ")),
@@ -650,6 +695,28 @@ mod tests {
         }
         add_item(
             &conn,
+            "00000000-0000-0000-0000-0000000000a1",
+            "Équipe",
+            &[("Password", "password", "unicode")],
+            false,
+        );
+        // Two items share a title, but one has no fields at all.
+        add_item(
+            &conn,
+            "00000000-0000-0000-0000-0000000000b1",
+            "Hollow Twin",
+            &[("Password", "password", "x")],
+            false,
+        );
+        add_item(
+            &conn,
+            "00000000-0000-0000-0000-0000000000b2",
+            "Hollow Twin",
+            &[],
+            false,
+        );
+        add_item(
+            &conn,
             "51111111-2222-4333-8444-555555555555",
             "Binned",
             &[("Password", "password", "gone")],
@@ -741,6 +808,17 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn matches_non_ascii_titles_and_labels_case_insensitively() {
+        if env_password_set() {
+            return;
+        }
+        let dir = test_vault(4);
+        let p = provider(dir.path(), PASSWORD, None);
+        assert_eq!(p.get_secret("équipe").await.unwrap(), "unicode");
+        assert_eq!(p.get_secret("ÉQUIPE/password").await.unwrap(), "unicode");
+    }
+
+    #[tokio::test]
     async fn opens_sqlcipher3_vaults() {
         if env_password_set() {
             return;
@@ -767,6 +845,8 @@ mod tests {
             Err(FnoxError::ProviderSecretNotFound { .. })
         ));
         let err = p.get_secret("Twin").await.unwrap_err().to_string();
+        assert!(err.contains("More than one item"), "{err}");
+        let err = p.get_secret("Hollow Twin").await.unwrap_err().to_string();
         assert!(err.contains("More than one item"), "{err}");
         let err = p
             .get_secret("GitHub/Old password")
