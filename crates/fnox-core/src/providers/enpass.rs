@@ -75,6 +75,7 @@ struct Item {
 }
 
 /// One field of an Enpass item, as stored.
+#[derive(Clone)]
 struct Field {
     uuid: String,
     label: String,
@@ -291,9 +292,9 @@ impl EnpassProvider {
     }
 
     /// Every live (not deleted, not trashed) item, read once per unlock. This
-    /// also opens a read transaction that lasts until the connection is dropped,
-    /// so the item and field reads of a batch see one consistent vault state even
-    /// if Enpass writes to it meanwhile.
+    /// also opens a read transaction, which the caller ends with `COMMIT` once its
+    /// field reads are done, so a batch sees one consistent vault state even if
+    /// Enpass writes to it meanwhile.
     fn load_items(conn: &Connection) -> Result<Vec<Item>> {
         conn.execute_batch("BEGIN")
             .map_err(|e| Self::invalid(format!("Could not read the vault: {e}"), ""))?;
@@ -369,7 +370,7 @@ impl EnpassProvider {
         }
     }
 
-    fn lookup(conn: &Connection, items: &[Item], value: &str) -> Result<String> {
+    fn find_field(conn: &Connection, items: &[Item], value: &str) -> Result<Field> {
         // Try the whole reference as a title first, so titles containing "/" work.
         let (field, found_item) = match Self::fields_for(conn, items, value)? {
             Some(item) => (None, Some(item)),
@@ -422,7 +423,7 @@ impl EnpassProvider {
                 format!("Its fields: {}", names.join(", ")),
             )
         })?;
-        decrypt_field(found)
+        Ok(found.clone())
     }
 }
 
@@ -438,19 +439,35 @@ impl EnpassProvider {
             .map_err(|e| FnoxError::Provider(format!("Enpass task failed: {e}")))?
     }
 
+    /// Resolve references against one snapshot of the vault. The read
+    /// transaction covers only the reads and ends before decryption, so it never
+    /// holds up Enpass saving for longer than the queries take.
+    fn lookup_many(conn: &Connection, values: &[&str]) -> Vec<Result<String>> {
+        let found: Vec<Result<Field>> = match Self::load_items(conn) {
+            Ok(items) => values
+                .iter()
+                .map(|value| Self::find_field(conn, &items, value))
+                .collect(),
+            Err(e) => values.iter().map(|_| Err(replicate_error(&e))).collect(),
+        };
+        let _ = conn.execute_batch("COMMIT");
+        found
+            .into_iter()
+            .map(|field| field.and_then(|f| decrypt_field(&f)))
+            .collect()
+    }
+
     /// One unlock for the whole batch.
     fn lookup_all(&self, secrets: &[(String, String)]) -> HashMap<String, Result<String>> {
         match self.open() {
-            Ok(conn) => match Self::load_items(&conn) {
-                Ok(items) => secrets
+            Ok(conn) => {
+                let values: Vec<&str> = secrets.iter().map(|(_, v)| v.as_str()).collect();
+                secrets
                     .iter()
-                    .map(|(key, value)| (key.clone(), Self::lookup(&conn, &items, value)))
-                    .collect(),
-                Err(e) => secrets
-                    .iter()
-                    .map(|(key, _)| (key.clone(), Err(replicate_error(&e))))
-                    .collect(),
-            },
+                    .map(|(key, _)| key.clone())
+                    .zip(Self::lookup_many(&conn, &values))
+                    .collect()
+            }
             Err(e) => secrets
                 .iter()
                 .map(|(key, _)| (key.clone(), Err(replicate_error(&e))))
@@ -551,7 +568,9 @@ impl crate::providers::Provider for EnpassProvider {
         let value = value.to_string();
         self.blocking(move |p| {
             let conn = p.open()?;
-            Self::lookup(&conn, &Self::load_items(&conn)?, &value)
+            Self::lookup_many(&conn, &[value.as_str()])
+                .pop()
+                .expect("one result per reference")
         })
         .await
     }
