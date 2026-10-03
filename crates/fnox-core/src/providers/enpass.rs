@@ -708,17 +708,16 @@ mod tests {
         if env_password_set() {
             return;
         }
-        let dir = test_vault(4);
-        let p = provider(dir.path(), "wrong", None);
+        let p = provider(&enpass_fixture(), "wrong", None);
 
         assert!(matches!(
-            p.get_secret("GitHub").await,
+            p.get_secret("password").await,
             Err(FnoxError::ProviderAuthFailed { .. })
         ));
         let batch = p
             .get_secrets_batch(&[
-                ("A".to_string(), "GitHub".to_string()),
-                ("B".to_string(), "Prod/DB".to_string()),
+                ("A".to_string(), "password".to_string()),
+                ("B".to_string(), "sensitive text".to_string()),
             ])
             .await;
         assert_eq!(batch.len(), 2);
@@ -785,13 +784,28 @@ mod tests {
         assert!(err.contains("Unsupported vault format"), "{err}");
     }
 
-    /// `FNOX_ENPASS_FIXTURE_DIR=$PWD/test/fixtures/enpass cargo test -p fnox-core write_bats_fixture -- --ignored`
-    #[test]
-    #[ignore]
-    fn write_bats_fixture() {
-        let dir = PathBuf::from(std::env::var("FNOX_ENPASS_FIXTURE_DIR").unwrap());
-        std::fs::create_dir_all(&dir).unwrap();
-        let _ = std::fs::remove_file(dir.join(DB_FILE));
-        build_vault(&dir, PASSWORD, None, 4);
+    fn enpass_fixture() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test/fixtures/enpass")
+    }
+
+    #[tokio::test]
+    async fn reads_a_vault_created_by_enpass() {
+        if env_password_set() {
+            return;
+        }
+        let p = provider(&enpass_fixture(), "password", None);
+        let batch = p
+            .get_secrets_batch(&[
+                ("DEFAULT".to_string(), "password".to_string()),
+                ("BY_TYPE".to_string(), "Password/PASSWORD".to_string()),
+                (
+                    "SENSITIVE".to_string(),
+                    "sensitive text/sensitive field".to_string(),
+                ),
+            ])
+            .await;
+        assert_eq!(batch["DEFAULT"].as_ref().unwrap(), "password");
+        assert_eq!(batch["BY_TYPE"].as_ref().unwrap(), "password");
+        assert_eq!(batch["SENSITIVE"].as_ref().unwrap(), "sensitive");
     }
 }

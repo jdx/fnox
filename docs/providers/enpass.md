@@ -132,7 +132,7 @@ The error lists the item's field labels. Use one of them after the `/`.
 mise run test:bats -- test/enpass.bats
 ```
 
-The tests read a small synthetic vault in `test/fixtures/enpass`, so no Enpass installation is needed.
+The tests read a small vault created in Enpass, stored in `test/fixtures/enpass`, so no Enpass installation is needed.
 
 ## Next steps
 
