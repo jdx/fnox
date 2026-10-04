@@ -96,9 +96,10 @@ enum Request {
     ResolveOne(ResolveOneRequest),
     StoreResolved(StoreResolvedRequest),
     Status,
-    Clear {
-        /// Secret keys to evict. Empty clears the whole cache.
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    Clear,
+    /// Evict only these secret keys. A separate variant so a daemon from an
+    /// older fnox rejects it instead of reading it as a full `Clear`.
+    ClearKeys {
         keys: Vec<String>,
     },
     Shutdown,
@@ -530,16 +531,29 @@ pub async fn refresh(cli: &Cli, config: &Config, keys: &[String]) -> Result<()> 
 }
 
 async fn clear_socket(path: PathBuf, keys: &[String], ignore_missing: bool) -> Result<bool> {
-    let request = Request::Clear {
-        keys: keys.to_vec(),
+    let request = if keys.is_empty() {
+        Request::Clear
+    } else {
+        Request::ClearKeys {
+            keys: keys.to_vec(),
+        }
     };
-    match call(path, request).await {
+    match call(path.clone(), request).await {
         Ok(Response::Ok) => Ok(true),
         Ok(Response::Error { message }) => Err(FnoxError::Config(message)),
         Ok(_) => Err(FnoxError::Config(
             "Invalid daemon response for Clear".to_string(),
         )),
         Err(e) if ignore_missing && e.is_socket_missing() => Ok(false),
+        // A daemon from an older fnox drops the connection on a request it
+        // cannot decode. Leave its cache alone rather than failing the clear.
+        Err(DaemonCallError::Other(error)) if ignore_missing && !keys.is_empty() => {
+            tracing::warn!(
+                "fnox daemon at {} did not accept a keyed clear ({error}); it may be from an older fnox. Run `fnox daemon clear` to clear it fully",
+                path.display()
+            );
+            Ok(false)
+        }
         Err(e) => Err(e.into_fnox_error()),
     }
 }
@@ -946,9 +960,16 @@ async fn process_request(
                 cached_entries: state.cache.len(),
             })
         }
-        Request::Clear { keys } => {
+        Request::Clear => {
             let _guard = request_lock.lock().await;
-            state.lock().await.clear(keys);
+            state.lock().await.clear(Vec::new());
+            Ok(Response::Ok)
+        }
+        Request::ClearKeys { keys } => {
+            let _guard = request_lock.lock().await;
+            if !keys.is_empty() {
+                state.lock().await.clear(keys);
+            }
             Ok(Response::Ok)
         }
         Request::Shutdown => {
@@ -1396,7 +1417,9 @@ fn socket_path(cli: &Cli) -> Result<PathBuf> {
 /// Incrementing this ensures new clients don't connect to stale daemons
 /// running an incompatible wire format or resolution behavior.
 /// Version 4 requires missing values to remain cache misses, including after upgrades.
-const WIRE_VERSION: u8 = 4;
+/// Version 5 adds keyed clears and rejects foreground write-backs for keys cleared
+/// while they were being resolved.
+const WIRE_VERSION: u8 = 5;
 
 fn socket_path_for_context(ctx: &ResolveContext) -> Result<PathBuf> {
     let mut hasher = blake3::Hasher::new();
@@ -1729,21 +1752,18 @@ mod tests {
         assert!(decoded.include_all_modes);
     }
 
-    // A full clear keeps the wire shape older daemons and clients expect, and a
-    // request without `keys` still decodes as a full clear.
+    // A full clear keeps the wire shape older daemons expect. A keyed clear uses
+    // its own type so an older daemon rejects it instead of clearing everything.
     #[test]
     fn clear_request_wire_shape_is_compatible() {
-        let full = serde_json::to_string(&Request::Clear { keys: Vec::new() }).unwrap();
+        let full = serde_json::to_string(&Request::Clear).unwrap();
         assert_eq!(full, r#"{"type":"clear"}"#);
 
-        let decoded: Request = serde_json::from_str(r#"{"type":"clear"}"#).unwrap();
-        assert!(matches!(decoded, Request::Clear { keys } if keys.is_empty()));
-
-        let keyed = serde_json::to_string(&Request::Clear {
+        let keyed = serde_json::to_string(&Request::ClearKeys {
             keys: vec!["API_KEY".to_string()],
         })
         .unwrap();
-        assert_eq!(keyed, r#"{"type":"clear","keys":["API_KEY"]}"#);
+        assert_eq!(keyed, r#"{"type":"clear_keys","keys":["API_KEY"]}"#);
     }
 
     #[tokio::test]
@@ -1765,7 +1785,7 @@ mod tests {
         }));
 
         let response = process_request(
-            Request::Clear {
+            Request::ClearKeys {
                 keys: vec!["API_KEY".to_string()],
             },
             state.clone(),
