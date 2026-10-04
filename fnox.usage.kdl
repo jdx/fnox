@@ -52,7 +52,13 @@ cmd config-files help="List all config files that would be loaded" {
 cmd daemon help="Manage the per-user daemon" subcommand_required=#true {
     flag "-h --help" help="Print help" action=help builtin=#true
     cmd clear help="Clear the caches of all running daemons" {
+        long_help #"""
+Clear the caches of all running daemons
+
+With one or more KEYs, only the cached values for those secrets are evicted; everything else stays cached.
+"""#
         flag "-h --help" help="Print help" action=help builtin=#true
+        arg "[KEYS]..." help="Secret keys to evict (default: the whole cache)"
     }
     cmd serve help="Run the daemon server in the foreground" hide=#true {
         flag "-h --help" help="Print help" action=help builtin=#true
@@ -90,6 +96,9 @@ cmd edit help="Edit the configuration file" {
 cmd exec help="Execute a command with secrets as environment variables" {
     alias x
     alias run hide=#true
+    flag --refresh help="Re-resolve this secret from its provider instead of serving it from the daemon cache, and cache the new value. Other secrets are still served from the cache. Repeat to refresh several keys" var=#true {
+        arg <KEY>
+    }
     flag --replace help="Replace the fnox process with the command so it keeps the same PID and receives signals directly. Rejected when the command's environment would carry an as_file secret, or when the profile configures credential leases, since fnox must clean those up after the command exits. Unix only"
     flag "-h --help" help="Print help" action=help builtin=#true
     arg "[COMMAND]..." help="Command to run" double_dash=automatic
@@ -118,6 +127,7 @@ cmd export help="Export secrets in various formats" {
 }
 cmd get help="Get a secret value" {
     flag --base64-decode help="Base64 decode the secret"
+    flag --refresh help="Re-resolve the secret from its provider instead of serving it from the daemon cache, and cache the new value"
     flag "-h --help" help="Print help" action=help builtin=#true
     arg <KEY> help="Secret key to retrieve"
 }

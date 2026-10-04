@@ -14,6 +14,11 @@ pub struct GetCommand {
     /// Base64 decode the secret
     #[usage(long)]
     pub base64_decode: bool,
+
+    /// Re-resolve the secret from its provider instead of serving it from the
+    /// daemon cache, and cache the new value
+    #[usage(long)]
+    pub refresh: bool,
 }
 
 impl GetCommand {
@@ -62,6 +67,10 @@ impl GetCommand {
                 suggestion,
             }
         })?;
+
+        if self.refresh {
+            crate::daemon::refresh(cli, &config, std::slice::from_ref(&self.key)).await?;
+        }
 
         // Resolve the secret using centralized resolver
         match crate::daemon::resolve_one(

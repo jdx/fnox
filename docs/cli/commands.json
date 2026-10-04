@@ -201,9 +201,20 @@
         "subcommands": {
           "clear": {
             "full_cmd": ["daemon", "clear"],
-            "usage": "daemon clear",
+            "usage": "daemon clear [KEYS]…",
             "subcommands": {},
-            "args": [],
+            "args": [
+              {
+                "name": "KEYS",
+                "usage": "[KEYS]…",
+                "help": "Secret keys to evict (default: the whole cache)",
+                "help_first_line": "Secret keys to evict (default: the whole cache)",
+                "required": false,
+                "double_dash": "Optional",
+                "var": true,
+                "hide": false
+              }
+            ],
             "flags": [
               {
                 "name": "help",
@@ -223,6 +234,7 @@
             "hide": false,
             "args_override_self": true,
             "help": "Clear the caches of all running daemons",
+            "help_long": "Clear the caches of all running daemons\n\nWith one or more KEYs, only the cached values for those secrets are evicted; everything else stays cached.",
             "name": "clear",
             "aliases": [],
             "hidden_aliases": [],
@@ -470,7 +482,7 @@
       },
       "exec": {
         "full_cmd": ["exec"],
-        "usage": "exec [--replace] [COMMAND]…",
+        "usage": "exec [--refresh <KEY>] [--replace] [COMMAND]…",
         "subcommands": {},
         "args": [
           {
@@ -485,6 +497,24 @@
           }
         ],
         "flags": [
+          {
+            "name": "refresh",
+            "usage": "--refresh <KEY>",
+            "help": "Re-resolve this secret from its provider instead of serving it from the daemon cache, and cache the new value. Other secrets are still served from the cache. Repeat to refresh several keys",
+            "help_first_line": "Re-resolve this secret from its provider instead of serving it from the daemon cache, and cache the new value. Other secrets are still served from the cache. Repeat to refresh several keys",
+            "short": [],
+            "long": ["refresh"],
+            "var": true,
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "KEY",
+              "usage": "<KEY>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            }
+          },
           {
             "name": "replace",
             "usage": "--replace",
@@ -647,7 +677,7 @@
       },
       "get": {
         "full_cmd": ["get"],
-        "usage": "get [--base64-decode] <KEY>",
+        "usage": "get [--base64-decode] [--refresh] <KEY>",
         "subcommands": {},
         "args": [
           {
@@ -668,6 +698,16 @@
             "help_first_line": "Base64 decode the secret",
             "short": [],
             "long": ["base64-decode"],
+            "hide": false,
+            "global": false
+          },
+          {
+            "name": "refresh",
+            "usage": "--refresh",
+            "help": "Re-resolve the secret from its provider instead of serving it from the daemon cache, and cache the new value",
+            "help_first_line": "Re-resolve the secret from its provider instead of serving it from the daemon cache, and cache the new value",
+            "short": [],
+            "long": ["refresh"],
             "hide": false,
             "global": false
           },

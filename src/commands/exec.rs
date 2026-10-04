@@ -9,6 +9,12 @@ use tempfile::NamedTempFile;
 #[derive(Debug, usage_rs::Args)]
 #[usage(alias = "x", alias_hidden = "run")]
 pub struct ExecCommand {
+    /// Re-resolve this secret from its provider instead of serving it from the
+    /// daemon cache, and cache the new value. Other secrets are still served from
+    /// the cache. Repeat to refresh several keys
+    #[usage(long, value_name = "KEY")]
+    pub refresh: Vec<String>,
+
     /// Replace the fnox process with the command so it keeps the same PID and receives
     /// signals directly. Rejected when the command's environment would carry an as_file
     /// secret, or when the profile configures credential leases, since fnox must clean
@@ -86,6 +92,13 @@ impl ExecCommand {
         if self.command.len() > 1 {
             cmd.args(&self.command[1..]);
         }
+
+        for key in &self.refresh {
+            if !profile_secrets.contains_key(key) {
+                tracing::warn!("--refresh {key}: no such secret in the current profile");
+            }
+        }
+        crate::daemon::refresh(cli, &config, &self.refresh).await?;
 
         // Resolve secrets using batch resolution first
         let resolved_secrets = crate::daemon::resolve_batch(

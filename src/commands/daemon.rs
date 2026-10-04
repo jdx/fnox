@@ -12,7 +12,13 @@ pub struct DaemonCommand {
 #[derive(Debug, usage_rs::Subcommands)]
 enum DaemonSubcommand {
     /// Clear the caches of all running daemons
-    Clear,
+    ///
+    /// With one or more KEYs, only the cached values for those secrets are
+    /// evicted; everything else stays cached.
+    Clear {
+        /// Secret keys to evict (default: the whole cache)
+        keys: Vec<String>,
+    },
     /// Run the daemon server in the foreground
     #[usage(hide)]
     Serve,
@@ -26,10 +32,14 @@ enum DaemonSubcommand {
 
 impl DaemonCommand {
     pub async fn run(&self, cli: &Cli) -> Result<()> {
-        match self.command {
-            DaemonSubcommand::Clear => {
-                daemon::clear(cli).await?;
-                println!("fnox daemon cache cleared");
+        match &self.command {
+            DaemonSubcommand::Clear { keys } => {
+                daemon::clear(cli, keys).await?;
+                if keys.is_empty() {
+                    println!("fnox daemon cache cleared");
+                } else {
+                    println!("fnox daemon cache cleared for {}", keys.join(", "));
+                }
                 Ok(())
             }
             DaemonSubcommand::Serve => {

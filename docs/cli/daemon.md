@@ -16,7 +16,7 @@ Manage the per-user daemon
 
 ## Subcommands
 
-- [`fnox daemon clear`](/cli/daemon/clear.md)
+- [`fnox daemon clear [KEYS]…`](/cli/daemon/clear.md)
 - [`fnox daemon start`](/cli/daemon/start.md)
 - [`fnox daemon status`](/cli/daemon/status.md)
 - [`fnox daemon stop`](/cli/daemon/stop.md)
