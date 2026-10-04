@@ -124,9 +124,10 @@ type = "proton-pass"
 [secrets]
 EOF
 
-	run "$FNOX_BIN" --verbose provider test protonpass
+	run env RUST_LOG=debug "$FNOX_BIN" provider test protonpass
 	assert_success
 	assert_output --partial "connection successful"
+	assert_output --partial "Proton Pass connection test successful"
 	refute_output --partial "test-account@example.com"
 	assert_file_contains "$PASS_CLI_ARGS_FILE" "info"
 }
