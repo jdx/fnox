@@ -37,8 +37,8 @@ setup() {
 	# Some tests intentionally run without auth (like 'fails gracefully')
 	# Only check auth if this test actually needs it
 	if [[ $BATS_TEST_DESCRIPTION != *"list"* ]] && [[ $BATS_TEST_DESCRIPTION != *"fails gracefully"* ]]; then
-		# Check if we can authenticate by running pass-cli test
-		if ! pass-cli test >/dev/null 2>&1; then
+		# `pass-cli test` was removed in pass-cli 2.2.4; `info` verifies the session.
+		if ! pass-cli info >/dev/null 2>&1; then
 			skip "Cannot authenticate with Proton Pass. Run 'pass-cli login' first."
 		fi
 	fi
@@ -247,7 +247,7 @@ value = "some-item"
 EOF
 
 	# If authenticated, skip this test (we need to be unauthenticated to test auth failure)
-	if pass-cli test >/dev/null 2>&1; then
+	if pass-cli info >/dev/null 2>&1; then
 		skip "Already authenticated with Proton Pass. Run 'pass-cli logout' to test auth failure handling."
 	fi
 
