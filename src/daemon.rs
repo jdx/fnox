@@ -530,6 +530,7 @@ pub async fn refresh(cli: &Cli, config: &Config, keys: &[String]) -> Result<()> 
     Ok(())
 }
 
+/// Returns whether a daemon was listening on `path`.
 async fn clear_socket(path: PathBuf, keys: &[String], ignore_missing: bool) -> Result<bool> {
     let request = if keys.is_empty() {
         Request::Clear
@@ -552,7 +553,9 @@ async fn clear_socket(path: PathBuf, keys: &[String], ignore_missing: bool) -> R
                 "fnox daemon at {} did not accept a keyed clear ({error}); it may be from an older fnox. Run `fnox daemon clear` to clear it fully",
                 path.display()
             );
-            Ok(false)
+            // A daemon was running there, so don't fall back to failing on
+            // the current version's (possibly absent) socket.
+            Ok(true)
         }
         Err(e) => Err(e.into_fnox_error()),
     }
