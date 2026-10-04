@@ -66,9 +66,17 @@ Mutation and admin commands still resolve directly, including `sync`, `reencrypt
 
 The daemon cache is memory-only. Secret values are not written to disk by the daemon.
 
-Remote changes do not automatically invalidate cached values. Run `fnox daemon clear` after changing a secret in its source provider. Cached values are also discarded when:
+Remote changes do not automatically invalidate cached values. After rotating a secret in its source provider, refresh just that secret so the rest of the cache stays warm:
 
-- You run `fnox daemon clear`, which clears all running profile-scoped daemon caches
+```bash
+fnox daemon clear API_TOKEN                # evict one key from every running daemon
+fnox get --refresh API_TOKEN               # re-resolve it now and cache the new value
+fnox exec --refresh API_TOKEN -- ./deploy  # same, while other secrets come from the cache
+```
+
+`--refresh` can be repeated on `fnox exec` to refresh several keys. Cached values are also discarded when:
+
+- You run `fnox daemon clear` without keys, which clears all running profile-scoped daemon caches
 - You run `fnox daemon stop`
 - The daemon exits after its idle timeout
 - Config files, profile settings, provider references, post-processing options, or relevant `FNOX_*` and provider environment variables change

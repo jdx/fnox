@@ -96,7 +96,11 @@ enum Request {
     ResolveOne(ResolveOneRequest),
     StoreResolved(StoreResolvedRequest),
     Status,
-    Clear,
+    Clear {
+        /// Secret keys to evict. Empty clears the whole cache.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        keys: Vec<String>,
+    },
     Shutdown,
 }
 
@@ -197,7 +201,11 @@ impl DaemonCallError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct CacheKey(String);
+struct CacheKey {
+    /// Secret name, kept alongside the hash so entries can be evicted by key.
+    secret: String,
+    hash: String,
+}
 
 #[derive(Default)]
 struct DaemonState {
@@ -436,26 +444,43 @@ async fn status_for_context(ctx: &ResolveContext) -> Result<Option<(u32, usize)>
     }
 }
 
-pub async fn clear(cli: &Cli) -> Result<()> {
+/// Clear the caches of all running daemons. When `keys` is non-empty, only
+/// entries for those secret keys are evicted.
+pub async fn clear(cli: &Cli, keys: &[String]) -> Result<()> {
     let paths = daemon_socket_paths()?;
     if paths.is_empty() {
-        clear_socket(socket_path(cli)?, false).await?;
+        clear_socket(socket_path(cli)?, keys, false).await?;
         return Ok(());
     }
 
     let mut cleared = false;
     for path in paths {
-        cleared |= clear_socket(path, true).await?;
+        cleared |= clear_socket(path, keys, true).await?;
     }
 
     if !cleared {
-        clear_socket(socket_path(cli)?, false).await?;
+        clear_socket(socket_path(cli)?, keys, false).await?;
     }
     Ok(())
 }
 
-async fn clear_socket(path: PathBuf, ignore_missing: bool) -> Result<bool> {
-    match call(path, Request::Clear).await {
+/// Evict `keys` from the cache of the daemon this invocation would use, so the
+/// next resolve fetches them from their providers and caches the new values.
+/// Does nothing when the daemon is disabled or not running.
+pub async fn refresh(cli: &Cli, config: &Config, keys: &[String]) -> Result<()> {
+    let ctx = ResolveContext::from_cli(cli);
+    if keys.is_empty() || !should_use_daemon(&ctx, config) {
+        return Ok(());
+    }
+    clear_socket(socket_path_for_context(&ctx)?, keys, true).await?;
+    Ok(())
+}
+
+async fn clear_socket(path: PathBuf, keys: &[String], ignore_missing: bool) -> Result<bool> {
+    let request = Request::Clear {
+        keys: keys.to_vec(),
+    };
+    match call(path, request).await {
         Ok(Response::Ok) => Ok(true),
         Ok(Response::Error { message }) => Err(FnoxError::Config(message)),
         Ok(_) => Err(FnoxError::Config(
@@ -868,9 +893,17 @@ async fn process_request(
                 cached_entries: state.cache.len(),
             })
         }
-        Request::Clear => {
+        Request::Clear { keys } => {
             let _guard = request_lock.lock().await;
-            state.lock().await.cache.clear();
+            let mut state = state.lock().await;
+            if keys.is_empty() {
+                state.cache.clear();
+            } else {
+                let keys = keys.into_iter().collect::<HashSet<_>>();
+                state
+                    .cache
+                    .retain(|cache_key, _| !keys.contains(&cache_key.secret));
+            }
             Ok(Response::Ok)
         }
         Request::Shutdown => {
@@ -1210,7 +1243,10 @@ fn cache_key(
     hasher.update(key.as_bytes());
     hasher.update(req.purpose.as_bytes());
     hasher.update(serde_json::to_string(secret).unwrap_or_default().as_bytes());
-    CacheKey(hasher.finalize().to_hex().to_string())
+    CacheKey {
+        secret: key.to_string(),
+        hash: hasher.finalize().to_hex().to_string(),
+    }
 }
 
 fn config_fingerprint(config: &Config, env: &[(String, String)]) -> Result<String> {
@@ -1604,8 +1640,9 @@ pub fn parse_duration(value: &str) -> Result<Duration> {
 #[cfg(test)]
 mod tests {
     use super::{
-        CacheKey, DaemonState, Purpose, ResolveBatchRequest, cache_key, config_fingerprint,
-        foreground_resolution_if_needed, parse_duration, resolve_with_cache, store_resolved_values,
+        CacheKey, DaemonState, Purpose, Request, ResolveBatchRequest, Response, cache_key,
+        config_fingerprint, foreground_resolution_if_needed, parse_duration, process_request,
+        resolve_with_cache, store_resolved_values,
     };
     use fnox_core::config::{Config, ProviderConfig, SecretConfig};
     use indexmap::IndexMap;
@@ -1634,6 +1671,58 @@ mod tests {
 
         let decoded: ResolveBatchRequest = serde_json::from_str(&json).unwrap();
         assert!(decoded.include_all_modes);
+    }
+
+    // A full clear keeps the wire shape older daemons and clients expect, and a
+    // request without `keys` still decodes as a full clear.
+    #[test]
+    fn clear_request_wire_shape_is_compatible() {
+        let full = serde_json::to_string(&Request::Clear { keys: Vec::new() }).unwrap();
+        assert_eq!(full, r#"{"type":"clear"}"#);
+
+        let decoded: Request = serde_json::from_str(r#"{"type":"clear"}"#).unwrap();
+        assert!(matches!(decoded, Request::Clear { keys } if keys.is_empty()));
+
+        let keyed = serde_json::to_string(&Request::Clear {
+            keys: vec!["API_KEY".to_string()],
+        })
+        .unwrap();
+        assert_eq!(keyed, r#"{"type":"clear","keys":["API_KEY"]}"#);
+    }
+
+    #[tokio::test]
+    async fn clear_with_keys_evicts_only_matching_entries() {
+        let config = Config::new();
+        let secret = plain_secret("value");
+        let req = test_batch_request();
+        let fingerprint = config_fingerprint(&config, &req.env).unwrap();
+        let mut cache = std::collections::HashMap::<CacheKey, Option<String>>::new();
+        for key in ["API_KEY", "OTHER_KEY"] {
+            cache.insert(
+                cache_key(&fingerprint, &req.profile, key, &secret, &req),
+                Some("cached".to_string()),
+            );
+        }
+        let state = Arc::new(Mutex::new(DaemonState { cache }));
+
+        let response = process_request(
+            Request::Clear {
+                keys: vec!["API_KEY".to_string()],
+            },
+            state.clone(),
+            Arc::new(Mutex::new(())),
+        )
+        .await
+        .unwrap();
+        assert!(matches!(response, Response::Ok));
+
+        let state = state.lock().await;
+        let remaining = state
+            .cache
+            .keys()
+            .map(|key| key.secret.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(remaining, vec!["OTHER_KEY"]);
     }
 
     #[test]

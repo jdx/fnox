@@ -6,9 +6,15 @@ description: "Usage and examples for fnox daemon clear. Clear cached values afte
 
 # `fnox daemon clear`
 
-- **Usage:** `fnox daemon clear`
+- **Usage:** `fnox daemon clear [KEYS]…`
 
 Clear the caches of all running daemons
+
+With one or more KEYs, only the cached values for those secrets are evicted; everything else stays cached.
+
+## Arguments
+
+- **`[KEYS]…`** — Secret keys to evict (default: the whole cache)
 
 ## Flags
 
@@ -18,10 +24,11 @@ Clear the caches of all running daemons
 
 ## Examples
 
-Clear cached values after changing a secret in its source provider. This clears running daemon caches; it does not remove encrypted sync caches.
+Clear cached values after changing a secret in its source provider. Name keys to evict only those secrets and keep everything else cached. This clears running daemon caches; it does not remove encrypted sync caches.
 
 ```sh
 fnox daemon clear
+fnox daemon clear API_TOKEN DB_PASSWORD
 ```
 
 ## Related

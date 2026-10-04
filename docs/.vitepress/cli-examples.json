@@ -155,8 +155,8 @@
     "links": ["/guide/daemon", "/guide/troubleshooting"]
   },
   "daemon/clear": {
-    "note": "Clear cached values after changing a secret in its source provider. This clears running daemon caches; it does not remove encrypted sync caches.",
-    "commands": "fnox daemon clear",
+    "note": "Clear cached values after changing a secret in its source provider. Name keys to evict only those secrets and keep everything else cached. This clears running daemon caches; it does not remove encrypted sync caches.",
+    "commands": "fnox daemon clear\nfnox daemon clear API_TOKEN DB_PASSWORD",
     "links": ["/guide/daemon", "/guide/sync"]
   },
   "daemon/stop": {

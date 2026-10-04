@@ -6,7 +6,7 @@ description: "Usage and examples for fnox get. Print one resolved value to stdou
 
 # `fnox get`
 
-- **Usage:** `fnox get [--base64-decode] <KEY>`
+- **Usage:** `fnox get [--base64-decode] [--refresh] <KEY>`
 
 Get a secret value
 
@@ -17,6 +17,7 @@ Get a secret value
 ## Flags
 
 - **`--base64-decode`** — Base64 decode the secret
+- **`--refresh`** — Re-resolve the secret from its provider instead of serving it from the daemon cache, and cache the new value
 - **`-h --help`** — Print help
 
 <!-- fnox examples:start -->

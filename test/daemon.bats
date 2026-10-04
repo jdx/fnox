@@ -218,6 +218,108 @@ EOF
 	assert_success
 }
 
+rotating_config() {
+	mkdir -p "$TEST_TEMP_DIR/bin"
+	cat >"$TEST_TEMP_DIR/bin/pass" <<'EOF'
+#!/bin/sh
+cat "$PASS_VALUES_DIR/$2"
+EOF
+	chmod +x "$TEST_TEMP_DIR/bin/pass"
+	export PATH="$TEST_TEMP_DIR/bin:$PATH"
+	export PASS_VALUES_DIR="$TEST_TEMP_DIR/values"
+	mkdir -p "$PASS_VALUES_DIR"
+	echo "old-token" >"$PASS_VALUES_DIR/token"
+	echo "old-other" >"$PASS_VALUES_DIR/other"
+
+	cat >fnox.toml <<'EOF'
+root = true
+
+[daemon]
+enabled = true
+
+[providers.pass]
+type = "password-store"
+
+[secrets]
+TOKEN = { provider = "pass", value = "token" }
+OTHER = { provider = "pass", value = "other" }
+EOF
+}
+
+print_both() {
+	"$FNOX_BIN" exec "$@" -- sh -c 'printf "%s %s\n" "$TOKEN" "$OTHER"'
+}
+
+rotate_both() {
+	echo "new-token" >"$PASS_VALUES_DIR/token"
+	echo "new-other" >"$PASS_VALUES_DIR/other"
+}
+
+@test "daemon clear with keys evicts only those secrets" {
+	rotating_config
+
+	run print_both
+	assert_success
+	assert_output "old-token old-other"
+
+	rotate_both
+
+	run "$FNOX_BIN" daemon clear TOKEN
+	assert_success
+	assert_output "fnox daemon cache cleared for TOKEN"
+
+	run "$FNOX_BIN" daemon status
+	assert_success
+	assert_output --partial "cached_entries: 1"
+
+	# TOKEN is re-resolved; OTHER is still served from the cache.
+	run print_both
+	assert_success
+	assert_output "new-token old-other"
+}
+
+@test "get --refresh re-resolves one secret and caches the new value" {
+	rotating_config
+
+	run "$FNOX_BIN" get TOKEN
+	assert_success
+	assert_output "old-token"
+
+	rotate_both
+
+	run "$FNOX_BIN" get TOKEN
+	assert_success
+	assert_output "old-token"
+
+	run "$FNOX_BIN" get --refresh TOKEN
+	assert_success
+	assert_output "new-token"
+
+	# The refreshed value is cached again, so a later rotation is not seen yet.
+	echo "newer-token" >"$PASS_VALUES_DIR/token"
+	run "$FNOX_BIN" get TOKEN
+	assert_success
+	assert_output "new-token"
+}
+
+@test "exec --refresh re-resolves only the named secrets" {
+	rotating_config
+
+	run print_both
+	assert_success
+	assert_output "old-token old-other"
+
+	rotate_both
+
+	run print_both --refresh TOKEN
+	assert_success
+	assert_output "new-token old-other"
+
+	run print_both --refresh TOKEN --refresh OTHER
+	assert_success
+	assert_output "new-token new-other"
+}
+
 @test "no-daemon bypass does not start daemon" {
 	daemon_config
 

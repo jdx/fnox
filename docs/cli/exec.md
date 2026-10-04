@@ -6,7 +6,7 @@ description: "Usage and examples for fnox exec. Put fnox options before --."
 
 # `fnox exec`
 
-- **Usage:** `fnox exec [--replace] [COMMAND]…`
+- **Usage:** `fnox exec [--replace] [--refresh <KEY>] [COMMAND]…`
 - **Aliases:** `x`
 
 Execute a command with secrets as environment variables
@@ -18,6 +18,7 @@ Execute a command with secrets as environment variables
 ## Flags
 
 - **`--replace`** — Replace the fnox process with the command so it keeps the same PID and receives signals directly. Rejected when the command's environment would carry an as_file secret, or when the profile configures credential leases, since fnox must clean those up after the command exits. Unix only
+- **`--refresh <KEY>`** — Re-resolve this secret from its provider instead of serving it from the daemon cache, and cache the new value. Other secrets are still served from the cache. Repeat to refresh several keys
 - **`-h --help`** — Print help
 
 <!-- fnox examples:start -->
