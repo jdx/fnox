@@ -96,10 +96,10 @@ cmd edit help="Edit the configuration file" {
 cmd exec help="Execute a command with secrets as environment variables" {
     alias x
     alias run hide=#true
-    flag --replace help="Replace the fnox process with the command so it keeps the same PID and receives signals directly. Rejected when the command's environment would carry an as_file secret, or when the profile configures credential leases, since fnox must clean those up after the command exits. Unix only"
     flag --refresh help="Re-resolve this secret from its provider instead of serving it from the daemon cache, and cache the new value. Other secrets are still served from the cache. Repeat to refresh several keys" var=#true {
         arg <KEY>
     }
+    flag --replace help="Replace the fnox process with the command so it keeps the same PID and receives signals directly. Rejected when the command's environment would carry an as_file secret, or when the profile configures credential leases, since fnox must clean those up after the command exits. Unix only"
     flag "-h --help" help="Print help" action=help builtin=#true
     arg "[COMMAND]..." help="Command to run" double_dash=automatic
     complete command type=command_args

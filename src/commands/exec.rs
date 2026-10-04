@@ -9,6 +9,12 @@ use tempfile::NamedTempFile;
 #[derive(Debug, usage_rs::Args)]
 #[usage(alias = "x", alias_hidden = "run")]
 pub struct ExecCommand {
+    /// Re-resolve this secret from its provider instead of serving it from the
+    /// daemon cache, and cache the new value. Other secrets are still served from
+    /// the cache. Repeat to refresh several keys
+    #[usage(long, value_name = "KEY")]
+    pub refresh: Vec<String>,
+
     /// Replace the fnox process with the command so it keeps the same PID and receives
     /// signals directly. Rejected when the command's environment would carry an as_file
     /// secret, or when the profile configures credential leases, since fnox must clean
@@ -16,12 +22,6 @@ pub struct ExecCommand {
     #[cfg(unix)]
     #[usage(long)]
     pub replace: bool,
-
-    /// Re-resolve this secret from its provider instead of serving it from the
-    /// daemon cache, and cache the new value. Other secrets are still served from
-    /// the cache. Repeat to refresh several keys
-    #[usage(long, value_name = "KEY")]
-    pub refresh: Vec<String>,
 
     /// Command to run
     #[usage(

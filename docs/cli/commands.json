@@ -482,7 +482,7 @@
       },
       "exec": {
         "full_cmd": ["exec"],
-        "usage": "exec [--replace] [--refresh <KEY>] [COMMAND]…",
+        "usage": "exec [--refresh <KEY>] [--replace] [COMMAND]…",
         "subcommands": {},
         "args": [
           {
@@ -497,16 +497,6 @@
           }
         ],
         "flags": [
-          {
-            "name": "replace",
-            "usage": "--replace",
-            "help": "Replace the fnox process with the command so it keeps the same PID and receives signals directly. Rejected when the command's environment would carry an as_file secret, or when the profile configures credential leases, since fnox must clean those up after the command exits. Unix only",
-            "help_first_line": "Replace the fnox process with the command so it keeps the same PID and receives signals directly. Rejected when the command's environment would carry an as_file secret, or when the profile configures credential leases, since fnox must clean those up after the command exits. Unix only",
-            "short": [],
-            "long": ["replace"],
-            "hide": false,
-            "global": false
-          },
           {
             "name": "refresh",
             "usage": "--refresh <KEY>",
@@ -524,6 +514,16 @@
               "double_dash": "Optional",
               "hide": false
             }
+          },
+          {
+            "name": "replace",
+            "usage": "--replace",
+            "help": "Replace the fnox process with the command so it keeps the same PID and receives signals directly. Rejected when the command's environment would carry an as_file secret, or when the profile configures credential leases, since fnox must clean those up after the command exits. Unix only",
+            "help_first_line": "Replace the fnox process with the command so it keeps the same PID and receives signals directly. Rejected when the command's environment would carry an as_file secret, or when the profile configures credential leases, since fnox must clean those up after the command exits. Unix only",
+            "short": [],
+            "long": ["replace"],
+            "hide": false,
+            "global": false
           },
           {
             "name": "help",

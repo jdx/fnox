@@ -145,6 +145,11 @@ struct StoreResolvedRequest {
     request: ResolveBatchRequest,
     fingerprint: String,
     values: IndexMap<String, Option<String>>,
+    /// Clear epoch the daemon reported when it handed resolution to the client.
+    /// Values for keys cleared since then are stale and not cached. Absent from
+    /// older clients, which skip the check.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    epoch: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -157,6 +162,8 @@ enum Response {
         fingerprint: String,
         cached_values: IndexMap<String, Option<String>>,
         keys: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        epoch: Option<u64>,
     },
     Status {
         pid: u32,
@@ -211,6 +218,40 @@ struct CacheKey {
 struct DaemonState {
     // Missing values are not cache hits: a provider may recover between requests.
     cache: HashMap<CacheKey, Option<String>>,
+    /// Incremented on every clear. A foreground resolution records the epoch it
+    /// started at so its write-back can be rejected for keys cleared meanwhile.
+    epoch: u64,
+    /// Epoch of the last full clear.
+    full_clear_epoch: u64,
+    /// Epoch of the last keyed clear for each secret name.
+    key_clear_epochs: HashMap<String, u64>,
+}
+
+impl DaemonState {
+    fn clear(&mut self, keys: Vec<String>) {
+        self.epoch += 1;
+        if keys.is_empty() {
+            self.cache.clear();
+            self.full_clear_epoch = self.epoch;
+            self.key_clear_epochs.clear();
+        } else {
+            let keys = keys.into_iter().collect::<HashSet<_>>();
+            self.cache
+                .retain(|cache_key, _| !keys.contains(&cache_key.secret));
+            for key in keys {
+                self.key_clear_epochs.insert(key, self.epoch);
+            }
+        }
+    }
+
+    /// Whether `key` was cleared after a resolution that started at `epoch`.
+    fn cleared_since(&self, key: &str, epoch: u64) -> bool {
+        self.full_clear_epoch > epoch
+            || self
+                .key_clear_epochs
+                .get(key)
+                .is_some_and(|cleared| *cleared > epoch)
+    }
 }
 
 pub async fn resolve_batch(
@@ -275,6 +316,7 @@ pub async fn resolve_batch_with_context(
             fingerprint,
             mut cached_values,
             keys,
+            epoch,
         } => {
             let secrets = if include_all_modes {
                 secrets.clone()
@@ -306,9 +348,15 @@ pub async fn resolve_batch_with_context(
                     values.insert(key.clone(), value);
                 }
             }
-            if let Err(error) =
-                store_foreground_values(ctx, config, batch_request, fingerprint, values.clone())
-                    .await
+            if let Err(error) = store_foreground_values(
+                ctx,
+                config,
+                batch_request,
+                fingerprint,
+                epoch,
+                values.clone(),
+            )
+            .await
             {
                 tracing::warn!("failed to fill daemon cache after foreground resolution: {error}");
             }
@@ -368,7 +416,9 @@ pub async fn resolve_one_with_context(
 
     match call_or_start(ctx, config, Request::ResolveOne(one_request.clone())).await? {
         Response::Resolved { mut values } => Ok(values.swap_remove(key).flatten()),
-        Response::ResolveInForeground { fingerprint, .. } => {
+        Response::ResolveInForeground {
+            fingerprint, epoch, ..
+        } => {
             let value =
                 crate::secret_resolver::resolve_secret(config, profile, key, secret_config).await?;
             let values = [(key.to_string(), value.clone())].into_iter().collect();
@@ -386,7 +436,8 @@ pub async fn resolve_one_with_context(
                 env: one_request.env,
             };
             if let Err(error) =
-                store_foreground_values(ctx, config, batch_request, fingerprint, values).await
+                store_foreground_values(ctx, config, batch_request, fingerprint, epoch, values)
+                    .await
             {
                 tracing::warn!("failed to fill daemon cache after foreground resolution: {error}");
             }
@@ -404,6 +455,7 @@ async fn store_foreground_values(
     config: &Config,
     request: ResolveBatchRequest,
     fingerprint: String,
+    epoch: Option<u64>,
     values: IndexMap<String, Option<String>>,
 ) -> Result<()> {
     match call_or_start(
@@ -413,6 +465,7 @@ async fn store_foreground_values(
             request,
             fingerprint,
             values,
+            epoch,
         }),
     )
     .await?
@@ -895,15 +948,7 @@ async fn process_request(
         }
         Request::Clear { keys } => {
             let _guard = request_lock.lock().await;
-            let mut state = state.lock().await;
-            if keys.is_empty() {
-                state.cache.clear();
-            } else {
-                let keys = keys.into_iter().collect::<HashSet<_>>();
-                state
-                    .cache
-                    .retain(|cache_key, _| !keys.contains(&cache_key.secret));
-            }
+            state.lock().await.clear(keys);
             Ok(Response::Ok)
         }
         Request::Shutdown => {
@@ -937,6 +982,7 @@ async fn process_request(
                 &secrets,
                 &req.request,
                 &req.fingerprint,
+                req.epoch,
                 req.values,
                 state,
             )
@@ -971,6 +1017,7 @@ async fn process_request(
                     fingerprint: foreground.fingerprint,
                     cached_values: foreground.cached_values,
                     keys: foreground.keys,
+                    epoch: Some(foreground.epoch),
                 });
             }
             let values = resolve_with_cache(&config, &req.profile, secrets, &req, state).await?;
@@ -1020,6 +1067,7 @@ async fn process_request(
                     fingerprint: foreground.fingerprint,
                     cached_values: foreground.cached_values,
                     keys: foreground.keys,
+                    epoch: Some(foreground.epoch),
                 });
             }
             let values =
@@ -1044,6 +1092,7 @@ struct ForegroundResolution {
     fingerprint: String,
     cached_values: IndexMap<String, Option<String>>,
     keys: Vec<String>,
+    epoch: u64,
 }
 
 async fn foreground_resolution_if_needed(
@@ -1082,16 +1131,19 @@ async fn foreground_resolution_if_needed(
             fingerprint,
             cached_values,
             keys,
+            epoch: state.epoch,
         }))
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn store_resolved_values(
     config: &Config,
     profile: &[String],
     secrets: &IndexMap<String, SecretConfig>,
     req: &ResolveBatchRequest,
     expected_fingerprint: &str,
+    epoch: Option<u64>,
     mut values: IndexMap<String, Option<String>>,
     state: std::sync::Arc<Mutex<DaemonState>>,
 ) -> Result<()> {
@@ -1105,6 +1157,10 @@ async fn store_resolved_values(
     let default_provider = cache_policy_default_provider(config, profile, &providers);
     let mut state = state.lock().await;
     for (key, secret) in secrets {
+        if epoch.is_some_and(|epoch| state.cleared_since(key, epoch)) {
+            tracing::debug!("{key} was cleared during foreground resolution; not caching it");
+            continue;
+        }
         if secret_is_cacheable(&providers, default_provider, secret, req)
             && let Some(Some(value)) = values.swap_remove(key)
         {
@@ -1703,7 +1759,10 @@ mod tests {
                 Some("cached".to_string()),
             );
         }
-        let state = Arc::new(Mutex::new(DaemonState { cache }));
+        let state = Arc::new(Mutex::new(DaemonState {
+            cache,
+            ..Default::default()
+        }));
 
         let response = process_request(
             Request::Clear {
@@ -1822,7 +1881,10 @@ mod tests {
         let key = cache_key(&fingerprint, &req.profile, "API_KEY", secret, req);
         let mut cache = std::collections::HashMap::<CacheKey, Option<String>>::new();
         cache.insert(key, Some("cached".to_string()));
-        Arc::new(Mutex::new(DaemonState { cache }))
+        Arc::new(Mutex::new(DaemonState {
+            cache,
+            ..Default::default()
+        }))
     }
 
     #[tokio::test]
@@ -1851,6 +1913,56 @@ mod tests {
         );
     }
 
+    // A foreground client that read a value before it was cleared must not
+    // write that stale value back afterwards.
+    #[tokio::test]
+    async fn foreground_write_back_skips_keys_cleared_meanwhile() {
+        let mut config = Config::new();
+        config
+            .providers
+            .insert("plain".to_string(), plain_provider_config(None));
+        let secrets = IndexMap::from([
+            ("API_KEY".to_string(), plain_secret("api")),
+            ("OTHER_KEY".to_string(), plain_secret("other")),
+        ]);
+        let mut req = test_batch_request();
+        req.non_interactive = false;
+        req.keys = vec!["API_KEY".to_string(), "OTHER_KEY".to_string()];
+        let state = Arc::new(Mutex::new(DaemonState::default()));
+
+        let foreground =
+            foreground_resolution_if_needed(&config, &req.profile, &secrets, &req, &state)
+                .await
+                .unwrap()
+                .expect("cache misses should be resolved by the foreground client");
+
+        state.lock().await.clear(vec!["API_KEY".to_string()]);
+
+        store_resolved_values(
+            &config,
+            &req.profile,
+            &secrets,
+            &req,
+            &foreground.fingerprint,
+            Some(foreground.epoch),
+            IndexMap::from([
+                ("API_KEY".to_string(), Some("stale".to_string())),
+                ("OTHER_KEY".to_string(), Some("other".to_string())),
+            ]),
+            state.clone(),
+        )
+        .await
+        .unwrap();
+
+        let state = state.lock().await;
+        let cached = state
+            .cache
+            .keys()
+            .map(|key| key.secret.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(cached, vec!["OTHER_KEY"]);
+    }
+
     #[tokio::test]
     async fn foreground_client_resolves_cache_miss_and_populates_cache() {
         let mut config = Config::new();
@@ -1877,6 +1989,7 @@ mod tests {
             &secrets,
             &req,
             &foreground.fingerprint,
+            Some(foreground.epoch),
             IndexMap::from([("API_KEY".to_string(), Some("from-foreground".to_string()))]),
             state.clone(),
         )
