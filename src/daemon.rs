@@ -182,6 +182,9 @@ enum DaemonCallError {
         path: PathBuf,
         source: std::io::Error,
     },
+    /// The daemon closed the connection without replying, as one from an
+    /// older fnox does for a request it cannot decode.
+    EmptyResponse,
     Other(FnoxError),
 }
 
@@ -203,6 +206,9 @@ impl DaemonCallError {
                 "Failed to connect to fnox daemon at {}: {source}",
                 path.display()
             )),
+            Self::EmptyResponse => FnoxError::Config(
+                "fnox daemon closed the connection without a response".to_string(),
+            ),
             Self::Other(error) => error,
         }
     }
@@ -548,9 +554,9 @@ async fn clear_socket(path: PathBuf, keys: &[String], ignore_missing: bool) -> R
         Err(e) if ignore_missing && e.is_socket_missing() => Ok(false),
         // A daemon from an older fnox drops the connection on a request it
         // cannot decode. Leave its cache alone rather than failing the clear.
-        Err(DaemonCallError::Other(error)) if ignore_missing && !keys.is_empty() => {
+        Err(DaemonCallError::EmptyResponse) if ignore_missing && !keys.is_empty() => {
             tracing::warn!(
-                "fnox daemon at {} did not accept a keyed clear ({error}); it may be from an older fnox. Run `fnox daemon clear` to clear it fully",
+                "fnox daemon at {} did not accept a keyed clear; it may be from an older fnox. Run `fnox daemon clear` to clear it fully",
                 path.display()
             );
             // A daemon was running there, so don't fall back to failing on
@@ -891,11 +897,14 @@ async fn call(path: PathBuf, request: Request) -> std::result::Result<Response, 
 
     let mut reader = BufReader::new(stream);
     let mut response = String::new();
-    reader.read_line(&mut response).await.map_err(|e| {
+    let read = reader.read_line(&mut response).await.map_err(|e| {
         DaemonCallError::Other(FnoxError::Config(format!(
             "Failed to read daemon response: {e}"
         )))
     })?;
+    if read == 0 {
+        return Err(DaemonCallError::EmptyResponse);
+    }
     serde_json::from_str(&response).map_err(|e| {
         DaemonCallError::Other(FnoxError::Config(format!(
             "Failed to decode daemon response: {e}"
