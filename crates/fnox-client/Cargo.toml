@@ -21,7 +21,10 @@ serde_json = { workspace = true }
 libc = { workspace = true }
 
 [dev-dependencies]
+shellexpand = { workspace = true }
 tempfile = { workspace = true }
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
+# blake3 compiles NEON C code for Apple targets, which fails on docs.rs's Linux host.
+features = ["blake3/pure"]

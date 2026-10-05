@@ -153,20 +153,15 @@ fn is_true_word(value: &str) -> bool {
             .any(|word| value.eq_ignore_ascii_case(word))
 }
 
+/// Expands a leading `~` the way `shellexpand::tilde` does, by string
+/// concatenation, so the socket hash sees the same bytes as fnox's.
 fn expand_tilde(path: &str, get: &dyn Fn(&str) -> Option<String>) -> PathBuf {
-    let rest = if path == "~" {
-        Some("")
-    } else {
-        path.strip_prefix("~/")
-    };
-    match (rest, get("HOME").filter(|home| !home.is_empty())) {
-        (Some(rest), Some(home)) => {
-            let home = PathBuf::from(home);
-            if rest.is_empty() {
-                home
-            } else {
-                home.join(rest)
-            }
+    match (
+        path.strip_prefix('~'),
+        get("HOME").filter(|h| !h.is_empty()),
+    ) {
+        (Some(rest), Some(home)) if rest.is_empty() || rest.starts_with('/') => {
+            PathBuf::from(format!("{home}{rest}"))
         }
         _ => PathBuf::from(path),
     }
@@ -177,7 +172,8 @@ fn expand_tilde(path: &str, get: &dyn Fn(&str) -> Option<String>) -> PathBuf {
 pub struct RuntimeEnv {
     /// `XDG_RUNTIME_DIR`; empty counts as unset.
     pub xdg_runtime_dir: Option<PathBuf>,
-    /// The temporary directory, `TMPDIR` or the platform default.
+    /// The temporary directory: `TMPDIR`, else what std uses when it is
+    /// absent (on Apple, the per-user directory from `confstr`).
     pub tmpdir: PathBuf,
     /// The effective user id.
     pub euid: u32,
@@ -212,6 +208,14 @@ impl RuntimeEnv {
     }
 }
 
+/// What std uses when `TMPDIR` is absent: on Apple, the per-user directory
+/// from `confstr`; elsewhere `/tmp` (`/data/local/tmp` on Android).
+#[cfg(target_vendor = "apple")]
+fn default_tmpdir() -> PathBuf {
+    darwin_user_temp_dir().unwrap_or_else(|| PathBuf::from("/tmp"))
+}
+
+#[cfg(not(target_vendor = "apple"))]
 fn default_tmpdir() -> PathBuf {
     if cfg!(target_os = "android") {
         PathBuf::from("/data/local/tmp")
@@ -219,6 +223,35 @@ fn default_tmpdir() -> PathBuf {
         std::env::temp_dir()
     } else {
         PathBuf::from("/tmp")
+    }
+}
+
+/// `confstr(_CS_DARWIN_USER_TEMP_DIR)`, as std reads it, trailing `/` included.
+/// Not `std::env::temp_dir()`, which would read this process's `TMPDIR`.
+#[cfg(target_vendor = "apple")]
+fn darwin_user_temp_dir() -> Option<PathBuf> {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let mut buf: Vec<u8> = Vec::with_capacity(512);
+    loop {
+        // SAFETY: the pointer and capacity describe `buf`'s allocation.
+        let n = unsafe {
+            libc::confstr(
+                libc::_CS_DARWIN_USER_TEMP_DIR,
+                buf.as_mut_ptr().cast(),
+                buf.capacity(),
+            )
+        };
+        if n == 0 {
+            return None;
+        }
+        if n <= buf.capacity() {
+            // SAFETY: confstr wrote `n` bytes, the last being the NUL.
+            unsafe { buf.set_len(n - 1) };
+            return Some(PathBuf::from(OsString::from_vec(buf)));
+        }
+        buf.reserve(n);
     }
 }
 
@@ -397,8 +430,20 @@ mod tests {
     fn tmpdir_defaults_like_std_when_absent() {
         let rt = RuntimeEnv::from_env(&|_| None);
         assert_eq!(rt.xdg_runtime_dir, None);
-        if cfg!(unix) && !cfg!(target_os = "android") {
-            assert_eq!(rt.tmpdir, PathBuf::from("/tmp"));
+        #[cfg(target_vendor = "apple")]
+        {
+            let out = std::process::Command::new("/usr/bin/getconf")
+                .arg("DARWIN_USER_TEMP_DIR")
+                .output()
+                .unwrap();
+            let want = String::from_utf8(out.stdout).unwrap();
+            assert_eq!(rt.tmpdir, PathBuf::from(want.trim()));
+            assert_ne!(rt.tmpdir, PathBuf::from("/tmp"));
+        }
+        #[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "android")))]
+        assert_eq!(rt.tmpdir, PathBuf::from("/tmp"));
+        if std::env::var_os("TMPDIR").is_none() && !cfg!(windows) {
+            assert_eq!(rt.tmpdir, std::env::temp_dir());
         }
     }
 
@@ -567,6 +612,26 @@ mod tests {
         assert_eq!(expand_tilde("~other/k", &env), PathBuf::from("~other/k"));
         assert_eq!(expand_tilde("/a/~/k", &env), PathBuf::from("/a/~/k"));
         assert_eq!(expand_tilde("~/k", &env_of(&[])), PathBuf::from("~/k"));
+        // Concatenation, not path joining: a trailing slash in HOME survives.
+        let slash = env_of(&[("HOME", "/h/")]);
+        assert_eq!(expand_tilde("~/k", &slash), PathBuf::from("/h//k"));
+        assert_eq!(expand_tilde("~", &slash), PathBuf::from("/h/"));
+    }
+
+    #[test]
+    fn tilde_matches_shellexpand() {
+        for home in ["/h", "/h/", "/h//"] {
+            let pairs = [("HOME", home)];
+            let env = env_of(&pairs);
+            for path in ["~", "~/k", "~other/k", "/a/k"] {
+                let want = shellexpand::tilde_with_context(path, || Some(home)).into_owned();
+                assert_eq!(
+                    expand_tilde(path, &env),
+                    PathBuf::from(want),
+                    "{home} {path}"
+                );
+            }
+        }
     }
 
     #[test]

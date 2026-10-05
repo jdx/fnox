@@ -31,7 +31,7 @@ pub struct HelloInfo {
 }
 
 /// A request for the environment of one command.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct EnvRequest<'a> {
     /// Where the CLI fallback would run: the config root.
     pub cwd: &'a Path,
@@ -44,6 +44,18 @@ pub struct EnvRequest<'a> {
     /// Exactly the environment given to the CLI fallback, and never resolved
     /// values. The daemon keys its cache on parts of it.
     pub env: &'a [(String, String)],
+}
+
+impl std::fmt::Debug for EnvRequest<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EnvRequest")
+            .field("cwd", &self.cwd)
+            .field("config", &self.config)
+            .field("scope", &self.scope)
+            .field("keys", &self.keys)
+            .field("env", &crate::wire::Vars(self.env))
+            .finish()
+    }
 }
 
 /// The result of [`Client::resolve_env`].
@@ -195,4 +207,24 @@ fn validate(document: &EnvDocument, req: &EnvRequest<'_>) -> Result<(), CallErro
         return Err(CallError::Protocol("env document has an unrequested key"));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn env_request_debug_hides_the_environment() {
+        let env = vec![("FNOX_AGE_KEY".to_string(), "s3cr3t".to_string())];
+        let req = EnvRequest {
+            cwd: Path::new("/p"),
+            config: Path::new("fnox.toml"),
+            scope: EnvScope::Exec,
+            keys: None,
+            env: &env,
+        };
+        let debug = format!("{req:?}");
+        assert!(!debug.contains("s3cr3t"), "{debug}");
+        assert!(debug.contains("<1 vars>"));
+    }
 }

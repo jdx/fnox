@@ -4,10 +4,12 @@ use crate::config::{Config, ProviderConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
 use crate::secret_resolver::{resolve_secrets_batch, resolve_secrets_batch_with_pre_resolved};
 use fnox_client::path::{RuntimeEnv, SocketKey};
+#[cfg(unix)]
+use fnox_client::wire::MAX_LINE_BYTES;
 pub use fnox_client::wire::Purpose;
 use fnox_client::wire::{
-    CallError, CallOptions, MAX_LINE_BYTES, Request, ResolveBatchRequest, ResolveEnvRequest,
-    ResolveOneRequest, Response, StoreResolvedRequest,
+    CallError, Request, ResolveBatchRequest, ResolveEnvRequest, ResolveOneRequest, Response,
+    StoreResolvedRequest,
 };
 use fnox_client::{MIN_PROTOCOL, WIRE_VERSION, daemon_env_override, platform_supported};
 use indexmap::IndexMap;
@@ -693,13 +695,59 @@ async fn call_or_start(
 }
 
 /// Sends `request` to the daemon at `path`. fnox's own calls wait as long as
-/// the daemon takes, so the blocking client runs on a blocking thread.
+/// the daemon takes. This mirrors `fnox_client::wire::call` on tokio I/O, so
+/// dropping the future cancels the call instead of leaving a blocked thread.
+#[cfg(unix)]
 async fn call(path: PathBuf, request: Request) -> std::result::Result<Response, CallError> {
-    tokio::task::spawn_blocking(move || {
-        fnox_client::wire::call(&path, &request, &CallOptions::no_timeout())
-    })
-    .await
-    .map_err(|e| CallError::Io(std::io::Error::other(format!("daemon call failed: {e}"))))?
+    fn io_error(context: &str, e: std::io::Error) -> CallError {
+        CallError::Io(std::io::Error::new(e.kind(), format!("{context}: {e}")))
+    }
+
+    let mut stream =
+        UnixStream::connect(&path)
+            .await
+            .map_err(|source| CallError::SocketUnavailable {
+                path: path.clone(),
+                source,
+            })?;
+    fnox_client::peer::verify_peer(stream.as_raw_fd()).map_err(CallError::PeerRejected)?;
+    let mut line = serde_json::to_vec(&request).map_err(|e| {
+        CallError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Failed to encode daemon request: {e}"),
+        ))
+    })?;
+    if line.len() > MAX_LINE_BYTES {
+        return Err(CallError::Oversize);
+    }
+    line.push(b'\n');
+    stream
+        .write_all(&line)
+        .await
+        .map_err(|e| io_error("Failed to write daemon request", e))?;
+
+    let mut reader = BufReader::new(stream);
+    let mut response = Vec::new();
+    let read = (&mut reader)
+        .take(MAX_LINE_BYTES as u64 + 1)
+        .read_until(b'\n', &mut response)
+        .await
+        .map_err(|e| io_error("Failed to read daemon response", e))?;
+    if read == 0 {
+        return Err(CallError::EmptyResponse);
+    }
+    if response.last() == Some(&b'\n') {
+        response.pop();
+    }
+    if response.len() > MAX_LINE_BYTES {
+        return Err(CallError::Oversize);
+    }
+    serde_json::from_slice(&response).map_err(CallError::Decode)
+}
+
+#[cfg(not(unix))]
+async fn call(_path: PathBuf, _request: Request) -> std::result::Result<Response, CallError> {
+    Err(CallError::Unsupported)
 }
 
 #[cfg(unix)]
@@ -1594,6 +1642,7 @@ mod tests {
         resolve_with_cache, store_resolved_values,
     };
     use fnox_client::document::EnvScope;
+    use fnox_client::path::RuntimeEnv;
     use fnox_core::config::{Config, ProviderConfig, SecretConfig};
     use indexmap::IndexMap;
     use std::{path::PathBuf, sync::Arc};
@@ -2547,6 +2596,13 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
             };
             let client = SocketKey::from_cli_env(&CliFlags::default(), &get);
             assert_eq!(client, cli, "environment: {env:?}");
+            // SocketKey's component-wise equality hides byte differences the hash sees.
+            let rt = RuntimeEnv {
+                xdg_runtime_dir: Some(PathBuf::from("/run/user/1000")),
+                tmpdir: PathBuf::from("/tmp"),
+                euid: 1000,
+            };
+            assert_eq!(client.socket_path(&rt), cli.socket_path(&rt), "{env:?}");
         }
     }
 
@@ -2595,5 +2651,35 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
             _ => None,
         };
         assert_eq!(fnox_client::SocketKey::from_cli_env(&flags, &get), key);
+    }
+
+    // Dropping a call must not leave a thread blocked on the daemon's reply.
+    #[cfg(unix)]
+    #[test]
+    fn dropping_a_call_does_not_wait_for_the_daemon() {
+        use std::os::unix::net::UnixListener;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hang.sock");
+        let listener = UnixListener::bind(&path).unwrap();
+        std::thread::spawn(move || {
+            let (_stream, _) = listener.accept().unwrap();
+            std::thread::sleep(std::time::Duration::from_secs(30));
+        });
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            tokio::spawn(super::call(path.clone(), Request::Status));
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        });
+        let start = std::time::Instant::now();
+        drop(rt);
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(2),
+            "dropping the runtime waited {:?}",
+            start.elapsed()
+        );
     }
 }

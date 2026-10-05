@@ -186,7 +186,7 @@ pub enum Response {
     },
 }
 
-struct Vars<'a>(&'a [(String, String)]);
+pub(crate) struct Vars<'a>(pub(crate) &'a [(String, String)]);
 
 impl fmt::Debug for Vars<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

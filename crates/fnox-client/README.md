@@ -20,8 +20,8 @@ does not depend on `fnox-core`, `tokio` or any provider SDK.
 - **Only the environment you pass is sent.** The client reads nothing from its
   own process environment.
 - **`Debug` never prints a secret value.** Values are `SecretValue`s, which
-  print as `SecretValue(<redacted>)`, and the wire types print environments as
-  `<N vars>`.
+  print as `SecretValue(<redacted>)`, and `EnvRequest` and the wire types print
+  environments as `<N vars>`.
 
 The crate compiles everywhere. On a platform without a daemon (anything but
 Linux, macOS, FreeBSD and OpenBSD), `Client` answers `Absent`, so callers need
@@ -101,7 +101,8 @@ every request miss, and does so silently.
 
 The same environment decides which daemon you talk to: `SocketKey::from_cli_env`
 and `RuntimeEnv::from_env` read `FNOX_PROFILE`, `FNOX_NO_DEFAULTS`,
-`FNOX_IF_MISSING`, `FNOX_AGE_KEY_FILE`, `XDG_RUNTIME_DIR` and `TMPDIR` from it.
+`FNOX_IF_MISSING`, `FNOX_AGE_KEY_FILE`, `XDG_RUNTIME_DIR` and `TMPDIR` from it. Without `TMPDIR` the temp dir is what the
+std library uses: `/tmp`, or on macOS the per-user `confstr` directory.
 
 The daemon reads fnox's global config file (`~/.config/fnox/config.toml`) on
 every request, but locates it once, from its own environment. A request whose

@@ -2411,6 +2411,7 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
+ "shellexpand",
  "tempfile",
 ]
 
