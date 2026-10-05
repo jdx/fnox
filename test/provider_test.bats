@@ -103,3 +103,31 @@ EOF
 	assert_fnox_success provider t plain
 	assert_output --partial "connection successful"
 }
+
+@test "fnox provider test uses pass-cli info without logging account details" {
+	mkdir -p "$TEST_TEMP_DIR/bin"
+	export PASS_CLI_ARGS_FILE="$TEST_TEMP_DIR/pass-cli-args"
+	cat >"$TEST_TEMP_DIR/bin/pass-cli" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >"$PASS_CLI_ARGS_FILE"
+printf '%s\n' 'account: test-account@example.com'
+EOF
+	chmod +x "$TEST_TEMP_DIR/bin/pass-cli"
+	export PATH="$TEST_TEMP_DIR/bin:$PATH"
+
+	cat >fnox.toml <<'EOF'
+root = true
+
+[providers.protonpass]
+type = "proton-pass"
+
+[secrets]
+EOF
+
+	run env RUST_LOG=debug "$FNOX_BIN" provider test protonpass
+	assert_success
+	assert_output --partial "connection successful"
+	assert_output --partial "Proton Pass connection test successful"
+	refute_output --partial "test-account@example.com"
+	assert_file_contains "$PASS_CLI_ARGS_FILE" "info"
+}

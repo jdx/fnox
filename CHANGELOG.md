@@ -1,6 +1,27 @@
 # Changelog
 
-## [1.37.0](https://github.com/jdx/fnox/compare/v1.36.0..v1.37.0) - 2026-10-03
+## [1.38.1](https://github.com/jdx/fnox/compare/v1.38.0..v1.38.1) - 2026-10-05
+
+### 🐛 Bug Fixes
+
+- **(ci)** restore Windows release builds with native Perl by [@jdx](https://github.com/jdx) in [#934](https://github.com/jdx/fnox/pull/934)
+
+## [1.38.0](https://github.com/jdx/fnox/compare/v1.37.0..v1.38.0) - 2026-10-05
+
+### 🚀 Features
+
+- **(daemon)** clear or refresh individual cached secrets by [@jdx](https://github.com/jdx) in [#930](https://github.com/jdx/fnox/pull/930)
+
+### 🐛 Bug Fixes
+
+- **(proton-pass)** use info for connection checks by [@jdx](https://github.com/jdx) in [#932](https://github.com/jdx/fnox/pull/932)
+
+### 🔍 Other Changes
+
+- update pr-closer policy by [@jdx](https://github.com/jdx) in [e6b15ec](https://github.com/jdx/fnox/commit/e6b15ec29b5feca42f0f88badb76a9b3a0a5caf2)
+- verify release signing with pinned Packslip v1.6.0 by [@jdx](https://github.com/jdx) in [#933](https://github.com/jdx/fnox/pull/933)
+
+## [1.37.0](https://github.com/jdx/fnox/compare/v1.36.0..v1.37.0) - 2026-10-04
 
 ### 🚀 Features
 

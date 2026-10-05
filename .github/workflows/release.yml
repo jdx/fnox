@@ -60,6 +60,10 @@ jobs:
         with:
           p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
           p12-password: ${{ secrets.CERTIFICATES_P12_PASS }}
+      - name: Select native Perl for vendored OpenSSL
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./.github/scripts/select-openssl-perl.ps1
       - uses: taiki-e/upload-rust-binary-action@f0d45ae91ee7b8ee928de7a9d04d893a08bcbec6 # v1
         env:
           # Links the Linux GNU executable non-PIE (see build.rs); ignored for
@@ -267,7 +271,10 @@ jobs:
       # lets an installer check a download against jdx/fnox's identity
       # rather than against a key this project would have to hold. See
       # https://packslip.dev.
-      - uses: jdx/packslip@87479dfc6443253dff69601cace5fc6ea07e6df5 # v1.4.0
+      - uses: jdx/packslip@2af36e792faa28130987c8af509e475c7458405d # v1.6.0
+        env:
+          # Override the workflow's PAT; Packslip only needs this job's token.
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           tag: ${{ inputs.version != '' && format('v{0}', inputs.version) || github.ref_name }}
           artifacts: release-assets/fnox-*.tar.gz release-assets/fnox-*.tar.xz release-assets/fnox-*.zip
@@ -279,7 +286,7 @@ jobs:
             completion/zsh=asset:fnox.zsh
             completion/fish=asset:fnox.fish
             completion/powershell=asset:fnox.powershell
-          token: ${{ secrets.FNOX_GH_TOKEN }}
+          token: ${{ github.token }}
 
   enhance-release:
     needs: [create-release]
