@@ -29,7 +29,7 @@ For tools that start processes themselves, such as mise. stdout carries one line
 
 ## Examples
 
-For tools that start processes themselves, such as mise. stdout contains secret values in plain text; do not log it. Exit status is 1 on any error, with a JSON error document on stdout.
+For tools that start processes themselves, such as mise. stdout contains secret values in plain text; do not log it. Errors exit 1 with a JSON error document on stdout, except argument errors (exit 2) and a missing --json (exit 1), which print nothing; see the reference for the full table.
 
 ```sh
 fnox env --json

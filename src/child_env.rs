@@ -201,11 +201,16 @@ pub fn select(
                 env,
             }),
             None => {
-                let candidates = secrets.keys().map(String::as_str).chain(
+                let mut candidates: Vec<&str> = Vec::new();
+                for candidate in secrets.keys().map(String::as_str).chain(
                     leases
                         .values()
                         .flat_map(|lease| lease.produced_env_vars().into_iter()),
-                );
+                ) {
+                    if candidate != key && !candidates.contains(&candidate) {
+                        candidates.push(candidate);
+                    }
+                }
                 let similar = if key.is_empty() {
                     Vec::new()
                 } else {
@@ -759,6 +764,25 @@ create_command = "true"
     }
 
     #[test]
+    fn select_suggestions_are_deduplicated_and_never_the_key_itself() {
+        let toml = format!("{BASE}\n[secrets.GH_TOKEN]\ndefault = \"master\"\nenv = false\n");
+        let (secrets, leases) = fixture(&toml);
+        // GH_TOKEN is both a secret and a lease key: suggested once.
+        let requested = keys(&["GH_TOKN"]);
+        let rejection =
+            select(&secrets, &leases, EnvScope::Exec, Roots::Keys(&requested)).unwrap_err();
+        assert_eq!(rejection.suggestions["GH_TOKN"], ["GH_TOKEN"]);
+
+        // Under shell scope a lease-only key is unknown, but is not its own suggestion.
+        let (secrets, leases) = fixture(BASE);
+        let requested = keys(&["GH_TOKEN"]);
+        let rejection =
+            select(&secrets, &leases, EnvScope::Shell, Roots::Keys(&requested)).unwrap_err();
+        assert_eq!(rejection.unknown, ["GH_TOKEN"]);
+        assert!(!rejection.suggestions.contains_key("GH_TOKEN"));
+    }
+
+    #[test]
     fn select_suggests_statically_known_lease_keys() {
         let (secrets, leases) = fixture(BASE);
         let requested = keys(&["GH_TOKE"]);
@@ -921,18 +945,24 @@ create_command = "true"
 root = true
 [secrets]
 FNOX_AGE_KEY = { default = "explicit" }
+FNOX_AGE_KEY_FILE = { default = "k", as_file = true }
 "#;
         let env = assemble_for(
             EnvScope::Exec,
             toml,
             Roots::AllProfile,
-            &resolved(&[("FNOX_AGE_KEY", Some("explicit"))]),
+            &resolved(&[
+                ("FNOX_AGE_KEY", Some("explicit")),
+                ("FNOX_AGE_KEY_FILE", Some("k")),
+            ]),
             &creds(&[]),
             &[],
         );
         assert_eq!(env.set, creds(&[("FNOX_AGE_KEY", "explicit")]));
+        assert_eq!(env.files, creds(&[("FNOX_AGE_KEY_FILE", "k")]));
         assert!(!env.remove.contains(&"FNOX_AGE_KEY".to_string()));
-        assert!(env.remove.contains(&"FNOX_AGE_KEY_FILE".to_string()));
+        assert!(!env.remove.contains(&"FNOX_AGE_KEY_FILE".to_string()));
+        assert!(env.remove.contains(&"ENPASS_PASSWORD".to_string()));
     }
 
     #[test]

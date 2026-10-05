@@ -7,6 +7,9 @@
 setup() {
 	load 'test_helper/common_setup'
 	_common_setup
+	# A private runtime dir keeps teardown from stopping a real daemon
+	export XDG_RUNTIME_DIR="$TEST_TEMP_DIR/runtime"
+	mkdir -p "$XDG_RUNTIME_DIR"
 
 	# root = true stops config recursion into parent directories (the test
 	# temp dir lives inside the fnox repo, which has its own fnox.toml)
@@ -318,8 +321,6 @@ TOML
 
 @test "env --json shares the daemon cache with exec" {
 	install_pass_stub
-	export XDG_RUNTIME_DIR="$TEST_TEMP_DIR/runtime"
-	mkdir -p "$XDG_RUNTIME_DIR"
 	cat >fnox.toml <<'TOML'
 root = true
 
@@ -348,8 +349,6 @@ TOML
 
 @test "env --json --no-daemon does not start an enabled daemon" {
 	install_pass_stub
-	export XDG_RUNTIME_DIR="$TEST_TEMP_DIR/runtime"
-	mkdir -p "$XDG_RUNTIME_DIR"
 	cat >fnox.toml <<'TOML'
 root = true
 
