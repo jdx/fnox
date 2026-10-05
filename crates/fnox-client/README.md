@@ -76,15 +76,15 @@ apply: remove -> set -> files (0600 temp files, deleted after the child exits)
 
 ### Outcomes
 
-| Outcome | Meaning | What to do |
-|---|---|---|
-| `Hit(doc)` | Every requested key was cached. | Use `doc`. |
-| `Miss { keys }` | Some keys are not cached, or a lease is needed. | Run `fnox env --json`. |
-| `Rejected(r)` | A key is unknown, or is not injectable in this scope. | Report it. |
-| `Disabled` | This project's fnox config, or `FNOX_DAEMON` in the env you sent, does not enable the daemon. | Run `fnox env --json`. |
-| `Absent` | No daemon is running for this key, or the platform has none. | Run `fnox env --json`, which starts one when the config enables it. |
-| `VersionMismatch` | The daemon speaks another protocol. | Run `fnox env --json`. |
-| `Unavailable(e)` | A timeout, a bad reply or another failure. | Run `fnox env --json`. |
+| Outcome           | Meaning                                                                                       | What to do                                                          |
+| ----------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `Hit(doc)`        | Every requested key was cached.                                                               | Use `doc`.                                                          |
+| `Miss { keys }`   | Some keys are not cached, or a lease is needed.                                               | Run `fnox env --json`.                                              |
+| `Rejected(r)`     | A key is unknown, or is not injectable in this scope.                                         | Report it.                                                          |
+| `Disabled`        | This project's fnox config, or `FNOX_DAEMON` in the env you sent, does not enable the daemon. | Run `fnox env --json`.                                              |
+| `Absent`          | No daemon is running for this key, or the platform has none.                                  | Run `fnox env --json`, which starts one when the config enables it. |
+| `VersionMismatch` | The daemon speaks another protocol.                                                           | Run `fnox env --json`.                                              |
+| `Unavailable(e)`  | A timeout, a bad reply or another failure.                                                    | Run `fnox env --json`.                                              |
 
 A key whose secret resolved to nothing is never cached, so a request that
 includes an optional key that is currently missing always misses.
@@ -110,13 +110,13 @@ daemon's global config, not yours. `fnox` behaves the same way.
 
 ## Following fnox's daemon setting
 
-| Situation | `fnox-client` | `fnox env` |
-|---|---|---|
-| Config enables the daemon, and it is running | `Hit` or `Miss` | uses it |
-| Enabled, not running | `Absent` | starts it |
-| Running, but this project is not enabled | `Disabled` | resolves directly |
-| `FNOX_DAEMON=off` in the env you send | `Disabled`, without I/O | direct |
-| `FNOX_DAEMON=on`, config silent | the daemon serves | uses or starts it |
+| Situation                                    | `fnox-client`           | `fnox env`        |
+| -------------------------------------------- | ----------------------- | ----------------- |
+| Config enables the daemon, and it is running | `Hit` or `Miss`         | uses it           |
+| Enabled, not running                         | `Absent`                | starts it         |
+| Running, but this project is not enabled     | `Disabled`              | resolves directly |
+| `FNOX_DAEMON=off` in the env you send        | `Disabled`, without I/O | direct            |
+| `FNOX_DAEMON=on`, config silent              | the daemon serves       | uses or starts it |
 
 ## Compatibility
 
