@@ -660,7 +660,8 @@ fn should_use_daemon(ctx: &ResolveContext, config: &Config) -> bool {
 /// Whether fnox would use its daemon for `config`, before any per-invocation
 /// `--no-daemon`: the platform supports it, and `FNOX_DAEMON` or `[daemon] enabled` says so.
 pub(crate) fn config_enables_daemon(config: &Config) -> bool {
-    platform_supported() && daemon_enabled(config, daemon_env_override(&|k| std::env::var(k).ok()))
+    platform_supported()
+        && daemon_enabled(config, daemon_env_override(&|k| crate::env::var(k).ok()))
 }
 
 /// Whether `config` enables the daemon, unless `env_override` (`FNOX_DAEMON`) says.
@@ -839,7 +840,7 @@ async fn process_request(
             // As `fnox env` does, so an unknown profile is an error here and
             // the CLI fallback reports it, rather than an empty hit.
             config.validate_profiles(&req.profile, None)?;
-            let env_override = daemon_env_override(&|k| std::env::var(k).ok());
+            let env_override = daemon_env_override(&|k| crate::env::var(k).ok());
             resolve_env_response(&config, &req, env_override, &state).await
         }
         Request::Status => {
