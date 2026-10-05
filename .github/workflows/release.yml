@@ -267,7 +267,10 @@ jobs:
       # lets an installer check a download against jdx/fnox's identity
       # rather than against a key this project would have to hold. See
       # https://packslip.dev.
-      - uses: jdx/packslip@87479dfc6443253dff69601cace5fc6ea07e6df5 # v1.4.0
+      - uses: jdx/packslip@2af36e792faa28130987c8af509e475c7458405d # v1.6.0
+        env:
+          # Override the workflow's PAT; Packslip only needs this job's token.
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           tag: ${{ inputs.version != '' && format('v{0}', inputs.version) || github.ref_name }}
           artifacts: release-assets/fnox-*.tar.gz release-assets/fnox-*.tar.xz release-assets/fnox-*.zip
@@ -279,7 +282,7 @@ jobs:
             completion/zsh=asset:fnox.zsh
             completion/fish=asset:fnox.fish
             completion/powershell=asset:fnox.powershell
-          token: ${{ secrets.FNOX_GH_TOKEN }}
+          token: ${{ github.token }}
 
   enhance-release:
     needs: [create-release]
