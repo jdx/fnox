@@ -1,0 +1,34 @@
+name: windows-release-check
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - .github/workflows/windows-release-check.yml
+      - .github/scripts/select-openssl-perl.ps1
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x86_64-pc-windows-msvc, aarch64-pc-windows-msvc]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Select native Perl for vendored OpenSSL
+        shell: pwsh
+        run: ./.github/scripts/select-openssl-perl.ps1
+      - uses: taiki-e/upload-rust-binary-action@f0d45ae91ee7b8ee928de7a9d04d893a08bcbec6 # v1
+        with:
+          bin: fnox
+          target: ${{ matrix.target }}
+          build-tool: cargo
+          token: ${{ github.token }}
+          dry-run: true
