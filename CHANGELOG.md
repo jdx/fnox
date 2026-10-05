@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.38.1](https://github.com/jdx/fnox/compare/v1.38.0..v1.38.1) - 2026-10-05
+
+### 🐛 Bug Fixes
+
+- **(ci)** restore Windows release builds with native Perl by [@jdx](https://github.com/jdx) in [#934](https://github.com/jdx/fnox/pull/934)
+
 ## [1.38.0](https://github.com/jdx/fnox/compare/v1.37.0..v1.38.0) - 2026-10-05
 
 ### 🚀 Features
