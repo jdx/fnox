@@ -85,6 +85,7 @@ mise run lint-fix       # Auto-fix lint issues
 
 ```text
 src/commands/                    # One file per command
+crates/fnox-client/              # daemon wire protocol, socket discovery, read-only client and fnox env JSON types — must not depend on fnox-core, tokio or provider crates
 crates/fnox-core/src/providers/  # Provider implementations and encryption
 crates/fnox-core/src/config.rs   # Config parsing and layering
 crates/fnox-core/src/env.rs      # Centralized FNOX_* environment handling

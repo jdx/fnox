@@ -1,9 +1,16 @@
+use crate::child_env;
 use crate::commands::Cli;
 use crate::config::{Config, ProviderConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
 use crate::secret_resolver::{resolve_secrets_batch, resolve_secrets_batch_with_pre_resolved};
+use fnox_client::path::{RuntimeEnv, SocketKey};
+pub use fnox_client::wire::Purpose;
+use fnox_client::wire::{
+    CallError, CallOptions, MAX_LINE_BYTES, Request, ResolveBatchRequest, ResolveEnvRequest,
+    ResolveOneRequest, Response, StoreResolvedRequest,
+};
+use fnox_client::{MIN_PROTOCOL, WIRE_VERSION, daemon_env_override, platform_supported};
 use indexmap::IndexMap;
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 #[cfg(unix)]
 use std::os::fd::AsRawFd;
@@ -11,14 +18,13 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 #[cfg(unix)]
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 #[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::Mutex;
 #[cfg(unix)]
 use tokio::task::JoinSet;
 
-const SOCKET_NAME: &str = "fnoxd.sock";
 const SHUTDOWN_GRACE_PERIOD: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone)]
@@ -35,183 +41,51 @@ pub struct ResolveContext {
 impl ResolveContext {
     pub fn from_cli(cli: &Cli) -> Self {
         let settings = crate::settings::Settings::try_get().ok();
+        Self::from_cli_and_settings(cli, settings.as_deref())
+    }
+
+    /// The context for `cli` and the settings that fill what it left unset.
+    fn from_cli_and_settings(cli: &Cli, settings: Option<&crate::settings::SettingsData>) -> Self {
+        let profile = if cli.profile.is_empty() {
+            Config::normalize_profiles(
+                settings
+                    .map(|settings| settings.profile.as_slice())
+                    .unwrap_or_default(),
+            )
+        } else {
+            Config::normalize_profiles(&cli.profile)
+        };
         Self {
             config: cli.config.clone(),
-            profile: Config::get_profiles(cli.profile.as_slice()),
-            age_key_file: cli.age_key_file.clone().or_else(|| {
-                settings
-                    .as_ref()
-                    .and_then(|settings| settings.age_key_file.clone())
-            }),
-            if_missing: cli.if_missing.clone().or_else(|| {
-                settings
-                    .as_ref()
-                    .and_then(|settings| settings.if_missing.clone())
-            }),
-            no_defaults: cli.no_defaults
-                || settings
-                    .as_ref()
-                    .is_some_and(|settings| settings.no_defaults),
+            profile,
+            age_key_file: cli
+                .age_key_file
+                .clone()
+                .or_else(|| settings.and_then(|settings| settings.age_key_file.clone())),
+            if_missing: cli
+                .if_missing
+                .clone()
+                .or_else(|| settings.and_then(|settings| settings.if_missing.clone())),
+            no_defaults: cli.no_defaults || settings.is_some_and(|settings| settings.no_defaults),
             non_interactive: cli.non_interactive || crate::env::is_non_interactive(),
             no_daemon: cli.no_daemon,
         }
     }
-}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Purpose {
-    Exec,
-    Get,
-    HookEnv,
-    Export,
-    ListValues,
-    Check,
-    Tui,
-    Mcp,
-    Proxy,
-    CiRedact,
-}
-
-impl Purpose {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Exec => "exec",
-            Self::Get => "get",
-            Self::HookEnv => "hook-env",
-            Self::Export => "export",
-            Self::ListValues => "list-values",
-            Self::Check => "check",
-            Self::Tui => "tui",
-            Self::Mcp => "mcp",
-            Self::Proxy => "proxy",
-            Self::CiRedact => "ci-redact",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum Request {
-    ResolveBatch(ResolveBatchRequest),
-    ResolveOne(ResolveOneRequest),
-    StoreResolved(StoreResolvedRequest),
-    Status,
-    Clear,
-    /// Evict only these secret keys. A separate variant so a daemon from an
-    /// older fnox rejects it instead of reading it as a full `Clear`.
-    ClearKeys {
-        keys: Vec<String>,
-    },
-    Shutdown,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct ResolveBatchRequest {
-    cwd: PathBuf,
-    config: PathBuf,
-    profile: Vec<String>,
-    age_key_file: Option<PathBuf>,
-    if_missing: Option<String>,
-    no_defaults: bool,
-    non_interactive: bool,
-    purpose: String,
-    keys: Vec<String>,
-    /// When true, resolve secrets of every env mode. When false, the resolve
-    /// layer keeps only shell-injectable secrets (`env = true`), dropping
-    /// `env = "exec"` and `env = false`; callers that pre-filter pass true.
-    ///
-    /// The wire key stays `include_env_false` for cross-version daemon
-    /// compatibility (a stale daemon must still deserialize new requests).
-    #[serde(rename = "include_env_false")]
-    include_all_modes: bool,
-    env: Vec<(String, String)>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct ResolveOneRequest {
-    cwd: PathBuf,
-    config: PathBuf,
-    profile: Vec<String>,
-    age_key_file: Option<PathBuf>,
-    if_missing: Option<String>,
-    no_defaults: bool,
-    non_interactive: bool,
-    purpose: String,
-    key: String,
-    env: Vec<(String, String)>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct StoreResolvedRequest {
-    request: ResolveBatchRequest,
-    fingerprint: String,
-    values: IndexMap<String, Option<String>>,
-    /// Clear epoch the daemon reported when it handed resolution to the client.
-    /// Values for keys cleared since then are stale and not cached. Absent from
-    /// older clients, which skip the check.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    epoch: Option<u64>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "status", rename_all = "snake_case")]
-enum Response {
-    Resolved {
-        values: IndexMap<String, Option<String>>,
-    },
-    ResolveInForeground {
-        fingerprint: String,
-        cached_values: IndexMap<String, Option<String>>,
-        keys: Vec<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        epoch: Option<u64>,
-    },
-    Status {
-        pid: u32,
-        cached_entries: usize,
-    },
-    Ok,
-    Error {
-        message: String,
-    },
-}
-
-#[derive(Debug)]
-enum DaemonCallError {
-    SocketUnavailable {
-        path: PathBuf,
-        source: std::io::Error,
-    },
-    /// The daemon closed the connection without replying, as one from an
-    /// older fnox does for a request it cannot decode.
-    EmptyResponse,
-    Other(FnoxError),
-}
-
-impl DaemonCallError {
-    fn is_socket_missing(&self) -> bool {
-        matches!(
-            self,
-            Self::SocketUnavailable { source, .. }
-                if matches!(
-                    source.kind(),
-                    std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
-                )
+    /// Which daemon serves this context.
+    pub fn socket_key(&self) -> SocketKey {
+        SocketKey::new(
+            &self.profile,
+            self.no_defaults,
+            self.if_missing.clone(),
+            self.age_key_file.clone(),
         )
     }
+}
 
-    fn into_fnox_error(self) -> FnoxError {
-        match self {
-            Self::SocketUnavailable { path, source } => FnoxError::Config(format!(
-                "Failed to connect to fnox daemon at {}: {source}",
-                path.display()
-            )),
-            Self::EmptyResponse => FnoxError::Config(
-                "fnox daemon closed the connection without a response".to_string(),
-            ),
-            Self::Other(error) => error,
-        }
-    }
+/// What a failed call to the daemon says, in fnox's own error type.
+fn into_fnox_error(error: CallError) -> FnoxError {
+    FnoxError::Config(error.to_string())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -500,7 +374,7 @@ async fn status_for_context(ctx: &ResolveContext) -> Result<Option<(u32, usize)>
             "Invalid daemon response for Status".to_string(),
         )),
         Err(e) if e.is_socket_missing() => Ok(None),
-        Err(e) => Err(e.into_fnox_error()),
+        Err(e) => Err(into_fnox_error(e)),
     }
 }
 
@@ -554,7 +428,7 @@ async fn clear_socket(path: PathBuf, keys: &[String], ignore_missing: bool) -> R
         Err(e) if ignore_missing && e.is_socket_missing() => Ok(false),
         // A daemon from an older fnox drops the connection on a request it
         // cannot decode. Leave its cache alone rather than failing the clear.
-        Err(DaemonCallError::EmptyResponse) if ignore_missing && !keys.is_empty() => {
+        Err(CallError::EmptyResponse) if ignore_missing && !keys.is_empty() => {
             tracing::warn!(
                 "fnox daemon at {} did not accept a keyed clear; it may be from an older fnox. Run `fnox daemon clear` to clear it fully",
                 path.display()
@@ -563,43 +437,13 @@ async fn clear_socket(path: PathBuf, keys: &[String], ignore_missing: bool) -> R
             // the current version's (possibly absent) socket.
             Ok(true)
         }
-        Err(e) => Err(e.into_fnox_error()),
+        Err(e) => Err(into_fnox_error(e)),
     }
 }
 
 fn daemon_socket_paths() -> Result<Vec<PathBuf>> {
-    let dir = runtime_dir()?;
-    let entries = match std::fs::read_dir(&dir) {
-        Ok(entries) => entries,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(e) => {
-            return Err(FnoxError::Config(format!(
-                "Failed to read daemon runtime dir {}: {e}",
-                dir.display()
-            )));
-        }
-    };
-
-    let suffix = format!("-{SOCKET_NAME}");
-    let expected_len = 16 + suffix.len();
-    let mut paths = Vec::new();
-    for entry in entries {
-        let entry = entry.map_err(|e| {
-            FnoxError::Config(format!(
-                "Failed to read daemon runtime dir {}: {e}",
-                dir.display()
-            ))
-        })?;
-        let path = entry.path();
-        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-            continue;
-        };
-        if name.len() == expected_len && name.ends_with(&suffix) {
-            paths.push(path);
-        }
-    }
-    paths.sort();
-    Ok(paths)
+    fnox_client::path::daemon_socket_paths(&RuntimeEnv::from_process())
+        .map_err(|e| FnoxError::Config(e.to_string()))
 }
 
 pub async fn shutdown(cli: &Cli) -> Result<()> {
@@ -610,7 +454,7 @@ pub async fn shutdown(cli: &Cli) -> Result<()> {
             "Invalid daemon response for Shutdown".to_string(),
         )),
         Err(e) if e.is_socket_missing() => Ok(()),
-        Err(e) => Err(e.into_fnox_error()),
+        Err(e) => Err(into_fnox_error(e)),
     }
 }
 
@@ -808,34 +652,15 @@ pub async fn serve(cli: &Cli, idle_timeout: Duration) -> Result<()> {
 }
 
 fn should_use_daemon(ctx: &ResolveContext, config: &Config) -> bool {
-    #[cfg(not(unix))]
-    {
-        let _ = ctx;
-        let _ = config;
+    if !platform_supported() || ctx.no_daemon {
         return false;
     }
-
-    if !daemon_supported() {
-        return false;
-    }
-    if ctx.no_daemon {
-        return false;
-    }
-    match std::env::var("FNOX_DAEMON").ok().as_deref() {
-        Some("0" | "false" | "off" | "no") => return false,
-        Some("1" | "true" | "on" | "yes") => return true,
-        _ => {}
-    }
-    config.daemon.as_ref().is_some_and(|d| d.enabled())
+    daemon_enabled(config, daemon_env_override(&|k| std::env::var(k).ok()))
 }
 
-fn daemon_supported() -> bool {
-    cfg!(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd",
-        target_os = "openbsd"
-    ))
+/// Whether `config` enables the daemon, unless `env_override` (`FNOX_DAEMON`) says.
+fn daemon_enabled(config: &Config, env_override: Option<bool>) -> bool {
+    env_override.unwrap_or_else(|| config.daemon.as_ref().is_some_and(|d| d.enabled()))
 }
 
 async fn call_or_start(
@@ -860,63 +685,21 @@ async fn call_or_start(
             Ok(response) => Ok(response),
             Err(e) if e.is_socket_missing() => {
                 start_background_for_context(ctx, Some(config)).await?;
-                call(path, request)
-                    .await
-                    .map_err(DaemonCallError::into_fnox_error)
+                call(path, request).await.map_err(into_fnox_error)
             }
-            Err(e) => Err(e.into_fnox_error()),
+            Err(e) => Err(into_fnox_error(e)),
         }
     }
 }
 
-#[cfg(unix)]
-async fn call(path: PathBuf, request: Request) -> std::result::Result<Response, DaemonCallError> {
-    let mut stream =
-        UnixStream::connect(&path)
-            .await
-            .map_err(|source| DaemonCallError::SocketUnavailable {
-                path: path.clone(),
-                source,
-            })?;
-    verify_peer(&stream).map_err(DaemonCallError::Other)?;
-    let line = serde_json::to_string(&request).map_err(|e| {
-        DaemonCallError::Other(FnoxError::Config(format!(
-            "Failed to encode daemon request: {e}"
-        )))
-    })?;
-    stream.write_all(line.as_bytes()).await.map_err(|e| {
-        DaemonCallError::Other(FnoxError::Config(format!(
-            "Failed to write daemon request: {e}"
-        )))
-    })?;
-    stream.write_all(b"\n").await.map_err(|e| {
-        DaemonCallError::Other(FnoxError::Config(format!(
-            "Failed to write daemon request: {e}"
-        )))
-    })?;
-
-    let mut reader = BufReader::new(stream);
-    let mut response = String::new();
-    let read = reader.read_line(&mut response).await.map_err(|e| {
-        DaemonCallError::Other(FnoxError::Config(format!(
-            "Failed to read daemon response: {e}"
-        )))
-    })?;
-    if read == 0 {
-        return Err(DaemonCallError::EmptyResponse);
-    }
-    serde_json::from_str(&response).map_err(|e| {
-        DaemonCallError::Other(FnoxError::Config(format!(
-            "Failed to decode daemon response: {e}"
-        )))
+/// Sends `request` to the daemon at `path`. fnox's own calls wait as long as
+/// the daemon takes, so the blocking client runs on a blocking thread.
+async fn call(path: PathBuf, request: Request) -> std::result::Result<Response, CallError> {
+    tokio::task::spawn_blocking(move || {
+        fnox_client::wire::call(&path, &request, &CallOptions::no_timeout())
     })
-}
-
-#[cfg(not(unix))]
-async fn call(_path: PathBuf, _request: Request) -> std::result::Result<Response, DaemonCallError> {
-    Err(DaemonCallError::Other(FnoxError::Config(
-        "fnox daemon is currently supported on Unix platforms only".to_string(),
-    )))
+    .await
+    .map_err(|e| CallError::Io(std::io::Error::other(format!("daemon call failed: {e}"))))?
 }
 
 #[cfg(unix)]
@@ -927,12 +710,23 @@ async fn handle_connection(
     shutdown_tx: tokio::sync::mpsc::UnboundedSender<()>,
 ) -> Result<()> {
     let mut reader = BufReader::new(stream);
-    let mut line = String::new();
-    reader
-        .read_line(&mut line)
+    // Read at most one byte more than the limit, so an oversize request is
+    // noticed without buffering all of it.
+    let mut line = Vec::new();
+    (&mut reader)
+        .take(MAX_LINE_BYTES as u64 + 1)
+        .read_until(b'\n', &mut line)
         .await
         .map_err(|e| FnoxError::Config(format!("Failed to read daemon request: {e}")))?;
-    let request: Request = serde_json::from_str(&line)
+    if line.last() == Some(&b'\n') {
+        line.pop();
+    }
+    if line.len() > MAX_LINE_BYTES {
+        return Err(FnoxError::Config(format!(
+            "Dropped a daemon request over {MAX_LINE_BYTES} bytes"
+        )));
+    }
+    let request: Request = serde_json::from_slice(&line)
         .map_err(|e| FnoxError::Config(format!("Failed to decode daemon request: {e}")))?;
 
     let shutdown = matches!(request, Request::Shutdown);
@@ -965,6 +759,38 @@ async fn process_request(
     request_lock: std::sync::Arc<Mutex<()>>,
 ) -> Result<Response> {
     match request {
+        Request::Hello { protocol } => {
+            if !protocol_supported(protocol) {
+                return Ok(unsupported_protocol());
+            }
+            Ok(Response::Hello {
+                protocol: u32::from(WIRE_VERSION),
+                min_protocol: MIN_PROTOCOL,
+                fnox_version: env!("CARGO_PKG_VERSION").to_string(),
+                pid: std::process::id(),
+            })
+        }
+        Request::ResolveEnv(req) => {
+            if !protocol_supported(req.protocol) {
+                return Ok(unsupported_protocol());
+            }
+            let _guard = request_lock.lock().await;
+            let _env = EnvOverlay::apply(&req.env)?;
+            let _cwd = CwdGuard::change_to(&req.cwd)?;
+            apply_request_settings(
+                req.age_key_file.clone(),
+                req.profile.clone(),
+                req.if_missing.clone(),
+                req.no_defaults,
+                false,
+            );
+            let config = Config::load_smart(&req.config)?;
+            // As `fnox env` does, so an unknown profile is an error here and
+            // the CLI fallback reports it, rather than an empty hit.
+            config.validate_profiles(&req.profile, None)?;
+            let env_override = daemon_env_override(&|k| std::env::var(k).ok());
+            resolve_env_response(&config, &req, env_override, &state).await
+        }
         Request::Status => {
             let state = state.lock().await;
             Ok(Response::Status {
@@ -1110,13 +936,123 @@ async fn process_request(
     }
 }
 
+fn protocol_supported(protocol: u32) -> bool {
+    (MIN_PROTOCOL..=u32::from(WIRE_VERSION)).contains(&protocol)
+}
+
+fn unsupported_protocol() -> Response {
+    Response::UnsupportedProtocol {
+        min: MIN_PROTOCOL,
+        max: u32::from(WIRE_VERSION),
+    }
+}
+
+/// Answers a `resolve_env` request from the cache alone. Never calls a provider.
+///
+/// - `Disabled` unless the config, or `env_override` (`FNOX_DAEMON`), enables
+///   the daemon.
+/// - `EnvRejected` for keys that `fnox env` would reject.
+/// - `EnvMiss` when a lease is selected (leases never go through the daemon)
+///   or any root is not cached. A secret that resolved to nothing is never
+///   cached, so it always misses.
+/// - Otherwise `Env`, the document `fnox env --json` would print.
+async fn resolve_env_response(
+    config: &Config,
+    req: &ResolveEnvRequest,
+    env_override: Option<bool>,
+    state: &std::sync::Arc<Mutex<DaemonState>>,
+) -> Result<Response> {
+    if !daemon_enabled(config, env_override) {
+        return Ok(Response::Disabled);
+    }
+    let secrets = config.get_secrets(&req.profile)?;
+    let leases = config.get_leases(&req.profile)?;
+    let roots = match &req.keys {
+        Some(keys) => child_env::Roots::Keys(keys),
+        None => child_env::Roots::Scope,
+    };
+    let sel = match child_env::select(&secrets, &leases, req.scope, roots) {
+        Ok(sel) => sel,
+        Err(rejection) => return Ok(Response::EnvRejected(rejection)),
+    };
+    if !sel.leases.is_empty() {
+        let mut keys: Vec<String> = Vec::new();
+        match &sel.requested {
+            Some(requested) => keys.extend(
+                requested
+                    .iter()
+                    .filter(|key| !sel.roots.contains(key))
+                    .cloned(),
+            ),
+            None => {
+                for lease in sel.leases.iter().filter_map(|name| leases.get(name)) {
+                    for key in lease.produced_env_vars() {
+                        if !keys.iter().any(|existing| existing == key) {
+                            keys.push(key.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        return Ok(Response::EnvMiss { keys });
+    }
+
+    let purpose = child_env::scope_purpose(req.scope).as_str();
+    let fingerprint = config_fingerprint(config, &req.env)?;
+    let providers = config.get_providers(&req.profile)?;
+    let default_provider = cache_policy_default_provider(config, &req.profile, &providers);
+    let mut resolved = IndexMap::new();
+    let mut misses = Vec::new();
+    {
+        let state = state.lock().await;
+        for key in &sel.roots {
+            let cached = secrets.get(key).and_then(|secret| {
+                if !secret_is_cacheable(&providers, default_provider, secret, purpose) {
+                    return None;
+                }
+                let cache_key = cache_key(
+                    &fingerprint,
+                    &req.profile,
+                    key,
+                    secret,
+                    req.no_defaults,
+                    purpose,
+                );
+                state.cache.get(&cache_key).cloned().flatten()
+            });
+            match cached {
+                Some(value) => {
+                    resolved.insert(key.clone(), Some(value));
+                }
+                None => misses.push(key.clone()),
+            }
+        }
+    }
+    if !misses.is_empty() {
+        return Ok(Response::EnvMiss { keys: misses });
+    }
+
+    let env = child_env::assemble(
+        req.scope,
+        &secrets,
+        &leases,
+        &sel,
+        &resolved,
+        &IndexMap::new(),
+        Vec::new(),
+    );
+    Ok(Response::Env {
+        document: child_env::env_document(req.scope, req.profile.clone(), env),
+    })
+}
+
 fn secret_is_cacheable(
     providers: &IndexMap<String, ProviderConfig>,
     default_provider: Option<&str>,
     secret: &SecretConfig,
-    req: &ResolveBatchRequest,
+    purpose: &str,
 ) -> bool {
-    req.purpose != Purpose::Check.as_str()
+    purpose != Purpose::Check.as_str()
         && secret.daemon_cache.unwrap_or(true)
         && provider_daemon_cache_enabled(providers, default_provider, secret)
 }
@@ -1146,11 +1082,15 @@ async fn foreground_resolution_if_needed(
     let mut cached_values = IndexMap::new();
     let mut keys = Vec::new();
     for (key, secret) in secrets {
-        if secret_is_cacheable(&providers, default_provider, secret, req)
-            && let Some(Some(value)) =
-                state
-                    .cache
-                    .get(&cache_key(&fingerprint, profile, key, secret, req))
+        if secret_is_cacheable(&providers, default_provider, secret, &req.purpose)
+            && let Some(Some(value)) = state.cache.get(&cache_key(
+                &fingerprint,
+                profile,
+                key,
+                secret,
+                req.no_defaults,
+                &req.purpose,
+            ))
         {
             cached_values.insert(key.clone(), Some(value.clone()));
         } else {
@@ -1194,10 +1134,17 @@ async fn store_resolved_values(
             tracing::debug!("{key} was cleared during foreground resolution; not caching it");
             continue;
         }
-        if secret_is_cacheable(&providers, default_provider, secret, req)
+        if secret_is_cacheable(&providers, default_provider, secret, &req.purpose)
             && let Some(Some(value)) = values.swap_remove(key)
         {
-            let cache_key = cache_key(&fingerprint, profile, key, secret, req);
+            let cache_key = cache_key(
+                &fingerprint,
+                profile,
+                key,
+                secret,
+                req.no_defaults,
+                &req.purpose,
+            );
             state.cache.insert(cache_key, Some(value));
         }
     }
@@ -1238,9 +1185,16 @@ async fn resolve_with_cache(
     {
         let state = state.lock().await;
         for (key, secret) in &secrets {
-            let cacheable = secret_is_cacheable(&providers, default_provider, secret, req);
+            let cacheable = secret_is_cacheable(&providers, default_provider, secret, &req.purpose);
             if cacheable {
-                let cache_key = cache_key(&fingerprint, profile, key, secret, req);
+                let cache_key = cache_key(
+                    &fingerprint,
+                    profile,
+                    key,
+                    secret,
+                    req.no_defaults,
+                    &req.purpose,
+                );
                 if let Some(Some(value)) = state.cache.get(&cache_key) {
                     results.insert(key.clone(), Some(value.clone()));
                     continue;
@@ -1322,15 +1276,16 @@ fn cache_key(
     profile: &[String],
     key: &str,
     secret: &SecretConfig,
-    req: &ResolveBatchRequest,
+    no_defaults: bool,
+    purpose: &str,
 ) -> CacheKey {
     let mut hasher = blake3::Hasher::new();
     let profile_str = profile.join(",");
     hasher.update(fingerprint.as_bytes());
     hasher.update(profile_str.as_bytes());
-    hasher.update(req.no_defaults.to_string().as_bytes());
+    hasher.update(no_defaults.to_string().as_bytes());
     hasher.update(key.as_bytes());
-    hasher.update(req.purpose.as_bytes());
+    hasher.update(purpose.as_bytes());
     hasher.update(serde_json::to_string(secret).unwrap_or_default().as_bytes());
     CacheKey {
         secret: key.to_string(),
@@ -1425,55 +1380,8 @@ fn socket_path(cli: &Cli) -> Result<PathBuf> {
     socket_path_for_context(&ResolveContext::from_cli(cli))
 }
 
-/// Wire-protocol version tag included in the socket path hash.
-/// Incrementing this ensures new clients don't connect to stale daemons
-/// running an incompatible wire format or resolution behavior.
-/// Version 4 requires missing values to remain cache misses, including after upgrades.
-/// Version 5 adds keyed clears and rejects foreground write-backs for keys cleared
-/// while they were being resolved.
-const WIRE_VERSION: u8 = 5;
-
 fn socket_path_for_context(ctx: &ResolveContext) -> Result<PathBuf> {
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(&[WIRE_VERSION]);
-    let profile_str = ctx.profile.join(",");
-    hasher.update(profile_str.as_bytes());
-    hasher.update(ctx.no_defaults.to_string().as_bytes());
-    if let Some(if_missing) = &ctx.if_missing {
-        hasher.update(if_missing.as_bytes());
-    }
-    if let Some(age_key_file) = &ctx.age_key_file {
-        hasher.update(age_key_file.to_string_lossy().as_bytes());
-    }
-    Ok(runtime_dir()?.join(format!(
-        "{}-{}",
-        &hasher.finalize().to_hex()[..16],
-        SOCKET_NAME
-    )))
-}
-
-fn runtime_dir() -> Result<PathBuf> {
-    let base = std::env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| std::env::temp_dir().join(format!("fnox-{}", current_uid())));
-    let dir = base.join("fnox");
-    if socket_path_fits(&dir) {
-        return Ok(dir);
-    }
-
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(base.to_string_lossy().as_bytes());
-    let digest = hasher.finalize().to_hex();
-    let short_base = PathBuf::from("/tmp")
-        .join(format!("fnox-{}", current_uid()))
-        .join(&digest[..8]);
-    let dir = short_base.join("fnox");
-    Ok(dir)
-}
-
-fn socket_path_fits(dir: &Path) -> bool {
-    let socket_name_len = 16 + 1 + SOCKET_NAME.len();
-    dir.to_string_lossy().len() + 1 + socket_name_len < 100
+    Ok(ctx.socket_key().socket_path(&RuntimeEnv::from_process()))
 }
 
 fn prepare_socket_path(path: &Path) -> Result<()> {
@@ -1484,7 +1392,9 @@ fn prepare_socket_path(path: &Path) -> Result<()> {
         .map_err(|e| FnoxError::Config(format!("Failed to create daemon runtime dir: {e}")))?;
     #[cfg(unix)]
     {
-        let temp_user_dir = std::env::temp_dir().join(format!("fnox-{}", current_uid()));
+        let temp_user_dir = RuntimeEnv::from_process()
+            .tmpdir
+            .join(format!("fnox-{}", current_uid()));
         if parent.starts_with(&temp_user_dir) {
             secure_runtime_component(&temp_user_dir)?;
             if let Some(hash_dir) = parent.parent() {
@@ -1538,66 +1448,13 @@ fn set_socket_permissions(path: &Path) -> Result<()> {
 
 #[cfg(unix)]
 fn verify_peer(stream: &UnixStream) -> Result<()> {
-    let fd = stream.as_raw_fd();
-    #[cfg(target_os = "linux")]
-    {
-        let mut cred = libc::ucred {
-            pid: 0,
-            uid: 0,
-            gid: 0,
-        };
-        let mut len = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
-        let rc = unsafe {
-            libc::getsockopt(
-                fd,
-                libc::SOL_SOCKET,
-                libc::SO_PEERCRED,
-                &mut cred as *mut _ as *mut libc::c_void,
-                &mut len,
-            )
-        };
-        if rc != 0 {
-            return Err(FnoxError::Config(format!(
-                "Failed to verify daemon peer credentials: {}",
-                std::io::Error::last_os_error()
-            )));
-        }
-        if cred.uid != current_uid() {
-            return Err(FnoxError::Config(
-                "Daemon client is not owned by the current user".to_string(),
-            ));
-        }
-        return Ok(());
-    }
-    #[cfg(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd"))]
-    {
-        let mut euid: libc::uid_t = 0;
-        let mut egid: libc::gid_t = 0;
-        let rc = unsafe { libc::getpeereid(fd, &mut euid, &mut egid) };
-        if rc != 0 {
-            return Err(FnoxError::Config(format!(
-                "Failed to verify daemon peer credentials: {}",
-                std::io::Error::last_os_error()
-            )));
-        }
-        let _ = egid;
-        if euid != current_uid() {
-            return Err(FnoxError::Config(
-                "Daemon client is not owned by the current user".to_string(),
-            ));
-        }
-        return Ok(());
-    }
-    #[allow(unreachable_code)]
-    Err(FnoxError::Config(
-        "fnox daemon peer verification is not supported on this Unix platform".to_string(),
-    ))
+    fnox_client::peer::verify_peer(stream.as_raw_fd()).map_err(|e| FnoxError::Config(e.to_string()))
 }
 
 fn current_uid() -> u32 {
     #[cfg(unix)]
     {
-        unsafe { libc::geteuid() }
+        fnox_client::peer::current_euid()
     }
     #[cfg(not(unix))]
     {
@@ -1731,10 +1588,12 @@ pub fn parse_duration(value: &str) -> Result<Duration> {
 #[cfg(test)]
 mod tests {
     use super::{
-        CacheKey, DaemonState, Purpose, Request, ResolveBatchRequest, Response, cache_key,
-        config_fingerprint, foreground_resolution_if_needed, parse_duration, process_request,
+        CacheKey, DaemonState, Purpose, Request, ResolveBatchRequest, ResolveContext,
+        ResolveEnvRequest, Response, cache_key, config_fingerprint,
+        foreground_resolution_if_needed, parse_duration, process_request, resolve_env_response,
         resolve_with_cache, store_resolved_values,
     };
+    use fnox_client::document::EnvScope;
     use fnox_core::config::{Config, ProviderConfig, SecretConfig};
     use indexmap::IndexMap;
     use std::{path::PathBuf, sync::Arc};
@@ -1746,38 +1605,6 @@ mod tests {
         assert_eq!(parse_duration("1d2h3m4s").unwrap().as_secs(), 93784);
     }
 
-    // The `include_all_modes` field serializes as `include_env_false` on the
-    // wire so a stale daemon from an older fnox version can still deserialize
-    // requests from a newer client (and vice versa) across an upgrade. Guard
-    // that key name against accidental churn.
-    #[test]
-    fn resolve_batch_request_wire_key_is_stable() {
-        let req = test_batch_request();
-        let json = serde_json::to_string(&req).unwrap();
-        assert!(
-            json.contains("\"include_env_false\":true"),
-            "wire key changed, breaking cross-version daemon IPC: {json}"
-        );
-        assert!(!json.contains("include_all_modes"));
-
-        let decoded: ResolveBatchRequest = serde_json::from_str(&json).unwrap();
-        assert!(decoded.include_all_modes);
-    }
-
-    // A full clear keeps the wire shape older daemons expect. A keyed clear uses
-    // its own type so an older daemon rejects it instead of clearing everything.
-    #[test]
-    fn clear_request_wire_shape_is_compatible() {
-        let full = serde_json::to_string(&Request::Clear).unwrap();
-        assert_eq!(full, r#"{"type":"clear"}"#);
-
-        let keyed = serde_json::to_string(&Request::ClearKeys {
-            keys: vec!["API_KEY".to_string()],
-        })
-        .unwrap();
-        assert_eq!(keyed, r#"{"type":"clear_keys","keys":["API_KEY"]}"#);
-    }
-
     #[tokio::test]
     async fn clear_with_keys_evicts_only_matching_entries() {
         let config = Config::new();
@@ -1787,7 +1614,14 @@ mod tests {
         let mut cache = std::collections::HashMap::<CacheKey, Option<String>>::new();
         for key in ["API_KEY", "OTHER_KEY"] {
             cache.insert(
-                cache_key(&fingerprint, &req.profile, key, &secret, &req),
+                cache_key(
+                    &fingerprint,
+                    &req.profile,
+                    key,
+                    &secret,
+                    req.no_defaults,
+                    &req.purpose,
+                ),
                 Some("cached".to_string()),
             );
         }
@@ -1910,7 +1744,14 @@ mod tests {
         req: &ResolveBatchRequest,
     ) -> Arc<Mutex<DaemonState>> {
         let fingerprint = config_fingerprint(config, &req.env).unwrap();
-        let key = cache_key(&fingerprint, &req.profile, "API_KEY", secret, req);
+        let key = cache_key(
+            &fingerprint,
+            &req.profile,
+            "API_KEY",
+            secret,
+            req.no_defaults,
+            &req.purpose,
+        );
         let mut cache = std::collections::HashMap::<CacheKey, Option<String>>::new();
         cache.insert(key, Some("cached".to_string()));
         Arc::new(Mutex::new(DaemonState {
@@ -2225,5 +2066,534 @@ daemon_cache = false
             resolved.get("API_KEY").and_then(|value| value.as_deref()),
             Some("cached")
         );
+    }
+
+    // ---- resolve_env ----
+
+    const ENV_CONFIG: &str = r#"
+root = true
+
+[daemon]
+enabled = true
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+FOO = { provider = "plain", value = "foo" }
+BAR = { provider = "plain", value = "bar", env = "exec" }
+HID = { provider = "plain", value = "hid", env = false }
+NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
+"#;
+
+    fn env_config(toml: &str) -> Config {
+        toml_edit::de::from_str(toml).unwrap()
+    }
+
+    fn env_request(scope: EnvScope, keys: Option<&[&str]>) -> ResolveEnvRequest {
+        ResolveEnvRequest {
+            protocol: 6,
+            cwd: PathBuf::from("."),
+            config: PathBuf::from("fnox.toml"),
+            profile: vec!["default".to_string()],
+            age_key_file: None,
+            if_missing: None,
+            no_defaults: false,
+            scope,
+            keys: keys.map(|keys| keys.iter().map(|k| k.to_string()).collect()),
+            env: Vec::new(),
+        }
+    }
+
+    /// Seeds the cache the way a foreground resolution does.
+    async fn seed(
+        config: &Config,
+        purpose: &str,
+        values: &[(&str, &str)],
+    ) -> Arc<Mutex<DaemonState>> {
+        let state = Arc::new(Mutex::new(DaemonState::default()));
+        seed_into(&state, config, purpose, values).await;
+        state
+    }
+
+    async fn seed_into(
+        state: &Arc<Mutex<DaemonState>>,
+        config: &Config,
+        purpose: &str,
+        values: &[(&str, &str)],
+    ) {
+        let profile = vec!["default".to_string()];
+        let mut req = test_batch_request();
+        req.purpose = purpose.to_string();
+        req.keys = values.iter().map(|(k, _)| k.to_string()).collect();
+        let secrets = config.get_secrets(&profile).unwrap();
+        let fingerprint = config_fingerprint(config, &req.env).unwrap();
+        store_resolved_values(
+            config,
+            &profile,
+            &secrets,
+            &req,
+            &fingerprint,
+            None,
+            values
+                .iter()
+                .map(|(k, v)| (k.to_string(), Some(v.to_string())))
+                .collect(),
+            state.clone(),
+        )
+        .await
+        .unwrap();
+    }
+
+    async fn respond(
+        config: &Config,
+        req: &ResolveEnvRequest,
+        env_override: Option<bool>,
+        state: &Arc<Mutex<DaemonState>>,
+    ) -> Response {
+        resolve_env_response(config, req, env_override, state)
+            .await
+            .unwrap()
+    }
+
+    fn empty_state() -> Arc<Mutex<DaemonState>> {
+        Arc::new(Mutex::new(DaemonState::default()))
+    }
+
+    #[tokio::test]
+    async fn resolve_env_is_disabled_when_the_config_does_not_enable_the_daemon() {
+        let config = env_config("root = true\n[providers.plain]\ntype = \"plain\"\n");
+        let req = env_request(EnvScope::Exec, None);
+        assert!(matches!(
+            respond(&config, &req, None, &empty_state()).await,
+            Response::Disabled
+        ));
+        let config = env_config("root = true\n[daemon]\nenabled = false\n");
+        assert!(matches!(
+            respond(&config, &req, None, &empty_state()).await,
+            Response::Disabled
+        ));
+    }
+
+    #[tokio::test]
+    async fn resolve_env_follows_the_fnox_daemon_override() {
+        let req = env_request(EnvScope::Exec, None);
+        // `FNOX_DAEMON=off` beats `enabled = true`.
+        let enabled = env_config(ENV_CONFIG);
+        assert!(matches!(
+            respond(&enabled, &req, Some(false), &empty_state()).await,
+            Response::Disabled
+        ));
+        // `FNOX_DAEMON=on` serves a project whose config is silent.
+        let silent = env_config(
+            "root = true\n[providers.plain]\ntype = \"plain\"\n[secrets]\nFOO = { provider = \"plain\", value = \"foo\" }\n",
+        );
+        let state = seed(&silent, "exec", &[("FOO", "foo")]).await;
+        assert!(matches!(
+            respond(&silent, &req, Some(true), &state).await,
+            Response::Env { .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn resolve_env_rejects_unknown_and_env_false_keys() {
+        let config = env_config(ENV_CONFIG);
+        let req = env_request(EnvScope::Exec, Some(&["FO", "HID"]));
+        let Response::EnvRejected(rejection) = respond(&config, &req, None, &empty_state()).await
+        else {
+            panic!("expected a rejection");
+        };
+        assert_eq!(rejection.unknown, ["FO"]);
+        assert_eq!(rejection.suggestions["FO"], ["FOO"]);
+        assert_eq!(rejection.not_injectable.len(), 1);
+        assert_eq!(rejection.not_injectable[0].key, "HID");
+    }
+
+    #[tokio::test]
+    async fn resolve_env_misses_on_an_empty_cache() {
+        let config = env_config(ENV_CONFIG);
+        let req = env_request(EnvScope::Exec, Some(&["FOO", "BAR"]));
+        let Response::EnvMiss { keys } = respond(&config, &req, None, &empty_state()).await else {
+            panic!("expected a miss");
+        };
+        assert_eq!(keys, ["FOO", "BAR"]);
+    }
+
+    #[tokio::test]
+    async fn resolve_env_hits_after_a_foreground_store() {
+        let config = env_config(ENV_CONFIG);
+        let state = seed(&config, "exec", &[("FOO", "foo"), ("BAR", "bar")]).await;
+        let req = env_request(EnvScope::Exec, Some(&["BAR", "FOO"]));
+        let Response::Env { document } = respond(&config, &req, None, &state).await else {
+            panic!("expected a hit");
+        };
+        assert_eq!(document.schema, 1);
+        assert_eq!(document.scope, EnvScope::Exec);
+        assert_eq!(document.profile, ["default"]);
+        // Config order, not request order.
+        let set: Vec<_> = document
+            .set
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.expose()))
+            .collect();
+        assert_eq!(set, [("FOO", "foo"), ("BAR", "bar")]);
+        assert!(document.files.is_empty());
+        assert!(document.missing.is_empty());
+        assert!(document.leases.is_empty());
+
+        // `remove` is what assemble builds: the ambient scrub, then out-of-scope secrets.
+        let profile = vec!["default".to_string()];
+        let secrets = config.get_secrets(&profile).unwrap();
+        let leases = config.get_leases(&profile).unwrap();
+        let requested = ["BAR".to_string(), "FOO".to_string()];
+        let sel = crate::child_env::select(
+            &secrets,
+            &leases,
+            EnvScope::Exec,
+            crate::child_env::Roots::Keys(&requested),
+        )
+        .unwrap();
+        let resolved = IndexMap::from([
+            ("FOO".to_string(), Some("foo".to_string())),
+            ("BAR".to_string(), Some("bar".to_string())),
+        ]);
+        let expected = crate::child_env::assemble(
+            EnvScope::Exec,
+            &secrets,
+            &leases,
+            &sel,
+            &resolved,
+            &IndexMap::new(),
+            Vec::new(),
+        );
+        assert_eq!(document.remove, expected.remove);
+        assert!(document.remove.contains(&"HID".to_string()));
+        assert!(document.remove.contains(&"FNOX_AGE_KEY".to_string()));
+    }
+
+    #[tokio::test]
+    async fn resolve_env_hit_matches_the_cli_document() {
+        let config = env_config(ENV_CONFIG);
+        let state = seed(&config, "exec", &[("FOO", "foo"), ("BAR", "bar")]).await;
+        // Every key in scope, minus the root that is never cached.
+        let req = env_request(EnvScope::Exec, Some(&["FOO", "BAR"]));
+        let Response::Env { document } = respond(&config, &req, None, &state).await else {
+            panic!("expected a hit");
+        };
+        let profile = vec!["default".to_string()];
+        let secrets = config.get_secrets(&profile).unwrap();
+        let leases = config.get_leases(&profile).unwrap();
+        let requested = ["FOO".to_string(), "BAR".to_string()];
+        let sel = crate::child_env::select(
+            &secrets,
+            &leases,
+            EnvScope::Exec,
+            crate::child_env::Roots::Keys(&requested),
+        )
+        .unwrap();
+        let resolved = IndexMap::from([
+            ("FOO".to_string(), Some("foo".to_string())),
+            ("BAR".to_string(), Some("bar".to_string())),
+        ]);
+        let cli_document = crate::child_env::env_document(
+            EnvScope::Exec,
+            profile,
+            crate::child_env::assemble(
+                EnvScope::Exec,
+                &secrets,
+                &leases,
+                &sel,
+                &resolved,
+                &IndexMap::new(),
+                Vec::new(),
+            ),
+        );
+        assert_eq!(document, cli_document);
+        assert_eq!(
+            serde_json::to_string(&document).unwrap(),
+            serde_json::to_string(&cli_document).unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_env_reports_only_the_uncached_roots() {
+        let config = env_config(ENV_CONFIG);
+        let state = seed(&config, "exec", &[("FOO", "foo")]).await;
+        let req = env_request(EnvScope::Exec, Some(&["FOO", "BAR"]));
+        let Response::EnvMiss { keys } = respond(&config, &req, None, &state).await else {
+            panic!("expected a miss");
+        };
+        assert_eq!(keys, ["BAR"]);
+    }
+
+    #[tokio::test]
+    async fn resolve_env_never_serves_a_root_that_opts_out_of_the_cache() {
+        let config = env_config(ENV_CONFIG);
+        let state = seed(&config, "exec", &[("NOCACHE", "nc")]).await;
+        // Even an entry placed in the cache by hand is ignored.
+        let secrets = config.get_secrets(&["default".to_string()]).unwrap();
+        let fingerprint = config_fingerprint(&config, &[]).unwrap();
+        state.lock().await.cache.insert(
+            cache_key(
+                &fingerprint,
+                &["default".to_string()],
+                "NOCACHE",
+                &secrets["NOCACHE"],
+                false,
+                "exec",
+            ),
+            Some("nc".to_string()),
+        );
+        let req = env_request(EnvScope::Exec, Some(&["NOCACHE"]));
+        let Response::EnvMiss { keys } = respond(&config, &req, None, &state).await else {
+            panic!("expected a miss");
+        };
+        assert_eq!(keys, ["NOCACHE"]);
+    }
+
+    #[tokio::test]
+    async fn resolve_env_misses_when_a_lease_produces_a_requested_key() {
+        let config = env_config(&format!(
+            "{ENV_CONFIG}\n[leases.gh]\ntype = \"github-app\"\napp_id = \"1\"\ninstallation_id = \"2\"\nenv_var = \"GH_TOKEN\"\n"
+        ));
+        let state = seed(&config, "exec", &[("FOO", "foo")]).await;
+        let req = env_request(EnvScope::Exec, Some(&["FOO", "GH_TOKEN"]));
+        let Response::EnvMiss { keys } = respond(&config, &req, None, &state).await else {
+            panic!("expected a miss");
+        };
+        assert_eq!(keys, ["GH_TOKEN"]);
+        // Without --keys, the statically known keys of the selected lease.
+        let req = env_request(EnvScope::Exec, None);
+        let Response::EnvMiss { keys } = respond(&config, &req, None, &state).await else {
+            panic!("expected a miss");
+        };
+        assert_eq!(keys, ["GH_TOKEN"]);
+    }
+
+    #[tokio::test]
+    async fn resolve_env_without_keys_serves_every_cached_root_in_scope() {
+        let config = env_config(ENV_CONFIG);
+        let state = seed(
+            &config,
+            "exec",
+            &[("FOO", "foo"), ("BAR", "bar"), ("NOCACHE", "nc")],
+        )
+        .await;
+        // NOCACHE is in scope and never cached, so everything misses.
+        let req = env_request(EnvScope::Exec, None);
+        let Response::EnvMiss { keys } = respond(&config, &req, None, &state).await else {
+            panic!("expected a miss");
+        };
+        assert_eq!(keys, ["NOCACHE"]);
+
+        let config = env_config(&ENV_CONFIG.replace(
+            "NOCACHE = { provider = \"plain\", value = \"nc\", daemon_cache = false }\n",
+            "",
+        ));
+        let state = seed(&config, "exec", &[("FOO", "foo"), ("BAR", "bar")]).await;
+        let Response::Env { document } = respond(&config, &req, None, &state).await else {
+            panic!("expected a hit");
+        };
+        assert_eq!(document.set.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn resolve_env_derives_the_cache_purpose_from_the_scope() {
+        let config = env_config(ENV_CONFIG);
+        let state = seed(&config, "exec", &[("FOO", "foo")]).await;
+        let shell = env_request(EnvScope::Shell, Some(&["FOO"]));
+        assert!(matches!(
+            respond(&config, &shell, None, &state).await,
+            Response::EnvMiss { .. }
+        ));
+        seed_into(&state, &config, "hook-env", &[("FOO", "foo")]).await;
+        assert!(matches!(
+            respond(&config, &shell, None, &state).await,
+            Response::Env { .. }
+        ));
+        // `env = "exec"` is not injectable into a shell.
+        let bar = env_request(EnvScope::Shell, Some(&["BAR"]));
+        assert!(matches!(
+            respond(&config, &bar, None, &state).await,
+            Response::EnvRejected(_)
+        ));
+    }
+
+    #[tokio::test]
+    async fn resolve_env_checks_the_protocol_before_anything_else() {
+        for protocol in [5, 7] {
+            let mut req = env_request(EnvScope::Exec, None);
+            req.protocol = protocol;
+            // The request's cwd and config do not exist; the protocol check comes first.
+            req.cwd = PathBuf::from("/nonexistent/fnox-test");
+            let response = process_request(
+                Request::ResolveEnv(req),
+                empty_state(),
+                Arc::new(Mutex::new(())),
+            )
+            .await
+            .unwrap();
+            assert!(
+                matches!(response, Response::UnsupportedProtocol { min: 6, max: 6 }),
+                "{response:?}"
+            );
+            let response = process_request(
+                Request::Hello { protocol },
+                empty_state(),
+                Arc::new(Mutex::new(())),
+            )
+            .await
+            .unwrap();
+            assert!(matches!(
+                response,
+                Response::UnsupportedProtocol { min: 6, max: 6 }
+            ));
+        }
+    }
+
+    #[tokio::test]
+    async fn hello_reports_the_protocol_range_and_pid() {
+        let response = process_request(
+            Request::Hello { protocol: 6 },
+            empty_state(),
+            Arc::new(Mutex::new(())),
+        )
+        .await
+        .unwrap();
+        let Response::Hello {
+            protocol,
+            min_protocol,
+            fnox_version,
+            pid,
+        } = response
+        else {
+            panic!("expected hello");
+        };
+        assert_eq!((protocol, min_protocol), (6, 6));
+        assert_eq!(fnox_version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(pid, std::process::id());
+    }
+
+    // ---- socket key parity ----
+
+    fn parity_cli() -> crate::commands::Cli {
+        crate::commands::Cli {
+            config: PathBuf::from("fnox.toml"),
+            profile: Vec::new(),
+            verbose: false,
+            age_key_file: None,
+            if_missing: None,
+            no_color: false,
+            no_daemon: false,
+            no_defaults: false,
+            non_interactive: false,
+            write_profile: None,
+            command: crate::commands::Commands::Version(crate::commands::version::VersionCommand),
+        }
+    }
+
+    /// What the fnox CLI builds its settings from, for these environment variables.
+    fn cli_socket_key(
+        env: &[(&str, &str)],
+    ) -> Result<fnox_client::SocketKey, impl std::fmt::Debug> {
+        let layer = usage_rs::config::EnvLayer::new(
+            env.iter().map(|(k, v)| (k.to_string(), v.to_string())),
+        );
+        let settings = crate::settings::Settings::from_layers(None, &layer)?;
+        Ok::<_, miette::Report>(
+            ResolveContext::from_cli_and_settings(&parity_cli(), Some(&settings)).socket_key(),
+        )
+    }
+
+    // V3: the boolean words usage-rs accepts, and everything else the client must agree on.
+    #[test]
+    fn socket_key_matches_what_the_cli_resolves() {
+        use fnox_client::{CliFlags, SocketKey};
+        let home = std::env::var("HOME").expect("HOME is set for tests");
+        let mut cases: Vec<Vec<(&str, String)>> = vec![Vec::new()];
+        for profile in ["staging, prod", "../bad", "", "dev", "a,,b", "ok,../bad"] {
+            cases.push(vec![("FNOX_PROFILE", profile.to_string())]);
+        }
+        for word in [
+            "1", "true", "TRUE", "True", "yes", "Yes", "y", "Y", "on", "ON", "0", "false", "no",
+            "n", "off", "OFF", "",
+        ] {
+            cases.push(vec![("FNOX_NO_DEFAULTS", word.to_string())]);
+        }
+        for value in ["warn", "error", ""] {
+            cases.push(vec![("FNOX_IF_MISSING", value.to_string())]);
+        }
+        for value in ["~/k", "/abs/k", "~", "~other/k", "rel/k", ""] {
+            cases.push(vec![("FNOX_AGE_KEY_FILE", value.to_string())]);
+        }
+        cases.push(vec![
+            ("FNOX_PROFILE", "staging, prod".to_string()),
+            ("FNOX_NO_DEFAULTS", "on".to_string()),
+            ("FNOX_IF_MISSING", "ignore".to_string()),
+            ("FNOX_AGE_KEY_FILE", "~/k".to_string()),
+        ]);
+
+        for case in cases {
+            let env: Vec<(&str, &str)> = case.iter().map(|(k, v)| (*k, v.as_str())).collect();
+            let cli = cli_socket_key(&env).expect("these inputs resolve");
+            // The client reads HOME from the environment it is given.
+            let get = |name: &str| {
+                if name == "HOME" {
+                    return Some(home.clone());
+                }
+                env.iter()
+                    .find(|(k, _)| *k == name)
+                    .map(|(_, v)| v.to_string())
+            };
+            let client = SocketKey::from_cli_env(&CliFlags::default(), &get);
+            assert_eq!(client, cli, "environment: {env:?}");
+        }
+    }
+
+    // `maybe` is not a boolean word. fnox resolves its settings without it
+    // (the default stands), and the client reads it as false: the same key.
+    #[test]
+    fn an_unrecognized_boolean_word_is_false_for_the_client() {
+        use fnox_client::{CliFlags, SocketKey};
+        let cli = cli_socket_key(&[("FNOX_NO_DEFAULTS", "maybe")]).expect("resolves");
+        let get = |name: &str| (name == "FNOX_NO_DEFAULTS").then(|| "maybe".to_string());
+        let client = SocketKey::from_cli_env(&CliFlags::default(), &get);
+        assert_eq!(client, cli);
+        assert_eq!(client, SocketKey::new(&[], false, None, None));
+    }
+
+    #[test]
+    fn the_settings_registry_is_reachable_from_tests() {
+        // V8
+        assert!(
+            crate::settings::SettingsData::SETTINGS_REGISTRY
+                .lookup("no_defaults")
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn cli_flags_override_the_environment_in_the_context() {
+        let mut cli = parity_cli();
+        cli.profile = vec!["cli".to_string()];
+        cli.no_defaults = true;
+        cli.if_missing = Some("error".to_string());
+        let layer = usage_rs::config::EnvLayer::new([
+            ("FNOX_PROFILE".to_string(), "env".to_string()),
+            ("FNOX_IF_MISSING".to_string(), "ignore".to_string()),
+        ]);
+        let settings = crate::settings::Settings::from_layers(None, &layer).unwrap();
+        let key = ResolveContext::from_cli_and_settings(&cli, Some(&settings)).socket_key();
+        let flags = fnox_client::CliFlags {
+            profile: vec!["cli".to_string()],
+            no_defaults: true,
+            if_missing: Some("error".to_string()),
+        };
+        let get = |name: &str| match name {
+            "FNOX_PROFILE" => Some("env".to_string()),
+            "FNOX_IF_MISSING" => Some("ignore".to_string()),
+            _ => None,
+        };
+        assert_eq!(fnox_client::SocketKey::from_cli_env(&flags, &get), key);
     }
 }

@@ -120,36 +120,7 @@ pub fn parse_profile_list(profiles: &str) -> Vec<String> {
 /// Validates that a profile name is safe to use in file paths.
 /// Rejects names containing path separators or other dangerous characters.
 pub fn is_valid_profile_name(name: &str) -> bool {
-    // Profile names must be non-empty
-    if name.is_empty() {
-        return false;
-    }
-
-    // Reject path separators and other dangerous characters
-    // Allow: alphanumeric, dash, underscore, dot (but not .. or .)
-    if name == "." || name == ".." {
-        return false;
-    }
-
-    // Check for path separators or other dangerous characters
-    for ch in name.chars() {
-        match ch {
-            // Path separators
-            '/' | '\\' => return false,
-            // Comma — used as delimiter in multi-profile lists (FNOX_PROFILE=a,b)
-            // and in socket-path/cache-key joins. Allowing it would cause
-            // collisions: "a,b" as one name vs "a" + "b" as two names.
-            ',' => return false,
-            // Null byte (could truncate paths)
-            '\0' => return false,
-            // Control characters
-            c if c.is_control() => return false,
-            // Allow everything else (alphanumeric, dash, underscore, dot)
-            _ => {}
-        }
-    }
-
-    true
+    fnox_client::profile::is_valid_name(name)
 }
 
 #[cfg(test)]

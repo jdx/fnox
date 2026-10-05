@@ -31,6 +31,7 @@ chrono = { workspace = true }
 usage-rs = { workspace = true }
 demand = { workspace = true }
 dirs = { workspace = true }
+fnox-client = { workspace = true }
 futures = { workspace = true }
 gcp_auth = { workspace = true }
 google-cloud-kms = { workspace = true }

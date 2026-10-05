@@ -179,6 +179,8 @@ Authentication prompts need stdin on a terminal: fnox prompts only when stdin is
 
 Consumers must ignore unknown fields. New optional fields may appear within schema 1. Any breaking change increments `schema`.
 
+Rust programs can use the document types from the [`fnox-client`](https://crates.io/crates/fnox-client) crate, which has no provider dependencies.
+
 ## Daemon
 
 `fnox env --json` resolves through the same path as `fnox exec`, using the daemon cache purpose `exec` for `--for exec` and `hook-env` for `--for shell`:
@@ -190,3 +192,5 @@ Consumers must ignore unknown fields. New optional fields may appear within sche
 | Interactive, cache misses                                                              | Resolves on its own terminal, then stores the values in the daemon |
 
 With `--non-interactive` and the daemon enabled, the daemon resolves cache misses itself. Callers that want resolution to stay in the client also pass `--no-daemon`. `--describe` never touches the daemon. See [the daemon guide](/guide/daemon).
+
+To get the same document from a running daemon without starting `fnox`, see [Other programs](/guide/daemon#other-programs-mise).

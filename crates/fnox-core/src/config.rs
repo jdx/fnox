@@ -643,6 +643,16 @@ impl Serialize for EnvMode {
     }
 }
 
+impl From<EnvMode> for fnox_client::document::EnvMode {
+    fn from(mode: EnvMode) -> Self {
+        match mode {
+            EnvMode::Shell => Self::Shell,
+            EnvMode::Exec => Self::Exec,
+            EnvMode::Never => Self::Never,
+        }
+    }
+}
+
 impl<'de> Deserialize<'de> for EnvMode {
     fn deserialize<D: serde::Deserializer<'de>>(
         deserializer: D,
@@ -1572,17 +1582,7 @@ impl Config {
     /// Normalize a profile list: split comma-separated entries, trim whitespace,
     /// drop invalid names, and remove empty entries. Order is preserved.
     pub fn normalize_profiles(input: &[String]) -> Vec<String> {
-        let profiles: Vec<String> = input
-            .iter()
-            .flat_map(|s| s.split(','))
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty() && env::is_valid_profile_name(s))
-            .collect();
-        if profiles.is_empty() {
-            vec!["default".to_string()]
-        } else {
-            profiles
-        }
+        fnox_client::profile::normalize(input)
     }
 
     /// Format a profile list for display.

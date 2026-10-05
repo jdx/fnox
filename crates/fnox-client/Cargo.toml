@@ -1,0 +1,27 @@
+[package]
+name = "fnox-client"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Read-only client for the fnox daemon and types for `fnox env --json`, with no provider dependencies"
+readme = "README.md"
+keywords = ["fnox", "secrets", "daemon", "ipc"]
+categories = ["authentication", "api-bindings"]
+
+[dependencies]
+blake3 = { workspace = true }
+indexmap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
