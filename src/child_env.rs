@@ -308,6 +308,7 @@ pub struct ChildEnv {
 pub fn assemble(
     scope: EnvScope,
     secrets: &IndexMap<String, SecretConfig>,
+    leases: &IndexMap<String, LeaseBackendConfig>,
     sel: &Selection,
     resolved: &IndexMap<String, Option<String>>,
     lease_creds: &IndexMap<String, String>,
@@ -319,6 +320,7 @@ pub fn assemble(
         None => true,
     };
 
+    let leases_used_names = leases_used.clone();
     let mut out = ChildEnv {
         leases: leases_used,
         ..ChildEnv::default()
@@ -360,6 +362,24 @@ pub fn assemble(
                 && !out.missing.contains(key)
             {
                 out.missing.push(key.clone());
+            }
+        }
+    }
+
+    // Without `--keys`, the statically known keys of a selected lease that did
+    // not run are in scope but resolved to nothing.
+    if sel.requested.is_none() {
+        for name in sel.leases.iter().filter(|n| !leases_used_names.contains(n)) {
+            let Some(lease) = leases.get(name) else {
+                continue;
+            };
+            for key in lease.produced_env_vars() {
+                if !out.set.contains_key(key)
+                    && !out.files.contains_key(key)
+                    && !out.missing.iter().any(|m| m == key)
+                {
+                    out.missing.push(key.to_string());
+                }
             }
         }
     }
@@ -469,7 +489,15 @@ pub async fn plan(
     // The lease-time files stay alive for the caller: a lease credential may
     // be a path to one of them, and `fnox exec` keeps them until the child exits.
     Ok((
-        assemble(scope, &secrets, &sel, &resolved, &lease_creds, leases_used),
+        assemble(
+            scope,
+            &secrets,
+            &leases,
+            &sel,
+            &resolved,
+            &lease_creds,
+            leases_used,
+        ),
         _temp_files,
     ))
 }
@@ -849,6 +877,7 @@ create_command = "true"
         assemble(
             scope,
             &secrets,
+            &leases,
             &sel,
             resolved,
             lease_creds,
@@ -869,7 +898,7 @@ create_command = "true"
                 ("FILE_SECRET", Some("f")),
             ]),
             &creds(&[]),
-            &[],
+            &["gh", "cmd"],
         );
         assert_eq!(env.set, creds(&[("SHELL_OK", "a"), ("EXEC_ONLY", "b")]));
         assert_eq!(env.files, creds(&[("FILE_SECRET", "f")]));
@@ -942,6 +971,7 @@ LAST = { default = "3" }
         let env = assemble(
             EnvScope::Exec,
             &secrets,
+            &leases,
             &sel,
             &resolved(&[
                 ("FIRST", Some("1")),
@@ -978,7 +1008,7 @@ LAST = { default = "3" }
                 ("FILE_SECRET", Some("f")),
             ]),
             &creds(&[]),
-            &[],
+            &["gh", "cmd"],
         );
         assert!(env.remove.contains(&"HIDDEN".to_string()));
         assert!(env.missing.is_empty());
@@ -996,7 +1026,7 @@ LAST = { default = "3" }
                 ("FILE_SECRET", None),
             ]),
             &creds(&[]),
-            &[],
+            &["gh", "cmd"],
         );
         assert_eq!(env.missing, ["SHELL_OK", "FILE_SECRET"]);
         assert_eq!(env.set, creds(&[("EXEC_ONLY", "b")]));
@@ -1065,6 +1095,53 @@ LAST = { default = "3" }
         let sel = select(&secrets, &leases, EnvScope::Exec, Roots::Keys(&requested)).unwrap();
         let set = resolve_set(&config, &profile, &secrets, &leases, &sel).unwrap();
         assert_eq!(set.keys().collect::<Vec<_>>(), ["SHELL_OK"]);
+    }
+
+    #[test]
+    fn assemble_scope_mode_reports_skipped_lease_keys_as_missing() {
+        let toml = r#"
+root = true
+[secrets]
+FOO = { default = "foo" }
+[leases.aws]
+type = "aws-sts"
+region = "us-east-1"
+role_arn = "arn:aws:iam::1:role/r"
+[leases.cmd]
+type = "command"
+create_command = "true"
+"#;
+        let env = assemble_for(
+            EnvScope::Exec,
+            toml,
+            Roots::Scope,
+            &resolved(&[("FOO", Some("foo"))]),
+            &creds(&[]),
+            &[],
+        );
+        assert_eq!(
+            env.missing,
+            [
+                "AWS_ACCESS_KEY_ID",
+                "AWS_SECRET_ACCESS_KEY",
+                "AWS_SESSION_TOKEN"
+            ]
+        );
+
+        // A lease that ran reports nothing.
+        let ran = assemble_for(
+            EnvScope::Exec,
+            toml,
+            Roots::Scope,
+            &resolved(&[("FOO", Some("foo"))]),
+            &creds(&[
+                ("AWS_ACCESS_KEY_ID", "a"),
+                ("AWS_SECRET_ACCESS_KEY", "b"),
+                ("AWS_SESSION_TOKEN", "c"),
+            ]),
+            &["aws", "cmd"],
+        );
+        assert!(ran.missing.is_empty());
     }
 
     #[test]
