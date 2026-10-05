@@ -73,9 +73,9 @@ impl ExportCommand {
 
         let mut profile_secrets = config.get_secrets(&profile)?;
 
-        // Export is a shell-injection surface (the mise plugin evaluates it),
-        // so exclude secrets not meant for the shell unless --all is passed.
-        // Filtering before resolution avoids auth prompts for hidden secrets.
+        // Export is a shell-injection surface, so exclude secrets not meant for
+        // the shell unless --all is passed. Filtering before resolution avoids
+        // auth prompts for hidden secrets.
         if !self.all {
             profile_secrets.retain(|_, sc| sc.env_mode().in_shell());
         }

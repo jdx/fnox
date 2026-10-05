@@ -16,6 +16,7 @@ const reference = {
     page("Commands", "/cli/"),
     page("Configuration", "/reference/configuration"),
     page("Environment variables", "/reference/environment"),
+    page("fnox env JSON", "/reference/env-json"),
     page("Troubleshooting", "/guide/troubleshooting"),
     page("Contributing", "/contributing"),
   ],
@@ -136,7 +137,7 @@ const leases = [
 
 export function sidebar(commands) {
   const commandGroups = [
-    ["Read and run", ["get", "list", "exec", "check", "export", "tui"]],
+    ["Read and run", ["get", "list", "exec", "env", "check", "export", "tui"]],
     [
       "Configure and write",
       [

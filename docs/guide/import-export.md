@@ -161,6 +161,10 @@ fnox export --format json | jq '.secrets'
 
 For `as_file = true` secrets, export returns paths to temporary files rather than their contents. Export is therefore not a complete backup of configuration or file secrets.
 
+::: tip
+Tools that launch processes themselves should use [`fnox env --json`](/reference/env-json) instead of `fnox export`. It selects keys, returns `as_file` contents without leaving files behind, lists variables to remove, and reports errors as JSON.
+:::
+
 ### Save to file
 
 Create private output files and keep them out of version control. In a POSIX shell, `umask 077` restricts permissions on newly created files:

@@ -34,6 +34,11 @@
     "commands": "EDITOR=vim fnox edit",
     "links": ["/reference/environment#editor", "/cli/set"]
   },
+  "env": {
+    "note": "For tools that start processes themselves, such as mise. stdout contains secret values in plain text; do not log it. Exit status is 1 on any error, with a JSON error document on stdout.",
+    "commands": "fnox env --json\nfnox env --json --keys DATABASE_URL,STRIPE_KEY\nfnox env --json --describe",
+    "links": ["/reference/env-json", "/guide/daemon"]
+  },
   "exec": {
     "note": "Put fnox options before --. Arguments after -- belong to the child command. To expand an injected variable in a shell expression, defer expansion to a child shell with single quotes.",
     "commands": "fnox exec -- npm start\nfnox exec --profile production --if-missing error -- ./deploy.sh\nfnox exec -- sh -c 'test -n \"$DATABASE_URL\"'",

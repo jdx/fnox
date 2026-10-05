@@ -35,6 +35,7 @@ const labels = {
   "/guide/sync": "Sync a local cache",
   "/guide/tui": "Terminal dashboard",
   "/guide/daemon": "Daemon caching",
+  "/reference/env-json": "fnox env JSON",
   "/guide/leases": "Credential leases",
   "/guide/leases#how-caching-works": "Lease caching",
   "/guide/leases#supported-backends": "Lease backend capabilities",

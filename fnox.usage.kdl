@@ -93,6 +93,27 @@ cmd doctor help="Show diagnostic information about the current fnox state" {
 cmd edit help="Edit the configuration file" {
     flag "-h --help" help="Print help" action=help builtin=#true
 }
+cmd env help="Print the environment fnox would give a command, as JSON for other tools" {
+    long_help #"""
+Print the environment fnox would give a command, as JSON for other tools
+
+For tools that start processes themselves, such as mise. stdout carries one line of JSON and contains secret values in plain text. Callers apply `remove`, then `set`, then `files`.
+"""#
+    flag --describe help="List keys and where each may be injected, without resolving anything"
+    flag --for help="Where the environment will be injected" default=exec {
+        arg <SCOPE> {
+            choices {
+                choice exec help="A command started by `fnox exec`: `env = true` and `env = \"exec\"` secrets, plus leases"
+                choice shell help="An interactive shell: `env = true` secrets only, no leases"
+            }
+        }
+    }
+    flag --json help="Print JSON (required)"
+    flag --keys help="Only these keys, plus the secrets they depend on. Repeat or comma-separate" var=#true delimiter=, {
+        arg <KEY>
+    }
+    flag "-h --help" help="Print help" action=help builtin=#true
+}
 cmd exec help="Execute a command with secrets as environment variables" {
     alias x
     alias run hide=#true

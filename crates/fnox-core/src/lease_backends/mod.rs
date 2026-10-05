@@ -284,6 +284,23 @@ impl LeaseBackendConfig {
         }
     }
 
+    /// Every env var name this backend produces. Empty for `command` backends,
+    /// whose keys are only known after the command runs.
+    pub fn produced_env_vars(&self) -> Vec<&str> {
+        match self {
+            LeaseBackendConfig::AwsSts { .. } => aws_sts::PRODUCED_ENV_VARS.to_vec(),
+            LeaseBackendConfig::GcpIam { env_var, .. }
+            | LeaseBackendConfig::AzureToken { env_var, .. }
+            | LeaseBackendConfig::Cloudflare { env_var, .. }
+            | LeaseBackendConfig::GithubApp { env_var, .. }
+            | LeaseBackendConfig::GithubOauth { env_var, .. } => vec![env_var.as_str()],
+            LeaseBackendConfig::Vault { env_map, .. } => {
+                env_map.values().map(String::as_str).collect()
+            }
+            LeaseBackendConfig::Command { .. } => Vec::new(),
+        }
+    }
+
     /// All env var names this backend may consume at runtime, including aliases.
     /// Used by `fnox get` to filter which profile secrets to resolve before
     /// creating a lease. Each backend defines its own `CONSUMED_ENV_VARS` constant
@@ -445,5 +462,67 @@ impl LeaseBackendConfig {
             | LeaseBackendConfig::GithubOauth { duration, .. }
             | LeaseBackendConfig::Command { duration, .. } => duration.as_deref(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixtures() -> Vec<LeaseBackendConfig> {
+        [
+            "type = \"aws-sts\"\nregion = \"us-east-1\"\nrole_arn = \"arn:aws:iam::1:role/r\"",
+            "type = \"gcp-iam\"\nservice_account_email = \"sa@p.iam.gserviceaccount.com\"\nenv_var = \"GCP_TOKEN\"",
+            "type = \"vault\"\nsecret_path = \"aws/creds/r\"\n[env_map]\naccess_key = \"VAULT_AK\"\nsecret_key = \"VAULT_SK\"",
+            "type = \"azure-token\"\nscope = \"https://management.azure.com/.default\"\nenv_var = \"AZ_TOKEN\"",
+            "type = \"cloudflare\"\nenv_var = \"CF_TOKEN\"",
+            "type = \"github-app\"\napp_id = \"1\"\ninstallation_id = \"2\"\nenv_var = \"GH_APP_TOKEN\"",
+            "type = \"github-oauth\"\nclient_id = \"cid\"\nenv_var = \"GH_OAUTH_TOKEN\"",
+            "type = \"command\"\ncreate_command = \"true\"",
+        ]
+        .iter()
+        .map(|toml| toml_edit::de::from_str(toml).unwrap())
+        .collect()
+    }
+
+    #[test]
+    fn produced_env_vars_agrees_with_produces_env_var() {
+        let probes = [
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "AWS_SESSION_TOKEN",
+            "AWS_REGION",
+            "GCP_TOKEN",
+            "VAULT_AK",
+            "VAULT_SK",
+            "access_key",
+            "AZ_TOKEN",
+            "CF_TOKEN",
+            "GH_APP_TOKEN",
+            "GH_OAUTH_TOKEN",
+            "GITHUB_TOKEN",
+            "MY_TOKEN",
+            "",
+        ];
+        for lease in fixtures() {
+            let produced = lease.produced_env_vars();
+            for probe in probes {
+                assert_eq!(
+                    produced.contains(&probe),
+                    lease.produces_env_var(probe),
+                    "{lease:?} disagrees on {probe:?}"
+                );
+            }
+            for key in &produced {
+                assert!(lease.produces_env_var(key));
+            }
+        }
+    }
+
+    #[test]
+    fn command_backends_produce_no_statically_known_keys() {
+        let fixtures = fixtures();
+        let command = fixtures.last().unwrap();
+        assert!(command.produced_env_vars().is_empty());
     }
 }
