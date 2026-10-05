@@ -654,10 +654,13 @@ pub async fn serve(cli: &Cli, idle_timeout: Duration) -> Result<()> {
 }
 
 fn should_use_daemon(ctx: &ResolveContext, config: &Config) -> bool {
-    if !platform_supported() || ctx.no_daemon {
-        return false;
-    }
-    daemon_enabled(config, daemon_env_override(&|k| std::env::var(k).ok()))
+    !ctx.no_daemon && config_enables_daemon(config)
+}
+
+/// Whether fnox would use its daemon for `config`, before any per-invocation
+/// `--no-daemon`: the platform supports it, and `FNOX_DAEMON` or `[daemon] enabled` says so.
+pub(crate) fn config_enables_daemon(config: &Config) -> bool {
+    platform_supported() && daemon_enabled(config, daemon_env_override(&|k| std::env::var(k).ok()))
 }
 
 /// Whether `config` enables the daemon, unless `env_override` (`FNOX_DAEMON`) says.

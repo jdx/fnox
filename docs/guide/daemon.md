@@ -67,6 +67,7 @@ Mutation and admin commands still resolve directly, including `sync`, `reencrypt
 
 Programs that start processes themselves can read the daemon's cache directly, without running `fnox`. The [`fnox-client`](https://crates.io/crates/fnox-client) crate is a small Rust client for this: one round trip over the daemon's Unix socket answers with the same JSON document as [`fnox env --json`](/reference/env-json), and mise uses it to start tasks with the secrets they were granted.
 
+- **Ask describe first.** `fnox env --json --describe` reports `daemon_enabled`, whether fnox would use the daemon for this project. Send a request to the daemon only when it is `true`, so a project that disables the daemon never has its environment sent to it.
 - **It only reads.** Such a client never starts the daemon, never stores values in it, and never makes it call a provider. If no daemon is running, it says so.
 - **A miss is resolved by fnox.** When a requested secret is not cached (or needs a lease), the program runs `fnox env --json` itself. That command resolves on your terminal, so prompts and hardware-key touches work, and it fills the cache for next time.
 - **`disabled` is decided per project.** One daemon can run while some projects do not enable it. For those, and for any request made with `FNOX_DAEMON=off`, the daemon answers `disabled` and the program resolves directly, as `fnox` does.

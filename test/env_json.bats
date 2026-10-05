@@ -254,6 +254,21 @@ TOML
 	assert_equal "$(jq -r '.keys | map(.key) | join(",")' out)" EXEC_ONLY
 }
 
+@test "env --json --describe reports whether the daemon would be used" {
+	printf 'root = true\n[secrets]\nA = { default = "a" }\n' >fnox.toml
+	run_env env --json --describe
+	assert_equal "$status" 0
+	assert_equal "$(jq -c .daemon_enabled out)" false
+
+	printf 'root = true\n[daemon]\nenabled = true\n[secrets]\nA = { default = "a" }\n' >fnox.toml
+	run_env env --json --describe
+	assert_equal "$status" 0
+	assert_equal "$(jq -c .daemon_enabled out)" true
+
+	FNOX_DAEMON=0 run_env env --json --describe
+	assert_equal "$(jq -c .daemon_enabled out)" false
+}
+
 @test "env --json reports a broken config as a config error" {
 	printf 'root = true\n[secrets\n' >fnox.toml
 	run_env env --json

@@ -109,6 +109,7 @@ impl EnvCommand {
                 profile,
                 child_env::describe(&secrets, &leases, sel.requested.as_deref()),
                 child_env::dynamic_leases(&leases),
+                crate::daemon::config_enables_daemon(&config),
             );
             return print_document(&doc).map_err(|e| failure(ErrorKind::Resolution, e));
         }

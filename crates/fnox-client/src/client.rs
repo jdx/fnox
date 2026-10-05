@@ -202,6 +202,7 @@ fn validate(document: &EnvDocument, req: &EnvRequest<'_>) -> Result<(), CallErro
             .set
             .keys()
             .chain(document.files.keys())
+            .chain(document.missing.iter())
             .any(|key| !keys.contains(key))
     {
         return Err(CallError::Protocol("env document has an unrequested key"));
@@ -226,5 +227,33 @@ mod tests {
         let debug = format!("{req:?}");
         assert!(!debug.contains("s3cr3t"), "{debug}");
         assert!(debug.contains("<1 vars>"));
+    }
+
+    #[test]
+    fn validate_rejects_unrequested_missing_keys() {
+        let keys = vec!["A".to_string()];
+        let req = EnvRequest {
+            cwd: Path::new("/p"),
+            config: Path::new("fnox.toml"),
+            scope: EnvScope::Exec,
+            keys: Some(&keys),
+            env: &[],
+        };
+        let doc = |missing: &str| {
+            EnvDocument::new(
+                EnvScope::Exec,
+                vec!["default".to_string()],
+                Default::default(),
+                Default::default(),
+                Vec::new(),
+                vec![missing.to_string()],
+                Vec::new(),
+            )
+        };
+        assert!(validate(&doc("A"), &req).is_ok());
+        assert!(matches!(
+            validate(&doc("B"), &req),
+            Err(CallError::Protocol("env document has an unrequested key"))
+        ));
     }
 }

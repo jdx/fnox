@@ -137,11 +137,12 @@ Every document is one line of compact JSON followed by a newline. stdout carries
       "injectable": { "exec": true, "shell": false }
     }
   ],
-  "dynamic_leases": ["build_token"]
+  "dynamic_leases": ["build_token"],
+  "daemon_enabled": true
 }
 ```
 
-(The real output is a single line.) `env` and `as_file` are present only when a secret of that name exists, `description` only when set, and `kind` is `"lease"` when a lease produces the key. `dynamic_leases` names `command` leases, whose keys are only known after they run.
+(The real output is a single line.) `env` and `as_file` are present only when a secret of that name exists, `description` only when set, and `kind` is `"lease"` when a lease produces the key. `dynamic_leases` names `command` leases, whose keys are only known after they run. `daemon_enabled` says whether fnox would use its daemon for this project (the platform supports it, and `[daemon] enabled` or `FNOX_DAEMON` says so; `--no-daemon` is not considered). It is `false` when absent, as in fnox 1.39. A program that reads the daemon directly should only do so when it is `true`.
 
 ### Error
 

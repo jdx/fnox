@@ -614,8 +614,9 @@ mod tests {
         assert_eq!(expand_tilde("~/k", &env_of(&[])), PathBuf::from("~/k"));
         // Concatenation, not path joining: a trailing slash in HOME survives.
         let slash = env_of(&[("HOME", "/h/")]);
-        assert_eq!(expand_tilde("~/k", &slash), PathBuf::from("/h//k"));
-        assert_eq!(expand_tilde("~", &slash), PathBuf::from("/h/"));
+        // PathBuf equality compares components, so compare the exact strings.
+        assert_eq!(expand_tilde("~/k", &slash).to_str(), Some("/h//k"));
+        assert_eq!(expand_tilde("~", &slash).to_str(), Some("/h/"));
     }
 
     #[test]
@@ -626,8 +627,8 @@ mod tests {
             for path in ["~", "~/k", "~other/k", "/a/k"] {
                 let want = shellexpand::tilde_with_context(path, || Some(home)).into_owned();
                 assert_eq!(
-                    expand_tilde(path, &env),
-                    PathBuf::from(want),
+                    expand_tilde(path, &env).to_str(),
+                    Some(want.as_str()),
                     "{home} {path}"
                 );
             }
