@@ -224,7 +224,7 @@ pub struct DescribeDocument {
     pub dynamic_leases: Vec<String>,
     /// Whether fnox would use its daemon for this project, ignoring `--no-daemon`:
     /// the platform supports it and `[daemon] enabled` or `FNOX_DAEMON` says so.
-    /// Absent in documents from fnox 1.39, which reads as `false`.
+    /// Absent in documents from fnox versions that predate this field, which reads as `false`.
     #[serde(default)]
     pub daemon_enabled: bool,
 }
@@ -420,7 +420,7 @@ mod tests {
             serde_json::to_string(&doc).unwrap(),
             r#"{"schema":1,"fnox_version":"1.38.0","profile":["default"],"keys":[{"key":"DATABASE_URL","kind":"secret","env":true,"as_file":false,"description":"Main DB","injectable":{"exec":true,"shell":true}},{"key":"STRIPE_KEY","kind":"secret","env":"exec","as_file":false,"injectable":{"exec":true,"shell":false}},{"key":"SIGNING_KEY","kind":"secret","env":false,"as_file":false,"injectable":{"exec":false,"shell":false}},{"key":"AWS_ACCESS_KEY_ID","kind":"lease","lease":"aws","injectable":{"exec":true,"shell":false}}],"dynamic_leases":["build_token"],"daemon_enabled":false}"#
         );
-        // A document from fnox 1.39 has no such field.
+        // A document from a fnox that predates the field has none.
         let old = r#"{"schema":1,"fnox_version":"1.39.0","profile":["default"],"keys":[],"dynamic_leases":[]}"#;
         assert!(
             !serde_json::from_str::<DescribeDocument>(old)
