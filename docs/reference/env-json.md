@@ -8,7 +8,7 @@ description: "Reference for fnox env --json: the versioned JSON contract that to
 
 ```console
 $ fnox env --json --keys DATABASE_URL,GCP_SA_JSON
-{"schema":1,"fnox_version":"1.38.0","scope":"exec","profile":["default"],"set":{"DATABASE_URL":"postgres://…"},"files":{"GCP_SA_JSON":"{…contents…}"},"remove":["FNOX_AGE_KEY","FNOX_AGE_KEY_FILE","ENPASS_PASSWORD","FNOX_ENPASS_PASSWORD","SIGNING_KEY"],"missing":[],"leases":[]}
+{"schema":1,"fnox_version":"1.39.0","scope":"exec","profile":["default"],"set":{"DATABASE_URL":"postgres://…"},"files":{"GCP_SA_JSON":"{…contents…}"},"remove":["FNOX_AGE_KEY","FNOX_AGE_KEY_FILE","ENPASS_PASSWORD","FNOX_ENPASS_PASSWORD","SIGNING_KEY"],"missing":[],"leases":[]}
 ```
 
 ::: warning
@@ -51,13 +51,15 @@ Each listed key is checked against the active profile:
 
 All problems are reported together in one `invalid_keys` error. A `command` lease produces no statically known keys, so its keys cannot be listed in `--keys`; they appear only when `--keys` is absent.
 
+A `command` lease also declares no inputs, so when one is selected fnox resolves the whole profile for the lease to read, as `fnox exec` does. Only the selected keys are ever printed: `env = false` values the lease reads are not in the output.
+
 ## What gets resolved
 
 fnox resolves the roots plus the secrets they depend on: secrets referenced with `${NAME}` in a `default`, and the secrets a provider reads from the environment (for example `OP_SERVICE_ACCOUNT_TOKEN` for a `1password` secret). For each selected lease, the secrets that lease consumes are included as well.
 
-`env = false` secrets are never printed. They are resolved only when a requested key depends on them. (`fnox exec` currently resolves every secret in the profile, including `env = false` ones, and removes them from the child's environment.)
+`env = false` secrets are never printed. They are resolved only when a requested key depends on them, or when a selected `command` lease may read them. (`fnox exec` currently resolves every secret in the profile, including `env = false` ones, and removes them from the child's environment.)
 
-`as_file` secrets come back as raw contents in `files`, so fnox leaves no files behind. The caller writes them.
+`as_file` secrets come back as raw contents in `files`, so fnox leaves no files behind. The caller writes them. Lease credentials that point at lease-time files (files fnox writes so a lease backend can read an `as_file` secret) are not usable through `fnox env`, because those files are removed when it exits; `as_file` secrets themselves come back in `files`.
 
 ## Documents (schema 1)
 
@@ -68,7 +70,7 @@ Every document is one line of compact JSON followed by a newline. stdout carries
 ```json
 {
   "schema": 1,
-  "fnox_version": "1.38.0",
+  "fnox_version": "1.39.0",
   "scope": "exec",
   "profile": ["default"],
   "set": { "DATABASE_URL": "postgres://…" },
@@ -103,7 +105,7 @@ Every document is one line of compact JSON followed by a newline. stdout carries
 ```json
 {
   "schema": 1,
-  "fnox_version": "1.38.0",
+  "fnox_version": "1.39.0",
   "profile": ["default"],
   "keys": [
     {
@@ -179,7 +181,7 @@ Consumers must ignore unknown fields. New optional fields may appear within sche
 
 ## Daemon
 
-`fnox env --json` resolves through the same path as `fnox exec`, using the daemon cache purpose `exec`:
+`fnox env --json` resolves through the same path as `fnox exec`, using the daemon cache purpose `exec` for `--for exec` and `hook-env` for `--for shell`:
 
 | Condition                                                                              | Behavior                                                           |
 | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |

@@ -89,7 +89,7 @@ impl ExecCommand {
         }
         crate::daemon::refresh(cli, &config, &self.refresh).await?;
 
-        let plan = child_env::plan(
+        let (plan, lease_files) = child_env::plan(
             cli,
             &config,
             &profile,
@@ -109,7 +109,7 @@ impl ExecCommand {
             cmd.env(key, value);
         }
         // Keep temp files alive for the duration of the command
-        let mut _temp_files: Vec<NamedTempFile> = Vec::new();
+        let mut _temp_files: Vec<NamedTempFile> = lease_files;
         for (key, value) in &plan.files {
             let temp_file = create_ephemeral_secret_file(key, value)?;
             tracing::debug!(

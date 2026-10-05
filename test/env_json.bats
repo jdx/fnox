@@ -200,7 +200,15 @@ TOML
 	assert_equal "$(jq -r '.set | length' out)" 0
 	[ -s err ]
 
-	sed -i 's/if_missing = "warn"/if_missing = "error"/' fnox.toml
+	cat >fnox.toml <<'TOML'
+root = true
+
+[providers.pass]
+type = "password-store"
+
+[secrets]
+GONE = { provider = "pass", value = "missing/path", if_missing = "error" }
+TOML
 	run_env env --json --keys GONE
 	assert_equal "$status" 1
 	assert_equal "$(jq -r .error.kind out)" resolution
@@ -360,4 +368,40 @@ TOML
 	assert_equal "$(jq -r '.set.FOO' out)" v-foo
 	run "$FNOX_BIN" daemon status
 	assert_output --partial "not running"
+}
+
+@test "env --json lets a command lease read an env=false secret without printing it" {
+	cat >create-creds.sh <<'SCRIPT'
+#!/usr/bin/env bash
+cat <<JSON
+{
+  "credentials": {
+    "MY_TOKEN": "tok-${LEASE_INPUT}"
+  },
+  "expires_at": "2099-01-01T00:00:00Z",
+  "lease_id": "cmd-test-lease-2"
+}
+JSON
+SCRIPT
+	chmod +x create-creds.sh
+	cat >fnox.toml <<TOML
+root = true
+
+[providers.plain]
+type = "plain"
+
+[leases.test_cmd]
+type = "command"
+create_command = "$PWD/create-creds.sh"
+
+[secrets]
+LEASE_INPUT = { provider = "plain", value = "hidden-input", env = false }
+FOO = { provider = "plain", value = "foo-value" }
+TOML
+
+	run_env env --json
+	assert_equal "$status" 0
+	assert_equal "$(jq -r '.set.MY_TOKEN' out)" tok-hidden-input
+	assert_equal "$(jq -r '.set | has("LEASE_INPUT")' out)" false
+	assert_equal "$(jq -r '.remove | index("LEASE_INPUT") != null' out)" true
 }

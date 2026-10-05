@@ -252,6 +252,17 @@ pub fn resolve_set(
     if sel.resolve_all {
         return Ok(secrets.clone());
     }
+    // A selected lease that does not declare its inputs (a `command` lease) may
+    // read any secret, as it can under `fnox exec`. Resolution covers the whole
+    // profile; assembly still emits only the roots.
+    if sel
+        .leases
+        .iter()
+        .filter_map(|name| leases.get(name))
+        .any(|lease| !lease.has_known_inputs())
+    {
+        return Ok(secrets.clone());
+    }
 
     let mut roots = sel.roots.clone();
     if !sel.leases.is_empty() {
@@ -363,7 +374,7 @@ pub fn assemble(
         push_remove(key);
     }
     for (key, secret) in secrets {
-        if !scope_allows(scope, secret.env_mode()) && !lease_creds.contains_key(key) {
+        if !scope_allows(scope, secret.env_mode()) {
             push_remove(key);
         }
     }
@@ -377,7 +388,8 @@ pub fn assemble(
 /// Lease prerequisites and failures follow `fnox exec`: a lease whose
 /// prerequisites are missing and that has no cached credential is skipped with
 /// a warning, and any other lease error fails the plan. The temporary process
-/// environment and lease-time files are gone when this returns.
+/// environment is gone when this returns. The files created for `as_file`
+/// secrets while leases ran are returned, and must outlive the child.
 pub async fn plan(
     cli: &Cli,
     config: &Config,
@@ -385,7 +397,7 @@ pub async fn plan(
     scope: EnvScope,
     roots: Roots<'_>,
     lease_label: &str,
-) -> Result<ChildEnv> {
+) -> Result<(ChildEnv, Vec<tempfile::NamedTempFile>)> {
     let secrets = config.get_secrets(profile)?;
     let leases = config.get_leases(profile)?;
     let sel = select(&secrets, &leases, scope, roots).map_err(|rejection| rejection.to_error())?;
@@ -453,15 +465,12 @@ pub async fn plan(
         }
     }
     drop(_temp_env_guard);
-    drop(_temp_files);
 
-    Ok(assemble(
-        scope,
-        &secrets,
-        &sel,
-        &resolved,
-        &lease_creds,
-        leases_used,
+    // The lease-time files stay alive for the caller: a lease credential may
+    // be a path to one of them, and `fnox exec` keeps them until the child exits.
+    Ok((
+        assemble(scope, &secrets, &sel, &resolved, &lease_creds, leases_used),
+        _temp_files,
     ))
 }
 
@@ -1006,6 +1015,56 @@ LAST = { default = "3" }
         );
         assert_eq!(env.set, creds(&[("SHELL_OK", "a"), ("GH_TOKEN", "t")]));
         assert!(env.missing.is_empty());
+    }
+
+    #[test]
+    fn assemble_keys_mode_removes_env_false_secret_named_like_an_unrequested_credential() {
+        let toml = format!("{BASE}\n[secrets.OTHER_CRED]\ndefault = \"master\"\nenv = false\n");
+        let requested = keys(&["GH_TOKEN"]);
+        let env = assemble_for(
+            EnvScope::Exec,
+            &toml,
+            Roots::Keys(&requested),
+            &resolved(&[]),
+            &creds(&[("GH_TOKEN", "t"), ("OTHER_CRED", "lease")]),
+            &["gh"],
+        );
+        assert!(!env.set.contains_key("OTHER_CRED"));
+        assert!(env.remove.contains(&"OTHER_CRED".to_string()));
+    }
+
+    #[test]
+    fn assemble_all_profile_still_sets_a_lease_credential_over_an_env_false_secret() {
+        let toml = format!("{BASE}\n[secrets.OTHER_CRED]\ndefault = \"master\"\nenv = false\n");
+        let env = assemble_for(
+            EnvScope::Exec,
+            &toml,
+            Roots::AllProfile,
+            &resolved(&[("OTHER_CRED", Some("master"))]),
+            &creds(&[("OTHER_CRED", "lease")]),
+            &["gh"],
+        );
+        assert_eq!(env.set["OTHER_CRED"], "lease");
+        assert!(!env.remove.contains(&"OTHER_CRED".to_string()));
+    }
+
+    #[test]
+    fn resolve_set_covers_the_whole_profile_for_a_command_lease() {
+        let config: Config = toml_edit::de::from_str(BASE).unwrap();
+        let profile = vec!["default".to_string()];
+        let secrets = config.get_secrets(&profile).unwrap();
+        let leases = config.get_leases(&profile).unwrap();
+
+        let sel = select(&secrets, &leases, EnvScope::Exec, Roots::Scope).unwrap();
+        let set = resolve_set(&config, &profile, &secrets, &leases, &sel).unwrap();
+        assert!(set.contains_key("HIDDEN"));
+        // Only roots are emitted, so the hidden value is still never set.
+        assert!(!sel.roots.contains(&"HIDDEN".to_string()));
+
+        let requested = keys(&["SHELL_OK"]);
+        let sel = select(&secrets, &leases, EnvScope::Exec, Roots::Keys(&requested)).unwrap();
+        let set = resolve_set(&config, &profile, &secrets, &leases, &sel).unwrap();
+        assert_eq!(set.keys().collect::<Vec<_>>(), ["SHELL_OK"]);
     }
 
     #[test]

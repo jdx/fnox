@@ -119,8 +119,9 @@ impl EnvCommand {
 
         // Phase `resolution`
         let result = async {
-            let env = child_env::plan(cli, &config, &profile, scope, roots_for(&self.keys), "env")
-                .await?;
+            let (env, _lease_files) =
+                child_env::plan(cli, &config, &profile, scope, roots_for(&self.keys), "env")
+                    .await?;
             print_document(&EnvDocument::new(scope, profile.clone(), env))
         }
         .await;

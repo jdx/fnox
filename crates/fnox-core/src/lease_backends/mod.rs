@@ -301,6 +301,12 @@ impl LeaseBackendConfig {
         }
     }
 
+    /// Whether `consumed_env_vars` lists every secret this backend may read.
+    /// A `command` backend runs a script that may read any environment variable.
+    pub fn has_known_inputs(&self) -> bool {
+        !matches!(self, LeaseBackendConfig::Command { .. })
+    }
+
     /// All env var names this backend may consume at runtime, including aliases.
     /// Used by `fnox get` to filter which profile secrets to resolve before
     /// creating a lease. Each backend defines its own `CONSUMED_ENV_VARS` constant
@@ -516,6 +522,16 @@ mod tests {
             for key in &produced {
                 assert!(lease.produces_env_var(key));
             }
+        }
+    }
+
+    #[test]
+    fn only_command_backends_have_unknown_inputs() {
+        for lease in fixtures() {
+            assert_eq!(
+                lease.has_known_inputs(),
+                !matches!(lease, LeaseBackendConfig::Command { .. })
+            );
         }
     }
 
