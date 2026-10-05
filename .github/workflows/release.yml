@@ -60,6 +60,10 @@ jobs:
         with:
           p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
           p12-password: ${{ secrets.CERTIFICATES_P12_PASS }}
+      - name: Select native Perl for vendored OpenSSL
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./.github/scripts/select-openssl-perl.ps1
       - uses: taiki-e/upload-rust-binary-action@f0d45ae91ee7b8ee928de7a9d04d893a08bcbec6 # v1
         env:
           # Links the Linux GNU executable non-PIE (see build.rs); ignored for
