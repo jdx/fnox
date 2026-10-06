@@ -1,6 +1,4 @@
-use crate::child_env::{
-    self, DescribeDocument, ENV_SCHEMA, EnvDocument, EnvScope, ErrorDocument, ErrorKind, Roots,
-};
+use crate::child_env::{self, DescribeDocument, EnvScope, ErrorDocument, ErrorKind, Roots};
 use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
@@ -100,20 +98,19 @@ impl EnvCommand {
         let sel = match child_env::select(&secrets, &leases, scope, roots_for(&self.keys)) {
             Ok(sel) => sel,
             Err(rejection) => {
-                let err = rejection.to_error();
+                let err = child_env::rejection_error(&rejection);
                 let doc = ErrorDocument::invalid_keys(rejection, err.to_string());
                 return Err(Box::new((doc, err)));
             }
         };
 
         if self.describe {
-            let doc = DescribeDocument {
-                schema: ENV_SCHEMA,
-                fnox_version: env!("CARGO_PKG_VERSION").to_string(),
+            let doc = DescribeDocument::new(
                 profile,
-                keys: child_env::describe(&secrets, &leases, sel.requested.as_deref()),
-                dynamic_leases: child_env::dynamic_leases(&leases),
-            };
+                child_env::describe(&secrets, &leases, sel.requested.as_deref()),
+                child_env::dynamic_leases(&leases),
+                crate::daemon::config_enables_daemon(&config),
+            );
             return print_document(&doc).map_err(|e| failure(ErrorKind::Resolution, e));
         }
 
@@ -122,7 +119,7 @@ impl EnvCommand {
             let (env, _lease_files) =
                 child_env::plan(cli, &config, &profile, scope, roots_for(&self.keys), "env")
                     .await?;
-            print_document(&EnvDocument::new(scope, profile.clone(), env))
+            print_document(&child_env::env_document(scope, profile.clone(), env))
         }
         .await;
         result.map_err(|e| failure(ErrorKind::Resolution, e))

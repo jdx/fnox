@@ -272,12 +272,17 @@ impl Settings {
     fn build_from_all_sources() -> Result<SettingsData> {
         let env = EnvLayer::from_process();
         let cli_guard = CLI_LAYER.lock().unwrap();
+        Self::from_layers(cli_guard.as_ref(), &env)
+    }
 
+    /// Build settings from explicit layers, exactly as the process-wide settings are
+    /// built, including the conveniences applied to environment-supplied values.
+    pub fn from_layers(cli: Option<&CliLayer>, env: &EnvLayer) -> Result<SettingsData> {
         let mut layers = Layers::new();
-        if let Some(cli) = cli_guard.as_ref() {
+        if let Some(cli) = cli {
             layers = layers.then(cli);
         }
-        let layers = layers.then(&env);
+        let layers = layers.then(env);
 
         let resolved = resolve(SettingsData::SETTINGS_REGISTRY, layers)
             .map_err(|e| miette::miette!("failed to resolve settings: {e}"))?;

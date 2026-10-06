@@ -137,11 +137,12 @@ Every document is one line of compact JSON followed by a newline. stdout carries
       "injectable": { "exec": true, "shell": false }
     }
   ],
-  "dynamic_leases": ["build_token"]
+  "dynamic_leases": ["build_token"],
+  "daemon_enabled": true
 }
 ```
 
-(The real output is a single line.) `env` and `as_file` are present only when a secret of that name exists, `description` only when set, and `kind` is `"lease"` when a lease produces the key. `dynamic_leases` names `command` leases, whose keys are only known after they run.
+(The real output is a single line.) `env` and `as_file` are present only when a secret of that name exists, `description` only when set, and `kind` is `"lease"` when a lease produces the key. `dynamic_leases` names `command` leases, whose keys are only known after they run. `daemon_enabled` says whether fnox would use its daemon for this project (the platform supports it, and `[daemon] enabled` or `FNOX_DAEMON` says so; `--no-daemon` is not considered). fnox versions from before this field do not send it; read a missing field as `false`. A program that reads the daemon directly should only do so when it is `true`.
 
 ### Error
 
@@ -179,6 +180,8 @@ Authentication prompts need stdin on a terminal: fnox prompts only when stdin is
 
 Consumers must ignore unknown fields. New optional fields may appear within schema 1. Any breaking change increments `schema`.
 
+Rust programs can use the document types from the [`fnox-client`](https://crates.io/crates/fnox-client) crate, which has no provider dependencies.
+
 ## Daemon
 
 `fnox env --json` resolves through the same path as `fnox exec`, using the daemon cache purpose `exec` for `--for exec` and `hook-env` for `--for shell`:
@@ -190,3 +193,5 @@ Consumers must ignore unknown fields. New optional fields may appear within sche
 | Interactive, cache misses                                                              | Resolves on its own terminal, then stores the values in the daemon |
 
 With `--non-interactive` and the daemon enabled, the daemon resolves cache misses itself. Callers that want resolution to stay in the client also pass `--no-daemon`. `--describe` never touches the daemon. See [the daemon guide](/guide/daemon).
+
+To get the same document from a running daemon without starting `fnox`, see [Other programs](/guide/daemon#other-programs-mise).

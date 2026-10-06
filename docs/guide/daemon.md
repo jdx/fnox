@@ -63,6 +63,18 @@ Daemon-backed resolution applies to read-oriented commands:
 
 Mutation and admin commands still resolve directly, including `sync`, `reencrypt`, `edit`, `set`, `remove`, `provider`, and `lease create`.
 
+## Other programs (mise)
+
+Programs that start processes themselves can read the daemon's cache directly, without running `fnox`. The [`fnox-client`](https://crates.io/crates/fnox-client) crate is a small Rust client for this: one round trip over the daemon's Unix socket answers with the same JSON document as [`fnox env --json`](/reference/env-json), and mise uses it to start tasks with the secrets they were granted.
+
+- **Ask describe first.** `fnox env --json --describe` reports `daemon_enabled`, whether fnox would use the daemon for this project. Send a request to the daemon only when it is `true`, so a project that disables the daemon never has its environment sent to it.
+- **It only reads.** Such a client never starts the daemon, never stores values in it, and never makes it call a provider. If no daemon is running, it says so.
+- **A miss is resolved by fnox.** When a requested secret is not cached (or needs a lease), the program runs `fnox env --json` itself. That command resolves on your terminal, so prompts and hardware-key touches work, and it fills the cache for next time.
+- **`disabled` is decided per project.** One daemon can run while some projects do not enable it. For those, and for any request made with `FNOX_DAEMON=off`, the daemon answers `disabled` and the program resolves directly, as `fnox` does.
+- **The environment matters.** The daemon's cache is keyed on `FNOX_*` variables and provider credentials such as `AWS_*`, so a program must send exactly the environment it gives `fnox env --json`. Otherwise every request misses.
+
+The wire protocol is version 6, which adds a `hello` handshake and the `resolve_env` request these clients use. Version 6 also changes the socket path. After upgrading fnox, a daemon from the previous version keeps running until its idle timeout, and `fnox daemon clear` still reaches it. The first daemon-enabled command after the upgrade starts a new daemon, so its cache starts empty.
+
 ## Cache behavior
 
 The daemon cache is memory-only. Secret values are not written to disk by the daemon.

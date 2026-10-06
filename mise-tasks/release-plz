@@ -12,9 +12,11 @@ if [ -z "$released_versions" ] || ! echo "$released_versions" | grep -q "^v$cur_
     # Only create and push the tag - let the release workflow handle creating the release
     git tag "v$cur_version"
     git push --tags
-    # Publish fnox-core first; fnox depends on it via path + version, so the
-    # binary publish requires fnox-core at this version to be on crates.io.
+    # Publish fnox-client, then fnox-core, then fnox: fnox-core depends on
+    # fnox-client, and fnox on both, via path + version, so each publish
+    # requires its dependencies at this version to be on crates.io.
     # Modern cargo waits for the index to update before returning.
+    cargo publish -p fnox-client
     cargo publish -p fnox-core
     cargo publish -p fnox
   fi
@@ -35,10 +37,11 @@ if [ "$version" = "v$cur_version" ]; then
   exit 0
 fi
 
-# Bump the workspace version; both `fnox` and `fnox-core` inherit it via
-# `version.workspace = true`. Like `cargo set-version --workspace`, also move
-# fnox's major-only `fnox-core` requirement to the new major. Done with sed
-# because cargo-edit has no prebuilt binary and compiling it slowed every CI job.
+# Bump the workspace version; `fnox`, `fnox-core` and `fnox-client` all inherit
+# it via `version.workspace = true`. Like `cargo set-version --workspace`, also
+# move the major-only `fnox-client` requirement in `[workspace.dependencies]`
+# and fnox's `fnox-core` requirement to the new major. Done with sed because
+# cargo-edit has no prebuilt binary and compiling it slowed every CI job.
 target_version="${version#v}"
 # Also keeps sed metacharacters out of the replacements below.
 if ! [[ "$target_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
@@ -48,16 +51,17 @@ fi
 sed -i.bak \
   -e "/^\[workspace\.package\]/,/^\[/ s/^\(version[[:space:]]*=[[:space:]]*\)\"[^\"]*\"/\1\"$target_version\"/" \
   -e "s/^\(fnox-core[[:space:]]*=[[:space:]]*{.*version[[:space:]]*=[[:space:]]*\"\)[0-9][0-9]*\"/\1${target_version%%.*}\"/" \
+  -e "s/^\(fnox-client[[:space:]]*=[[:space:]]*{.*version[[:space:]]*=[[:space:]]*\"\)[0-9][0-9]*\"/\1${target_version%%.*}\"/" \
   Cargo.toml
 rm Cargo.toml.bak
-# Resolving the workspace syncs the fnox and fnox-core Cargo.lock entries
-# without upgrading any dependency, the same lockfile effect `cargo set-version`
-# had.
+# Resolving the workspace syncs the Cargo.lock entries of fnox, fnox-core and
+# fnox-client without upgrading any dependency, the same lockfile effect
+# `cargo set-version` had.
 cargo metadata --format-version 1 >/dev/null
 # sed exits 0 even when nothing matched, so confirm cargo sees the new version
-# before releasing. A missed fnox-core requirement on a major bump already
-# fails `cargo metadata` above.
-for crate in fnox fnox-core; do
+# before releasing. A missed fnox-core or fnox-client requirement on a major
+# bump already fails `cargo metadata` above.
+for crate in fnox fnox-core fnox-client; do
   new_version="$(cargo pkgid "$crate" | cut -d# -f2 | cut -d@ -f2)"
   if [ "$new_version" != "$target_version" ]; then
     echo "error: $crate is at $new_version after the bump, expected $target_version; check [workspace.package] in Cargo.toml" >&2

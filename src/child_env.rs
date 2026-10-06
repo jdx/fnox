@@ -14,18 +14,14 @@ use crate::lease::{self, LeaseLedger};
 use crate::lease_backends::LeaseBackendConfig;
 use crate::suggest::find_similar;
 use indexmap::IndexMap;
-use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-/// Which consumer the environment is for.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum EnvScope {
-    /// A command started by `fnox exec`: `env = true` and `env = "exec"` secrets, plus leases.
-    Exec,
-    /// An interactive shell: `env = true` secrets only, no leases.
-    Shell,
-}
+// The documents `fnox env --json` prints live in fnox-client, so that other
+// programs can read them without depending on fnox-core.
+pub use fnox_client::document::{
+    DescribeDocument, ENV_SCHEMA, EnvDocument, EnvScope, ErrorBody, ErrorDocument, ErrorKind,
+    Injectable, KeyInfo, KeyKind, KeyRejection, NotInjectable, SecretValue,
+};
 
 /// Whether a secret with this `env` mode is injected for `scope`.
 pub fn scope_allows(scope: EnvScope, mode: EnvMode) -> bool {
@@ -78,43 +74,31 @@ pub struct Selection {
     pub resolve_all: bool,
 }
 
-/// Why a set of requested keys was rejected.
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct KeyRejection {
-    pub unknown: Vec<String>,
-    pub suggestions: IndexMap<String, Vec<String>>,
-    pub not_injectable: Vec<NotInjectable>,
-}
-
-/// A requested key that is a secret, but not one this scope injects.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NotInjectable {
-    pub key: String,
-    pub env: EnvMode,
-}
-
-impl KeyRejection {
-    pub fn to_error(&self) -> FnoxError {
-        let mut help = String::new();
-        for (key, similar) in &self.suggestions {
-            if !similar.is_empty() {
-                help.push_str(&format!(
-                    "Did you mean {} instead of {key}?\n",
-                    similar.join(" or ")
-                ));
-            }
+/// The error for a rejected key set, with the help text `fnox env` prints.
+pub fn rejection_error(rejection: &KeyRejection) -> FnoxError {
+    let mut help = String::new();
+    for (key, similar) in &rejection.suggestions {
+        if !similar.is_empty() {
+            help.push_str(&format!(
+                "Did you mean {} instead of {key}?\n",
+                similar.join(" or ")
+            ));
         }
-        if !self.not_injectable.is_empty() {
-            help.push_str(
-                "env = false secrets are never injected; read them with `fnox get`. \
-                 env = \"exec\" secrets are only injected for `--for exec`.",
-            );
-        }
-        FnoxError::EnvKeysRejected {
-            unknown: self.unknown.clone(),
-            not_injectable: self.not_injectable.iter().map(|n| n.key.clone()).collect(),
-            help: help.trim_end().to_string(),
-        }
+    }
+    if !rejection.not_injectable.is_empty() {
+        help.push_str(
+            "env = false secrets are never injected; read them with `fnox get`. \
+             env = \"exec\" secrets are only injected for `--for exec`.",
+        );
+    }
+    FnoxError::EnvKeysRejected {
+        unknown: rejection.unknown.clone(),
+        not_injectable: rejection
+            .not_injectable
+            .iter()
+            .map(|n| n.key.clone())
+            .collect(),
+        help: help.trim_end().to_string(),
     }
 }
 
@@ -198,7 +182,7 @@ pub fn select(
         match mode {
             Some(env) => rejection.not_injectable.push(NotInjectable {
                 key: key.clone(),
-                env,
+                env: env.into(),
             }),
             None => {
                 let mut candidates: Vec<&str> = Vec::new();
@@ -425,7 +409,8 @@ pub async fn plan(
 ) -> Result<(ChildEnv, Vec<tempfile::NamedTempFile>)> {
     let secrets = config.get_secrets(profile)?;
     let leases = config.get_leases(profile)?;
-    let sel = select(&secrets, &leases, scope, roots).map_err(|rejection| rejection.to_error())?;
+    let sel =
+        select(&secrets, &leases, scope, roots).map_err(|rejection| rejection_error(&rejection))?;
     let set = resolve_set(config, profile, &secrets, &leases, &sel)?;
 
     let resolved = if set.is_empty() && !sel.resolve_all {
@@ -507,129 +492,25 @@ pub async fn plan(
     ))
 }
 
-/// Schema version of the documents below. Any breaking change increments it.
-pub const ENV_SCHEMA: u32 = 1;
-
-/// Success document of `fnox env --json`.
+/// The document `fnox env --json` prints for `env`.
 ///
-/// Consumers must ignore unknown fields: new optional fields may appear within a schema.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct EnvDocument {
-    pub schema: u32,
-    pub fnox_version: String,
-    pub scope: EnvScope,
-    pub profile: Vec<String>,
-    pub set: IndexMap<String, String>,
-    pub files: IndexMap<String, String>,
-    pub remove: Vec<String>,
-    pub missing: Vec<String>,
-    pub leases: Vec<String>,
-}
-
-impl EnvDocument {
-    pub fn new(scope: EnvScope, profile: Vec<String>, env: ChildEnv) -> Self {
-        Self {
-            schema: ENV_SCHEMA,
-            fnox_version: env!("CARGO_PKG_VERSION").to_string(),
-            scope,
-            profile,
-            set: env.set,
-            files: env.files,
-            remove: env.remove,
-            missing: env.missing,
-            leases: env.leases,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum KeyKind {
-    Secret,
-    Lease,
-}
-
-/// Where a key may be injected.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Injectable {
-    pub exec: bool,
-    pub shell: bool,
-}
-
-/// One key in a [`DescribeDocument`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct KeyInfo {
-    pub key: String,
-    pub kind: KeyKind,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub lease: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub env: Option<EnvMode>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub as_file: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    pub injectable: Injectable,
-}
-
-/// Success document of `fnox env --json --describe`: metadata only, no values.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DescribeDocument {
-    pub schema: u32,
-    pub fnox_version: String,
-    pub profile: Vec<String>,
-    pub keys: Vec<KeyInfo>,
-    pub dynamic_leases: Vec<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ErrorKind {
-    Config,
-    InvalidKeys,
-    Resolution,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ErrorBody {
-    pub kind: ErrorKind,
-    pub message: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub unknown: Vec<String>,
-    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
-    pub suggestions: IndexMap<String, Vec<String>>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub not_injectable: Vec<NotInjectable>,
-}
-
-/// Failure document of `fnox env --json`, written to stdout with exit status 1.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ErrorDocument {
-    pub schema: u32,
-    pub error: ErrorBody,
-}
-
-impl ErrorDocument {
-    pub fn new(kind: ErrorKind, message: String) -> Self {
-        Self {
-            schema: ENV_SCHEMA,
-            error: ErrorBody {
-                kind,
-                message,
-                unknown: Vec::new(),
-                suggestions: IndexMap::new(),
-                not_injectable: Vec::new(),
-            },
-        }
-    }
-
-    pub fn invalid_keys(rejection: KeyRejection, message: String) -> Self {
-        let mut doc = Self::new(ErrorKind::InvalidKeys, message);
-        doc.error.unknown = rejection.unknown;
-        doc.error.suggestions = rejection.suggestions;
-        doc.error.not_injectable = rejection.not_injectable;
-        doc
-    }
+/// The daemon builds the same document for a cache hit, so both paths agree.
+pub fn env_document(scope: EnvScope, profile: Vec<String>, env: ChildEnv) -> EnvDocument {
+    let secret_values = |values: IndexMap<String, String>| {
+        values
+            .into_iter()
+            .map(|(key, value)| (key, SecretValue::from(value)))
+            .collect()
+    };
+    EnvDocument::new(
+        scope,
+        profile,
+        secret_values(env.set),
+        secret_values(env.files),
+        env.remove,
+        env.missing,
+        env.leases,
+    )
 }
 
 /// Describes the keys a plan could provide, without resolving anything.
@@ -652,22 +533,22 @@ pub fn describe(
         let secret = secrets.get(key);
         let lease = lease_for.get(key).copied();
         let env = secret.map(|secret| secret.env_mode());
-        KeyInfo {
-            key: key.to_string(),
-            kind: if lease.is_some() {
+        KeyInfo::new(
+            key.to_string(),
+            if lease.is_some() {
                 KeyKind::Lease
             } else {
                 KeyKind::Secret
             },
-            lease: lease.map(String::from),
-            env,
-            as_file: secret.map(|secret| secret.as_file),
-            description: secret.and_then(|secret| secret.description.clone()),
-            injectable: Injectable {
+            lease.map(String::from),
+            env.map(Into::into),
+            secret.map(|secret| secret.as_file),
+            secret.and_then(|secret| secret.description.clone()),
+            Injectable {
                 exec: lease.is_some() || env.is_some_and(EnvMode::in_exec),
                 shell: env.is_some_and(EnvMode::in_shell),
             },
-        }
+        )
     };
 
     match requested {
@@ -802,7 +683,7 @@ create_command = "true"
             rejection.not_injectable,
             [NotInjectable {
                 key: "HIDDEN".to_string(),
-                env: EnvMode::Never
+                env: fnox_client::document::EnvMode::Never
             }]
         );
     }
@@ -813,7 +694,10 @@ create_command = "true"
         let requested = keys(&["EXEC_ONLY"]);
         let rejection =
             select(&secrets, &leases, EnvScope::Shell, Roots::Keys(&requested)).unwrap_err();
-        assert_eq!(rejection.not_injectable[0].env, EnvMode::Exec);
+        assert_eq!(
+            rejection.not_injectable[0].env,
+            fnox_client::document::EnvMode::Exec
+        );
         assert!(
             select(&secrets, &leases, EnvScope::Exec, Roots::Keys(&requested)).is_ok(),
             "exec scope accepts env = \"exec\""
@@ -1234,110 +1118,26 @@ create_command = "true"
         assert_eq!(dynamic_leases(&leases), ["cmd"]);
     }
 
-    // ---- golden documents: these pin schema 1 ----
-
     #[test]
-    fn golden_env_document() {
-        let doc = EnvDocument {
-            schema: 1,
-            fnox_version: "1.38.0".to_string(),
-            scope: EnvScope::Exec,
-            profile: keys(&["default"]),
-            set: creds(&[("DATABASE_URL", "postgres://x")]),
-            files: creds(&[("GCP_SA_JSON", "{}")]),
-            remove: keys(&["FNOX_AGE_KEY", "SIGNING_KEY"]),
-            missing: keys(&["OPTIONAL_TOKEN"]),
-            leases: keys(&["aws"]),
+    fn env_document_wraps_the_child_env_and_keeps_its_order() {
+        let env = ChildEnv {
+            set: creds(&[("B", "2"), ("A", "1")]),
+            files: creds(&[("F", "x")]),
+            remove: keys(&["R"]),
+            missing: keys(&["M"]),
+            leases: keys(&["L"]),
         };
+        let doc = env_document(EnvScope::Shell, keys(&["dev"]), env);
+        assert_eq!(doc.schema, ENV_SCHEMA);
+        assert_eq!(doc.fnox_version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(doc.scope, EnvScope::Shell);
+        assert_eq!(doc.profile, ["dev"]);
         assert_eq!(
             serde_json::to_string(&doc).unwrap(),
-            r#"{"schema":1,"fnox_version":"1.38.0","scope":"exec","profile":["default"],"set":{"DATABASE_URL":"postgres://x"},"files":{"GCP_SA_JSON":"{}"},"remove":["FNOX_AGE_KEY","SIGNING_KEY"],"missing":["OPTIONAL_TOKEN"],"leases":["aws"]}"#
-        );
-    }
-
-    #[test]
-    fn golden_describe_document() {
-        let doc = DescribeDocument {
-            schema: 1,
-            fnox_version: "1.38.0".to_string(),
-            profile: keys(&["default"]),
-            keys: vec![
-                KeyInfo {
-                    key: "DATABASE_URL".to_string(),
-                    kind: KeyKind::Secret,
-                    lease: None,
-                    env: Some(EnvMode::Shell),
-                    as_file: Some(false),
-                    description: Some("Main DB".to_string()),
-                    injectable: Injectable {
-                        exec: true,
-                        shell: true,
-                    },
-                },
-                KeyInfo {
-                    key: "STRIPE_KEY".to_string(),
-                    kind: KeyKind::Secret,
-                    lease: None,
-                    env: Some(EnvMode::Exec),
-                    as_file: Some(false),
-                    description: None,
-                    injectable: Injectable {
-                        exec: true,
-                        shell: false,
-                    },
-                },
-                KeyInfo {
-                    key: "SIGNING_KEY".to_string(),
-                    kind: KeyKind::Secret,
-                    lease: None,
-                    env: Some(EnvMode::Never),
-                    as_file: Some(false),
-                    description: None,
-                    injectable: Injectable {
-                        exec: false,
-                        shell: false,
-                    },
-                },
-                KeyInfo {
-                    key: "AWS_ACCESS_KEY_ID".to_string(),
-                    kind: KeyKind::Lease,
-                    lease: Some("aws".to_string()),
-                    env: None,
-                    as_file: None,
-                    description: None,
-                    injectable: Injectable {
-                        exec: true,
-                        shell: false,
-                    },
-                },
-            ],
-            dynamic_leases: keys(&["build_token"]),
-        };
-        assert_eq!(
-            serde_json::to_string(&doc).unwrap(),
-            r#"{"schema":1,"fnox_version":"1.38.0","profile":["default"],"keys":[{"key":"DATABASE_URL","kind":"secret","env":true,"as_file":false,"description":"Main DB","injectable":{"exec":true,"shell":true}},{"key":"STRIPE_KEY","kind":"secret","env":"exec","as_file":false,"injectable":{"exec":true,"shell":false}},{"key":"SIGNING_KEY","kind":"secret","env":false,"as_file":false,"injectable":{"exec":false,"shell":false}},{"key":"AWS_ACCESS_KEY_ID","kind":"lease","lease":"aws","injectable":{"exec":true,"shell":false}}],"dynamic_leases":["build_token"]}"#
-        );
-    }
-
-    #[test]
-    fn golden_error_document() {
-        let rejection = KeyRejection {
-            unknown: keys(&["DEPLOY_KYE"]),
-            suggestions: IndexMap::from([("DEPLOY_KYE".to_string(), keys(&["DEPLOY_KEY"]))]),
-            not_injectable: vec![NotInjectable {
-                key: "SIGNING_KEY".to_string(),
-                env: EnvMode::Never,
-            }],
-        };
-        let doc = ErrorDocument::invalid_keys(rejection, "bad keys".to_string());
-        assert_eq!(
-            serde_json::to_string(&doc).unwrap(),
-            r#"{"schema":1,"error":{"kind":"invalid_keys","message":"bad keys","unknown":["DEPLOY_KYE"],"suggestions":{"DEPLOY_KYE":["DEPLOY_KEY"]},"not_injectable":[{"key":"SIGNING_KEY","env":false}]}}"#
-        );
-        let plain = ErrorDocument::new(ErrorKind::Config, "boom".to_string());
-        assert_eq!(
-            serde_json::to_string(&plain).unwrap(),
-            r#"{"schema":1,"error":{"kind":"config","message":"boom"}}"#
+            format!(
+                r#"{{"schema":1,"fnox_version":"{}","scope":"shell","profile":["dev"],"set":{{"B":"2","A":"1"}},"files":{{"F":"x"}},"remove":["R"],"missing":["M"],"leases":["L"]}}"#,
+                env!("CARGO_PKG_VERSION")
+            )
         );
     }
 }
