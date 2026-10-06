@@ -334,13 +334,14 @@ jobs:
             ~/.cargo/git
             ~/.cargo/.global-cache
             target
-      # Untrusted runs use GitHub-hosted runners and only restore (save-if: false);
-      # trusted runs keep their cache on the Namespace volume.
+      # Untrusted runs use GitHub-hosted runners and restore this cache. Trusted
+      # runs use the Namespace volume, except that main and tag pushes also
+      # publish the GitHub cache, so the untrusted restore does not go stale.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2 # zizmor: ignore[cache-poisoning]
-        if: ${{ !inputs.trusted }}
+        if: ${{ !inputs.trusted || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
         with:
           shared-key: debug-${{ matrix.os }}
-          save-if: false
+          save-if: ${{ inputs.trusted && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) }}
       - name: Run tests
         run: cargo test --workspace
       - name: mise run render
@@ -365,6 +366,10 @@ jobs:
   msrv:
     runs-on: ${{ !inputs.trusted && 'ubuntu-latest' || 'namespace-profile-endev-linux-amd64;overrides.cache-tag=cache' }}
     timeout-minutes: 10
+    env:
+      # A separate target dir: msrv builds with another toolchain, and the
+      # Namespace cache volume is shared with the build and ci-other jobs.
+      CARGO_TARGET_DIR: target-msrv
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -373,7 +378,7 @@ jobs:
       - uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           cache: false
-      - name: Mount the cargo registry and target dir on the Namespace cache volume
+      - name: Mount the cargo registry and msrv target dir on the Namespace cache volume
         if: inputs.trusted
         uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
         with:
@@ -381,14 +386,15 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             ~/.cargo/.global-cache
-            target
-      # Untrusted runs use GitHub-hosted runners and only restore (save-if: false),
-      # so PRs cannot poison the cache.
+            target-msrv
+      # Untrusted runs use GitHub-hosted runners and restore this cache. Trusted
+      # runs use the Namespace volume, except that main and tag pushes also
+      # publish the GitHub cache. Only those pushes save, so PRs cannot poison it.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2 # zizmor: ignore[cache-poisoning]
-        if: ${{ !inputs.trusted }}
+        if: ${{ !inputs.trusted || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
         with:
           shared-key: msrv
-          save-if: false
+          save-if: ${{ inputs.trusted && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) }}
       - name: Install system dependencies
         run: |
           if [ -f /etc/apt/apt-mirrors.txt ]; then
