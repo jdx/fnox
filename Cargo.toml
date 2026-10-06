@@ -80,7 +80,7 @@ rpassword = "7"
 rcgen = { version = "0.14", default-features = false, features = ["aws_lc_rs", "pem"] }
 rmcp = { version = "3", features = ["server", "transport-io", "macros"] }
 rmp-serde = "1"
-rusqlite = { version = "0.37", features = ["bundled-sqlcipher-vendored-openssl"] }
+rusqlite = { version = "0.40", features = ["bundled-sqlcipher-vendored-openssl"] }
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std"] }
 rustls-native-certs = "0.8"
 schemars = { version = "1", features = ["indexmap2"] }
