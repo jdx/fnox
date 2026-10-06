@@ -4,143 +4,104 @@ set -euxo pipefail
 
 DRY_RUN="${DRY_RUN:-0}"
 
-# --- publish helpers ---
-# Seconds between polls of the crates.io index, polls before giving up, pause
-# between failed `cargo publish` attempts. Overridable for tests.
-POLL_SECS="${POLL_SECS:-15}"
-POLL_ATTEMPTS="${POLL_ATTEMPTS:-40}"
-RETRY_SECS="${RETRY_SECS:-60}"
-
-# Path of a crate in the crates.io sparse index.
-index_path() {
-  local crate="$1"
-  case "${#crate}" in
-  1) echo "1/$crate" ;;
-  2) echo "2/$crate" ;;
-  3) echo "3/${crate:0:1}/$crate" ;;
-  *) echo "${crate:0:2}/${crate:2:2}/$crate" ;;
-  esac
-}
-
-# Succeeds if `crate` at `version` is in the crates.io sparse index, the index
-# cargo itself resolves dependencies from. A 404 means the crate is unknown;
-# transient errors are retried and then fail the script, so an outage is never
-# mistaken for "not published" and publishes nothing blindly.
-published() {
-  local crate="$1" version="$2" attempt code found
-  local body
-  body="$(mktemp)"
-  for attempt in 1 2 3 4; do
-    # The index body goes to a file so `set -x` does not print it.
-    code="$(curl -sS --max-time 30 -o "$body" -w '%{http_code}' "https://index.crates.io/$(index_path "$crate")")" || code=000
-    case "$code" in
-    200)
-      found=1
-      grep -q "\"vers\":\"$version\"" "$body" || found=0
-      rm -f "$body"
-      [ "$found" = 1 ]
-      return
-      ;;
-    404)
-      rm -f "$body"
-      return 1
-      ;;
-    esac
-    echo "crates.io index returned $code for $crate (attempt $attempt)" >&2
-    sleep "$POLL_SECS"
-  done
-  rm -f "$body"
-  echo "error: cannot read the crates.io index for $crate; not publishing blindly" >&2
-  exit 1
-}
-
-# Waits until `crate` at `version` is visible in the index.
-wait_published() {
-  local crate="$1" version="$2" attempt
-  for ((attempt = 1; attempt <= POLL_ATTEMPTS; attempt++)); do
-    if published "$crate" "$version"; then
-      return 0
-    fi
-    echo "waiting for $crate $version to appear in the crates.io index ($attempt/$POLL_ATTEMPTS)" >&2
-    sleep "$POLL_SECS"
-  done
-  echo "error: $crate $version is still not in the crates.io index" >&2
-  exit 1
-}
-
-# The workspace crates a crate depends on, which must be published first.
-workspace_deps() {
-  case "$1" in
-  fnox-core) echo "fnox-client" ;;
-  fnox) echo "fnox-core fnox-client" ;;
-  esac
-}
-
-# Publishes one crate: waits for its workspace dependencies to be visible in
-# the index (cargo verifies against the index, which lags an upload by a while),
-# retries a failed publish after re-checking that it did not upload anyway,
-# then waits for the crate itself to be visible.
-publish_crate() {
-  local crate="$1" version="$2" dep attempt
-  for dep in $(workspace_deps "$crate"); do
-    wait_published "$dep" "$version"
-  done
-  for attempt in 1 2 3; do
-    if cargo publish -p "$crate"; then
-      break
-    fi
-    if published "$crate" "$version"; then
-      break
-    fi
-    if [ "$attempt" = 3 ]; then
-      echo "error: cargo publish -p $crate failed $attempt times" >&2
-      exit 1
-    fi
-    sleep "$RETRY_SECS"
-  done
-  wait_published "$crate" "$version"
-}
-
-# Publishes every workspace crate whose current version is not on crates.io,
-# dependencies first, so an interrupted release is completed by the next run.
-publish_missing() {
-  local crate version
-  for crate in fnox-client fnox-core fnox; do
-    version="$(cargo pkgid "$crate" | cut -d# -f2 | cut -d@ -f2)"
-    if published "$crate" "$version"; then
-      echo "$crate $version is already published"
-      continue
-    fi
-    if [ "$DRY_RUN" != 0 ]; then
-      echo "would publish $crate $version"
-      continue
-    fi
-    publish_crate "$crate" "$version"
-  done
-}
-# --- end publish helpers ---
-
 released_versions="$(git tag --list | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$' || true)"
 cur_version="$(cargo pkgid fnox | cut -d# -f2 | cut -d@ -f2)"
+# Publish order: fnox-core depends on fnox-client, and fnox on both, via path +
+# version, so each needs its dependencies at this version in the crates.io index.
+CRATES=(fnox-client fnox-core fnox)
+
+# Succeeds if crate $1 at version $2 is in the crates.io sparse index, which is
+# what cargo resolves dependencies from. A 404 means "not published"; any other
+# failure stops the script rather than risk publishing again.
+# (The index path below is for names of four or more characters.)
+on_crates_io() {
+  local name="$1" version="$2" body code found
+  body="$(mktemp)"
+  # The body goes to a file so `set -x` does not print the whole index entry.
+  code="$(curl -sSL -H 'Cache-Control: no-cache' -o "$body" -w '%{http_code}' "https://index.crates.io/${name:0:2}/${name:2:2}/$name")" || code=000
+  case "$code" in
+  200)
+    found=1
+    grep -q "\"vers\":\"$version\"" "$body" || found=0
+    rm -f "$body"
+    [ "$found" = 1 ]
+    ;;
+  404)
+    rm -f "$body"
+    return 1
+    ;;
+  *)
+    rm -f "$body"
+    echo "error: crates.io index returned HTTP $code for $name" >&2
+    exit 1
+    ;;
+  esac
+}
+
+# Publishes the given crates in order, skipping any already on crates.io, and
+# waits for each to be visible in the index before the next. `cargo publish`
+# waits only publish.timeout (60s) for that, then merely warns and succeeds,
+# which let `fnox` resolve a stale `fnox-core` and fail in v1.39.0.
+publish_crates() {
+  local crate _
+  for crate in "$@"; do
+    if on_crates_io "$crate" "$cur_version"; then
+      echo "$crate $cur_version is already on crates.io"
+      continue
+    fi
+    cargo publish -p "$crate"
+    for _ in $(seq 60); do
+      if on_crates_io "$crate" "$cur_version"; then
+        continue 2
+      fi
+      sleep 10
+    done
+    echo "error: $crate $cur_version is still not in the crates.io index" >&2
+    exit 1
+  done
+}
+
+# Publishes the given crates from the tag, not from whatever main has moved on
+# to, and puts the checkout back afterwards, even on failure.
+publish_crates_from_tag() {
+  local start
+  start="$(git rev-parse --abbrev-ref HEAD)"
+  if [ "$start" = HEAD ]; then
+    start="$(git rev-parse HEAD)"
+  fi
+  git checkout --quiet "v$cur_version"
+  # shellcheck disable=SC2064
+  trap "git checkout --quiet '$start'" EXIT
+  publish_crates "$@"
+  git checkout --quiet "$start"
+  trap - EXIT
+}
+
 if [ -z "$released_versions" ] || ! echo "$released_versions" | grep -q "^v$cur_version$"; then
   echo "Releasing $cur_version"
   if [ "${DRY_RUN:-}" == 0 ]; then
     # Only create and push the tag - let the release workflow handle creating the release
     git tag "v$cur_version"
     git push --tags
+    publish_crates "${CRATES[@]}"
   fi
-  # Publish fnox-client, then fnox-core, then fnox: fnox-core depends on
-  # fnox-client, and fnox on both, via path + version, so each publish
-  # requires its dependencies at this version in the crates.io index. An upload
-  # takes a while to appear there, and cargo does not wait for it, so
-  # publish_missing waits itself.
-  publish_missing
   exit 0
 fi
 
-# The tag exists, but a previous run may have been interrupted before every
-# crate was published (the tag is pushed first). Publish what is missing.
-publish_missing
+# The tag exists, but a release interrupted after the tag was pushed (it is
+# pushed first) can leave crates unpublished. Finish it from the tag.
+missing=()
+for crate in "${CRATES[@]}"; do
+  if ! on_crates_io "$crate" "$cur_version"; then
+    missing+=("$crate")
+  fi
+done
+if [ "${#missing[@]}" -gt 0 ]; then
+  echo "v$cur_version is tagged but not fully published; missing: ${missing[*]}"
+  if [ "$DRY_RUN" == 0 ]; then
+    publish_crates_from_tag "${missing[@]}"
+  fi
+fi
 
 version="$(git cliff --bumped-version)"
 
