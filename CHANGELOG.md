@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.39.0](https://github.com/jdx/fnox/compare/v1.38.1..v1.39.0) - 2026-10-06
+
+### 🚀 Features
+
+- **(daemon)** add the fnox-client crate so other tools can read the daemon cache by [@jdx](https://github.com/jdx) in [#937](https://github.com/jdx/fnox/pull/937)
+- **(env)** add fnox env --json to print the environment a command would get by [@jdx](https://github.com/jdx) in [#936](https://github.com/jdx/fnox/pull/936)
+
+### 🔍 Other Changes
+
+- **(ci)** update pr-closer to v1.3.0 by [@jdx](https://github.com/jdx) in [6119823](https://github.com/jdx/fnox/commit/6119823dc0feca2894e23a23a9ac4dbd60b32e64)
+
+### 📦️ Dependency Updates
+
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#819](https://github.com/jdx/fnox/pull/819)
+- update rust crate rusqlite to 0.40 by [@renovate[bot]](https://github.com/renovate[bot]) in [#941](https://github.com/jdx/fnox/pull/941)
+- update dependency @anthropic-ai/claude-code to v2.1.284 by [@renovate[bot]](https://github.com/renovate[bot]) in [#940](https://github.com/jdx/fnox/pull/940)
+- update jdx/mise-action action to v5 by [@renovate[bot]](https://github.com/renovate[bot]) in [#942](https://github.com/jdx/fnox/pull/942)
+- update jdx/renovate-config action to v1.0.2 by [@renovate[bot]](https://github.com/renovate[bot]) in [#943](https://github.com/jdx/fnox/pull/943)
+- update rust crate usage-rs to v6.12.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#944](https://github.com/jdx/fnox/pull/944)
+- update dependency usage to latest by [@renovate[bot]](https://github.com/renovate[bot]) in [#945](https://github.com/jdx/fnox/pull/945)
+
 ## [1.38.1](https://github.com/jdx/fnox/compare/v1.38.0..v1.38.1) - 2026-10-05
 
 ### 🐛 Bug Fixes
