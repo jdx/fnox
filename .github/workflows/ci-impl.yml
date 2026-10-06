@@ -31,7 +31,8 @@ jobs:
           - os: ubuntu-latest
             runner: namespace-profile-endev-linux-amd64;overrides.cache-tag=cache
     runs-on: ${{ !inputs.trusted && matrix.os || matrix.runner }}
-    timeout-minutes: 10
+    # Untrusted runs are cold, on GitHub-hosted runners (no Rust cache there).
+    timeout-minutes: ${{ inputs.trusted && 10 || 20 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -40,11 +41,15 @@ jobs:
       - uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           cache: false
-      # save-if: false — this job never saves to cache, only restores from main's cache.
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2 # zizmor: ignore[cache-poisoning]
+      - name: Mount the cargo registry and target dir on the Namespace cache volume
+        if: inputs.trusted
+        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
         with:
-          shared-key: debug-${{ matrix.os }}
-          save-if: false
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/.global-cache
+            target
       - name: Install system dependencies (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -311,13 +316,15 @@ jobs:
           fnox ci-redact
           # shellcheck disable=SC2016
           fnox run -- sh -c 'echo MY_UNIMPORTANT_SECRET: $MY_UNIMPORTANT_SECRET'
-      - name: Clean stale Rust build artifacts before restoring the cache
-        run: cargo clean
-      # save-if: only trusted main and tag pushes may publish shared caches.
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2 # zizmor: ignore[cache-poisoning]
+      - name: Mount the cargo registry and target dir on the Namespace cache volume
+        if: inputs.trusted
+        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
         with:
-          shared-key: debug-${{ matrix.os }}
-          save-if: ${{ inputs.trusted && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) }}
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/.global-cache
+            target
       - name: Run tests
         run: cargo test --workspace
       - name: mise run render
@@ -341,7 +348,11 @@ jobs:
 
   msrv:
     runs-on: ${{ !inputs.trusted && 'ubuntu-latest' || 'namespace-profile-endev-linux-amd64;overrides.cache-tag=cache' }}
-    timeout-minutes: 10
+    timeout-minutes: ${{ inputs.trusted && 10 || 20 }}
+    env:
+      # A separate target dir: msrv builds with another toolchain, and the
+      # Namespace cache volume is shared with the build and ci-other jobs.
+      CARGO_TARGET_DIR: target-msrv
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -350,11 +361,15 @@ jobs:
       - uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           cache: false
-      # save-if: only saves on main pushes, so PRs cannot poison the cache.
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2 # zizmor: ignore[cache-poisoning]
+      - name: Mount the cargo registry and msrv target dir on the Namespace cache volume
+        if: inputs.trusted
+        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
         with:
-          shared-key: msrv
-          save-if: ${{ inputs.trusted && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) }}
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/.global-cache
+            target-msrv
       - name: Install system dependencies
         run: |
           if [ -f /etc/apt/apt-mirrors.txt ]; then
