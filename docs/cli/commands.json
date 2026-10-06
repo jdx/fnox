@@ -480,6 +480,107 @@
         "examples": [],
         "headings": []
       },
+      "env": {
+        "full_cmd": ["env"],
+        "usage": "env [FLAGS]",
+        "subcommands": {},
+        "args": [],
+        "flags": [
+          {
+            "name": "describe",
+            "usage": "--describe",
+            "help": "List keys and where each may be injected, without resolving anything",
+            "help_first_line": "List keys and where each may be injected, without resolving anything",
+            "short": [],
+            "long": ["describe"],
+            "hide": false,
+            "global": false
+          },
+          {
+            "name": "for",
+            "usage": "--for <SCOPE>",
+            "help": "Where the environment will be injected",
+            "help_first_line": "Where the environment will be injected",
+            "short": [],
+            "long": ["for"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "SCOPE",
+              "usage": "<SCOPE>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false,
+              "choices": {
+                "choices": ["exec", "shell"],
+                "details": [
+                  {
+                    "value": "exec",
+                    "help": "A command started by `fnox exec`: `env = true` and `env = \"exec\"` secrets, plus leases"
+                  },
+                  {
+                    "value": "shell",
+                    "help": "An interactive shell: `env = true` secrets only, no leases"
+                  }
+                ]
+              }
+            },
+            "default": ["exec"]
+          },
+          {
+            "name": "json",
+            "usage": "--json",
+            "help": "Print JSON (required)",
+            "help_first_line": "Print JSON (required)",
+            "short": [],
+            "long": ["json"],
+            "hide": false,
+            "global": false
+          },
+          {
+            "name": "keys",
+            "usage": "--keys <KEY>",
+            "help": "Only these keys, plus the secrets they depend on. Repeat or comma-separate",
+            "help_first_line": "Only these keys, plus the secrets they depend on. Repeat or comma-separate",
+            "short": [],
+            "long": ["keys"],
+            "var": true,
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "KEY",
+              "usage": "<KEY>",
+              "required": true,
+              "double_dash": "Optional",
+              "delimiter": ",",
+              "hide": false
+            }
+          },
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
+        "mounts": [],
+        "unknown_flags": null,
+        "hide": false,
+        "args_override_self": true,
+        "help": "Print the environment fnox would give a command, as JSON for other tools",
+        "help_long": "Print the environment fnox would give a command, as JSON for other tools\n\nFor tools that start processes themselves, such as mise. stdout carries one line of JSON and contains secret values in plain text. Callers apply `remove`, then `set`, then `files`.",
+        "name": "env",
+        "aliases": [],
+        "hidden_aliases": [],
+        "examples": [],
+        "headings": []
+      },
       "exec": {
         "full_cmd": ["exec"],
         "usage": "exec [--refresh <KEY>] [--replace] [COMMAND]…",

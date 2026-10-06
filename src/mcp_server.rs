@@ -26,9 +26,7 @@ const PER_STREAM_LIMIT: usize = (MAX_OUTPUT_BYTES / 2) + 1;
 const DEFAULT_EXEC_TIMEOUT_SECS: u64 = 300;
 
 fn scrub_age_identity(cmd: &mut tokio::process::Command) {
-    cmd.env_remove("FNOX_AGE_KEY");
-    cmd.env_remove("FNOX_AGE_KEY_FILE");
-    for key in fnox_core::providers::enpass::env_dependencies() {
+    for key in crate::child_env::ambient_scrub_keys() {
         cmd.env_remove(key);
     }
 }

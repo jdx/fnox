@@ -13,6 +13,7 @@ pub mod daemon;
 pub mod deactivate;
 pub mod doctor;
 pub mod edit;
+pub mod env;
 pub mod exec;
 pub mod export;
 pub mod get;
@@ -117,6 +118,9 @@ pub enum Commands {
 
     /// Edit the configuration file
     Edit(edit::EditCommand),
+
+    /// Print the environment fnox would give a command, as JSON for other tools
+    Env(env::EnvCommand),
 
     /// Execute a command with secrets as environment variables
     Exec(exec::ExecCommand),
@@ -330,6 +334,7 @@ impl Commands {
             Commands::Provider(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Proxy(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Reencrypt(cmd) => cmd.run(cli, self.load_config(cli)?).await,
+            Commands::Env(cmd) => cmd.run(cli).await,
             Commands::Remove(cmd) => cmd.run(cli).await,
             Commands::Exec(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Set(cmd) => cmd.run(cli, self.load_config(cli)?).await,
@@ -341,22 +346,27 @@ impl Commands {
 
     /// Load configuration and validate the active profiles for this command.
     fn load_config(&self, cli: &Cli) -> Result<Config> {
-        let config = Config::load_smart(&cli.config)?;
-        let profiles = Config::get_profiles(&cli.profile);
-        let allow_missing = match self {
-            Commands::Set(_) | Commands::Import(_) => Some(Config::resolve_write_profile(
-                &profiles,
-                cli.write_profile.as_deref(),
-            )?),
-            Commands::Profiles(_) => return Ok(config),
-            _ => {
-                config.validate_profiles(&profiles, None)?;
-                return Ok(config);
+        match self {
+            Commands::Set(_) | Commands::Import(_) => {
+                let config = Config::load_smart(&cli.config)?;
+                let profiles = Config::get_profiles(&cli.profile);
+                let write_profile =
+                    Config::resolve_write_profile(&profiles, cli.write_profile.as_deref())?;
+                config.validate_profiles(&profiles, Some(&write_profile))?;
+                Ok(config)
             }
-        };
-        config.validate_profiles(&profiles, allow_missing.as_deref())?;
-        Ok(config)
+            Commands::Profiles(_) => Config::load_smart(&cli.config),
+            _ => load_read_config(cli),
+        }
     }
+}
+
+/// Load configuration for a command that only reads it, and validate the active profiles.
+pub(crate) fn load_read_config(cli: &Cli) -> Result<Config> {
+    let config = Config::load_smart(&cli.config)?;
+    let profiles = Config::get_profiles(&cli.profile);
+    config.validate_profiles(&profiles, None)?;
+    Ok(config)
 }
 
 #[cfg(test)]

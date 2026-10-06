@@ -178,6 +178,17 @@ pub enum FnoxError {
     #[diagnostic(code(fnox::secret::decode_failed))]
     SecretDecodeFailed { details: String },
 
+    #[error(
+        "fnox env cannot provide: {}",
+        env_keys_rejected_summary(unknown, not_injectable)
+    )]
+    #[diagnostic(code(fnox::env::keys_rejected), help("{help}"))]
+    EnvKeysRejected {
+        unknown: Vec<String>,
+        not_injectable: Vec<String>,
+        help: String,
+    },
+
     // ========================================================================
     // Provider Errors
     // ========================================================================
@@ -838,6 +849,17 @@ impl FnoxError {
 }
 
 pub type Result<T> = std::result::Result<T, FnoxError>;
+
+fn env_keys_rejected_summary(unknown: &[String], not_injectable: &[String]) -> String {
+    let mut parts = Vec::new();
+    if !unknown.is_empty() {
+        parts.push(format!("unknown keys: {}", unknown.join(", ")));
+    }
+    if !not_injectable.is_empty() {
+        parts.push(format!("not injectable: {}", not_injectable.join(", ")));
+    }
+    parts.join("; ")
+}
 
 #[cfg(test)]
 mod tests {

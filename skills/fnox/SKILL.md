@@ -19,8 +19,10 @@ fnox profiles
 ```
 
 `list` describes configured secrets, not every item in a remote vault. Values
-are hidden unless `--values` is requested. Avoid `get`, `export`, and
-`list --values` for routine inspection: they expose resolved secrets.
+are hidden unless `--values` is requested. Avoid `get`, `export`,
+`env --json`, and `list --values` for routine inspection: they expose resolved
+secrets. `fnox env --json --describe` is the value-free view of which keys a
+command could receive.
 
 Global config is the base. At each directory, project config, profile-specific
 config, and local overrides merge in that order; closer directories win over

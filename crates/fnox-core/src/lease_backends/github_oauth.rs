@@ -414,20 +414,26 @@ fn interactive_auth_required() -> FnoxError {
     }
 }
 
+/// Detach the launcher's stdio so a browser cannot write to, or hold open, the
+/// caller's pipes (`fnox env --json` promises a pure stdout).
+fn silence(cmd: &mut std::process::Command) -> &mut std::process::Command {
+    cmd.stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+}
+
 fn open_browser(url: &str) -> std::io::Result<()> {
     #[cfg(target_os = "macos")]
     {
-        std::process::Command::new("open").arg(url).status()?;
+        silence(std::process::Command::new("open").arg(url)).status()?;
     }
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", url])
-            .status()?;
+        silence(std::process::Command::new("cmd").args(["/C", "start", "", url])).status()?;
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
-        std::process::Command::new("xdg-open").arg(url).status()?;
+        silence(std::process::Command::new("xdg-open").arg(url)).status()?;
     }
     Ok(())
 }

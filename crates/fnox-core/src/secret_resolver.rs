@@ -259,6 +259,68 @@ fn collect_interpolation_closure(
     Ok(collector.subset)
 }
 
+/// Returns the secrets that must be resolved together with `roots`.
+///
+/// This is a breadth-first walk from the roots that follows the two edges the
+/// batch resolver orders by: every `${X}` reference in a secret's `default`
+/// (soft and fallback defaults included), and the `env_dependencies()` of the
+/// provider that resolves the secret (chosen as the batch resolver does).
+/// Only secrets defined in `all_secrets` are added; an undefined reference is
+/// skipped here because the batch resolver reports it. Cycles terminate through
+/// the visited set and are reported by the batch resolver too. The result keeps
+/// the config order of `all_secrets`.
+pub fn dependency_closure(
+    config: &Config,
+    profile: &[String],
+    all_secrets: &IndexMap<String, SecretConfig>,
+    roots: &[String],
+) -> Result<IndexMap<String, SecretConfig>> {
+    let providers = config.get_providers(profile)?;
+    let default_provider = config.get_default_provider(profile).ok().flatten();
+
+    let mut visited: HashSet<String> = HashSet::new();
+    let mut queue: std::collections::VecDeque<String> = std::collections::VecDeque::new();
+    for root in roots {
+        if all_secrets.contains_key(root) && visited.insert(root.clone()) {
+            queue.push_back(root.clone());
+        }
+    }
+
+    while let Some(key) = queue.pop_front() {
+        let Some(secret) = all_secrets.get(&key) else {
+            continue;
+        };
+        let mut deps: Vec<String> = Vec::new();
+
+        if let Some(default) = &secret.default {
+            deps.extend(extract_default_references(default));
+        }
+
+        let provider_name = if let Some(sync) = &secret.sync {
+            Some(sync.provider.as_str())
+        } else if secret.value().is_some() {
+            secret.provider().or(default_provider.as_deref())
+        } else {
+            None
+        };
+        if let Some(provider) = provider_name.and_then(|name| providers.get(name)) {
+            deps.extend(provider.env_dependencies().iter().map(|d| d.to_string()));
+        }
+
+        for dep in deps {
+            if all_secrets.contains_key(&dep) && visited.insert(dep.clone()) {
+                queue.push_back(dep);
+            }
+        }
+    }
+
+    Ok(all_secrets
+        .iter()
+        .filter(|(key, _)| visited.contains(key.as_str()))
+        .map(|(key, secret)| (key.clone(), secret.clone()))
+        .collect())
+}
+
 /// Creates a ProviderNotConfigured error, using source spans when available for better error display.
 fn create_provider_not_configured_error(
     provider_name: &str,
@@ -2284,5 +2346,131 @@ mod tests {
             msg.contains("mutually exclusive"),
             "unexpected error: {msg}"
         );
+    }
+
+    fn closure_config(toml: &str) -> (Config, IndexMap<String, SecretConfig>) {
+        let config: Config = toml_edit::de::from_str(toml).unwrap();
+        let secrets = config.get_secrets(&profile("default")).unwrap();
+        (config, secrets)
+    }
+
+    fn closure_keys(
+        config: &Config,
+        secrets: &IndexMap<String, SecretConfig>,
+        roots: &[&str],
+    ) -> Vec<String> {
+        let roots: Vec<String> = roots.iter().map(|r| r.to_string()).collect();
+        dependency_closure(config, &profile("default"), secrets, &roots)
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect()
+    }
+
+    #[test]
+    fn dependency_closure_follows_transitive_default_references() {
+        let (config, secrets) = closure_config(
+            r#"
+root = true
+[secrets]
+UNRELATED = { default = "x" }
+C = { default = "c" }
+B = { default = "b-${C}" }
+A = { default = "a-${B}" }
+"#,
+        );
+        // Config order is kept, not discovery order.
+        assert_eq!(closure_keys(&config, &secrets, &["A"]), ["C", "B", "A"]);
+    }
+
+    #[test]
+    fn dependency_closure_pulls_provider_env_dependencies() {
+        let (config, secrets) = closure_config(
+            r#"
+root = true
+[providers.op]
+type = "1password"
+vault = "v"
+[secrets]
+OP_SERVICE_ACCOUNT_TOKEN = { default = "tok" }
+OTHER = { default = "x" }
+DB = { provider = "op", value = "item/field" }
+"#,
+        );
+        assert_eq!(
+            closure_keys(&config, &secrets, &["DB"]),
+            ["OP_SERVICE_ACCOUNT_TOKEN", "DB"]
+        );
+    }
+
+    #[test]
+    fn dependency_closure_uses_the_default_provider_when_value_is_set() {
+        let (config, secrets) = closure_config(
+            r#"
+root = true
+default_provider = "op"
+[providers.op]
+type = "1password"
+vault = "v"
+[secrets]
+OP_SERVICE_ACCOUNT_TOKEN = { default = "tok" }
+DB = { value = "item/field" }
+NO_VALUE = { default = "d" }
+"#,
+        );
+        assert_eq!(
+            closure_keys(&config, &secrets, &["DB"]),
+            ["OP_SERVICE_ACCOUNT_TOKEN", "DB"]
+        );
+        assert_eq!(closure_keys(&config, &secrets, &["NO_VALUE"]), ["NO_VALUE"]);
+    }
+
+    #[test]
+    fn dependency_closure_uses_the_sync_provider() {
+        let (config, mut secrets) = closure_config(
+            r#"
+root = true
+[providers.op]
+type = "1password"
+vault = "v"
+[secrets]
+OP_SERVICE_ACCOUNT_TOKEN = { default = "tok" }
+DB = { default = "d" }
+"#,
+        );
+        secrets.get_mut("DB").unwrap().sync = Some(crate::config::SyncConfig {
+            provider: "op".to_string(),
+            value: "item".to_string(),
+        });
+        assert_eq!(
+            closure_keys(&config, &secrets, &["DB"]),
+            ["OP_SERVICE_ACCOUNT_TOKEN", "DB"]
+        );
+    }
+
+    #[test]
+    fn dependency_closure_skips_undefined_references_and_ends_on_cycles() {
+        let (config, secrets) = closure_config(
+            r#"
+root = true
+[secrets]
+A = { default = "${MISSING}${B}" }
+B = { default = "${A}" }
+"#,
+        );
+        assert_eq!(closure_keys(&config, &secrets, &["A"]), ["A", "B"]);
+    }
+
+    #[test]
+    fn dependency_closure_includes_env_false_dependencies() {
+        let (config, secrets) = closure_config(
+            r#"
+root = true
+[secrets]
+HIDDEN = { default = "h", env = false }
+APP = { default = "pg://${HIDDEN}@db" }
+"#,
+        );
+        assert_eq!(closure_keys(&config, &secrets, &["APP"]), ["HIDDEN", "APP"]);
     }
 }

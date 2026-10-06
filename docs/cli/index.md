@@ -63,6 +63,7 @@ New to fnox? Follow the [quick start](/guide/quick-start). Put fnox options befo
 - [`fnox deactivate`](/cli/deactivate.md)
 - [`fnox doctor`](/cli/doctor.md)
 - [`fnox edit`](/cli/edit.md)
+- [`fnox env [FLAGS]`](/cli/env.md)
 - [`fnox exec [--refresh <KEY>] [--replace] [COMMAND]…`](/cli/exec.md)
 - [`fnox export [FLAGS]`](/cli/export.md)
 - [`fnox get [--base64-decode] [--refresh] <KEY>`](/cli/get.md)
