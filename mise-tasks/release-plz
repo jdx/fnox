@@ -9,16 +9,18 @@ cur_version="$(cargo pkgid fnox | cut -d# -f2 | cut -d@ -f2)"
 # Publish order: fnox-core depends on fnox-client, and fnox on both, via path +
 # version, so each needs its dependencies at this version in the crates.io index.
 CRATES=(fnox-client fnox-core fnox)
+# Overridable for tests.
+CRATES_IO_INDEX="${CRATES_IO_INDEX:-https://index.crates.io}"
 
 # Succeeds if crate $1 at version $2 is in the crates.io sparse index, which is
 # what cargo resolves dependencies from. A 404 means "not published"; any other
-# failure stops the script rather than risk publishing again.
+# failure, including a timeout, stops the script rather than risk publishing again.
 # (The index path below is for names of four or more characters.)
 on_crates_io() {
   local name="$1" version="$2" body code found
   body="$(mktemp)"
   # The body goes to a file so `set -x` does not print the whole index entry.
-  code="$(curl -sSL -H 'Cache-Control: no-cache' -o "$body" -w '%{http_code}' "https://index.crates.io/${name:0:2}/${name:2:2}/$name")" || code=000
+  code="$(curl -sSL --max-time 30 --retry 2 -H 'Cache-Control: no-cache' -o "$body" -w '%{http_code}' "$CRATES_IO_INDEX/${name:0:2}/${name:2:2}/$name")" || code=000
   case "$code" in
   200)
     found=1
