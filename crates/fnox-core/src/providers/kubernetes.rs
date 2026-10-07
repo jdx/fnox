@@ -1,6 +1,7 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
+use futures::{StreamExt, stream};
 use k8s_openapi::api::core::v1::Secret;
 use kube::{
     Api, Client, Config,
@@ -125,8 +126,17 @@ impl KubernetesProvider {
                 });
         }
 
-        for ((namespace, secret_name), values) in requested {
-            let secret = get_secret(&client, &namespace, &secret_name).await;
+        let requests = stream::iter(requested)
+            .map(|((namespace, secret_name), values)| {
+                let client = &client;
+                async move {
+                    let secret = get_secret(client, &namespace, &secret_name).await;
+                    (namespace, secret_name, values, secret)
+                }
+            })
+            .buffer_unordered(10);
+        futures::pin_mut!(requests);
+        while let Some((namespace, secret_name, values, secret)) = requests.next().await {
             for value in values {
                 let result = match &secret {
                     Ok(secret) => read_secret_value(
@@ -415,11 +425,16 @@ mod tests {
         response::{IntoResponse, Response},
         routing::get,
     };
-    use std::sync::{Arc, Mutex};
+    use std::sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    };
 
     #[derive(Clone, Default)]
     struct TestState {
         paths: Arc<Mutex<Vec<String>>>,
+        active: Arc<AtomicUsize>,
+        peak: Arc<AtomicUsize>,
     }
 
     async fn get_test_secret(
@@ -431,6 +446,12 @@ mod tests {
             .lock()
             .unwrap()
             .push(format!("{namespace}/{name}"));
+        if namespace == "concurrent" {
+            let active = state.active.fetch_add(1, Ordering::SeqCst) + 1;
+            state.peak.fetch_max(active, Ordering::SeqCst);
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+            state.active.fetch_sub(1, Ordering::SeqCst);
+        }
         match (namespace.as_str(), name.as_str()) {
             ("denied", _) => (
                 StatusCode::FORBIDDEN,
@@ -484,6 +505,36 @@ mod tests {
         });
         let config = Config::new(format!("http://{address}").parse().unwrap());
         (Client::try_from(config).unwrap(), state)
+    }
+
+    #[tokio::test]
+    async fn distinct_secrets_are_fetched_with_bounded_concurrency() {
+        let (client, state) = test_client().await;
+        let provider = KubernetesProvider::new(None, None, None, None).unwrap();
+        let secrets = (0..25)
+            .map(|i| {
+                (
+                    format!("VALUE_{i}"),
+                    format!("concurrent/secret-{i}/username"),
+                )
+            })
+            .collect::<Vec<_>>();
+        let results = provider
+            .resolve_batch_with_client(client, "default".into(), &secrets)
+            .await;
+        assert_eq!(results.len(), secrets.len());
+        assert!(
+            results
+                .values()
+                .all(|result| matches!(result.as_deref(), Ok("alice")))
+        );
+        assert_eq!(state.paths.lock().unwrap().len(), secrets.len());
+        let peak = state.peak.load(Ordering::SeqCst);
+        assert!(peak > 1, "Secret requests must overlap");
+        assert!(
+            peak <= 10,
+            "Secret requests must respect the concurrency limit"
+        );
     }
 
     #[test]
