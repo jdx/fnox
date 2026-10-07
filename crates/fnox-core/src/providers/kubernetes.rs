@@ -198,7 +198,7 @@ impl crate::providers::Provider for KubernetesProvider {
 }
 
 pub fn env_dependencies() -> &'static [&'static str] {
-    &[]
+    &["FNOX_K8S_CONTEXT", "KUBECONFIG"]
 }
 
 fn non_empty(value: Option<String>) -> Option<String> {
