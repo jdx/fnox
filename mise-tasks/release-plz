@@ -173,7 +173,7 @@ git commit -m "chore: release $version"
 git push origin release --force
 
 # Try to create PR, if it already exists then edit it
-if ! gh pr create --title "chore: release $version" --body "$PR_BODY"; then
+if ! gh pr create --title "chore: release $version" --body "$PR_BODY" --label "release"; then
   echo "Failed to create PR, attempting to update existing PR"
-  gh pr edit release --title "chore: release $version" --body "$PR_BODY" || true
+  gh pr edit release --title "chore: release $version" --body "$PR_BODY" --add-label "release" || true
 fi
