@@ -285,6 +285,14 @@ impl AddCommand {
                 auth_command: None,
                 daemon_cache: None,
             },
+            ProviderType::Kubernetes => crate::config::ProviderConfig::Kubernetes {
+                context: OptionStringOrSecretRef::none(),
+                namespace: OptionStringOrSecretRef::none(),
+                kubeconfig: OptionStringOrSecretRef::none(),
+                prefix: OptionStringOrSecretRef::none(),
+                auth_command: None,
+                daemon_cache: None,
+            },
             ProviderType::PasswordStore => crate::config::ProviderConfig::PasswordStore {
                 prefix: OptionStringOrSecretRef::literal("fnox/"),
                 store_dir: OptionStringOrSecretRef::none(),

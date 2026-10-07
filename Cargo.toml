@@ -21,6 +21,7 @@ aho-corasick = "1"
 anyhow = "1"
 arboard = "3"
 arc-swap = "1"
+axum = "0.8"
 async-trait = "0.1"
 atty = "0.2"
 aws-config = { version = "1", features = ["sso", "credentials-process", "credentials-login"] }
@@ -57,9 +58,11 @@ hmac = "0.13"
 ignore = "0.4"
 indexmap = { version = "2", features = ["serde"] }
 jsonwebtoken = { version = "11", features = ["aws_lc_rs"] }
+k8s-openapi = { version = "0.28", features = ["v1_32"] }
 keepass = { version = "0.15", features = ["save_kdbx4"] }
 keeper-secrets-manager-core = { version = "17", default-features = false, features = ["blocking"] }
 keyring-core = "1"
+kube = { version = "4", default-features = false, features = ["client", "rustls-tls", "aws-lc-rs"] }
 apple-native-keyring-store = { version = "1", features = ["keychain"] }
 windows-native-keyring-store = "1"
 dbus-secret-service-keyring-store = { version = "1", features = ["crypto-rust", "vendored"] }

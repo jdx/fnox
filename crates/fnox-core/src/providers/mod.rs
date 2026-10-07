@@ -26,6 +26,7 @@ pub mod infisical;
 pub mod keepass;
 pub mod keeper_sm;
 pub mod keychain;
+pub mod kubernetes;
 pub mod onepassword;
 pub mod password_store;
 pub mod passwordstate;
@@ -149,7 +150,8 @@ mod generated {
         use super::super::{
             age, aws_kms, aws_ps, aws_sm, azure_ac, azure_kms, azure_sm, bitwarden, bitwarden_sm,
             doppler, enpass, foks, gcp_kms, gcp_sm, infisical, keepass, keeper_sm, keychain,
-            onepassword, password_store, passwordstate, plain, proton_pass, vault, yubikey,
+            kubernetes, onepassword, password_store, passwordstate, plain, proton_pass, vault,
+            yubikey,
         };
         include!(concat!(
             env!("OUT_DIR"),
@@ -441,6 +443,25 @@ pub(crate) fn get_provider_from_resolved_with_context_and_identity_cycle_guard(
         };
         return get_provider_from_resolved(provider_name, &resolved);
     }
+    if let ResolvedProviderConfig::Kubernetes {
+        context,
+        namespace,
+        kubeconfig,
+        prefix,
+    } = resolved
+    {
+        let provider_source = provider_source_path(config, profile, provider_name);
+        let resolved = ResolvedProviderConfig::Kubernetes {
+            context: context.clone(),
+            namespace: namespace.clone(),
+            kubeconfig: crate::config_path::resolve_optional_string_relative_to_file(
+                kubeconfig.clone(),
+                provider_source.as_deref(),
+            ),
+            prefix: prefix.clone(),
+        };
+        return get_provider_from_resolved(provider_name, &resolved);
+    }
     get_provider_from_resolved(provider_name, resolved)
 }
 
@@ -534,6 +555,20 @@ mod tests {
             provider_source_path(&config, &["prod".to_string()], "pass"),
             Some(PathBuf::from("/home/user/project/fnox.toml")),
         );
+    }
+
+    #[test]
+    fn kubernetes_provider_never_enables_daemon_cache() {
+        let provider = ProviderConfig::Kubernetes {
+            context: OptionStringOrSecretRef::none(),
+            namespace: OptionStringOrSecretRef::none(),
+            kubeconfig: OptionStringOrSecretRef::none(),
+            prefix: OptionStringOrSecretRef::none(),
+            auth_command: None,
+            daemon_cache: Some(true),
+        };
+
+        assert!(!provider.daemon_cache_enabled());
     }
 
     #[test]

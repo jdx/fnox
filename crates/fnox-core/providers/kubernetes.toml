@@ -1,0 +1,37 @@
+# Kubernetes Secret provider - read-only named Secret retrieval
+display_name = "Kubernetes Secrets"
+serde_rename = "kubernetes"
+rust_variant = "Kubernetes"
+category = "CloudSecretsManager"
+description = "Read named Kubernetes Secrets with native Kubernetes authentication"
+default_name = "kubernetes"
+daemon_cache_supported = false
+setup_instructions = """
+Reads existing Kubernetes Secret data with the Kubernetes API.
+Uses an explicit kubeconfig/context when configured, otherwise the standard kubeconfig or in-cluster authentication.
+Requires RBAC permission to get each referenced Secret; it never lists, watches, creates, updates, or deletes Secrets.
+See: https://fnox.jdx.dev/providers/kubernetes"""
+
+[fields.context]
+type = "optional"
+placeholder = "production"
+label = "Kubernetes context (optional):"
+wizard = true
+
+[fields.namespace]
+type = "optional"
+placeholder = "default"
+label = "Kubernetes namespace (optional):"
+wizard = true
+
+[fields.kubeconfig]
+type = "optional"
+placeholder = "~/.kube/config"
+label = "Kubeconfig path (optional):"
+wizard = true
+
+[fields.prefix]
+type = "optional"
+placeholder = "myapp-"
+label = "Secret name prefix (optional):"
+wizard = true

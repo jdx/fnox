@@ -74,6 +74,7 @@ const providerGroups = [
       ["Azure App Configuration", "azure-ac"],
       ["Azure Key Vault Secrets", "azure-sm"],
       ["Google Cloud Secret Manager", "gcp-sm"],
+      ["Kubernetes Secrets", "kubernetes"],
       ["Bitwarden Secrets Manager", "bitwarden-sm"],
       ["Doppler", "doppler"],
       ["FOKS", "foks"],

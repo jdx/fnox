@@ -16,7 +16,7 @@ Add a new provider
 - **`<PROVIDER>`** — Provider name
 - **`<PROVIDER_TYPE>`** — Provider type
 
-  **Choices:** `1password`, `age`, `aws`, `aws-kms`, `aws-ps`, `azure-ac`, `azure-kms`, `azure-sm`, `gcp`, `gcp-kms`, `fido2`, `bitwarden`, `doppler`, `enpass`, `foks`, `bitwarden-sm`, `infisical`, `keepass`, `keeper-sm`, `keychain`, `password-store`, `passwordstate`, `plain`, `proton-pass`, `vault`, `yubikey`
+  **Choices:** `1password`, `age`, `aws`, `aws-kms`, `aws-ps`, `azure-ac`, `azure-kms`, `azure-sm`, `gcp`, `gcp-kms`, `fido2`, `bitwarden`, `doppler`, `enpass`, `foks`, `bitwarden-sm`, `infisical`, `keepass`, `keeper-sm`, `keychain`, `kubernetes`, `password-store`, `passwordstate`, `plain`, `proton-pass`, `vault`, `yubikey`
 
 ## Flags
 

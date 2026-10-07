@@ -1067,6 +1067,35 @@
         {
           "type": "object",
           "properties": {
+            "context": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "namespace": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "kubeconfig": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "prefix": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
+            "type": {
+              "type": "string",
+              "const": "kubernetes"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
             "config_file": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },

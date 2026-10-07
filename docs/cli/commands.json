@@ -1570,6 +1570,7 @@
                     "keepass",
                     "keeper-sm",
                     "keychain",
+                    "kubernetes",
                     "password-store",
                     "passwordstate",
                     "plain",
@@ -1657,6 +1658,10 @@
                     {
                       "value": "keychain",
                       "help": "OS Keychain"
+                    },
+                    {
+                      "value": "kubernetes",
+                      "help": "Kubernetes Secrets (read-only)"
                     },
                     {
                       "value": "password-store",

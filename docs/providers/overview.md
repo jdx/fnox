@@ -42,6 +42,7 @@ A provider connects a secret name to its storage. Configure an instance under `[
 | [Azure Key Vault Secrets](/providers/azure-sm)       | `azure-sm`     | A secret name                                          |
 | [Azure App Configuration](/providers/azure-ac)       | `azure-ac`     | A non-secret configuration key and optional label      |
 | [Google Cloud Secret Manager](/providers/gcp-sm)     | `gcp-sm`       | A secret name                                          |
+| [Kubernetes Secrets](/providers/kubernetes)          | `kubernetes`   | A named Secret and data key                            |
 | [HashiCorp Vault](/providers/vault)                  | `vault`        | A KV secret and field                                  |
 | [Doppler](/providers/doppler)                        | `doppler`      | A secret key in a project/config                       |
 | [FOKS](/providers/foks)                              | `foks`         | A key in a personal or team namespace                  |
