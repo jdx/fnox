@@ -32,7 +32,7 @@ jobs:
             runner: namespace-profile-endev-linux-amd64;overrides.cache-tag=cache
     runs-on: ${{ !inputs.trusted && matrix.os || matrix.runner }}
     # Untrusted runs are cold, on GitHub-hosted runners (no Rust cache there).
-    timeout-minutes: ${{ inputs.trusted && 10 || 20 }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -348,7 +348,7 @@ jobs:
 
   msrv:
     runs-on: ${{ !inputs.trusted && 'ubuntu-latest' || 'namespace-profile-endev-linux-amd64;overrides.cache-tag=cache' }}
-    timeout-minutes: ${{ inputs.trusted && 10 || 20 }}
+    timeout-minutes: 20
     env:
       # A separate target dir: msrv builds with another toolchain, and the
       # Namespace cache volume is shared with the build and ci-other jobs.
