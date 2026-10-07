@@ -2404,6 +2404,26 @@ DB = { provider = "op", value = "item/field" }
     }
 
     #[test]
+    fn dependency_closure_pulls_kubernetes_client_selection() {
+        let (config, secrets) = closure_config(
+            r#"
+root = true
+[providers.cluster]
+type = "kubernetes"
+[secrets]
+FNOX_K8S_CONTEXT = { default = "production" }
+KUBECONFIG = { default = "/tmp/production-kubeconfig" }
+OTHER = { default = "x" }
+DB = { provider = "cluster", value = "database/password" }
+"#,
+        );
+        assert_eq!(
+            closure_keys(&config, &secrets, &["DB"]),
+            ["FNOX_K8S_CONTEXT", "KUBECONFIG", "DB"]
+        );
+    }
+
+    #[test]
     fn dependency_closure_uses_the_default_provider_when_value_is_set() {
         let (config, secrets) = closure_config(
             r#"

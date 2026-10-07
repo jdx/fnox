@@ -279,6 +279,7 @@ Provider configuration may override environment credentials. Follow the linked g
 | AWS                       | `AWS_PROFILE`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION` | [AWS credentials](/providers/aws-sm#configure-aws-credentials)    |
 | Azure                     | `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`                                    | [Azure authentication](/providers/azure-sm#authentication)        |
 | Google Cloud              | `GOOGLE_APPLICATION_CREDENTIALS`                                                               | [Google Cloud authentication](/providers/gcp-sm#authentication)   |
+| Kubernetes                | `FNOX_K8S_CONTEXT`, `KUBECONFIG`                                                               | [Kubernetes Secrets](/providers/kubernetes#configuration)         |
 | 1Password                 | `FNOX_OP_SERVICE_ACCOUNT_TOKEN`, `OP_SERVICE_ACCOUNT_TOKEN`                                    | [1Password](/providers/1password#authentication)                  |
 | Bitwarden                 | `FNOX_BW_SESSION`, `BW_SESSION`                                                                | [Bitwarden](/providers/bitwarden)                                 |
 | Bitwarden Secrets Manager | `FNOX_BWS_ACCESS_TOKEN`, `BWS_ACCESS_TOKEN`, `BWS_PROJECT_ID`                                  | [Bitwarden SM](/providers/bitwarden-sm#environment-variables)     |

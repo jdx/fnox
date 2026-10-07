@@ -31,6 +31,10 @@ struct ProviderTomlRaw {
     /// Used to skip the provider in non-interactive contexts like the TUI.
     #[serde(default)]
     requires_interactive_auth: bool,
+    /// When false, daemon memory caching is forbidden even when a provider instance
+    /// explicitly sets `daemon_cache = true`.
+    #[serde(default = "default_true")]
+    daemon_cache_supported: bool,
     #[serde(default)]
     fields: IndexMap<String, FieldDef>,
     #[serde(default)]
@@ -52,8 +56,13 @@ struct ProviderToml {
     auth_command: Option<String>,
     pass_provider_name: bool,
     requires_interactive_auth: bool,
+    daemon_cache_supported: bool,
     fields: IndexMap<String, FieldDef>,
     wizard_fields: IndexMap<String, WizardFieldDef>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl ProviderTomlRaw {
@@ -88,6 +97,7 @@ impl ProviderTomlRaw {
             auth_command: self.auth_command,
             pass_provider_name: self.pass_provider_name,
             requires_interactive_auth: self.requires_interactive_auth,
+            daemon_cache_supported: self.daemon_cache_supported,
             fields: self.fields,
             wizard_fields: self.wizard_fields,
         }
@@ -404,9 +414,12 @@ fn generate_provider_methods(
                 None => #static_default,
             }
         });
-        daemon_cache_arms.push(quote! {
-            Self::#variant { daemon_cache, .. } => daemon_cache.unwrap_or(true)
-        });
+        let daemon_cache_arm = if provider.daemon_cache_supported {
+            quote! { Self::#variant { daemon_cache, .. } => daemon_cache.unwrap_or(true) }
+        } else {
+            quote! { Self::#variant { .. } => false }
+        };
+        daemon_cache_arms.push(daemon_cache_arm);
         env_deps_arms.push(quote! {
             Self::#variant { .. } => #module::env_dependencies()
         });

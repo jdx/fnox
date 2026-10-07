@@ -278,6 +278,7 @@ cmd provider help="Manage providers (defaults to list)" {
                 choice keepass help=KeePass
                 choice keeper-sm help="Keeper Secrets Manager"
                 choice keychain help="OS Keychain"
+                choice kubernetes help="Kubernetes Secrets (read-only)"
                 choice password-store help="password-store (pass)"
                 choice passwordstate help="Click Studios Passwordstate"
                 choice plain help="Plain text provider"

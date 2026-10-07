@@ -91,6 +91,9 @@ pub enum ProviderType {
     /// OS Keychain
     #[usage(name = "keychain")]
     Keychain,
+    /// Kubernetes Secrets (read-only)
+    #[usage(name = "kubernetes")]
+    Kubernetes,
     /// password-store (pass)
     #[usage(name = "password-store")]
     #[strum(serialize = "password-store")]
