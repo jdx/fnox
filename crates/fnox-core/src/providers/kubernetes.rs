@@ -69,6 +69,13 @@ impl KubernetesProvider {
             None if options.context.is_some() => Config::from_kubeconfig(&options)
                 .await
                 .map_err(|_| config_error())?,
+            // An explicit KUBECONFIG must not fall back to an in-cluster identity
+            // when it cannot be loaded. That could select a different cluster.
+            None if has_non_empty_value(env::var("KUBECONFIG").ok().as_deref()) => {
+                Config::from_kubeconfig(&options)
+                    .await
+                    .map_err(|_| config_error())?
+            }
             None => Config::infer().await.map_err(|_| config_error())?,
         };
 
@@ -195,6 +202,10 @@ fn selected_context(configured: Option<&str>, environment: Option<&str>) -> Opti
         .map(str::to_owned)
 }
 
+fn has_non_empty_value(value: Option<&str>) -> bool {
+    value.is_some_and(|value| !value.trim().is_empty())
+}
+
 fn parse_reference(value: &str) -> Result<SecretReference> {
     let segments: Vec<_> = value.split('/').collect();
     if segments.is_empty() || segments.iter().any(|segment| segment.is_empty()) {
@@ -241,12 +252,8 @@ fn read_secret_value(
     let data = secret
         .data
         .as_ref()
-        .ok_or_else(|| FnoxError::ProviderInvalidResponse {
-            provider: PROVIDER_NAME.to_string(),
-            details: format!("Secret '{secret_name}' in namespace '{namespace}' has no data"),
-            hint: "Select a text key from a Secret that contains data".to_string(),
-            url: PROVIDER_URL.to_string(),
-        })?;
+        .filter(|data| !data.is_empty())
+        .ok_or_else(|| no_secret_data_error(namespace, secret_name))?;
 
     let (key, value) = match requested_key {
         Some(key) => data.get(key).map(|value| (key, value)).ok_or_else(|| {
@@ -285,6 +292,15 @@ fn read_secret_value(
         hint: "fnox resolves text values only; choose a UTF-8 Secret data key".to_string(),
         url: PROVIDER_URL.to_string(),
     })
+}
+
+fn no_secret_data_error(namespace: &str, secret_name: &str) -> FnoxError {
+    FnoxError::ProviderInvalidResponse {
+        provider: PROVIDER_NAME.to_string(),
+        details: format!("Secret '{secret_name}' in namespace '{namespace}' has no data"),
+        hint: "Select a text key from a Secret that contains data".to_string(),
+        url: PROVIDER_URL.to_string(),
+    }
 }
 
 fn config_error() -> FnoxError {
@@ -548,6 +564,37 @@ users: []
         }
     }
 
+    #[test]
+    fn non_empty_kubeconfig_environment_is_explicit() {
+        assert!(has_non_empty_value(Some("/tmp/kubeconfig")));
+        assert!(!has_non_empty_value(Some("  ")));
+        assert!(!has_non_empty_value(None));
+    }
+
+    #[test]
+    fn short_references_require_exactly_one_non_empty_data_key() {
+        let single = secret_with_data(Some(&[("token", "value")]));
+        assert_eq!(
+            read_secret_value(&single, "team", "single", None).unwrap(),
+            "value"
+        );
+
+        for (name, secret) in [
+            (
+                "multiple",
+                secret_with_data(Some(&[("username", "alice"), ("password", "secret")])),
+            ),
+            ("empty", secret_with_data(Some(&[]))),
+            ("absent", secret_with_data(None)),
+        ] {
+            let error = read_secret_value(&secret, "team", name, None).unwrap_err();
+            assert!(matches!(error, FnoxError::ProviderInvalidResponse { .. }));
+            if matches!(name, "empty" | "absent") {
+                assert!(error.to_string().contains("has no data"));
+            }
+        }
+    }
+
     #[tokio::test]
     async fn batches_named_gets_without_list_or_watch_and_deduplicates_targets() {
         let (client, state) = test_client().await;
@@ -622,5 +669,22 @@ users: []
             results["BINARY"],
             Err(FnoxError::ProviderInvalidResponse { .. })
         ));
+    }
+
+    fn secret_with_data(entries: Option<&[(&str, &str)]>) -> Secret {
+        Secret {
+            data: entries.map(|entries| {
+                entries
+                    .iter()
+                    .map(|(key, value)| {
+                        (
+                            (*key).to_string(),
+                            k8s_openapi::ByteString(value.as_bytes().to_vec()),
+                        )
+                    })
+                    .collect()
+            }),
+            ..Secret::default()
+        }
     }
 }

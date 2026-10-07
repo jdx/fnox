@@ -31,7 +31,7 @@ Context selection is deterministic:
 
 When `kubeconfig` is set, fnox reads only that file. When a context is set without `kubeconfig`, fnox reads the standard Kubernetes kubeconfig source (`KUBECONFIG`, then `~/.kube/config`). A selected context must be present there; fnox does not silently fall back to in-cluster credentials in that case.
 
-With neither `context` nor `kubeconfig`, fnox follows the Kubernetes client’s conservative inference: it tries the standard local kubeconfig first, then in-cluster service-account authentication. The in-cluster namespace comes from the mounted service-account namespace file. `namespace` in the fnox provider overrides the context or in-cluster default, and a namespace in an individual secret reference overrides both.
+With neither `context` nor `kubeconfig`, a non-empty `KUBECONFIG` is treated as explicit: fnox loads it through the standard kubeconfig loader and returns an error if it cannot be read. It does not then fall back to an in-cluster identity. When `KUBECONFIG` is unset or empty, fnox follows Kubernetes client inference: it tries the standard local kubeconfig first, then in-cluster service-account authentication. The in-cluster namespace comes from the mounted service-account namespace file. `namespace` in the fnox provider overrides the context or in-cluster default, and a namespace in an individual secret reference overrides both.
 
 ## References
 
