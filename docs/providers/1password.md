@@ -85,6 +85,25 @@ API_KEY = { provider = "op", value = "op://Engineering/Service/api-key" }
 
 Use the field names in your items. Full `op://` references can be copied from 1Password and are useful when a project reads from several vaults.
 
+## 1Password Environments
+
+[1Password Environments](https://developer.1password.com/docs/environments/) are named bundles of environment variables that the CLI reads as a whole. Reference a single variable with `environment://<environment-id>/<VARIABLE>`:
+
+```toml
+[providers.op]
+type = "1password"
+
+[secrets]
+DATABASE_URL = { provider = "op", value = "environment://blgexucrwfr2dtsxe2q4uu7dp4/DATABASE_URL" }
+STRIPE_KEY = { provider = "op", value = "environment://blgexucrwfr2dtsxe2q4uu7dp4/STRIPE_KEY" }
+```
+
+fnox runs `op environment read <environment-id>` once per environment and serves every variable that references it from that read. Your `fnox.toml` holds only the environment ID and variable names. Environment references do not use the provider's `vault` setting, and they can sit next to vault item references in the same config.
+
+This needs a 1Password CLI build that includes `op environment`, which is in beta (2.33.0-beta.02 or later on the beta channel). Authenticate as usual: the desktop-app integration or a service account that has access to the Environment.
+
+A variable that is missing from the Environment is an error rather than an empty value.
+
 ## Create and update items
 
 Create or update items in the 1Password app or with the `op` CLI, then add their references to `fnox.toml`. For custom fields, use the exact field name in the reference.
