@@ -13,6 +13,10 @@ setup() {
 #!/usr/bin/env bash
 echo "$*" >>"$OP_STUB_LOG"
 if [ "$1 $2" = "environment read" ]; then
+	if [ "$3" = "env_unterminated" ]; then
+		printf 'DB_URL="unterminated\n'
+		exit 0
+	fi
 	if [ "$3" = "env_garbage" ]; then
 		echo '{"variables": []}'
 		exit 0
@@ -181,4 +185,17 @@ TOML
 	run "$FNOX_BIN" get X
 	assert_failure
 	assert_output --partial "dotenv-style KEY=value"
+}
+
+@test "get rejects environment output with an unterminated quote" {
+	cat >fnox.toml <<'TOML'
+[providers.op]
+type = "1password"
+
+[secrets]
+DB_URL = { provider = "op", value = "environment://env_unterminated/DB_URL" }
+TOML
+	run "$FNOX_BIN" get DB_URL
+	assert_failure
+	assert_output --partial "unterminated quote"
 }

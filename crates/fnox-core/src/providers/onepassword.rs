@@ -120,18 +120,17 @@ impl OnePasswordProvider {
                 e => e,
             })?;
 
-        let vars = parse_dotenv(&output);
-        if vars.is_empty() && !output.is_empty() {
-            return Err(FnoxError::ProviderInvalidResponse {
-                provider: "1Password".to_string(),
-                details: format!(
-                    "Could not read variables from the output of 'op environment read {}'",
-                    id
-                ),
-                hint: "Expected dotenv-style KEY=value lines".to_string(),
-                url: "https://fnox.jdx.dev/providers/1password".to_string(),
-            });
-        }
+        // Reject output that isn't dotenv before caching it, so a format change surfaces
+        // as an error here rather than as "variable not found" for every lookup.
+        let vars = parse_dotenv(&output).map_err(|problem| FnoxError::ProviderInvalidResponse {
+            provider: "1Password".to_string(),
+            details: format!(
+                "Could not parse the output of 'op environment read {}': {}",
+                id, problem
+            ),
+            hint: "Expected dotenv-style KEY=value lines".to_string(),
+            url: "https://fnox.jdx.dev/providers/1password".to_string(),
+        })?;
         let vars = Arc::new(vars);
         cache.insert(id.to_string(), vars.clone());
         Ok(vars)
@@ -590,22 +589,25 @@ impl OnePasswordProvider {
 ///
 /// Accepts an optional `export ` prefix, blank and `#` comment lines, and single- or
 /// double-quoted values (which may span lines). Unquoted values are taken verbatim.
-fn parse_dotenv(input: &str) -> HashMap<String, String> {
+/// Anything else (a line without `=`, an invalid variable name, an unterminated quote)
+/// is an error naming the line but never echoing its content, which may be secret.
+fn parse_dotenv(input: &str) -> std::result::Result<HashMap<String, String>, String> {
     let mut vars = HashMap::new();
-    let mut lines = input.lines();
+    let mut lines = input.lines().enumerate();
 
-    while let Some(line) = lines.next() {
+    while let Some((index, line)) = lines.next() {
+        let line_no = index + 1;
         let line = line.trim_start();
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
         let line = line.strip_prefix("export ").unwrap_or(line);
         let Some((key, raw)) = line.split_once('=') else {
-            continue;
+            return Err(format!("line {line_no} is not KEY=value"));
         };
         let key = key.trim();
-        if key.is_empty() {
-            continue;
+        if !is_valid_variable_name(key) {
+            return Err(format!("line {line_no} has an invalid variable name"));
         }
 
         let raw = raw.trim_start();
@@ -613,25 +615,22 @@ fn parse_dotenv(input: &str) -> HashMap<String, String> {
             Some(quote @ ('"' | '\'')) => {
                 // Quoted: read until the closing quote, continuing onto later lines.
                 let mut body = raw[1..].to_string();
-                let mut closed = None;
-                loop {
+                let end = loop {
                     if let Some(end) = find_closing_quote(&body, quote) {
-                        closed = Some(end);
-                        break;
+                        break end;
                     }
                     match lines.next() {
-                        Some(next) => {
+                        Some((_, next)) => {
                             body.push('\n');
                             body.push_str(next);
                         }
-                        None => break,
+                        None => return Err(format!("line {line_no} has an unterminated quote")),
                     }
-                }
-                match closed {
-                    Some(end) if quote == '"' => unescape_double_quoted(&body[..end]),
-                    Some(end) => body[..end].to_string(),
-                    // Unterminated quote: keep the text as written.
-                    None => raw.to_string(),
+                };
+                if quote == '"' {
+                    unescape_double_quoted(&body[..end])
+                } else {
+                    body[..end].to_string()
                 }
             }
             _ => raw.trim_end().to_string(),
@@ -639,7 +638,13 @@ fn parse_dotenv(input: &str) -> HashMap<String, String> {
         vars.insert(key.to_string(), value);
     }
 
-    vars
+    Ok(vars)
+}
+
+fn is_valid_variable_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '-')
 }
 
 /// Byte index of the first unescaped `quote` in `s`.
@@ -696,7 +701,7 @@ mod tests {
 
     #[test]
     fn parses_plain_and_exported_lines() {
-        let vars = parse_dotenv("# comment\n\nA=1\nexport B=two words\nC=\nbroken line\n");
+        let vars = parse_dotenv("# comment\n\nA=1\nexport B=two words\nC=\n").unwrap();
         assert_eq!(vars["A"], "1");
         assert_eq!(vars["B"], "two words");
         assert_eq!(vars["C"], "");
@@ -705,18 +710,46 @@ mod tests {
 
     #[test]
     fn keeps_equals_and_hash_in_unquoted_values() {
-        let vars = parse_dotenv("URL=postgres://u:p@h/db?x=1#frag\n");
+        let vars = parse_dotenv("URL=postgres://u:p@h/db?x=1#frag\n").unwrap();
         assert_eq!(vars["URL"], "postgres://u:p@h/db?x=1#frag");
     }
 
     #[test]
     fn parses_quoted_values() {
         let vars =
-            parse_dotenv("A=\"say \\\"hi\\\"\\n\"\nB='raw \\n $x'\nC=\"line1\nline2\"\nD=after\n");
+            parse_dotenv("A=\"say \\\"hi\\\"\\n\"\nB='raw \\n $x'\nC=\"line1\nline2\"\nD=after\n")
+                .unwrap();
         assert_eq!(vars["A"], "say \"hi\"\n");
         assert_eq!(vars["B"], "raw \\n $x");
         assert_eq!(vars["C"], "line1\nline2");
         assert_eq!(vars["D"], "after");
+    }
+
+    #[test]
+    fn accepts_empty_output() {
+        assert!(parse_dotenv("").unwrap().is_empty());
+    }
+
+    #[test]
+    fn rejects_non_dotenv_output() {
+        for bad in [
+            "DB_URL=\"unterminated",
+            "DB_URL='unterminated\nA=1",
+            "not a variable line",
+            "{\"variables\": []}",
+            "[{\"a\":\"b=c\"}]",
+            "1BAD=x",
+            "=x",
+        ] {
+            assert!(parse_dotenv(bad).is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn parse_errors_do_not_echo_values() {
+        let err = parse_dotenv("A=1\nhunter2 secret").unwrap_err();
+        assert!(err.contains("line 2"));
+        assert!(!err.contains("hunter2"));
     }
 
     #[test]
