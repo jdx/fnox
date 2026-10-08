@@ -1803,6 +1803,8 @@ mod tests {
         config.providers.insert(
             "plain".to_string(),
             ProviderConfig::Plain {
+                file: crate::providers::OptionStringOrSecretRef::none(),
+                format: crate::providers::OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
             },
@@ -1860,6 +1862,8 @@ mod tests {
         config.providers.insert(
             "plain".to_string(),
             ProviderConfig::Plain {
+                file: crate::providers::OptionStringOrSecretRef::none(),
+                format: crate::providers::OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
             },
@@ -1887,6 +1891,8 @@ mod tests {
         config.providers.insert(
             "plain".to_string(),
             ProviderConfig::Plain {
+                file: crate::providers::OptionStringOrSecretRef::none(),
+                format: crate::providers::OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
             },
@@ -2009,6 +2015,8 @@ mod tests {
         config.providers.insert(
             "plain".to_string(),
             ProviderConfig::Plain {
+                file: crate::providers::OptionStringOrSecretRef::none(),
+                format: crate::providers::OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
             },
