@@ -1,4 +1,4 @@
-# Plain provider - stores values as plain text in config
+# Plain provider - stores values as plain text in config, or reads them from a plaintext file
 display_name = "Plain text"
 serde_rename = "plain"
 rust_variant = "Plain"
@@ -10,4 +10,16 @@ No setup required.
 Secrets are stored as plain text in the config file.
 Only use for non-sensitive data or testing."""
 
-# Plain provider has no fields - it's a unit variant
+# Without `file`, secret values are returned as-is. With `file`, each secret's
+# value names a key to look up in that file, parsed according to `format`.
+[fields.file]
+type = "optional"
+placeholder = "secrets.env"
+label = "File path:"
+wizard = false
+
+[fields.format]
+type = "optional"
+placeholder = "env"
+label = "File format (env, shell, json, yaml, toml):"
+wizard = false

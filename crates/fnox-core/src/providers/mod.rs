@@ -432,6 +432,21 @@ pub(crate) fn get_provider_from_resolved_with_context_and_identity_cycle_guard(
         };
         return get_provider_from_resolved(provider_name, &resolved);
     }
+    if let ResolvedProviderConfig::Plain {
+        file: Some(file),
+        format,
+    } = resolved
+    {
+        let provider_source = provider_source_path(config, profile, provider_name);
+        let resolved = ResolvedProviderConfig::Plain {
+            file: Some(crate::config_path::resolve_string_relative_to_file(
+                file.clone(),
+                provider_source.as_deref(),
+            )),
+            format: format.clone(),
+        };
+        return get_provider_from_resolved(provider_name, &resolved);
+    }
     if let ResolvedProviderConfig::KeeperSecretsManager { config_file, token } = resolved {
         let provider_source = provider_source_path(config, profile, provider_name);
         let resolved = ResolvedProviderConfig::KeeperSecretsManager {
@@ -500,6 +515,8 @@ mod tests {
         profile.providers.insert(
             "pass".to_string(),
             ProviderConfig::Plain {
+                file: OptionStringOrSecretRef::none(),
+                format: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
             },
@@ -528,6 +545,8 @@ mod tests {
         profile.providers.insert(
             "pass".to_string(),
             ProviderConfig::Plain {
+                file: OptionStringOrSecretRef::none(),
+                format: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
             },

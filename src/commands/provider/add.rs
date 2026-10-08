@@ -309,6 +309,8 @@ impl AddCommand {
                 daemon_cache: None,
             },
             ProviderType::Plain => crate::config::ProviderConfig::Plain {
+                file: crate::providers::OptionStringOrSecretRef::none(),
+                format: crate::providers::OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
             },

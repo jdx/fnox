@@ -33,6 +33,48 @@ LOG_LEVEL = { provider = "plain", value = "debug" }
 
 Use this when a test or configuration needs a provider-backed value without encryption. A `default` is usually simpler for public settings.
 
+## Reading from a plaintext file
+
+Set `file` and `format` to look values up in an unencrypted file instead. Each secret's `value` names the key to read from that file:
+
+```toml
+[providers.dotenv]
+type = "plain"
+file = "secrets.env"
+format = "env"
+
+[secrets]
+DATABASE_URL = { provider = "dotenv", value = "DATABASE_URL" }
+API_TOKEN = { provider = "dotenv", value = "SERVICE_TOKEN" }
+```
+
+With a `secrets.env` containing:
+
+```sh
+DATABASE_URL=postgres://localhost/app
+SERVICE_TOKEN='abc$123'
+```
+
+`fnox get API_TOKEN` prints `abc$123`.
+
+`format` is required whenever `file` is set; fnox does not guess it from the file name. It accepts every format that [`fnox export`](/cli/export) writes:
+
+| `format` | Contents                                                                            |
+| -------- | ----------------------------------------------------------------------------------- |
+| `env`    | `KEY=value` lines, as in a `.env` file. An `export ` prefix is allowed.             |
+| `shell`  | `export KEY=value` statements using POSIX shell quoting. Values are not expanded.   |
+| `json`   | An object of keys to values, or the `{"secrets": {...}}` document from fnox export. |
+| `yaml`   | A mapping of keys to values, or the `secrets:` document from fnox export.           |
+| `toml`   | A table of keys to values, or the `[secrets]` document from fnox export.            |
+
+Relative `file` paths resolve against the config file that declares the provider, and `~` expands to your home directory.
+
+fnox reads the file when it resolves secrets from the provider, and secrets resolved together share a single read. The file may be read more than once in a single command, for example when one secret's `default` refers to another secret from the same file.
+
+A provider with `file` is read-only: fnox never writes to the file. `fnox set DB_URL DATABASE_URL --provider dotenv` records `DATABASE_URL` as the key to look up, as it would for other read-only providers.
+
+A key missing from the file is reported as a missing secret, so `if_missing` and `default` apply as usual.
+
 ## Fallbacks
 
 A remote or encrypted secret can have a non-sensitive fallback:

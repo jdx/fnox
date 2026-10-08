@@ -560,6 +560,12 @@
         {
           "type": "object",
           "properties": {
+            "file": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "format": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "auth_command": {
               "type": ["string", "null"]
             },

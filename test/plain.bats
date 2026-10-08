@@ -287,3 +287,138 @@ EOF
 	assert_output --partial "First secret"
 	assert_output --partial "Second secret"
 }
+
+@test "plain provider reads values from a file in each export format" {
+	mkdir -p source
+	cat >source/fnox.toml <<'EOF'
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+SIMPLE = { provider = "plain", value = "kek" }
+TRICKY = { provider = "plain", value = "it's \"quoted\" $HOME\nsecond line" }
+EOF
+
+	for format in env shell json yaml toml; do
+		run "$FNOX_BIN" --config source/fnox.toml export --format "$format" --output "source/secrets.$format"
+		assert_success
+	done
+
+	cat >fnox.toml <<'EOF'
+root = true
+
+[providers.env]
+type = "plain"
+file = "source/secrets.env"
+format = "env"
+
+[providers.shell]
+type = "plain"
+file = "source/secrets.shell"
+format = "shell"
+
+[providers.json]
+type = "plain"
+file = "source/secrets.json"
+format = "json"
+
+[providers.yaml]
+type = "plain"
+file = "source/secrets.yaml"
+format = "yaml"
+
+[providers.toml]
+type = "plain"
+file = "source/secrets.toml"
+format = "toml"
+
+[secrets]
+ENV_SIMPLE = { provider = "env", value = "SIMPLE" }
+ENV_TRICKY = { provider = "env", value = "TRICKY" }
+SHELL_SIMPLE = { provider = "shell", value = "SIMPLE" }
+SHELL_TRICKY = { provider = "shell", value = "TRICKY" }
+JSON_SIMPLE = { provider = "json", value = "SIMPLE" }
+JSON_TRICKY = { provider = "json", value = "TRICKY" }
+YAML_SIMPLE = { provider = "yaml", value = "SIMPLE" }
+YAML_TRICKY = { provider = "yaml", value = "TRICKY" }
+TOML_SIMPLE = { provider = "toml", value = "SIMPLE" }
+TOML_TRICKY = { provider = "toml", value = "TRICKY" }
+EOF
+
+	expected=$'it\'s "quoted" $HOME\nsecond line'
+	for format in ENV SHELL JSON YAML TOML; do
+		run "$FNOX_BIN" get "${format}_SIMPLE"
+		assert_success
+		assert_output "kek"
+
+		run "$FNOX_BIN" get "${format}_TRICKY"
+		assert_success
+		assert_output "$expected"
+	done
+}
+
+@test "plain provider with file reports missing keys" {
+	printf 'PRESENT=yes\n' >secrets.env
+	cat >fnox.toml <<'EOF'
+root = true
+
+[providers.dotenv]
+type = "plain"
+file = "secrets.env"
+format = "env"
+
+[secrets]
+ABSENT = { provider = "dotenv", value = "ABSENT", if_missing = "error" }
+EOF
+
+	run "$FNOX_BIN" get ABSENT
+	assert_failure
+	assert_output --partial "ABSENT"
+	assert_output --partial "secrets.env"
+}
+
+@test "plain provider with file requires a format" {
+	printf 'PRESENT=yes\n' >secrets.env
+	cat >fnox.toml <<'EOF'
+root = true
+
+[providers.dotenv]
+type = "plain"
+file = "secrets.env"
+
+[secrets]
+PRESENT = { provider = "dotenv", value = "PRESENT", if_missing = "error" }
+EOF
+
+	run "$FNOX_BIN" get PRESENT
+	assert_failure
+	assert_output --partial "requires \`format\`"
+}
+
+@test "plain provider with file stores set values as lookup keys" {
+	printf 'DATABASE_URL=postgres://localhost/app\n' >secrets.env
+	cat >fnox.toml <<'EOF'
+root = true
+
+[providers.dotenv]
+type = "plain"
+file = "secrets.env"
+format = "env"
+
+[secrets]
+EOF
+
+	run "$FNOX_BIN" set DB_URL DATABASE_URL --provider dotenv
+	assert_success
+	assert_config_contains 'value = "DATABASE_URL"'
+
+	run "$FNOX_BIN" get DB_URL
+	assert_success
+	assert_output "postgres://localhost/app"
+
+	# The file itself is never written
+	run cat secrets.env
+	assert_output "DATABASE_URL=postgres://localhost/app"
+}

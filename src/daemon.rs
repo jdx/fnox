@@ -1757,6 +1757,8 @@ mod tests {
 
     fn plain_provider_config(daemon_cache: Option<bool>) -> ProviderConfig {
         ProviderConfig::Plain {
+            file: crate::providers::OptionStringOrSecretRef::none(),
+            format: crate::providers::OptionStringOrSecretRef::none(),
             auth_command: None,
             daemon_cache,
         }
