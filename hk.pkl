@@ -24,6 +24,16 @@ local linters = new Mapping<String, Step> {
         })
     }
 
+    // lints GitHub Actions workflows (jdx/jactionlint, a maintained actionlint fork)
+    ["jactionlint"] {
+        glob = List(".github/workflows/*.yml", ".github/workflows/*.yaml")
+        batch = true
+        check = new CommandSpec {
+            command = "jactionlint {{ files }}"
+            effect = "read"
+        }
+    }
+
     // define a custom linter
     ["pkl"] {
         glob = "*.pkl"

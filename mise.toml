@@ -13,6 +13,7 @@ cargo-msrv = "latest"
 communique = { version = "latest", minimum_release_age = "0s" }
 git-cliff = "latest"
 hk = { version = "latest", minimum_release_age = "0s" }
+jactionlint = "latest"
 pkl = "latest"
 prettier = "latest"
 shellcheck = "latest"
