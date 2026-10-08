@@ -1,12 +1,18 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
+use crate::providers::Provider as _;
 use async_trait::async_trait;
 use regex::Regex;
 use std::collections::HashMap;
 use std::process::Stdio;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
+use tokio::sync::Mutex;
+
+/// Prefix of a reference to one variable of a 1Password Environment:
+/// `environment://<environment-id>/<VARIABLE>`.
+const ENVIRONMENT_PREFIX: &str = "environment://";
 
 /// Precompiled regex to remove leading error prefixes from stderr output of `op`.
 /// [ERROR] YYYY/MM/DD HH:MM:SS message
@@ -17,6 +23,10 @@ pub struct OnePasswordProvider {
     vault: Option<String>,
     account: Option<String>,
     token: Option<String>,
+    /// Variables of each 1Password Environment read so far, keyed by environment ID.
+    /// An environment is only readable as a whole bundle, so it is read once and
+    /// every variable that references it is served from here.
+    environments: Mutex<HashMap<String, Arc<HashMap<String, String>>>>,
 }
 
 impl OnePasswordProvider {
@@ -29,6 +39,7 @@ impl OnePasswordProvider {
             vault,
             account,
             token,
+            environments: Mutex::new(HashMap::new()),
         })
     }
 
@@ -79,6 +90,67 @@ impl OnePasswordProvider {
                 url: "https://fnox.jdx.dev/providers/1password".to_string(),
             }),
         }
+    }
+
+    /// Read all variables of a 1Password Environment, at most once per provider instance.
+    async fn read_environment(&self, id: &str) -> Result<Arc<HashMap<String, String>>> {
+        // Held across the read so concurrent lookups of one environment share a single `op` call.
+        let mut cache = self.environments.lock().await;
+        if let Some(vars) = cache.get(id) {
+            return Ok(vars.clone());
+        }
+
+        tracing::debug!("Reading 1Password Environment '{}'", id);
+        let output = self
+            .execute_op_command(&["environment", "read", id])
+            .await
+            .map_err(|e| match e {
+                FnoxError::ProviderCliFailed { details, url, .. }
+                    if details.contains("unknown command") =>
+                {
+                    FnoxError::ProviderCliFailed {
+                        provider: "1Password".to_string(),
+                        details,
+                        hint: "1Password Environments need a 1Password CLI build that includes \
+                               'op environment' (currently the 2.33.0 beta or newer)"
+                            .to_string(),
+                        url,
+                    }
+                }
+                e => e,
+            })?;
+
+        let vars = Arc::new(parse_dotenv(&output));
+        cache.insert(id.to_string(), vars.clone());
+        Ok(vars)
+    }
+
+    /// Resolve `<environment-id>/<VARIABLE>` (the part after `environment://`).
+    async fn get_environment_variable(&self, spec: &str) -> Result<String> {
+        let (id, name) = match spec.split_once('/') {
+            Some((id, name)) if !id.is_empty() && !name.is_empty() => (id, name),
+            _ => {
+                return Err(FnoxError::ProviderInvalidResponse {
+                    provider: "1Password".to_string(),
+                    details: format!(
+                        "Invalid environment reference: '{}{}'",
+                        ENVIRONMENT_PREFIX, spec
+                    ),
+                    hint: "Expected 'environment://<environment-id>/<VARIABLE>'".to_string(),
+                    url: "https://fnox.jdx.dev/providers/1password".to_string(),
+                });
+            }
+        };
+
+        let vars = self.read_environment(id).await?;
+        vars.get(name)
+            .cloned()
+            .ok_or_else(|| FnoxError::ProviderSecretNotFound {
+                provider: "1Password".to_string(),
+                secret: format!("{}{}/{}", ENVIRONMENT_PREFIX, id, name),
+                hint: format!("Environment '{}' has no variable named '{}'", id, name),
+                url: "https://fnox.jdx.dev/providers/1password".to_string(),
+            })
     }
 
     /// Execute op CLI command with proper authentication
@@ -270,6 +342,10 @@ impl crate::providers::Provider for OnePasswordProvider {
     async fn get_secret(&self, value: &str) -> Result<String> {
         tracing::debug!("Getting secret '{}' from 1Password", value);
 
+        if let Some(spec) = value.strip_prefix(ENVIRONMENT_PREFIX) {
+            return self.get_environment_variable(spec).await;
+        }
+
         let reference = self.value_to_reference(value)?;
         tracing::debug!("Reading 1Password secret: {}", reference);
 
@@ -281,10 +357,47 @@ impl crate::providers::Provider for OnePasswordProvider {
         &self,
         secrets: &[(String, String)],
     ) -> HashMap<String, Result<String>> {
+        // Environment variables come from one `op environment read` per environment;
+        // everything else is resolved together through `op inject`.
+        let (env_refs, op_refs): (Vec<_>, Vec<_>) = secrets
+            .iter()
+            .cloned()
+            .partition(|(_, value)| value.starts_with(ENVIRONMENT_PREFIX));
+
+        let mut results = self.get_op_secrets_batch(&op_refs).await;
+        for (key, value) in env_refs {
+            let spec = &value[ENVIRONMENT_PREFIX.len()..];
+            results.insert(key, self.get_environment_variable(spec).await);
+        }
+        results
+    }
+
+    async fn test_connection(&self) -> Result<()> {
+        tracing::debug!("Testing connection to 1Password");
+
+        // Try to get the current user as a basic connectivity test
+        let output = self.execute_op_command(&["whoami"]).await?;
+
+        tracing::debug!("1Password whoami output: {}", output);
+
+        Ok(())
+    }
+}
+
+impl OnePasswordProvider {
+    /// Resolve vault item references in one `op inject` call.
+    async fn get_op_secrets_batch(
+        &self,
+        secrets: &[(String, String)],
+    ) -> HashMap<String, Result<String>> {
         tracing::debug!(
             "Getting {} secrets from 1Password using batch mode",
             secrets.len()
         );
+
+        if secrets.is_empty() {
+            return HashMap::new();
+        }
 
         // If only one secret, fall back to single get_secret
         if secrets.len() == 1 {
@@ -394,17 +507,100 @@ impl crate::providers::Provider for OnePasswordProvider {
 
         results
     }
+}
 
-    async fn test_connection(&self) -> Result<()> {
-        tracing::debug!("Testing connection to 1Password");
+/// Parse the dotenv-style `KEY=value` lines printed by `op environment read`.
+///
+/// Accepts an optional `export ` prefix, blank and `#` comment lines, and single- or
+/// double-quoted values (which may span lines). Unquoted values are taken verbatim.
+fn parse_dotenv(input: &str) -> HashMap<String, String> {
+    let mut vars = HashMap::new();
+    let mut lines = input.lines();
 
-        // Try to get the current user as a basic connectivity test
-        let output = self.execute_op_command(&["whoami"]).await?;
+    while let Some(line) = lines.next() {
+        let line = line.trim_start();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let line = line.strip_prefix("export ").unwrap_or(line);
+        let Some((key, raw)) = line.split_once('=') else {
+            continue;
+        };
+        let key = key.trim();
+        if key.is_empty() {
+            continue;
+        }
 
-        tracing::debug!("1Password whoami output: {}", output);
-
-        Ok(())
+        let raw = raw.trim_start();
+        let value = match raw.chars().next() {
+            Some(quote @ ('"' | '\'')) => {
+                // Quoted: read until the closing quote, continuing onto later lines.
+                let mut body = raw[1..].to_string();
+                let mut closed = None;
+                loop {
+                    if let Some(end) = find_closing_quote(&body, quote) {
+                        closed = Some(end);
+                        break;
+                    }
+                    match lines.next() {
+                        Some(next) => {
+                            body.push('\n');
+                            body.push_str(next);
+                        }
+                        None => break,
+                    }
+                }
+                match closed {
+                    Some(end) if quote == '"' => unescape_double_quoted(&body[..end]),
+                    Some(end) => body[..end].to_string(),
+                    // Unterminated quote: keep the text as written.
+                    None => raw.to_string(),
+                }
+            }
+            _ => raw.trim_end().to_string(),
+        };
+        vars.insert(key.to_string(), value);
     }
+
+    vars
+}
+
+/// Byte index of the first unescaped `quote` in `s`.
+fn find_closing_quote(s: &str, quote: char) -> Option<usize> {
+    let mut escaped = false;
+    for (i, c) in s.char_indices() {
+        if escaped {
+            escaped = false;
+        } else if c == '\\' && quote == '"' {
+            escaped = true;
+        } else if c == quote {
+            return Some(i);
+        }
+    }
+    None
+}
+
+fn unescape_double_quoted(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some('r') => out.push('\r'),
+            Some('t') => out.push('\t'),
+            Some(other @ ('"' | '\\')) => out.push(other),
+            Some(other) => {
+                out.push('\\');
+                out.push(other);
+            }
+            None => out.push('\\'),
+        }
+    }
+    out
 }
 
 pub fn env_dependencies() -> &'static [&'static str] {
@@ -415,4 +611,49 @@ fn op_service_account_token() -> Option<String> {
     env::var("FNOX_OP_SERVICE_ACCOUNT_TOKEN")
         .or_else(|_| env::var("OP_SERVICE_ACCOUNT_TOKEN"))
         .ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_plain_and_exported_lines() {
+        let vars = parse_dotenv("# comment\n\nA=1\nexport B=two words\nC=\nbroken line\n");
+        assert_eq!(vars["A"], "1");
+        assert_eq!(vars["B"], "two words");
+        assert_eq!(vars["C"], "");
+        assert_eq!(vars.len(), 3);
+    }
+
+    #[test]
+    fn keeps_equals_and_hash_in_unquoted_values() {
+        let vars = parse_dotenv("URL=postgres://u:p@h/db?x=1#frag\n");
+        assert_eq!(vars["URL"], "postgres://u:p@h/db?x=1#frag");
+    }
+
+    #[test]
+    fn parses_quoted_values() {
+        let vars =
+            parse_dotenv("A=\"say \\\"hi\\\"\\n\"\nB='raw \\n $x'\nC=\"line1\nline2\"\nD=after\n");
+        assert_eq!(vars["A"], "say \"hi\"\n");
+        assert_eq!(vars["B"], "raw \\n $x");
+        assert_eq!(vars["C"], "line1\nline2");
+        assert_eq!(vars["D"], "after");
+    }
+
+    #[test]
+    fn rejects_malformed_environment_references() {
+        let provider = OnePasswordProvider::new(None, None, None).unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        for spec in ["", "abc", "abc/", "/KEY"] {
+            let err = rt.block_on(provider.get_environment_variable(spec));
+            assert!(
+                matches!(err, Err(FnoxError::ProviderInvalidResponse { .. })),
+                "{spec:?}"
+            );
+        }
+    }
 }
