@@ -1,0 +1,7 @@
+name: comment release fixes
+on: {release: {types: [published]}, workflow_dispatch: {inputs: {tag: {required: true, type: string}, dry_run: {required: false, type: boolean, default: true}}}}
+jobs:
+  comment:
+    permissions: {contents: read, pull-requests: read, issues: write, discussions: write}
+    uses: jdx/workflows/.github/workflows/comment-release-fixes.yml@652dd92c36927734924fcfe25d7a6bae33c06efc
+    with: {tag: '${{ inputs.tag || github.event.release.tag_name }}', marker_prefix: fnox-fixed-in, dry_run: '${{ inputs.dry_run || false }}'}
