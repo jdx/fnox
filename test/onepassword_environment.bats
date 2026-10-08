@@ -13,7 +13,16 @@ setup() {
 #!/usr/bin/env bash
 echo "$*" >>"$OP_STUB_LOG"
 if [ "$1 $2" = "environment read" ]; then
+	if [ "$3" = "env_garbage" ]; then
+		echo '{"variables": []}'
+		exit 0
+	fi
 	if [ "$3" = "env_abc" ]; then
+		# A user-set OP_FORMAT would change the real CLI's output; fnox must not pass it on.
+		if [ -n "$OP_FORMAT" ]; then
+			echo '[{"name": "DB_URL"}]'
+			exit 0
+		fi
 		cat <<'ENV'
 # fnox test environment
 DB_URL=postgres://u:p@host/db?sslmode=require
@@ -153,4 +162,23 @@ TOML
 	assert_output "1"
 	run grep -c '^inject' "$OP_STUB_LOG"
 	assert_output "1"
+}
+
+@test "OP_FORMAT from the user's shell does not change how an environment is read" {
+	OP_FORMAT=json run "$FNOX_BIN" get DB_URL
+	assert_success
+	assert_output "postgres://u:p@host/db?sslmode=require"
+}
+
+@test "get reports unparseable environment output instead of a missing variable" {
+	cat >fnox.toml <<'TOML'
+[providers.op]
+type = "1password"
+
+[secrets]
+X = { provider = "op", value = "environment://env_garbage/X" }
+TOML
+	run "$FNOX_BIN" get X
+	assert_failure
+	assert_output --partial "dotenv-style KEY=value"
 }

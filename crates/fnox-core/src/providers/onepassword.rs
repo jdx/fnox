@@ -112,7 +112,7 @@ impl OnePasswordProvider {
                         provider: "1Password".to_string(),
                         details,
                         hint: "1Password Environments need a 1Password CLI build that includes \
-                               'op environment' (currently the 2.33.0 beta or newer)"
+                               'op environment': 2.33.0-beta.02 or later on the beta channel"
                             .to_string(),
                         url,
                     }
@@ -120,7 +120,19 @@ impl OnePasswordProvider {
                 e => e,
             })?;
 
-        let vars = Arc::new(parse_dotenv(&output));
+        let vars = parse_dotenv(&output);
+        if vars.is_empty() && !output.is_empty() {
+            return Err(FnoxError::ProviderInvalidResponse {
+                provider: "1Password".to_string(),
+                details: format!(
+                    "Could not read variables from the output of 'op environment read {}'",
+                    id
+                ),
+                hint: "Expected dotenv-style KEY=value lines".to_string(),
+                url: "https://fnox.jdx.dev/providers/1password".to_string(),
+            });
+        }
+        let vars = Arc::new(vars);
         cache.insert(id.to_string(), vars.clone());
         Ok(vars)
     }
@@ -230,6 +242,10 @@ impl OnePasswordProvider {
             cmd.env("OP_SERVICE_ACCOUNT_TOKEN", token);
         }
         cmd.args(args);
+        if args.first() == Some(&"environment") {
+            // The output is parsed as dotenv lines; don't let a user's OP_FORMAT=json change it.
+            cmd.env_remove("OP_FORMAT");
+        }
 
         // Add account flag if specified
         if let Some(account) = &self.account {
