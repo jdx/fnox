@@ -27,6 +27,15 @@ ENV
 	exit 1
 fi
 if [ "$1" = "whoami" ]; then exit 0; fi
+if [ "$1" = "inject" ]; then
+	# KEY=op://vault/item/field  ->  KEY=value-of-item-field
+	sed -E 's#=op://[^/]+/([^/]+)/(.+)$#=value-of-\1-\2#'
+	exit 0
+fi
+if [ "$1" = "read" ]; then
+	echo "$2" | sed -E 's#^op://[^/]+/([^/]+)/(.+)$#value-of-\1-\2#'
+	exit 0
+fi
 echo "[ERROR] 2026/10/08 00:00:00 unexpected op call: $*" >&2
 exit 1
 STUB
@@ -106,4 +115,42 @@ TOML
 	run "$FNOX_BIN" get X
 	assert_failure
 	assert_output --partial "environment://<environment-id>/<VARIABLE>"
+}
+
+@test "failed environment read is shared by every variable of that environment" {
+	cat >fnox.toml <<'TOML'
+[providers.op]
+type = "1password"
+
+[secrets]
+A = { provider = "op", value = "environment://env_nope/A" }
+B = { provider = "op", value = "environment://env_nope/B" }
+C = { provider = "op", value = "environment://env_nope/C" }
+TOML
+	run "$FNOX_BIN" exec --if-missing ignore -- true
+	assert_success
+
+	run grep -c '^environment read env_nope' "$OP_STUB_LOG"
+	assert_output "1"
+}
+
+@test "environment variables and vault item references resolve together" {
+	cat >fnox.toml <<'TOML'
+[providers.op]
+type = "1password"
+
+[secrets]
+DB_URL = { provider = "op", value = "environment://env_abc/DB_URL" }
+API_KEY = { provider = "op", value = "environment://env_abc/API_KEY" }
+USER = { provider = "op", value = "op://Vault/db/username" }
+PASS = { provider = "op", value = "op://Vault/db/password" }
+TOML
+	run "$FNOX_BIN" exec --if-missing ignore -- sh -c 'echo "$DB_URL|$API_KEY|$USER|$PASS"'
+	assert_success
+	assert_output --partial "postgres://u:p@host/db?sslmode=require|quoted value|value-of-db-username|value-of-db-password"
+
+	run grep -c '^environment read env_abc' "$OP_STUB_LOG"
+	assert_output "1"
+	run grep -c '^inject' "$OP_STUB_LOG"
+	assert_output "1"
 }

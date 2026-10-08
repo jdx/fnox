@@ -125,24 +125,27 @@ impl OnePasswordProvider {
         Ok(vars)
     }
 
-    /// Resolve `<environment-id>/<VARIABLE>` (the part after `environment://`).
-    async fn get_environment_variable(&self, spec: &str) -> Result<String> {
-        let (id, name) = match spec.split_once('/') {
-            Some((id, name)) if !id.is_empty() && !name.is_empty() => (id, name),
-            _ => {
-                return Err(FnoxError::ProviderInvalidResponse {
-                    provider: "1Password".to_string(),
-                    details: format!(
-                        "Invalid environment reference: '{}{}'",
-                        ENVIRONMENT_PREFIX, spec
-                    ),
-                    hint: "Expected 'environment://<environment-id>/<VARIABLE>'".to_string(),
-                    url: "https://fnox.jdx.dev/providers/1password".to_string(),
-                });
-            }
-        };
+    /// Split `<environment-id>/<VARIABLE>` (the part after `environment://`).
+    fn parse_environment_ref(spec: &str) -> Result<(&str, &str)> {
+        match spec.split_once('/') {
+            Some((id, name)) if !id.is_empty() && !name.is_empty() => Ok((id, name)),
+            _ => Err(FnoxError::ProviderInvalidResponse {
+                provider: "1Password".to_string(),
+                details: format!(
+                    "Invalid environment reference: '{}{}'",
+                    ENVIRONMENT_PREFIX, spec
+                ),
+                hint: "Expected 'environment://<environment-id>/<VARIABLE>'".to_string(),
+                url: "https://fnox.jdx.dev/providers/1password".to_string(),
+            }),
+        }
+    }
 
-        let vars = self.read_environment(id).await?;
+    fn lookup_environment_variable(
+        vars: &HashMap<String, String>,
+        id: &str,
+        name: &str,
+    ) -> Result<String> {
         vars.get(name)
             .cloned()
             .ok_or_else(|| FnoxError::ProviderSecretNotFound {
@@ -151,6 +154,67 @@ impl OnePasswordProvider {
                 hint: format!("Environment '{}' has no variable named '{}'", id, name),
                 url: "https://fnox.jdx.dev/providers/1password".to_string(),
             })
+    }
+
+    /// Resolve `<environment-id>/<VARIABLE>` (the part after `environment://`).
+    async fn get_environment_variable(&self, spec: &str) -> Result<String> {
+        let (id, name) = Self::parse_environment_ref(spec)?;
+        let vars = self.read_environment(id).await?;
+        Self::lookup_environment_variable(&vars, id, name)
+    }
+
+    /// Resolve several `(key, <environment-id>/<VARIABLE>)` pairs. Each Environment is
+    /// read once; if that read fails, every variable of it gets the same error without
+    /// running `op` again. Failures are not cached, so a later batch retries.
+    async fn get_environment_variables_batch(
+        &self,
+        refs: Vec<(String, String)>,
+    ) -> HashMap<String, Result<String>> {
+        let mut results = HashMap::new();
+        let mut by_environment: Vec<(String, Vec<(String, String)>)> = Vec::new();
+
+        for (key, value) in refs {
+            let spec = &value[ENVIRONMENT_PREFIX.len()..];
+            match Self::parse_environment_ref(spec) {
+                Ok((id, name)) => {
+                    match by_environment.iter_mut().find(|(env_id, _)| env_id == id) {
+                        Some((_, vars)) => vars.push((key, name.to_string())),
+                        None => {
+                            by_environment.push((id.to_string(), vec![(key, name.to_string())]))
+                        }
+                    }
+                }
+                Err(e) => {
+                    results.insert(key, Err(e));
+                }
+            }
+        }
+
+        for (id, wanted) in by_environment {
+            match self.read_environment(&id).await {
+                Ok(vars) => {
+                    for (key, name) in wanted {
+                        results.insert(key, Self::lookup_environment_variable(&vars, &id, &name));
+                    }
+                }
+                Err(e) => {
+                    for (key, _) in wanted {
+                        let err = e.clone_provider_error().unwrap_or_else(|| {
+                            FnoxError::ProviderCliFailed {
+                                provider: "1Password".to_string(),
+                                details: e.to_string(),
+                                hint: "Check your 1Password configuration and authentication"
+                                    .to_string(),
+                                url: "https://fnox.jdx.dev/providers/1password".to_string(),
+                            }
+                        });
+                        results.insert(key, Err(err));
+                    }
+                }
+            }
+        }
+
+        results
     }
 
     /// Execute op CLI command with proper authentication
@@ -365,10 +429,7 @@ impl crate::providers::Provider for OnePasswordProvider {
             .partition(|(_, value)| value.starts_with(ENVIRONMENT_PREFIX));
 
         let mut results = self.get_op_secrets_batch(&op_refs).await;
-        for (key, value) in env_refs {
-            let spec = &value[ENVIRONMENT_PREFIX.len()..];
-            results.insert(key, self.get_environment_variable(spec).await);
-        }
+        results.extend(self.get_environment_variables_batch(env_refs).await);
         results
     }
 
