@@ -13,7 +13,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Not "aube-lock-<ref>": the called workflow uses that group for its own job.
+  group: aube-lock-caller-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
