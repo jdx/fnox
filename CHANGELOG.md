@@ -1,5 +1,40 @@
 # Changelog
 
+## [1.40.0](https://github.com/jdx/fnox/compare/v1.39.0..v1.40.0) - 2026-10-10
+
+### 🚀 Features
+
+- **(1password)** read variables from 1Password Environments by [@jdx](https://github.com/jdx) in [#955](https://github.com/jdx/fnox/pull/955)
+- **(kubernetes)** read Kubernetes Secrets by [@jdx](https://github.com/jdx) in [#953](https://github.com/jdx/fnox/pull/953)
+- **(plain)** read values from a plaintext file by [@joshbode](https://github.com/joshbode) in [#954](https://github.com/jdx/fnox/pull/954)
+
+### 🐛 Bug Fixes
+
+- **(release)** wait for each crate on crates.io and finish partial publishes by [@jdx](https://github.com/jdx) in [#946](https://github.com/jdx/fnox/pull/946)
+
+### 🛡️ Security
+
+- require zizmor in final by [@jdx](https://github.com/jdx) in [#961](https://github.com/jdx/fnox/pull/961)
+
+### 🔍 Other Changes
+
+- **(ci)** lint workflows with jactionlint by [@jdx](https://github.com/jdx) in [#957](https://github.com/jdx/fnox/pull/957)
+- **(ci)** switch to jactionlint v2 and drop zizmor by [@jdx](https://github.com/jdx) in [#962](https://github.com/jdx/fnox/pull/962)
+- **(release)** remove unused Claude Code CLI install from release-plz by [@jdx](https://github.com/jdx) in [#956](https://github.com/jdx/fnox/pull/956)
+- use Namespace cache instead of rust-cache on Namespace runners by [@jdx](https://github.com/jdx) in [#947](https://github.com/jdx/fnox/pull/947)
+- label release PRs with release by [@jdx](https://github.com/jdx) in [#950](https://github.com/jdx/fnox/pull/950)
+- add shared release fix notifications by [@jdx](https://github.com/jdx) in [#958](https://github.com/jdx/fnox/pull/958)
+
+### 📦️ Dependency Updates
+
+- update dependency @anthropic-ai/claude-code to v2.1.285 by [@renovate[bot]](https://github.com/renovate[bot]) in [#949](https://github.com/jdx/fnox/pull/949)
+- update rust crate demand to v2.4.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#951](https://github.com/jdx/fnox/pull/951)
+- update rust crate usage-rs to v7 by [@jdx](https://github.com/jdx) in [#960](https://github.com/jdx/fnox/pull/960)
+
+### New Contributors
+
+- @joshbode made their first contribution in [#954](https://github.com/jdx/fnox/pull/954)
+
 ## [1.39.0](https://github.com/jdx/fnox/compare/v1.38.1..v1.39.0) - 2026-10-06
 
 ### 🚀 Features
