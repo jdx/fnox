@@ -341,6 +341,10 @@ jobs:
           timeout_minutes: 5
           max_attempts: 3
           command: mise run lint
+        env:
+          # online checks (vulnerable, impostor and stale action refs) run in CI only
+          JACTIONLINT_ONLINE: 1
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Run clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
