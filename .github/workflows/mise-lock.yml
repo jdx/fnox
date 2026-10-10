@@ -14,6 +14,11 @@ on:
 
 permissions: {}
 
+concurrency:
+  # Not "mise-lock-<ref>": the called workflow uses that group for its own job.
+  group: mise-lock-caller-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   mise-lock:
     permissions:

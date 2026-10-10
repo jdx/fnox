@@ -6,6 +6,9 @@ on:
       - .github/workflows/release.yml
       - .github/workflows/windows-release-check.yml
       - .github/scripts/select-openssl-perl.ps1
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

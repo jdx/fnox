@@ -10,6 +10,9 @@ on:
       AGE_SECRET:
         required: false
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -198,11 +201,6 @@ jobs:
         run: |
           source ./test/setup-bitwarden-ci.sh
           echo "BW_SESSION=$BW_SESSION" >> "$GITHUB_ENV"
-      - name: Install Infisical CLI
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: |
-          curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | sudo -E bash
-          sudo apt-get update && sudo apt-get install -y infisical
       - name: Setup Infisical for tests
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
@@ -250,7 +248,7 @@ jobs:
           cache: false
           fetch_from_github: false
       # save-if: only saves on main pushes, so PRs cannot poison the cache.
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2 # zizmor: ignore[cache-poisoning]
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           shared-key: check-windows
           save-if: ${{ inputs.trusted && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) }}
@@ -343,6 +341,10 @@ jobs:
           timeout_minutes: 5
           max_attempts: 3
           command: mise run lint
+        env:
+          # online checks (vulnerable, impostor and stale action refs) run in CI only
+          JACTIONLINT_ONLINE: 1
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Run clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
