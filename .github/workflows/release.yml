@@ -3,8 +3,9 @@ name: release
 permissions: {}
 
 # A release in flight must finish, so a second run for the same version waits.
+# The tag push (`v1.2.3`) and the manual input (`1.2.3`) share one group.
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.version || github.ref_name }}
+  group: ${{ github.workflow }}-${{ inputs.version != '' && format('v{0}', inputs.version) || github.ref_name }}
   cancel-in-progress: false
 
 on:
@@ -189,7 +190,7 @@ jobs:
   create-release:
     needs: [build-binaries]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: write
       # The packslip is signed with this job's OIDC identity and its
@@ -299,7 +300,7 @@ jobs:
   enhance-release:
     needs: [create-release]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: write
     steps:
@@ -357,7 +358,7 @@ jobs:
   publish-release:
     needs: [enhance-release]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: write
     steps:
