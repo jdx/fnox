@@ -74,6 +74,11 @@ create_test_bw_item() {
 	local password
 	password="test-secret-value-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
 	local username="testuser"
+	local folder_id="${1:-}"
+	local folder_json="null"
+	if [ -n "$folder_id" ]; then
+		folder_json="\"$folder_id\""
+	fi
 
 	# Create item with bw CLI
 	# Note: This is a simplified version - real implementation would need proper JSON encoding
@@ -82,7 +87,7 @@ create_test_bw_item() {
 		cat <<EOF
 {
   "organizationId": null,
-  "folderId": null,
+  "folderId": $folder_json,
   "type": 1,
   "name": "$item_name",
   "notes": "Created by fnox test",
@@ -111,6 +116,21 @@ EOF
 	local item_id
 	item_id=$(echo "$template" | bw encode | bw create item --session "$BW_SESSION" | bw get item - --session "$BW_SESSION" | jq -r '.id')
 	echo "$item_id|$item_name"
+}
+
+# Helper function to create a test folder in Bitwarden
+# Returns "folder_id|folder_name"
+create_test_bw_folder() {
+	local folder_name
+	folder_name="fnox-test-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}/Production"
+	local folder_id
+	folder_id=$(echo "{\"name\": \"$folder_name\"}" | bw encode | bw create folder --session "$BW_SESSION" | jq -r '.id')
+	echo "$folder_id|$folder_name"
+}
+
+delete_test_bw_folder() {
+	local folder_id="${1}"
+	bw delete folder "$folder_id" --session "$BW_SESSION" >/dev/null 2>&1 || true
 }
 
 # Helper function to delete a test item from Bitwarden
@@ -340,4 +360,115 @@ EOF
 	run "$FNOX_BIN" get TEST_SECRET
 	# Will fail if organization doesn't exist, but that's expected
 	assert_failure
+}
+
+@test "fnox get retrieves secret scoped by folder with bw backend" {
+	folder_info=$(create_test_bw_folder)
+	folder_id=$(echo "$folder_info" | cut -d'|' -f1)
+	folder_name=$(echo "$folder_info" | cut -d'|' -f2)
+
+	item_info=$(create_test_bw_item "$folder_id")
+	item_id=$(echo "$item_info" | cut -d'|' -f1)
+	item_name=$(echo "$item_info" | cut -d'|' -f2)
+
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF
+[providers.bitwarden]
+type = "bitwarden"
+folder = "$folder_name"
+
+[secrets.TEST_FOLDER_PASSWORD]
+provider = "bitwarden"
+value = "$item_name"
+
+[secrets.TEST_FOLDER_CUSTOM]
+provider = "bitwarden"
+value = "$item_name/API Key"
+EOF
+
+	run "$FNOX_BIN" get TEST_FOLDER_PASSWORD
+	assert_success
+	assert_output --partial "test-secret-value-"
+
+	run "$FNOX_BIN" get TEST_FOLDER_CUSTOM
+	assert_success
+	assert_output "custom-secret-value-${BATS_TEST_NUMBER:-0}"
+
+	delete_test_bw_item "$item_id"
+	delete_test_bw_folder "$folder_id"
+}
+
+@test "fnox get fails when item is not in the configured folder" {
+	folder_info=$(create_test_bw_folder)
+	folder_id=$(echo "$folder_info" | cut -d'|' -f1)
+	folder_name=$(echo "$folder_info" | cut -d'|' -f2)
+
+	item_info=$(create_test_bw_item)
+	item_id=$(echo "$item_info" | cut -d'|' -f1)
+	item_name=$(echo "$item_info" | cut -d'|' -f2)
+
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF
+[providers.bitwarden]
+type = "bitwarden"
+folder = "$folder_name"
+
+[secrets.TEST_OUTSIDE_FOLDER]
+provider = "bitwarden"
+value = "$item_name"
+EOF
+
+	run "$FNOX_BIN" get TEST_OUTSIDE_FOLDER
+	assert_failure
+	assert_output --partial "not found"
+
+	delete_test_bw_item "$item_id"
+	delete_test_bw_folder "$folder_id"
+}
+
+@test "fnox get retrieves secret scoped by folder with rbw backend" {
+	if ! command -v rbw >/dev/null 2>&1; then
+		skip "rbw not installed"
+	fi
+	if ! rbw unlocked >/dev/null 2>&1; then
+		skip "rbw is not unlocked. Run: rbw unlock"
+	fi
+
+	folder_info=$(create_test_bw_folder)
+	folder_id=$(echo "$folder_info" | cut -d'|' -f1)
+	folder_name=$(echo "$folder_info" | cut -d'|' -f2)
+
+	item_info=$(create_test_bw_item "$folder_id")
+	item_id=$(echo "$item_info" | cut -d'|' -f1)
+	item_name=$(echo "$item_info" | cut -d'|' -f2)
+
+	if ! rbw sync >/dev/null 2>&1 || ! rbw get "$item_name" --folder "$folder_name" >/dev/null 2>&1; then
+		delete_test_bw_item "$item_id"
+		delete_test_bw_folder "$folder_id"
+		skip "rbw is not configured against the same vault as bw"
+	fi
+
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF
+[providers.bitwarden]
+type = "bitwarden"
+backend = "rbw"
+folder = "$folder_name"
+
+[secrets.TEST_RBW_FOLDER_PASSWORD]
+provider = "bitwarden"
+value = "$item_name"
+
+[secrets.TEST_RBW_FOLDER_USERNAME]
+provider = "bitwarden"
+value = "$item_name/username"
+EOF
+
+	run "$FNOX_BIN" get TEST_RBW_FOLDER_PASSWORD
+	assert_success
+	assert_output --partial "test-secret-value-"
+
+	run "$FNOX_BIN" get TEST_RBW_FOLDER_USERNAME
+	assert_success
+	assert_output "testuser"
+
+	delete_test_bw_item "$item_id"
+	delete_test_bw_folder "$folder_id"
 }

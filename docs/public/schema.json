@@ -641,6 +641,9 @@
             "profile": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
+            "folder": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "backend": {
               "anyOf": [
                 {

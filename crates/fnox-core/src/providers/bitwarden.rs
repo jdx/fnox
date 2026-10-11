@@ -5,12 +5,17 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tokio::process::Command;
+use tokio::sync::OnceCell;
+
+const URL: &str = "https://fnox.jdx.dev/providers/bitwarden";
 
 pub struct BitwardenProvider {
     collection: Option<String>,
     organization_id: Option<String>,
     profile: Option<String>,
+    folder: Option<String>,
     backend: BitwardenBackend,
+    folder_id: OnceCell<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -32,6 +37,12 @@ struct BitwardenField {
     value: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct BitwardenListEntry {
+    id: Option<String>,
+    name: String,
+}
+
 impl fmt::Display for BitwardenBackend {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -50,13 +61,16 @@ impl BitwardenProvider {
         collection: Option<String>,
         organization_id: Option<String>,
         profile: Option<String>,
+        folder: Option<String>,
         backend: Option<BitwardenBackend>,
     ) -> Result<Self> {
         Ok(Self {
             collection,
             organization_id,
             profile,
+            folder,
             backend: backend.unwrap_or(BitwardenBackend::Bw),
+            folder_id: OnceCell::new(),
         })
     }
 
@@ -111,6 +125,20 @@ impl BitwardenProvider {
             cmd.args(["--organizationid", org]);
         }
 
+        self.apply_bw_session_and_profile(&mut cmd)?;
+
+        Ok(cmd)
+    }
+
+    fn build_bw_list_command(&self, args: &[&str]) -> Result<tokio::process::Command> {
+        let mut cmd = Command::new("bw");
+        cmd.arg("list");
+        cmd.args(args);
+        self.apply_bw_session_and_profile(&mut cmd)?;
+        Ok(cmd)
+    }
+
+    fn apply_bw_session_and_profile(&self, cmd: &mut Command) -> Result<()> {
         // Check if session token is available
         let session_token = bw_session_token();
         let token = if let Some(token) = &session_token {
@@ -159,7 +187,7 @@ impl BitwardenProvider {
             }
         }
 
-        Ok(cmd)
+        Ok(())
     }
 
     fn build_rbw_command(
@@ -190,6 +218,10 @@ impl BitwardenProvider {
             Some(field) => {
                 cmd.args(["get", item_name, "--field", field]);
             }
+        }
+
+        if let Some(folder) = &self.folder {
+            cmd.args(["--folder", folder]);
         }
 
         if let Some(profile) = &self.profile {
@@ -272,6 +304,43 @@ impl BitwardenProvider {
         Ok(stdout.trim().to_string())
     }
 
+    async fn resolve_bw_folder_id(&self, folder: &str) -> Result<String> {
+        self.folder_id
+            .get_or_try_init(|| async {
+                let mut cmd = self.build_bw_list_command(&["folders", "--search", folder])?;
+                let output = self.execute_command(&mut cmd).await?;
+                let folders = parse_list_entries("folders", &output)?;
+                select_entry("folder", folder, folders)
+            })
+            .await
+            .cloned()
+    }
+
+    async fn resolve_bw_item_id(&self, folder: &str, item_name: &str) -> Result<String> {
+        let folder_id = self.resolve_bw_folder_id(folder).await?;
+        let mut args = vec!["items", "--folderid", &folder_id, "--search", item_name];
+        if let Some(coll) = &self.collection {
+            args.extend(["--collectionid", coll]);
+        }
+        if let Some(org) = &self.organization_id {
+            args.extend(["--organizationid", org]);
+        }
+        let mut cmd = self.build_bw_list_command(&args)?;
+        let output = self.execute_command(&mut cmd).await?;
+        let items = parse_list_entries("items", &output)?;
+        select_entry("item", item_name, items).map_err(|e| match e {
+            FnoxError::ProviderSecretNotFound { hint, url, .. } => {
+                FnoxError::ProviderSecretNotFound {
+                    provider: "Bitwarden".to_string(),
+                    secret: format!("{folder}/{item_name}"),
+                    hint,
+                    url,
+                }
+            }
+            e => e,
+        })
+    }
+
     fn extract_custom_field(
         &self,
         item_name: &str,
@@ -333,7 +402,13 @@ impl crate::providers::Provider for BitwardenProvider {
             field_name,
             "password" | "username" | "notes" | "uri" | "url" | "totp"
         );
-        let mut cmd = self.build_command(Some(field_name), item_name)?;
+        let mut cmd = match (&self.backend, &self.folder) {
+            (BitwardenBackend::Bw, Some(folder)) => {
+                let item_id = self.resolve_bw_item_id(folder, item_name).await?;
+                self.build_command(Some(field_name), &item_id)?
+            }
+            _ => self.build_command(Some(field_name), item_name)?,
+        };
         let output = self.execute_command(&mut cmd).await?;
 
         if is_custom_field && self.backend == BitwardenBackend::Bw {
@@ -348,6 +423,48 @@ pub fn env_dependencies() -> &'static [&'static str] {
     &["BW_SESSION", "FNOX_BW_SESSION"]
 }
 
+fn parse_list_entries(kind: &str, json: &str) -> Result<Vec<BitwardenListEntry>> {
+    serde_json::from_str(json).map_err(|e| FnoxError::ProviderInvalidResponse {
+        provider: "Bitwarden".to_string(),
+        details: format!("Failed to parse 'bw list {kind}' output: {e}"),
+        hint: "Check that the Bitwarden CLI returned valid JSON".to_string(),
+        url: URL.to_string(),
+    })
+}
+
+fn select_entry(kind: &str, name: &str, entries: Vec<BitwardenListEntry>) -> Result<String> {
+    let entries: Vec<_> = entries.into_iter().filter(|e| e.id.is_some()).collect();
+    let exact: Vec<_> = entries.iter().filter(|e| e.name == name).collect();
+    let candidates = if exact.is_empty() {
+        entries.iter().collect()
+    } else {
+        exact
+    };
+
+    match candidates.as_slice() {
+        [] => Err(FnoxError::ProviderSecretNotFound {
+            provider: "Bitwarden".to_string(),
+            secret: format!("{kind} '{name}'"),
+            hint: format!("Check that the {kind} exists and the name is spelled correctly"),
+            url: URL.to_string(),
+        }),
+        [entry] => Ok(entry.id.clone().unwrap()),
+        many => Err(FnoxError::ProviderCliFailed {
+            provider: "Bitwarden".to_string(),
+            details: format!(
+                "{} {kind}s match '{name}': {}",
+                many.len(),
+                many.iter()
+                    .map(|e| e.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            hint: format!("Use a unique, exact {kind} name"),
+            url: URL.to_string(),
+        }),
+    }
+}
+
 fn bw_session_token() -> Option<String> {
     env::var("FNOX_BW_SESSION")
         .or_else(|_| env::var("BW_SESSION"))
@@ -359,7 +476,127 @@ mod tests {
     use super::*;
 
     fn provider(backend: BitwardenBackend) -> BitwardenProvider {
-        BitwardenProvider::new(None, None, None, Some(backend)).unwrap()
+        BitwardenProvider::new(None, None, None, None, Some(backend)).unwrap()
+    }
+
+    fn provider_with_folder(backend: BitwardenBackend) -> BitwardenProvider {
+        BitwardenProvider::new(
+            None,
+            None,
+            None,
+            Some("MyApp/Production".to_string()),
+            Some(backend),
+        )
+        .unwrap()
+    }
+
+    fn rbw_args(kind: Option<&str>) -> Vec<String> {
+        provider_with_folder(BitwardenBackend::Rbw)
+            .build_rbw_command(kind, "Database")
+            .unwrap()
+            .as_std()
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn rbw_appends_folder_flag_for_every_field_kind() {
+        assert_eq!(
+            rbw_args(None),
+            ["get", "Database", "--folder", "MyApp/Production"]
+        );
+        assert_eq!(
+            rbw_args(Some("username")),
+            [
+                "get",
+                "Database",
+                "--field",
+                "username",
+                "--folder",
+                "MyApp/Production"
+            ]
+        );
+        assert_eq!(
+            rbw_args(Some("totp")),
+            ["code", "Database", "--folder", "MyApp/Production"]
+        );
+        assert_eq!(
+            rbw_args(Some("API/Key")),
+            [
+                "get",
+                "Database",
+                "--field",
+                "API/Key",
+                "--folder",
+                "MyApp/Production"
+            ]
+        );
+    }
+
+    #[test]
+    fn rbw_omits_folder_flag_when_unset() {
+        let command = provider(BitwardenBackend::Rbw)
+            .build_rbw_command(Some("totp"), "Database")
+            .unwrap();
+        let args: Vec<_> = command.as_std().get_args().collect();
+
+        assert_eq!(args, ["code", "Database"]);
+    }
+
+    #[test]
+    fn selects_exact_folder_name_over_partial_matches() {
+        let json = r#"[
+            {"object": "folder", "id": "parent-id", "name": "MyApp"},
+            {"object": "folder", "id": "prod-id", "name": "MyApp/Production"},
+            {"object": "folder", "id": "prod-old-id", "name": "MyApp/Production-old"}
+        ]"#;
+
+        let entries = parse_list_entries("folders", json).unwrap();
+        let id = select_entry("folder", "MyApp/Production", entries).unwrap();
+
+        assert_eq!(id, "prod-id");
+    }
+
+    #[test]
+    fn falls_back_to_single_partial_match() {
+        let json = r#"[{"object": "folder", "id": "prod-id", "name": "MyApp/Production"}]"#;
+
+        let entries = parse_list_entries("folders", json).unwrap();
+        let id = select_entry("folder", "production", entries).unwrap();
+
+        assert_eq!(id, "prod-id");
+    }
+
+    #[test]
+    fn errors_when_folder_not_found() {
+        let json = r#"[{"object": "folder", "id": null, "name": "No Folder"}]"#;
+
+        let entries = parse_list_entries("folders", json).unwrap();
+        let error = select_entry("folder", "Missing", entries).unwrap_err();
+
+        assert!(matches!(error, FnoxError::ProviderSecretNotFound { .. }));
+        assert!(error.to_string().contains("folder 'Missing'"));
+    }
+
+    #[test]
+    fn errors_when_match_is_ambiguous() {
+        let json = r#"[
+            {"id": "a", "name": "Database"},
+            {"id": "b", "name": "Database"}
+        ]"#;
+
+        let entries = parse_list_entries("items", json).unwrap();
+        let error = select_entry("item", "Database", entries).unwrap_err();
+
+        assert!(error.to_string().contains("2 items match 'Database'"));
+    }
+
+    #[test]
+    fn errors_on_invalid_list_json() {
+        let error = parse_list_entries("folders", "not json").unwrap_err();
+
+        assert!(matches!(error, FnoxError::ProviderInvalidResponse { .. }));
     }
 
     #[test]

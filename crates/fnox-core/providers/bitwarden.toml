@@ -33,6 +33,13 @@ placeholder = ""
 label = "Profile (optional):"
 wizard = true
 
+# Filter items by Bitwarden folder name (or path like "Parent/Child" for nested folders)
+[fields.folder]
+type = "optional"
+placeholder = ""
+label = "Folder (optional):"
+wizard = true
+
 [fields.backend]
 type = "backend_enum"
 wizard = false

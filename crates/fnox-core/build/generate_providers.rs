@@ -683,6 +683,7 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
                 collection: get_optional("collection"),
                 organization_id: get_optional("organization_id"),
                 profile: get_optional("profile"),
+                folder: get_optional("folder"),
                 backend: None,
                 auth_command: None,
                 daemon_cache: None,
