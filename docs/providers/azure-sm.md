@@ -39,20 +39,36 @@ fnox get DATABASE_URL
 
 ## Authentication
 
-Choose one:
+By default, fnox uses a service principal when `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_CLIENT_SECRET` are all set, and otherwise uses your Azure CLI or Azure Developer CLI login:
 
 ```bash
-# Azure CLI (development)
-az login
-
-# Service Principal (CI/CD)
+# Service principal (CI/CD, or anywhere the CLI login is unavailable)
+export AZURE_TENANT_ID="..."
 export AZURE_CLIENT_ID="..."
 export AZURE_CLIENT_SECRET="..."
-export AZURE_TENANT_ID="..."
 
-# Managed Identity (automatic on Azure VMs/Functions)
-# No configuration needed!
+# Azure CLI or Azure Developer CLI (development)
+az login
+azd auth login
 ```
+
+The three service principal variables can also be fnox secrets resolved from another provider. fnox resolves them before it uses the Azure provider.
+
+On an Azure host, set `auth = "managed-identity"` to use the host's managed identity instead:
+
+```toml
+[providers]
+azure = { type = "azure-sm", vault_url = "https://myapp-vault.vault.azure.net/", auth = "managed-identity" }
+
+# A user-assigned identity, selected by its client ID
+azure-uami = { type = "azure-sm", vault_url = "https://myapp-vault.vault.azure.net/", auth = "managed-identity", managed_identity_client_id = "00000000-0000-0000-0000-000000000000" }
+```
+
+Without `managed_identity_client_id`, the system-assigned identity is used. Managed identity is never tried automatically: it is selected only by `auth = "managed-identity"`, so machines outside Azure do not wait on the instance metadata endpoint.
+
+Managed identity works on Azure VMs and virtual machine scale sets, and on App Service, Azure Functions and Container Apps. The Azure SDK for Rust does not support the Azure Arc, Service Fabric, Cloud Shell or Azure Machine Learning managed identity endpoints.
+
+The same `auth` and `managed_identity_client_id` settings apply to the [Azure Key Vault Keys](/providers/azure-kms) and [Azure App Configuration](/providers/azure-ac) providers.
 
 ## Permissions
 
@@ -71,6 +87,13 @@ az role assignment create \
 [providers]
 azure = { type = "azure-sm", vault_url = "https://myapp-vault.vault.azure.net/", prefix = "myapp-" }  # prefix is optional
 ```
+
+| Field                        | Required | Description                                                                                 |
+| ---------------------------- | -------- | ------------------------------------------------------------------------------------------- |
+| `vault_url`                  | Yes      | Key Vault URL                                                                               |
+| `prefix`                     | No       | Prepended to every secret name                                                              |
+| `auth`                       | No       | `default` (service principal variables, then Azure CLI/Developer CLI) or `managed-identity` |
+| `managed_identity_client_id` | No       | Client ID of a user-assigned managed identity. Requires `auth = "managed-identity"`         |
 
 ## Usage notes
 

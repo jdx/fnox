@@ -1,13 +1,13 @@
 use crate::error::{FnoxError, Result};
+use crate::providers::azure_shared::{AzureAuth, SERVICE_PRINCIPAL_ENV_VARS};
 use async_trait::async_trait;
-use azure_identity::DeveloperToolsCredential;
 use azure_security_keyvault_keys::{
     KeyClient,
     models::{EncryptionAlgorithm, KeyOperationParameters},
 };
 
 pub fn env_dependencies() -> &'static [&'static str] {
-    &[]
+    SERVICE_PRINCIPAL_ENV_VARS
 }
 
 const URL: &str = "https://fnox.jdx.dev/providers/azure-kms";
@@ -15,28 +15,26 @@ const URL: &str = "https://fnox.jdx.dev/providers/azure-kms";
 pub struct AzureKeyVaultProvider {
     vault_url: String,
     key_name: String,
+    auth: AzureAuth,
 }
 
 impl AzureKeyVaultProvider {
-    pub fn new(vault_url: String, key_name: String) -> Result<Self> {
+    pub fn new(
+        vault_url: String,
+        key_name: String,
+        auth: Option<String>,
+        managed_identity_client_id: Option<String>,
+    ) -> Result<Self> {
         Ok(Self {
             vault_url,
             key_name,
+            auth: AzureAuth::from_config(auth.as_deref(), managed_identity_client_id)?,
         })
     }
 
     /// Create an Azure Key Vault key client
     fn create_client(&self) -> Result<KeyClient> {
-        // Use DeveloperToolsCredential which supports multiple auth methods:
-        // - Azure CLI
-        // - Azure Developer CLI
-        let credential =
-            DeveloperToolsCredential::new(None).map_err(|e| FnoxError::ProviderAuthFailed {
-                provider: "Azure Key Vault".to_string(),
-                details: e.to_string(),
-                hint: "Run 'az login' to authenticate with Azure".to_string(),
-                url: URL.to_string(),
-            })?;
+        let credential = self.auth.build_credential("Azure Key Vault", URL)?;
 
         KeyClient::new(&self.vault_url, credential, None).map_err(|e| FnoxError::ProviderApiError {
             provider: "Azure Key Vault".to_string(),

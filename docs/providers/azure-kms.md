@@ -30,6 +30,17 @@ fnox set DATABASE_URL "postgresql://prod.example.com/db" --provider azurekms
 fnox get DATABASE_URL
 ```
 
+## Authentication
+
+The Azure Key Vault Keys provider authenticates the same way as [Azure Key Vault Secrets](/providers/azure-sm#authentication): a service principal from `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_CLIENT_SECRET` when all three are set, otherwise the Azure CLI or Azure Developer CLI login. Set `auth = "managed-identity"` to use the managed identity of an Azure host instead:
+
+```toml
+[providers]
+azurekms = { type = "azure-kms", vault_url = "https://myapp-vault.vault.azure.net/", key_name = "encryption-key", auth = "managed-identity" }
+```
+
+Add `managed_identity_client_id` to select a user-assigned identity.
+
 ## Permissions
 
 Grant crypto permissions:

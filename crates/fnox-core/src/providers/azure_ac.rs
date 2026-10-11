@@ -1,7 +1,6 @@
 use crate::error::{FnoxError, Result};
+use crate::providers::azure_shared::{AzureAuth, SERVICE_PRINCIPAL_ENV_VARS};
 use async_trait::async_trait;
-use azure_core::credentials::TokenCredential;
-use azure_identity::DeveloperToolsCredential;
 use reqwest::Url;
 use serde::Deserialize;
 
@@ -43,7 +42,7 @@ fn invalid_endpoint(endpoint: &str, reason: &str) -> FnoxError {
 }
 
 pub fn env_dependencies() -> &'static [&'static str] {
-    &[]
+    SERVICE_PRINCIPAL_ENV_VARS
 }
 
 #[derive(Deserialize)]
@@ -75,10 +74,17 @@ pub struct AzureAppConfigurationProvider {
     label: Option<String>,
     prefix: Option<String>,
     scope: &'static str,
+    auth: AzureAuth,
 }
 
 impl AzureAppConfigurationProvider {
-    pub fn new(endpoint: String, label: Option<String>, prefix: Option<String>) -> Result<Self> {
+    pub fn new(
+        endpoint: String,
+        label: Option<String>,
+        prefix: Option<String>,
+        auth: Option<String>,
+        managed_identity_client_id: Option<String>,
+    ) -> Result<Self> {
         let url = Url::parse(&endpoint).map_err(|e| invalid_endpoint(&endpoint, &e.to_string()))?;
         if url.scheme() != "https" {
             return Err(invalid_endpoint(&endpoint, "must use https"));
@@ -96,6 +102,7 @@ impl AzureAppConfigurationProvider {
             label: label.filter(|l| !l.is_empty()),
             prefix: prefix.filter(|p| !p.is_empty()),
             scope,
+            auth: AzureAuth::from_config(auth.as_deref(), managed_identity_client_id)?,
         })
     }
 
@@ -150,14 +157,7 @@ impl AzureAppConfigurationProvider {
 
     /// Acquire a Microsoft Entra ID token for the App Configuration data plane
     async fn get_token(&self) -> Result<String> {
-        let credential = DeveloperToolsCredential::new(None).map_err(|e: azure_core::Error| {
-            FnoxError::ProviderAuthFailed {
-                provider: PROVIDER_NAME.to_string(),
-                details: e.to_string(),
-                hint: "Run 'az login' to authenticate with Azure".to_string(),
-                url: PROVIDER_URL.to_string(),
-            }
-        })?;
+        let credential = self.auth.build_credential(PROVIDER_NAME, PROVIDER_URL)?;
 
         let token =
             credential
@@ -166,7 +166,7 @@ impl AzureAppConfigurationProvider {
                 .map_err(|e: azure_core::Error| FnoxError::ProviderAuthFailed {
                     provider: PROVIDER_NAME.to_string(),
                     details: e.to_string(),
-                    hint: "Run 'az login' to authenticate with Azure".to_string(),
+                    hint: self.auth.hint().to_string(),
                     url: PROVIDER_URL.to_string(),
                 })?;
 
@@ -267,6 +267,8 @@ mod tests {
             "https://store.azconfig.io/".to_string(),
             label.map(String::from),
             prefix.map(String::from),
+            None,
+            None,
         )
         .unwrap()
     }
@@ -311,6 +313,8 @@ mod tests {
             "https://store.azconfig.io/some/path?q=1#frag".to_string(),
             None,
             None,
+            None,
+            None,
         )
         .unwrap();
         assert_eq!(with_path.endpoint, "https://store.azconfig.io");
@@ -331,7 +335,8 @@ mod tests {
             "not a url",
         ] {
             assert!(
-                AzureAppConfigurationProvider::new(endpoint.to_string(), None, None).is_err(),
+                AzureAppConfigurationProvider::new(endpoint.to_string(), None, None, None, None)
+                    .is_err(),
                 "expected {endpoint} to be rejected"
             );
         }

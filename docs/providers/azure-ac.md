@@ -41,12 +41,26 @@ fnox get API_URL
 
 ## Authentication
 
+The Azure App Configuration provider authenticates the same way as [Azure Key Vault Secrets](/providers/azure-sm#authentication):
+
 ```bash
+# Service principal
+export AZURE_TENANT_ID="..."
+export AZURE_CLIENT_ID="..."
+export AZURE_CLIENT_SECRET="..."
+
 # Azure CLI
 az login
 
 # Azure Developer CLI
 azd auth login
+```
+
+The service principal is used when all three variables are set. On an Azure host, set `auth = "managed-identity"` to use its managed identity, and add `managed_identity_client_id` for a user-assigned identity:
+
+```toml
+[providers]
+appconfig = { type = "azure-ac", endpoint = "https://myapp-config.azconfig.io", auth = "managed-identity" }
 ```
 
 ## Permissions

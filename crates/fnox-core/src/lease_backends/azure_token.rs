@@ -1,5 +1,6 @@
 use crate::error::{FnoxError, Result};
 use crate::lease_backends::{Lease, LeaseBackend};
+use crate::providers::azure_shared::{self, AzureAuth};
 use async_trait::async_trait;
 use azure_core::credentials::TokenCredential;
 use indexmap::IndexMap;
@@ -9,14 +10,10 @@ use std::time::Duration;
 const URL: &str = "https://fnox.jdx.dev/leases/azure-token";
 
 /// All env var names the Azure Token backend may consume at runtime.
-pub const CONSUMED_ENV_VARS: &[&str] =
-    &["AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET", "AZURE_TENANT_ID"];
+pub const CONSUMED_ENV_VARS: &[&str] = azure_shared::SERVICE_PRINCIPAL_ENV_VARS;
 
 pub fn check_prerequisites() -> Option<String> {
-    let has_sp = std::env::var("AZURE_CLIENT_ID").is_ok()
-        && std::env::var("AZURE_CLIENT_SECRET").is_ok()
-        && std::env::var("AZURE_TENANT_ID").is_ok();
-    if has_sp {
+    if azure_shared::service_principal_env().is_some() {
         return None;
     }
     let has_az = which::which("az").is_ok();
@@ -46,38 +43,7 @@ impl AzureTokenBackend {
     }
 
     fn build_credential(&self) -> Result<Arc<dyn TokenCredential>> {
-        // Prefer ClientSecretCredential from env vars
-        if let (Ok(tenant_id), Ok(client_id), Ok(client_secret)) = (
-            std::env::var("AZURE_TENANT_ID"),
-            std::env::var("AZURE_CLIENT_ID"),
-            std::env::var("AZURE_CLIENT_SECRET"),
-        ) {
-            let cred = azure_identity::ClientSecretCredential::new(
-                &tenant_id,
-                client_id,
-                client_secret.into(),
-                None,
-            )
-            .map_err(|e: azure_core::Error| FnoxError::ProviderAuthFailed {
-                provider: "Azure Token".to_string(),
-                details: e.to_string(),
-                hint: "Check AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET".to_string(),
-                url: URL.to_string(),
-            })?;
-            return Ok(cred);
-        }
-
-        // Fall back to DeveloperToolsCredential (az CLI)
-        let cred = azure_identity::DeveloperToolsCredential::new(None).map_err(
-            |e: azure_core::Error| FnoxError::ProviderAuthFailed {
-                provider: "Azure Token".to_string(),
-                details: e.to_string(),
-                hint: "Run 'az login' or set AZURE_CLIENT_ID/AZURE_CLIENT_SECRET/AZURE_TENANT_ID"
-                    .to_string(),
-                url: URL.to_string(),
-            },
-        )?;
-        Ok(cred)
+        AzureAuth::Default.build_credential("Azure Token", URL)
     }
 }
 

@@ -152,6 +152,8 @@ impl AddCommand {
                     endpoint: StringOrSecretRef::from("https://my-store.azconfig.io"),
                     label: OptionStringOrSecretRef::none(),
                     prefix: OptionStringOrSecretRef::none(),
+                    auth: OptionStringOrSecretRef::none(),
+                    managed_identity_client_id: OptionStringOrSecretRef::none(),
                     auth_command: None,
                     daemon_cache: None,
                 }
@@ -159,6 +161,8 @@ impl AddCommand {
             ProviderType::AzureKms => crate::config::ProviderConfig::AzureKms {
                 vault_url: StringOrSecretRef::from("https://my-vault.vault.azure.net/"),
                 key_name: StringOrSecretRef::from("my-key"),
+                auth: OptionStringOrSecretRef::none(),
+                managed_identity_client_id: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
             },
@@ -166,6 +170,8 @@ impl AddCommand {
                 crate::config::ProviderConfig::AzureSecretsManager {
                     vault_url: StringOrSecretRef::from("https://my-vault.vault.azure.net/"),
                     prefix: OptionStringOrSecretRef::none(),
+                    auth: OptionStringOrSecretRef::none(),
+                    managed_identity_client_id: OptionStringOrSecretRef::none(),
                     auth_command: None,
                     daemon_cache: None,
                 }
