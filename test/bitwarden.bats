@@ -53,7 +53,25 @@ setup() {
 }
 
 teardown() {
+	cleanup_registered_bw_objects
 	_common_teardown
+}
+
+register_bw_cleanup() {
+	echo "$1 $2" >>"$TEST_TEMP_DIR/.bw-cleanup"
+}
+
+cleanup_registered_bw_objects() {
+	local file="$TEST_TEMP_DIR/.bw-cleanup"
+	[ -f "$file" ] || return 0
+	local kind id
+	for kind in item folder; do
+		while read -r entry_kind id; do
+			if [ "$entry_kind" = "$kind" ] && [ -n "$id" ] && [ "$id" != "null" ]; then
+				bw delete "$kind" "$id" --session "$BW_SESSION" >/dev/null 2>&1 || true
+			fi
+		done <"$file"
+	done
 }
 
 # Helper function to create a Bitwarden test config
@@ -67,14 +85,12 @@ EOF
 }
 
 # Helper function to create a test item in Bitwarden
-# Returns the item ID
+# Returns "item_id|item_name"
 create_test_bw_item() {
-	local item_name
-	item_name="fnox-test-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
-	local password
-	password="test-secret-value-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}"
-	local username="testuser"
 	local folder_id="${1:-}"
+	local item_name="${2:-fnox-test-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}}"
+	local password="${3:-test-secret-value-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}}"
+	local username="testuser"
 	local folder_json="null"
 	if [ -n "$folder_id" ]; then
 		folder_json="\"$folder_id\""
@@ -115,22 +131,18 @@ EOF
 
 	local item_id
 	item_id=$(echo "$template" | bw encode | bw create item --session "$BW_SESSION" | bw get item - --session "$BW_SESSION" | jq -r '.id')
+	register_bw_cleanup item "$item_id"
 	echo "$item_id|$item_name"
 }
 
-# Helper function to create a test folder in Bitwarden
 # Returns "folder_id|folder_name"
 create_test_bw_folder() {
 	local folder_name
-	folder_name="fnox-test-$(date +%s)-$$-${BATS_TEST_NUMBER:-0}/Production"
+	folder_name="fnox-test-$$-${BATS_TEST_NUMBER:-0}/${1:-Production}"
 	local folder_id
 	folder_id=$(echo "{\"name\": \"$folder_name\"}" | bw encode | bw create folder --session "$BW_SESSION" | jq -r '.id')
+	register_bw_cleanup folder "$folder_id"
 	echo "$folder_id|$folder_name"
-}
-
-delete_test_bw_folder() {
-	local folder_id="${1}"
-	bw delete folder "$folder_id" --session "$BW_SESSION" >/dev/null 2>&1 || true
 }
 
 # Helper function to delete a test item from Bitwarden
@@ -367,9 +379,7 @@ EOF
 	folder_id=$(echo "$folder_info" | cut -d'|' -f1)
 	folder_name=$(echo "$folder_info" | cut -d'|' -f2)
 
-	item_info=$(create_test_bw_item "$folder_id")
-	item_id=$(echo "$item_info" | cut -d'|' -f1)
-	item_name=$(echo "$item_info" | cut -d'|' -f2)
+	item_name=$(create_test_bw_item "$folder_id" | cut -d'|' -f2)
 
 	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF
 [providers.bitwarden]
@@ -392,19 +402,51 @@ EOF
 	run "$FNOX_BIN" get TEST_FOLDER_CUSTOM
 	assert_success
 	assert_output "custom-secret-value-${BATS_TEST_NUMBER:-0}"
+}
 
-	delete_test_bw_item "$item_id"
-	delete_test_bw_folder "$folder_id"
+@test "fnox get picks same-named item from the configured folder" {
+	prod_info=$(create_test_bw_folder Production)
+	prod_folder_id=$(echo "$prod_info" | cut -d'|' -f1)
+	prod_folder_name=$(echo "$prod_info" | cut -d'|' -f2)
+
+	staging_info=$(create_test_bw_folder Staging)
+	staging_folder_id=$(echo "$staging_info" | cut -d'|' -f1)
+	staging_folder_name=$(echo "$staging_info" | cut -d'|' -f2)
+
+	item_name="fnox-test-shared-$$-${BATS_TEST_NUMBER:-0}"
+	create_test_bw_item "$prod_folder_id" "$item_name" "prod-password-$$" >/dev/null
+	create_test_bw_item "$staging_folder_id" "$item_name" "staging-password-$$" >/dev/null
+
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF
+[providers.bw-prod]
+type = "bitwarden"
+folder = "$prod_folder_name"
+
+[providers.bw-staging]
+type = "bitwarden"
+folder = "$staging_folder_name"
+
+[secrets.PROD_PASSWORD]
+provider = "bw-prod"
+value = "$item_name"
+
+[secrets.STAGING_PASSWORD]
+provider = "bw-staging"
+value = "$item_name"
+EOF
+
+	run "$FNOX_BIN" get PROD_PASSWORD
+	assert_success
+	assert_output "prod-password-$$"
+
+	run "$FNOX_BIN" get STAGING_PASSWORD
+	assert_success
+	assert_output "staging-password-$$"
 }
 
 @test "fnox get fails when item is not in the configured folder" {
-	folder_info=$(create_test_bw_folder)
-	folder_id=$(echo "$folder_info" | cut -d'|' -f1)
-	folder_name=$(echo "$folder_info" | cut -d'|' -f2)
-
-	item_info=$(create_test_bw_item)
-	item_id=$(echo "$item_info" | cut -d'|' -f1)
-	item_name=$(echo "$item_info" | cut -d'|' -f2)
+	folder_name=$(create_test_bw_folder | cut -d'|' -f2)
+	item_name=$(create_test_bw_item | cut -d'|' -f2)
 
 	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF
 [providers.bitwarden]
@@ -419,9 +461,6 @@ EOF
 	run "$FNOX_BIN" get TEST_OUTSIDE_FOLDER
 	assert_failure
 	assert_output --partial "not found"
-
-	delete_test_bw_item "$item_id"
-	delete_test_bw_folder "$folder_id"
 }
 
 @test "fnox get retrieves secret scoped by folder with rbw backend" {
@@ -436,13 +475,9 @@ EOF
 	folder_id=$(echo "$folder_info" | cut -d'|' -f1)
 	folder_name=$(echo "$folder_info" | cut -d'|' -f2)
 
-	item_info=$(create_test_bw_item "$folder_id")
-	item_id=$(echo "$item_info" | cut -d'|' -f1)
-	item_name=$(echo "$item_info" | cut -d'|' -f2)
+	item_name=$(create_test_bw_item "$folder_id" | cut -d'|' -f2)
 
 	if ! rbw sync >/dev/null 2>&1 || ! rbw get "$item_name" --folder "$folder_name" >/dev/null 2>&1; then
-		delete_test_bw_item "$item_id"
-		delete_test_bw_folder "$folder_id"
 		skip "rbw is not configured against the same vault as bw"
 	fi
 
@@ -468,7 +503,4 @@ EOF
 	run "$FNOX_BIN" get TEST_RBW_FOLDER_USERNAME
 	assert_success
 	assert_output "testuser"
-
-	delete_test_bw_item "$item_id"
-	delete_test_bw_folder "$folder_id"
 }

@@ -436,7 +436,11 @@ fn select_entry(kind: &str, name: &str, entries: Vec<BitwardenListEntry>) -> Res
     let entries: Vec<_> = entries.into_iter().filter(|e| e.id.is_some()).collect();
     let exact: Vec<_> = entries.iter().filter(|e| e.name == name).collect();
     let candidates = if exact.is_empty() {
-        entries.iter().collect()
+        let needle = name.to_lowercase();
+        entries
+            .iter()
+            .filter(|e| e.name.to_lowercase().contains(&needle))
+            .collect()
     } else {
         exact
     };
@@ -566,6 +570,17 @@ mod tests {
         let id = select_entry("folder", "production", entries).unwrap();
 
         assert_eq!(id, "prod-id");
+    }
+
+    #[test]
+    fn ignores_search_results_matched_on_other_fields() {
+        let json =
+            r#"[{"id": "other-id", "name": "Unrelated", "login": {"username": "database"}}]"#;
+
+        let entries = parse_list_entries("items", json).unwrap();
+        let error = select_entry("item", "database", entries).unwrap_err();
+
+        assert!(matches!(error, FnoxError::ProviderSecretNotFound { .. }));
     }
 
     #[test]
