@@ -52,7 +52,7 @@ az login
 azd auth login
 ```
 
-The three service principal variables can also be fnox secrets resolved from another provider. fnox resolves them before it uses the Azure provider.
+The three service principal variables can also be fnox secrets stored with another provider. `fnox exec` resolves them before it uses the Azure provider. For a single `fnox get`, export them in the environment first.
 
 A service principal signs in through the public-cloud authority, `https://login.microsoftonline.com`. For Azure Government or Azure China, set `AZURE_AUTHORITY_HOST` to that cloud's authority, such as `https://login.microsoftonline.us` or `https://login.chinacloudapi.cn`. The Azure CLI uses the cloud selected with `az cloud set` instead.
 

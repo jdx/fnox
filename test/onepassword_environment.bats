@@ -58,8 +58,6 @@ STUB
 	: >"$OP_STUB_LOG"
 
 	cat >fnox.toml <<'TOML'
-root = true
-
 [providers.op]
 type = "1password"
 
@@ -108,8 +106,6 @@ teardown() {
 
 @test "get fails for an unknown environment" {
 	cat >fnox.toml <<'TOML'
-root = true
-
 [providers.op]
 type = "1password"
 
@@ -123,8 +119,6 @@ TOML
 
 @test "get rejects a malformed environment reference" {
 	cat >fnox.toml <<'TOML'
-root = true
-
 [providers.op]
 type = "1password"
 
@@ -138,8 +132,6 @@ TOML
 
 @test "failed environment read is shared by every variable of that environment" {
 	cat >fnox.toml <<'TOML'
-root = true
-
 [providers.op]
 type = "1password"
 
@@ -157,8 +149,6 @@ TOML
 
 @test "environment variables and vault item references resolve together" {
 	cat >fnox.toml <<'TOML'
-root = true
-
 [providers.op]
 type = "1password"
 
@@ -186,8 +176,6 @@ TOML
 
 @test "get reports unparseable environment output instead of a missing variable" {
 	cat >fnox.toml <<'TOML'
-root = true
-
 [providers.op]
 type = "1password"
 
@@ -201,8 +189,6 @@ TOML
 
 @test "get rejects environment output with an unterminated quote" {
 	cat >fnox.toml <<'TOML'
-root = true
-
 [providers.op]
 type = "1password"
 

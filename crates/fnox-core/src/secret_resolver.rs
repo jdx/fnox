@@ -548,61 +548,7 @@ pub async fn resolve_secret(
     key: &str,
     secret_config: &SecretConfig,
 ) -> Result<Option<String>> {
-    resolve_provider_env_dependencies(config, profile, key, secret_config).await?;
     resolve_secret_raw(config, profile, key, secret_config).await
-}
-
-/// Resolve and export the secrets named by the `env_dependencies()` of the
-/// provider that resolves `key`, as batch resolution does, so a provider whose
-/// credentials are themselves fnox secrets also works for a single lookup.
-/// Variables already set in the environment are left alone.
-async fn resolve_provider_env_dependencies(
-    config: &Config,
-    profile: &[String],
-    key: &str,
-    secret_config: &SecretConfig,
-) -> Result<()> {
-    let provider_name = if let Some(sync) = &secret_config.sync {
-        Some(sync.provider.clone())
-    } else if secret_config.value().is_some() {
-        match secret_config.provider() {
-            Some(name) => Some(name.to_string()),
-            None => config.get_default_provider(profile).ok().flatten(),
-        }
-    } else {
-        None
-    };
-    let Some(provider_name) = provider_name else {
-        return Ok(());
-    };
-    let providers = config.get_providers(profile)?;
-    let Some(provider) = providers.get(&provider_name) else {
-        return Ok(());
-    };
-    let env_dependencies = provider.env_dependencies();
-    if env_dependencies.is_empty() {
-        return Ok(());
-    }
-
-    let secrets = config.get_secrets(profile)?;
-    let roots: Vec<String> = env_dependencies
-        .iter()
-        .filter(|dep| **dep != key && secrets.contains_key(**dep) && env::var_os(dep).is_none())
-        .map(|dep| dep.to_string())
-        .collect();
-    if roots.is_empty() {
-        return Ok(());
-    }
-
-    let mut subset = dependency_closure(config, profile, &secrets, &roots)?;
-    subset.shift_remove(key);
-    let resolved = resolve_secrets_batch(config, profile, &subset).await?;
-    for root in &roots {
-        if let Some(Some(value)) = resolved.get(root) {
-            env::set_var(root, value);
-        }
-    }
-    Ok(())
 }
 
 async fn resolve_interpolated_default_value(
