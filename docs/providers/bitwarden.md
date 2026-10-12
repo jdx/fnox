@@ -334,7 +334,7 @@ This lets items with the same name live in different folders, for example one pr
 Both backends support `folder`:
 
 - `rbw` passes `--folder` to `rbw get` and `rbw code`.
-- `bw` resolves the folder ID with `bw list folders`, then looks up the item inside that folder with `bw list items --folderid`. An exact name match wins. If there is no exact match, a single name that contains the reference (case-insensitive) is used; matches on other fields such as usernames or URIs are ignored. Multiple matches cause an error rather than returning a secret from the wrong item.
+- `bw` resolves the folder ID with `bw list folders`, then looks up the item inside that folder with `bw list items --folderid`. An exact name match wins. If there is no exact match, a single name that contains the reference (case-insensitive) is used; matches on other fields such as usernames or URIs are ignored. Multiple matches cause an error rather than returning a secret from the wrong item. When `collection` or `organization_id` is also set, the item must be in the folder and match those filters too.
 
 List folder names:
 

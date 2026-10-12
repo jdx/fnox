@@ -45,6 +45,10 @@ struct BitwardenField {
 struct BitwardenListEntry {
     id: Option<String>,
     name: String,
+    #[serde(default, rename = "organizationId")]
+    organization_id: Option<String>,
+    #[serde(default, rename = "collectionIds")]
+    collection_ids: Vec<String>,
 }
 
 impl fmt::Display for BitwardenBackend {
@@ -331,21 +335,19 @@ impl BitwardenProvider {
             .cloned()
     }
 
-    /// Finds the ID of `item_name` inside `folder`, honoring collection and organization filters.
+    /// Finds the ID of `item_name` inside `folder` that also belongs to the configured
+    /// collection and organization.
     ///
+    /// `bw list items` ORs its `--folderid`/`--collectionid`/`--organizationid` filters, so only
+    /// the folder is passed to `bw` and the other filters are intersected locally.
     /// A missing item is reported as `<folder>/<item>` not found.
     async fn resolve_bw_item_id(&self, folder: &str, item_name: &str) -> Result<String> {
         let folder_id = self.resolve_bw_folder_id(folder).await?;
-        let mut args = vec!["items", "--folderid", &folder_id, "--search", item_name];
-        if let Some(coll) = &self.collection {
-            args.extend(["--collectionid", coll]);
-        }
-        if let Some(org) = &self.organization_id {
-            args.extend(["--organizationid", org]);
-        }
+        let args = ["items", "--folderid", &folder_id, "--search", item_name];
         let mut cmd = self.build_bw_list_command(&args)?;
         let output = self.execute_command(&mut cmd).await?;
-        let items = parse_list_entries("items", &output)?;
+        let mut items = parse_list_entries("items", &output)?;
+        self.retain_in_scope(&mut items);
         select_entry("item", item_name, items).map_err(|e| match e {
             FnoxError::ProviderSecretNotFound { hint, url, .. } => {
                 FnoxError::ProviderSecretNotFound {
@@ -357,6 +359,19 @@ impl BitwardenProvider {
             }
             e => e,
         })
+    }
+
+    /// Drops items outside the configured collection or organization.
+    fn retain_in_scope(&self, items: &mut Vec<BitwardenListEntry>) {
+        items.retain(|item| {
+            self.collection
+                .as_ref()
+                .is_none_or(|coll| item.collection_ids.contains(coll))
+                && self
+                    .organization_id
+                    .as_ref()
+                    .is_none_or(|org| item.organization_id.as_ref() == Some(org))
+        });
     }
 
     fn extract_custom_field(
@@ -609,6 +624,40 @@ mod tests {
         let error = select_entry("item", "database", entries).unwrap_err();
 
         assert!(matches!(error, FnoxError::ProviderSecretNotFound { .. }));
+    }
+
+    #[test]
+    fn folder_lookup_intersects_collection_and_organization() {
+        let json = r#"[
+            {"id": "in-scope", "name": "Database", "organizationId": "org-1", "collectionIds": ["coll-1"]},
+            {"id": "other-org", "name": "Database", "organizationId": "org-2", "collectionIds": ["coll-1"]},
+            {"id": "other-coll", "name": "Database", "organizationId": "org-1", "collectionIds": ["coll-2"]},
+            {"id": "personal", "name": "Database"}
+        ]"#;
+        let provider = BitwardenProvider::new(
+            Some("coll-1".to_string()),
+            Some("org-1".to_string()),
+            None,
+            Some("MyApp/Production".to_string()),
+            Some(BitwardenBackend::Bw),
+        )
+        .unwrap();
+
+        let mut items = parse_list_entries("items", json).unwrap();
+        provider.retain_in_scope(&mut items);
+        let id = select_entry("item", "Database", items).unwrap();
+
+        assert_eq!(id, "in-scope");
+    }
+
+    #[test]
+    fn folder_lookup_keeps_all_items_without_scope_filters() {
+        let json = r#"[{"id": "personal", "name": "Database"}]"#;
+
+        let mut items = parse_list_entries("items", json).unwrap();
+        provider_with_folder(BitwardenBackend::Bw).retain_in_scope(&mut items);
+
+        assert_eq!(items.len(), 1);
     }
 
     #[test]
