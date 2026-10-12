@@ -102,6 +102,7 @@ const providerGroups = [
       ["Plaintext defaults", "plain"],
     ],
   ],
+  ["Custom providers", [["Lua plugins", "lua"]]],
 ];
 const providers = [
   {
@@ -150,6 +151,7 @@ export function sidebar(commands) {
         "reencrypt",
         "edit",
         "provider",
+        "plugin",
         "profiles",
         "config-files",
       ],

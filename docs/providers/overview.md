@@ -73,6 +73,14 @@ These use a store available on your machine, or no encrypted storage at all for 
 | [password-store](/providers/password-store) | `password-store` | GPG-encrypted files managed by `pass`                               |
 | [Plaintext](/providers/plain)               | `plain`          | Unencrypted values; only for non-sensitive configuration            |
 
+## Custom providers
+
+When no built-in provider fits, write one in Lua. A plugin can read, store, or encrypt values using HTTP, JSON, and command helpers, and can be shared as a git repository.
+
+| Provider                      | Config type | Implementation                            |
+| ----------------------------- | ----------- | ----------------------------------------- |
+| [Lua plugins](/providers/lua) | `lua`       | A `provider.lua` file or installed plugin |
+
 ## Configure an instance
 
 This example reads an existing item from 1Password:

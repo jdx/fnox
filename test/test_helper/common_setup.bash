@@ -82,6 +82,7 @@ _common_setup() {
 	# fnox to look in the wrong directory.
 	unset XDG_CONFIG_HOME
 	unset XDG_STATE_HOME
+	unset XDG_DATA_HOME
 
 	# Ensure no existing config
 	rm -f "$FNOX_CONFIG_FILE"

@@ -67,6 +67,23 @@ pub static FNOX_STATE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     })
 });
 
+pub static FNOX_DATA_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
+    var_path("FNOX_DATA_DIR").unwrap_or_else(|| {
+        var_path("XDG_DATA_HOME")
+            .unwrap_or_else(|| {
+                #[cfg(unix)]
+                return HOME_DIR.join(".local").join("share");
+                #[cfg(windows)]
+                return HOME_DIR.join("AppData").join("Local");
+            })
+            .join("fnox")
+    })
+});
+
+/// Directory holding installed Lua provider plugins, one subdirectory per plugin.
+pub static FNOX_PLUGINS_DIR: LazyLock<PathBuf> =
+    LazyLock::new(|| var_path("FNOX_PLUGINS_DIR").unwrap_or_else(|| FNOX_DATA_DIR.join("plugins")));
+
 // Profile configuration
 pub static FNOX_PROFILE: LazyLock<Vec<String>> = LazyLock::new(|| {
     var("FNOX_PROFILE")

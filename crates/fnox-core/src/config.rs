@@ -197,6 +197,11 @@ pub struct Config {
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub providers: IndexMap<String, ProviderConfig>,
 
+    /// Lua provider plugins to install, as `name = "<git url>[#ref]"`.
+    /// `owner/repo` is shorthand for a GitHub repository.
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub plugins: IndexMap<String, String>,
+
     /// Default provider name for default profile
     #[serde(default, skip_serializing_if = "Option::is_none")]
     default_provider: Option<SpannedValue<String>>,
@@ -1163,6 +1168,11 @@ impl Config {
             merged.providers.insert(name, provider);
         }
 
+        // Merge plugin sources (overlay takes precedence)
+        for (name, source) in overlay.plugins {
+            merged.plugins.insert(name, source);
+        }
+
         // Merge provider sources (overlay takes precedence)
         for (name, source) in overlay.provider_sources {
             merged.provider_sources.insert(name, source);
@@ -1549,6 +1559,7 @@ impl Config {
             root: false,
             leases: IndexMap::new(),
             providers: IndexMap::new(),
+            plugins: IndexMap::new(),
             default_provider: None,
             secrets: IndexMap::new(),
             profiles: IndexMap::new(),

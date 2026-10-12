@@ -14,13 +14,13 @@ description: "Find fnox commands for reading secrets, running applications, conf
 
 ## Choose a command
 
-| Task             | Commands                                                                                                   |
-| ---------------- | ---------------------------------------------------------------------------------------------------------- |
-| Read and run     | [get](/cli/get), [list](/cli/list), [exec](/cli/exec), [check](/cli/check)                                 |
-| Store or migrate | [set](/cli/set), [import](/cli/import), [export](/cli/export), [sync](/cli/sync)                           |
-| Configure        | [init](/cli/init), [provider](/cli/provider), [profiles](/cli/profiles), [config-files](/cli/config-files) |
-| Diagnose         | [doctor](/cli/doctor), [scan](/cli/scan)                                                                   |
-| Cache and broker | [daemon](/cli/daemon), [lease](/cli/lease), [proxy](/cli/proxy), [mcp](/cli/mcp)                           |
+| Task             | Commands                                                                                                                          |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Read and run     | [get](/cli/get), [list](/cli/list), [exec](/cli/exec), [check](/cli/check)                                                        |
+| Store or migrate | [set](/cli/set), [import](/cli/import), [export](/cli/export), [sync](/cli/sync)                                                  |
+| Configure        | [init](/cli/init), [provider](/cli/provider), [plugin](/cli/plugin), [profiles](/cli/profiles), [config-files](/cli/config-files) |
+| Diagnose         | [doctor](/cli/doctor), [scan](/cli/scan)                                                                                          |
+| Cache and broker | [daemon](/cli/daemon), [lease](/cli/lease), [proxy](/cli/proxy), [mcp](/cli/mcp)                                                  |
 
 New to fnox? Follow the [quick start](/guide/quick-start). Put fnox options before the `--` separator in commands such as `fnox exec -- npm start`.
 
@@ -76,9 +76,15 @@ New to fnox? Follow the [quick start](/guide/quick-start). Put fnox options befo
 - [`fnox lease revoke <LEASE_ID>`](/cli/lease/revoke.md)
 - [`fnox list [FLAGS]`](/cli/list.md)
 - [`fnox mcp`](/cli/mcp.md)
+- [`fnox plugin [SUBCOMMAND]`](/cli/plugin.md)
+- [`fnox plugin install [-f --force] [NAME] [SOURCE]`](/cli/plugin/install.md)
+- [`fnox plugin link [-f --force] <NAME> <PATH>`](/cli/plugin/link.md)
+- [`fnox plugin ls`](/cli/plugin/ls.md)
+- [`fnox plugin uninstall <NAME>`](/cli/plugin/uninstall.md)
+- [`fnox plugin update [NAMES]…`](/cli/plugin/update.md)
 - [`fnox profiles`](/cli/profiles.md)
 - [`fnox provider [SUBCOMMAND]`](/cli/provider.md)
-- [`fnox provider add [-g --global] [--vault <VAULT>] <PROVIDER> <PROVIDER_TYPE>`](/cli/provider/add.md)
+- [`fnox provider add [FLAGS] <PROVIDER> <PROVIDER_TYPE>`](/cli/provider/add.md)
 - [`fnox provider list`](/cli/provider/list.md)
 - [`fnox provider remove [-g --global] <PROVIDER>`](/cli/provider/remove.md)
 - [`fnox provider test [-a --all] [PROVIDER]`](/cli/provider/test.md)

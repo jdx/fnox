@@ -27,6 +27,7 @@ pub mod keepass;
 pub mod keeper_sm;
 pub mod keychain;
 pub mod kubernetes;
+pub mod lua;
 pub mod onepassword;
 pub mod password_store;
 pub mod passwordstate;
@@ -62,6 +63,7 @@ pub enum WizardCategory {
     CloudKms,
     CloudSecretsManager,
     OsKeychain,
+    Plugin,
 }
 
 impl WizardCategory {
@@ -73,6 +75,7 @@ impl WizardCategory {
             Self::CloudKms => "Cloud KMS",
             Self::CloudSecretsManager => "Cloud Secrets Manager",
             Self::OsKeychain => "OS Keychain",
+            Self::Plugin => "Plugin",
         }
     }
 
@@ -88,6 +91,7 @@ impl WizardCategory {
                 "AWS, Azure, GCP, HashiCorp Vault - store secrets remotely"
             }
             Self::OsKeychain => "Use your operating system's secure keychain",
+            Self::Plugin => "Custom providers implemented as Lua plugins",
         }
     }
 
@@ -99,6 +103,7 @@ impl WizardCategory {
             Self::CloudKms,
             Self::CloudSecretsManager,
             Self::OsKeychain,
+            Self::Plugin,
         ]
     }
 }
@@ -150,7 +155,7 @@ mod generated {
         use super::super::{
             age, aws_kms, aws_ps, aws_sm, azure_ac, azure_kms, azure_sm, bitwarden, bitwarden_sm,
             doppler, enpass, foks, gcp_kms, gcp_sm, infisical, keepass, keeper_sm, keychain,
-            kubernetes, onepassword, password_store, passwordstate, plain, proton_pass, vault,
+            kubernetes, lua, onepassword, password_store, passwordstate, plain, proton_pass, vault,
             yubikey,
         };
         include!(concat!(
@@ -476,6 +481,22 @@ pub(crate) fn get_provider_from_resolved_with_context_and_identity_cycle_guard(
             prefix: prefix.clone(),
         };
         return get_provider_from_resolved(provider_name, &resolved);
+    }
+    if let ResolvedProviderConfig::Lua { plugin, options } = resolved {
+        let plugin = if lua::plugin_is_path(plugin) {
+            let provider_source = provider_source_path(config, profile, provider_name);
+            crate::config_path::resolve_string_relative_to_file(
+                plugin.clone(),
+                provider_source.as_deref(),
+            )
+        } else {
+            plugin.clone()
+        };
+        let declared = config.plugins.get(&plugin).cloned();
+        return Ok(Box::new(
+            lua::LuaProvider::new(provider_name.to_string(), plugin, options.clone())?
+                .with_declared_source(declared),
+        ));
     }
     get_provider_from_resolved(provider_name, resolved)
 }

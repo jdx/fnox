@@ -1,0 +1,23 @@
+# Lua provider - delegates to a user-supplied Lua plugin
+display_name = "Lua plugin"
+serde_rename = "lua"
+rust_variant = "Lua"
+category = "Plugin"
+description = "Custom provider implemented as a Lua plugin"
+default_name = "plugin"
+pass_provider_name = true
+setup_instructions = """
+Point `plugin` at an installed plugin name (see `fnox plugin install`)
+or at a Lua file or plugin directory, relative to the config file.
+Plugin-specific settings go in the `options` table."""
+
+# Installed plugin name, or a path to a .lua file or plugin directory
+[fields.plugin]
+type = "required"
+placeholder = "my-plugin"
+label = "Plugin name or path:"
+wizard = true
+
+# Arbitrary string settings passed to the plugin as `ctx.options`
+[fields.options]
+type = "string_map"

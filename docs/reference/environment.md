@@ -74,6 +74,23 @@ export FNOX_STATE_DIR=/opt/fnox/state
 
 **Default:** `$XDG_STATE_HOME/fnox` if set, otherwise `~/.local/state/fnox` on Unix and `%USERPROFILE%\AppData\Local\fnox` on Windows
 
+### `FNOX_DATA_DIR`
+
+Data directory path. fnox installs [Lua provider plugins](/providers/lua) under
+`$FNOX_DATA_DIR/plugins/`.
+
+```bash
+export FNOX_DATA_DIR=/opt/fnox/data
+```
+
+**Default:** `$XDG_DATA_HOME/fnox` if set, otherwise `~/.local/share/fnox` on Unix and `%USERPROFILE%\AppData\Local\fnox` on Windows
+
+### `FNOX_PLUGINS_DIR`
+
+Directory for installed Lua provider plugins, one subdirectory per plugin.
+
+**Default:** `$FNOX_DATA_DIR/plugins`
+
 ### `FNOX_PROMPT_AUTH`
 
 Whether to prompt to run a provider's auth command (e.g., `aws sso login`,

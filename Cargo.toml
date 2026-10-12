@@ -68,6 +68,7 @@ windows-native-keyring-store = "1"
 dbus-secret-service-keyring-store = { version = "1", features = ["crypto-rust", "vendored"] }
 libc = "0.2"
 libloading = "0.9"
+mlua = { version = "0.12", features = ["lua54", "vendored", "async", "send", "serialize"] }
 miette = { version = "7", features = ["fancy"] }
 miniz_oxide = "0.9"
 nix = { version = "0.31", features = ["signal", "process"] }

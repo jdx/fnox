@@ -104,6 +104,36 @@
     "commands": "fnox provider test op\nfnox provider test --all\nfnox check --all",
     "links": ["/guide/troubleshooting"]
   },
+  "plugin": {
+    "note": "Manage Lua provider plugins. Without a subcommand, lists installed plugins and plugins declared under [plugins] that are not installed yet.",
+    "commands": "fnox plugin\nfnox plugin install",
+    "links": ["/providers/lua"]
+  },
+  "plugin/install": {
+    "note": "Clones a plugin from git into the plugins directory. Without arguments, installs every plugin declared under [plugins]. A source may pin a tag, branch, or commit with `#<ref>`; `owner/repo` is shorthand for GitHub.",
+    "commands": "fnox plugin install\nfnox plugin install corp acme/fnox-plugin-corp#v1.2.0",
+    "links": ["/providers/lua#installing-plugins"]
+  },
+  "plugin/link": {
+    "note": "Installs a plugin as a symlink to a local directory, so edits take effect without reinstalling. fnox plugin update skips linked plugins.",
+    "commands": "fnox plugin link corp ~/src/fnox-plugin-corp\nfnox plugin link corp ./plugin --force",
+    "links": ["/providers/lua#installing-plugins"]
+  },
+  "plugin/ls": {
+    "note": "Lists installed plugins with their git source and checked-out revision, linked plugins with their target, and declared plugins that are not installed.",
+    "commands": "fnox plugin ls",
+    "links": ["/providers/lua#installing-plugins"]
+  },
+  "plugin/uninstall": {
+    "note": "Removes an installed plugin, or the link for a linked plugin. The plugin's declaration under [plugins] is left in place, so the next use reinstalls it.",
+    "commands": "fnox plugin uninstall corp",
+    "links": ["/providers/lua#installing-plugins"]
+  },
+  "plugin/update": {
+    "note": "Checks out each plugin's declared ref, or its remote's default branch when no ref is declared. Without arguments, updates every installed plugin; linked plugins are skipped.",
+    "commands": "fnox plugin update\nfnox plugin update corp",
+    "links": ["/providers/lua#installing-plugins"]
+  },
   "reencrypt": {
     "note": "After changing recipients, re-encrypt with an identity that can still decrypt the existing ciphertext. Repeat for each affected profile. This changes the encryption, not the underlying secret value.",
     "commands": "fnox reencrypt --provider age --dry-run\nfnox reencrypt --provider age\nfnox reencrypt --provider age --profile staging",

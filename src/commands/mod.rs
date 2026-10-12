@@ -23,6 +23,7 @@ pub mod init;
 pub mod lease;
 pub mod list;
 pub mod mcp;
+pub mod plugin;
 pub mod profiles;
 pub mod provider;
 pub mod proxy;
@@ -149,6 +150,9 @@ pub enum Commands {
 
     /// Start an MCP server that brokers secrets to AI agents
     Mcp(mcp::McpCommand),
+
+    /// Manage Lua provider plugins
+    Plugin(plugin::PluginCommand),
 
     /// List available profiles
     Profiles(profiles::ProfilesCommand),
@@ -300,6 +304,7 @@ impl Commands {
             Commands::Daemon(cmd) => cmd.run(cli).await,
             Commands::Schema(cmd) => cmd.run(cli).await,
             Commands::Sponsors(cmd) => cmd.run(cli).await,
+            Commands::Plugin(cmd) => cmd.run(cli).await,
             Commands::Usage(cmd) => cmd.run(cli).await,
             Commands::Activate(cmd) => cmd
                 .run()
