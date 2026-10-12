@@ -9,12 +9,15 @@ use tokio::sync::OnceCell;
 
 const URL: &str = "https://fnox.jdx.dev/providers/bitwarden";
 
+/// Reads secrets from a Bitwarden vault through the `bw` or `rbw` CLI.
 pub struct BitwardenProvider {
     collection: Option<String>,
     organization_id: Option<String>,
     profile: Option<String>,
+    /// Folder name or nested path (e.g. `MyApp/Production`) that scopes item lookups.
     folder: Option<String>,
     backend: BitwardenBackend,
+    /// `bw` folder ID for `folder`, resolved on first use and shared by later lookups.
     folder_id: OnceCell<String>,
 }
 
@@ -37,6 +40,7 @@ struct BitwardenField {
     value: Option<String>,
 }
 
+/// One folder or item from `bw list` JSON output. The built-in "No Folder" entry has no `id`.
 #[derive(Debug, Deserialize)]
 struct BitwardenListEntry {
     id: Option<String>,
@@ -57,6 +61,7 @@ impl BitwardenProvider {
         value.split_once('/').unwrap_or((value, "password"))
     }
 
+    /// Creates a provider from its config fields; `backend` defaults to `bw`.
     pub fn new(
         collection: Option<String>,
         organization_id: Option<String>,
@@ -85,6 +90,9 @@ impl BitwardenProvider {
         }
     }
 
+    /// Builds `bw get <field> <item>`, or `bw get item <item>` for custom fields.
+    ///
+    /// `item_name` may be an item name or, for folder-scoped lookups, a resolved item ID.
     fn build_bw_command(
         &self,
         kind: Option<&str>,
@@ -130,6 +138,7 @@ impl BitwardenProvider {
         Ok(cmd)
     }
 
+    /// Builds `bw list <args>` with the session token and profile applied.
     fn build_bw_list_command(&self, args: &[&str]) -> Result<tokio::process::Command> {
         let mut cmd = Command::new("bw");
         cmd.arg("list");
@@ -138,6 +147,10 @@ impl BitwardenProvider {
         Ok(cmd)
     }
 
+    /// Adds `--session` from `FNOX_BW_SESSION`/`BW_SESSION` and points `bw` at the configured
+    /// profile's data directory, unless `BITWARDENCLI_APPDATA_DIR` is already set.
+    ///
+    /// Fails with an auth error when no session token is available.
     fn apply_bw_session_and_profile(&self, cmd: &mut Command) -> Result<()> {
         // Check if session token is available
         let session_token = bw_session_token();
@@ -190,6 +203,7 @@ impl BitwardenProvider {
         Ok(())
     }
 
+    /// Builds `rbw get` (or `rbw code` for TOTP), adding `--folder` when a folder is set.
     fn build_rbw_command(
         &self,
         kind: Option<&str>,
@@ -304,6 +318,7 @@ impl BitwardenProvider {
         Ok(stdout.trim().to_string())
     }
 
+    /// Returns the `bw` folder ID for `folder`, querying `bw list folders` only once per provider.
     async fn resolve_bw_folder_id(&self, folder: &str) -> Result<String> {
         self.folder_id
             .get_or_try_init(|| async {
@@ -316,6 +331,9 @@ impl BitwardenProvider {
             .cloned()
     }
 
+    /// Finds the ID of `item_name` inside `folder`, honoring collection and organization filters.
+    ///
+    /// A missing item is reported as `<folder>/<item>` not found.
     async fn resolve_bw_item_id(&self, folder: &str, item_name: &str) -> Result<String> {
         let folder_id = self.resolve_bw_folder_id(folder).await?;
         let mut args = vec!["items", "--folderid", &folder_id, "--search", item_name];
@@ -385,6 +403,10 @@ impl BitwardenProvider {
 
 #[async_trait]
 impl crate::providers::Provider for BitwardenProvider {
+    /// Resolves an `item` or `item/field` reference; `field` defaults to `password`.
+    ///
+    /// With `folder` set, `rbw` filters by folder directly, while `bw` first resolves the
+    /// item's ID inside that folder and fetches by ID.
     async fn get_secret(&self, value: &str) -> Result<String> {
         tracing::debug!("Getting secret '{}' from Bitwarden", value);
 
@@ -423,6 +445,7 @@ pub fn env_dependencies() -> &'static [&'static str] {
     &["BW_SESSION", "FNOX_BW_SESSION"]
 }
 
+/// Parses `bw list <kind>` JSON output.
 fn parse_list_entries(kind: &str, json: &str) -> Result<Vec<BitwardenListEntry>> {
     serde_json::from_str(json).map_err(|e| FnoxError::ProviderInvalidResponse {
         provider: "Bitwarden".to_string(),
@@ -432,6 +455,11 @@ fn parse_list_entries(kind: &str, json: &str) -> Result<Vec<BitwardenListEntry>>
     })
 }
 
+/// Picks the single entry named `name` from `bw list --search` results and returns its ID.
+///
+/// Exact name matches win. Otherwise, names containing `name` (case-insensitive) are used,
+/// so search hits on other fields such as usernames or URIs are ignored. Errors if nothing
+/// matches or if more than one entry does.
 fn select_entry(kind: &str, name: &str, entries: Vec<BitwardenListEntry>) -> Result<String> {
     let entries: Vec<_> = entries.into_iter().filter(|e| e.id.is_some()).collect();
     let exact: Vec<_> = entries.iter().filter(|e| e.name == name).collect();

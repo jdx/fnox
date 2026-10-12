@@ -57,10 +57,13 @@ teardown() {
 	_common_teardown
 }
 
+# Records a created vault object for teardown; works from $(...) subshells.
+# Usage: register_bw_cleanup <item|folder> <id>
 register_bw_cleanup() {
 	echo "$1 $2" >>"$TEST_TEMP_DIR/.bw-cleanup"
 }
 
+# Deletes registered items, then folders, even when an assertion failed earlier.
 cleanup_registered_bw_objects() {
 	local file="$TEST_TEMP_DIR/.bw-cleanup"
 	[ -f "$file" ] || return 0
@@ -85,6 +88,7 @@ EOF
 }
 
 # Helper function to create a test item in Bitwarden
+# Usage: create_test_bw_item [folder_id] [item_name] [password]
 # Returns "item_id|item_name"
 create_test_bw_item() {
 	local folder_id="${1:-}"
@@ -135,6 +139,8 @@ EOF
 	echo "$item_id|$item_name"
 }
 
+# Creates fnox-test-<pid>-<test>/<leaf_name>; folders from one test share the parent.
+# Usage: create_test_bw_folder [leaf_name]   (default: Production)
 # Returns "folder_id|folder_name"
 create_test_bw_folder() {
 	local folder_name
