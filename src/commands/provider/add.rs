@@ -188,6 +188,7 @@ impl AddCommand {
                 collection: OptionStringOrSecretRef::none(),
                 organization_id: OptionStringOrSecretRef::none(),
                 profile: OptionStringOrSecretRef::none(),
+                folder: OptionStringOrSecretRef::none(),
                 backend: None,
                 auth_command: None,
                 daemon_cache: None,

@@ -92,7 +92,7 @@ export BW_SESSION=$(fnox get BW_SESSION)
 
 ```toml
 [providers]
-bitwarden = { type = "bitwarden", collection = "my-collection-id", organization_id = "my-org-id" }  # both optional
+bitwarden = { type = "bitwarden", collection = "my-collection-id", organization_id = "my-org-id", folder = "MyApp/Production" }  # all optional
 ```
 
 ## Adding secrets to Bitwarden
@@ -314,6 +314,32 @@ Get organization ID:
 
 ```bash
 bw list organizations | jq '.[] | {name, id}'
+```
+
+## Folders
+
+Scope secrets to a Bitwarden folder with `folder`. Use the folder name, or the full path such as `Parent/Child` for a nested folder:
+
+```toml
+[providers.bitwarden]
+type = "bitwarden"
+folder = "MyApp/Production"
+
+[secrets]
+DATABASE_PASSWORD = { provider = "bitwarden", value = "Database" }  # "Database" item inside MyApp/Production
+```
+
+This lets items with the same name live in different folders, for example one provider per environment.
+
+Both backends support `folder`:
+
+- `rbw` passes `--folder` to `rbw get` and `rbw code`.
+- `bw` resolves the folder ID with `bw list folders`, then looks up the item inside that folder with `bw list items --folderid`. An exact name match wins. If there is no exact match, a single name that contains the reference (case-insensitive) is used; matches on other fields such as usernames or URIs are ignored. Multiple matches cause an error rather than returning a secret from the wrong item. When `collection` or `organization_id` is also set, the item must be in the folder and match those filters too.
+
+List folder names:
+
+```bash
+bw list folders | jq '.[] | {name, id}'
 ```
 
 ## Testing with Vaultwarden
