@@ -1,0 +1,12 @@
+self-hosted-runner:
+  labels:
+    - jdx-perf-v1
+    - bamboo-perf
+
+# Durable ignores, matched by rule and place rather than by line, so a bot that
+# rewrites a `uses:` line cannot drop them.
+ignores:
+  - rule: artipacked
+    file: .github/workflows/release-plz.yml
+    job: release-plz
+    reason: release-plz pushes tags and the release branch with `git push`, which needs the scoped FNOX_GH_TOKEN persisted in the git config

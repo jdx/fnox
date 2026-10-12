@@ -9,6 +9,13 @@ on:
 
 permissions: {}
 
+# ci-impl.yml has its own group, keyed on github.workflow and github.ref, so
+# this one carries a different prefix: a shared group would make the called
+# workflow wait for its own caller.
+concurrency:
+  group: ci-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   trusted:
     if: ${{ github.actor == 'jdx' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'jdx')) }}
@@ -28,23 +35,11 @@ jobs:
     with:
       trusted: false
 
-  zizmor:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
-        with:
-          advanced-security: false
-
   final:
     name: final
-    if: ${{ always() && !cancelled() && needs.trusted.result != 'cancelled' && needs.untrusted.result != 'cancelled' && needs.zizmor.result != 'cancelled' }}
+    if: ${{ always() && !cancelled() && needs.trusted.result != 'cancelled' && needs.untrusted.result != 'cancelled' }}
     permissions: {}
-    needs: [trusted, untrusted, zizmor]
+    needs: [trusted, untrusted]
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
@@ -52,12 +47,10 @@ jobs:
         env:
           TRUSTED_RESULT: ${{ needs.trusted.result }}
           UNTRUSTED_RESULT: ${{ needs.untrusted.result }}
-          ZIZMOR_RESULT: ${{ needs.zizmor.result }}
         run: |
-          if [[ "$ZIZMOR_RESULT" == success ]] && {
-               [[ "$TRUSTED_RESULT" == success && "$UNTRUSTED_RESULT" == skipped ]] ||
-               [[ "$TRUSTED_RESULT" == skipped && "$UNTRUSTED_RESULT" == success ]]; }; then
+          if [[ "$TRUSTED_RESULT" == success && "$UNTRUSTED_RESULT" == skipped ]] ||
+             [[ "$TRUSTED_RESULT" == skipped && "$UNTRUSTED_RESULT" == success ]]; then
             exit 0
           fi
-          echo "trusted=$TRUSTED_RESULT untrusted=$UNTRUSTED_RESULT zizmor=$ZIZMOR_RESULT"
+          echo "trusted=$TRUSTED_RESULT untrusted=$UNTRUSTED_RESULT"
           exit 1

@@ -9,11 +9,17 @@ on:
   push:
     branches: ["renovate/**"]
 
-permissions:
-  contents: write
+permissions: {}
+
+concurrency:
+  # Not "aube-lock-<ref>": the called workflow uses that group for its own job.
+  group: aube-lock-caller-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   aube-lock:
+    permissions:
+      contents: write
     uses: jdx/renovate-config/.github/workflows/aube-lock.yml@d0f85cba63adc5a26194009e76eebcf5bc1ee823 # v1.0.2
     secrets:
       AUBE_LOCK_APP_ID: ${{ secrets.AUBE_LOCK_APP_ID }}

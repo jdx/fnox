@@ -2,6 +2,12 @@ name: release
 
 permissions: {}
 
+# A release in flight must finish, so a second run for the same version waits.
+# The tag push (`v1.2.3`) and the manual input (`1.2.3`) share one group.
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.version != '' && format('v{0}', inputs.version) || github.ref_name }}
+  cancel-in-progress: false
+
 on:
   push:
     tags:
@@ -20,6 +26,8 @@ env:
 jobs:
   build-binaries:
     runs-on: ${{ matrix.os }}
+    # Notarization alone may wait up to 30 minutes (`notarytool --timeout 30m`).
+    timeout-minutes: 90
     permissions:
       contents: write
     strategy:
@@ -182,6 +190,7 @@ jobs:
   create-release:
     needs: [build-binaries]
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: write
       # The packslip is signed with this job's OIDC identity and its
@@ -291,6 +300,7 @@ jobs:
   enhance-release:
     needs: [create-release]
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: write
     steps:
@@ -324,6 +334,7 @@ jobs:
           else
             TAG_NAME="${GITHUB_REF_NAME}"
           fi
+          set -o pipefail
           # Strip any pre-existing "Sponsor fnox" section from the body so the
           # canonical block we append below isn't duplicated. Matches headings
           # like "## Sponsor fnox" or "## 💚 Sponsor fnox" and drops everything
@@ -347,6 +358,7 @@ jobs:
   publish-release:
     needs: [enhance-release]
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: write
     steps:

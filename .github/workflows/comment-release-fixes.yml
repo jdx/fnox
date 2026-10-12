@@ -1,4 +1,7 @@
 name: comment release fixes
+concurrency:
+  group: comment-release-fixes-${{ inputs.tag || github.event.release.tag_name }}
+  cancel-in-progress: false
 on:
   {
     release: { types: [published] },

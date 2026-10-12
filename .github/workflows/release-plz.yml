@@ -1,9 +1,6 @@
 name: release-plz
 
-permissions:
-  pull-requests: write
-  contents: write
-  id-token: write # crates.io trusted publishing
+permissions: {}
 
 on:
   workflow_dispatch: {}
@@ -12,8 +9,11 @@ on:
       - main
       - release-plz
 
+# A release in flight must finish. Default queueing keeps one pending run and replaces it with
+# the newest; release-plz acts on the SHA it checked out, so queued stale runs would be wasteful.
 concurrency:
   group: release-plz
+  cancel-in-progress: false
 
 env:
   MBX_DISABLE: "1"
@@ -22,10 +22,17 @@ env:
 jobs:
   release-plz:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: write
+      id-token: write # crates.io trusted publishing
+    # Publishes three crates and may poll the crates.io index for ~10 minutes after each, so
+    # a short limit could stop a release after the tag is pushed but before every crate is out.
+    timeout-minutes: 120
     steps:
       # release-plz pushes tags and the release branch via `git push`, which needs the scoped
       # FNOX_GH_TOKEN persisted in the git config.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked]
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           token: ${{ secrets.FNOX_GH_TOKEN }}
