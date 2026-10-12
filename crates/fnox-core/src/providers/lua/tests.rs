@@ -103,6 +103,24 @@ async fn encryption_plugins_round_trip() {
 }
 
 #[tokio::test]
+async fn encrypt_takes_precedence_over_put() {
+    let (_dir, provider) = plugin(
+        r#"
+        return {
+          encrypt = function(ctx, value) return "enc:" .. value end,
+          put = function() error("put should not be called") end,
+          get = function(ctx, ref) return ref:sub(5) end,
+        }
+        "#,
+    );
+    assert_eq!(
+        provider.capabilities(),
+        vec![ProviderCapability::Encryption]
+    );
+    assert_eq!(provider.put_secret("K", "v").await.unwrap(), "enc:v");
+}
+
+#[tokio::test]
 async fn put_returns_reference() {
     let (_dir, provider) = plugin(
         r#"

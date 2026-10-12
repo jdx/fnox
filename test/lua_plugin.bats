@@ -193,6 +193,41 @@ EOF2
 	assert_output "hey you (v1)"
 }
 
+@test "failed plugin updates and reinstalls keep the working install" {
+	make_plugin_repo "$TEST_TEMP_DIR/repo"
+	git -C "$TEST_TEMP_DIR/repo" rm --quiet provider.lua
+	git -C "$TEST_TEMP_DIR/repo" commit --quiet -m "drop entry file"
+	git -C "$TEST_TEMP_DIR/repo" tag broken
+	cat >fnox.toml <<EOF2
+root = true
+
+[plugins]
+demo = "file://$TEST_TEMP_DIR/repo#v1"
+
+[providers.demo]
+type = "lua"
+plugin = "demo"
+options = { greeting = "hi" }
+
+[secrets]
+WHO = { provider = "demo", value = "again" }
+EOF2
+
+	run "$FNOX_BIN" plugin install
+	assert_success
+
+	sed -i.bak 's/#v1/#broken/' fnox.toml
+	run "$FNOX_BIN" plugin update demo
+	assert_failure
+	assert_output --partial "no provider.lua"
+	run "$FNOX_BIN" plugin install demo --force
+	assert_failure
+
+	run "$FNOX_BIN" get WHO
+	assert_success
+	assert_output "hi again (v1)"
+}
+
 @test "set fails instead of storing plaintext when a plugin cannot load" {
 	echo 'return {' >broken.lua
 	cat >fnox.toml <<'EOF2'

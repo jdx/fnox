@@ -162,6 +162,34 @@ fn git_output_sync(dir: &Path, args: &[&str]) -> Option<String> {
         .then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+/// Run git in `dir` and return its trimmed stdout.
+async fn git_stdout(name: &str, dir: &Path, args: &[&str]) -> Result<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(args)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .await
+        .map_err(|e| FnoxError::Plugin {
+            plugin: name.to_string(),
+            details: format!("failed to run git: {e}"),
+            help: "Install git to manage fnox plugins".to_string(),
+        })?;
+    if !output.status.success() {
+        return Err(FnoxError::Plugin {
+            plugin: name.to_string(),
+            details: format!(
+                "git {} failed: {}",
+                args.first().copied().unwrap_or_default(),
+                String::from_utf8_lossy(&output.stderr).trim()
+            ),
+            help: format!("Reinstall with `fnox plugin install {name} <git-url> --force`"),
+        });
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
 async fn git(name: &str, dir: Option<&Path>, args: &[&str]) -> Result<()> {
     let mut cmd = Command::new("git");
     if let Some(dir) = dir {
@@ -275,14 +303,27 @@ pub async fn install(name: &str, source: &PluginSource, force: bool) -> Result<P
     }
     ensure_entry_file(name, &checkout_dir)?;
 
-    if force {
-        remove(&dest)?;
+    // A forced reinstall moves the current install aside and restores it if
+    // the new checkout cannot be put in place. The backup lives in the temp
+    // directory, so it is removed once the install succeeds.
+    let backup = tmp.path().join("previous");
+    let replaced = force && dest.symlink_metadata().is_ok();
+    if replaced {
+        std::fs::rename(&dest, &backup)?;
     }
     match std::fs::rename(&checkout_dir, &dest) {
         Ok(()) => {}
         // Another fnox process finished installing the same plugin first
         Err(_) if !force && dest.join(ENTRY_FILE).is_file() => {}
-        Err(e) => return Err(e.into()),
+        Err(e) => {
+            if replaced && let Err(restore) = std::fs::rename(&backup, &dest) {
+                tracing::warn!(
+                    "failed to restore plugin '{name}' from {}: {restore}",
+                    backup.display()
+                );
+            }
+            return Err(e.into());
+        }
     }
     Ok(dest)
 }
@@ -298,16 +339,42 @@ pub async fn update(name: &str, source: Option<&PluginSource>) -> Result<UpdateO
     if std::fs::read_link(&dir).is_ok() {
         return Ok(UpdateOutcome::Linked);
     }
-    if let Some(source) = source {
-        git(
+    // Remember the current state so a failed update leaves the working
+    // install in place.
+    let previous_head = git_stdout(name, &dir, &["rev-parse", "HEAD"]).await?;
+    let previous_url = git_stdout(name, &dir, &["remote", "get-url", "origin"])
+        .await
+        .ok();
+
+    let result = async {
+        if let Some(source) = source {
+            git(
+                name,
+                Some(&dir),
+                &["remote", "set-url", "origin", &source.url],
+            )
+            .await?;
+        }
+        checkout(name, &dir, source.and_then(|s| s.git_ref.as_deref())).await?;
+        ensure_entry_file(name, &dir)
+    }
+    .await;
+
+    if let Err(e) = result {
+        if let Some(url) = &previous_url {
+            let _ = git(name, Some(&dir), &["remote", "set-url", "origin", url]).await;
+        }
+        if let Err(restore) = git(
             name,
             Some(&dir),
-            &["remote", "set-url", "origin", &source.url],
+            &["checkout", "--quiet", "--detach", &previous_head],
         )
-        .await?;
+        .await
+        {
+            tracing::warn!("failed to restore plugin '{name}' to {previous_head}: {restore}");
+        }
+        return Err(e);
     }
-    checkout(name, &dir, source.and_then(|s| s.git_ref.as_deref())).await?;
-    ensure_entry_file(name, &dir)?;
     Ok(UpdateOutcome::Updated)
 }
 

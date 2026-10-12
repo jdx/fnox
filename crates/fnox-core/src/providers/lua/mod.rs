@@ -467,13 +467,15 @@ impl Provider for LuaProvider {
     }
 
     async fn put_secret(&self, key: &str, value: &str) -> Result<String> {
-        let ctx = self.runtime().await?.ctx.clone();
-        if self.has_hook("put").await? {
-            let reference = self.call_string_hook("put", (ctx, key, value)).await?;
-            return Ok(reference.unwrap_or_else(|| key.to_string()));
-        }
+        // Same precedence as `capabilities()`: a plugin with `encrypt` is an
+        // encryption provider even if it also defines `put`.
         if self.has_hook("encrypt").await? {
             return self.encrypt(value).await;
+        }
+        if self.has_hook("put").await? {
+            let ctx = self.runtime().await?.ctx.clone();
+            let reference = self.call_string_hook("put", (ctx, key, value)).await?;
+            return Ok(reference.unwrap_or_else(|| key.to_string()));
         }
         Err(FnoxError::Provider(format!(
             "{}: plugin is read-only (it defines neither `put` nor `encrypt`)",
