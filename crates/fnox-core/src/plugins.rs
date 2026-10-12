@@ -194,7 +194,33 @@ async fn git(name: &str, dir: Option<&Path>, args: &[&str]) -> Result<()> {
 /// Check out `git_ref` (or the remote's default branch) in `dir`.
 async fn checkout(name: &str, dir: &Path, git_ref: Option<&str>) -> Result<()> {
     let target = git_ref.unwrap_or("HEAD");
-    git(name, Some(dir), &["fetch", "--quiet", "origin", target]).await?;
+    if let Err(fetch_err) = git(name, Some(dir), &["fetch", "--quiet", "origin", target]).await {
+        // Many servers (including file:// remotes) refuse to fetch a commit by
+        // SHA. Fetch every branch and tag instead, then resolve the ref locally.
+        let Some(git_ref) = git_ref else {
+            return Err(fetch_err);
+        };
+        git(
+            name,
+            Some(dir),
+            &[
+                "fetch",
+                "--quiet",
+                "--tags",
+                "origin",
+                "+refs/heads/*:refs/remotes/origin/*",
+            ],
+        )
+        .await?;
+        let commit = format!("{git_ref}^{{commit}}");
+        return git(
+            name,
+            Some(dir),
+            &["checkout", "--quiet", "--detach", &commit],
+        )
+        .await
+        .map_err(|_| fetch_err);
+    }
     git(
         name,
         Some(dir),

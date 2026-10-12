@@ -206,6 +206,36 @@ async fn runs_commands() {
     assert!(err.contains("status 3") && err.contains("nope"), "{err}");
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn streams_large_stdin_while_reading_output() {
+    let (_dir, provider) = plugin(
+        r#"
+        local cmd = require("fnox.cmd")
+        return {
+          get = function(ctx, ref)
+            -- `cat` echoes input as it reads, so stdout fills before stdin is done
+            local input = string.rep(ref, 1024 * 1024)
+            local out = cmd.exec({ "cat" }, { stdin = input })
+            return tostring(#out)
+          end,
+        }
+        "#,
+    );
+    let len = tokio::time::timeout(std::time::Duration::from_secs(20), provider.get_secret("x"))
+        .await
+        .expect("cmd.exec deadlocked")
+        .unwrap();
+    assert_eq!(len, (1024 * 1024).to_string());
+}
+
+#[tokio::test]
+async fn load_failures_report_no_capabilities() {
+    let (_dir, provider) = plugin("return {");
+    assert!(provider.prepare().await.is_err());
+    assert!(provider.capabilities().is_empty());
+}
+
 #[tokio::test]
 async fn http_module_talks_to_servers() {
     use axum::{Router, routing::get};

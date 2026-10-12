@@ -191,7 +191,7 @@ impl LuaProvider {
                         .build()
                         .ok()?;
                     rt.block_on(self.load())
-                        .inspect_err(|e| tracing::debug!("failed to load Lua plugin: {e}"))
+                        .inspect_err(|e| tracing::warn!("failed to load Lua plugin: {e}"))
                         .ok()
                 })
                 .join()
@@ -404,10 +404,12 @@ fn set_package_path(lua: &Lua, dir: &Path) -> mlua::Result<()> {
 #[async_trait]
 impl Provider for LuaProvider {
     fn capabilities(&self) -> Vec<ProviderCapability> {
-        // Capabilities follow the hooks the plugin defines. If the plugin
-        // cannot load, report read-only and let the next call surface the error.
+        // Capabilities follow the hooks the plugin defines. A plugin that
+        // cannot load reports none: claiming read-only would let `fnox set`
+        // store the value in fnox.toml as plaintext. `prepare` normally loads
+        // the plugin first and surfaces the error.
         let Some(runtime) = self.runtime_blocking() else {
-            return vec![ProviderCapability::RemoteRead];
+            return Vec::new();
         };
         let defined = |name| matches!(hook(&runtime.hooks, name), Ok(Some(_)));
         if defined("encrypt") {
@@ -417,6 +419,10 @@ impl Provider for LuaProvider {
         } else {
             vec![ProviderCapability::RemoteRead]
         }
+    }
+
+    async fn prepare(&self) -> Result<()> {
+        self.runtime().await.map(|_| ())
     }
 
     async fn get_secret(&self, value: &str) -> Result<String> {

@@ -369,12 +369,24 @@ async fn run_command(command: Value, opts: Option<Table>) -> mlua::Result<CmdOut
     .stderr(Stdio::piped());
 
     let mut child = cmd.spawn().into_lua_err()?;
-    if let Some(data) = stdin_data
-        && let Some(mut stdin) = child.stdin.take()
-    {
-        stdin.write_all(&data).await.into_lua_err()?;
-    }
+    // Feed stdin while the output is read: a child that writes before it has
+    // consumed all of its input would otherwise block on a full pipe.
+    let writer = match (stdin_data, child.stdin.take()) {
+        (Some(data), Some(mut stdin)) => Some(tokio::spawn(async move {
+            let result = stdin.write_all(&data).await;
+            drop(stdin);
+            result
+        })),
+        _ => None,
+    };
     let output = child.wait_with_output().await.into_lua_err()?;
+    if let Some(writer) = writer {
+        match writer.await.into_lua_err()? {
+            // The child exited without reading all of its input
+            Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {}
+            result => result.into_lua_err()?,
+        }
+    }
     Ok(CmdOutput {
         status: output.status.code(),
         stdout: output.stdout,

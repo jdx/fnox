@@ -160,6 +160,56 @@ EOF2
 	assert_output --partial "(not installed)"
 }
 
+@test "plugins can be pinned to a commit SHA" {
+	make_plugin_repo "$TEST_TEMP_DIR/repo"
+	sha="$(git -C "$TEST_TEMP_DIR/repo" rev-parse v1)"
+	cat >fnox.toml <<'EOF2'
+root = true
+
+[providers.demo]
+type = "lua"
+plugin = "demo"
+options = { greeting = "hey" }
+
+[secrets]
+WHO = { provider = "demo", value = "you" }
+EOF2
+
+	run "$FNOX_BIN" plugin install demo "file://$TEST_TEMP_DIR/repo#$sha"
+	assert_success
+	run "$FNOX_BIN" get WHO
+	assert_success
+	assert_output "hey you (v1)"
+
+	cat >>fnox.toml <<EOF2
+
+[plugins]
+demo = "file://$TEST_TEMP_DIR/repo#$sha"
+EOF2
+	run "$FNOX_BIN" plugin update demo
+	assert_success
+	run "$FNOX_BIN" get WHO
+	assert_success
+	assert_output "hey you (v1)"
+}
+
+@test "set fails instead of storing plaintext when a plugin cannot load" {
+	echo 'return {' >broken.lua
+	cat >fnox.toml <<'EOF2'
+root = true
+
+[providers.broken]
+type = "lua"
+plugin = "broken.lua"
+EOF2
+
+	run "$FNOX_BIN" set TOKEN hunter2 --provider broken
+	assert_failure
+	assert_output --partial "fnox::plugin::error"
+	run grep -q hunter2 fnox.toml
+	assert_failure
+}
+
 @test "plugin install, link, and missing-plugin errors" {
 	make_plugin_repo "$TEST_TEMP_DIR/repo"
 	cat >fnox.toml <<'EOF2'

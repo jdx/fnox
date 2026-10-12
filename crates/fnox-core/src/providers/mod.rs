@@ -256,6 +256,14 @@ pub trait Provider: Send + Sync {
         vec![ProviderCapability::RemoteRead]
     }
 
+    /// Finish setup that can fail before the provider is used.
+    ///
+    /// Called when a provider is created from config, so a broken provider
+    /// fails there instead of reporting misleading capabilities.
+    async fn prepare(&self) -> Result<()> {
+        Ok(())
+    }
+
     /// Test if the provider is accessible and properly configured
     async fn test_connection(&self) -> Result<()> {
         // Default implementation does a basic check
@@ -314,7 +322,10 @@ pub async fn get_provider_resolved(
     provider_config: &ProviderConfig,
 ) -> Result<Box<dyn Provider>> {
     let resolved = resolve_provider_config(config, profile, provider_name, provider_config).await?;
-    get_provider_from_resolved_with_context(config, profile, provider_name, &resolved)
+    let provider =
+        get_provider_from_resolved_with_context(config, profile, provider_name, &resolved)?;
+    provider.prepare().await?;
+    Ok(provider)
 }
 
 pub(crate) fn get_provider_from_resolved_with_context(
