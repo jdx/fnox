@@ -810,6 +810,12 @@
             "key_name": {
               "$ref": "#/$defs/StringOrSecretRef"
             },
+            "auth": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "managed_identity_client_id": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "auth_command": {
               "type": ["string", "null"]
             },
@@ -929,6 +935,12 @@
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
+            "auth": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "managed_identity_client_id": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "auth_command": {
               "type": ["string", "null"]
             },
@@ -950,6 +962,12 @@
               "$ref": "#/$defs/StringOrSecretRef"
             },
             "prefix": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "auth": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "managed_identity_client_id": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "auth_command": {

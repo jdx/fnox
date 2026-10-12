@@ -22,3 +22,15 @@ type = "optional"
 placeholder = ""
 label = "Secret name prefix (optional):"
 wizard = true
+
+[fields.auth]
+type = "optional"
+placeholder = "managed-identity"
+label = "Authentication (optional: default or managed-identity):"
+wizard = false
+
+[fields.managed_identity_client_id]
+type = "optional"
+placeholder = "00000000-0000-0000-0000-000000000000"
+label = "User-assigned managed identity client ID (optional):"
+wizard = false

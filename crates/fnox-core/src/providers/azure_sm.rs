@@ -1,11 +1,11 @@
 use crate::error::{FnoxError, Result};
+use crate::providers::azure_shared::{AzureAuth, SERVICE_PRINCIPAL_ENV_VARS};
 use async_trait::async_trait;
 use azure_core::{Error, error::ErrorKind, http::StatusCode};
-use azure_identity::DeveloperToolsCredential;
 use azure_security_keyvault_secrets::{SecretClient, models::SetSecretParameters};
 
 pub fn env_dependencies() -> &'static [&'static str] {
-    &[]
+    SERVICE_PRINCIPAL_ENV_VARS
 }
 
 const URL: &str = "https://fnox.jdx.dev/providers/azure-sm";
@@ -41,11 +41,21 @@ fn handle_connection_test_error(vault_url: &str, error: Error) -> Result<()> {
 pub struct AzureSecretsManagerProvider {
     vault_url: String,
     prefix: Option<String>,
+    auth: AzureAuth,
 }
 
 impl AzureSecretsManagerProvider {
-    pub fn new(vault_url: String, prefix: Option<String>) -> Result<Self> {
-        Ok(Self { vault_url, prefix })
+    pub fn new(
+        vault_url: String,
+        prefix: Option<String>,
+        auth: Option<String>,
+        managed_identity_client_id: Option<String>,
+    ) -> Result<Self> {
+        Ok(Self {
+            vault_url,
+            prefix,
+            auth: AzureAuth::from_config(auth.as_deref(), managed_identity_client_id)?,
+        })
     }
 
     pub fn get_secret_name(&self, key: &str) -> String {
@@ -57,16 +67,7 @@ impl AzureSecretsManagerProvider {
 
     /// Create an Azure Key Vault secret client
     fn create_client(&self) -> Result<SecretClient> {
-        // Use DeveloperToolsCredential which supports multiple auth methods:
-        // - Azure CLI
-        // - Azure Developer CLI
-        let credential =
-            DeveloperToolsCredential::new(None).map_err(|e| FnoxError::ProviderAuthFailed {
-                provider: "Azure Key Vault".to_string(),
-                details: e.to_string(),
-                hint: "Run 'az login' to authenticate with Azure".to_string(),
-                url: URL.to_string(),
-            })?;
+        let credential = self.auth.build_credential("Azure Key Vault", URL)?;
 
         SecretClient::new(&self.vault_url, credential, None).map_err(|e| {
             FnoxError::ProviderApiError {

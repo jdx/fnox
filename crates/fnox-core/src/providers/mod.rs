@@ -11,6 +11,7 @@ mod aws_shared;
 pub mod aws_sm;
 pub mod azure_ac;
 pub mod azure_kms;
+pub(crate) mod azure_shared;
 pub mod azure_sm;
 pub mod bitwarden;
 pub mod bitwarden_sm;
