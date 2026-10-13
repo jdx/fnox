@@ -485,7 +485,7 @@ pub fn link(name: &str, target: &Path, force: bool) -> Result<PathBuf> {
         .prefix(&format!(".{name}-"))
         .tempdir_in(plugins_dir())?;
     let backup = tmp.path().join("previous");
-    let replaced = is_installed(name);
+    let replaced = force && is_installed(name);
     if replaced {
         std::fs::rename(&dest, &backup)?;
     }
