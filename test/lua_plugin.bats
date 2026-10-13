@@ -9,6 +9,19 @@ teardown() {
 	_common_teardown
 }
 
+# Assert that $output contains $1 once miette's line wrapping and gutter
+# characters are removed; error messages wrap at different points depending on
+# the length of the temp directory path.
+assert_unwrapped_output() {
+	local flat
+	flat="$(printf '%s' "$output" | sed -e 's/[│×]//g' | tr '\n' ' ' | tr -s ' ')"
+	if [[ $flat != *"$1"* ]]; then
+		echo "expected (unwrapped) output to contain: $1"
+		echo "output: $output"
+		return 1
+	fi
+}
+
 # Create a git repository at $1 whose provider.lua returns "<ref> (<label>)".
 make_plugin_repo() {
 	local repo="$1"
@@ -114,7 +127,7 @@ EOF2
 
 	FNOX_PROMPT_AUTH=false run "$FNOX_BIN" get S
 	assert_failure
-	assert_output --partial "authentication failed: vault is locked"
+	assert_unwrapped_output "authentication failed: vault is locked"
 }
 
 @test "declared plugins install on first use and update to a new ref" {
@@ -219,7 +232,7 @@ EOF2
 	sed -i.bak 's/#v1/#broken/' fnox.toml
 	run "$FNOX_BIN" plugin update demo
 	assert_failure
-	assert_output --partial "no provider.lua"
+	assert_unwrapped_output "no provider.lua"
 	run "$FNOX_BIN" plugin install demo --force
 	assert_failure
 
@@ -251,7 +264,7 @@ EOF2
 
 	run "$FNOX_BIN" get WHO
 	assert_failure
-	assert_output --partial "but [plugins] declares"
+	assert_unwrapped_output "but [plugins] declares"
 
 	run "$FNOX_BIN" plugin update demo
 	assert_success
@@ -293,7 +306,7 @@ EOF2
 
 	run "$FNOX_BIN" get WHO
 	assert_failure
-	assert_output --partial "plugin 'demo': not installed"
+	assert_unwrapped_output "plugin 'demo': not installed"
 
 	run "$FNOX_BIN" plugin install demo "file://$TEST_TEMP_DIR/repo#v1"
 	assert_success
@@ -303,7 +316,7 @@ EOF2
 
 	run "$FNOX_BIN" plugin install demo "file://$TEST_TEMP_DIR/repo"
 	assert_failure
-	assert_output --partial "already installed"
+	assert_unwrapped_output "already installed"
 
 	mkdir dev
 	echo 'return { get = function(ctx, ref) return "dev " .. ref end }' >dev/provider.lua
