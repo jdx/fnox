@@ -27,6 +27,8 @@ const labels = {
   "/cli/tui": "Terminal dashboard",
   "/guide/mcp": "MCP server",
   "/providers/overview": "Provider catalog",
+  "/providers/lua": "Lua plugins",
+  "/providers/lua#installing-plugins": "Installing Lua plugins",
   "/guide/golden-path": "Connect a vault",
   "/providers/age#adding-a-new-team-member": "Update age recipients",
   "/providers/plain": "Plaintext defaults",
@@ -57,7 +59,7 @@ for (const file of walk(root).filter((file) => file.endsWith(".md"))) {
   if (slug === "index") {
     description =
       "Find fnox commands for reading secrets, running applications, configuring providers, and managing caches and temporary credentials.";
-    extra = `## Choose a command\n\n| Task | Commands |\n| --- | --- |\n| Read and run | [get](/cli/get), [list](/cli/list), [exec](/cli/exec), [check](/cli/check) |\n| Store or migrate | [set](/cli/set), [import](/cli/import), [export](/cli/export), [sync](/cli/sync) |\n| Configure | [init](/cli/init), [provider](/cli/provider), [profiles](/cli/profiles), [config-files](/cli/config-files) |\n| Diagnose | [doctor](/cli/doctor), [scan](/cli/scan) |\n| Cache and broker | [daemon](/cli/daemon), [lease](/cli/lease), [proxy](/cli/proxy), [mcp](/cli/mcp) |\n\nNew to fnox? Follow the [quick start](/guide/quick-start). Put fnox options before the \`--\` separator in commands such as \`fnox exec -- npm start\`.`;
+    extra = `## Choose a command\n\n| Task | Commands |\n| --- | --- |\n| Read and run | [get](/cli/get), [list](/cli/list), [exec](/cli/exec), [check](/cli/check) |\n| Store or migrate | [set](/cli/set), [import](/cli/import), [export](/cli/export), [sync](/cli/sync) |\n| Configure | [init](/cli/init), [provider](/cli/provider), [plugin](/cli/plugin), [profiles](/cli/profiles), [config-files](/cli/config-files) |\n| Diagnose | [doctor](/cli/doctor), [scan](/cli/scan) |\n| Cache and broker | [daemon](/cli/daemon), [lease](/cli/lease), [proxy](/cli/proxy), [mcp](/cli/mcp) |\n\nNew to fnox? Follow the [quick start](/guide/quick-start). Put fnox options before the \`--\` separator in commands such as \`fnox exec -- npm start\`.`;
   } else if (slug === "configuration") {
     description =
       "Generated runtime settings for fnox, including profile selection, missing-secret behavior, and key-file settings.";

@@ -120,6 +120,21 @@ pub enum FnoxError {
     Config(String),
 
     // ========================================================================
+    // Plugin Errors
+    // ========================================================================
+    #[error("plugin '{plugin}': {details}")]
+    #[diagnostic(
+        code(fnox::plugin::error),
+        help("{help}"),
+        url("https://fnox.jdx.dev/providers/lua")
+    )]
+    Plugin {
+        plugin: String,
+        details: String,
+        help: String,
+    },
+
+    // ========================================================================
     // Profile Errors
     // ========================================================================
     #[error("Profile '{profile}' not found")]
@@ -806,6 +821,15 @@ impl FnoxError {
                 details: details.clone(),
                 hint: hint.clone(),
                 url: url.clone(),
+            },
+            FnoxError::Plugin {
+                plugin,
+                details,
+                help,
+            } => FnoxError::Plugin {
+                plugin: plugin.clone(),
+                details: details.clone(),
+                help: help.clone(),
             },
             _ => return None,
         })

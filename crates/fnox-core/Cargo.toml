@@ -47,6 +47,7 @@ keeper-secrets-manager-core = { workspace = true }
 keyring-core = { workspace = true }
 kube = { workspace = true }
 libloading = { workspace = true }
+mlua = { workspace = true }
 miette = { workspace = true }
 pluralizer = { workspace = true }
 rand = { workspace = true }

@@ -6,7 +6,7 @@ description: "Usage and examples for fnox provider add. Creates a provider confi
 
 # `fnox provider add`
 
-- **Usage:** `fnox provider add [-g --global] [--vault <VAULT>] <PROVIDER> <PROVIDER_TYPE>`
+- **Usage:** `fnox provider add [FLAGS] <PROVIDER> <PROVIDER_TYPE>`
 - **Aliases:** `a`, `set`
 
 Add a new provider
@@ -16,11 +16,12 @@ Add a new provider
 - **`<PROVIDER>`** — Provider name
 - **`<PROVIDER_TYPE>`** — Provider type
 
-  **Choices:** `1password`, `age`, `aws`, `aws-kms`, `aws-ps`, `azure-ac`, `azure-kms`, `azure-sm`, `gcp`, `gcp-kms`, `fido2`, `bitwarden`, `doppler`, `enpass`, `foks`, `bitwarden-sm`, `infisical`, `keepass`, `keeper-sm`, `keychain`, `kubernetes`, `password-store`, `passwordstate`, `plain`, `proton-pass`, `vault`, `yubikey`
+  **Choices:** `1password`, `age`, `aws`, `aws-kms`, `aws-ps`, `azure-ac`, `azure-kms`, `azure-sm`, `gcp`, `gcp-kms`, `fido2`, `bitwarden`, `doppler`, `enpass`, `foks`, `bitwarden-sm`, `infisical`, `keepass`, `keeper-sm`, `keychain`, `kubernetes`, `lua`, `password-store`, `passwordstate`, `plain`, `proton-pass`, `vault`, `yubikey`
 
 ## Flags
 
 - **`-g --global`** — Add to the global config file (~/.config/fnox/config.toml)
+- **`--plugin <PLUGIN>`** — Plugin name or path (only valid with provider type lua; defaults to the provider name)
 - **`--vault <VAULT>`** — Default Proton Pass vault name (only valid with provider type proton-pass)
 - **`-h --help`** — Print help
 

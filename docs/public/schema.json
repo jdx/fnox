@@ -28,6 +28,13 @@
         "$ref": "#/$defs/ProviderConfig"
       }
     },
+    "plugins": {
+      "description": "Lua provider plugins to install, as `name = \"<git url>[#ref]\"`.\n`owner/repo` is shorthand for a GitHub repository.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
     "default_provider": {
       "description": "Default provider name for default profile",
       "anyOf": [
@@ -1197,6 +1204,32 @@
           },
           "additionalProperties": false,
           "required": ["type", "service"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "plugin": {
+              "$ref": "#/$defs/StringOrSecretRef"
+            },
+            "options": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/StringOrSecretRef"
+              }
+            },
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
+            "type": {
+              "type": "string",
+              "const": "lua"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "plugin"]
         }
       ]
     },

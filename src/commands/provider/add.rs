@@ -19,6 +19,10 @@ pub struct AddCommand {
     #[usage(short = 'g', long)]
     pub global: bool,
 
+    /// Plugin name or path (only valid with provider type lua; defaults to the provider name)
+    #[usage(long)]
+    pub plugin: Option<String>,
+
     /// Default Proton Pass vault name (only valid with provider type proton-pass)
     #[usage(long)]
     pub vault: Option<String>,
@@ -35,6 +39,11 @@ impl AddCommand {
         if self.vault.is_some() && self.provider_type != ProviderType::ProtonPass {
             return Err(FnoxError::Config(
                 "--vault is only supported for provider type 'proton-pass'".to_string(),
+            ));
+        }
+        if self.plugin.is_some() && self.provider_type != ProviderType::Lua {
+            return Err(FnoxError::Config(
+                "--plugin is only supported for provider type 'lua'".to_string(),
             ));
         }
 
@@ -312,6 +321,14 @@ impl AddCommand {
                 api_key: OptionStringOrSecretRef::none(),
                 password_list_id: StringOrSecretRef::from("123"),
                 verify_ssl: OptionStringOrSecretRef::none(),
+                auth_command: None,
+                daemon_cache: None,
+            },
+            ProviderType::Lua => crate::config::ProviderConfig::Lua {
+                plugin: StringOrSecretRef::from(
+                    self.plugin.clone().unwrap_or_else(|| self.provider.clone()),
+                ),
+                options: Default::default(),
                 auth_command: None,
                 daemon_cache: None,
             },

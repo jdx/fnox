@@ -94,6 +94,9 @@ pub enum ProviderType {
     /// Kubernetes Secrets (read-only)
     #[usage(name = "kubernetes")]
     Kubernetes,
+    /// Custom provider implemented as a Lua plugin
+    #[usage(name = "lua")]
+    Lua,
     /// password-store (pass)
     #[usage(name = "password-store")]
     #[strum(serialize = "password-store")]

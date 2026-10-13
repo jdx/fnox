@@ -240,6 +240,48 @@ cmd list help="List all secrets" {
 cmd mcp help="Start an MCP server that brokers secrets to AI agents" {
     flag "-h --help" help="Print help" action=help builtin=#true
 }
+cmd plugin help="Manage Lua provider plugins" {
+    flag "-h --help" help="Print help" action=help builtin=#true
+    cmd install help="Install plugins from git" {
+        long_help #"""
+Install plugins from git
+
+With no arguments, installs every plugin declared under `[plugins]` that is not installed yet. A source is a git URL, optionally followed by `#<ref>` to pin a tag, branch, or commit; `owner/repo` is shorthand for GitHub.
+"""#
+        after_long_help #"""
+Examples:
+  fnox plugin install
+  fnox plugin install corp
+  fnox plugin install corp acme/fnox-plugin-corp#v1.0.0
+  fnox plugin install corp https://git.example.com/fnox-plugin-corp.git
+"""#
+        flag "-f --force" help="Reinstall even if the plugin is already installed"
+        flag "-h --help" help="Print help" action=help builtin=#true
+        arg "[NAME]" help="Plugin name; installs all declared plugins when omitted"
+        arg "[SOURCE]" help="Git source; defaults to the name's entry under `[plugins]`"
+    }
+    cmd link help="Link a local plugin directory, for plugin development" {
+        flag "-f --force" help="Replace an existing plugin with the link"
+        flag "-h --help" help="Print help" action=help builtin=#true
+        arg <NAME> help="Plugin name"
+        arg <PATH> help="Plugin directory containing provider.lua"
+    }
+    cmd ls help="List installed and declared plugins" {
+        alias list
+        flag "-h --help" help="Print help" action=help builtin=#true
+    }
+    cmd uninstall help="Remove an installed or linked plugin" {
+        alias rm
+        alias remove
+        flag "-h --help" help="Print help" action=help builtin=#true
+        arg <NAME> help="Plugin name"
+    }
+    cmd update help="Update installed plugins to their declared source" {
+        alias upgrade
+        flag "-h --help" help="Print help" action=help builtin=#true
+        arg "[NAMES]..." help="Plugins to update; updates all installed plugins when omitted"
+    }
+}
 cmd profiles help="List available profiles" {
     alias profile hide=#true
     flag --complete help="Output profile names for shell completion (one per line)" hide=#true
@@ -251,6 +293,9 @@ cmd provider help="Manage providers (defaults to list)" {
         alias a
         alias set
         flag "-g --global" help="Add to the global config file (~/.config/fnox/config.toml)"
+        flag --plugin help="Plugin name or path (only valid with provider type lua; defaults to the provider name)" {
+            arg <PLUGIN>
+        }
         flag --vault help="Default Proton Pass vault name (only valid with provider type proton-pass)" {
             arg <VAULT>
         }
@@ -279,6 +324,7 @@ cmd provider help="Manage providers (defaults to list)" {
                 choice keeper-sm help="Keeper Secrets Manager"
                 choice keychain help="OS Keychain"
                 choice kubernetes help="Kubernetes Secrets (read-only)"
+                choice lua help="Custom provider implemented as a Lua plugin"
                 choice password-store help="password-store (pass)"
                 choice passwordstate help="Click Studios Passwordstate"
                 choice plain help="Plain text provider"

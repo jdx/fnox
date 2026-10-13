@@ -1482,6 +1482,268 @@
         "examples": [],
         "headings": []
       },
+      "plugin": {
+        "full_cmd": ["plugin"],
+        "usage": "plugin [SUBCOMMAND]",
+        "subcommands": {
+          "install": {
+            "full_cmd": ["plugin", "install"],
+            "usage": "plugin install [-f --force] [NAME] [SOURCE]",
+            "subcommands": {},
+            "args": [
+              {
+                "name": "NAME",
+                "usage": "[NAME]",
+                "help": "Plugin name; installs all declared plugins when omitted",
+                "help_first_line": "Plugin name; installs all declared plugins when omitted",
+                "required": false,
+                "double_dash": "Optional",
+                "hide": false
+              },
+              {
+                "name": "SOURCE",
+                "usage": "[SOURCE]",
+                "help": "Git source; defaults to the name's entry under `[plugins]`",
+                "help_first_line": "Git source; defaults to the name's entry under `[plugins]`",
+                "required": false,
+                "double_dash": "Optional",
+                "hide": false
+              }
+            ],
+            "flags": [
+              {
+                "name": "force",
+                "usage": "-f --force",
+                "help": "Reinstall even if the plugin is already installed",
+                "help_first_line": "Reinstall even if the plugin is already installed",
+                "short": ["f"],
+                "long": ["force"],
+                "hide": false,
+                "global": false
+              },
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
+              }
+            ],
+            "mounts": [],
+            "unknown_flags": null,
+            "hide": false,
+            "args_override_self": true,
+            "help": "Install plugins from git",
+            "help_long": "Install plugins from git\n\nWith no arguments, installs every plugin declared under `[plugins]` that is not installed yet. A source is a git URL, optionally followed by `#<ref>` to pin a tag, branch, or commit; `owner/repo` is shorthand for GitHub.",
+            "name": "install",
+            "aliases": [],
+            "hidden_aliases": [],
+            "after_help_long": "Examples:\n  fnox plugin install\n  fnox plugin install corp\n  fnox plugin install corp acme/fnox-plugin-corp#v1.0.0\n  fnox plugin install corp https://git.example.com/fnox-plugin-corp.git",
+            "examples": [],
+            "headings": []
+          },
+          "link": {
+            "full_cmd": ["plugin", "link"],
+            "usage": "plugin link [-f --force] <NAME> <PATH>",
+            "subcommands": {},
+            "args": [
+              {
+                "name": "NAME",
+                "usage": "<NAME>",
+                "help": "Plugin name",
+                "help_first_line": "Plugin name",
+                "required": true,
+                "double_dash": "Optional",
+                "hide": false
+              },
+              {
+                "name": "PATH",
+                "usage": "<PATH>",
+                "help": "Plugin directory containing provider.lua",
+                "help_first_line": "Plugin directory containing provider.lua",
+                "required": true,
+                "double_dash": "Optional",
+                "hide": false
+              }
+            ],
+            "flags": [
+              {
+                "name": "force",
+                "usage": "-f --force",
+                "help": "Replace an existing plugin with the link",
+                "help_first_line": "Replace an existing plugin with the link",
+                "short": ["f"],
+                "long": ["force"],
+                "hide": false,
+                "global": false
+              },
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
+              }
+            ],
+            "mounts": [],
+            "unknown_flags": null,
+            "hide": false,
+            "args_override_self": true,
+            "help": "Link a local plugin directory, for plugin development",
+            "name": "link",
+            "aliases": [],
+            "hidden_aliases": [],
+            "examples": [],
+            "headings": []
+          },
+          "ls": {
+            "full_cmd": ["plugin", "ls"],
+            "usage": "plugin ls",
+            "subcommands": {},
+            "args": [],
+            "flags": [
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
+              }
+            ],
+            "mounts": [],
+            "unknown_flags": null,
+            "hide": false,
+            "args_override_self": true,
+            "help": "List installed and declared plugins",
+            "name": "ls",
+            "aliases": ["list"],
+            "hidden_aliases": [],
+            "examples": [],
+            "headings": []
+          },
+          "uninstall": {
+            "full_cmd": ["plugin", "uninstall"],
+            "usage": "plugin uninstall <NAME>",
+            "subcommands": {},
+            "args": [
+              {
+                "name": "NAME",
+                "usage": "<NAME>",
+                "help": "Plugin name",
+                "help_first_line": "Plugin name",
+                "required": true,
+                "double_dash": "Optional",
+                "hide": false
+              }
+            ],
+            "flags": [
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
+              }
+            ],
+            "mounts": [],
+            "unknown_flags": null,
+            "hide": false,
+            "args_override_self": true,
+            "help": "Remove an installed or linked plugin",
+            "name": "uninstall",
+            "aliases": ["rm", "remove"],
+            "hidden_aliases": [],
+            "examples": [],
+            "headings": []
+          },
+          "update": {
+            "full_cmd": ["plugin", "update"],
+            "usage": "plugin update [NAMES]…",
+            "subcommands": {},
+            "args": [
+              {
+                "name": "NAMES",
+                "usage": "[NAMES]…",
+                "help": "Plugins to update; updates all installed plugins when omitted",
+                "help_first_line": "Plugins to update; updates all installed plugins when omitted",
+                "required": false,
+                "double_dash": "Optional",
+                "var": true,
+                "hide": false
+              }
+            ],
+            "flags": [
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
+              }
+            ],
+            "mounts": [],
+            "unknown_flags": null,
+            "hide": false,
+            "args_override_self": true,
+            "help": "Update installed plugins to their declared source",
+            "name": "update",
+            "aliases": ["upgrade"],
+            "hidden_aliases": [],
+            "examples": [],
+            "headings": []
+          }
+        },
+        "args": [],
+        "flags": [
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
+        "mounts": [],
+        "unknown_flags": null,
+        "hide": false,
+        "args_override_self": true,
+        "help": "Manage Lua provider plugins",
+        "name": "plugin",
+        "aliases": [],
+        "hidden_aliases": [],
+        "examples": [],
+        "headings": []
+      },
       "profiles": {
         "full_cmd": ["profiles"],
         "usage": "profiles",
@@ -1528,7 +1790,7 @@
         "subcommands": {
           "add": {
             "full_cmd": ["provider", "add"],
-            "usage": "provider add [-g --global] [--vault <VAULT>] <PROVIDER> <PROVIDER_TYPE>",
+            "usage": "provider add [FLAGS] <PROVIDER> <PROVIDER_TYPE>",
             "subcommands": {},
             "args": [
               {
@@ -1571,6 +1833,7 @@
                     "keeper-sm",
                     "keychain",
                     "kubernetes",
+                    "lua",
                     "password-store",
                     "passwordstate",
                     "plain",
@@ -1664,6 +1927,10 @@
                       "help": "Kubernetes Secrets (read-only)"
                     },
                     {
+                      "value": "lua",
+                      "help": "Custom provider implemented as a Lua plugin"
+                    },
+                    {
                       "value": "password-store",
                       "help": "password-store (pass)"
                     },
@@ -1701,6 +1968,23 @@
                 "long": ["global"],
                 "hide": false,
                 "global": false
+              },
+              {
+                "name": "plugin",
+                "usage": "--plugin <PLUGIN>",
+                "help": "Plugin name or path (only valid with provider type lua; defaults to the provider name)",
+                "help_first_line": "Plugin name or path (only valid with provider type lua; defaults to the provider name)",
+                "short": [],
+                "long": ["plugin"],
+                "hide": false,
+                "global": false,
+                "arg": {
+                  "name": "PLUGIN",
+                  "usage": "<PLUGIN>",
+                  "required": true,
+                  "double_dash": "Optional",
+                  "hide": false
+                }
               },
               {
                 "name": "vault",

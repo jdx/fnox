@@ -206,7 +206,8 @@ fn load_providers() -> Result<Vec<(String, ProviderToml)>, Box<dyn std::error::E
                 "CloudKms" => 2,
                 "CloudSecretsManager" => 3,
                 "OsKeychain" => 4,
-                _ => 5,
+                "Plugin" => 5,
+                _ => 6,
             }
         };
         cat_order(&a.1.category)
@@ -319,6 +320,12 @@ fn generate_config_variant_fields(provider: &ProviderToml) -> Vec<TokenStream> {
                     #field_name: OptionProviderSecretRef
                 });
             }
+            "string_map" => {
+                fields.push(quote! {
+                    #[serde(default, skip_serializing_if = "indexmap::IndexMap::is_empty")]
+                    #field_name: indexmap::IndexMap<String, StringOrSecretRef>
+                });
+            }
             _ => {}
         }
     }
@@ -357,6 +364,9 @@ fn generate_resolved_variant_fields(provider: &ProviderToml) -> Vec<TokenStream>
             }
             "provider_ref" => {
                 fields.push(quote! { #field_name: OptionProviderSecretRef });
+            }
+            "string_map" => {
+                fields.push(quote! { #field_name: indexmap::IndexMap<String, String> });
             }
             _ => {}
         }
@@ -613,6 +623,14 @@ fn generate_try_to_resolved_body(provider: &ProviderToml) -> TokenStream {
             "provider_ref" => {
                 field_conversions.push(quote! { #field_name: #local_ident.clone() });
             }
+            "string_map" => {
+                field_conversions.push(quote! {
+                    #field_name: #local_ident
+                        .iter()
+                        .map(|(k, v)| Ok((k.clone(), req(v)?)))
+                        .collect::<Result<indexmap::IndexMap<String, String>>>()?
+                });
+            }
             _ => {}
         }
     }
@@ -702,6 +720,9 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
             }
             "optional" => {
                 field_inits.push(quote! { #field_name: get_optional(#name_str) });
+            }
+            "string_map" => {
+                field_inits.push(quote! { #field_name: Default::default() });
             }
             "vec_string" | "backend_enum" => {
                 // Skip - handled specially
@@ -864,6 +885,18 @@ fn generate_resolver_fields(provider: &ProviderToml) -> Vec<TokenStream> {
                 "provider_ref" => {
                     quote! { #field_name: #local_ident.clone() }
                 }
+                "string_map" => {
+                    quote! {
+                        #field_name: {
+                            let mut resolved = indexmap::IndexMap::with_capacity(#local_ident.len());
+                            for (key, value) in #local_ident {
+                                let value = super::super::resolver::resolve_required(config, profile, provider_name, key, value, ctx).await?;
+                                resolved.insert(key.clone(), value);
+                            }
+                            resolved
+                        }
+                    }
+                }
                 _ => quote! {},
             }
         })
@@ -887,6 +920,7 @@ fn generate_provider_wizard(
             "CloudKms" => quote! { WizardCategory::CloudKms },
             "CloudSecretsManager" => quote! { WizardCategory::CloudSecretsManager },
             "OsKeychain" => quote! { WizardCategory::OsKeychain },
+            "Plugin" => quote! { WizardCategory::Plugin },
             _ => quote! { WizardCategory::Local },
         };
 

@@ -143,6 +143,7 @@ Encryption providers store ciphertext in `fnox.toml`; remote and local storage p
 | Passwordstate       | `passwordstate`  | Passwordstate server      | `reqwest` HTTP           |
 | password-store      | `password-store` | GPG files                 | `pass` CLI               |
 | Proton Pass         | `proton-pass`    | Proton Pass vault         | `pass-cli` CLI           |
+| Lua plugin          | `lua`            | Defined by the plugin     | `mlua` crate (Lua 5.4)   |
 
 **Provider fields:** `type` is required. Fields such as `prefix`, `region`, and `vault` depend on the provider type; use its schema and guide for supported fields and reference formats.
 

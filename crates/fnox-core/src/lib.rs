@@ -19,6 +19,7 @@ pub(crate) mod keyring_store;
 pub mod lease;
 pub mod lease_backends;
 pub mod library;
+pub mod plugins;
 pub mod providers;
 pub mod secret_file;
 pub mod secret_resolver;
