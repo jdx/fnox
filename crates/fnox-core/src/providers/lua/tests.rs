@@ -175,6 +175,12 @@ async fn reports_load_errors() {
     let (_dir, provider) = plugin("return {}");
     let err = provider.get_secret("x").await.unwrap_err().to_string();
     assert!(err.contains("missing required `get` hook"), "{err}");
+
+    // A non-function hook must not be mistaken for a missing one
+    let (_dir, provider) = plugin("return { get = function() end, encrypt = true }");
+    let err = provider.prepare().await.unwrap_err().to_string();
+    assert!(err.contains("hook `encrypt` must be a function"), "{err}");
+    assert!(provider.capabilities().is_empty());
 }
 
 #[tokio::test]

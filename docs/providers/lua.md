@@ -67,7 +67,9 @@ type = "lua"
 plugin = "corp"
 ```
 
-A source is a git URL, optionally followed by `#<ref>` to pin a tag, branch, or commit. `owner/repo` is shorthand for `https://github.com/owner/repo.git`. fnox clones plugins into `~/.local/share/fnox/plugins/<name>`; set `FNOX_DATA_DIR` or `FNOX_PLUGINS_DIR` to change the location.
+A source is a git URL, optionally followed by `#<ref>` to pin a tag, branch, or commit. `owner/repo` is shorthand for `https://github.com/owner/repo.git`. Plugin names can't end in `.lua`, since such values are treated as paths.
+
+Installed plugins are shared by every project on the machine. If a project declares a different source or ref than the one installed, fnox refuses to load the plugin rather than run a different version with that project's options; run `fnox plugin update <name>` to switch. A plugin installed with `fnox plugin link` overrides any declaration. fnox clones plugins into `~/.local/share/fnox/plugins/<name>`; set `FNOX_DATA_DIR` or `FNOX_PLUGINS_DIR` to change the location.
 
 Manage installed plugins with [`fnox plugin`](/cli/plugin):
 
@@ -106,7 +108,7 @@ The returned table must define `get`; the other hooks are optional. Each hook re
 
 `ref` is the secret's `value` from `fnox.toml`. Without `get_batch`, fnox calls `get` for each secret, up to 10 at a time. Define `get_batch` when the backend can return many values in one request; `refs` is a list of unique references.
 
-A plugin that defines `encrypt` is an encryption provider. One that defines `put` stores values remotely. A plugin with neither is read-only, and `fnox set` reports an error.
+A plugin that defines `encrypt` is an encryption provider. One that defines `put` stores values remotely. A plugin with neither is read-only: like other read-only providers, `fnox set KEY VALUE --provider <name>` saves `VALUE` in `fnox.toml` as the secret's reference, so pass the reference (for example `prod/database-url`), never the secret itself. Hooks must be functions; fnox refuses to load a plugin whose hook fields hold anything else.
 
 ## Errors and authentication
 

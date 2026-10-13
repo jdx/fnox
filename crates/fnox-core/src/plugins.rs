@@ -70,7 +70,13 @@ fn is_github_shorthand(url: &str) -> bool {
 }
 
 /// Plugin names become directory names, so keep them to a safe character set.
+/// A `.lua` suffix is rejected because providers treat such values as paths.
 pub fn validate_name(name: &str) -> Result<()> {
+    if name.to_ascii_lowercase().ends_with(".lua") {
+        return Err(FnoxError::Config(format!(
+            "invalid plugin name '{name}': names ending in .lua are treated as file paths"
+        )));
+    }
     let valid = name
         .chars()
         .next()
@@ -234,20 +240,37 @@ async fn checkout(name: &str, dir: &Path, git_ref: Option<&str>) -> Result<()> {
             &[
                 "fetch",
                 "--quiet",
-                "--tags",
                 "origin",
                 "+refs/heads/*:refs/remotes/origin/*",
+                "+refs/tags/*:refs/tags/*",
             ],
         )
         .await?;
-        let commit = format!("{git_ref}^{{commit}}");
+        // Prefer the refs just fetched over local branches left by the clone,
+        // which can be stale.
+        let mut commit = None;
+        for candidate in [
+            format!("refs/remotes/origin/{git_ref}"),
+            format!("refs/tags/{git_ref}"),
+            git_ref.to_string(),
+        ] {
+            let spec = format!("{candidate}^{{commit}}");
+            if let Ok(sha) =
+                git_stdout(name, dir, &["rev-parse", "--verify", "--quiet", &spec]).await
+            {
+                commit = Some(sha);
+                break;
+            }
+        }
+        let Some(commit) = commit else {
+            return Err(fetch_err);
+        };
         return git(
             name,
             Some(dir),
             &["checkout", "--quiet", "--detach", &commit],
         )
-        .await
-        .map_err(|_| fetch_err);
+        .await;
     }
     git(
         name,
@@ -255,6 +278,24 @@ async fn checkout(name: &str, dir: &Path, git_ref: Option<&str>) -> Result<()> {
         &["checkout", "--quiet", "--detach", "FETCH_HEAD"],
     )
     .await
+}
+
+/// Where an install records the source it was installed or updated from,
+/// inside `.git` so it stays out of the plugin's work tree.
+fn source_record(dir: &Path) -> PathBuf {
+    dir.join(".git").join("fnox-source")
+}
+
+fn write_source_record(dir: &Path, source: &str) {
+    if let Err(e) = std::fs::write(source_record(dir), source) {
+        tracing::warn!("failed to record plugin source in {}: {e}", dir.display());
+    }
+}
+
+fn read_source_record(dir: &Path) -> Option<String> {
+    std::fs::read_to_string(source_record(dir))
+        .ok()
+        .map(|s| s.trim().to_string())
 }
 
 fn ensure_entry_file(name: &str, dir: &Path) -> Result<()> {
@@ -302,6 +343,7 @@ pub async fn install(name: &str, source: &PluginSource, force: bool) -> Result<P
         checkout(name, &checkout_dir, source.git_ref.as_deref()).await?;
     }
     ensure_entry_file(name, &checkout_dir)?;
+    write_source_record(&checkout_dir, &source.to_string());
 
     // A forced reinstall moves the current install aside and restores it if
     // the new checkout cannot be put in place. The backup lives in the temp
@@ -356,7 +398,13 @@ pub async fn update(name: &str, source: Option<&PluginSource>) -> Result<UpdateO
             .await?;
         }
         checkout(name, &dir, source.and_then(|s| s.git_ref.as_deref())).await?;
-        ensure_entry_file(name, &dir)
+        ensure_entry_file(name, &dir)?;
+        let recorded = match source {
+            Some(source) => source.to_string(),
+            None => git_stdout(name, &dir, &["remote", "get-url", "origin"]).await?,
+        };
+        write_source_record(&dir, &recorded);
+        Ok(())
     }
     .await;
 
@@ -419,24 +467,41 @@ pub fn link(name: &str, target: &Path, force: bool) -> Result<PathBuf> {
     })?;
     ensure_entry_file(name, &target)?;
     let dest = plugin_dir(name);
-    if is_installed(name) {
-        if !force {
-            return Err(FnoxError::Plugin {
-                plugin: name.to_string(),
-                details: "already installed".to_string(),
-                help: "Use `--force` to replace it with a link".to_string(),
-            });
-        }
-        remove(&dest)?;
+    if is_installed(name) && !force {
+        return Err(FnoxError::Plugin {
+            plugin: name.to_string(),
+            details: "already installed".to_string(),
+            help: "Use `--force` to replace it with a link".to_string(),
+        });
     }
     std::fs::create_dir_all(plugins_dir()).map_err(|e| FnoxError::CreateDirFailed {
         path: plugins_dir().to_path_buf(),
         source: e,
     })?;
+
+    // Move an existing install aside, and restore it if the link cannot be
+    // created (e.g. symlinks are not permitted on Windows).
+    let tmp = tempfile::Builder::new()
+        .prefix(&format!(".{name}-"))
+        .tempdir_in(plugins_dir())?;
+    let backup = tmp.path().join("previous");
+    let replaced = is_installed(name);
+    if replaced {
+        std::fs::rename(&dest, &backup)?;
+    }
     #[cfg(unix)]
-    std::os::unix::fs::symlink(&target, &dest)?;
+    let linked = std::os::unix::fs::symlink(&target, &dest);
     #[cfg(windows)]
-    std::os::windows::fs::symlink_dir(&target, &dest)?;
+    let linked = std::os::windows::fs::symlink_dir(&target, &dest);
+    if let Err(e) = linked {
+        if replaced && let Err(restore) = std::fs::rename(&backup, &dest) {
+            tracing::warn!(
+                "failed to restore plugin '{name}' from {}: {restore}",
+                backup.display()
+            );
+        }
+        return Err(e.into());
+    }
     Ok(dest)
 }
 
@@ -444,8 +509,31 @@ pub fn link(name: &str, target: &Path, force: bool) -> Result<PathBuf> {
 /// `declared` (its `[plugins]` source) when it is missing.
 pub async fn ensure_installed(name: &str, declared: Option<&str>) -> Result<PathBuf> {
     validate_name(name)?;
+    let dir = plugin_dir(name);
     if is_installed(name) {
-        return Ok(plugin_dir(name));
+        // A linked plugin is an explicit local override of any declaration.
+        if let Some(declared) = declared
+            && std::fs::read_link(&dir).is_err()
+        {
+            let declared = PluginSource::parse(declared)?.to_string();
+            let recorded = read_source_record(&dir);
+            if recorded.as_deref() != Some(declared.as_str()) {
+                // Another project (or `fnox plugin install`) installed this
+                // name from a different source; don't run that code with this
+                // project's options.
+                return Err(FnoxError::Plugin {
+                    plugin: name.to_string(),
+                    details: format!(
+                        "installed from {}, but [plugins] declares {declared}",
+                        recorded.as_deref().unwrap_or("an unknown source")
+                    ),
+                    help: format!(
+                        "Run `fnox plugin update {name}` to switch to the declared source"
+                    ),
+                });
+            }
+        }
+        return Ok(dir);
     }
     let Some(declared) = declared else {
         return Err(not_installed(name));
@@ -507,5 +595,6 @@ mod tests {
         assert!(validate_name(".hidden").is_err());
         assert!(validate_name("../evil").is_err());
         assert!(validate_name("a/b").is_err());
+        assert!(validate_name("corp.lua").is_err());
     }
 }

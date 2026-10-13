@@ -223,9 +223,41 @@ EOF2
 	run "$FNOX_BIN" plugin install demo --force
 	assert_failure
 
+	sed -i.bak 's/#broken/#v1/' fnox.toml
 	run "$FNOX_BIN" get WHO
 	assert_success
 	assert_output "hi again (v1)"
+}
+
+@test "a plugin installed from another source is not used" {
+	make_plugin_repo "$TEST_TEMP_DIR/repo"
+	cat >fnox.toml <<EOF2
+root = true
+
+[plugins]
+demo = "file://$TEST_TEMP_DIR/repo#v1"
+
+[providers.demo]
+type = "lua"
+plugin = "demo"
+options = { greeting = "yo" }
+
+[secrets]
+WHO = { provider = "demo", value = "there" }
+EOF2
+
+	run "$FNOX_BIN" plugin install demo "file://$TEST_TEMP_DIR/repo"
+	assert_success
+
+	run "$FNOX_BIN" get WHO
+	assert_failure
+	assert_output --partial "but [plugins] declares"
+
+	run "$FNOX_BIN" plugin update demo
+	assert_success
+	run "$FNOX_BIN" get WHO
+	assert_success
+	assert_output "yo there (v1)"
 }
 
 @test "set fails instead of storing plaintext when a plugin cannot load" {

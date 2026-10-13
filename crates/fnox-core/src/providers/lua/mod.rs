@@ -244,6 +244,11 @@ impl LuaProvider {
                 "Add `get = function(ctx, ref) ... end` to the returned table",
             ));
         }
+        // Reject malformed optional hooks now: capabilities() would otherwise
+        // treat them as absent and report the plugin as read-only.
+        for name in ["get_batch", "put", "encrypt", "test"] {
+            hook(&hooks, name).map_err(load_err)?;
+        }
 
         let ctx = lua.create_table().map_err(load_err)?;
         let options = lua.to_value(&self.options).map_err(load_err)?;
