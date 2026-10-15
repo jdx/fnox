@@ -65,6 +65,7 @@ keyring-core = "1"
 kube = { version = "4", default-features = false, features = ["client", "rustls-tls", "aws-lc-rs"] }
 apple-native-keyring-store = { version = "1", features = ["keychain"] }
 windows-native-keyring-store = "1"
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_System_Pipes", "Win32_System_Threading"] }
 dbus-secret-service-keyring-store = { version = "1", features = ["crypto-rust", "vendored"] }
 libc = "0.2"
 libloading = "0.9"

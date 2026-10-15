@@ -1,7 +1,7 @@
 //! A read-only client for the fnox daemon, and the types of `fnox env --json`.
 //!
 //! This crate lets another program ask a running fnox daemon for the
-//! environment a command would get, in one round trip over a Unix socket and
+//! environment a command would get, in one round trip over a Unix socket (a named pipe on Windows) and
 //! with no fnox process. It depends on neither fnox-core nor tokio, so it pulls
 //! in none of the provider SDKs.
 //!
@@ -46,6 +46,10 @@ pub mod path;
 #[cfg(unix)]
 #[doc(hidden)]
 pub mod peer;
+#[cfg(windows)]
+#[doc(hidden)]
+#[path = "peer_windows.rs"]
+pub mod peer;
 pub mod profile;
 #[doc(hidden)]
 pub mod wire;
@@ -66,13 +70,15 @@ pub const WIRE_VERSION: u8 = 6;
 /// The oldest protocol this crate talks to.
 pub const MIN_PROTOCOL: u32 = 6;
 
-/// Whether fnox's daemon runs on this platform: Linux, macOS, FreeBSD and OpenBSD.
+/// Whether fnox's daemon runs on this platform: Linux, macOS, FreeBSD, OpenBSD
+/// and Windows.
 pub const fn platform_supported() -> bool {
     cfg!(any(
         target_os = "linux",
         target_os = "macos",
         target_os = "freebsd",
-        target_os = "openbsd"
+        target_os = "openbsd",
+        windows
     ))
 }
 

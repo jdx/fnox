@@ -65,7 +65,7 @@ Mutation and admin commands still resolve directly, including `sync`, `reencrypt
 
 ## Other programs (mise)
 
-Programs that start processes themselves can read the daemon's cache directly, without running `fnox`. The [`fnox-client`](https://crates.io/crates/fnox-client) crate is a small Rust client for this: one round trip over the daemon's Unix socket answers with the same JSON document as [`fnox env --json`](/reference/env-json), and mise uses it to start tasks with the secrets they were granted.
+Programs that start processes themselves can read the daemon's cache directly, without running `fnox`. The [`fnox-client`](https://crates.io/crates/fnox-client) crate is a small Rust client for this: one round trip over the daemon's Unix socket or Windows named pipe answers with the same JSON document as [`fnox env --json`](/reference/env-json), and mise uses it to start tasks with the secrets they were granted.
 
 - **Ask describe first.** `fnox env --json --describe` reports `daemon_enabled`, whether fnox would use the daemon for this project. Send a request to the daemon only when it is `true`, so a project that disables the daemon never has its environment sent to it.
 - **It only reads.** Such a client never starts the daemon, never stores values in it, and never makes it call a provider. If no daemon is running, it says so.
@@ -120,9 +120,9 @@ This disables cache reuse for those values. If daemon mode is enabled, fnox stil
 
 ## Security model
 
-The daemon is Unix-first and uses a Unix domain socket. It does not listen on TCP.
+The daemon listens on a Unix domain socket on Linux, macOS, FreeBSD and OpenBSD, and on a named pipe on Windows. It does not listen on TCP.
 
-The socket is created in a user-owned runtime directory with strict permissions. The daemon verifies that each client is owned by the same user before accepting requests, and clients verify the daemon peer before sending request data.
+On Unix the socket is created in a user-owned runtime directory with strict permissions. On Windows the pipe is named after your user's SID and its access list admits only that user. It rejects remote clients, and the daemon refuses to adopt a pipe that another process created first. In both cases the daemon verifies that each client belongs to the same user before accepting requests, and clients verify the daemon peer before sending request data.
 
 On unsupported platforms, daemon mode returns a clear unsupported error. Use `--no-daemon` or `FNOX_DAEMON=off` to force direct resolution.
 

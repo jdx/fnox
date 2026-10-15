@@ -358,29 +358,9 @@ impl CallOptions {
     }
 }
 
-/// Sends `request` to the daemon at `path` and reads its reply.
-///
-/// Verifies the peer's user id before writing anything.
-#[cfg(unix)]
-pub fn call(path: &Path, request: &Request, options: &CallOptions) -> Result<Response, CallError> {
-    use std::io::{BufRead, BufReader, Read, Write};
-    use std::os::fd::AsRawFd;
-    use std::os::unix::net::UnixStream;
-
-    fn io_error(context: &str, e: std::io::Error) -> CallError {
-        CallError::Io(std::io::Error::new(e.kind(), format!("{context}: {e}")))
-    }
-
-    let mut stream = UnixStream::connect(path).map_err(|source| CallError::SocketUnavailable {
-        path: path.to_path_buf(),
-        source,
-    })?;
-    crate::peer::verify_peer(stream.as_raw_fd()).map_err(CallError::PeerRejected)?;
-    stream
-        .set_read_timeout(options.timeout)
-        .and_then(|()| stream.set_write_timeout(options.timeout))
-        .map_err(|e| io_error("Failed to configure daemon socket", e))?;
-
+/// Encodes `request` as the one line the daemon reads.
+#[cfg(any(unix, windows))]
+fn encode_request(request: &Request) -> Result<Vec<u8>, CallError> {
     let mut line = serde_json::to_vec(request).map_err(|e| {
         CallError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -391,11 +371,27 @@ pub fn call(path: &Path, request: &Request, options: &CallOptions) -> Result<Res
         return Err(CallError::Oversize);
     }
     line.push(b'\n');
+    Ok(line)
+}
+
+#[cfg(any(unix, windows))]
+fn io_error(context: &str, e: std::io::Error) -> CallError {
+    CallError::Io(std::io::Error::new(e.kind(), format!("{context}: {e}")))
+}
+
+/// Writes the encoded request and reads the one line that answers it.
+#[cfg(any(unix, windows))]
+fn exchange<S: std::io::Read + std::io::Write>(
+    stream: &mut S,
+    line: &[u8],
+) -> Result<Response, CallError> {
+    use std::io::{BufRead, BufReader, Read};
+
     stream
-        .write_all(&line)
+        .write_all(line)
         .map_err(|e| io_error("Failed to write daemon request", e))?;
 
-    let mut reader = BufReader::new(&stream).take(MAX_LINE_BYTES as u64 + 1);
+    let mut reader = BufReader::new(stream).take(MAX_LINE_BYTES as u64 + 1);
     let mut response = Vec::new();
     let read = reader
         .read_until(b'\n', &mut response)
@@ -413,7 +409,78 @@ pub fn call(path: &Path, request: &Request, options: &CallOptions) -> Result<Res
 }
 
 /// Sends `request` to the daemon at `path` and reads its reply.
-#[cfg(not(unix))]
+///
+/// Verifies the peer's user id before writing anything.
+#[cfg(unix)]
+pub fn call(path: &Path, request: &Request, options: &CallOptions) -> Result<Response, CallError> {
+    use std::os::fd::AsRawFd;
+    use std::os::unix::net::UnixStream;
+
+    let mut stream = UnixStream::connect(path).map_err(|source| CallError::SocketUnavailable {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    crate::peer::verify_peer(stream.as_raw_fd()).map_err(CallError::PeerRejected)?;
+    stream
+        .set_read_timeout(options.timeout)
+        .and_then(|()| stream.set_write_timeout(options.timeout))
+        .map_err(|e| io_error("Failed to configure daemon socket", e))?;
+
+    exchange(&mut stream, &encode_request(request)?)
+}
+
+/// Sends `request` to the daemon's named pipe at `path` and reads its reply.
+///
+/// Verifies that the pipe's server runs as the current user before writing
+/// anything. A pipe handle has no read timeout, so with one the exchange runs
+/// on a helper thread that is abandoned if the daemon does not answer in time.
+#[cfg(windows)]
+pub fn call(path: &Path, request: &Request, options: &CallOptions) -> Result<Response, CallError> {
+    use std::os::windows::io::AsRawHandle;
+    use std::time::Instant;
+
+    /// `ERROR_PIPE_BUSY`: every instance of the pipe has a client; one frees up soon.
+    const ERROR_PIPE_BUSY: i32 = 231;
+
+    let deadline = Instant::now() + options.timeout.unwrap_or(Duration::from_secs(5));
+    let mut file = loop {
+        match std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(path)
+        {
+            Ok(file) => break file,
+            Err(e) if e.raw_os_error() == Some(ERROR_PIPE_BUSY) && Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Err(source) => {
+                return Err(CallError::SocketUnavailable {
+                    path: path.to_path_buf(),
+                    source,
+                });
+            }
+        }
+    };
+    crate::peer::verify_pipe_server(file.as_raw_handle()).map_err(CallError::PeerRejected)?;
+
+    let line = encode_request(request)?;
+    let Some(timeout) = options.timeout else {
+        return exchange(&mut file, &line);
+    };
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(exchange(&mut file, &line));
+    });
+    rx.recv_timeout(timeout).unwrap_or_else(|_| {
+        Err(CallError::Io(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "Timed out waiting for the daemon",
+        )))
+    })
+}
+
+/// Sends `request` to the daemon at `path` and reads its reply.
+#[cfg(not(any(unix, windows)))]
 pub fn call(
     _path: &Path,
     _request: &Request,

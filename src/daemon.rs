@@ -4,7 +4,7 @@ use crate::config::{Config, ProviderConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
 use crate::secret_resolver::{resolve_secrets_batch, resolve_secrets_batch_with_pre_resolved};
 use fnox_client::path::{RuntimeEnv, SocketKey};
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use fnox_client::wire::MAX_LINE_BYTES;
 pub use fnox_client::wire::Purpose;
 use fnox_client::wire::{
@@ -16,15 +16,19 @@ use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 #[cfg(unix)]
 use std::os::fd::AsRawFd;
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
-#[cfg(unix)]
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+#[cfg(any(unix, windows))]
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+#[cfg(windows)]
+use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeServer, ServerOptions};
 #[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::Mutex;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use tokio::task::JoinSet;
 
 const SHUTDOWN_GRACE_PERIOD: Duration = Duration::from_secs(30);
@@ -496,7 +500,18 @@ async fn start_background_for_context(
     {
         cmd.env("FNOX_DAEMON_IDLE_TIMEOUT", daemon.idle_timeout());
     }
+    #[cfg(unix)]
     cmd.current_dir("/");
+    #[cfg(windows)]
+    cmd.current_dir(std::env::temp_dir());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        // Detach the daemon from the caller's console, as setsid does on Unix.
+        cmd.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+    }
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
@@ -519,7 +534,8 @@ async fn start_background_for_context(
 
     let path = socket_path_for_context(ctx)?;
     for _ in 0..50 {
-        if path.exists() && status_for_context(ctx).await?.is_some() {
+        // A named pipe is no file, so on Windows only a status call can tell.
+        if (cfg!(windows) || path.exists()) && status_for_context(ctx).await?.is_some() {
             return Ok(true);
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
@@ -531,12 +547,12 @@ async fn start_background_for_context(
 }
 
 pub async fn serve(cli: &Cli, idle_timeout: Duration) -> Result<()> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = cli;
         let _ = idle_timeout;
         return Err(FnoxError::Config(
-            "fnox daemon is currently supported on Unix platforms only".to_string(),
+            "fnox daemon is not supported on this platform".to_string(),
         ));
     }
 
@@ -561,37 +577,12 @@ pub async fn serve(cli: &Cli, idle_timeout: Duration) -> Result<()> {
         target_os = "linux",
         target_os = "macos",
         target_os = "freebsd",
-        target_os = "openbsd"
+        target_os = "openbsd",
+        windows
     ))]
     {
         let path = socket_path(cli)?;
-        prepare_socket_path(&path)?;
-        if path.exists() {
-            match UnixStream::connect(&path).await {
-                Ok(_) => {
-                    return Err(FnoxError::Config(format!(
-                        "fnox daemon is already running at {}",
-                        path.display()
-                    )));
-                }
-                Err(_) => {
-                    std::fs::remove_file(&path).map_err(|e| {
-                        FnoxError::Config(format!(
-                            "Failed to remove stale daemon socket {}: {e}",
-                            path.display()
-                        ))
-                    })?;
-                }
-            }
-        }
-
-        let listener = UnixListener::bind(&path).map_err(|e| {
-            FnoxError::Config(format!(
-                "Failed to bind daemon socket {}: {e}",
-                path.display()
-            ))
-        })?;
-        set_socket_permissions(&path)?;
+        let mut listener = Listener::bind(&path).await?;
 
         let state = std::sync::Arc::new(Mutex::new(DaemonState::default()));
         let request_lock = std::sync::Arc::new(Mutex::new(()));
@@ -608,27 +599,42 @@ pub async fn serve(cli: &Cli, idle_timeout: Duration) -> Result<()> {
                 }
                 accepted = tokio::time::timeout(idle_timeout, listener.accept()) => accepted,
             };
-            let (stream, _) = match accepted {
-                Ok(Ok(pair)) => pair,
+            let stream = match accepted {
+                Ok(Ok(stream)) => stream,
                 Ok(Err(e)) => {
                     tracing::warn!("daemon accept failed: {e}");
+                    if listener.is_exhausted() {
+                        tracing::error!(
+                            "daemon listener cannot accept more clients; shutting down"
+                        );
+                        break;
+                    }
+                    // A persistent failure must not spin; idle shutdown only runs while accept waits.
+                    tokio::time::sleep(Duration::from_millis(100)).await;
                     continue;
                 }
                 Err(_) => break,
             };
-            if let Err(e) = verify_peer(&stream) {
-                tracing::warn!("rejected daemon client: {e}");
-                continue;
-            }
-
-            let state = state.clone();
-            let request_lock = request_lock.clone();
-            let shutdown_tx = shutdown_tx.clone();
-            tasks.spawn(async move {
-                if let Err(e) = handle_connection(stream, state, request_lock, shutdown_tx).await {
-                    tracing::warn!("daemon request failed: {e}");
+            match verify_peer(&stream) {
+                Ok(()) => {
+                    let state = state.clone();
+                    let request_lock = request_lock.clone();
+                    let shutdown_tx = shutdown_tx.clone();
+                    tasks.spawn(async move {
+                        if let Err(e) =
+                            handle_connection(stream, state, request_lock, shutdown_tx).await
+                        {
+                            tracing::warn!("daemon request failed: {e}");
+                        }
+                    });
                 }
-            });
+                Err(e) => tracing::warn!("rejected daemon client: {e}"),
+            }
+            if listener.is_exhausted() {
+                // Serve the client on the line, then exit rather than leave the name free for another daemon.
+                tracing::error!("daemon listener cannot accept more clients; shutting down");
+                break;
+            }
         }
 
         if !tasks.is_empty() {
@@ -646,11 +652,147 @@ pub async fn serve(cli: &Cli, idle_timeout: Duration) -> Result<()> {
             }
         }
 
+        // The named pipe on Windows disappears with its last handle.
+        #[cfg(unix)]
         if path.exists() {
             let _ = std::fs::remove_file(&path);
         }
         Ok(())
     }
+}
+
+/// Where the daemon accepts connections: a Unix socket.
+#[cfg(unix)]
+struct Listener(UnixListener);
+
+#[cfg(unix)]
+impl Listener {
+    async fn bind(path: &Path) -> Result<Self> {
+        prepare_socket_path(path)?;
+        if path.exists() {
+            match UnixStream::connect(path).await {
+                Ok(_) => {
+                    return Err(FnoxError::Config(format!(
+                        "fnox daemon is already running at {}",
+                        path.display()
+                    )));
+                }
+                Err(_) => {
+                    std::fs::remove_file(path).map_err(|e| {
+                        FnoxError::Config(format!(
+                            "Failed to remove stale daemon socket {}: {e}",
+                            path.display()
+                        ))
+                    })?;
+                }
+            }
+        }
+
+        let listener = UnixListener::bind(path).map_err(|e| {
+            FnoxError::Config(format!(
+                "Failed to bind daemon socket {}: {e}",
+                path.display()
+            ))
+        })?;
+        set_socket_permissions(path)?;
+        Ok(Self(listener))
+    }
+
+    async fn accept(&mut self) -> std::io::Result<UnixStream> {
+        self.0.accept().await.map(|(stream, _)| stream)
+    }
+
+    fn is_exhausted(&self) -> bool {
+        false
+    }
+}
+
+/// Where the daemon accepts connections: a named pipe that only the current
+/// user may open. One idle instance always waits for the next client, which
+/// keeps the name taken.
+#[cfg(windows)]
+struct Listener {
+    name: PathBuf,
+    security: fnox_client::peer::PipeSecurity,
+    next: Option<NamedPipeServer>,
+    /// Creating the waiting instance failed, so the name is held only by the
+    /// client being served.
+    exhausted: bool,
+}
+
+#[cfg(windows)]
+impl Listener {
+    async fn bind(name: &Path) -> Result<Self> {
+        let mut security = fnox_client::peer::PipeSecurity::current_user_only()
+            .map_err(|e| FnoxError::Config(format!("Failed to secure daemon pipe: {e}")))?;
+        // The first instance must be new, so a pipe of the same name made by
+        // another process is never adopted.
+        let next = create_pipe_instance(name, &mut security, true).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::PermissionDenied {
+                FnoxError::Config(format!(
+                    "fnox daemon is already running at {}",
+                    name.display()
+                ))
+            } else {
+                FnoxError::Config(format!(
+                    "Failed to create daemon pipe {}: {e}",
+                    name.display()
+                ))
+            }
+        })?;
+        Ok(Self {
+            name: name.to_path_buf(),
+            security,
+            next: Some(next),
+            exhausted: false,
+        })
+    }
+
+    /// Cancel safe: the waiting instance stays in `self` until a client is on it.
+    async fn accept(&mut self) -> std::io::Result<NamedPipeServer> {
+        let Some(waiting) = &self.next else {
+            return Err(std::io::Error::other("no waiting daemon pipe instance"));
+        };
+        if let Err(e) = waiting.connect().await {
+            // A client that left before connecting can leave the instance unusable.
+            match create_pipe_instance(&self.name, &mut self.security, false) {
+                Ok(fresh) => self.next = Some(fresh),
+                Err(_) => self.exhausted = true,
+            }
+            return Err(e);
+        }
+        let connected = self.next.take().expect("checked above");
+        match create_pipe_instance(&self.name, &mut self.security, false) {
+            Ok(fresh) => self.next = Some(fresh),
+            Err(e) => {
+                // The connected client is still served. Recreating the pipe later
+                // could attach to one a second daemon made once this one let go
+                // of the name, so the daemon exits instead.
+                tracing::warn!("failed to create the next daemon pipe instance: {e}");
+                self.exhausted = true;
+            }
+        }
+        Ok(connected)
+    }
+
+    fn is_exhausted(&self) -> bool {
+        self.exhausted
+    }
+}
+
+#[cfg(windows)]
+fn create_pipe_instance(
+    name: &Path,
+    security: &mut fnox_client::peer::PipeSecurity,
+    first: bool,
+) -> std::io::Result<NamedPipeServer> {
+    let mut options = ServerOptions::new();
+    options
+        .first_pipe_instance(first)
+        .reject_remote_clients(true);
+    // SAFETY: the attributes point at a descriptor that `security` keeps alive,
+    // and CreateNamedPipe copies it.
+    unsafe { options.create_with_security_attributes_raw(name, security.as_raw_attributes()) }
 }
 
 fn should_use_daemon(ctx: &ResolveContext, config: &Config) -> bool {
@@ -674,17 +816,17 @@ async fn call_or_start(
     config: &Config,
     request: Request,
 ) -> Result<Response> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = ctx;
         let _ = config;
         let _ = request;
         return Err(FnoxError::Config(
-            "fnox daemon is currently supported on Unix platforms only".to_string(),
+            "fnox daemon is not supported on this platform".to_string(),
         ));
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let path = socket_path_for_context(ctx)?;
         match call(path.clone(), request.clone()).await {
@@ -701,20 +843,13 @@ async fn call_or_start(
 /// Sends `request` to the daemon at `path`. fnox's own calls wait as long as
 /// the daemon takes. This mirrors `fnox_client::wire::call` on tokio I/O, so
 /// dropping the future cancels the call instead of leaving a blocked thread.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 async fn call(path: PathBuf, request: Request) -> std::result::Result<Response, CallError> {
     fn io_error(context: &str, e: std::io::Error) -> CallError {
         CallError::Io(std::io::Error::new(e.kind(), format!("{context}: {e}")))
     }
 
-    let mut stream =
-        UnixStream::connect(&path)
-            .await
-            .map_err(|source| CallError::SocketUnavailable {
-                path: path.clone(),
-                source,
-            })?;
-    fnox_client::peer::verify_peer(stream.as_raw_fd()).map_err(CallError::PeerRejected)?;
+    let stream = connect(&path).await?;
     let mut line = serde_json::to_vec(&request).map_err(|e| {
         CallError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -725,12 +860,12 @@ async fn call(path: PathBuf, request: Request) -> std::result::Result<Response, 
         return Err(CallError::Oversize);
     }
     line.push(b'\n');
-    stream
+    let mut reader = BufReader::new(stream);
+    reader
         .write_all(&line)
         .await
         .map_err(|e| io_error("Failed to write daemon request", e))?;
 
-    let mut reader = BufReader::new(stream);
     let mut response = Vec::new();
     let read = (&mut reader)
         .take(MAX_LINE_BYTES as u64 + 1)
@@ -749,14 +884,59 @@ async fn call(path: PathBuf, request: Request) -> std::result::Result<Response, 
     serde_json::from_slice(&response).map_err(CallError::Decode)
 }
 
-#[cfg(not(unix))]
+/// Connects to the daemon's socket and checks that the user on the other end
+/// is the current one, before anything is sent.
+#[cfg(unix)]
+async fn connect(path: &Path) -> std::result::Result<UnixStream, CallError> {
+    let stream =
+        UnixStream::connect(path)
+            .await
+            .map_err(|source| CallError::SocketUnavailable {
+                path: path.to_path_buf(),
+                source,
+            })?;
+    fnox_client::peer::verify_peer(stream.as_raw_fd()).map_err(CallError::PeerRejected)?;
+    Ok(stream)
+}
+
+/// Connects to the daemon's named pipe and checks that its server runs as the
+/// current user, before anything is sent.
+#[cfg(windows)]
+async fn connect(
+    path: &Path,
+) -> std::result::Result<tokio::net::windows::named_pipe::NamedPipeClient, CallError> {
+    /// `ERROR_PIPE_BUSY`: every instance of the pipe has a client; one frees up soon.
+    const ERROR_PIPE_BUSY: i32 = 231;
+
+    let mut busy_retries = 0;
+    let client = loop {
+        match ClientOptions::new().open(path) {
+            Ok(client) => break client,
+            Err(e) if e.raw_os_error() == Some(ERROR_PIPE_BUSY) && busy_retries < 500 => {
+                busy_retries += 1;
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            Err(source) => {
+                return Err(CallError::SocketUnavailable {
+                    path: path.to_path_buf(),
+                    source,
+                });
+            }
+        }
+    };
+    fnox_client::peer::verify_pipe_server(client.as_raw_handle())
+        .map_err(CallError::PeerRejected)?;
+    Ok(client)
+}
+
+#[cfg(not(any(unix, windows)))]
 async fn call(_path: PathBuf, _request: Request) -> std::result::Result<Response, CallError> {
     Err(CallError::Unsupported)
 }
 
-#[cfg(unix)]
-async fn handle_connection(
-    stream: UnixStream,
+#[cfg(any(unix, windows))]
+async fn handle_connection<S: AsyncRead + AsyncWrite + Unpin>(
+    stream: S,
     state: std::sync::Arc<Mutex<DaemonState>>,
     request_lock: std::sync::Arc<Mutex<()>>,
     shutdown_tx: tokio::sync::mpsc::UnboundedSender<()>,
@@ -1436,26 +1616,23 @@ fn socket_path_for_context(ctx: &ResolveContext) -> Result<PathBuf> {
     Ok(ctx.socket_key().socket_path(&RuntimeEnv::from_process()))
 }
 
+#[cfg(unix)]
 fn prepare_socket_path(path: &Path) -> Result<()> {
     let Some(parent) = path.parent() else {
         return Err(FnoxError::Config("Invalid daemon socket path".to_string()));
     };
     std::fs::create_dir_all(parent)
         .map_err(|e| FnoxError::Config(format!("Failed to create daemon runtime dir: {e}")))?;
-    #[cfg(unix)]
-    {
-        let temp_user_dir = RuntimeEnv::from_process()
-            .tmpdir
-            .join(format!("fnox-{}", current_uid()));
-        if parent.starts_with(&temp_user_dir) {
-            secure_runtime_component(&temp_user_dir)?;
-            if let Some(hash_dir) = parent.parent() {
-                secure_runtime_component(hash_dir)?;
-            }
+    let temp_user_dir = RuntimeEnv::from_process()
+        .tmpdir
+        .join(format!("fnox-{}", current_uid()));
+    if parent.starts_with(&temp_user_dir) {
+        secure_runtime_component(&temp_user_dir)?;
+        if let Some(hash_dir) = parent.parent() {
+            secure_runtime_component(hash_dir)?;
         }
-        secure_runtime_component(parent)?;
     }
-    Ok(())
+    secure_runtime_component(parent)
 }
 
 #[cfg(unix)]
@@ -1503,15 +1680,15 @@ fn verify_peer(stream: &UnixStream) -> Result<()> {
     fnox_client::peer::verify_peer(stream.as_raw_fd()).map_err(|e| FnoxError::Config(e.to_string()))
 }
 
+#[cfg(windows)]
+fn verify_peer(stream: &NamedPipeServer) -> Result<()> {
+    fnox_client::peer::verify_pipe_client(stream.as_raw_handle())
+        .map_err(|e| FnoxError::Config(e.to_string()))
+}
+
+#[cfg(unix)]
 fn current_uid() -> u32 {
-    #[cfg(unix)]
-    {
-        fnox_client::peer::current_euid()
-    }
-    #[cfg(not(unix))]
-    {
-        0
-    }
+    fnox_client::peer::current_euid()
 }
 
 struct EnvOverlay {
@@ -2686,6 +2863,56 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
             start.elapsed() < std::time::Duration::from_secs(2),
             "dropping the runtime waited {:?}",
             start.elapsed()
+        );
+    }
+
+    // The daemon's named pipe serves both the async and the blocking client, and
+    // names no pipe of another user.
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn named_pipe_round_trip() {
+        use fnox_client::wire::{CallOptions, Response};
+        let key = fnox_client::SocketKey::new(&["pipe-test".to_string()], false, None, None);
+        let name = key.socket_path(&RuntimeEnv::from_process());
+        let mut listener = super::Listener::bind(&name).await.unwrap();
+        assert!(
+            super::Listener::bind(&name).await.is_err(),
+            "a second daemon must not adopt the pipe"
+        );
+        let state = Arc::new(Mutex::new(DaemonState::default()));
+        let lock = Arc::new(Mutex::new(()));
+        let (shutdown_tx, _shutdown_rx) = tokio::sync::mpsc::unbounded_channel();
+        let server = tokio::spawn(async move {
+            for _ in 0..2 {
+                let stream = listener.accept().await.unwrap();
+                super::verify_peer(&stream).unwrap();
+                super::handle_connection(stream, state.clone(), lock.clone(), shutdown_tx.clone())
+                    .await
+                    .unwrap();
+            }
+        });
+
+        let response = super::call(name.clone(), Request::Status).await.unwrap();
+        assert!(matches!(response, Response::Status { .. }), "{response:?}");
+        let blocking_name = name.clone();
+        let response = tokio::task::spawn_blocking(move || {
+            fnox_client::wire::call(
+                &blocking_name,
+                &Request::Status,
+                &CallOptions::with_timeout(std::time::Duration::from_secs(5)),
+            )
+        })
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(matches!(response, Response::Status { .. }), "{response:?}");
+        server.await.unwrap();
+
+        assert!(
+            super::call(name, Request::Status)
+                .await
+                .unwrap_err()
+                .is_socket_missing()
         );
     }
 }

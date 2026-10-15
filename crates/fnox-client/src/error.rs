@@ -8,7 +8,7 @@ use std::path::PathBuf;
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum CallError {
-    /// Connecting to the daemon's socket failed.
+    /// Connecting to the daemon's socket (or named pipe) failed.
     SocketUnavailable { path: PathBuf, source: io::Error },
     /// The peer on the socket is not owned by the current user.
     PeerRejected(io::Error),
@@ -30,7 +30,8 @@ pub enum CallError {
 }
 
 impl CallError {
-    /// Whether the socket does not exist or nothing listens on it.
+    /// Whether the socket does not exist or nothing listens on it. On Windows
+    /// that is a pipe that does not exist.
     pub fn is_socket_missing(&self) -> bool {
         matches!(
             self,
@@ -58,10 +59,7 @@ impl fmt::Display for CallError {
             }
             Self::Oversize => write!(f, "fnox daemon line exceeds the size limit"),
             Self::Decode(source) => write!(f, "Failed to decode daemon response: {source}"),
-            Self::Unsupported => write!(
-                f,
-                "fnox daemon is currently supported on Unix platforms only"
-            ),
+            Self::Unsupported => write!(f, "fnox daemon is not supported on this platform"),
             Self::Daemon(message) => write!(f, "{message}"),
             Self::Protocol(what) => write!(f, "fnox daemon protocol violation: {what}"),
         }
