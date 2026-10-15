@@ -135,11 +135,20 @@ impl SocketKey {
             .as_ref()
             .map(|path| path.to_string_lossy().into_owned());
         opt(&mut hasher, age_key_file.as_deref());
-        runtime_dir(rt).join(format!(
-            "{}-{}",
-            &hasher.finalize().to_hex()[..16],
-            SOCKET_NAME
-        ))
+        let hash = hasher.finalize().to_hex();
+        #[cfg(windows)]
+        {
+            // Pipe names are global to the machine, so the user's SID is part of the name.
+            let _ = rt;
+            PathBuf::from(format!(
+                r"\\.\pipe\{}",
+                pipe_name(&windows_user_component(), &hash[..16])
+            ))
+        }
+        #[cfg(not(windows))]
+        {
+            runtime_dir(rt).join(format!("{}-{}", &hash[..16], SOCKET_NAME))
+        }
     }
 }
 
@@ -291,9 +300,55 @@ fn socket_path_fits(dir: &Path) -> bool {
     dir.to_string_lossy().len() + 1 + socket_name_len < 100
 }
 
-/// Every daemon socket in the runtime directory, sorted. Empty when the
-/// directory does not exist.
+#[cfg(windows)]
+const PIPE_DIR: &str = r"\\.\pipe\";
+
+/// `fnox-<user>-<hash>-<SOCKET_NAME>`: a pipe name has no directories.
+#[cfg(windows)]
+fn pipe_name(user: &str, hash: &str) -> String {
+    format!("fnox-{user}-{hash}-{SOCKET_NAME}")
+}
+
+#[cfg(windows)]
+fn windows_user_component() -> String {
+    // The SID is the user; a process that cannot read its own token cannot
+    // tell users apart, so fall back to the name Windows reports.
+    crate::peer::current_user_sid_string()
+        .unwrap_or_else(|_| std::env::var("USERNAME").unwrap_or_default())
+}
+
+/// Every daemon socket (named pipe on Windows) of the current user, sorted.
+/// Empty when there is none.
 pub fn daemon_socket_paths(rt: &RuntimeEnv) -> io::Result<Vec<PathBuf>> {
+    #[cfg(windows)]
+    {
+        let _ = rt;
+        let prefix = format!("fnox-{}-", windows_user_component());
+        let suffix = format!("-{SOCKET_NAME}");
+        let expected_len = prefix.len() + 16 + suffix.len();
+        let entries = std::fs::read_dir(PIPE_DIR)
+            .map_err(|e| io::Error::new(e.kind(), format!("Failed to list {PIPE_DIR}: {e}")))?;
+        let mut paths = Vec::new();
+        for entry in entries {
+            // A pipe can vanish while the directory is read.
+            let Ok(entry) = entry else { continue };
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else { continue };
+            if name.len() == expected_len && name.starts_with(&prefix) && name.ends_with(&suffix) {
+                paths.push(PathBuf::from(format!("{PIPE_DIR}{name}")));
+            }
+        }
+        paths.sort();
+        Ok(paths)
+    }
+    #[cfg(not(windows))]
+    {
+        unix_daemon_socket_paths(rt)
+    }
+}
+
+#[cfg(not(windows))]
+fn unix_daemon_socket_paths(rt: &RuntimeEnv) -> io::Result<Vec<PathBuf>> {
     let dir = runtime_dir(rt);
     let read_error = |e: io::Error| {
         io::Error::new(
