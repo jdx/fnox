@@ -603,25 +603,33 @@ pub async fn serve(cli: &Cli, idle_timeout: Duration) -> Result<()> {
                 Ok(Ok(stream)) => stream,
                 Ok(Err(e)) => {
                     tracing::warn!("daemon accept failed: {e}");
+                    if listener.is_exhausted() {
+                        tracing::error!(
+                            "daemon listener cannot accept more clients; shutting down"
+                        );
+                        break;
+                    }
                     // A persistent failure must not spin; idle shutdown only runs while accept waits.
                     tokio::time::sleep(Duration::from_millis(100)).await;
                     continue;
                 }
                 Err(_) => break,
             };
-            if let Err(e) = verify_peer(&stream) {
-                tracing::warn!("rejected daemon client: {e}");
-                continue;
-            }
-
-            let state = state.clone();
-            let request_lock = request_lock.clone();
-            let shutdown_tx = shutdown_tx.clone();
-            tasks.spawn(async move {
-                if let Err(e) = handle_connection(stream, state, request_lock, shutdown_tx).await {
-                    tracing::warn!("daemon request failed: {e}");
+            match verify_peer(&stream) {
+                Ok(()) => {
+                    let state = state.clone();
+                    let request_lock = request_lock.clone();
+                    let shutdown_tx = shutdown_tx.clone();
+                    tasks.spawn(async move {
+                        if let Err(e) =
+                            handle_connection(stream, state, request_lock, shutdown_tx).await
+                        {
+                            tracing::warn!("daemon request failed: {e}");
+                        }
+                    });
                 }
-            });
+                Err(e) => tracing::warn!("rejected daemon client: {e}"),
+            }
             if listener.is_exhausted() {
                 // Serve the client on the line, then exit rather than leave the name free for another daemon.
                 tracing::error!("daemon listener cannot accept more clients; shutting down");
@@ -745,7 +753,14 @@ impl Listener {
         let Some(waiting) = &self.next else {
             return Err(std::io::Error::other("no waiting daemon pipe instance"));
         };
-        waiting.connect().await?;
+        if let Err(e) = waiting.connect().await {
+            // A client that left before connecting can leave the instance unusable.
+            match create_pipe_instance(&self.name, &mut self.security, false) {
+                Ok(fresh) => self.next = Some(fresh),
+                Err(_) => self.exhausted = true,
+            }
+            return Err(e);
+        }
         let connected = self.next.take().expect("checked above");
         match create_pipe_instance(&self.name, &mut self.security, false) {
             Ok(fresh) => self.next = Some(fresh),
