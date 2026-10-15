@@ -39,6 +39,38 @@ EOF
 	assert_success
 	run grep 'description = "desc"' fnox.toml
 	assert_success
-	run grep -E '^\s*A\s*=.*\b(value|default)\s*=' fnox.toml
+	run grep -E '^[[:space:]]*A[[:space:]]*=.*(value|default)[[:space:]]*=' fnox.toml
+	assert_failure
+}
+
+@test "fnox set --default with empty stdin sets only metadata" {
+	cat >fnox.toml <<EOF
+root = true
+[providers.plain]
+type = "plain"
+[secrets]
+EOF
+
+	run bash -c "'$FNOX_BIN' set A --default 'fallback' </dev/null"
+	assert_success
+	run grep 'default = "fallback"' fnox.toml
+	assert_success
+	run grep -E '^[[:space:]]*A[[:space:]]*=.*value[[:space:]]*=' fnox.toml
+	assert_failure
+}
+
+@test "fnox set --if-missing with empty stdin sets only metadata" {
+	cat >fnox.toml <<EOF
+root = true
+[providers.plain]
+type = "plain"
+[secrets]
+EOF
+
+	run bash -c "'$FNOX_BIN' set A --if-missing warn </dev/null"
+	assert_success
+	run grep 'if_missing = "warn"' fnox.toml
+	assert_success
+	run grep -E '^[[:space:]]*A[[:space:]]*=.*(value|default)[[:space:]]*=' fnox.toml
 	assert_failure
 }
