@@ -2817,4 +2817,54 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
             start.elapsed()
         );
     }
+
+    // The daemon's named pipe serves both the async and the blocking client, and
+    // names no pipe of another user.
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn named_pipe_round_trip() {
+        use fnox_client::wire::{CallOptions, Response};
+        let key = fnox_client::SocketKey::new(&["pipe-test".to_string()], false, None, None);
+        let name = key.socket_path(&RuntimeEnv::from_process());
+        let mut listener = super::Listener::bind(&name).await.unwrap();
+        assert!(
+            super::Listener::bind(&name).await.is_err(),
+            "a second daemon must not adopt the pipe"
+        );
+        let state = Arc::new(Mutex::new(DaemonState::default()));
+        let lock = Arc::new(Mutex::new(()));
+        let (shutdown_tx, _shutdown_rx) = tokio::sync::mpsc::unbounded_channel();
+        let server = tokio::spawn(async move {
+            for _ in 0..2 {
+                let stream = listener.accept().await.unwrap();
+                super::verify_peer(&stream).unwrap();
+                super::handle_connection(stream, state.clone(), lock.clone(), shutdown_tx.clone())
+                    .await
+                    .unwrap();
+            }
+        });
+
+        let response = super::call(name.clone(), Request::Status).await.unwrap();
+        assert!(matches!(response, Response::Status { .. }), "{response:?}");
+        let blocking_name = name.clone();
+        let response = tokio::task::spawn_blocking(move || {
+            fnox_client::wire::call(
+                &blocking_name,
+                &Request::Status,
+                &CallOptions::with_timeout(std::time::Duration::from_secs(5)),
+            )
+        })
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(matches!(response, Response::Status { .. }), "{response:?}");
+        server.await.unwrap();
+
+        assert!(
+            super::call(name, Request::Status)
+                .await
+                .unwrap_err()
+                .is_socket_missing()
+        );
+    }
 }
