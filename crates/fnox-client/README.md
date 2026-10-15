@@ -3,7 +3,7 @@
 A read-only client for the [fnox](https://fnox.jdx.dev) daemon, and the types
 of `fnox env --json`. Programs that start processes themselves (mise first) use
 it to ask a running daemon for the environment a command would get, in one
-Unix-socket round trip and with no fnox process.
+Unix-socket (Windows named-pipe) round trip and with no fnox process.
 
 It depends only on `serde`, `serde_json`, `indexmap`, `blake3` and `libc`. It
 does not depend on `fnox-core`, `tokio` or any provider SDK.
@@ -24,7 +24,7 @@ does not depend on `fnox-core`, `tokio` or any provider SDK.
   environments as `<N vars>`.
 
 The crate compiles everywhere. On a platform without a daemon (anything but
-Linux, macOS, FreeBSD and OpenBSD), `Client` answers `Absent`, so callers need
+Linux, macOS, FreeBSD, OpenBSD and Windows), `Client` answers `Absent`, so callers need
 no `cfg`.
 
 ## Example
