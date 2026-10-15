@@ -5,7 +5,7 @@ of `fnox env --json`. Programs that start processes themselves (mise first) use
 it to ask a running daemon for the environment a command would get, in one
 Unix-socket (Windows named-pipe) round trip and with no fnox process.
 
-It depends only on `serde`, `serde_json`, `indexmap`, `blake3` and `libc`. It
+It depends only on `serde`, `serde_json`, `indexmap`, `blake3`, and `libc` on Unix or `windows-sys` on Windows. It
 does not depend on `fnox-core`, `tokio` or any provider SDK.
 
 ## Guarantees
