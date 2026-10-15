@@ -402,6 +402,7 @@ mod tests {
         path.file_name().unwrap().to_string_lossy().into_owned()
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn socket_path_is_pinned() {
         let dir = "/run/user/1000/fnox";
@@ -439,6 +440,7 @@ mod tests {
     }
 
     // The preimage, spelled out byte by byte, as the protocol documents it.
+    #[cfg(not(windows))]
     #[test]
     fn socket_hash_preimage_layout() {
         let mut pre = Vec::new();
@@ -502,6 +504,7 @@ mod tests {
         }
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn long_base_falls_back_to_a_short_hashed_dir() {
         let long = format!("/{}", "x".repeat(120));
@@ -729,5 +732,22 @@ mod tests {
             names,
             ["aaaaaaaaaaaaaaaa-fnoxd.sock", "bbbbbbbbbbbbbbbb-fnoxd.sock"]
         );
+    }
+
+    // Windows has no runtime directory: the pipe name carries the user's SID and
+    // the same hash the Unix socket name does.
+    #[cfg(windows)]
+    #[test]
+    fn pipe_name_carries_user_and_hash() {
+        let key = SocketKey::new(&[], false, None, None);
+        let rt = RuntimeEnv::from_process();
+        let path = key.socket_path(&rt);
+        let name = path.to_string_lossy().into_owned();
+        let sid = crate::peer::current_user_sid_string().unwrap();
+        let prefix = format!(r"\\.\pipe\fnox-{sid}-");
+        assert!(name.starts_with(&prefix), "{name}");
+        assert!(name.ends_with("-fnoxd.sock"), "{name}");
+        assert_eq!(name.len(), prefix.len() + 16 + "-fnoxd.sock".len());
+        assert!(!name[r"\\.\pipe\".len()..].contains('\\'), "{name}");
     }
 }
