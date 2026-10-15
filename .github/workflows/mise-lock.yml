@@ -33,7 +33,7 @@ jobs:
     # installs itself. The shared workflow runs on a plain ubuntu-latest with
     # no way to request system packages, so the render step would fail and take
     # the lockfile commit down with it. The tradeoff: if a bump to a tool that
-    # renders tracked files (prettier, usage) changes their output, the
+    # renders tracked files (oxfmt, usage) changes their output, the
     # Renovate branch still goes red on ci's `assert render produces no diff`
     # and someone runs `mise run render` by hand — visible, not silent. Adding
     # a system-packages input to the shared workflow would let this be
