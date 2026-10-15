@@ -622,6 +622,11 @@ pub async fn serve(cli: &Cli, idle_timeout: Duration) -> Result<()> {
                     tracing::warn!("daemon request failed: {e}");
                 }
             });
+            if listener.is_exhausted() {
+                // Serve the client on the line, then exit rather than leave the name free for another daemon.
+                tracing::error!("daemon listener cannot accept more clients; shutting down");
+                break;
+            }
         }
 
         if !tasks.is_empty() {
@@ -688,16 +693,23 @@ impl Listener {
     async fn accept(&mut self) -> std::io::Result<UnixStream> {
         self.0.accept().await.map(|(stream, _)| stream)
     }
+
+    fn is_exhausted(&self) -> bool {
+        false
+    }
 }
 
 /// Where the daemon accepts connections: a named pipe that only the current
-/// user may open. One idle instance waits for the next client, and is made
-/// again by the next `accept` when creating it after a connection failed.
+/// user may open. One idle instance always waits for the next client, which
+/// keeps the name taken.
 #[cfg(windows)]
 struct Listener {
     name: PathBuf,
     security: fnox_client::peer::PipeSecurity,
     next: Option<NamedPipeServer>,
+    /// Creating the waiting instance failed, so the name is held only by the
+    /// client being served.
+    exhausted: bool,
 }
 
 #[cfg(windows)]
@@ -724,25 +736,32 @@ impl Listener {
             name: name.to_path_buf(),
             security,
             next: Some(next),
+            exhausted: false,
         })
     }
 
     /// Cancel safe: the waiting instance stays in `self` until a client is on it.
     async fn accept(&mut self) -> std::io::Result<NamedPipeServer> {
-        if self.next.is_none() {
-            self.next = Some(create_pipe_instance(&self.name, &mut self.security, false)?);
-        }
-        if let Some(waiting) = &self.next {
-            waiting.connect().await?;
-        }
-        let connected = self.next.take().expect("the waiting instance is set above");
-        // If this fails, the client on `connected` is still served and the next
-        // `accept` tries again.
+        let Some(waiting) = &self.next else {
+            return Err(std::io::Error::other("no waiting daemon pipe instance"));
+        };
+        waiting.connect().await?;
+        let connected = self.next.take().expect("checked above");
         match create_pipe_instance(&self.name, &mut self.security, false) {
             Ok(fresh) => self.next = Some(fresh),
-            Err(e) => tracing::warn!("failed to create the next daemon pipe instance: {e}"),
+            Err(e) => {
+                // The connected client is still served. Recreating the pipe later
+                // could attach to one a second daemon made once this one let go
+                // of the name, so the daemon exits instead.
+                tracing::warn!("failed to create the next daemon pipe instance: {e}");
+                self.exhausted = true;
+            }
         }
         Ok(connected)
+    }
+
+    fn is_exhausted(&self) -> bool {
+        self.exhausted
     }
 }
 
