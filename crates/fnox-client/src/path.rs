@@ -311,10 +311,10 @@ fn pipe_name(user: &str, hash: &str) -> String {
 
 #[cfg(windows)]
 fn windows_user_component() -> String {
-    // The SID is the user; a process that cannot read its own token cannot
-    // tell users apart, so fall back to the name Windows reports.
-    crate::peer::current_user_sid_string()
-        .unwrap_or_else(|_| std::env::var("USERNAME").unwrap_or_default())
+    // A process that cannot read its own token cannot start a daemon either (it
+    // cannot build the pipe's DACL), so every user of this fallback finds no
+    // daemon, never one of another user.
+    crate::peer::current_user_sid_string().unwrap_or_else(|_| "unknown".to_string())
 }
 
 /// Every daemon socket (named pipe on Windows) of the current user, sorted.
