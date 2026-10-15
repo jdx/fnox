@@ -39,4 +39,6 @@ EOF
 	assert_success
 	run grep 'description = "desc"' fnox.toml
 	assert_success
+	run grep -E '^\s*A\s*=.*\b(value|default)\s*=' fnox.toml
+	assert_failure
 }
