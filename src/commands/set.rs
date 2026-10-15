@@ -136,9 +136,6 @@ impl SetCommand {
         } else if let Some(ref v) = self.value {
             // Value provided as argument
             Some(v.clone())
-        } else if has_metadata && self.key_name.is_none() {
-            // Only metadata is being set, no secret value needed
-            None
         } else if !atty::is(atty::Stream::Stdin) {
             // Read from stdin if piped
             tracing::debug!("Reading secret value from stdin");
@@ -146,7 +143,16 @@ impl SetCommand {
             io::stdin()
                 .read_to_string(&mut buffer)
                 .map_err(|source| FnoxError::StdinReadFailed { source })?;
-            Some(buffer.trim().to_string())
+            let value = buffer.trim().to_string();
+            if value.is_empty() && has_metadata && self.key_name.is_none() {
+                // Nothing piped and only metadata is being set
+                None
+            } else {
+                Some(value)
+            }
+        } else if has_metadata && self.key_name.is_none() {
+            // Only metadata is being set, no secret value needed
+            None
         } else {
             // Interactive terminal - prompt for value
             let value = demand::Input::new("Enter secret value")
