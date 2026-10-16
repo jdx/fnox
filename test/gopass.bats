@@ -83,3 +83,17 @@ TOML
 	run "$FNOX_BIN" get MISSING
 	assert_failure
 }
+
+@test "gopass provider preserves whitespace in secret values" {
+	cat >fnox.toml <<'TOML'
+[providers.gopass]
+type = "gopass"
+TOML
+
+	run "$FNOX_BIN" set PADDED "  secret  " --provider gopass
+	assert_success
+	[ "$(cat "$STORE/PADDED")" = "  secret  " ]
+	run "$FNOX_BIN" get PADDED
+	assert_success
+	assert_output "  secret  "
+}

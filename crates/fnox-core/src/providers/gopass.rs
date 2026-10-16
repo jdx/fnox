@@ -126,7 +126,8 @@ impl GopassProvider {
                 url: URL.to_string(),
             })?;
 
-        Ok(stdout.trim().to_string())
+        // Return the content verbatim: leading/trailing whitespace can be part of a secret
+        Ok(stdout)
     }
 }
 
