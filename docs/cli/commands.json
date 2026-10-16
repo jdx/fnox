@@ -1827,6 +1827,7 @@
                     "doppler",
                     "enpass",
                     "foks",
+                    "gopass",
                     "bitwarden-sm",
                     "infisical",
                     "keepass",
@@ -1901,6 +1902,10 @@
                     {
                       "value": "foks",
                       "help": "FOKS (Federated Open Key Service)"
+                    },
+                    {
+                      "value": "gopass",
+                      "help": "gopass (GPG/age-encrypted, Git-synced)"
                     },
                     {
                       "value": "bitwarden-sm",

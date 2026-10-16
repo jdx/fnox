@@ -71,6 +71,7 @@ These use a store available on your machine, or no encrypted storage at all for 
 | [OS keychain](/providers/keychain)          | `keychain`       | macOS Keychain, Windows Credential Manager, or Linux Secret Service |
 | [KeePass](/providers/keepass)               | `keepass`        | A local `.kdbx` file                                                |
 | [password-store](/providers/password-store) | `password-store` | GPG-encrypted files managed by `pass`                               |
+| [gopass](/providers/gopass)                 | `gopass`         | GPG/age-encrypted, Git-synced store managed by `gopass`             |
 | [Plaintext](/providers/plain)               | `plain`          | Unencrypted values; only for non-sensitive configuration            |
 
 ## Custom providers

@@ -318,6 +318,7 @@ cmd provider help="Manage providers (defaults to list)" {
                 choice doppler help="Doppler secrets manager"
                 choice enpass help="Enpass vault (read-only)"
                 choice foks help="FOKS (Federated Open Key Service)"
+                choice gopass help="gopass (GPG/age-encrypted, Git-synced)"
                 choice bitwarden-sm help="Bitwarden Secrets Manager"
                 choice infisical help=Infisical
                 choice keepass help=KeePass

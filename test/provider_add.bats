@@ -27,6 +27,7 @@ bws|bitwarden-sm|bitwarden-sm
 enpass|enpass|enpass
 infisical|infisical|infisical
 keepass|keepass|keepass
+gopass|gopass|gopass
 keychain|keychain|keychain
 passstore|password-store|password-store
 passwordstate|passwordstate|passwordstate

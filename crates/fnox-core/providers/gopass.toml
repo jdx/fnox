@@ -1,0 +1,16 @@
+# gopass provider - GPG/age-encrypted, Git-synced password store
+display_name = "gopass"
+serde_rename = "gopass"
+rust_variant = "Gopass"
+category = "Local"
+description = "gopass team password manager (GPG-encrypted, Git-synced)"
+default_name = "gopass"
+setup_instructions = """
+Requires gopass CLI: brew install gopass
+Initialize store: gopass setup"""
+
+[fields.mount]
+type = "optional"
+placeholder = "company"
+label = "Mount/store name (optional):"
+wizard = true
