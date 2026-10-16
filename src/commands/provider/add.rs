@@ -309,6 +309,11 @@ impl AddCommand {
                 auth_command: None,
                 daemon_cache: None,
             },
+            ProviderType::Gopass => crate::config::ProviderConfig::Gopass {
+                mount: OptionStringOrSecretRef::none(),
+                auth_command: None,
+                daemon_cache: None,
+            },
             ProviderType::PasswordStore => crate::config::ProviderConfig::PasswordStore {
                 prefix: OptionStringOrSecretRef::literal("fnox/"),
                 store_dir: OptionStringOrSecretRef::none(),

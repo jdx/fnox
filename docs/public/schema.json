@@ -515,6 +515,26 @@
         {
           "type": "object",
           "properties": {
+            "mount": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "auth_command": {
+              "type": ["string", "null"]
+            },
+            "daemon_cache": {
+              "type": ["boolean", "null"]
+            },
+            "type": {
+              "type": "string",
+              "const": "gopass"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
             "database": {
               "$ref": "#/$defs/StringOrSecretRef"
             },

@@ -99,6 +99,7 @@ const providerGroups = [
       ["OS keychain", "keychain"],
       ["KeePass", "keepass"],
       ["password-store", "password-store"],
+      ["gopass", "gopass"],
       ["Plaintext defaults", "plain"],
     ],
   ],

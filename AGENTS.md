@@ -142,6 +142,7 @@ Encryption providers store ciphertext in `fnox.toml`; remote and local storage p
 | Infisical           | `infisical`      | Infisical                 | `infisical` CLI          |
 | Passwordstate       | `passwordstate`  | Passwordstate server      | `reqwest` HTTP           |
 | password-store      | `password-store` | GPG files                 | `pass` CLI               |
+| gopass              | `gopass`         | GPG/age files, Git-synced | `gopass` CLI             |
 | Proton Pass         | `proton-pass`    | Proton Pass vault         | `pass-cli` CLI           |
 | Lua plugin          | `lua`            | Defined by the plugin     | `mlua` crate (Lua 5.4)   |
 

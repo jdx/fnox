@@ -73,6 +73,9 @@ pub enum ProviderType {
     /// FOKS (Federated Open Key Service)
     #[usage(name = "foks")]
     Foks,
+    /// gopass (GPG/age-encrypted, Git-synced)
+    #[usage(name = "gopass")]
+    Gopass,
     /// Bitwarden Secrets Manager
     #[usage(name = "bitwarden-sm")]
     #[strum(serialize = "bitwarden-sm")]
