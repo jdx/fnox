@@ -9,6 +9,19 @@ teardown() {
 	_common_teardown
 }
 
+# macOS has no coreutils `timeout`; fall back to running unbounded there.
+run_with_timeout() {
+	local seconds="$1"
+	shift
+	if command -v timeout >/dev/null 2>&1; then
+		timeout "$seconds" "$@"
+	elif command -v gtimeout >/dev/null 2>&1; then
+		gtimeout "$seconds" "$@"
+	else
+		"$@"
+	fi
+}
+
 @test "quiet interpolated fallback tries the unavailable age secret once" {
 	if ! command -v age-keygen >/dev/null 2>&1; then
 		skip "age-keygen not installed"
@@ -337,7 +350,7 @@ identity = { provider = "age-a", value = "secret-value" }
 MY_SECRET = { provider = "age-a", value = "secret-value" }
 EOF
 
-	run timeout 30 "$FNOX_BIN" get MY_SECRET
+	run run_with_timeout 30 "$FNOX_BIN" get MY_SECRET
 	assert_failure
 	[ "$status" -ne 124 ]
 	assert_output --partial "Circular dependency detected in provider configuration"
@@ -424,7 +437,7 @@ identity = { provider = "age-b", value = "$ciphertext" }
 A_KEY = { provider = "age-a", value = "$ciphertext" }
 EOF
 
-	run timeout 30 "$FNOX_BIN" get A_KEY
+	run run_with_timeout 30 "$FNOX_BIN" get A_KEY
 	[ "$status" -ne 124 ]
 	assert_success
 	assert_output --partial "AGE-SECRET-KEY-"
