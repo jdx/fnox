@@ -111,12 +111,12 @@ MULTI = { provider = "gopass", value = "MULTI" }
 TOKEN = { provider = "gopass", value = "TOKEN" }
 TOML
 
-	run "$FNOX_BIN" exec -- bash -c 'printf %s "$TOKEN" | od -An -c | tr -s " "'
+	run "$FNOX_BIN" exec -- bash -c '[ "$TOKEN" = "token" ] && echo token-ok'
 	assert_success
-	assert_line " t o k e n"
+	assert_line "token-ok"
 
 	# Only one terminator is removed: the extra blank line is part of the value
-	run "$FNOX_BIN" exec -- bash -c 'printf %s "$MULTI" | od -An -c | tr -s " "'
+	run "$FNOX_BIN" exec -- bash -c '[ "$MULTI" = $'"'"'line1\nline2\n'"'"' ] && echo multi-ok'
 	assert_success
-	assert_line " l i n e 1 \\n l i n e 2 \\n"
+	assert_line "multi-ok"
 }
