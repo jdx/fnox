@@ -7,5 +7,12 @@
     "aws-sdk-secretsmanager",
     "aws-sdk-ssm",
     "aws-sdk-sts"
+  ],
+  "packageRules": [
+    {
+      "description": "The perf-runner image sets the toolchain every perf baseline is measured on; review bumps instead of automerging them.",
+      "matchPackageNames": ["ghcr.io/jdx/perf-runner"],
+      "automerge": false
+    }
   ]
 }
