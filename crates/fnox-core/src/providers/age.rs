@@ -365,6 +365,25 @@ impl crate::providers::Provider for AgeEncryptionProvider {
 
 impl AgeEncryptionProvider {
     async fn decrypt_age_value(&self, value: &str) -> Result<String> {
+        // Plugin identities (TPM/YubiKey) prompt for a PIN on every decrypt, and one
+        // command can rebuild a provider that depends on the same secret several times.
+        // One cell per ciphertext: concurrent callers wait on it, nested identity decrypts don't deadlock.
+        type Cells = HashMap<String, Arc<tokio::sync::OnceCell<String>>>;
+        static DECRYPTED: std::sync::LazyLock<Mutex<Cells>> =
+            std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+
+        let cell = DECRYPTED
+            .lock()
+            .unwrap()
+            .entry(value.to_string())
+            .or_default()
+            .clone();
+        cell.get_or_try_init(|| self.decrypt_age_value_uncached(value))
+            .await
+            .cloned()
+    }
+
+    async fn decrypt_age_value_uncached(&self, value: &str) -> Result<String> {
         // value contains the encrypted blob (might be base64 encoded or raw)
 
         // Try to decode as base64 first, if that fails, treat as raw bytes
@@ -531,6 +550,47 @@ mod tests {
                 "plugin recipient should parse successfully: {message}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn repeated_decrypt_reuses_value_without_identity() {
+        let (provider, key_file) = test_provider();
+        let ciphertext = provider.encrypt("doppler-token").await.unwrap();
+
+        assert_eq!(
+            provider.get_secret(&ciphertext).await.unwrap(),
+            "doppler-token"
+        );
+        key_file.close().unwrap();
+
+        let (provider_without_key, _) = test_provider();
+        assert_eq!(
+            provider_without_key.get_secret(&ciphertext).await.unwrap(),
+            "doppler-token"
+        );
+    }
+
+    #[tokio::test]
+    async fn concurrent_decrypts_of_same_value_share_one_result() {
+        let (provider, _key_file) = test_provider();
+        let ciphertext = provider.encrypt("shared").await.unwrap();
+
+        let (first, second) = tokio::join!(
+            provider.get_secret(&ciphertext),
+            provider.get_secret(&ciphertext)
+        );
+        assert_eq!(first.unwrap(), "shared");
+        assert_eq!(second.unwrap(), "shared");
+    }
+
+    #[tokio::test]
+    async fn failed_decrypt_is_not_reused() {
+        let (provider, _key_file) = test_provider();
+        let ciphertext = provider.encrypt("retry").await.unwrap();
+        let (other_provider, _other_key_file) = test_provider();
+
+        assert!(other_provider.get_secret(&ciphertext).await.is_err());
+        assert_eq!(provider.get_secret(&ciphertext).await.unwrap(), "retry");
     }
 
     #[tokio::test]
