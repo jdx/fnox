@@ -61,6 +61,7 @@ impl GopassProvider {
             || lower.contains("agent")
             || lower.contains("public key")
             || lower.contains("secret key")
+            || lower.contains("no identity matched any recipient")
         {
             return FnoxError::ProviderAuthFailed {
                 provider: "gopass".to_string(),
