@@ -548,7 +548,13 @@ pub async fn resolve_secret(
     key: &str,
     secret_config: &SecretConfig,
 ) -> Result<Option<String>> {
-    resolve_secret_raw(config, profile, key, secret_config).await
+    crate::providers::age::with_decrypt_scope(resolve_secret_raw(
+        config,
+        profile,
+        key,
+        secret_config,
+    ))
+    .await
 }
 
 async fn resolve_interpolated_default_value(
@@ -816,6 +822,21 @@ pub async fn resolve_secrets_batch(
 /// Resolves multiple secrets while treating previously resolved values as
 /// dependencies that are already available.
 pub async fn resolve_secrets_batch_with_pre_resolved(
+    config: &Config,
+    profile: &[String],
+    secrets: &IndexMap<String, SecretConfig>,
+    pre_resolved: &IndexMap<String, Option<String>>,
+) -> Result<IndexMap<String, Option<String>>> {
+    crate::providers::age::with_decrypt_scope(resolve_secrets_batch_in_scope(
+        config,
+        profile,
+        secrets,
+        pre_resolved,
+    ))
+    .await
+}
+
+async fn resolve_secrets_batch_in_scope(
     config: &Config,
     profile: &[String],
     secrets: &IndexMap<String, SecretConfig>,

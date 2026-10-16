@@ -320,6 +320,65 @@ rotate_both() {
 	assert_output "new-token new-other"
 }
 
+age_daemon_config() {
+	local provider_options="$1"
+	local keygen_output public_key
+	keygen_output=$(age-keygen -o key.txt 2>&1)
+	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+
+	cat >fnox.toml <<EOF
+root = true
+
+[daemon]
+enabled = true
+
+[providers.age]
+type = "age"
+recipients = ["$public_key"]
+key_file = "key.txt"
+$provider_options
+
+[secrets]
+EOF
+
+	run "$FNOX_BIN" --no-daemon set MY_SECRET "age-value" --provider age
+	assert_success
+}
+
+@test "daemon does not keep age plaintext when provider disables daemon cache" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+	age_daemon_config "daemon_cache = false"
+
+	run "$FNOX_BIN" --non-interactive get MY_SECRET
+	assert_success
+	assert_output "age-value"
+
+	rm key.txt
+
+	run "$FNOX_BIN" --non-interactive get MY_SECRET
+	refute_output --partial "age-value"
+}
+
+@test "daemon clear drops age plaintext resolved by the daemon" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+	age_daemon_config ""
+
+	run "$FNOX_BIN" --non-interactive get MY_SECRET
+	assert_success
+	assert_output "age-value"
+
+	rm key.txt
+	run "$FNOX_BIN" daemon clear
+	assert_success
+
+	run "$FNOX_BIN" --non-interactive get MY_SECRET
+	refute_output --partial "age-value"
+}
+
 @test "no-daemon bypass does not start daemon" {
 	daemon_config
 

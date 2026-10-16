@@ -363,24 +363,46 @@ impl crate::providers::Provider for AgeEncryptionProvider {
     }
 }
 
+type DecryptCells = HashMap<String, Arc<tokio::sync::OnceCell<String>>>;
+
+tokio::task_local! {
+    static DECRYPT_SCOPE: Arc<Mutex<DecryptCells>>;
+}
+
+/// Shares age decrypts of a ciphertext within one request so PIN-backed identities prompt once.
+pub async fn with_decrypt_scope<F: std::future::Future>(fut: F) -> F::Output {
+    if DECRYPT_SCOPE.try_with(|_| ()).is_ok() {
+        fut.await
+    } else {
+        DECRYPT_SCOPE.scope(Arc::default(), fut).await
+    }
+}
+
+async fn decrypt_once<F, Fut>(ciphertext: &str, decrypt: F) -> Result<String>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<String>>,
+{
+    let Ok(cells) = DECRYPT_SCOPE.try_with(Arc::clone) else {
+        return decrypt().await;
+    };
+    let cell = cells
+        .lock()
+        .unwrap()
+        .entry(ciphertext.to_string())
+        .or_default()
+        .clone();
+    cell.get_or_try_init(decrypt).await.cloned()
+}
+
 impl AgeEncryptionProvider {
     async fn decrypt_age_value(&self, value: &str) -> Result<String> {
-        // Plugin identities (TPM/YubiKey) prompt for a PIN on every decrypt, and one
-        // command can rebuild a provider that depends on the same secret several times.
-        // One cell per ciphertext: concurrent callers wait on it, nested identity decrypts don't deadlock.
-        type Cells = HashMap<String, Arc<tokio::sync::OnceCell<String>>>;
-        static DECRYPTED: std::sync::LazyLock<Mutex<Cells>> =
-            std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
-
-        let cell = DECRYPTED
-            .lock()
-            .unwrap()
-            .entry(value.to_string())
-            .or_default()
-            .clone();
-        cell.get_or_try_init(|| self.decrypt_age_value_uncached(value))
-            .await
-            .cloned()
+        // A provider-backed identity can lead back to this ciphertext; waiting on our own
+        // cell would hang before AgeIdentityCycleGuard reports the cycle.
+        if self.identity.as_ref().is_some() {
+            return self.decrypt_age_value_uncached(value).await;
+        }
+        decrypt_once(value, || self.decrypt_age_value_uncached(value)).await
     }
 
     async fn decrypt_age_value_uncached(&self, value: &str) -> Result<String> {
@@ -553,44 +575,94 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn repeated_decrypt_reuses_value_without_identity() {
+    async fn decrypt_scope_reuses_value_across_providers() {
         let (provider, key_file) = test_provider();
         let ciphertext = provider.encrypt("doppler-token").await.unwrap();
 
-        assert_eq!(
-            provider.get_secret(&ciphertext).await.unwrap(),
-            "doppler-token"
-        );
+        with_decrypt_scope(async {
+            assert_eq!(
+                provider.get_secret(&ciphertext).await.unwrap(),
+                "doppler-token"
+            );
+            key_file.close().unwrap();
+
+            let (provider_without_key, _) = test_provider();
+            assert_eq!(
+                provider_without_key.get_secret(&ciphertext).await.unwrap(),
+                "doppler-token"
+            );
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn decrypts_are_not_reused_outside_a_scope() {
+        let (provider, key_file) = test_provider();
+        let ciphertext = provider.encrypt("doppler-token").await.unwrap();
+
+        with_decrypt_scope(provider.get_secret(&ciphertext))
+            .await
+            .unwrap();
         key_file.close().unwrap();
 
         let (provider_without_key, _) = test_provider();
-        assert_eq!(
-            provider_without_key.get_secret(&ciphertext).await.unwrap(),
-            "doppler-token"
+        assert!(provider_without_key.get_secret(&ciphertext).await.is_err());
+        assert!(
+            with_decrypt_scope(provider_without_key.get_secret(&ciphertext))
+                .await
+                .is_err()
         );
     }
 
     #[tokio::test]
-    async fn concurrent_decrypts_of_same_value_share_one_result() {
-        let (provider, _key_file) = test_provider();
-        let ciphertext = provider.encrypt("shared").await.unwrap();
+    async fn overlapping_decrypts_in_a_scope_run_once() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
 
-        let (first, second) = tokio::join!(
-            provider.get_secret(&ciphertext),
-            provider.get_secret(&ciphertext)
-        );
+        let attempts = AtomicUsize::new(0);
+        let decrypt = || async {
+            attempts.fetch_add(1, Ordering::SeqCst);
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            Ok("shared".to_string())
+        };
+
+        let (first, second) = with_decrypt_scope(async {
+            tokio::join!(
+                decrypt_once("ciphertext", decrypt),
+                decrypt_once("ciphertext", decrypt)
+            )
+        })
+        .await;
+
         assert_eq!(first.unwrap(), "shared");
         assert_eq!(second.unwrap(), "shared");
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]
-    async fn failed_decrypt_is_not_reused() {
-        let (provider, _key_file) = test_provider();
-        let ciphertext = provider.encrypt("retry").await.unwrap();
-        let (other_provider, _other_key_file) = test_provider();
+    async fn failed_decrypt_in_a_scope_can_be_retried() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
 
-        assert!(other_provider.get_secret(&ciphertext).await.is_err());
-        assert_eq!(provider.get_secret(&ciphertext).await.unwrap(), "retry");
+        let attempts = AtomicUsize::new(0);
+        let decrypt = || async {
+            if attempts.fetch_add(1, Ordering::SeqCst) == 0 {
+                Err(FnoxError::AgeDecryptionFailed {
+                    details: "wrong PIN".to_string(),
+                })
+            } else {
+                Ok("retry".to_string())
+            }
+        };
+
+        let (first, second) = with_decrypt_scope(async {
+            let first = decrypt_once("ciphertext", decrypt).await;
+            let second = decrypt_once("ciphertext", decrypt).await;
+            (first, second)
+        })
+        .await;
+
+        assert!(first.is_err());
+        assert_eq!(second.unwrap(), "retry");
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
     }
 
     #[tokio::test]

@@ -318,3 +318,27 @@ EOF
 	assert_output --partial "Circular dependency detected in provider configuration"
 	assert_output --partial "age-a -> age-b -> age-a"
 }
+
+@test "age identity cycle back to the same value fails instead of hanging" {
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.age-a]
+type = "age"
+recipients = ["age1test"]
+identity = { provider = "age-b", value = "identity-for-a" }
+
+[providers.age-b]
+type = "age"
+recipients = ["age1test"]
+identity = { provider = "age-a", value = "secret-value" }
+
+[secrets]
+MY_SECRET = { provider = "age-a", value = "secret-value" }
+EOF
+
+	run timeout 30 "$FNOX_BIN" get MY_SECRET
+	assert_failure
+	[ "$status" -ne 124 ]
+	assert_output --partial "Circular dependency detected in provider configuration"
+}
