@@ -9,7 +9,7 @@ teardown() {
 	_common_teardown
 }
 
-# macOS has no coreutils `timeout`; fall back to running unbounded there.
+# macOS has no coreutils `timeout`; fall back to perl's alarm so a hang stays bounded.
 run_with_timeout() {
 	local seconds="$1"
 	shift
@@ -18,7 +18,7 @@ run_with_timeout() {
 	elif command -v gtimeout >/dev/null 2>&1; then
 		gtimeout "$seconds" "$@"
 	else
-		"$@"
+		perl -e 'alarm shift; exec @ARGV or exit 127' "$seconds" "$@"
 	fi
 }
 

@@ -451,7 +451,12 @@ impl LeaseRevokeCommand {
                     lease::EncryptionProviderResult::Available(found_name, provider)
                         if found_name == *enc_name =>
                     {
-                        match lease::decrypt_credentials(provider.as_ref(), creds).await {
+                        match crate::providers::age::with_decrypt_scope(lease::decrypt_credentials(
+                            provider.as_ref(),
+                            creds,
+                        ))
+                        .await
+                        {
                             Ok(decrypted) => Some(decrypted),
                             Err(e) => {
                                 tracing::warn!(
