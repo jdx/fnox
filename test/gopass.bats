@@ -97,3 +97,20 @@ TOML
 	assert_success
 	assert_output "  secret  "
 }
+
+@test "gopass provider preserves a trailing newline in secret values" {
+	printf 'line1\nline2\n' >"$STORE/MULTI"
+
+	cat >fnox.toml <<'TOML'
+[providers.gopass]
+type = "gopass"
+
+[secrets]
+MULTI = { provider = "gopass", value = "MULTI" }
+TOML
+
+	run "$FNOX_BIN" exec -- bash -c 'printf %s "$MULTI" | od -An -c | tr -s " "'
+	assert_success
+	assert_output --partial '\n'
+	[ "$(printf %s "$output" | grep -o '\\n' | wc -l)" -eq 2 ]
+}
