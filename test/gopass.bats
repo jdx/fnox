@@ -98,8 +98,9 @@ TOML
 	assert_output "  secret  "
 }
 
-@test "gopass provider preserves a trailing newline in secret values" {
-	printf 'line1\nline2\n' >"$STORE/MULTI"
+@test "gopass provider strips only the terminating newline" {
+	printf 'line1\nline2\n\n' >"$STORE/MULTI"
+	printf 'token\n' >"$STORE/TOKEN"
 
 	cat >fnox.toml <<'TOML'
 [providers.gopass]
@@ -107,10 +108,15 @@ type = "gopass"
 
 [secrets]
 MULTI = { provider = "gopass", value = "MULTI" }
+TOKEN = { provider = "gopass", value = "TOKEN" }
 TOML
 
+	run "$FNOX_BIN" exec -- bash -c 'printf %s "$TOKEN" | od -An -c | tr -s " "'
+	assert_success
+	assert_line " t o k e n"
+
+	# Only one terminator is removed: the extra blank line is part of the value
 	run "$FNOX_BIN" exec -- bash -c 'printf %s "$MULTI" | od -An -c | tr -s " "'
 	assert_success
-	assert_output --partial '\n'
-	[ "$(printf %s "$output" | grep -o '\\n' | wc -l)" -eq 2 ]
+	assert_line " l i n e 1 \\n l i n e 2 \\n"
 }

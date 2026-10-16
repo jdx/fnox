@@ -130,9 +130,11 @@ impl GopassProvider {
                 url: URL.to_string(),
             })?;
 
-        // Return `gopass cat` output verbatim: leading/trailing whitespace and newlines
-        // can be part of a secret
-        Ok(stdout)
+        // gopass stores a terminating newline on secrets; drop exactly one so values like
+        // tokens and URLs are usable as env vars, but keep any other leading/trailing whitespace
+        let stdout = stdout.strip_suffix('\n').unwrap_or(&stdout);
+        let stdout = stdout.strip_suffix('\r').unwrap_or(stdout);
+        Ok(stdout.to_string())
     }
 }
 
