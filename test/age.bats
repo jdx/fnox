@@ -396,3 +396,36 @@ EOF
 	assert_success
 	assert_equal "$(wc -l <"$PASS_CALLS" | tr -d ' ')" "1"
 }
+
+@test "identity stored under the same ciphertext it unlocks does not hang" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local a_public b_public ciphertext
+	a_public=$(age-keygen -o a.txt 2>&1 | grep "^Public key:" | cut -d' ' -f3)
+	b_public=$(age-keygen -o b.txt 2>&1 | grep "^Public key:" | cut -d' ' -f3)
+	ciphertext=$(age -r "$a_public" -r "$b_public" <a.txt | base64 | tr -d '\n')
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.age-b]
+type = "age"
+recipients = ["$b_public"]
+key_file = "b.txt"
+
+[providers.age-a]
+type = "age"
+recipients = ["$a_public"]
+identity = { provider = "age-b", value = "$ciphertext" }
+
+[secrets]
+A_KEY = { provider = "age-a", value = "$ciphertext" }
+EOF
+
+	run timeout 30 "$FNOX_BIN" get A_KEY
+	[ "$status" -ne 124 ]
+	assert_success
+	assert_output --partial "AGE-SECRET-KEY-"
+}

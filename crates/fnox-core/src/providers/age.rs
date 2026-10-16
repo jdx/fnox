@@ -61,7 +61,7 @@ impl AgeEncryptionProvider {
         })
     }
 
-    async fn resolve_provider_identity(&self) -> Result<Option<String>> {
+    async fn resolve_provider_identity(&self, ciphertext: &str) -> Result<Option<String>> {
         let Some(identity) = self.identity.as_ref() else {
             return Ok(None);
         };
@@ -81,6 +81,7 @@ impl AgeEncryptionProvider {
 
         let identity_cycle_guard = self.identity_cycle_guard.clone().unwrap_or_default();
         let _guard = identity_cycle_guard.enter(&self.provider_name)?;
+        let _decrypting = identity_cycle_guard.mark_decrypting(ciphertext);
         let mut ctx = crate::providers::resolver::ResolutionContext::new();
         crate::providers::resolver::resolve_provider_ref_with_identity_cycle_guard(
             config,
@@ -121,13 +122,26 @@ impl AgeEncryptionProvider {
 #[derive(Clone, Default)]
 pub struct AgeIdentityCycleGuard {
     resolving: Arc<Mutex<Vec<String>>>,
+    decrypting: Arc<Mutex<Vec<String>>>,
 }
 
 impl AgeIdentityCycleGuard {
-    fn is_resolving(&self, provider_name: &str) -> bool {
-        self.resolving
-            .lock()
-            .is_ok_and(|resolving| resolving.iter().any(|name| name == provider_name))
+    fn is_reentrant(&self, provider_name: &str, ciphertext: &str) -> bool {
+        let contains = |list: &Mutex<Vec<String>>, item: &str| {
+            list.lock()
+                .is_ok_and(|list| list.iter().any(|entry| entry == item))
+        };
+        contains(&self.resolving, provider_name) || contains(&self.decrypting, ciphertext)
+    }
+
+    fn mark_decrypting(&self, ciphertext: &str) -> AgeIdentityCycleEntry {
+        if let Ok(mut decrypting) = self.decrypting.lock() {
+            decrypting.push(ciphertext.to_string());
+        }
+        AgeIdentityCycleEntry {
+            item: ciphertext.to_string(),
+            list: self.decrypting.clone(),
+        }
     }
 
     fn enter(&self, provider_name: &str) -> Result<AgeIdentityCycleEntry> {
@@ -148,25 +162,23 @@ impl AgeIdentityCycleGuard {
         resolving.push(provider_name.to_string());
 
         Ok(AgeIdentityCycleEntry {
-            provider_name: provider_name.to_string(),
-            resolving: self.resolving.clone(),
+            item: provider_name.to_string(),
+            list: self.resolving.clone(),
         })
     }
 }
 
 struct AgeIdentityCycleEntry {
-    provider_name: String,
-    resolving: Arc<Mutex<Vec<String>>>,
+    item: String,
+    list: Arc<Mutex<Vec<String>>>,
 }
 
 impl Drop for AgeIdentityCycleEntry {
     fn drop(&mut self) {
-        if let Ok(mut resolving) = self.resolving.lock()
-            && let Some(index) = resolving
-                .iter()
-                .rposition(|name| name == &self.provider_name)
+        if let Ok(mut list) = self.list.lock()
+            && let Some(index) = list.iter().rposition(|entry| entry == &self.item)
         {
-            resolving.remove(index);
+            list.remove(index);
         }
     }
 }
@@ -403,12 +415,12 @@ where
 
 impl AgeEncryptionProvider {
     async fn decrypt_age_value(&self, value: &str) -> Result<String> {
-        // Re-entered while resolving our own identity: waiting on the outer, unfinished
-        // decrypt would hang before AgeIdentityCycleGuard reports the cycle.
+        // Re-entered from an identity lookup on this chain (same provider or same
+        // ciphertext): waiting on the outer, unfinished decrypt would never return.
         if self
             .identity_cycle_guard
             .as_ref()
-            .is_some_and(|guard| guard.is_resolving(&self.provider_name))
+            .is_some_and(|guard| guard.is_reentrant(&self.provider_name, value))
         {
             return self.decrypt_age_value_uncached(value).await;
         }
@@ -437,7 +449,7 @@ impl AgeEncryptionProvider {
         let (identity_content, key_file_path_opt) = if let Some(ref age_key) = *env::FNOX_AGE_KEY {
             // Use the key directly from the environment variable
             (age_key.clone(), None)
-        } else if let Some(identity) = self.resolve_provider_identity().await? {
+        } else if let Some(identity) = self.resolve_provider_identity(value).await? {
             (identity, None)
         } else {
             // Determine which key file to use
