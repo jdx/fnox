@@ -44,22 +44,23 @@ impl GopassProvider {
 
     fn map_failure(stderr: &str, secret: &str) -> FnoxError {
         let lower = stderr.to_lowercase();
-        if lower.contains("not found")
-            || lower.contains("entry is not in the password store")
-            || lower.contains("no such file")
-        {
-            return FnoxError::ProviderSecretNotFound {
-                provider: "gopass".to_string(),
-                secret: secret.to_string(),
-                hint: "Check that the secret exists in your gopass store".to_string(),
-                url: URL.to_string(),
-            };
+        let missing = |secret: &str| FnoxError::ProviderSecretNotFound {
+            provider: "gopass".to_string(),
+            secret: secret.to_string(),
+            hint: "Check that the secret exists in your gopass store".to_string(),
+            url: URL.to_string(),
+        };
+        if lower.contains("entry is not in the password store") {
+            return missing(secret);
         }
+        // GPG errors such as "public key not found" must not look like a missing secret
         if lower.contains("gpg")
             || lower.contains("decrypt")
             || lower.contains("locked")
             || lower.contains("passphrase")
             || lower.contains("agent")
+            || lower.contains("public key")
+            || lower.contains("secret key")
         {
             return FnoxError::ProviderAuthFailed {
                 provider: "gopass".to_string(),
@@ -67,6 +68,9 @@ impl GopassProvider {
                 hint: "Check that your GPG/age key is available and unlocked".to_string(),
                 url: URL.to_string(),
             };
+        }
+        if lower.contains("not found") || lower.contains("no such file") {
+            return missing(secret);
         }
         FnoxError::ProviderCliFailed {
             provider: "gopass".to_string(),
@@ -126,8 +130,11 @@ impl GopassProvider {
                 url: URL.to_string(),
             })?;
 
-        // Return the content verbatim: leading/trailing whitespace can be part of a secret
-        Ok(stdout)
+        // Keep whitespace intact (it can be part of a secret) but drop the single
+        // line terminator the CLI appends to its output
+        let stdout = stdout.strip_suffix('\n').unwrap_or(&stdout);
+        let stdout = stdout.strip_suffix('\r').unwrap_or(stdout);
+        Ok(stdout.to_string())
     }
 }
 
