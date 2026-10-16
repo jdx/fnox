@@ -124,6 +124,12 @@ pub struct AgeIdentityCycleGuard {
 }
 
 impl AgeIdentityCycleGuard {
+    fn is_resolving(&self, provider_name: &str) -> bool {
+        self.resolving
+            .lock()
+            .is_ok_and(|resolving| resolving.iter().any(|name| name == provider_name))
+    }
+
     fn enter(&self, provider_name: &str) -> Result<AgeIdentityCycleEntry> {
         let mut resolving = self
             .resolving
@@ -397,9 +403,13 @@ where
 
 impl AgeEncryptionProvider {
     async fn decrypt_age_value(&self, value: &str) -> Result<String> {
-        // A provider-backed identity can lead back to this ciphertext; waiting on our own
-        // cell would hang before AgeIdentityCycleGuard reports the cycle.
-        if self.identity.as_ref().is_some() {
+        // Re-entered while resolving our own identity: waiting on the outer, unfinished
+        // decrypt would hang before AgeIdentityCycleGuard reports the cycle.
+        if self
+            .identity_cycle_guard
+            .as_ref()
+            .is_some_and(|guard| guard.is_resolving(&self.provider_name))
+        {
             return self.decrypt_age_value_uncached(value).await;
         }
         decrypt_once(value, || self.decrypt_age_value_uncached(value)).await

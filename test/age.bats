@@ -342,3 +342,57 @@ EOF
 	[ "$status" -ne 124 ]
 	assert_output --partial "Circular dependency detected in provider configuration"
 }
+
+@test "repeated age value with provider-backed identity decrypts once per command" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local keygen_output public_key
+	keygen_output=$(age-keygen -o key.txt 2>&1)
+	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+
+	mkdir -p "$TEST_TEMP_DIR/bin"
+	cat >"$TEST_TEMP_DIR/bin/pass" <<'EOF'
+#!/bin/sh
+echo call >>"$PASS_CALLS"
+cat "$PASS_KEY_FILE"
+EOF
+	chmod +x "$TEST_TEMP_DIR/bin/pass"
+	export PATH="$TEST_TEMP_DIR/bin:$PATH"
+	export PASS_CALLS="$TEST_TEMP_DIR/pass-calls"
+	export PASS_KEY_FILE="$TEST_TEMP_DIR/key.txt"
+
+	cat >fnox.toml <<EOF
+root = true
+if_missing = "error"
+
+[providers.pass]
+type = "password-store"
+
+[providers.age]
+type = "age"
+recipients = ["$public_key"]
+identity = { provider = "pass", value = "age-key" }
+
+[secrets]
+EOF
+
+	run "$FNOX_BIN" set FIRST "shared-value" --provider age
+	assert_success
+	local ciphertext
+	ciphertext=$(sed -n 's/^FIRST *= *{ provider = "age", value = "\([^"]*\)" }$/\1/p' fnox.toml)
+	[ -n "$ciphertext" ]
+	echo "SECOND = { provider = \"age\", value = \"$ciphertext\" }" >>fnox.toml
+
+	rm -f "$PASS_CALLS"
+	run "$FNOX_BIN" exec -- sh -c 'echo "$FIRST|$SECOND"'
+	assert_success
+	assert_output "shared-value|shared-value"
+	assert_equal "$(wc -l <"$PASS_CALLS" | tr -d ' ')" "1"
+
+	rm -f "$PASS_CALLS"
+	run "$FNOX_BIN" check
+	assert_success
+	assert_equal "$(wc -l <"$PASS_CALLS" | tr -d ' ')" "1"
+}

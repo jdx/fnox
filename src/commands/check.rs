@@ -15,6 +15,10 @@ pub struct CheckCommand {
 
 impl CheckCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
+        crate::providers::age::with_decrypt_scope(self.run_in_scope(cli, config)).await
+    }
+
+    async fn run_in_scope(&self, cli: &Cli, config: Config) -> Result<()> {
         config.validate()?;
         let profile = Config::get_profiles(cli.profile.as_slice());
         let profile_display = Config::display_profiles(&profile);
