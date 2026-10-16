@@ -9,6 +9,19 @@ teardown() {
 	_common_teardown
 }
 
+# macOS has no coreutils `timeout`; fall back to perl's alarm so a hang stays bounded.
+run_with_timeout() {
+	local seconds="$1"
+	shift
+	if command -v timeout >/dev/null 2>&1; then
+		timeout "$seconds" "$@"
+	elif command -v gtimeout >/dev/null 2>&1; then
+		gtimeout "$seconds" "$@"
+	else
+		perl -e 'alarm shift; exec @ARGV or exit 127' "$seconds" "$@"
+	fi
+}
+
 @test "quiet interpolated fallback tries the unavailable age secret once" {
 	if ! command -v age-keygen >/dev/null 2>&1; then
 		skip "age-keygen not installed"
@@ -317,4 +330,115 @@ EOF
 	assert_failure
 	assert_output --partial "Circular dependency detected in provider configuration"
 	assert_output --partial "age-a -> age-b -> age-a"
+}
+
+@test "age identity cycle back to the same value fails instead of hanging" {
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.age-a]
+type = "age"
+recipients = ["age1test"]
+identity = { provider = "age-b", value = "identity-for-a" }
+
+[providers.age-b]
+type = "age"
+recipients = ["age1test"]
+identity = { provider = "age-a", value = "secret-value" }
+
+[secrets]
+MY_SECRET = { provider = "age-a", value = "secret-value" }
+EOF
+
+	run run_with_timeout 30 "$FNOX_BIN" get MY_SECRET
+	assert_failure
+	[ "$status" -ne 124 ]
+	assert_output --partial "Circular dependency detected in provider configuration"
+}
+
+@test "repeated age value with provider-backed identity decrypts once per command" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local keygen_output public_key
+	keygen_output=$(age-keygen -o key.txt 2>&1)
+	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+
+	mkdir -p "$TEST_TEMP_DIR/bin"
+	cat >"$TEST_TEMP_DIR/bin/pass" <<'EOF'
+#!/bin/sh
+echo call >>"$PASS_CALLS"
+cat "$PASS_KEY_FILE"
+EOF
+	chmod +x "$TEST_TEMP_DIR/bin/pass"
+	export PATH="$TEST_TEMP_DIR/bin:$PATH"
+	export PASS_CALLS="$TEST_TEMP_DIR/pass-calls"
+	export PASS_KEY_FILE="$TEST_TEMP_DIR/key.txt"
+
+	cat >fnox.toml <<EOF
+root = true
+if_missing = "error"
+
+[providers.pass]
+type = "password-store"
+
+[providers.age]
+type = "age"
+recipients = ["$public_key"]
+identity = { provider = "pass", value = "age-key" }
+
+[secrets]
+EOF
+
+	run "$FNOX_BIN" set FIRST "shared-value" --provider age
+	assert_success
+	local ciphertext
+	ciphertext=$(sed -n 's/^FIRST *= *{ provider = "age", value = "\([^"]*\)" }$/\1/p' fnox.toml)
+	[ -n "$ciphertext" ]
+	echo "SECOND = { provider = \"age\", value = \"$ciphertext\" }" >>fnox.toml
+
+	rm -f "$PASS_CALLS"
+	run "$FNOX_BIN" exec -- sh -c 'echo "$FIRST|$SECOND"'
+	assert_success
+	assert_output "shared-value|shared-value"
+	assert_equal "$(wc -l <"$PASS_CALLS" | tr -d ' ')" "1"
+
+	rm -f "$PASS_CALLS"
+	run "$FNOX_BIN" check
+	assert_success
+	assert_equal "$(wc -l <"$PASS_CALLS" | tr -d ' ')" "1"
+}
+
+@test "identity stored under the same ciphertext it unlocks does not hang" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local a_public b_public ciphertext
+	a_public=$(age-keygen -o a.txt 2>&1 | grep "^Public key:" | cut -d' ' -f3)
+	b_public=$(age-keygen -o b.txt 2>&1 | grep "^Public key:" | cut -d' ' -f3)
+	ciphertext=$(age -r "$a_public" -r "$b_public" <a.txt | base64 | tr -d '\n')
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.age-b]
+type = "age"
+recipients = ["$b_public"]
+key_file = "b.txt"
+
+[providers.age-a]
+type = "age"
+recipients = ["$a_public"]
+identity = { provider = "age-b", value = "$ciphertext" }
+
+[secrets]
+A_KEY = { provider = "age-a", value = "$ciphertext" }
+EOF
+
+	run run_with_timeout 30 "$FNOX_BIN" get A_KEY
+	[ "$status" -ne 124 ]
+	assert_success
+	assert_output --partial "AGE-SECRET-KEY-"
 }
