@@ -1,0 +1,13 @@
+{
+  "printWidth": 80,
+  "sortPackageJson": false,
+  "ignorePatterns": ["CHANGELOG.md", "**/aube-lock.yaml", "**/*.toml"],
+  "overrides": [
+    {
+      "files": ["**/*.md"],
+      "options": {
+        "embeddedLanguageFormatting": "off"
+      }
+    }
+  ]
+}

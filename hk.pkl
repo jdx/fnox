@@ -2,9 +2,7 @@ amends "package://github.com/jdx/hk/releases/download/v2.0.1/hk@2.0.1#/Config.pk
 import "package://github.com/jdx/hk/releases/download/v2.0.1/hk@2.0.1#/Builtins.pkl"
 
 local linters = new Mapping<String, Step> {
-    ["prettier"] = (Builtins.prettier) {
-        exclude = List("CLAUDE.md", "CHANGELOG.md") // TODO: fix symbolic links with prettier built-in: ([error] Explicitly specified pattern "CLAUDE.md" is a symbolic link.)
-    }
+    ["oxfmt"] = Builtins.oxfmt
     ["cargo-fmt"] = Builtins.cargo_fmt
     ["cargo-clippy"] = (Builtins.cargo_clippy) {
         check = "cargo clippy -q -- -D warnings"
