@@ -16,14 +16,28 @@ use crate::error::{FnoxError, Result};
 
 const MAX_FILE_SIZE: u64 = 5 * 1024 * 1024;
 
-/// Scan repository for potential secrets in plaintext
+/// Scan files for secrets committed in plaintext
+///
+/// Walks DIR and reports lines that look like cloud keys, API tokens, private
+/// keys, or password assignments, with the matched value redacted. It skips
+/// gitignored files, binary files, files over 5 MiB, and directories such as
+/// `.git`, `node_modules`, `target`, and `vendor`.
+///
+/// fnox exits 1 when it finds anything. Findings are heuristic: review each one,
+/// and do not treat a clean scan as proof that no secret is present.
 #[derive(usage_rs::Args)]
+#[usage(
+    example("fnox scan", header = "Scan the current directory"),
+    example("fnox scan . --format json", header = "Print findings as JSON"),
+    example("fnox scan . --ignore 'fixtures/**'", header = "Skip matching files"),
+    after_long_help = "See also:\n- Import and export: https://fnox.jdx.dev/guide/import-export"
+)]
 pub struct ScanCommand {
-    /// Directory to scan (default: current directory)
+    /// Directory to scan
     #[usage(arg, default = ".", value_hint = ValueHint::DirPath)]
     dir: PathBuf,
 
-    /// Skip files matching this glob pattern (can be used multiple times)
+    /// Skip files whose path or name matches this glob; repeatable
     #[usage(short, long)]
     ignore: Vec<String>,
 
@@ -31,7 +45,7 @@ pub struct ScanCommand {
     #[usage(long, value_enum, default_value_t = ScanFormat::Human, default = "human")]
     format: ScanFormat,
 
-    /// Show only files with potential secrets
+    /// Print only the paths of files with findings
     #[usage(short, long)]
     quiet: bool,
 }
@@ -39,7 +53,9 @@ pub struct ScanCommand {
 #[derive(Clone, Copy, Debug, usage_rs::ValueEnum, Display, EnumString)]
 #[strum(serialize_all = "lowercase")]
 enum ScanFormat {
+    /// Readable report grouped by file
     Human,
+    /// JSON with `findings` and a `summary`
     Json,
 }
 

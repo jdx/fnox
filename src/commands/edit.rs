@@ -24,7 +24,22 @@ const TEMP_FILE_HEADER: &str = "\
 
 ";
 
+/// Edit the config file with secret values decrypted
+///
+/// Decrypts or fetches every secret in the config file, across all profiles,
+/// into a private temporary copy and opens it in `$EDITOR` (then `$VISUAL`, then
+/// `vi`, or `notepad` on Windows). When the editor exits, fnox stores each new or
+/// changed value with its provider and writes the file back, keeping your
+/// comments and formatting. Unchanged values keep their existing ciphertext.
+///
+/// Secrets from read-only providers are shown but cannot be changed. fnox edits
+/// the file named by `-c` (default: `fnox.toml` in the current directory).
 #[derive(Debug, usage_rs::Args)]
+#[usage(
+    example("fnox edit", header = "Edit fnox.toml in your editor"),
+    example("EDITOR=nano fnox edit", header = "Use a specific editor"),
+    after_long_help = "See also:\n- Configuration reference: https://fnox.jdx.dev/reference/configuration"
+)]
 pub struct EditCommand;
 
 /// Represents a secret with its metadata for tracking during editing

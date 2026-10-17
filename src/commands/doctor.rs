@@ -4,8 +4,20 @@ use crate::env;
 use crate::error::Result;
 use crate::providers::get_provider_resolved;
 
+/// Print a report on config, secrets, providers, and environment
+///
+/// Validates the config for the active profile, counts its secrets and
+/// providers, shows `FNOX_PROFILE`, and tests each provider's connection. It
+/// also warns when an exported `FNOX_AGE_KEY` undermines a top-level
+/// `env = "exec"` or `env = false`. Secret values are not resolved; use
+/// `fnox check` for that.
 #[derive(Debug, usage_rs::Args)]
 #[usage(alias("dr"))]
+#[usage(
+    example("fnox doctor", header = "Report on the current project"),
+    example("fnox -P production doctor", header = "Report on another profile"),
+    after_long_help = "See also:\n- Troubleshooting: https://fnox.jdx.dev/guide/troubleshooting"
+)]
 pub struct DoctorCommand;
 
 impl DoctorCommand {

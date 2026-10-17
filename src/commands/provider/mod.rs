@@ -26,7 +26,7 @@ pub enum ProviderType {
     /// Age encryption
     #[usage(name = "age")]
     Age,
-    /// AWS Secrets Manager
+    /// AWS Secrets Manager (config type `aws-sm`)
     #[usage(name = "aws")]
     Aws,
     /// AWS KMS
@@ -49,7 +49,7 @@ pub enum ProviderType {
     #[usage(name = "azure-sm")]
     #[strum(serialize = "azure-sm")]
     AzureSecretsManager,
-    /// Google Cloud Secret Manager
+    /// Google Cloud Secret Manager (config type `gcp-sm`)
     #[usage(name = "gcp")]
     Gcp,
     /// Google Cloud KMS
@@ -122,7 +122,17 @@ pub enum ProviderType {
     Yubikey,
 }
 
+/// Manage configured providers
+///
+/// A provider is a named entry under `[providers]`, such as `op` of type
+/// `1password`, that secrets reference with `provider = "op"`. Without a
+/// subcommand, `fnox provider` lists them.
 #[derive(Debug, usage_rs::Args)]
+#[usage(
+    example("fnox provider list", header = "List configured providers"),
+    example("fnox provider test op", header = "Test one provider"),
+    after_long_help = "See also:\n- Providers: https://fnox.jdx.dev/providers/overview"
+)]
 pub struct ProviderCommand {
     #[usage(subcommand)]
     pub action: Option<ProviderAction>,
@@ -130,16 +140,9 @@ pub struct ProviderCommand {
 
 #[derive(Debug, usage_rs::Subcommands)]
 pub enum ProviderAction {
-    /// Add a new provider
     Add(AddCommand),
-
-    /// List available providers
     List(ListCommand),
-
-    /// Remove a provider
     Remove(RemoveCommand),
-
-    /// Test a provider connection
     Test(TestCommand),
 }
 

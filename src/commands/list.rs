@@ -8,18 +8,32 @@ use tabled::settings::{
 };
 use tabled::{Table, Tabled};
 
+/// List the secrets defined for the active profile
+///
+/// Prints a table of the secrets in the merged config: each key, where its value
+/// comes from (a provider, a stored value, a default, or the environment), the
+/// provider key, and the description. Nothing is resolved unless you pass
+/// `--values`. The list covers secrets declared in fnox config, not every item
+/// in a remote vault.
 #[derive(Debug, usage_rs::Args)]
 #[usage(alias("ls", "secrets"))]
+#[usage(
+    example("fnox list", header = "List secrets"),
+    example("fnox list --sources", header = "Show which file defines each secret"),
+    example("fnox -P production list", header = "List another profile's secrets"),
+    example("fnox list --values", header = "Resolve and show values"),
+    after_long_help = "See also:\n- Config files: https://fnox.jdx.dev/guide/config-files"
+)]
 pub struct ListCommand {
-    /// Show full provider keys without truncation
+    /// Show provider keys in full instead of truncating them at 40 characters
     #[usage(short, long)]
     pub full: bool,
 
-    /// Show source file paths where secrets are defined
+    /// Add a column with the config file that defines each secret
     #[usage(short, long)]
     pub sources: bool,
 
-    /// Show secret values (if available)
+    /// Resolve and show each secret's value
     #[usage(short = 'V', long)]
     pub values: bool,
 

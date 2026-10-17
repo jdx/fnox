@@ -9,30 +9,42 @@ use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
 
-/// Re-encrypt secrets with current provider configuration
+/// Re-encrypt stored secrets with the current provider settings
 ///
-/// When you add or remove recipients from an encryption provider (e.g. age),
-/// existing secrets remain encrypted with the old recipient set. This command
-/// decrypts and re-encrypts all matching secrets with the current provider
-/// configuration.
+/// Decrypts each matching secret stored with an encryption provider, such as age
+/// or a KMS, encrypts it again with that provider's current configuration, and
+/// writes the new ciphertext to the file that defines it. Run it after changing
+/// a provider's recipients or key, with an identity that can still decrypt the
+/// existing values.
+///
+/// fnox asks for confirmation unless you pass `--force`. Only the active
+/// profile's secrets are processed, so repeat with `-P` for other profiles.
+/// `fnox sync` caches on re-encrypted secrets are cleared; run `fnox sync` again
+/// to rebuild them.
 #[derive(usage_rs::Args)]
+#[usage(
+    example("fnox reencrypt -p age --dry-run", header = "Preview which secrets change"),
+    example("fnox reencrypt -p age", header = "Re-encrypt every age secret"),
+    example("fnox -P staging reencrypt -p age --force", header = "Re-encrypt another profile without a prompt"),
+    after_long_help = "See also:\n- Teams: https://fnox.jdx.dev/guide/teams\n- Age: https://fnox.jdx.dev/providers/age"
+)]
 pub struct ReencryptCommand {
-    /// Only re-encrypt these specific secret keys
+    /// Re-encrypt only these keys
     keys: Vec<String>,
 
-    /// Skip confirmation prompt
+    /// Write without asking for confirmation
     #[usage(short, long)]
     force: bool,
 
-    /// Show what would be done without making changes
+    /// List the secrets that would be re-encrypted without changing anything
     #[usage(short = 'n', long)]
     dry_run: bool,
 
-    /// Only re-encrypt secrets from this provider
+    /// Re-encrypt only secrets stored with this provider
     #[usage(short = 'p', long)]
     provider: Option<String>,
 
-    /// Only re-encrypt matching secrets (regex pattern)
+    /// Re-encrypt only keys matching this regular expression
     #[usage(long)]
     filter: Option<String>,
 }

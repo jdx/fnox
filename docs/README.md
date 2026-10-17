@@ -51,13 +51,22 @@ Lead with the task or behavior, then prerequisites and a working example. Explai
 
 ## Generated reference
 
-`mise run render:usage` regenerates the CLI pages from the Rust command definitions and the usage specification. It then runs `.vitepress/enrich-cli.mjs` to add maintained examples and related links from `.vitepress/cli-examples.json`, followed by formatting.
+The CLI pages in `cli/` come from the Rust command definitions, the same source as `fnox <command> --help`. `mise run render:usage` writes the usage spec (`fnox.usage.kdl`), renders one page per command with `usage g markdown`, and runs `.vitepress/cli-pages.mjs`, which adds each page's frontmatter `description`, gives code fences a language, and turns "See also" lists into site links. Formatting runs last.
 
 ```sh
+mise run build
 mise run render:usage
 ```
 
-Edit command descriptions and flags in `src/commands/` or the corresponding usage source. Edit examples and context in `.vitepress/cli-examples.json`. Do not hand-edit generated Markdown: regeneration will replace it. New public commands need an examples entry and a place in the CLI sidebar.
+Edit help text in `src/commands/`, on the struct that defines each command:
+
+- The doc comment's first line is the short description shown in `fnox --help` and the start of the page description. Use a verb phrase in sentence case with no trailing period.
+- Later paragraphs are the long help: what the command reads, writes, and prints. Indent list items by one space (`///  - item`) so they keep their line breaks.
+- `#[usage(example("fnox ...", header = "..."))]` adds an example to `--help` and the page. Every public command needs at least one.
+- `after_long_help = "See also:\n- Page name: https://fnox.jdx.dev/path"` adds related links.
+- Field doc comments are flag and argument help. Do not repeat a default that `default = "..."` already declares.
+
+Runtime settings on `cli/configuration.md` come from the doc comments and `#[usage(...)]` attributes on `SettingsData` in `crates/fnox-core/src/settings.rs`. Do not hand-edit generated Markdown: regeneration replaces it. A new public command also needs a place in the CLI sidebar (`commandGroups` in `.vitepress/navigation.mjs`).
 
 Regenerate the configuration schema with `mise run render:schema`, or both sets of artifacts with `mise run render`. CI checks that generation produces no diff.
 

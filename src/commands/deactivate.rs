@@ -4,16 +4,19 @@ use crate::hook_env::PREV_SESSION;
 use crate::shell;
 use anyhow::Result;
 
-/// Disable fnox shell integration in the current shell session
+/// Turn off shell integration in the current shell
 ///
-/// This removes the hook that automatically loads secrets when entering
-/// directories with fnox.toml files. It also restores environment variables
-/// to their state before fnox was activated.
+/// Removes the fnox hook from the current shell session and unsets the secrets
+/// it loaded. Other shells and new sessions are unaffected: to turn integration
+/// off for good, remove the `fnox activate` line from your shell startup file.
+/// To turn it back on in this shell, run the activation command again.
 ///
-/// Note: This only affects the current shell session. To re-enable fnox,
-/// run the activation command again for your shell.
+/// Fails when fnox is not active in the current shell.
 #[derive(Debug, Clone, usage_rs::Args)]
-#[usage(verbatim_doc_comment)]
+#[usage(
+    example("fnox deactivate", header = "Turn off the hook in this shell"),
+    after_long_help = "See also:\n- Shell integration: https://fnox.jdx.dev/guide/shell-integration"
+)]
 pub struct DeactivateCommand;
 
 impl DeactivateCommand {

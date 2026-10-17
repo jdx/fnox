@@ -94,9 +94,8 @@ run = [
   "fnox usage > fnox.usage.kdl",
   "rm -rf docs/cli && mkdir -p docs/cli",
   "usage g markdown -mf fnox.usage.kdl --out-dir docs/cli --url-prefix /cli --html-encode",
-  "perl -pi -e 'if (/^```$/) { s/$/sh/ unless $in_fence; $in_fence = !$in_fence }' docs/cli/configuration.md",
   "usage g json -f fnox.usage.kdl > docs/cli/commands.json",
-  "node docs/.vitepress/enrich-cli.mjs",
+  "node docs/.vitepress/cli-pages.mjs",
   "oxfmt --write docs/cli",
 ]
 

@@ -13,39 +13,59 @@ use strum::{Display, EnumString, VariantNames};
 #[derive(Debug, Clone, Copy, usage_rs::ValueEnum, Display, EnumString, VariantNames)]
 #[strum(serialize_all = "lowercase")]
 pub enum ExportFormat {
-    /// Environment variable format (KEY=value)
+    /// dotenv lines (`KEY=value`), quoted when needed
     Env,
-    /// POSIX shell format (export KEY=value)
+    /// `export KEY=value` lines for POSIX shells
     Shell,
-    /// JSON format
+    /// JSON object with `secrets` and `metadata`
     Json,
-    /// YAML format
+    /// YAML document with `secrets` and `metadata`
     Yaml,
-    /// TOML format
+    /// TOML document with `secrets` and `metadata`
     Toml,
 }
 
-/// Export secrets in various formats
+/// Print or write resolved secrets as env, shell, JSON, YAML, or TOML
+///
+/// Resolves the active profile's secrets and prints them in the chosen format,
+/// or writes them to `--output`. By default only secrets with `env = true` are
+/// included, matching shell integration; `--all` adds `env = "exec"` and
+/// `env = false` secrets. An `as_file` secret is exported as the path of a
+/// temporary file that holds its value.
+///
+/// JSON, YAML, and TOML put the values in a `secrets` object, which
+/// `fnox import` reads back. The output contains real values, and `--output`
+/// creates the file with your default permissions, so set a restrictive umask
+/// first.
 #[derive(usage_rs::Args)]
 #[usage(alias("ex"))]
+#[usage(
+    example("fnox export", header = "Print dotenv lines"),
+    example("fnox export --format json", header = "Print JSON"),
+    example("eval \"$(fnox export --format shell)\"", header = "Load secrets into the current shell"),
+    example("(umask 077 && fnox export -o .env)", header = "Write a private .env file"),
+    after_long_help = "See also:\n- Import and export: https://fnox.jdx.dev/guide/import-export"
+)]
 pub struct ExportCommand {
-    /// Export format
+    /// Output format
     #[usage(short, long, default = "env", value_enum)]
     format: ExportFormat,
 
-    /// Show what would be exported without writing to a file
+    /// With `--output`, list the keys instead of writing the file
+    ///
+    /// Has no effect on output to stdout, which still contains the values.
     #[usage(short = 'n', long)]
     dry_run: bool,
 
-    /// Output file (default: stdout)
+    /// Write to this file instead of stdout
     #[usage(short = 'o', long)]
     output: Option<PathBuf>,
 
-    /// Include secrets with env = false or env = "exec" (excluded by default)
+    /// Include secrets with `env = false` or `env = "exec"`
     #[usage(long)]
     all: bool,
 
-    /// Include metadata comments in env and shell output
+    /// Start env and shell output with comments naming the profile, time, and count
     #[usage(long)]
     header: bool,
 }

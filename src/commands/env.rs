@@ -25,18 +25,33 @@ impl From<EnvFor> for EnvScope {
     }
 }
 
-/// Print the environment fnox would give a command, as JSON for other tools
+/// Print the environment fnox would give a command, as JSON
 ///
-/// For tools that start processes themselves, such as mise. stdout carries one
-/// line of JSON and contains secret values in plain text. Callers apply `remove`,
-/// then `set`, then `files`.
+/// For tools that start processes themselves, such as mise. Prints one line of
+/// JSON describing what `fnox exec` would do: variables to `remove`, then to
+/// `set`, then `files` to write for `as_file` secrets. The output contains secret
+/// values in plain text, so keep it out of logs.
+///
+/// `--json` is required. When resolution fails, fnox prints a JSON error
+/// document to stdout and exits 1. `--describe` lists keys and where each may be
+/// injected without resolving anything.
 #[derive(Debug, usage_rs::Args)]
+#[usage(
+    example("fnox env --json", header = "Print the environment fnox exec would use"),
+    example(
+        "fnox env --json --keys DATABASE_URL,STRIPE_KEY",
+        header = "Resolve only some keys"
+    ),
+    example("fnox env --json --for shell", header = "Print what shell integration would load"),
+    example("fnox env --json --describe", header = "List keys without resolving values"),
+    after_long_help = "See also:\n- fnox env JSON: https://fnox.jdx.dev/reference/env-json\n- Running commands: https://fnox.jdx.dev/guide/running-commands"
+)]
 pub struct EnvCommand {
     /// List keys and where each may be injected, without resolving anything
     #[usage(long)]
     pub describe: bool,
 
-    /// Where the environment will be injected
+    /// Where the environment will be used: `exec` or `shell`
     #[usage(long = "for", value_name = "SCOPE", default = "exec", value_enum)]
     pub scope: EnvFor,
 
@@ -44,7 +59,7 @@ pub struct EnvCommand {
     #[usage(long)]
     pub json: bool,
 
-    /// Only these keys, plus the secrets they depend on. Repeat or comma-separate
+    /// Only these keys, plus the secrets they depend on; repeat or comma-separate
     #[usage(long, value_name = "KEY", delimiter = ',')]
     pub keys: Vec<String>,
 }

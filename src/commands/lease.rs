@@ -7,8 +7,19 @@ use chrono::Utc;
 use indexmap::IndexMap;
 use strum::EnumString;
 
+/// Create and manage short-lived credentials from lease backends
+///
+/// Lease backends, defined under `[leases.<name>]`, mint temporary credentials
+/// such as AWS STS sessions or Vault tokens. `fnox exec` creates or reuses
+/// leases automatically; these commands manage them by hand. fnox records each
+/// lease in a per-project ledger. Without a subcommand, `fnox lease` creates
+/// leases for every configured backend.
 #[derive(Debug, usage_rs::Args)]
-#[usage(about = "Manage ephemeral credential leases")]
+#[usage(
+    example("fnox lease list --active", header = "List active leases"),
+    example("fnox exec -- aws s3 ls", header = "Let fnox exec create or reuse a lease"),
+    after_long_help = "See also:\n- Credential leases: https://fnox.jdx.dev/guide/leases"
+)]
 pub struct LeaseCommand {
     #[usage(subcommand)]
     pub subcommand: Option<LeaseSubcommand>,
@@ -16,34 +27,52 @@ pub struct LeaseCommand {
 
 #[derive(Debug, usage_rs::Subcommands)]
 pub enum LeaseSubcommand {
-    /// Revoke all expired leases that need manual cleanup
     Cleanup(LeaseCleanupCommand),
-    /// Create a short-lived credential lease from a secret
     Create(LeaseCreateCommand),
-    /// List tracked leases
     List(LeaseListCommand),
-    /// Revoke a lease by ID
     Revoke(LeaseRevokeCommand),
 }
 
 #[derive(Debug, Clone, usage_rs::ValueEnum, EnumString)]
 #[strum(serialize_all = "lowercase")]
 pub enum OutputFormat {
+    /// Summary with masked credential values
     Shell,
+    /// JSON object with the credentials, `lease_id`, and `expires_at`
     Json,
+    /// `export KEY=value` lines with the real credentials
     Env,
 }
 
+/// Create short-lived credentials from a lease backend
+///
+/// Creates a lease from BACKEND_NAME, or from every configured backend when you
+/// omit it, records it in the project's lease ledger, and prints the
+/// credentials. The default `shell` format shows a summary with masked values;
+/// `json` and `env` print the real credentials, so keep that output out of logs.
+///
+/// The lease lasts for `--duration`, else the backend's `duration` setting,
+/// else 15 minutes, and cannot exceed the backend's maximum.
 #[derive(Debug, usage_rs::Args)]
+#[usage(
+    example("fnox lease create aws --duration 30m", header = "Create a 30-minute lease"),
+    example(
+        "eval \"$(fnox lease create aws --format env)\"",
+        header = "Export the credentials into the current shell"
+    ),
+    example("fnox lease create aws --interactive", header = "Prompt for missing backend credentials"),
+    after_long_help = "See also:\n- Credential leases: https://fnox.jdx.dev/guide/leases"
+)]
 pub struct LeaseCreateCommand {
-    /// Lease backend name (from `[leases.<name>]` config). Creates leases for all configured backends if omitted.
+    /// Lease backend from `[leases.<name>]` (default: every configured backend)
     pub backend_name: Option<String>,
 
-    /// Create leases for all configured backends
+    /// Create leases for every configured backend
     #[usage(short, long)]
     pub all: bool,
 
-    /// Lease duration (e.g., "15m", "1h", "2h30m"); overrides config duration
+    /// Lease length, such as `15m`, `1h`, or `2h30m`; overrides the backend's
+    /// `duration`
     #[usage(short, long)]
     pub duration: Option<String>,
 
@@ -51,18 +80,29 @@ pub struct LeaseCreateCommand {
     #[usage(short, long, default = "shell", value_enum)]
     pub format: OutputFormat,
 
-    /// Prompt interactively for missing credentials
+    /// Prompt for backend credentials that are missing from the environment
     #[usage(short, long)]
     pub interactive: bool,
 
-    /// Label for the lease (e.g., session purpose)
+    /// Label recorded with the lease, such as its purpose
     #[usage(short, long, default = "fnox-lease")]
     pub label: String,
 }
 
+/// List leases recorded for this project
+///
+/// Prints the ID, backend, expiry, and status (`active`, `expired`, or
+/// `revoked`) of each lease in the project's ledger. Long IDs are shortened. The
+/// ledger tracks leases fnox created; it is not an inventory of credentials at
+/// the provider.
 #[derive(Debug, usage_rs::Args)]
+#[usage(
+    example("fnox lease list", header = "List every recorded lease"),
+    example("fnox lease list --active", header = "List leases that are still valid"),
+    after_long_help = "See also:\n- Credential leases: https://fnox.jdx.dev/guide/leases"
+)]
 pub struct LeaseListCommand {
-    /// Show only active (non-expired, non-revoked) leases
+    /// Show only leases that have not expired or been revoked
     #[usage(long)]
     pub active: bool,
 
@@ -71,13 +111,36 @@ pub struct LeaseListCommand {
     pub expired: bool,
 }
 
+/// Revoke a lease by ID
+///
+/// Asks the lease backend to revoke LEASE_ID, then marks it revoked in the
+/// project's ledger. If the backend cannot revoke it, for example because its
+/// credentials only expire on their own, fnox warns and revokes only the ledger
+/// entry.
+///
+/// LEASE_ID must be the full ID. `fnox lease list` shortens long IDs;
+/// `fnox lease create --format json` prints the full one as `lease_id`.
 #[derive(Debug, usage_rs::Args)]
+#[usage(
+    example("fnox lease revoke LEASE_ID", header = "Revoke a lease"),
+    after_long_help = "See also:\n- Credential leases: https://fnox.jdx.dev/guide/leases"
+)]
 pub struct LeaseRevokeCommand {
-    /// Lease ID to revoke
+    /// Full ID of the lease to revoke
     pub lease_id: String,
 }
 
+/// Revoke expired leases and mark them revoked in the ledger
+///
+/// For each expired lease in the project's ledger that is not yet marked
+/// revoked, asks its backend to revoke it and then marks it revoked. A backend
+/// failure is logged and the entry is still marked. Backends may need their
+/// credentials and network access.
 #[derive(Debug, usage_rs::Args)]
+#[usage(
+    example("fnox lease cleanup", header = "Clean up expired leases"),
+    after_long_help = "See also:\n- Credential leases: https://fnox.jdx.dev/guide/leases"
+)]
 pub struct LeaseCleanupCommand;
 
 impl LeaseCommand {

@@ -6,17 +6,36 @@ use crate::temp_file_secrets::create_persistent_secret_file;
 use crate::{commands::Cli, config::Config};
 use indexmap::IndexMap;
 
+/// Print the resolved value of one secret
+///
+/// Resolves KEY for the active profile through its provider, a lease backend,
+/// or the daemon cache, and prints the value to stdout followed by a newline. A
+/// secret with `as_file = true` prints the path of a temporary file that holds
+/// the value instead.
+///
+/// When the secret cannot be resolved, `if_missing` decides the outcome: with
+/// `warn` or `ignore`, fnox prints nothing and exits 0. To check that secrets
+/// resolve without printing them, use `fnox check`.
 #[derive(Debug, usage_rs::Args)]
+#[usage(
+    example("fnox get DATABASE_URL", header = "Print a secret"),
+    example("fnox -P staging get DATABASE_URL", header = "Read from another profile"),
+    example(
+        "fnox get TLS_CERT --base64-decode > cert.pem",
+        header = "Decode a base64 value into a file"
+    ),
+    after_long_help = "See also:\n- Running commands: https://fnox.jdx.dev/guide/running-commands\n- Missing secrets: https://fnox.jdx.dev/guide/missing-secrets"
+)]
 pub struct GetCommand {
-    /// Secret key to retrieve
+    /// Secret to print
     pub key: String,
 
-    /// Base64 decode the secret
+    /// Decode a base64-encoded value before printing it
     #[usage(long)]
     pub base64_decode: bool,
 
-    /// Re-resolve the secret from its provider instead of serving it from the
-    /// daemon cache, and cache the new value
+    /// Re-fetch the value from its provider instead of the daemon cache, and
+    /// cache it
     #[usage(long)]
     pub refresh: bool,
 }

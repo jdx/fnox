@@ -5,10 +5,25 @@ use indexmap::IndexMap;
 
 use crate::commands::Cli;
 
+/// Verify that the active profile's secrets resolve, without printing them
+///
+/// Validates the config, then resolves each secret that uses a provider and
+/// whose `if_missing` is `error`. Secrets with no value source and references to
+/// unknown providers are reported as well. Values are never printed.
+///
+/// `--all` also resolves secrets whose `if_missing` is `warn` or `ignore`; their
+/// failures are reported as warnings, or not at all for `ignore`. Problems go to
+/// stderr, and fnox exits 1 when any error is found.
 #[derive(Debug, usage_rs::Args)]
 #[usage(alias = "c")]
+#[usage(
+    example("fnox check --all", header = "Resolve every secret in the active profile"),
+    example("fnox check --if-missing error", header = "Fail on any secret that does not resolve"),
+    example("fnox -P production check --all", header = "Check another profile"),
+    after_long_help = "See also:\n- Troubleshooting: https://fnox.jdx.dev/guide/troubleshooting\n- Missing secrets: https://fnox.jdx.dev/guide/missing-secrets"
+)]
 pub struct CheckCommand {
-    /// Check all secrets including those with if_missing=warn or if_missing=ignore
+    /// Also resolve secrets whose `if_missing` is `warn` or `ignore`
     #[usage(short = 'a', long)]
     all: bool,
 }

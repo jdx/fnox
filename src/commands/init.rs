@@ -5,18 +5,33 @@ use crate::providers::{WizardCategory, WizardInfo, get_provider_from_resolved};
 use demand::{Confirm, DemandOption, Input, Select};
 use std::collections::HashMap;
 
+/// Create a fnox.toml config file
+///
+/// Writes a new config file at the `-c` path (default: `fnox.toml` in the
+/// current directory), or the global config with `--global`. When stdin is a
+/// terminal, a wizard helps you configure a first provider, tests its
+/// connection, and makes it the default. Without a terminal, or with
+/// `--skip-wizard`, the file is minimal and no provider is configured.
+///
+/// fnox refuses to overwrite an existing file unless you pass `--force`.
 #[derive(Debug, usage_rs::Args)]
 #[usage(alias = "i")]
+#[usage(
+    example("fnox init", header = "Create fnox.toml with the setup wizard"),
+    example("fnox init --skip-wizard", header = "Create a minimal fnox.toml"),
+    example("fnox init --global", header = "Create the global config"),
+    after_long_help = "See also:\n- Quick start: https://fnox.jdx.dev/guide/quick-start"
+)]
 pub struct InitCommand {
-    /// Overwrite existing configuration file
+    /// Overwrite an existing config file
     #[usage(short, long)]
     force: bool,
 
-    /// Initialize the global config file (~/.config/fnox/config.toml)
+    /// Create the global config file (`~/.config/fnox/config.toml`) instead
     #[usage(short = 'g', long)]
     global: bool,
 
-    /// Skip the interactive wizard and create a minimal config
+    /// Write a minimal config without running the setup wizard
     #[usage(long)]
     skip_wizard: bool,
 }

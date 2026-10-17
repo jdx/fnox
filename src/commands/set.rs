@@ -37,50 +37,71 @@ fn secret_belongs_to_target(
     }
 }
 
+/// Store a secret and add it to the config
+///
+/// Stores the value with a provider and records KEY in the config file in the
+/// current directory, or the global config with `--global`. With an encryption
+/// provider such as age, the ciphertext goes in the config. With a remote
+/// provider such as 1Password or AWS Secrets Manager, the value is written to
+/// the provider and the config records its key there. With no provider, the
+/// value is stored in plain text.
+///
+/// The provider is `--provider`, else the secret's current provider, else
+/// `default_provider`. When you omit VALUE, fnox reads piped stdin (trimming
+/// surrounding whitespace) or prompts with hidden input. `--from-file` reads a
+/// file verbatim, including trailing newlines. Passing only `--description`,
+/// `--default`, or `--if-missing` updates those settings without asking for a
+/// value.
 #[derive(Debug, usage_rs::Args)]
 #[usage(alias("s"))]
+#[usage(
+    example("fnox set DATABASE_URL", header = "Prompt for a value with hidden input"),
+    example("fnox set API_TOKEN --provider op", header = "Store a value with a specific provider"),
+    example("fnox set SSH_KEY --from-file ~/.ssh/id_ed25519", header = "Store a file's contents verbatim"),
+    example("printf '%s' \"$TOKEN\" | fnox set API_TOKEN", header = "Read the value from stdin"),
+    example("fnox -P staging set DATABASE_URL", header = "Write to the staging profile"),
+    after_long_help = "See also:\n- Quick start: https://fnox.jdx.dev/guide/quick-start\n- Configuration reference: https://fnox.jdx.dev/reference/configuration"
+)]
 pub struct SetCommand {
-    /// Secret key (environment variable name)
+    /// Secret name, used as the environment variable name
     pub key: String,
 
-    /// Secret value to store.
+    /// Value to store; omit to read stdin or prompt
     ///
-    /// If omitted: reads from stdin when piped (`echo "x" | fnox set KEY`),
-    /// or prompts interactively with hidden input.
-    ///
-    /// Passing secrets as arguments exposes them in shell history and `ps` output.
-    /// For sensitive values, prefer stdin or the interactive prompt.
+    /// A value passed as an argument appears in shell history and process
+    /// listings. Prefer stdin or the prompt for sensitive values.
     pub value: Option<String>,
 
-    /// Description of the secret
+    /// Description to record with the secret
     #[usage(short = 'd', long)]
     pub description: Option<String>,
 
-    /// Save to the global config file (~/.config/fnox/config.toml)
+    /// Write to the global config file (`~/.config/fnox/config.toml`)
     #[usage(short = 'g', long)]
     pub global: bool,
 
-    /// Key name in the provider (if different from env var name)
+    /// Name to store the value under at a remote provider (default: KEY)
     #[usage(short = 'k', long)]
     pub key_name: Option<String>,
 
-    /// Show what would be done without making changes
+    /// Show what would be written without storing anything
     #[usage(short = 'n', long)]
     pub dry_run: bool,
 
-    /// Provider to store the secret in (defaults to its existing provider, then default_provider)
+    /// Provider to store the value with (default: the secret's current provider,
+    /// then `default_provider`)
     #[usage(short = 'p', long)]
     pub provider: Option<String>,
 
-    /// Base64 encode the secret
+    /// Base64-encode the value before storing it
     #[usage(long)]
     pub base64_encode: bool,
 
-    /// Default value to use if secret is not found
+    /// Fallback value to use when the secret cannot be resolved
     #[usage(long)]
     pub default: Option<String>,
 
-    /// Read the secret value verbatim from a UTF-8 file
+    /// Read the value from a UTF-8 file, verbatim
     #[usage(
         long,
         conflicts = "value",
@@ -88,7 +109,7 @@ pub struct SetCommand {
     )]
     pub from_file: Option<PathBuf>,
 
-    /// What to do if the secret is missing (error, warn, ignore)
+    /// What to do when the secret cannot be resolved: `error`, `warn`, or `ignore`
     #[usage(long, value_enum)]
     pub if_missing: Option<IfMissing>,
 }

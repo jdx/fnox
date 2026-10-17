@@ -6,7 +6,19 @@ use crate::{env, error::FnoxError};
 use rmcp::service::RunningService;
 use rmcp::{RoleServer, ServiceExt};
 
+/// Serve secrets to AI agents over the Model Context Protocol
+///
+/// Starts an MCP server on stdin and stdout for an agent client to launch. It
+/// offers the `get_secret` and `exec` tools, limited by the `[mcp]` table:
+/// `tools` chooses which tools are offered and `secrets` restricts which secrets
+/// they can reach. The server never prompts, so authenticate to your providers
+/// before starting the client.
 #[derive(Debug, usage_rs::Args)]
+#[usage(
+    example("fnox mcp", header = "Start the server for the current project"),
+    example("fnox -P staging mcp", header = "Serve another profile"),
+    after_long_help = "See also:\n- MCP server: https://fnox.jdx.dev/guide/mcp"
+)]
 pub struct McpCommand;
 
 impl McpCommand {

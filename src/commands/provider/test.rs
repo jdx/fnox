@@ -2,13 +2,25 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
 
+/// Test that a provider can connect and authenticate
+///
+/// Connects to PROVIDER with its configured credentials and reports success or
+/// the error. With `--all`, tests every provider for the active profile, prints
+/// a summary, and exits non-zero if any fail; add `--verbose` to see each error.
+/// A passing test does not check that individual secrets exist; use
+/// `fnox check --all` for that.
 #[derive(Debug, usage_rs::Args)]
 #[usage(alias("t"))]
+#[usage(
+    example("fnox provider test op", header = "Test one provider"),
+    example("fnox -v provider test --all", header = "Test every provider and show errors"),
+    after_long_help = "See also:\n- Troubleshooting: https://fnox.jdx.dev/guide/troubleshooting"
+)]
 pub struct TestCommand {
-    /// Provider name (optional when using --all)
+    /// Provider to test (omit with `--all`)
     pub provider: Option<String>,
 
-    /// Test all configured providers
+    /// Test every configured provider
     #[usage(short = 'a', long)]
     pub all: bool,
 }
