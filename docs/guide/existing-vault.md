@@ -82,7 +82,7 @@ The cache does not refresh by itself. After a value changes in the vault, sync a
 fnox sync --provider sync-age --local-file --force
 ```
 
-The [sync guide](/guide/sync) explains what is written where, and how to keep the age key in hardware such as Touch ID or a YubiKey.
+The [sync guide](/guide/sync) explains what is written where, and how to keep the age key in hardware such as Touch ID, a YubiKey, or a TPM. If your vault authenticates with a long-lived service token rather than an interactive login, keep that token in the same cache too: see [protect the vault credential](/guide/sync#protect-the-vault-credential).
 
 ## 4. Load secrets in your shell (optional)
 
