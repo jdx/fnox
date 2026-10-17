@@ -90,7 +90,7 @@ Grant the encrypter/decrypter role on the key:
 
 ```sh
 gcloud kms keys add-iam-policy-binding fnox-key \
-  --keyring fnox --location us-central1 \
+  --keyring fnox --location us-central1 --project my-project \
   --member "user:you@example.com" \
   --role roles/cloudkms.cryptoKeyEncrypterDecrypter
 ```
@@ -102,7 +102,7 @@ gcloud kms keys add-iam-policy-binding fnox-key \
 The identity lacks the permission named in the error. Check the key's bindings:
 
 ```sh
-gcloud kms keys get-iam-policy fnox-key --keyring fnox --location us-central1
+gcloud kms keys get-iam-policy fnox-key --keyring fnox --location us-central1 --project my-project
 ```
 
 ### `NOT_FOUND`

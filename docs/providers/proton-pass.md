@@ -43,6 +43,8 @@ fnox exec -- npm start
 
 fnox runs `pass-cli` and uses its stored session. When the CLI reports that you are not logged in, fnox offers to run `pass-cli login` in a terminal. A locked session needs `pass-cli session unlock` instead.
 
+That prompt runs `pass-cli login` with your environment as-is: fnox does not map its `FNOX_PROTON_PASS_*` aliases for it. To log in with a personal access token, set the native `PROTON_PASS_PERSONAL_ACCESS_TOKEN`.
+
 ### Personal access tokens
 
 For CI or headless machines, create a Proton Pass personal access token, supply it as `PROTON_PASS_PERSONAL_ACCESS_TOKEN` from the CI secret store, and log in:

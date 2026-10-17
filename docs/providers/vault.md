@@ -108,7 +108,7 @@ Without a field, fnox reads the field named `value`. A reference has at most one
 `fnox set` writes the value on standard input, never on the command line. What it changes depends on the remote key:
 
 - A key without a field, such as `fnox set API_KEY --provider vault`, runs `vault kv put` with the single field `value`. This replaces any other fields stored in that secret.
-- A key with a field, such as `fnox set DB_PASSWORD --provider vault --key-name database/password`, patches only that field. If the secret does not exist, or its current version is deleted, fnox creates it.
+- A key with a field, such as `fnox set DB_PASSWORD --provider vault --key-name database/password`, patches only that field with `vault kv patch`. If the secret does not exist, or its current version is deleted, fnox creates it. This needs a KV version 2 mount; on KV version 1, field-specific writes fail.
 
 ## Policy
 

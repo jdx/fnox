@@ -152,7 +152,7 @@ A read-only policy for secrets under `myapp/`:
 }
 ```
 
-`BatchGetSecretValue` and `ListSecrets` cannot be scoped to secret ARNs, so they need `"Resource": "*"`. To let `fnox set` write, add `secretsmanager:PutSecretValue` and `secretsmanager:CreateSecret` to the second statement. A secret encrypted with a customer managed KMS key also needs `kms:Decrypt` on that key.
+`BatchGetSecretValue` and `ListSecrets` cannot be scoped to secret ARNs, so they need `"Resource": "*"`. To let `fnox set` write, add `secretsmanager:PutSecretValue` and `secretsmanager:CreateSecret` to the second statement. A secret encrypted with a customer-managed KMS key also needs `kms:Decrypt` on that key to read, plus `kms:GenerateDataKey` to write.
 
 ## Batch reads
 

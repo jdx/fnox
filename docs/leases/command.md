@@ -28,7 +28,8 @@ duration = "1h"
 # scripts/get-k8s-token.sh
 set -eu
 # -o json returns the TokenRequest, including the expiry the API server actually granted
-kubectl create token my-service-account --duration="${FNOX_LEASE_DURATION}s" -o json |
+response=$(kubectl create token my-service-account --duration="${FNOX_LEASE_DURATION}s" -o json)
+printf '%s\n' "$response" |
   jq '{credentials: {KUBE_TOKEN: .status.token}, expires_at: .status.expirationTimestamp}'
 ```
 

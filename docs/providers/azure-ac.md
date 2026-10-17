@@ -18,7 +18,7 @@ Read key-values from an Azure App Configuration store, so configuration your inf
 Sign in with `az login` and create a key-value in the store:
 
 ```sh
-az appconfig kv set --name myapp-config --key api-url --value "https://api.example.com"
+az appconfig kv set --name myapp-config --key api-url --value "https://api.example.com" --auth-mode login
 ```
 
 Add the provider and a reference:
