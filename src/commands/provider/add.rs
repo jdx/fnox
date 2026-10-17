@@ -18,8 +18,14 @@ use super::ProviderType;
 #[usage(alias("a", "set"))]
 #[usage(
     example("fnox provider add op 1password", header = "Add a 1Password provider"),
-    example("fnox provider add sync-age age --global", header = "Add an age provider to the global config"),
-    example("fnox provider add corp lua --plugin fnox-plugin-corp", header = "Add a Lua plugin provider"),
+    example(
+        "fnox provider add sync-age age --global",
+        header = "Add an age provider to the global config"
+    ),
+    example(
+        "fnox provider add corp lua --plugin fnox-plugin-corp",
+        header = "Add a Lua plugin provider"
+    ),
     after_long_help = "See also:\n- Providers: https://fnox.jdx.dev/providers/overview\n- Connect an existing vault: https://fnox.jdx.dev/guide/existing-vault"
 )]
 pub struct AddCommand {

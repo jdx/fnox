@@ -27,8 +27,14 @@ struct PartialConfig {
 #[derive(usage_rs::Args)]
 #[usage(
     example("fnox config-files", header = "List the files for the default profile"),
-    example("fnox -P staging config-files", header = "Include the staging profile's files"),
-    example("fnox -c ./fnox.toml config-files", header = "Show what an explicit path loads"),
+    example(
+        "fnox -P staging config-files",
+        header = "Include the staging profile's files"
+    ),
+    example(
+        "fnox -c ./fnox.toml config-files",
+        header = "Show what an explicit path loads"
+    ),
     after_long_help = "See also:\n- Config files: https://fnox.jdx.dev/guide/config-files"
 )]
 pub struct ConfigFilesCommand;

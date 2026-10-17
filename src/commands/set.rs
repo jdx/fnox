@@ -55,11 +55,26 @@ fn secret_belongs_to_target(
 #[derive(Debug, usage_rs::Args)]
 #[usage(alias("s"))]
 #[usage(
-    example("fnox set DATABASE_URL", header = "Prompt for a value with hidden input"),
-    example("fnox set API_TOKEN --provider op", header = "Store a value with a specific provider"),
-    example("fnox set SSH_KEY --from-file ~/.ssh/id_ed25519", header = "Store a file's contents verbatim"),
-    example("printf '%s' \"$TOKEN\" | fnox set API_TOKEN", header = "Read the value from stdin"),
-    example("fnox -P staging set DATABASE_URL", header = "Write to the staging profile"),
+    example(
+        "fnox set DATABASE_URL",
+        header = "Prompt for a value with hidden input"
+    ),
+    example(
+        "fnox set API_TOKEN --provider op",
+        header = "Store a value with a specific provider"
+    ),
+    example(
+        "fnox set SSH_KEY --from-file ~/.ssh/id_ed25519",
+        header = "Store a file's contents verbatim"
+    ),
+    example(
+        "printf '%s' \"$TOKEN\" | fnox set API_TOKEN",
+        header = "Read the value from stdin"
+    ),
+    example(
+        "fnox -P staging set DATABASE_URL",
+        header = "Write to the staging profile"
+    ),
     after_long_help = "See also:\n- Quick start: https://fnox.jdx.dev/guide/quick-start\n- Configuration reference: https://fnox.jdx.dev/reference/configuration"
 )]
 pub struct SetCommand {

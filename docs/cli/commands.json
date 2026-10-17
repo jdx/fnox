@@ -1091,7 +1091,7 @@
         "hide": false,
         "args_override_self": true,
         "help": "Print the resolved value of one secret",
-        "help_long": "Print the resolved value of one secret\n\nResolves KEY for the active profile through its provider, a lease backend, or the daemon cache, and prints the value to stdout followed by a newline. A secret with `as_file = true` prints the path of a temporary file that holds the value instead.\n\nWhen the secret cannot be resolved, `if_missing` decides the outcome: with `warn` or `ignore`, fnox prints nothing and exits 0. To check that secrets resolve without printing them, use `fnox check`.",
+        "help_long": "Print the resolved value of one secret\n\nResolves KEY for the active profile through its provider, a lease backend, or the daemon cache, and prints the value to stdout followed by a newline. A secret with `as_file = true` prints the path of a temporary file that holds the value instead.\n\nWhen the secret cannot be resolved, `if_missing` decides the outcome: with `warn` or `ignore`, fnox prints nothing to stdout and exits 0. To check that secrets resolve without printing them, use `fnox check`.",
         "name": "get",
         "aliases": [],
         "hidden_aliases": [],

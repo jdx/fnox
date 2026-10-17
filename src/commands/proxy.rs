@@ -108,7 +108,10 @@ const AMBIENT_CREDENTIAL_ENV_VARS: &[&str] = &[
 #[derive(Debug, usage_rs::Args)]
 #[usage(
     example("fnox proxy rules", header = "Check the rules"),
-    example("fnox proxy run -- node agent.js", header = "Run a command behind the proxy"),
+    example(
+        "fnox proxy run -- node agent.js",
+        header = "Run a command behind the proxy"
+    ),
     after_long_help = "See also:\n- Credential proxy: https://fnox.jdx.dev/guide/proxy"
 )]
 pub struct ProxyCommand {
@@ -125,7 +128,10 @@ enum ProxySubcommand {
     /// variable. Secrets are not resolved.
     #[usage(
         example("fnox proxy rules", header = "Print the rules"),
-        example("fnox -P staging proxy rules", header = "Print another profile's rules"),
+        example(
+            "fnox -P staging proxy rules",
+            header = "Print another profile's rules"
+        ),
         after_long_help = "See also:\n- Credential proxy: https://fnox.jdx.dev/guide/proxy"
     )]
     Rules,
@@ -146,7 +152,10 @@ enum ProxySubcommand {
 /// with the command's exit status.
 #[derive(Debug, usage_rs::Args)]
 #[usage(
-    example("fnox proxy run -- node agent.js", header = "Run an agent behind the proxy"),
+    example(
+        "fnox proxy run -- node agent.js",
+        header = "Run an agent behind the proxy"
+    ),
     after_long_help = "See also:\n- Credential proxy: https://fnox.jdx.dev/guide/proxy"
 )]
 struct ProxyRunCommand {

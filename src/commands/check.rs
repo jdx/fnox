@@ -17,8 +17,14 @@ use crate::commands::Cli;
 #[derive(Debug, usage_rs::Args)]
 #[usage(alias = "c")]
 #[usage(
-    example("fnox check --all", header = "Resolve every secret in the active profile"),
-    example("fnox check --if-missing error", header = "Fail on any secret that does not resolve"),
+    example(
+        "fnox check --all",
+        header = "Resolve every secret in the active profile"
+    ),
+    example(
+        "fnox check --if-missing error",
+        header = "Fail on any secret that does not resolve"
+    ),
     example("fnox -P production check --all", header = "Check another profile"),
     after_long_help = "See also:\n- Troubleshooting: https://fnox.jdx.dev/guide/troubleshooting\n- Missing secrets: https://fnox.jdx.dev/guide/missing-secrets"
 )]

@@ -12,7 +12,10 @@ use std::path::PathBuf;
 #[derive(Debug, usage_rs::Args)]
 #[usage(
     example("fnox plugin", header = "List installed and declared plugins"),
-    example("fnox plugin install", header = "Install every plugin the project declares"),
+    example(
+        "fnox plugin install",
+        header = "Install every plugin the project declares"
+    ),
     after_long_help = "See also:\n- Lua plugins: https://fnox.jdx.dev/providers/lua"
 )]
 pub struct PluginCommand {
@@ -71,8 +74,14 @@ pub struct PluginInstallCommand {
 /// reinstalling. `fnox plugin update` skips linked plugins.
 #[derive(Debug, usage_rs::Args)]
 #[usage(
-    example("fnox plugin link corp ~/src/fnox-plugin-corp", header = "Link a checkout"),
-    example("fnox plugin link corp ./plugin --force", header = "Replace an installed plugin"),
+    example(
+        "fnox plugin link corp ~/src/fnox-plugin-corp",
+        header = "Link a checkout"
+    ),
+    example(
+        "fnox plugin link corp ./plugin --force",
+        header = "Replace an installed plugin"
+    ),
     after_long_help = "See also:\n- Lua plugins: https://fnox.jdx.dev/providers/lua"
 )]
 pub struct PluginLinkCommand {

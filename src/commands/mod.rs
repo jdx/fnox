@@ -62,8 +62,14 @@ pub mod version;
 #[usage(version)]
 #[usage(
     example("fnox init", header = "Create a config in the current directory"),
-    example("fnox set DATABASE_URL", header = "Store a secret (prompts for the value)"),
-    example("fnox exec -- npm start", header = "Run a command with secrets in its environment"),
+    example(
+        "fnox set DATABASE_URL",
+        header = "Store a secret (prompts for the value)"
+    ),
+    example(
+        "fnox exec -- npm start",
+        header = "Run a command with secrets in its environment"
+    ),
     example("fnox -P staging list", header = "List the secrets in another profile"),
     after_long_help = "See also:\n- Quick start: https://fnox.jdx.dev/guide/quick-start\n- Configuration reference: https://fnox.jdx.dev/reference/configuration"
 )]

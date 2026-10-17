@@ -13,7 +13,10 @@ use crate::error::{FnoxError, Result};
 #[usage(alias("t"))]
 #[usage(
     example("fnox provider test op", header = "Test one provider"),
-    example("fnox -v provider test --all", header = "Test every provider and show errors"),
+    example(
+        "fnox -v provider test --all",
+        header = "Test every provider and show errors"
+    ),
     after_long_help = "See also:\n- Troubleshooting: https://fnox.jdx.dev/guide/troubleshooting"
 )]
 pub struct TestCommand {

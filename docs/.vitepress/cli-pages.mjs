@@ -60,7 +60,8 @@ for (const file of walk(root).filter((file) => file.endsWith(".md"))) {
       if (line === "See also:") return "## See also\n";
       return line.replace(
         /^- (.+?): (https?:\/\/\S+)$/,
-        (_, name, url) => `- [${name}](${url.replace(/^https:\/\/fnox\.jdx\.dev\//, "/")})`,
+        (_, name, url) =>
+          `- [${name}](${url.replace(/^https:\/\/fnox\.jdx\.dev\//, "/")})`,
       );
     })
     .join("\n");

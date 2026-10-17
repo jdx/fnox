@@ -14,7 +14,10 @@ use crate::error::{FnoxError, Result};
 #[usage(
     example("fnox remove OLD_TOKEN --dry-run", header = "Preview the change"),
     example("fnox remove OLD_TOKEN", header = "Remove a secret"),
-    example("fnox -P staging remove OLD_TOKEN", header = "Remove it from the staging profile"),
+    example(
+        "fnox -P staging remove OLD_TOKEN",
+        header = "Remove it from the staging profile"
+    ),
     after_long_help = "See also:\n- Config files: https://fnox.jdx.dev/guide/config-files"
 )]
 pub struct RemoveCommand {

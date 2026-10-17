@@ -14,7 +14,10 @@ use anyhow::Result;
 #[usage(
     example("eval \"$(fnox activate bash)\"", header = "Bash (add to ~/.bashrc)"),
     example("eval \"$(fnox activate zsh)\"", header = "Zsh (add to ~/.zshrc)"),
-    example("fnox activate fish | source", header = "Fish (add to ~/.config/fish/config.fish)"),
+    example(
+        "fnox activate fish | source",
+        header = "Fish (add to ~/.config/fish/config.fish)"
+    ),
     after_long_help = "See also:\n- Shell integration: https://fnox.jdx.dev/guide/shell-integration"
 )]
 pub struct ActivateCommand {

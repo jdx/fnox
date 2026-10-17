@@ -13,7 +13,10 @@ use crate::error::Result;
         "fnox completion bash > ~/.local/share/bash-completion/completions/fnox",
         header = "Install Bash completions"
     ),
-    example("fnox completion zsh > \"${fpath[1]}/_fnox\"", header = "Install Zsh completions"),
+    example(
+        "fnox completion zsh > \"${fpath[1]}/_fnox\"",
+        header = "Install Zsh completions"
+    ),
     example(
         "fnox completion fish > ~/.config/fish/completions/fnox.fish",
         header = "Install Fish completions"

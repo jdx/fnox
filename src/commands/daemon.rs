@@ -13,7 +13,10 @@ use crate::error::Result;
 #[derive(Debug, usage_rs::Args)]
 #[usage(
     example("fnox daemon status", header = "Check whether the daemon is running"),
-    example("FNOX_DAEMON=on fnox get DATABASE_URL", header = "Use the daemon for one command"),
+    example(
+        "FNOX_DAEMON=on fnox get DATABASE_URL",
+        header = "Use the daemon for one command"
+    ),
     after_long_help = "See also:\n- Daemon: https://fnox.jdx.dev/guide/daemon"
 )]
 pub struct DaemonCommand {
@@ -30,7 +33,10 @@ enum DaemonSubcommand {
     /// provider. Encrypted `fnox sync` caches in config files are not affected.
     #[usage(
         example("fnox daemon clear", header = "Clear the whole cache"),
-        example("fnox daemon clear API_TOKEN DB_PASSWORD", header = "Evict two secrets"),
+        example(
+            "fnox daemon clear API_TOKEN DB_PASSWORD",
+            header = "Evict two secrets"
+        ),
         after_long_help = "See also:\n- Daemon: https://fnox.jdx.dev/guide/daemon"
     )]
     Clear {

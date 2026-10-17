@@ -24,9 +24,18 @@ use std::path::PathBuf;
 /// also removes cache entries for secrets that no longer have a source.
 #[derive(usage_rs::Args)]
 #[usage(
-    example("fnox sync -p sync-age --local-file --dry-run", header = "Preview a local sync"),
-    example("fnox sync -p sync-age --local-file", header = "Cache every remote secret in fnox.local.toml"),
-    example("fnox sync -p sync-age --local-file DATABASE_URL", header = "Refresh one secret"),
+    example(
+        "fnox sync -p sync-age --local-file --dry-run",
+        header = "Preview a local sync"
+    ),
+    example(
+        "fnox sync -p sync-age --local-file",
+        header = "Cache every remote secret in fnox.local.toml"
+    ),
+    example(
+        "fnox sync -p sync-age --local-file DATABASE_URL",
+        header = "Refresh one secret"
+    ),
     after_long_help = "See also:\n- Sync: https://fnox.jdx.dev/guide/sync"
 )]
 pub struct SyncCommand {

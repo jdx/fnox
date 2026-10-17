@@ -12,7 +12,7 @@ Print the resolved value of one secret
 
 Resolves KEY for the active profile through its provider, a lease backend, or the daemon cache, and prints the value to stdout followed by a newline. A secret with `as_file = true` prints the path of a temporary file that holds the value instead.
 
-When the secret cannot be resolved, `if_missing` decides the outcome: with `warn` or `ignore`, fnox prints nothing and exits 0. To check that secrets resolve without printing them, use `fnox check`.
+When the secret cannot be resolved, `if_missing` decides the outcome: with `warn` or `ignore`, fnox prints nothing to stdout and exits 0. To check that secrets resolve without printing them, use `fnox check`.
 
 ## Arguments
 

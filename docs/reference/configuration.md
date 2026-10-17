@@ -1,235 +1,321 @@
 ---
-description: "Reference for fnox.toml settings, providers, secrets, profiles, imports, local overrides, caches, proxies, and leases."
+description: "Look up every fnox.toml field, its default, and how fnox merges global, project, profile, and local config files."
 ---
 
 # Configuration reference
 
-Use this reference for configuration loading, top-level settings, providers, secrets, and profiles. Start with the [quick start](/guide/quick-start) for a working file, or use the [provider catalog](/providers/overview) for provider-specific fields.
+`fnox.toml` declares providers, secrets, profiles, and the settings that control how fnox resolves and injects them. This page lists every field and how config files combine. For a walkthrough, see [config files](/guide/config-files). For provider-specific fields, see the [provider catalog](/providers/overview).
 
 ## JSON schema
 
-A JSON Schema is available for IDE autocompletion and validation:
-
-```text
-https://fnox.jdx.dev/schema.json
-```
-
-### Editor setup
-
-**VS Code** with [Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml):
+The schema at `https://fnox.jdx.dev/schema.json` provides completion and validation in editors that support TOML schemas, such as VS Code with Even Better TOML. Reference it from the first line of the file:
 
 ```toml
 #:schema https://fnox.jdx.dev/schema.json
-
-[providers]
-age = { type = "age", recipients = ["age1..."] }
 ```
 
-**JetBrains IDEs**: Add the schema URL in Settings > Languages & Frameworks > Schemas and DTDs > JSON Schema Mappings.
+## Files and load order
 
-## File location
+fnox merges config files in this order. A later file overrides an earlier one.
 
-The global config is the base layer. fnox then loads discovered project directories from outermost to innermost. At **each directory**, it applies:
+1. The global config, `config.toml` in [`FNOX_CONFIG_DIR`](/reference/environment#fnox-config-dir) (default: `~/.config/fnox/config.toml`).
+2. For each directory, from the filesystem root down to the current directory:
+   1. `fnox.toml`, `.fnox.toml`, `.config/fnox.toml`
+   2. `fnox.<profile>.toml`, `.fnox.<profile>.toml`, `.config/fnox.<profile>.toml` for each active profile, in order
+   3. `fnox.local.toml`, `.fnox.local.toml`, `.config/fnox.local.toml`
 
-1. `fnox.toml` (or `.fnox.toml`).
-2. `fnox.<profile>.toml` for each active non-default profile, in selection order.
-3. `fnox.local.toml` (or `.fnox.local.toml`).
+The upward search stops at the first directory whose config sets [`root = true`](#root); the global config still loads. Each file is merged over the files it [imports](#import). Run `fnox config-files` to list the files fnox finds for the current directory.
 
-A closer directory overrides an outer directory, including its local overrides. Provider and secret definitions with the same name are replaced as a unit; they are not merged field by field. The global directory follows [`FNOX_CONFIG_DIR`](/reference/environment#fnox-config-dir).
-
-An explicit path uses the separate behavior below. To see the actual stack for a command, run `fnox config-files`.
+| File                  | Purpose                                                                                                                                                                      |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fnox.toml`           | Project config, usually committed.                                                                                                                                           |
+| `fnox.<profile>.toml` | Loaded only while `<profile>` is active. Its top-level `providers`, `secrets`, `leases`, and `default_provider` belong to that profile. `fnox.default.toml` is never loaded. |
+| `fnox.local.toml`     | Personal overrides and `fnox sync --local-file` caches. Keep it out of git.                                                                                                  |
+| global `config.toml`  | Providers and secrets for every project on the machine. Create it with `fnox init --global`.                                                                                 |
 
 ### Explicit config paths
 
-Passing `-c, --config` with anything other than the bare default filename turns
-off the hierarchical search: fnox loads that one file plus any files it
-`import`s, and skips parent directories and their local overrides. The global
-config is still loaded as the base layer, just as `root = true` stops
-parent-directory recursion without skipping the global config.
+`-c, --config` with a path other than the bare name `fnox.toml` or `.fnox.toml` turns off directory discovery. fnox loads that file, the files it imports, and the global config, without parent directories, profile files, or local overrides. To load a file with no global layer, point `FNOX_CONFIG_DIR` at a directory without a `config.toml`:
 
-To load a config in complete isolation, point `FNOX_CONFIG_DIR` at a directory
-with no `config.toml`:
-
-```bash
+```sh
 FNOX_CONFIG_DIR=/nonexistent fnox -c ./ci.toml get MY_SECRET
 ```
 
-Use `fnox config-files` to see exactly which files a given directory and set of
-flags will load.
+### Merge rules
 
-### Global configuration
-
-The global config file stores machine-wide secrets and providers that apply to all projects:
-
-```bash
-# Initialize global config
-fnox init --global
-
-# After configuring an age provider, add a secret with hidden input
-fnox set MY_TOKEN --global --provider age
-
-# Add providers to global config (the `aws` type is AWS Secrets Manager)
-fnox provider add aws aws --global
-```
-
-**Location**: `~/.config/fnox/config.toml` (customizable via `FNOX_CONFIG_DIR`)
-
-**Use cases**:
-
-- Personal API tokens used across multiple projects
-- Machine-specific credentials
-- Default providers available everywhere
-
-## Basic structure
-
-```toml
-# Top-level settings
-if_missing = "warn"  # Global default for missing secrets
-import = ["./shared/secrets.toml"]  # Import other configs
-
-# Provider definitions
-[providers]
-PROVIDER_NAME = { type = "PROVIDER_TYPE" }  # ... provider-specific config ...
-
-# Secret definitions
-[secrets]
-SECRET_NAME = { provider = "PROVIDER_NAME", value = "...", default = "...", if_missing = "error", description = "..." }
-
-# Profile definitions
-[profiles.PROFILE_NAME]
-# Profiles support providers, secrets, leases, default_provider, and inherits
-```
-
-Secret names are environment variable names and must match
-`^[A-Za-z_][A-Za-z0-9_]*$`.
-
-## Top-level settings
-
-### `default_provider`
-
-Provider instance to use when a secret does not select one explicitly. It also supplies the default target for commands such as `fnox set` and `fnox sync`.
-
-```toml
-default_provider = "age"
-
-[providers.age]
-type = "age"
-recipients = ["age1..."] # Replace with your public recipient
-```
-
-If no provider is selected, `fnox set` writes a plaintext default. Configure a provider before storing sensitive values.
-
-### `root`
-
-Stop the parent-directory search at this file. The global config still loads.
-
-```toml
-root = true
-```
-
-### `prompt_auth`
-
-Allow fnox to offer a provider authentication command in a terminal. Defaults to `true`. `FNOX_PROMPT_AUTH` overrides this setting; `--non-interactive` also disables interactive authentication flows.
-
-```toml
-prompt_auth = false
-```
-
-### `age_key_file`
-
-Legacy top-level path to an age identity file. Prefer `key_file` on the individual age provider so identity selection stays with its provider configuration. See [age identity selection](/providers/age#set-decryption-key).
-
-### `if_missing`
-
-Global default behavior when secrets cannot be resolved.
-
-```toml
-if_missing = "error"  # or "warn", "ignore"
-```
-
-**Values:**
-
-- `"error"` - Fail if secret is missing
-- `"warn"` - Print warning and continue (default)
-- `"ignore"` - Silently skip missing secrets
-
-**Priority:** Overridden by secret-level `if_missing`, `FNOX_IF_MISSING`, and CLI flags. Only `FNOX_IF_MISSING_DEFAULT` and the built-in default rank lower.
-
-### `env`
-
-Default injection mode for all secrets in the config. Secrets that don't set their own `env` inherit this value.
-
-```toml
-env = "exec"  # or true, false
-```
-
-**Values:**
-
-- `true` - Inject into the shell (via shell integration / `fnox export`) and `fnox exec` subprocesses (default)
-- `"exec"` - Only inject into `fnox exec` subprocesses; never the interactive shell
-- `false` - Exclude from normal environment injection; explicit reads and internal provider or lease dependencies can still resolve the secret
-
-Setting `env = "exec"` at the top level keeps every secret out of the interactive shell by default — useful when AI coding agents or other tools run in your shell and would otherwise inherit all injected secrets. Applications still receive secrets when launched through `fnox exec -- <command>`, and individual secrets can opt back in with `env = true`:
-
-```toml
-env = "exec"  # nothing enters the interactive shell...
-
-[secrets]
-DATABASE_URL = { provider = "age", value = "..." }              # exec-only (inherited)
-HOMEBREW_GITHUB_API_TOKEN = { provider = "age", value = "...", env = true }  # ...except this
-```
-
-Note that this limits _ambient_ exposure: processes in your shell no longer see secret values in their environment. Anyone who can run commands in your shell can still invoke `fnox get` or `fnox exec` themselves — for a hard boundary, combine this with the [MCP server allowlist](/guide/mcp) and OS-level sandboxing.
-
-### `import`
-
-List of config files to import.
-
-```toml
-import = ["./shared/base.toml", "./envs/dev.toml"]
-```
-
-**Usage:**
-
-- Paths relative to current config file
-- Imported files merged into current config
-- Later imports override earlier ones
+| Field                                                                   | When a later file sets it                                                                       |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `providers.<name>`, `secrets.<name>`, `leases.<name>`, `plugins.<name>` | Replaces the earlier entry of that name as a whole. Fields are not merged.                      |
+| `profiles.<name>`                                                       | Merged: its providers, secrets, and leases by name; `inherits` and `default_provider` replaced. |
+| `default_provider`, `if_missing`, `env`, `prompt_auth`                  | Replaced.                                                                                       |
+| `daemon`, `mcp`                                                         | Merged field by field. `mcp.secrets` is replaced as a whole.                                    |
+| `proxy`                                                                 | Replaced as a whole, including every rule.                                                      |
 
 ### Path values
 
-Paths declared in config files are resolved relative to the config file that declares them. This applies to imports and provider filesystem paths such as `age.key_file`, `enpass.vault`, `enpass.keyfile`, `keepass.database`, `keepass.keyfile`, `lua.plugin` (when it is a path), `password-store.store_dir`, and `foks.home`.
+Relative paths in a config file resolve against the directory of the file that declares them. This applies to `import` and to these provider fields: `age.key_file`, `enpass.vault`, `enpass.keyfile`, `foks.home`, `keepass.database`, `keepass.keyfile`, `keeper-sm.config_file`, `kubernetes.kubeconfig`, `lua.plugin` (when it is a path), `password-store.store_dir`, and `plain.file`. A leading `~` expands to your home directory. Paths given on the command line resolve against the current directory.
+
+## File structure
 
 ```toml
-# project/fnox.toml
-import = ["./shared/secrets.toml"] # project/shared/secrets.toml
+default_provider = "age"
+if_missing = "warn"
 
-[providers.keepass]
-type = "keepass"
-database = "./secrets.kdbx" # project/secrets.kdbx
+[providers.age]
+type = "age"
+recipients = ["age1..."]
+
+[providers.aws]
+type = "aws-sm"
+region = "us-east-1"
+
+[secrets]
+DATABASE_URL = { provider = "age", value = "YWdl..." } # ciphertext, abbreviated
+
+[profiles.production.secrets]
+DATABASE_URL = { provider = "aws", value = "database-url" }
 ```
 
-Paths beginning with `~` expand to your home directory. Absolute paths are used unchanged. CLI path arguments remain relative to the current working directory, and environment variable paths keep their existing environment-specific behavior.
+## Top-level settings
 
-### `daemon`
+| Field              | Type                            | Default  | Description                                                                          |
+| ------------------ | ------------------------------- | -------- | ------------------------------------------------------------------------------------ |
+| `default_provider` | string                          | none     | Provider for secrets that do not name one, and the default target of write commands. |
+| `if_missing`       | `"error"`, `"warn"`, `"ignore"` | `"warn"` | Missing-secret behavior for secrets that do not set their own.                       |
+| `env`              | `true`, `"exec"`, `false`       | `true`   | Injection mode for secrets that do not set their own.                                |
+| `import`           | array of paths                  | `[]`     | Config files to merge underneath this one.                                           |
+| `root`             | boolean                         | `false`  | Stop the upward directory search at this file.                                       |
+| `prompt_auth`      | boolean                         | `true`   | Offer to run a provider's auth command when authentication fails.                    |
+| `age_key_file`     | path                            | none     | Accepted for compatibility; has no effect.                                           |
+| `providers`        | table                           | `{}`     | [Provider instances](#providers), by name.                                           |
+| `secrets`          | table                           | `{}`     | [Secrets](#secrets) for the default profile, by name.                                |
+| `profiles`         | table                           | `{}`     | [Named profiles](#profiles).                                                         |
+| `leases`           | table                           | `{}`     | [Lease backends](#lease-backend-settings), by name.                                  |
+| `plugins`          | table                           | `{}`     | [Lua plugin sources](#plugins), by name.                                             |
+| `daemon`           | table                           | none     | [Daemon settings](#daemon).                                                          |
+| `mcp`              | table                           | none     | [MCP server settings](#mcp).                                                         |
+| `proxy`            | table                           | none     | [Credential proxy rules](#proxy).                                                    |
 
-Enable memory-only daemon caching for supported read commands.
+### `default_provider`
+
+Names the provider for secrets that set a `value` but no `provider`. It is also the default target of `fnox set` and `fnox sync`, and of new secrets added in `fnox edit`. A profile's `default_provider` overrides the top-level one. When neither is set and exactly one provider is available, fnox uses that provider. When no provider applies, `fnox set` stores the value in plain text.
+
+### `if_missing`
+
+What fnox does when a secret resolves to nothing: `"error"` fails the command, `"warn"` prints a warning and continues, and `"ignore"` continues silently. The effective value is the first of these that is set:
+
+1. `--if-missing`
+2. `FNOX_IF_MISSING`
+3. The secret's `if_missing`
+4. The top-level `if_missing`
+5. `FNOX_IF_MISSING_DEFAULT`
+6. `"warn"`
+
+See [missing secrets](/guide/missing-secrets).
+
+### `env`
+
+Default injection mode for every secret that does not set [`env`](#env-1) itself. With `env = "exec"`, no secret enters the interactive shell unless it opts back in with `env = true`; `fnox exec` still injects them.
 
 ```toml
-[daemon]
-enabled = true
-idle_timeout = "8h"
+env = "exec"
+
+[secrets]
+DATABASE_URL = { provider = "age", value = "YWdl..." } # exec only, inherited
+GITHUB_TOKEN = { provider = "age", value = "YWdl...", env = true } # also in the shell
 ```
 
-**Fields:**
+This limits what other programs in your shell can read from the environment. It is not an access boundary: anything that can run commands in your shell can still run `fnox get`.
 
-- `enabled` - Enable daemon-backed resolution. Defaults to `false`.
-- `idle_timeout` - How long the daemon stays alive while idle. Defaults to `"8h"`. Supports values such as `"30m"`, `"8h"`, or `"1d"`.
+### `import`
 
-See [Per-User Daemon](/guide/daemon).
+Paths of config files to merge underneath this one, relative to this file. The importing file overrides its imports, and an earlier import overrides a later one. Imports are not recursive: an imported file's own `import` and `root` are ignored.
 
-### `plugins`
+```toml
+import = ["./shared/base.toml"]
+```
 
-Lua provider plugins to install, keyed by plugin name. Each value is a git URL, optionally followed by `#<ref>` to pin a tag, branch, or commit; `owner/repo` is shorthand for GitHub. fnox installs a declared plugin the first time a `lua` provider uses it, or when you run `fnox plugin install`.
+### `root`
+
+`root = true` stops the upward search for config files at this file's directory. The global config still loads.
+
+### `prompt_auth`
+
+When a provider fails to authenticate in a terminal, fnox offers to run its [`auth_command`](#auth-command). Set `prompt_auth = false` to turn this off. `FNOX_PROMPT_AUTH` overrides this setting, and `--non-interactive` turns off all prompts.
+
+### `age_key_file`
+
+Parsed for compatibility with older configs, but nothing reads it. Set [`key_file`](/providers/age#set-decryption-key) on the age provider, or set `FNOX_AGE_KEY_FILE`.
+
+## Providers
+
+```toml
+[providers.op]
+type = "1password"
+vault = "Engineering"
+```
+
+Every provider entry needs a `type`. These fields apply to every type; the rest depend on the type and are listed on each [provider page](/providers/overview).
+
+| Field          | Type    | Default             | Description                                                            |
+| -------------- | ------- | ------------------- | ---------------------------------------------------------------------- |
+| `type`         | string  | required            | Provider type, such as `age`, `1password`, or `aws-sm`.                |
+| `auth_command` | string  | the type's built-in | Command to offer when authentication fails. `""` turns off the prompt. |
+| `daemon_cache` | boolean | `true`              | Set `false` to stop the daemon caching values from this provider.      |
+
+Provider types: `1password`, `age`, `aws-kms`, `aws-ps`, `aws-sm`, `azure-ac`, `azure-kms`, `azure-sm`, `bitwarden`, `bitwarden-sm`, `doppler`, `enpass`, `fido2`, `foks`, `gcp-kms`, `gcp-sm`, `gopass`, `infisical`, `keepass`, `keeper-sm`, `keychain`, `kubernetes`, `lua`, `password-store`, `passwordstate`, `plain`, `proton-pass`, `vault`, `yubikey`.
+
+### `auth_command`
+
+```toml
+[providers.rbw]
+type = "bitwarden"
+backend = "rbw"
+auth_command = "rbw unlock"
+```
+
+### Secret references in provider fields
+
+Many provider fields accept `{ secret = "NAME" }` instead of a literal, so a provider's credentials can be secrets themselves. fnox looks the name up among the configured secrets first, then in the environment, and reports a dependency cycle as an error.
+
+```toml
+[providers.vault]
+type = "vault"
+address = "https://vault.example.com:8200"
+token = { secret = "VAULT_TOKEN" }
+
+[secrets]
+VAULT_TOKEN = { provider = "age", value = "YWdl..." } # ciphertext, abbreviated
+```
+
+See [secret references in provider config](/guide/config-files#secret-references-in-provider-config).
+
+## Secrets
+
+```toml
+[secrets]
+DATABASE_URL = { provider = "op", value = "Database/url", description = "Main database" }
+```
+
+Secret names are environment variable names: they must match `^[A-Za-z_][A-Za-z0-9_]*$`. Every field is optional; `API_KEY = {}` declares a secret that comes from the environment.
+
+| Field          | Type                            | Default            | Description                                                                      |
+| -------------- | ------------------------------- | ------------------ | -------------------------------------------------------------------------------- |
+| `provider`     | string                          | `default_provider` | Provider that holds or decrypts the value.                                       |
+| `value`        | string                          | none               | Ciphertext for encryption providers, or the item reference for remote providers. |
+| `default`      | string                          | none               | Fallback when the provider returns nothing or fails.                             |
+| `if_missing`   | `"error"`, `"warn"`, `"ignore"` | inherited          | Missing-secret behavior for this secret.                                         |
+| `env`          | `true`, `"exec"`, `false`       | top-level `env`    | Where the secret is injected as an environment variable.                         |
+| `as_file`      | boolean                         | `false`            | Inject the path of a temporary file holding the value.                           |
+| `json_path`    | string                          | none               | Extract a field from a JSON value, with dot notation for nesting.                |
+| `line`         | integer, 1 or more              | none               | Extract one line from a multi-line value.                                        |
+| `description`  | string                          | none               | Shown by `fnox list`.                                                            |
+| `daemon_cache` | boolean                         | `true`             | Set `false` to resolve this secret directly instead of from the daemon cache.    |
+| `sync`         | table                           | none               | Encrypted cache written by `fnox sync`.                                          |
+
+### Resolution order
+
+fnox resolves a secret from the first source that produces a value:
+
+1. The `sync` cache, decrypted with its provider. Without one, the `provider` and `value`.
+2. `default`, with any `${NAME}` references expanded.
+3. An environment variable with the secret's name.
+
+If none produces a value, [`if_missing`](#if-missing) decides the outcome. `json_path` and `line` apply to whichever value was found.
+
+### `value`
+
+For an encryption provider such as `age` or `aws-kms`, `value` is ciphertext that `fnox set` writes. For a remote provider such as `1password` or `aws-sm`, it names the item; each provider's page gives the format.
+
+```toml
+[secrets]
+DATABASE_URL = { provider = "age", value = "YWdl..." } # ciphertext, abbreviated
+STRIPE_KEY = { provider = "aws", value = "stripe-key" } # AWS Secrets Manager secret name
+```
+
+### `default`
+
+Used when the provider returns nothing, including after a provider error. `${NAME}` inside a default expands to another secret's resolved value, in any declaration order:
+
+```toml
+[secrets]
+API_BASE_URL = { default = "https://api.${BASE_URL}" }
+BASE_URL = { default = "example.com" }
+```
+
+An undefined reference or a cycle is an error. A reference to a secret that resolves to nothing under `warn` or `ignore` expands to an empty string. Expansion applies only to `default`.
+
+### `env` {#env-1}
+
+| Value            | Shell integration and `fnox export` | `fnox exec` | `fnox get` |
+| ---------------- | ----------------------------------- | ----------- | ---------- |
+| `true` (default) | yes                                 | yes         | yes        |
+| `"exec"`         | no                                  | yes         | yes        |
+| `false`          | no                                  | no          | yes        |
+
+`fnox export --all` includes all three. A provider or lease backend that depends on an `env = false` secret can still read it.
+
+### `as_file`
+
+fnox writes the value to a temporary file that only you can read, and sets the variable to the file's path. `fnox exec` deletes the file when the command exits. Store file contents with `fnox set KEY --from-file PATH`, which keeps them byte for byte, including trailing newlines.
+
+```toml
+[secrets]
+GOOGLE_APPLICATION_CREDENTIALS = { provider = "op", value = "GCP/key file", as_file = true }
+```
+
+### `json_path` and `line`
+
+`json_path` parses the value as JSON and extracts a field, using dot notation for nested keys. `line` returns the Nth line, counting from 1. They cannot be combined.
+
+```toml
+[secrets]
+DB_PASSWORD = { provider = "aws", value = "db-credentials", json_path = "credentials.password" }
+USERNAME = { provider = "pass", value = "master", line = 2 }
+```
+
+### `sync`
+
+`fnox sync` writes `sync = { provider = "...", value = "..." }`, where `value` is the secret encrypted with `provider`. Resolution uses it instead of the original provider until `fnox sync` replaces it or `fnox reencrypt` clears it. Let `fnox sync` maintain this field. See [sync](/guide/sync).
+
+## Profiles
+
+```toml
+[profiles.production]
+default_provider = "aws"
+
+[profiles.production.providers]
+aws = { type = "aws-sm", region = "us-east-1" }
+
+[profiles.production.secrets]
+DATABASE_URL = { provider = "aws", value = "database-url" }
+```
+
+| Field              | Type             | Description                                                  |
+| ------------------ | ---------------- | ------------------------------------------------------------ |
+| `inherits`         | array of strings | Profiles applied before this one, in order.                  |
+| `providers`        | table            | Providers added to the top-level providers for this profile. |
+| `secrets`          | table            | Secrets that override top-level secrets of the same name.    |
+| `leases`           | table            | Lease backends for this profile.                             |
+| `default_provider` | string           | Overrides the top-level `default_provider`.                  |
+
+Other fields are rejected. Settings such as `if_missing`, `env`, `daemon`, `mcp`, and `proxy` are top-level only.
+
+A named profile starts from the top-level secrets and providers, applies each profile in `inherits` in order, then its own tables; later entries win. `--no-defaults` or `FNOX_NO_DEFAULTS` drops the top-level secrets but keeps the top-level providers. The name `default` refers to the top level, and a `[profiles.default]` table is ignored. Select profiles with `-P` or `FNOX_PROFILE`; several comma-separated profiles apply left to right. See [profiles](/guide/profiles).
+
+## Lease backend settings
+
+```toml
+[leases.aws]
+type = "aws-sts"
+region = "us-east-1"
+role_arn = "arn:aws:iam::123456789012:role/dev-role"
+duration = "1h"
+```
+
+Define lease backends under `[leases.<name>]` or `[profiles.<profile>.leases.<name>]`. Every backend has a `type` and an optional `duration` (default: `15m`); the service may cap the actual lifetime. Types: [`aws-sts`](/leases/aws-sts), [`azure-token`](/leases/azure-token), [`cloudflare`](/leases/cloudflare), [`command`](/leases/command), [`gcp-iam`](/leases/gcp-iam), [`github-app`](/leases/github-app), [`github-oauth`](/leases/github-oauth), and [`vault`](/leases/vault). See [credential leases](/guide/leases).
+
+## `plugins`
 
 ```toml
 [plugins]
@@ -240,12 +326,41 @@ type = "lua"
 plugin = "corp"
 ```
 
-See [Lua plugins](/providers/lua).
+Maps a plugin name to its git source. A source is a git URL, optionally followed by `#<ref>` to pin a tag, branch, or commit; `owner/repo` is shorthand for GitHub. `fnox plugin install` installs declared plugins. See [Lua plugins](/providers/lua).
 
-### `proxy`
+## `daemon`
 
-Broker credentials into destination-scoped HTTPS requests without exposing real
-secret values to the child process.
+```toml
+[daemon]
+enabled = true
+idle_timeout = "8h"
+```
+
+| Field          | Type     | Default | Description                                                              |
+| -------------- | -------- | ------- | ------------------------------------------------------------------------ |
+| `enabled`      | boolean  | `false` | Resolve secrets through the per-user daemon. `FNOX_DAEMON` overrides it. |
+| `idle_timeout` | duration | `"8h"`  | How long the daemon runs without requests before it exits.               |
+
+See [daemon](/guide/daemon).
+
+## `mcp`
+
+```toml
+[mcp]
+tools = ["exec"]
+secrets = ["DATABASE_URL"]
+```
+
+| Field               | Type               | Default                  | Description                                                        |
+| ------------------- | ------------------ | ------------------------ | ------------------------------------------------------------------ |
+| `tools`             | array of strings   | `["get_secret", "exec"]` | Tools that `fnox mcp` offers.                                      |
+| `secrets`           | array of strings   | every secret             | Allowlist of secrets the tools can reach.                          |
+| `exec_timeout_secs` | integer, 1 or more | `300`                    | Time limit, in seconds, for a command run by the `exec` tool.      |
+| `redact_output`     | boolean            | `true`                   | Replace resolved secret values in `exec` output with `[REDACTED]`. |
+
+Redaction is not a sandbox: a command can transform a value before printing it. See [MCP server](/guide/mcp).
+
+## `proxy`
 
 ```toml
 [proxy]
@@ -255,465 +370,26 @@ audit = true
 [[proxy.rules]]
 secret = "GITHUB_TOKEN"
 domain = "api.github.com"
-header = "authorization"
 methods = ["GET", "POST"]
 paths = ["/repos/example/**"]
-placeholder = "ghp_000000000000000000000000000000000000"
 ```
 
-**Fields:**
-
-- `egress` - Behavior for destinations without rules: `"strict"` (default) or
-  `"permissive"`.
-- `audit` - Log safe request metadata. Defaults to `true`.
-- `rules` - Credential substitution rules.
-- `rules[].secret` - Secret name in the active profile.
-- `rules[].domain` - Exact TLS server name.
-- `rules[].env` - Child environment variable name. Defaults to the secret name.
-- `rules[].header` - Header in which substitution is allowed. Defaults to
-  `"authorization"`.
-- `rules[].methods` - Allowed HTTP methods. Empty allows all methods.
-- `rules[].paths` - Allowed path globs. Empty allows all paths.
-- `rules[].placeholder` - Optional placeholder passed to the child.
-
-Proxy policy is replaced as a unit during configuration layering. If a nearer,
-profile-specific, or local config defines `[proxy]`, it must restate every rule
-it intends to allow; fields and rules are not inherited from an earlier
-`[proxy]` table. This keeps partial overlays from silently combining authority.
-
-See [Credential Proxy](/guide/proxy).
-
-## MCP server settings
-
-```toml
-[mcp]
-tools = ["exec"]
-secrets = ["DATABASE_URL"]
-redact_output = true
-```
-
-- `tools`: exposed tools; defaults to `["get_secret", "exec"]`.
-- `secrets`: optional allowlist of secret names; omitted means all active-profile secrets are available.
-- `redact_output`: redact literal resolved values in subprocess output; defaults to `true`.
-
-Output redaction is not a sandbox. An agent-controlled command can transform or transmit credentials. See [MCP access and limits](/guide/mcp).
-
-## Lease backend settings
-
-Define backends under `[leases.<name>]` or `[profiles.<name>.leases.<backend>]`. Each backend has a `type` and its own fields. `duration` requests a lifetime; the service controls the actual expiry.
-
-```toml
-[leases.aws]
-type = "aws-sts"
-region = "us-east-1"
-role_arn = "arn:aws:iam::123456789012:role/dev-role"
-duration = "1h"
-```
-
-See [credential leases](/guide/leases) for authentication, caching, revocation, and all backend types.
-
-## Provider configuration
-
-```toml
-[providers.PROVIDER_NAME]
-type = "PROVIDER_TYPE"
-# ... provider-specific fields ...
-```
-
-### `auth_command`
-
-Override the authentication command for a specific provider instance. When provider authentication fails in a TTY, fnox prompts to run this command. By default, each provider type has a built-in auth command (e.g., `bw login` for Bitwarden, `op signin` for 1Password).
-
-```toml
-[providers]
-# Use rbw instead of the default bw CLI
-rbw = { type = "bitwarden", backend = "rbw", auth_command = "rbw unlock" }
-
-# Use a custom AWS SSO profile
-aws = { type = "aws-sm", region = "us-east-1", auth_command = "aws sso login --profile myprofile" }
-
-# Disable auth prompting for this provider
-vault = { type = "vault", address = "https://vault.example.com", auth_command = "" }
-```
-
-Setting `auth_command = ""` disables the auth prompt for that provider instance.
-
-### `daemon_cache`
-
-Disable daemon cache reuse for all secrets that use this provider.
-
-```toml
-[providers.op]
-type = "1password"
-vault = "Engineering"
-daemon_cache = false
-```
-
-### Provider-specific fields
-
-The [provider catalog](/providers/overview) links to authentication, configuration, and reference formats for every supported provider. Fields such as `region`, `vault`, `prefix`, and `key_file` apply only to the types that document them.
-
-Many provider fields accept `{ secret = "NAME" }` in place of a literal value. See [secret references in provider config](/guide/profiles#secret-references-in-provider-config). Avoid a dependency cycle in which a provider needs a secret stored in itself.
-
-## Secret configuration
-
-```toml
-[secrets]
-SECRET_NAME = { provider = "PROVIDER_NAME", value = "...", default = "...", if_missing = "error", description = "..." }
-```
-
-### Fields
-
-#### `provider`
-
-Provider instance to use for this secret. An explicit value overrides `default_provider`.
-
-```toml
-[secrets]
-DATABASE_URL = { provider = "age", value = "encrypted..." }
-```
-
-**Optional:** A secret can use `default_provider`, a plaintext `default`, or an existing environment variable. An empty definition such as `API_KEY = {}` can require a value supplied by the environment when no default provider applies.
-
-#### `value`
-
-Provider-specific value:
-
-- **Encryption providers** (age, aws-kms, etc.): Encrypted ciphertext
-- **Remote providers** (aws-sm, 1password, etc.): Secret name/reference
-
-```toml
-[secrets]
-# Encrypted ciphertext (age)
-DATABASE_URL = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC..." }
-
-# Remote reference (AWS)
-REMOTE_DATABASE_URL = { provider = "aws", value = "database-url" }  # Secret name in AWS Secrets Manager
-```
-
-#### `daemon_cache`
-
-Disable daemon cache reuse for this secret.
-
-```toml
-[secrets]
-PAYMENT_API_KEY = { provider = "op", value = "Payments/api-key", daemon_cache = false }
-```
-
-#### `default`
-
-Fallback value if secret cannot be resolved.
-
-```toml
-[secrets]
-DATABASE_URL = { provider = "age", value = "encrypted...", default = "postgresql://localhost/dev" }  # Fallback for local dev
-```
-
-Use `${SECRET_NAME}` to include another secret in a default value:
-
-```toml
-[secrets]
-API_BASE_URL = { default = "https://api.${BASE_URL}" }
-BASE_URL = { default = "example.com" }
-```
-
-`API_BASE_URL` resolves to `https://api.example.com`. Declaration order does not
-matter. Referenced secrets must be defined in the config and can resolve from a
-provider, a default, or an environment variable. Profile overrides also apply.
-
-Interpolation only works in `default` values. Resolution order is provider
-values, interpolated defaults, literal defaults, then environment variables.
-Undefined references and dependency cycles in an evaluated default are errors.
-If a referenced secret is defined but resolves to no value under a non-error
-`if_missing` policy, the reference expands to an empty string.
-
-**Use for:**
-
-- Non-sensitive defaults
-- Local development fallbacks
-- Optional configuration
-
-#### `if_missing`
-
-Behavior when secret cannot be resolved.
-
-```toml
-[secrets]
-DATABASE_URL = { provider = "aws", value = "database-url", if_missing = "error" }  # Fail if missing (critical secret)
-ANALYTICS_KEY = { provider = "aws", value = "analytics-key", if_missing = "ignore" }  # Silently skip if missing (optional)
-```
-
-**Values:** `"error"`, `"warn"`, `"ignore"`
-
-**Priority:** Overrides top-level `if_missing`, but overridden by env vars and CLI flags.
-
-#### `env`
-
-Where the secret is injected as an environment variable.
-
-```toml
-[secrets]
-GITHUB_TOKEN = { provider = "age", value = "..." }                    # true (default): shell + fnox exec
-DATABASE_URL = { provider = "age", value = "...", env = "exec" }      # only fnox exec subprocesses
-SIGNING_KEY  = { provider = "age", value = "...", env = false }       # not normally injected; explicit reads still work
-```
-
-**Values:**
-
-- `true` - Injected by shell integration and `fnox exec` (default)
-- `"exec"` - Only injected into `fnox exec` subprocesses, never the interactive shell
-- `false` - Never injected as an env var; retrieve explicitly with `fnox get`
-
-**Priority:** Overrides the top-level `env` default.
-
-`fnox export` follows shell semantics: `env = "exec"` and `env = false` secrets are excluded unless `--all` is passed.
-
-#### `as_file`
-
-Write the secret to an ephemeral temp file and set the env var to the file path instead of the value.
-
-```toml
-[secrets]
-GOOGLE_APPLICATION_CREDENTIALS = { provider = "op", value = "GCP Service Account/key file", as_file = true }
-```
-
-When setting a secret whose contents come from a file, use `--from-file` to
-preserve the file exactly, including trailing newlines:
-
-```bash
-fnox set SSH_PRIVATE_KEY --from-file ~/.ssh/id_ed25519
-```
-
-With `as_file = true`, fnox writes those exact contents to a restricted temporary
-file and injects its path instead of the secret value.
-
-#### `json_path`
-
-Extract a field from a JSON secret value (dot notation for nesting).
-
-```toml
-[secrets]
-DB_PASSWORD = { provider = "aws", value = "db-credentials", json_path = "credentials.password" }
-```
-
-#### `line`
-
-Extract the Nth line (1-indexed) from a multi-line secret value. Useful for providers that pack several related values into one entry. Mutually exclusive with `json_path`.
-
-```toml
-[secrets]
-USERNAME = { provider = "pass", value = "master", line = 2 }
-```
-
-#### `sync`
-
-An encrypted cache generated by `fnox sync`. Resolution uses this cache before contacting the original provider. Keep personal caches in an ignored local file and let sync maintain the fields:
-
-```toml
-[secrets.DATABASE_URL]
-provider = "op"
-value = "Database/url"
-sync = { provider = "sync-age", value = "encrypted-cache..." }
-```
-
-The ciphertext above is abbreviated. See [sync a local cache](/guide/sync) for setup and refresh behavior.
-
-#### `description`
-
-Human-readable description.
-
-```toml
-[secrets]
-DATABASE_URL = { provider = "age", value = "encrypted...", description = "Production database connection string" }
-```
-
-## Profile configuration
-
-Profiles allow environment-specific configuration:
-
-```toml
-# Default profile (no prefix)
-[secrets]
-DATABASE_URL = { provider = "age", value = "encrypted-dev..." }
-
-# Production profile
-[profiles.production]
-
-[profiles.production.providers]
-aws = { type = "aws-sm", region = "us-east-1" }
-
-[profiles.production.secrets]
-DATABASE_URL = { provider = "aws", value = "database-url" }
-```
-
-### Profile structure
-
-Profiles support `inherits`, `providers`, `secrets`, `leases`, and `default_provider`. Settings such as `if_missing`, `env`, `daemon`, `mcp`, and `proxy` belong at the top level or, where supported, on individual secrets. Unknown profile fields are rejected.
-
-```toml
-[profiles.PROFILE_NAME]
-default_provider = "PROVIDER_NAME"
-
-[profiles.PROFILE_NAME.providers]
-PROVIDER_NAME = { type = "PROVIDER_TYPE" }  # ... provider config ...
-
-[profiles.PROFILE_NAME.secrets]
-SECRET_NAME = { provider = "PROVIDER_NAME", value = "..." }  # ... secret config ...
-```
-
-### Profile inheritance
-
-Profiles inherit top-level secrets and providers:
-
-```toml
-# Top-level (inherited by all profiles)
-[secrets]
-LOG_LEVEL = { default = "info" }
-DATABASE_URL = { provider = "age", value = "encrypted-dev..." }
-
-# Production profile
-[profiles.production.secrets]
-DATABASE_URL = { provider = "aws", value = "prod-db" }  # Overrides top-level DATABASE_URL
-# Inherits LOG_LEVEL="info" from top-level
-```
-
-You can disable this merge behavior at runtime:
-
-```bash
-fnox exec --profile production --no-defaults -- ./deploy.sh
-```
-
-With `--no-defaults`, top-level secrets are excluded for a named profile. Secrets from selected profiles and their inherited profiles still apply, and top-level providers remain available.
-
-Profiles can selectively inherit other named profiles as an ordered overlay:
-
-```toml
-[profiles.api-local]
-inherits = ["openai", "database-local", "no-log-upload"]
-
-[profiles.api-local-john]
-inherits = ["api-local", "openai-john"]
-```
-
-Inherited profiles are applied before the profile that declares `inherits`.
-Later inherited profiles override earlier ones, and declarations directly on
-the selected profile override all of them. Inheritance includes secrets,
-providers, lease backends, and `default_provider`.
-
-## Complete example
-
-```toml
-# Global settings
-if_missing = "warn"
-import = ["./shared/common.toml"]
-
-# Providers
-[providers]
-age = { type = "age", recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"] }
-aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp/" }
-
-# Default profile secrets
-[secrets]
-DATABASE_URL = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdC...", default = "postgresql://localhost/dev", description = "Database connection string" }
-JWT_SECRET = { provider = "age", value = "encrypted...", if_missing = "error" }
-LOG_LEVEL = { default = "info" }
-
-# Production profile
-[profiles.production]
-
-[profiles.production.providers]
-aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp-prod/" }
-
-[profiles.production.secrets]
-DATABASE_URL = { provider = "aws", value = "database-url", description = "Production database", if_missing = "error" }
-JWT_SECRET = { provider = "aws", value = "jwt-secret", if_missing = "error" }
-# Inherits LOG_LEVEL from top-level
-```
-
-## Local overrides
-
-Create `fnox.local.toml` alongside `fnox.toml` for local overrides:
-
-```toml
-# fnox.local.toml (gitignored)
-
-[secrets]
-DATABASE_URL = { default = "postgresql://localhost/mylocal" }  # Override for local development
-DEBUG_MODE = { default = "true" }
-```
-
-**Important:** Add to `.gitignore`:
-
-```text
-fnox.local.toml
-```
-
-## Profile-specific config files
-
-You can create environment-specific config files that load based on the active
-profile(s). When multiple profiles are active, each profile's config file is
-loaded in order:
-
-```bash
-# Directory structure
-project/
-├── fnox.toml              # Base config
-├── fnox.production.toml   # Production overrides
-├── fnox.staging.toml      # Staging overrides
-├── fnox.development.toml  # Development overrides
-└── fnox.local.toml        # Local overrides (gitignored)
-```
-
-Example usage:
-
-```bash
-# Use default config (fnox.toml only)
-fnox exec -- npm start
-
-# Use production config (fnox.toml + fnox.production.toml)
-FNOX_PROFILE=production fnox exec -- ./deploy.sh
-
-# Use staging config (fnox.toml + fnox.staging.toml)
-FNOX_PROFILE=staging fnox exec -- ./deploy.sh
-
-# Compose multiple profiles (fnox.toml + fnox.aws.toml + fnox.prod.toml)
-FNOX_PROFILE=aws,prod fnox exec -- ./app
-```
-
-**Key differences:**
-
-- `fnox.<profile>.toml` files are **committed to git** (environment-specific, but shared with team)
-- `fnox.local.toml` is **gitignored** (machine-specific, personal overrides)
-- Profile-specific files work with the default profile's secrets, not `[profiles.xxx]` sections
-- `fnox.default.toml` is **not loaded** (use `fnox.toml` instead)
-- With multiple active profiles, config files are loaded in profile order (later profiles override earlier)
-
-## Hierarchical configuration
-
-fnox searches parent directories for `fnox.toml` files:
-
-```text
-project/
-├── fnox.toml              # Root config
-└── services/
-    └── api/
-        └── fnox.toml      # API config (inherits from root)
-```
-
-Merge order (lowest to highest priority):
-
-1. **Global config** (`~/.config/fnox/config.toml`)
-2. Root `fnox.toml`
-3. Root `fnox.<profile>.toml` for each active profile (in profile order)
-4. Root `fnox.local.toml`
-5. Child `fnox.toml`
-6. Child `fnox.<profile>.toml` for each active profile (in profile order)
-7. Child `fnox.local.toml`
-
-**Note**: Setting `root = true` in a `fnox.toml` stops the parent-directory search at that file. The global config is always loaded, even when `root = true` stops parent directory recursion.
-
-## Next steps
-
-- [CLI Reference](/cli/) - All available commands
-- [Environment Variables](/reference/environment) - Environment variable reference
-- [Providers Overview](/providers/overview) - Available providers
+| Field                 | Type                       | Default           | Description                                                             |
+| --------------------- | -------------------------- | ----------------- | ----------------------------------------------------------------------- |
+| `egress`              | `"strict"`, `"permissive"` | `"strict"`        | Reject destinations without a rule, or tunnel them without credentials. |
+| `audit`               | boolean                    | `true`            | Log request metadata. Headers, bodies, and values are never logged.     |
+| `rules[].secret`      | string                     | required          | Secret to inject, from the active profile.                              |
+| `rules[].domain`      | string                     | required          | Exact TLS server name the secret may be sent to.                        |
+| `rules[].env`         | string                     | `rules[].secret`  | Variable that holds the placeholder in the command's environment.       |
+| `rules[].header`      | string                     | `"authorization"` | Header, case-insensitive, in which the placeholder is replaced.         |
+| `rules[].methods`     | array of strings           | every method      | Allowed HTTP methods.                                                   |
+| `rules[].paths`       | array of globs             | every path        | Allowed URL paths.                                                      |
+| `rules[].placeholder` | string                     | generated         | Placeholder value given to the command.                                 |
+
+A later config file that sets `[proxy]` replaces the whole table, so it must restate every rule it allows. See [credential proxy](/guide/proxy).
+
+## See also
+
+- [Config files](/guide/config-files): how global, project, profile, and local files work together.
+- [Environment variables](/reference/environment): variables that override these settings.
+- [Provider catalog](/providers/overview): fields and reference formats for each provider type.

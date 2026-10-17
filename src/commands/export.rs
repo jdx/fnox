@@ -42,8 +42,14 @@ pub enum ExportFormat {
 #[usage(
     example("fnox export", header = "Print dotenv lines"),
     example("fnox export --format json", header = "Print JSON"),
-    example("eval \"$(fnox export --format shell)\"", header = "Load secrets into the current shell"),
-    example("(umask 077 && fnox export -o .env)", header = "Write a private .env file"),
+    example(
+        "eval \"$(fnox export --format shell)\"",
+        header = "Load secrets into the current shell"
+    ),
+    example(
+        "(umask 077 && fnox export -o .env)",
+        header = "Write a private .env file"
+    ),
     after_long_help = "See also:\n- Import and export: https://fnox.jdx.dev/guide/import-export"
 )]
 pub struct ExportCommand {

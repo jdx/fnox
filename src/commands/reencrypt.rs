@@ -23,9 +23,15 @@ use std::path::PathBuf;
 /// to rebuild them.
 #[derive(usage_rs::Args)]
 #[usage(
-    example("fnox reencrypt -p age --dry-run", header = "Preview which secrets change"),
+    example(
+        "fnox reencrypt -p age --dry-run",
+        header = "Preview which secrets change"
+    ),
     example("fnox reencrypt -p age", header = "Re-encrypt every age secret"),
-    example("fnox -P staging reencrypt -p age --force", header = "Re-encrypt another profile without a prompt"),
+    example(
+        "fnox -P staging reencrypt -p age --force",
+        header = "Re-encrypt another profile without a prompt"
+    ),
     after_long_help = "See also:\n- Teams: https://fnox.jdx.dev/guide/teams\n- Age: https://fnox.jdx.dev/providers/age"
 )]
 pub struct ReencryptCommand {

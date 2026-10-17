@@ -11,7 +11,10 @@ use crate::error::Result;
 #[usage(alias_hidden = "profile")]
 #[usage(
     example("fnox profiles", header = "List profiles"),
-    example("fnox -P aws,staging list", header = "Layer two profiles for one command"),
+    example(
+        "fnox -P aws,staging list",
+        header = "Layer two profiles for one command"
+    ),
     after_long_help = "See also:\n- Profiles: https://fnox.jdx.dev/guide/profiles"
 )]
 pub struct ProfilesCommand {

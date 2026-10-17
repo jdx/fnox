@@ -9,7 +9,10 @@ use crate::error::Result;
 #[usage(alias("ls"))]
 #[usage(
     example("fnox provider list", header = "List providers"),
-    example("fnox -P production provider list", header = "List another profile's providers"),
+    example(
+        "fnox -P production provider list",
+        header = "List another profile's providers"
+    ),
     after_long_help = "See also:\n- Providers: https://fnox.jdx.dev/providers/overview"
 )]
 pub struct ListCommand {

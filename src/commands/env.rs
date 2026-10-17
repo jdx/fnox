@@ -37,13 +37,22 @@ impl From<EnvFor> for EnvScope {
 /// injected without resolving anything.
 #[derive(Debug, usage_rs::Args)]
 #[usage(
-    example("fnox env --json", header = "Print the environment fnox exec would use"),
+    example(
+        "fnox env --json",
+        header = "Print the environment fnox exec would use"
+    ),
     example(
         "fnox env --json --keys DATABASE_URL,STRIPE_KEY",
         header = "Resolve only some keys"
     ),
-    example("fnox env --json --for shell", header = "Print what shell integration would load"),
-    example("fnox env --json --describe", header = "List keys without resolving values"),
+    example(
+        "fnox env --json --for shell",
+        header = "Print what shell integration would load"
+    ),
+    example(
+        "fnox env --json --describe",
+        header = "List keys without resolving values"
+    ),
     after_long_help = "See also:\n- fnox env JSON: https://fnox.jdx.dev/reference/env-json\n- Running commands: https://fnox.jdx.dev/guide/running-commands"
 )]
 pub struct EnvCommand {

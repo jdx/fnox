@@ -17,7 +17,10 @@ use strum::EnumString;
 #[derive(Debug, usage_rs::Args)]
 #[usage(
     example("fnox lease list --active", header = "List active leases"),
-    example("fnox exec -- aws s3 ls", header = "Let fnox exec create or reuse a lease"),
+    example(
+        "fnox exec -- aws s3 ls",
+        header = "Let fnox exec create or reuse a lease"
+    ),
     after_long_help = "See also:\n- Credential leases: https://fnox.jdx.dev/guide/leases"
 )]
 pub struct LeaseCommand {
@@ -55,12 +58,18 @@ pub enum OutputFormat {
 /// else 15 minutes, and cannot exceed the backend's maximum.
 #[derive(Debug, usage_rs::Args)]
 #[usage(
-    example("fnox lease create aws --duration 30m", header = "Create a 30-minute lease"),
+    example(
+        "fnox lease create aws --duration 30m",
+        header = "Create a 30-minute lease"
+    ),
     example(
         "eval \"$(fnox lease create aws --format env)\"",
         header = "Export the credentials into the current shell"
     ),
-    example("fnox lease create aws --interactive", header = "Prompt for missing backend credentials"),
+    example(
+        "fnox lease create aws --interactive",
+        header = "Prompt for missing backend credentials"
+    ),
     after_long_help = "See also:\n- Credential leases: https://fnox.jdx.dev/guide/leases"
 )]
 pub struct LeaseCreateCommand {
@@ -98,7 +107,10 @@ pub struct LeaseCreateCommand {
 #[derive(Debug, usage_rs::Args)]
 #[usage(
     example("fnox lease list", header = "List every recorded lease"),
-    example("fnox lease list --active", header = "List leases that are still valid"),
+    example(
+        "fnox lease list --active",
+        header = "List leases that are still valid"
+    ),
     after_long_help = "See also:\n- Credential leases: https://fnox.jdx.dev/guide/leases"
 )]
 pub struct LeaseListCommand {

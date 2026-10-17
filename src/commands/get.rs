@@ -14,12 +14,15 @@ use indexmap::IndexMap;
 /// the value instead.
 ///
 /// When the secret cannot be resolved, `if_missing` decides the outcome: with
-/// `warn` or `ignore`, fnox prints nothing and exits 0. To check that secrets
-/// resolve without printing them, use `fnox check`.
+/// `warn` or `ignore`, fnox prints nothing to stdout and exits 0. To check that
+/// secrets resolve without printing them, use `fnox check`.
 #[derive(Debug, usage_rs::Args)]
 #[usage(
     example("fnox get DATABASE_URL", header = "Print a secret"),
-    example("fnox -P staging get DATABASE_URL", header = "Read from another profile"),
+    example(
+        "fnox -P staging get DATABASE_URL",
+        header = "Read from another profile"
+    ),
     example(
         "fnox get TLS_CERT --base64-decode > cert.pem",
         header = "Decode a base64 value into a file"
