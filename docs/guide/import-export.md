@@ -77,6 +77,8 @@ fnox export --profile production --format json --all |
 
 ### Kubernetes
 
+This uses process substitution, so run it in Bash or Zsh:
+
 ```sh
 kubectl create secret generic app-secrets --from-env-file=<(fnox export)
 ```

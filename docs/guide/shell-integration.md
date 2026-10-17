@@ -93,7 +93,7 @@ export FNOX_SHELL_OUTPUT=debug    # verbose, for troubleshooting
 
 The hook reloads when a config file or an `FNOX_*` variable changes, not when a value changes in a remote vault.
 
-- With a [sync cache](/guide/sync), run `fnox sync` again. It rewrites `fnox.local.toml`, so the hook picks up the new values at the next prompt.
+- With a [sync cache](/guide/sync), run the same `fnox sync --provider <your-sync-provider> --local-file --force` command you used to create the cache. It rewrites `fnox.local.toml`, so the hook picks up the new values at the next prompt.
 - With the [daemon](/guide/daemon), run `fnox daemon clear`, then open a new terminal.
 
 ## See also

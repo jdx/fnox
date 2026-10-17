@@ -50,7 +50,7 @@ This writes under `[profiles.staging.secrets]`.
 
 ## Leave out top-level secrets
 
-By default every profile includes the top-level secrets. `--no-defaults` (or `FNOX_NO_DEFAULTS=true`) drops them, so only the selected profile's own secrets are used. Top-level providers are still available.
+By default every profile includes the top-level secrets. `--no-defaults` (or `FNOX_NO_DEFAULTS=true`) drops them. The selected profile's secrets remain, including those from profiles it inherits or that you stack with it. Top-level providers are still available.
 
 ```sh
 fnox exec --profile production --no-defaults -- ./deploy.sh

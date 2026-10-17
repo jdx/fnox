@@ -26,7 +26,7 @@ if_missing = "warn"
 [providers.age]
 type = "age"
 recipients = [
-  "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p", # example
+  "age1...", # replace with your public key before running `fnox set`
 ]
 
 # Read items from 1Password through the `op` CLI.
