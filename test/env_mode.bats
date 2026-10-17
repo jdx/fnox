@@ -104,3 +104,34 @@ EOF
 	assert_output --partial "exec-value"
 	refute_output --partial "hidden-value"
 }
+
+@test "exec resolves env=false secrets only when an injected secret depends on them" {
+	mkdir -p "$TEST_TEMP_DIR/bin"
+	cat >"$TEST_TEMP_DIR/bin/pass" <<'STUB'
+#!/bin/sh
+for last; do :; done
+printf '%s\n' "$last" >>"$PASS_CALLS"
+printf 'v-%s\n' "$last"
+STUB
+	chmod +x "$TEST_TEMP_DIR/bin/pass"
+	export PATH="$TEST_TEMP_DIR/bin:$PATH"
+	export PASS_CALLS="$TEST_TEMP_DIR/pass-calls"
+
+	cat >fnox.toml <<'EOF'
+root = true
+
+[providers.pass]
+type = "password-store"
+
+[secrets]
+UNUSED = { provider = "pass", value = "unused/path", env = false }
+BASE_URL = { provider = "pass", value = "base/path", env = false }
+APP_URL = { default = "${BASE_URL}/app" }
+EOF
+
+	run "$FNOX_BIN" exec -- sh -c 'echo "${APP_URL}:${BASE_URL:-unset}:${UNUSED:-unset}"'
+	assert_success
+	assert_output "v-base/path/app:unset:unset"
+	run grep -c unused/path "$PASS_CALLS"
+	assert_output 0
+}
