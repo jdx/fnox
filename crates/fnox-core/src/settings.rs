@@ -24,28 +24,25 @@ use usage_rs::config::{CliLayer, EnvLayer, Layers, SourceKind, Value, resolve};
 /// `config` block through `#[usage(config = ...)]` on the root.
 #[derive(usage_rs::Config, Debug, Clone, PartialEq)]
 pub struct SettingsData {
-    /// Path to a file containing the age encryption key.
+    /// Path to an age identity file for decrypting age secrets.
     ///
-    /// Prefer setting key_file on the age provider itself, or FNOX_AGE_KEY for inline key
-    /// content. The --age-key-file flag is deprecated and hidden; the FNOX_AGE_KEY_FILE
-    /// environment variable remains supported.
-    ///
-    /// Priority (highest to lowest): CLI > Environment > Default
+    /// Used only when `FNOX_AGE_KEY` is unset and the age provider sets neither `identity`
+    /// nor `key_file`; without it, fnox falls back to `age.txt` in the fnox config directory.
+    /// Prefer `key_file` on the provider. The `--age-key-file` flag is deprecated and hidden,
+    /// and overrides `FNOX_AGE_KEY_FILE` when both are set.
     #[usage(
         env = "FNOX_AGE_KEY_FILE",
         cli("--age-key-file"),
         since = "0.1.0",
-        example("fnox get MY_SECRET --age-key-file ~/.age/key.txt"),
         example("FNOX_AGE_KEY_FILE=~/.age/key.txt fnox get MY_SECRET")
     )]
     pub age_key_file: Option<PathBuf>,
 
-    /// Configuration profile to use for secrets retrieval.
+    /// Profiles to use, separated by commas.
     ///
-    /// Profiles allow you to maintain multiple configurations (e.g., dev, staging, prod)
-    /// in a single fnox.toml file.
-    ///
-    /// Priority (highest to lowest): CLI > Environment > Default
+    /// Selects which `[profiles.<name>]` tables and `fnox.<name>.toml` files apply. With
+    /// several profiles, later ones override earlier ones. `--profile` overrides
+    /// `FNOX_PROFILE`.
     #[usage(
         env = "FNOX_PROFILE",
         cli("--profile", "-P"),
@@ -53,14 +50,15 @@ pub struct SettingsData {
         default("default"),
         since = "0.1.0",
         example("fnox get MY_SECRET --profile production"),
-        example("FNOX_PROFILE=staging fnox get MY_SECRET")
+        example("FNOX_PROFILE=aws,staging fnox exec -- ./deploy.sh")
     )]
     pub profile: Vec<String>,
 
-    /// When a non-default profile is selected, do not merge top-level [secrets] into
-    /// the profile. Only [profiles.<name>.secrets] will be used.
+    /// Use only the selected profile's secrets, without top-level `[secrets]`.
     ///
-    /// Priority (highest to lowest): CLI > Environment > Default
+    /// By default a named profile inherits the top-level `[secrets]` table. With this set,
+    /// only `[profiles.<name>.secrets]` (and the profile's own files) apply. `--no-defaults`
+    /// overrides `FNOX_NO_DEFAULTS`.
     #[usage(
         env = "FNOX_NO_DEFAULTS",
         cli("--no-defaults"),
@@ -71,30 +69,28 @@ pub struct SettingsData {
     )]
     pub no_defaults: bool,
 
-    /// Control how much the shell integration prints when it loads or unloads secrets.
+    /// How much shell integration prints when it loads or unloads secrets.
     ///
-    /// Available modes: "none" prints nothing, "normal" prints a summary when secrets are
-    /// loaded or unloaded (default), and "debug" prints detailed information, including
-    /// why the hook exited early.
-    ///
-    /// Priority: Environment > Default
+    /// `none` prints nothing, `normal` prints the keys that were loaded or unloaded, and
+    /// `debug` also explains what the hook did, including why it exited early. `off`,
+    /// `false`, and `0` also mean `none`; `verbose` also means `debug`. Any other value
+    /// means `normal`.
     #[usage(
         env = "FNOX_SHELL_OUTPUT",
         default = "normal",
         since = "0.1.0",
-        example("FNOX_SHELL_OUTPUT=none fnox activate bash"),
-        example("FNOX_SHELL_OUTPUT=debug fnox activate zsh")
+        example("export FNOX_SHELL_OUTPUT=none"),
+        example("export FNOX_SHELL_OUTPUT=debug")
     )]
     pub shell_integration_output: String,
 
-    /// Runtime override for the if_missing behavior when a secret cannot be resolved.
+    /// What to do when any secret cannot be resolved, overriding the config.
     ///
-    /// Available modes: "error" fails the command, "warn" prints a warning and continues,
-    /// and "ignore" silently skips the missing secret. This overrides any if_missing value
-    /// set in the configuration.
-    ///
-    /// Priority (highest to lowest): CLI flag > Environment > Secret level >
-    /// Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)
+    /// `error` fails the command, `warn` prints a warning and continues, and `ignore`
+    /// continues silently. This beats every `if_missing` in the config. The full order is:
+    /// `--if-missing`, `FNOX_IF_MISSING`, the secret's `if_missing`, the top-level
+    /// `if_missing`, `FNOX_IF_MISSING_DEFAULT`, then `warn`. An unknown value prints a
+    /// warning and means `warn`.
     #[usage(
         env = "FNOX_IF_MISSING",
         cli("--if-missing"),
@@ -104,13 +100,12 @@ pub struct SettingsData {
     )]
     pub if_missing: Option<String>,
 
-    /// HTTP request timeout for lease backend API calls (Vault, GCP IAM, etc.).
+    /// Timeout for HTTP requests that fnox makes itself.
     ///
-    /// Accepts a duration such as "30s", "2m", or "1h30m". Prevents fnox exec from hanging
-    /// indefinitely on slow or unreachable servers. Set to "0" to disable the timeout (not
-    /// recommended). An unparseable value falls back to the default.
-    ///
-    /// Priority: Environment > Default
+    /// Applies to lease backends such as Vault, GCP IAM, GitHub, and Cloudflare, to Lua
+    /// plugin HTTP calls, and to the Azure App Configuration provider, so a slow server
+    /// cannot hang `fnox exec`. Accepts a duration such as `30s`, `2m`, or `1h30m`. `0`
+    /// disables the timeout; a value that does not parse means `30s`.
     #[usage(
         env = "FNOX_HTTP_TIMEOUT",
         default = "30s",
@@ -120,19 +115,17 @@ pub struct SettingsData {
     )]
     pub http_timeout: String,
 
-    /// Fallback if_missing behavior for secrets that do not set one in the configuration.
+    /// What to do when a secret cannot be resolved, if the config does not say.
     ///
-    /// Available modes: "error" fails the command, "warn" prints a warning and continues
-    /// (default), and "ignore" silently skips the missing secret. Unlike FNOX_IF_MISSING,
-    /// this does not override values set in the configuration.
-    ///
-    /// Priority (highest to lowest): CLI flag > FNOX_IF_MISSING > Secret level >
-    /// Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)
+    /// `error` fails the command, `warn` prints a warning and continues (the built-in
+    /// default), and `ignore` continues silently. Unlike `FNOX_IF_MISSING`, it applies only
+    /// to secrets with no `if_missing` in the secret or at the top level of the config. An
+    /// unknown value prints a warning and means `warn`.
     #[usage(
         env = "FNOX_IF_MISSING_DEFAULT",
         since = "1.1.0",
-        example("export FNOX_IF_MISSING_DEFAULT=error  # Strict by default"),
-        example("export FNOX_IF_MISSING_DEFAULT=ignore  # Lenient by default")
+        example("export FNOX_IF_MISSING_DEFAULT=error"),
+        example("export FNOX_IF_MISSING_DEFAULT=ignore")
     )]
     pub if_missing_default: Option<String>,
 }

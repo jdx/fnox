@@ -2,13 +2,23 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
 
+/// Remove a provider entry from a config file
+///
+/// Deletes the `[providers.<PROVIDER>]` entry from the config file in the
+/// current directory, or the global config with `--global`. Secrets that still
+/// reference the provider will fail to resolve. Nothing is deleted from the
+/// provider itself.
 #[derive(Debug, usage_rs::Args)]
 #[usage(alias("rm", "delete"))]
+#[usage(
+    example("fnox provider remove old-vault", header = "Remove a provider"),
+    after_long_help = "See also:\n- Providers: https://fnox.jdx.dev/providers/overview"
+)]
 pub struct RemoveCommand {
-    /// Provider name
+    /// Provider to remove
     pub provider: String,
 
-    /// Remove from the global config file (~/.config/fnox/config.toml)
+    /// Remove from the global config file (`~/.config/fnox/config.toml`)
     #[usage(short = 'g', long)]
     pub global: bool,
 }

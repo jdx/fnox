@@ -9,38 +9,68 @@ use regex::Regex;
 use std::io;
 use std::path::PathBuf;
 
-/// Sync secrets from remote providers to a local encryption provider
+/// Cache remote secrets locally, encrypted with a local provider
+///
+/// Fetches each secret whose provider differs from the target, encrypts the
+/// value with the target encryption provider, and stores the ciphertext in the
+/// secret's `sync` field. Later reads decrypt that copy instead of calling the
+/// source provider. The original reference stays in place, so run sync again
+/// after source values change.
+///
+/// The target is `--provider`, else `default_provider`, and must be an
+/// encryption provider. The cache is written to the `-c` file (default:
+/// `fnox.toml`), the global config with `--global`, or with `--local-file` a
+/// personal `fnox.local.toml` to keep out of git. A full `--local-file` sync
+/// also removes cache entries for secrets that no longer have a source.
 #[derive(usage_rs::Args)]
+#[usage(
+    example(
+        "fnox sync -p sync-age --local-file --dry-run",
+        header = "Preview a local sync"
+    ),
+    example(
+        "fnox sync -p sync-age --local-file",
+        header = "Cache every remote secret in fnox.local.toml"
+    ),
+    example(
+        "fnox sync -p sync-age --local-file DATABASE_URL",
+        header = "Refresh one secret"
+    ),
+    after_long_help = "See also:\n- Sync: https://fnox.jdx.dev/guide/sync"
+)]
 pub struct SyncCommand {
-    /// Only sync these specific secret keys
+    /// Sync only these keys
     keys: Vec<String>,
 
-    /// Skip confirmation prompt
+    /// Write without asking for confirmation
     #[usage(short, long)]
     force: bool,
 
-    /// Write to global config (~/.config/fnox/config.toml)
+    /// Write the cache to the global config file (`~/.config/fnox/config.toml`)
     #[usage(short = 'g', long)]
     global: bool,
 
-    /// Show what would be done without making changes
+    /// List the secrets that would be synced without changing anything
     #[usage(short = 'n', long)]
     dry_run: bool,
 
-    /// Target encryption provider (defaults to default_provider)
+    /// Encryption provider to cache values with (default: `default_provider`)
     #[usage(short = 'p', long)]
     provider: Option<String>,
 
-    /// Only sync secrets from this source provider
+    /// Sync only secrets from this source provider
     #[usage(short = 's', long)]
     source: Option<String>,
 
-    /// Only sync matching secrets (regex pattern)
+    /// Sync only keys matching this regular expression
     #[usage(long)]
     filter: Option<String>,
 
-    /// Write synced secrets to the local override file next to the config file:
-    /// fnox.local.toml, or .fnox.local.toml when that file exists or the config is .fnox.toml
+    /// Write the cache to the local override file beside the config
+    ///
+    /// The file is `fnox.local.toml`, or `.fnox.local.toml` when that file exists
+    /// or the config is `.fnox.toml`. Requires `-c` to be a bare `fnox.toml` or
+    /// `.fnox.toml`.
     #[usage(long, conflicts = "--global")]
     local_file: bool,
 }

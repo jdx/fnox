@@ -13,8 +13,8 @@
           {
             "name": "SHELL",
             "usage": "[SHELL]",
-            "help": "Shell to generate activation code for (bash, zsh, fish, nu, pwsh)",
-            "help_first_line": "Shell to generate activation code for (bash, zsh, fish, nu, pwsh)",
+            "help": "Shell to generate code for: `bash`, `zsh`, `fish`, `nu`, or `pwsh`",
+            "help_first_line": "Shell to generate code for: `bash`, `zsh`, `fish`, `nu`, or `pwsh`",
             "required": false,
             "double_dash": "Optional",
             "hide": false
@@ -24,8 +24,8 @@
           {
             "name": "no-hook-env",
             "usage": "--no-hook-env",
-            "help": "Don't automatically invoke hook-env (for testing)",
-            "help_first_line": "Don't automatically invoke hook-env (for testing)",
+            "help": "Print the hook without its initial `hook-env` call (for testing)",
+            "help_first_line": "Print the hook without its initial `hook-env` call (for testing)",
             "short": [],
             "long": ["no-hook-env"],
             "hide": false,
@@ -48,11 +48,32 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Output shell activation code to enable automatic secret loading",
+        "help": "Print shell code that loads secrets when you enter a project",
+        "help_long": "Print shell code that loads secrets when you enter a project\n\nPrints a hook for your shell to evaluate. Once active, the hook runs before each prompt: it loads the secrets with `env = true` (the default) when you enter a directory with a fnox config and removes them when you leave.\n\nSHELL defaults to `$FNOX_SHELL`, then the name of `$SHELL`. Set `FNOX_SHELL_OUTPUT` to `none`, `normal`, or `debug` to control what the hook prints.",
         "name": "activate",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Shell integration: https://fnox.jdx.dev/guide/shell-integration",
+        "examples": [
+          {
+            "code": "eval \"$(fnox activate bash)\"",
+            "header": "Bash (add to ~/.bashrc)",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "eval \"$(fnox activate zsh)\"",
+            "header": "Zsh (add to ~/.zshrc)",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox activate fish | source",
+            "header": "Fish (add to ~/.config/fish/config.fish)",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "check": {
@@ -64,8 +85,8 @@
           {
             "name": "all",
             "usage": "-a --all",
-            "help": "Check all secrets including those with if_missing=warn or if_missing=ignore",
-            "help_first_line": "Check all secrets including those with if_missing=warn or if_missing=ignore",
+            "help": "Also resolve secrets whose `if_missing` is `warn` or `ignore`",
+            "help_first_line": "Also resolve secrets whose `if_missing` is `warn` or `ignore`",
             "short": ["a"],
             "long": ["all"],
             "hide": false,
@@ -88,11 +109,32 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Check if all required secrets are defined and configured",
+        "help": "Verify that the active profile's secrets resolve, without printing them",
+        "help_long": "Verify that the active profile's secrets resolve, without printing them\n\nValidates the config, then resolves each secret that uses a provider and whose `if_missing` is `error`. References to unknown providers are reported as well. Values are never printed.\n\nSecrets without a provider are not resolved. One with no default is reported only when its own `if_missing` is `error` or `warn`; `--if-missing` and `FNOX_IF_MISSING` do not apply to it, so an environment-only secret that is unset can still pass.\n\n`--all` also resolves secrets whose `if_missing` is `warn` or `ignore`; their failures are reported as warnings, or not at all for `ignore`. Problems go to stderr, and fnox exits 1 when any error is found.",
         "name": "check",
         "aliases": ["c"],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Troubleshooting: https://fnox.jdx.dev/guide/troubleshooting\n- Missing secrets: https://fnox.jdx.dev/guide/missing-secrets",
+        "examples": [
+          {
+            "code": "fnox check --all",
+            "header": "Resolve every secret in the active profile",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox check --if-missing error",
+            "header": "Treat every provider-backed secret as required",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox -P production check --all",
+            "header": "Check another profile",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "ci-redact": {
@@ -133,8 +175,8 @@
           {
             "name": "SHELL",
             "usage": "<SHELL>",
-            "help": "Shell type to generate completions for",
-            "help_first_line": "Shell type to generate completions for",
+            "help": "Shell to generate for: `bash`, `zsh`, `fish`, `elvish`, `nu`, or `pwsh`",
+            "help_first_line": "Shell to generate for: `bash`, `zsh`, `fish`, `elvish`, `nu`, or `pwsh`",
             "required": true,
             "double_dash": "Optional",
             "hide": false
@@ -158,11 +200,32 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Generate shell completions",
+        "help": "Print a shell completion script",
+        "help_long": "Print a shell completion script\n\nPrints a completion script for SHELL to stdout. Once installed, it completes commands and flags, and reads secret keys, profiles, and providers from your config when you press Tab.",
         "name": "completion",
         "aliases": [],
         "hidden_aliases": ["complete", "completions"],
-        "examples": [],
+        "after_help_long": "See also:\n- Shell integration: https://fnox.jdx.dev/guide/shell-integration",
+        "examples": [
+          {
+            "code": "fnox completion bash > ~/.local/share/bash-completion/completions/fnox",
+            "header": "Install Bash completions",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox completion zsh > \"${fpath[1]}/_fnox\"",
+            "header": "Install Zsh completions",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox completion fish > ~/.config/fish/completions/fnox.fish",
+            "header": "Install Fish completions",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "config-files": {
@@ -188,11 +251,32 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "List all config files that would be loaded",
+        "help": "List the config files fnox loads from the current directory",
+        "help_long": "List the config files fnox loads from the current directory\n\nPrints one path per line, nearest directory first: the config files in the current directory, then those in each parent up to a file that sets `root = true`, then the global config. Each file is followed by the files it imports. Profile files such as `fnox.staging.toml` appear for the active profile. Only files that exist are listed.\n\nWith `-c` set to an explicit path, fnox lists that file, its imports, and the global config, matching how it loads config in that case.",
         "name": "config-files",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Config files: https://fnox.jdx.dev/guide/config-files",
+        "examples": [
+          {
+            "code": "fnox config-files",
+            "header": "List the files for the default profile",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox -P staging config-files",
+            "header": "Include the staging profile's files",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox -c ./fnox.toml config-files",
+            "header": "Show what an explicit path loads",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "daemon": {
@@ -207,8 +291,8 @@
               {
                 "name": "KEYS",
                 "usage": "[KEYS]…",
-                "help": "Secret keys to evict (default: the whole cache)",
-                "help_first_line": "Secret keys to evict (default: the whole cache)",
+                "help": "Secrets to evict (default: the whole cache)",
+                "help_first_line": "Secrets to evict (default: the whole cache)",
                 "required": false,
                 "double_dash": "Optional",
                 "var": true,
@@ -233,12 +317,26 @@
             "unknown_flags": null,
             "hide": false,
             "args_override_self": true,
-            "help": "Clear the caches of all running daemons",
-            "help_long": "Clear the caches of all running daemons\n\nWith one or more KEYs, only the cached values for those secrets are evicted; everything else stays cached.",
+            "help": "Evict cached values from running daemons",
+            "help_long": "Evict cached values from running daemons\n\nWith no KEYS, clears each running daemon's whole cache. With KEYS, evicts only those secrets and keeps the rest. Run it after changing a value at its provider. Encrypted `fnox sync` caches in config files are not affected.",
             "name": "clear",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": [],
+            "after_help_long": "See also:\n- Daemon: https://fnox.jdx.dev/guide/daemon",
+            "examples": [
+              {
+                "code": "fnox daemon clear",
+                "header": "Clear the whole cache",
+                "help": null,
+                "lang": ""
+              },
+              {
+                "code": "fnox daemon clear API_TOKEN DB_PASSWORD",
+                "header": "Evict two secrets",
+                "help": null,
+                "lang": ""
+              }
+            ],
             "headings": []
           },
           "serve": {
@@ -294,11 +392,20 @@
             "unknown_flags": null,
             "hide": false,
             "args_override_self": true,
-            "help": "Start the per-user daemon in the background",
+            "help": "Start the daemon in the background",
+            "help_long": "Start the daemon in the background\n\nStarts the per-user daemon unless it is already running. Commands use it only while it is enabled with `[daemon] enabled = true` or `FNOX_DAEMON=on`.",
             "name": "start",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": [],
+            "after_help_long": "See also:\n- Daemon: https://fnox.jdx.dev/guide/daemon",
+            "examples": [
+              {
+                "code": "fnox daemon start",
+                "header": "Start the daemon",
+                "help": null,
+                "lang": ""
+              }
+            ],
             "headings": []
           },
           "status": {
@@ -324,11 +431,20 @@
             "unknown_flags": null,
             "hide": false,
             "args_override_self": true,
-            "help": "Show daemon status",
+            "help": "Show whether the daemon is running",
+            "help_long": "Show whether the daemon is running\n\nPrints the daemon's process ID and the number of cached entries, or that it is not running.",
             "name": "status",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": [],
+            "after_help_long": "See also:\n- Daemon: https://fnox.jdx.dev/guide/daemon",
+            "examples": [
+              {
+                "code": "fnox daemon status",
+                "header": "Show daemon status",
+                "help": null,
+                "lang": ""
+              }
+            ],
             "headings": []
           },
           "stop": {
@@ -354,11 +470,20 @@
             "unknown_flags": null,
             "hide": false,
             "args_override_self": true,
-            "help": "Stop the daemon",
+            "help": "Stop the daemon and discard its cache",
+            "help_long": "Stop the daemon and discard its cache\n\nWhile the daemon is still enabled, the next command that reads a secret starts it again.",
             "name": "stop",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": [],
+            "after_help_long": "See also:\n- Daemon: https://fnox.jdx.dev/guide/daemon",
+            "examples": [
+              {
+                "code": "fnox daemon stop",
+                "header": "Stop the daemon",
+                "help": null,
+                "lang": ""
+              }
+            ],
             "headings": []
           }
         },
@@ -382,11 +507,26 @@
         "hide": false,
         "subcommand_required": true,
         "args_override_self": true,
-        "help": "Manage the per-user daemon",
+        "help": "Manage the per-user daemon that caches resolved secrets",
+        "help_long": "Manage the per-user daemon that caches resolved secrets\n\nThe daemon keeps resolved values in memory, so repeated reads by `get`, `exec`, and the shell hook skip the provider. Commands use it only when `[daemon] enabled = true` is set in the config or `FNOX_DAEMON=on` is in the environment; it then starts on demand. `--no-daemon` bypasses it for one command.",
         "name": "daemon",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Daemon: https://fnox.jdx.dev/guide/daemon",
+        "examples": [
+          {
+            "code": "fnox daemon status",
+            "header": "Check whether the daemon is running",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "FNOX_DAEMON=on fnox get DATABASE_URL",
+            "header": "Use the daemon for one command",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "deactivate": {
@@ -412,12 +552,20 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Disable fnox shell integration in the current shell session",
-        "help_long": "Disable fnox shell integration in the current shell session\n\nThis removes the hook that automatically loads secrets when entering\ndirectories with fnox.toml files. It also restores environment variables\nto their state before fnox was activated.\n\nNote: This only affects the current shell session. To re-enable fnox,\nrun the activation command again for your shell.",
+        "help": "Turn off shell integration in the current shell",
+        "help_long": "Turn off shell integration in the current shell\n\nRemoves the fnox hook from the current shell session and unsets the secrets it loaded. Other shells and new sessions are unaffected: to turn integration off for good, remove the `fnox activate` line from your shell startup file. To turn it back on in this shell, run the activation command again.\n\nFails when fnox is not active in the current shell.",
         "name": "deactivate",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Shell integration: https://fnox.jdx.dev/guide/shell-integration",
+        "examples": [
+          {
+            "code": "fnox deactivate",
+            "header": "Turn off the hook in this shell",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "doctor": {
@@ -443,11 +591,26 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Show diagnostic information about the current fnox state",
+        "help": "Print a report on config, secrets, providers, and environment",
+        "help_long": "Print a report on config, secrets, providers, and environment\n\nValidates the config for the active profile, counts its secrets and providers, shows `FNOX_PROFILE`, and tests each provider's connection. It also warns when an exported `FNOX_AGE_KEY` undermines a top-level `env = \"exec\"` or `env = false`. Secret values are not resolved; use `fnox check` for that.",
         "name": "doctor",
         "aliases": ["dr"],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Troubleshooting: https://fnox.jdx.dev/guide/troubleshooting",
+        "examples": [
+          {
+            "code": "fnox doctor",
+            "header": "Report on the current project",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox -P production doctor",
+            "header": "Report on another profile",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "edit": {
@@ -473,11 +636,26 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Edit the configuration file",
+        "help": "Edit the config file with secret values decrypted",
+        "help_long": "Edit the config file with secret values decrypted\n\nDecrypts or fetches every secret in the config file, across all profiles, into a private temporary copy and opens it in `$EDITOR` (then `$VISUAL`, then `vi`, or `notepad` on Windows). When the editor exits, fnox stores each new or changed value with its provider and writes the file back, keeping your comments and formatting. Unchanged values keep their existing ciphertext.\n\nSecrets from read-only providers are shown but cannot be changed. fnox edits the file named by `-c` (default: `fnox.toml` in the current directory).",
         "name": "edit",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Configuration reference: https://fnox.jdx.dev/reference/configuration",
+        "examples": [
+          {
+            "code": "fnox edit",
+            "header": "Edit fnox.toml in your editor",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "EDITOR=nano fnox edit",
+            "header": "Use a specific editor",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "env": {
@@ -499,8 +677,8 @@
           {
             "name": "for",
             "usage": "--for <SCOPE>",
-            "help": "Where the environment will be injected",
-            "help_first_line": "Where the environment will be injected",
+            "help": "Where the environment will be used: `exec` or `shell`",
+            "help_first_line": "Where the environment will be used: `exec` or `shell`",
             "short": [],
             "long": ["for"],
             "hide": false,
@@ -540,8 +718,8 @@
           {
             "name": "keys",
             "usage": "--keys <KEY>",
-            "help": "Only these keys, plus the secrets they depend on. Repeat or comma-separate",
-            "help_first_line": "Only these keys, plus the secrets they depend on. Repeat or comma-separate",
+            "help": "Only these keys, plus the secrets they depend on; repeat or comma-separate",
+            "help_first_line": "Only these keys, plus the secrets they depend on; repeat or comma-separate",
             "short": [],
             "long": ["keys"],
             "var": true,
@@ -573,12 +751,38 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Print the environment fnox would give a command, as JSON for other tools",
-        "help_long": "Print the environment fnox would give a command, as JSON for other tools\n\nFor tools that start processes themselves, such as mise. stdout carries one line of JSON and contains secret values in plain text. Callers apply `remove`, then `set`, then `files`.",
+        "help": "Print the environment fnox would give a command, as JSON",
+        "help_long": "Print the environment fnox would give a command, as JSON\n\nFor tools that start processes themselves, such as mise. Prints one line of JSON describing what `fnox exec` would do: variables to `remove`, then to `set`, then `files` to write for `as_file` secrets. The output contains secret values in plain text, so keep it out of logs.\n\n`--json` is required. When resolution fails, fnox prints a JSON error document to stdout and exits 1. `--describe` lists keys and where each may be injected without resolving anything.",
         "name": "env",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- fnox env JSON: https://fnox.jdx.dev/reference/env-json\n- Running commands: https://fnox.jdx.dev/guide/running-commands",
+        "examples": [
+          {
+            "code": "fnox env --json",
+            "header": "Print the environment fnox exec would use",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox env --json --keys DATABASE_URL,STRIPE_KEY",
+            "header": "Resolve only some keys",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox env --json --for shell",
+            "header": "Print what shell integration would load",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox env --json --describe",
+            "header": "List keys without resolving values",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "exec": {
@@ -589,8 +793,8 @@
           {
             "name": "COMMAND",
             "usage": "[COMMAND]…",
-            "help": "Command to run",
-            "help_first_line": "Command to run",
+            "help": "Command to run, with its arguments",
+            "help_first_line": "Command to run, with its arguments",
             "required": false,
             "double_dash": "Automatic",
             "var": true,
@@ -601,8 +805,9 @@
           {
             "name": "refresh",
             "usage": "--refresh <KEY>",
-            "help": "Re-resolve this secret from its provider instead of serving it from the daemon cache, and cache the new value. Other secrets are still served from the cache. Repeat to refresh several keys",
-            "help_first_line": "Re-resolve this secret from its provider instead of serving it from the daemon cache, and cache the new value. Other secrets are still served from the cache. Repeat to refresh several keys",
+            "help": "Re-fetch KEY from its provider instead of the daemon cache; repeatable",
+            "help_long": "Re-fetch KEY from its provider instead of the daemon cache; repeatable\n\nThe fresh value replaces the cached one. Other secrets are still served from the cache.",
+            "help_first_line": "Re-fetch KEY from its provider instead of the daemon cache; repeatable",
             "short": [],
             "long": ["refresh"],
             "var": true,
@@ -619,8 +824,9 @@
           {
             "name": "replace",
             "usage": "--replace",
-            "help": "Replace the fnox process with the command so it keeps the same PID and receives signals directly. Rejected when the command's environment would carry an as_file secret, or when the profile configures credential leases, since fnox must clean those up after the command exits. Unix only",
-            "help_first_line": "Replace the fnox process with the command so it keeps the same PID and receives signals directly. Rejected when the command's environment would carry an as_file secret, or when the profile configures credential leases, since fnox must clean those up after the command exits. Unix only",
+            "help": "Replace the fnox process with the command (Unix only)",
+            "help_long": "Replace the fnox process with the command (Unix only)\n\nThe command keeps fnox's process ID and receives signals directly. Not allowed when the command would receive an `as_file` secret or the profile configures lease backends, because fnox must clean those up after the command exits.",
+            "help_first_line": "Replace the fnox process with the command (Unix only)",
             "short": [],
             "long": ["replace"],
             "hide": false,
@@ -643,11 +849,38 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Execute a command with secrets as environment variables",
+        "help": "Run a command with secrets in its environment",
+        "help_long": "Run a command with secrets in its environment\n\nResolves the active profile's secrets and runs COMMAND with them set as environment variables. Secrets with `env = true` (the default) or `env = \"exec\"` are set; `env = false` secrets are not, and are removed if the parent environment has them. An `as_file` secret is written to a private temporary file whose path becomes the variable's value; the file is deleted when the command exits. Configured lease backends add short-lived credentials.\n\nfnox also removes `FNOX_AGE_KEY`, `FNOX_AGE_KEY_FILE`, and the Enpass master password from the inherited environment, forwards Ctrl-C and `SIGTERM` to the command, and exits with the command's exit status. Put fnox options before `--`; everything after it is the command.",
         "name": "exec",
         "aliases": ["x"],
         "hidden_aliases": ["run"],
-        "examples": [],
+        "after_help_long": "See also:\n- Running commands: https://fnox.jdx.dev/guide/running-commands\n- Profiles: https://fnox.jdx.dev/guide/profiles",
+        "examples": [
+          {
+            "code": "fnox exec -- npm start",
+            "header": "Run a command",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox exec -P production --if-missing error -- ./deploy.sh",
+            "header": "Use the production profile and fail on any missing secret",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox exec -- sh -c 'test -n \"$DATABASE_URL\"'",
+            "header": "Expand a secret in a shell expression (single quotes defer expansion)",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox exec --refresh API_TOKEN -- ./script.sh",
+            "header": "Re-fetch one secret instead of using the daemon cache",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": [],
         "complete": {
           "command": {
@@ -665,8 +898,8 @@
           {
             "name": "format",
             "usage": "-f --format <FORMAT>",
-            "help": "Export format",
-            "help_first_line": "Export format",
+            "help": "Output format",
+            "help_first_line": "Output format",
             "short": ["f"],
             "long": ["format"],
             "hide": false,
@@ -682,23 +915,23 @@
                 "details": [
                   {
                     "value": "env",
-                    "help": "Environment variable format (KEY=value)"
+                    "help": "dotenv lines (`KEY=value`), quoted when needed"
                   },
                   {
                     "value": "shell",
-                    "help": "POSIX shell format (export KEY=value)"
+                    "help": "`export KEY=value` lines for POSIX shells"
                   },
                   {
                     "value": "json",
-                    "help": "JSON format"
+                    "help": "JSON object with `secrets` and `metadata`"
                   },
                   {
                     "value": "yaml",
-                    "help": "YAML format"
+                    "help": "YAML document with `secrets` and `metadata`"
                   },
                   {
                     "value": "toml",
-                    "help": "TOML format"
+                    "help": "TOML document with `secrets` and `metadata`"
                   }
                 ]
               }
@@ -708,8 +941,9 @@
           {
             "name": "dry-run",
             "usage": "-n --dry-run",
-            "help": "Show what would be exported without writing to a file",
-            "help_first_line": "Show what would be exported without writing to a file",
+            "help": "With `--output`, list the keys instead of writing the file",
+            "help_long": "With `--output`, list the keys instead of writing the file\n\nHas no effect on output to stdout, which still contains the values.",
+            "help_first_line": "With `--output`, list the keys instead of writing the file",
             "short": ["n"],
             "long": ["dry-run"],
             "hide": false,
@@ -718,8 +952,8 @@
           {
             "name": "output",
             "usage": "-o --output <OUTPUT>",
-            "help": "Output file (default: stdout)",
-            "help_first_line": "Output file (default: stdout)",
+            "help": "Write to this file instead of stdout",
+            "help_first_line": "Write to this file instead of stdout",
             "short": ["o"],
             "long": ["output"],
             "hide": false,
@@ -735,8 +969,8 @@
           {
             "name": "all",
             "usage": "--all",
-            "help": "Include secrets with env = false or env = \"exec\" (excluded by default)",
-            "help_first_line": "Include secrets with env = false or env = \"exec\" (excluded by default)",
+            "help": "Include secrets with `env = false` or `env = \"exec\"`",
+            "help_first_line": "Include secrets with `env = false` or `env = \"exec\"`",
             "short": [],
             "long": ["all"],
             "hide": false,
@@ -745,8 +979,8 @@
           {
             "name": "header",
             "usage": "--header",
-            "help": "Include metadata comments in env and shell output",
-            "help_first_line": "Include metadata comments in env and shell output",
+            "help": "Start env and shell output with comments naming the profile, time, and count",
+            "help_first_line": "Start env and shell output with comments naming the profile, time, and count",
             "short": [],
             "long": ["header"],
             "hide": false,
@@ -769,11 +1003,38 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Export secrets in various formats",
+        "help": "Print or write resolved secrets as env, shell, JSON, YAML, or TOML",
+        "help_long": "Print or write resolved secrets as env, shell, JSON, YAML, or TOML\n\nResolves the active profile's secrets and prints them in the chosen format, or writes them to `--output`. By default only secrets with `env = true` are included, matching shell integration; `--all` adds `env = \"exec\"` and `env = false` secrets. An `as_file` secret is exported as the path of a temporary file that holds its value.\n\nJSON, YAML, and TOML put the values in a `secrets` object, which `fnox import` reads back. The output contains real values, and `--output` creates the file with your default permissions, so set a restrictive umask first.",
         "name": "export",
         "aliases": ["ex"],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Import and export: https://fnox.jdx.dev/guide/import-export",
+        "examples": [
+          {
+            "code": "fnox export",
+            "header": "Print dotenv lines",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox export --format json",
+            "header": "Print JSON",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "eval \"$(fnox export --format shell)\"",
+            "header": "Load secrets into the current shell",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "(umask 077 && fnox export -o .env)",
+            "header": "Write a private .env file",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "get": {
@@ -784,8 +1045,8 @@
           {
             "name": "KEY",
             "usage": "<KEY>",
-            "help": "Secret key to retrieve",
-            "help_first_line": "Secret key to retrieve",
+            "help": "Secret to print",
+            "help_first_line": "Secret to print",
             "required": true,
             "double_dash": "Optional",
             "hide": false
@@ -795,8 +1056,8 @@
           {
             "name": "base64-decode",
             "usage": "--base64-decode",
-            "help": "Base64 decode the secret",
-            "help_first_line": "Base64 decode the secret",
+            "help": "Decode a base64-encoded value before printing it",
+            "help_first_line": "Decode a base64-encoded value before printing it",
             "short": [],
             "long": ["base64-decode"],
             "hide": false,
@@ -805,8 +1066,8 @@
           {
             "name": "refresh",
             "usage": "--refresh",
-            "help": "Re-resolve the secret from its provider instead of serving it from the daemon cache, and cache the new value",
-            "help_first_line": "Re-resolve the secret from its provider instead of serving it from the daemon cache, and cache the new value",
+            "help": "Re-fetch the value from its provider instead of the daemon cache, and cache it",
+            "help_first_line": "Re-fetch the value from its provider instead of the daemon cache, and cache it",
             "short": [],
             "long": ["refresh"],
             "hide": false,
@@ -829,11 +1090,32 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Get a secret value",
+        "help": "Print the resolved value of one secret",
+        "help_long": "Print the resolved value of one secret\n\nResolves KEY for the active profile through its provider, a lease backend, or the daemon cache, and prints the value to stdout followed by a newline. A secret with `as_file = true` prints the path of a temporary file that holds the value instead.\n\nWhen the secret cannot be resolved, `if_missing` decides the outcome: with `warn` or `ignore`, fnox prints nothing to stdout and exits 0. To check that secrets resolve without printing them, use `fnox check`.",
         "name": "get",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Running commands: https://fnox.jdx.dev/guide/running-commands\n- Missing secrets: https://fnox.jdx.dev/guide/missing-secrets",
+        "examples": [
+          {
+            "code": "fnox get DATABASE_URL",
+            "header": "Print a secret",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox -P staging get DATABASE_URL",
+            "header": "Read from another profile",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox get TLS_CERT --base64-decode > cert.pem",
+            "header": "Decode a base64 value into a file",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "hook-env": {
@@ -891,8 +1173,8 @@
           {
             "name": "FORMAT",
             "usage": "[FORMAT]",
-            "help": "Import source format",
-            "help_first_line": "Import source format",
+            "help": "Input format",
+            "help_first_line": "Input format",
             "required": false,
             "double_dash": "Optional",
             "hide": false,
@@ -902,19 +1184,19 @@
               "details": [
                 {
                   "value": "env",
-                  "help": "Environment variable format (KEY=value)"
+                  "help": "dotenv lines (`KEY=value` or `export KEY=value`)"
                 },
                 {
                   "value": "json",
-                  "help": "JSON format"
+                  "help": "JSON object, flat or as written by `fnox export`"
                 },
                 {
                   "value": "yaml",
-                  "help": "YAML format"
+                  "help": "YAML mapping, flat or as written by `fnox export`"
                 },
                 {
                   "value": "toml",
-                  "help": "TOML format"
+                  "help": "TOML table, flat or as written by `fnox export`"
                 }
               ]
             }
@@ -924,8 +1206,8 @@
           {
             "name": "force",
             "usage": "-f --force",
-            "help": "Skip confirmation prompts",
-            "help_first_line": "Skip confirmation prompts",
+            "help": "Write without asking for confirmation",
+            "help_first_line": "Write without asking for confirmation",
             "short": ["f"],
             "long": ["force"],
             "hide": false,
@@ -934,8 +1216,8 @@
           {
             "name": "global",
             "usage": "-g --global",
-            "help": "Import to the global config file (~/.config/fnox/config.toml)",
-            "help_first_line": "Import to the global config file (~/.config/fnox/config.toml)",
+            "help": "Write to the global config file (`~/.config/fnox/config.toml`)",
+            "help_first_line": "Write to the global config file (`~/.config/fnox/config.toml`)",
             "short": ["g"],
             "long": ["global"],
             "hide": false,
@@ -944,8 +1226,8 @@
           {
             "name": "input",
             "usage": "-i --input <INPUT>",
-            "help": "Source file or path to import from (default: stdin)",
-            "help_first_line": "Source file or path to import from (default: stdin)",
+            "help": "File to read (default: stdin)",
+            "help_first_line": "File to read (default: stdin)",
             "short": ["i"],
             "long": ["input"],
             "hide": false,
@@ -961,8 +1243,8 @@
           {
             "name": "dry-run",
             "usage": "-n --dry-run",
-            "help": "Show what would be imported without making changes",
-            "help_first_line": "Show what would be imported without making changes",
+            "help": "List the keys that would be imported without writing anything",
+            "help_first_line": "List the keys that would be imported without writing anything",
             "short": ["n"],
             "long": ["dry-run"],
             "hide": false,
@@ -971,8 +1253,8 @@
           {
             "name": "provider",
             "usage": "-p --provider <PROVIDER>",
-            "help": "Provider to use for encrypting/storing imported secrets (required)",
-            "help_first_line": "Provider to use for encrypting/storing imported secrets (required)",
+            "help": "Encryption provider to encrypt the values with",
+            "help_first_line": "Encryption provider to encrypt the values with",
             "short": ["p"],
             "long": ["provider"],
             "required": true,
@@ -989,8 +1271,8 @@
           {
             "name": "filter",
             "usage": "--filter <FILTER>",
-            "help": "Only import matching secrets (regex pattern)",
-            "help_first_line": "Only import matching secrets (regex pattern)",
+            "help": "Import only keys matching this regular expression",
+            "help_first_line": "Import only keys matching this regular expression",
             "short": [],
             "long": ["filter"],
             "hide": false,
@@ -1006,8 +1288,8 @@
           {
             "name": "prefix",
             "usage": "--prefix <PREFIX>",
-            "help": "Prefix to add to imported secret names",
-            "help_first_line": "Prefix to add to imported secret names",
+            "help": "Prepend this string to every imported key",
+            "help_first_line": "Prepend this string to every imported key",
             "short": [],
             "long": ["prefix"],
             "hide": false,
@@ -1037,11 +1319,38 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Import secrets from various sources",
+        "help": "Encrypt secrets from a dotenv, JSON, YAML, or TOML file into the config",
+        "help_long": "Encrypt secrets from a dotenv, JSON, YAML, or TOML file into the config\n\nReads key/value pairs from `--input` (or stdin), encrypts each value with the encryption provider named by `--provider`, and writes the ciphertext to the config file in the current directory, or to the global config with `--global`. Keys that already exist keep their other settings, such as `description` and `if_missing`. Remote storage providers cannot be import targets.\n\nfnox lists the keys and asks for confirmation before writing. When the data comes from stdin, pass `--force` (or `--dry-run`), because stdin cannot also answer the prompt.",
         "name": "import",
         "aliases": ["im"],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Import and export: https://fnox.jdx.dev/guide/import-export",
+        "examples": [
+          {
+            "code": "fnox import -i .env -p age --dry-run",
+            "header": "Preview an import",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox import -i .env -p age",
+            "header": "Import a dotenv file",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox import json -i secrets.json -p age --filter '^STRIPE_'",
+            "header": "Import only matching keys from JSON",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "cat .env | fnox import -p age --force",
+            "header": "Read from stdin",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "init": {
@@ -1053,8 +1362,8 @@
           {
             "name": "force",
             "usage": "-f --force",
-            "help": "Overwrite existing configuration file",
-            "help_first_line": "Overwrite existing configuration file",
+            "help": "Overwrite an existing config file",
+            "help_first_line": "Overwrite an existing config file",
             "short": ["f"],
             "long": ["force"],
             "hide": false,
@@ -1063,8 +1372,8 @@
           {
             "name": "global",
             "usage": "-g --global",
-            "help": "Initialize the global config file (~/.config/fnox/config.toml)",
-            "help_first_line": "Initialize the global config file (~/.config/fnox/config.toml)",
+            "help": "Create the global config file (`~/.config/fnox/config.toml`) instead",
+            "help_first_line": "Create the global config file (`~/.config/fnox/config.toml`) instead",
             "short": ["g"],
             "long": ["global"],
             "hide": false,
@@ -1073,8 +1382,8 @@
           {
             "name": "skip-wizard",
             "usage": "--skip-wizard",
-            "help": "Skip the interactive wizard and create a minimal config",
-            "help_first_line": "Skip the interactive wizard and create a minimal config",
+            "help": "Write a minimal config without running the setup wizard",
+            "help_first_line": "Write a minimal config without running the setup wizard",
             "short": [],
             "long": ["skip-wizard"],
             "hide": false,
@@ -1097,11 +1406,32 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Initialize a new fnox configuration file",
+        "help": "Create a fnox.toml config file",
+        "help_long": "Create a fnox.toml config file\n\nWrites a new config file at the `-c` path (default: `fnox.toml` in the current directory), or the global config with `--global`. When stdin is a terminal, a wizard helps you configure a first provider, tests its connection, and makes it the default. Without a terminal, or with `--skip-wizard`, the file is minimal and no provider is configured.\n\nfnox refuses to overwrite an existing file unless you pass `--force`.",
         "name": "init",
         "aliases": ["i"],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Quick start: https://fnox.jdx.dev/guide/quick-start",
+        "examples": [
+          {
+            "code": "fnox init",
+            "header": "Create fnox.toml with the setup wizard",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox init --skip-wizard",
+            "header": "Create a minimal fnox.toml",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox init --global",
+            "header": "Create the global config",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "lease": {
@@ -1131,11 +1461,20 @@
             "unknown_flags": null,
             "hide": false,
             "args_override_self": true,
-            "help": "Revoke all expired leases that need manual cleanup",
+            "help": "Revoke expired leases and mark them revoked in the ledger",
+            "help_long": "Revoke expired leases and mark them revoked in the ledger\n\nFor each expired lease in the project's ledger that is not yet marked revoked, asks its backend to revoke it and then marks it revoked. A backend failure is logged and the entry is still marked. Backends may need their credentials and network access.",
             "name": "cleanup",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": [],
+            "after_help_long": "See also:\n- Credential leases: https://fnox.jdx.dev/guide/leases",
+            "examples": [
+              {
+                "code": "fnox lease cleanup",
+                "header": "Clean up expired leases",
+                "help": null,
+                "lang": ""
+              }
+            ],
             "headings": []
           },
           "create": {
@@ -1146,8 +1485,8 @@
               {
                 "name": "BACKEND_NAME",
                 "usage": "[BACKEND_NAME]",
-                "help": "Lease backend name (from `[leases.<name>]` config). Creates leases for all configured backends if omitted.",
-                "help_first_line": "Lease backend name (from `[leases.<name>]` config). Creates leases for all configured backends if omitted.",
+                "help": "Lease backend from `[leases.<name>]` (default: every configured backend)",
+                "help_first_line": "Lease backend from `[leases.<name>]` (default: every configured backend)",
                 "required": false,
                 "double_dash": "Optional",
                 "hide": false
@@ -1157,8 +1496,8 @@
               {
                 "name": "all",
                 "usage": "-a --all",
-                "help": "Create leases for all configured backends",
-                "help_first_line": "Create leases for all configured backends",
+                "help": "Create leases for every configured backend",
+                "help_first_line": "Create leases for every configured backend",
                 "short": ["a"],
                 "long": ["all"],
                 "hide": false,
@@ -1167,8 +1506,8 @@
               {
                 "name": "duration",
                 "usage": "-d --duration <DURATION>",
-                "help": "Lease duration (e.g., \"15m\", \"1h\", \"2h30m\"); overrides config duration",
-                "help_first_line": "Lease duration (e.g., \"15m\", \"1h\", \"2h30m\"); overrides config duration",
+                "help": "Lease length, such as `15m`, `1h`, or `2h30m`; overrides the backend's `duration`",
+                "help_first_line": "Lease length, such as `15m`, `1h`, or `2h30m`; overrides the backend's `duration`",
                 "short": ["d"],
                 "long": ["duration"],
                 "hide": false,
@@ -1200,13 +1539,16 @@
                     "choices": ["shell", "json", "env"],
                     "details": [
                       {
-                        "value": "shell"
+                        "value": "shell",
+                        "help": "Summary with masked credential values"
                       },
                       {
-                        "value": "json"
+                        "value": "json",
+                        "help": "JSON object with the credentials, `lease_id`, and `expires_at`"
                       },
                       {
-                        "value": "env"
+                        "value": "env",
+                        "help": "`export KEY=value` lines with the real credentials"
                       }
                     ]
                   }
@@ -1216,8 +1558,8 @@
               {
                 "name": "interactive",
                 "usage": "-i --interactive",
-                "help": "Prompt interactively for missing credentials",
-                "help_first_line": "Prompt interactively for missing credentials",
+                "help": "Prompt for backend credentials that are missing from the environment",
+                "help_first_line": "Prompt for backend credentials that are missing from the environment",
                 "short": ["i"],
                 "long": ["interactive"],
                 "hide": false,
@@ -1226,8 +1568,8 @@
               {
                 "name": "label",
                 "usage": "-l --label <LABEL>",
-                "help": "Label for the lease (e.g., session purpose)",
-                "help_first_line": "Label for the lease (e.g., session purpose)",
+                "help": "Label recorded with the lease, such as its purpose",
+                "help_first_line": "Label recorded with the lease, such as its purpose",
                 "short": ["l"],
                 "long": ["label"],
                 "hide": false,
@@ -1258,11 +1600,32 @@
             "unknown_flags": null,
             "hide": false,
             "args_override_self": true,
-            "help": "Create a short-lived credential lease from a secret",
+            "help": "Create short-lived credentials from a lease backend",
+            "help_long": "Create short-lived credentials from a lease backend\n\nCreates a lease from BACKEND_NAME, or from every configured backend when you omit it, records it in the project's lease ledger, and prints the credentials. The default `shell` format shows a summary with masked values; `json` and `env` print the real credentials, so keep that output out of logs.\n\nThe lease lasts for `--duration`, else the backend's `duration` setting, else 15 minutes, and cannot exceed the backend's maximum.",
             "name": "create",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": [],
+            "after_help_long": "See also:\n- Credential leases: https://fnox.jdx.dev/guide/leases",
+            "examples": [
+              {
+                "code": "fnox lease create aws --duration 30m",
+                "header": "Create a 30-minute lease",
+                "help": null,
+                "lang": ""
+              },
+              {
+                "code": "eval \"$(fnox lease create aws --format env)\"",
+                "header": "Export the credentials into the current shell",
+                "help": null,
+                "lang": ""
+              },
+              {
+                "code": "fnox lease create aws --interactive",
+                "header": "Prompt for missing backend credentials",
+                "help": null,
+                "lang": ""
+              }
+            ],
             "headings": []
           },
           "list": {
@@ -1274,8 +1637,8 @@
               {
                 "name": "active",
                 "usage": "--active",
-                "help": "Show only active (non-expired, non-revoked) leases",
-                "help_first_line": "Show only active (non-expired, non-revoked) leases",
+                "help": "Show only leases that have not expired or been revoked",
+                "help_first_line": "Show only leases that have not expired or been revoked",
                 "short": [],
                 "long": ["active"],
                 "hide": false,
@@ -1308,11 +1671,26 @@
             "unknown_flags": null,
             "hide": false,
             "args_override_self": true,
-            "help": "List tracked leases",
+            "help": "List leases recorded for this project",
+            "help_long": "List leases recorded for this project\n\nPrints the ID, backend, expiry, and status (`active`, `expired`, or `revoked`) of each lease in the project's ledger. Long IDs are shortened. The ledger tracks leases fnox created; it is not an inventory of credentials at the provider.",
             "name": "list",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": [],
+            "after_help_long": "See also:\n- Credential leases: https://fnox.jdx.dev/guide/leases",
+            "examples": [
+              {
+                "code": "fnox lease list",
+                "header": "List every recorded lease",
+                "help": null,
+                "lang": ""
+              },
+              {
+                "code": "fnox lease list --active",
+                "header": "List leases that are still valid",
+                "help": null,
+                "lang": ""
+              }
+            ],
             "headings": []
           },
           "revoke": {
@@ -1323,8 +1701,8 @@
               {
                 "name": "LEASE_ID",
                 "usage": "<LEASE_ID>",
-                "help": "Lease ID to revoke",
-                "help_first_line": "Lease ID to revoke",
+                "help": "Full ID of the lease to revoke",
+                "help_first_line": "Full ID of the lease to revoke",
                 "required": true,
                 "double_dash": "Optional",
                 "hide": false
@@ -1349,10 +1727,19 @@
             "hide": false,
             "args_override_self": true,
             "help": "Revoke a lease by ID",
+            "help_long": "Revoke a lease by ID\n\nAsks the lease backend to revoke LEASE_ID, then marks it revoked in the project's ledger. If the backend cannot revoke it, for example because its credentials only expire on their own, fnox warns and revokes only the ledger entry.\n\nLEASE_ID must be the full ID. `fnox lease list` shortens long IDs; `fnox lease create --format json` prints the full one as `lease_id`.",
             "name": "revoke",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": [],
+            "after_help_long": "See also:\n- Credential leases: https://fnox.jdx.dev/guide/leases",
+            "examples": [
+              {
+                "code": "fnox lease revoke LEASE_ID",
+                "header": "Revoke a lease",
+                "help": null,
+                "lang": ""
+              }
+            ],
             "headings": []
           }
         },
@@ -1375,11 +1762,26 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Manage ephemeral credential leases",
+        "help": "Create and manage short-lived credentials from lease backends",
+        "help_long": "Create and manage short-lived credentials from lease backends\n\nLease backends, defined under `[leases.<name>]`, mint temporary credentials such as AWS STS sessions or Vault tokens. `fnox exec` creates or reuses leases automatically; these commands manage them by hand. fnox records each lease in a per-project ledger. Without a subcommand, `fnox lease` creates leases for every configured backend.",
         "name": "lease",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Credential leases: https://fnox.jdx.dev/guide/leases",
+        "examples": [
+          {
+            "code": "fnox lease list --active",
+            "header": "List active leases",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox exec -- aws s3 ls",
+            "header": "Let fnox exec create or reuse a lease",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "list": {
@@ -1391,8 +1793,8 @@
           {
             "name": "full",
             "usage": "-f --full",
-            "help": "Show full provider keys without truncation",
-            "help_first_line": "Show full provider keys without truncation",
+            "help": "Show provider keys in full instead of truncating them at 40 characters",
+            "help_first_line": "Show provider keys in full instead of truncating them at 40 characters",
             "short": ["f"],
             "long": ["full"],
             "hide": false,
@@ -1401,8 +1803,8 @@
           {
             "name": "sources",
             "usage": "-s --sources",
-            "help": "Show source file paths where secrets are defined",
-            "help_first_line": "Show source file paths where secrets are defined",
+            "help": "Add a column with the config file that defines each secret",
+            "help_first_line": "Add a column with the config file that defines each secret",
             "short": ["s"],
             "long": ["sources"],
             "hide": false,
@@ -1411,8 +1813,8 @@
           {
             "name": "values",
             "usage": "-V --values",
-            "help": "Show secret values (if available)",
-            "help_first_line": "Show secret values (if available)",
+            "help": "Resolve and show each secret's value",
+            "help_first_line": "Resolve and show each secret's value",
             "short": ["V"],
             "long": ["values"],
             "hide": false,
@@ -1445,11 +1847,38 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "List all secrets",
+        "help": "List the secrets defined for the active profile",
+        "help_long": "List the secrets defined for the active profile\n\nPrints a table of the secrets in the merged config: each key, where its value comes from (a provider, a stored value, a default, or the environment), the provider key, and the description. Nothing is resolved unless you pass `--values`. The list covers secrets declared in fnox config, not every item in a remote vault.",
         "name": "list",
         "aliases": ["ls", "secrets"],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Config files: https://fnox.jdx.dev/guide/config-files",
+        "examples": [
+          {
+            "code": "fnox list",
+            "header": "List secrets",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox list --sources",
+            "header": "Show which file defines each secret",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox -P production list",
+            "header": "List another profile's secrets",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox list --values",
+            "header": "Resolve and show values",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "mcp": {
@@ -1475,11 +1904,26 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Start an MCP server that brokers secrets to AI agents",
+        "help": "Serve secrets to AI agents over the Model Context Protocol",
+        "help_long": "Serve secrets to AI agents over the Model Context Protocol\n\nStarts an MCP server on stdin and stdout for an agent client to launch. It offers the `get_secret` and `exec` tools, limited by the `[mcp]` table: `tools` chooses which tools are offered and `secrets` restricts which secrets they can reach. The server never prompts, so authenticate to your providers before starting the client.",
         "name": "mcp",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- MCP server: https://fnox.jdx.dev/guide/mcp",
+        "examples": [
+          {
+            "code": "fnox mcp",
+            "header": "Start the server for the current project",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox -P staging mcp",
+            "header": "Serve another profile",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "plugin": {
@@ -1494,8 +1938,8 @@
               {
                 "name": "NAME",
                 "usage": "[NAME]",
-                "help": "Plugin name; installs all declared plugins when omitted",
-                "help_first_line": "Plugin name; installs all declared plugins when omitted",
+                "help": "Plugin to install (default: every declared plugin)",
+                "help_first_line": "Plugin to install (default: every declared plugin)",
                 "required": false,
                 "double_dash": "Optional",
                 "hide": false
@@ -1503,8 +1947,8 @@
               {
                 "name": "SOURCE",
                 "usage": "[SOURCE]",
-                "help": "Git source; defaults to the name's entry under `[plugins]`",
-                "help_first_line": "Git source; defaults to the name's entry under `[plugins]`",
+                "help": "Git source (default: the plugin's entry under `[plugins]`)",
+                "help_first_line": "Git source (default: the plugin's entry under `[plugins]`)",
                 "required": false,
                 "double_dash": "Optional",
                 "hide": false
@@ -1538,13 +1982,38 @@
             "unknown_flags": null,
             "hide": false,
             "args_override_self": true,
-            "help": "Install plugins from git",
-            "help_long": "Install plugins from git\n\nWith no arguments, installs every plugin declared under `[plugins]` that is not installed yet. A source is a git URL, optionally followed by `#<ref>` to pin a tag, branch, or commit; `owner/repo` is shorthand for GitHub.",
+            "help": "Install Lua plugins from git",
+            "help_long": "Install Lua plugins from git\n\nWith no arguments, installs every plugin declared under `[plugins]` that is not installed yet. With NAME, installs that plugin from SOURCE, or from its `[plugins]` entry when SOURCE is omitted. A source is a git URL, optionally followed by `#<ref>` to pin a tag, branch, or commit; `owner/repo` is shorthand for GitHub. Installing does not add a `[plugins]` entry.",
             "name": "install",
             "aliases": [],
             "hidden_aliases": [],
-            "after_help_long": "Examples:\n  fnox plugin install\n  fnox plugin install corp\n  fnox plugin install corp acme/fnox-plugin-corp#v1.0.0\n  fnox plugin install corp https://git.example.com/fnox-plugin-corp.git",
-            "examples": [],
+            "after_help_long": "See also:\n- Lua plugins: https://fnox.jdx.dev/providers/lua",
+            "examples": [
+              {
+                "code": "fnox plugin install",
+                "header": "Install every declared plugin",
+                "help": null,
+                "lang": ""
+              },
+              {
+                "code": "fnox plugin install corp",
+                "header": "Install one declared plugin",
+                "help": null,
+                "lang": ""
+              },
+              {
+                "code": "fnox plugin install corp acme/fnox-plugin-corp#v1.0.0",
+                "header": "Install a pinned version from GitHub",
+                "help": null,
+                "lang": ""
+              },
+              {
+                "code": "fnox plugin install corp https://git.example.com/fnox-plugin-corp.git",
+                "header": "Install from any git URL",
+                "help": null,
+                "lang": ""
+              }
+            ],
             "headings": []
           },
           "link": {
@@ -1564,8 +2033,8 @@
               {
                 "name": "PATH",
                 "usage": "<PATH>",
-                "help": "Plugin directory containing provider.lua",
-                "help_first_line": "Plugin directory containing provider.lua",
+                "help": "Directory that contains `provider.lua`",
+                "help_first_line": "Directory that contains `provider.lua`",
                 "required": true,
                 "double_dash": "Optional",
                 "hide": false
@@ -1575,8 +2044,8 @@
               {
                 "name": "force",
                 "usage": "-f --force",
-                "help": "Replace an existing plugin with the link",
-                "help_first_line": "Replace an existing plugin with the link",
+                "help": "Replace an existing plugin of the same name",
+                "help_first_line": "Replace an existing plugin of the same name",
                 "short": ["f"],
                 "long": ["force"],
                 "hide": false,
@@ -1599,11 +2068,26 @@
             "unknown_flags": null,
             "hide": false,
             "args_override_self": true,
-            "help": "Link a local plugin directory, for plugin development",
+            "help": "Link a local plugin directory for development",
+            "help_long": "Link a local plugin directory for development\n\nInstalls NAME as a symlink to PATH, so edits take effect without reinstalling. `fnox plugin update` skips linked plugins.",
             "name": "link",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": [],
+            "after_help_long": "See also:\n- Lua plugins: https://fnox.jdx.dev/providers/lua",
+            "examples": [
+              {
+                "code": "fnox plugin link corp ~/src/fnox-plugin-corp",
+                "header": "Link a checkout",
+                "help": null,
+                "lang": ""
+              },
+              {
+                "code": "fnox plugin link corp ./plugin --force",
+                "header": "Replace an installed plugin",
+                "help": null,
+                "lang": ""
+              }
+            ],
             "headings": []
           },
           "ls": {
@@ -1630,10 +2114,19 @@
             "hide": false,
             "args_override_self": true,
             "help": "List installed and declared plugins",
+            "help_long": "List installed and declared plugins\n\nPrints each installed plugin with its git source and checked-out revision, each linked plugin with its target, and each plugin declared under `[plugins]` that is not installed yet.",
             "name": "ls",
             "aliases": ["list"],
             "hidden_aliases": [],
-            "examples": [],
+            "after_help_long": "See also:\n- Lua plugins: https://fnox.jdx.dev/providers/lua",
+            "examples": [
+              {
+                "code": "fnox plugin ls",
+                "header": "List plugins",
+                "help": null,
+                "lang": ""
+              }
+            ],
             "headings": []
           },
           "uninstall": {
@@ -1670,10 +2163,19 @@
             "hide": false,
             "args_override_self": true,
             "help": "Remove an installed or linked plugin",
+            "help_long": "Remove an installed or linked plugin\n\nDeletes the plugin's directory, or only the link for a linked plugin. Its declaration under `[plugins]` stays, so `fnox plugin install` can reinstall it.",
             "name": "uninstall",
             "aliases": ["rm", "remove"],
             "hidden_aliases": [],
-            "examples": [],
+            "after_help_long": "See also:\n- Lua plugins: https://fnox.jdx.dev/providers/lua",
+            "examples": [
+              {
+                "code": "fnox plugin uninstall corp",
+                "header": "Remove a plugin",
+                "help": null,
+                "lang": ""
+              }
+            ],
             "headings": []
           },
           "update": {
@@ -1684,8 +2186,8 @@
               {
                 "name": "NAMES",
                 "usage": "[NAMES]…",
-                "help": "Plugins to update; updates all installed plugins when omitted",
-                "help_first_line": "Plugins to update; updates all installed plugins when omitted",
+                "help": "Plugins to update (default: every installed plugin)",
+                "help_first_line": "Plugins to update (default: every installed plugin)",
                 "required": false,
                 "double_dash": "Optional",
                 "var": true,
@@ -1711,10 +2213,25 @@
             "hide": false,
             "args_override_self": true,
             "help": "Update installed plugins to their declared source",
+            "help_long": "Update installed plugins to their declared source\n\nChecks out each plugin's declared ref, or its remote's default branch when no ref is declared. With no arguments, updates every installed plugin. Linked plugins are skipped.",
             "name": "update",
             "aliases": ["upgrade"],
             "hidden_aliases": [],
-            "examples": [],
+            "after_help_long": "See also:\n- Lua plugins: https://fnox.jdx.dev/providers/lua",
+            "examples": [
+              {
+                "code": "fnox plugin update",
+                "header": "Update every installed plugin",
+                "help": null,
+                "lang": ""
+              },
+              {
+                "code": "fnox plugin update corp",
+                "header": "Update one plugin",
+                "help": null,
+                "lang": ""
+              }
+            ],
             "headings": []
           }
         },
@@ -1738,10 +2255,25 @@
         "hide": false,
         "args_override_self": true,
         "help": "Manage Lua provider plugins",
+        "help_long": "Manage Lua provider plugins\n\nPlugins add provider types written in Lua. They are installed per user in `$FNOX_PLUGINS_DIR` (default: `~/.local/share/fnox/plugins`) and declared per project under `[plugins]`. Without a subcommand, `fnox plugin` lists them.",
         "name": "plugin",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Lua plugins: https://fnox.jdx.dev/providers/lua",
+        "examples": [
+          {
+            "code": "fnox plugin",
+            "header": "List installed and declared plugins",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox plugin install",
+            "header": "Install every plugin the project declares",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "profiles": {
@@ -1777,11 +2309,26 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "List available profiles",
+        "help": "List profiles and how many secrets each provides",
+        "help_long": "List profiles and how many secrets each provides\n\nPrints each profile in the loaded config, from `[profiles.<name>]` tables and profile files such as `fnox.staging.toml`, with its number of secrets, including inherited top-level secrets. `default` is always listed.",
         "name": "profiles",
         "aliases": [],
         "hidden_aliases": ["profile"],
-        "examples": [],
+        "after_help_long": "See also:\n- Profiles: https://fnox.jdx.dev/guide/profiles",
+        "examples": [
+          {
+            "code": "fnox profiles",
+            "header": "List profiles",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox -P aws,staging list",
+            "header": "Layer two profiles for one command",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "provider": {
@@ -1796,8 +2343,8 @@
               {
                 "name": "PROVIDER",
                 "usage": "<PROVIDER>",
-                "help": "Provider name",
-                "help_first_line": "Provider name",
+                "help": "Name for the provider, which secrets reference with `provider = \"...\"`",
+                "help_first_line": "Name for the provider, which secrets reference with `provider = \"...\"`",
                 "required": true,
                 "double_dash": "Optional",
                 "hide": false
@@ -1853,7 +2400,7 @@
                     },
                     {
                       "value": "aws",
-                      "help": "AWS Secrets Manager"
+                      "help": "AWS Secrets Manager (config type `aws-sm`)"
                     },
                     {
                       "value": "aws-kms",
@@ -1877,7 +2424,7 @@
                     },
                     {
                       "value": "gcp",
-                      "help": "Google Cloud Secret Manager"
+                      "help": "Google Cloud Secret Manager (config type `gcp-sm`)"
                     },
                     {
                       "value": "gcp-kms",
@@ -1967,8 +2514,8 @@
               {
                 "name": "global",
                 "usage": "-g --global",
-                "help": "Add to the global config file (~/.config/fnox/config.toml)",
-                "help_first_line": "Add to the global config file (~/.config/fnox/config.toml)",
+                "help": "Write to the global config file (`~/.config/fnox/config.toml`)",
+                "help_first_line": "Write to the global config file (`~/.config/fnox/config.toml`)",
                 "short": ["g"],
                 "long": ["global"],
                 "hide": false,
@@ -1977,8 +2524,8 @@
               {
                 "name": "plugin",
                 "usage": "--plugin <PLUGIN>",
-                "help": "Plugin name or path (only valid with provider type lua; defaults to the provider name)",
-                "help_first_line": "Plugin name or path (only valid with provider type lua; defaults to the provider name)",
+                "help": "Lua plugin name or path (type `lua` only; default: the provider name)",
+                "help_first_line": "Lua plugin name or path (type `lua` only; default: the provider name)",
                 "short": [],
                 "long": ["plugin"],
                 "hide": false,
@@ -1994,8 +2541,8 @@
               {
                 "name": "vault",
                 "usage": "--vault <VAULT>",
-                "help": "Default Proton Pass vault name (only valid with provider type proton-pass)",
-                "help_first_line": "Default Proton Pass vault name (only valid with provider type proton-pass)",
+                "help": "Default Proton Pass vault (type `proton-pass` only)",
+                "help_first_line": "Default Proton Pass vault (type `proton-pass` only)",
                 "short": [],
                 "long": ["vault"],
                 "hide": false,
@@ -2025,11 +2572,32 @@
             "unknown_flags": null,
             "hide": false,
             "args_override_self": true,
-            "help": "Add a new provider",
+            "help": "Add a provider entry to a config file",
+            "help_long": "Add a provider entry to a config file\n\nWrites a `[providers.<PROVIDER>]` entry of type PROVIDER_TYPE to the config file in the current directory, or the global config with `--global`. Most types start from a template with placeholder values that you edit afterward; `fido2` and `yubikey` run an interactive hardware setup instead.\n\nThe `aws` and `gcp` choices create `aws-sm` and `gcp-sm` providers. With an explicit `-P` or `--write-profile`, the entry goes under that profile.",
             "name": "add",
             "aliases": ["a", "set"],
             "hidden_aliases": [],
-            "examples": [],
+            "after_help_long": "See also:\n- Providers: https://fnox.jdx.dev/providers/overview\n- Connect an existing vault: https://fnox.jdx.dev/guide/existing-vault",
+            "examples": [
+              {
+                "code": "fnox provider add op 1password",
+                "header": "Add a 1Password provider",
+                "help": null,
+                "lang": ""
+              },
+              {
+                "code": "fnox provider add sync-age age --global",
+                "header": "Add an age provider to the global config",
+                "help": null,
+                "lang": ""
+              },
+              {
+                "code": "fnox provider add corp lua --plugin fnox-plugin-corp",
+                "header": "Add a Lua plugin provider",
+                "help": null,
+                "lang": ""
+              }
+            ],
             "headings": []
           },
           "list": {
@@ -2065,11 +2633,26 @@
             "unknown_flags": null,
             "hide": false,
             "args_override_self": true,
-            "help": "List available providers",
+            "help": "List the providers configured for the active profile",
+            "help_long": "List the providers configured for the active profile\n\nPrints each provider name, sorted, one per line.",
             "name": "list",
             "aliases": ["ls"],
             "hidden_aliases": [],
-            "examples": [],
+            "after_help_long": "See also:\n- Providers: https://fnox.jdx.dev/providers/overview",
+            "examples": [
+              {
+                "code": "fnox provider list",
+                "header": "List providers",
+                "help": null,
+                "lang": ""
+              },
+              {
+                "code": "fnox -P production provider list",
+                "header": "List another profile's providers",
+                "help": null,
+                "lang": ""
+              }
+            ],
             "headings": []
           },
           "remove": {
@@ -2080,8 +2663,8 @@
               {
                 "name": "PROVIDER",
                 "usage": "<PROVIDER>",
-                "help": "Provider name",
-                "help_first_line": "Provider name",
+                "help": "Provider to remove",
+                "help_first_line": "Provider to remove",
                 "required": true,
                 "double_dash": "Optional",
                 "hide": false
@@ -2091,8 +2674,8 @@
               {
                 "name": "global",
                 "usage": "-g --global",
-                "help": "Remove from the global config file (~/.config/fnox/config.toml)",
-                "help_first_line": "Remove from the global config file (~/.config/fnox/config.toml)",
+                "help": "Remove from the global config file (`~/.config/fnox/config.toml`)",
+                "help_first_line": "Remove from the global config file (`~/.config/fnox/config.toml`)",
                 "short": ["g"],
                 "long": ["global"],
                 "hide": false,
@@ -2115,11 +2698,20 @@
             "unknown_flags": null,
             "hide": false,
             "args_override_self": true,
-            "help": "Remove a provider",
+            "help": "Remove a provider entry from a config file",
+            "help_long": "Remove a provider entry from a config file\n\nDeletes the `[providers.<PROVIDER>]` entry from the config file in the current directory, or the global config with `--global`. Secrets that still reference the provider will fail to resolve. Nothing is deleted from the provider itself.",
             "name": "remove",
             "aliases": ["rm", "delete"],
             "hidden_aliases": [],
-            "examples": [],
+            "after_help_long": "See also:\n- Providers: https://fnox.jdx.dev/providers/overview",
+            "examples": [
+              {
+                "code": "fnox provider remove old-vault",
+                "header": "Remove a provider",
+                "help": null,
+                "lang": ""
+              }
+            ],
             "headings": []
           },
           "test": {
@@ -2130,8 +2722,8 @@
               {
                 "name": "PROVIDER",
                 "usage": "[PROVIDER]",
-                "help": "Provider name (optional when using --all)",
-                "help_first_line": "Provider name (optional when using --all)",
+                "help": "Provider to test (omit with `--all`)",
+                "help_first_line": "Provider to test (omit with `--all`)",
                 "required": false,
                 "double_dash": "Optional",
                 "hide": false
@@ -2141,8 +2733,8 @@
               {
                 "name": "all",
                 "usage": "-a --all",
-                "help": "Test all configured providers",
-                "help_first_line": "Test all configured providers",
+                "help": "Test every configured provider",
+                "help_first_line": "Test every configured provider",
                 "short": ["a"],
                 "long": ["all"],
                 "hide": false,
@@ -2165,11 +2757,26 @@
             "unknown_flags": null,
             "hide": false,
             "args_override_self": true,
-            "help": "Test a provider connection",
+            "help": "Test that a provider can connect and authenticate",
+            "help_long": "Test that a provider can connect and authenticate\n\nConnects to PROVIDER with its configured credentials and reports success or the error. With `--all`, tests every provider for the active profile, prints a summary, and exits non-zero if any fail; add `--verbose` to see each error. A passing test does not check that individual secrets exist; use `fnox check --all` for that.",
             "name": "test",
             "aliases": ["t"],
             "hidden_aliases": [],
-            "examples": [],
+            "after_help_long": "See also:\n- Troubleshooting: https://fnox.jdx.dev/guide/troubleshooting",
+            "examples": [
+              {
+                "code": "fnox provider test op",
+                "header": "Test one provider",
+                "help": null,
+                "lang": ""
+              },
+              {
+                "code": "fnox -v provider test --all",
+                "header": "Test every provider and show errors",
+                "help": null,
+                "lang": ""
+              }
+            ],
             "headings": []
           }
         },
@@ -2192,11 +2799,26 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Manage providers (defaults to list)",
+        "help": "Manage configured providers",
+        "help_long": "Manage configured providers\n\nA provider is a named entry under `[providers]`, such as `op` of type `1password`, that secrets reference with `provider = \"op\"`. Without a subcommand, `fnox provider` lists them.",
         "name": "provider",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Providers: https://fnox.jdx.dev/providers/overview",
+        "examples": [
+          {
+            "code": "fnox provider list",
+            "header": "List configured providers",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox provider test op",
+            "header": "Test one provider",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "proxy": {
@@ -2226,11 +2848,26 @@
             "unknown_flags": null,
             "hide": false,
             "args_override_self": true,
-            "help": "Show the effective credential proxy rules",
+            "help": "Print the effective proxy rules",
+            "help_long": "Print the effective proxy rules\n\nValidates the `[proxy]` table and prints its egress mode, audit setting, and each rule's secret, domain, methods, paths, header, and placeholder variable. Secrets are not resolved.",
             "name": "rules",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": [],
+            "after_help_long": "See also:\n- Credential proxy: https://fnox.jdx.dev/guide/proxy",
+            "examples": [
+              {
+                "code": "fnox proxy rules",
+                "header": "Print the rules",
+                "help": null,
+                "lang": ""
+              },
+              {
+                "code": "fnox -P staging proxy rules",
+                "header": "Print another profile's rules",
+                "help": null,
+                "lang": ""
+              }
+            ],
             "headings": []
           },
           "run": {
@@ -2241,8 +2878,8 @@
               {
                 "name": "COMMAND",
                 "usage": "[COMMAND]…",
-                "help": "Command to run",
-                "help_first_line": "Command to run",
+                "help": "Command to run, with its arguments",
+                "help_first_line": "Command to run, with its arguments",
                 "required": false,
                 "double_dash": "Automatic",
                 "var": true,
@@ -2267,11 +2904,20 @@
             "unknown_flags": null,
             "hide": false,
             "args_override_self": true,
-            "help": "Run a command with placeholder credentials through the local proxy",
+            "help": "Run a command with placeholder credentials behind the proxy",
+            "help_long": "Run a command with placeholder credentials behind the proxy\n\nResolves the secrets that `[[proxy.rules]]` names, plus any secrets their providers need, starts the proxy on a local port, and runs COMMAND with:\n\n - each rule's variable set to a placeholder instead of the real value\n - `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` pointing at the proxy\n - CA variables such as `SSL_CERT_FILE` pointing at the proxy's certificate\n - every configured secret and common cloud credential variables removed\n\nThe command's HTTP client must honor those proxy and CA settings. fnox exits with the command's exit status.",
             "name": "run",
             "aliases": [],
             "hidden_aliases": [],
-            "examples": [],
+            "after_help_long": "See also:\n- Credential proxy: https://fnox.jdx.dev/guide/proxy",
+            "examples": [
+              {
+                "code": "fnox proxy run -- node agent.js",
+                "header": "Run an agent behind the proxy",
+                "help": null,
+                "lang": ""
+              }
+            ],
             "headings": [],
             "complete": {
               "command": {
@@ -2301,11 +2947,26 @@
         "hide": false,
         "subcommand_required": true,
         "args_override_self": true,
-        "help": "Broker credentials into destination-scoped HTTPS requests",
+        "help": "Inject credentials into a command's HTTPS requests through a local proxy",
+        "help_long": "Inject credentials into a command's HTTPS requests through a local proxy\n\n`fnox proxy run` starts a local HTTPS proxy and runs a command that sees only placeholder values. When the command sends a request that matches a `[[proxy.rules]]` entry by domain, method, and path, the proxy swaps in the real secret. The proxy controls where credentials are sent; it does not sandbox the command. Both subcommands require a `[proxy]` table.",
         "name": "proxy",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Credential proxy: https://fnox.jdx.dev/guide/proxy",
+        "examples": [
+          {
+            "code": "fnox proxy rules",
+            "header": "Check the rules",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox proxy run -- node agent.js",
+            "header": "Run a command behind the proxy",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "reencrypt": {
@@ -2316,8 +2977,8 @@
           {
             "name": "KEYS",
             "usage": "[KEYS]…",
-            "help": "Only re-encrypt these specific secret keys",
-            "help_first_line": "Only re-encrypt these specific secret keys",
+            "help": "Re-encrypt only these keys",
+            "help_first_line": "Re-encrypt only these keys",
             "required": false,
             "double_dash": "Optional",
             "var": true,
@@ -2328,8 +2989,8 @@
           {
             "name": "force",
             "usage": "-f --force",
-            "help": "Skip confirmation prompt",
-            "help_first_line": "Skip confirmation prompt",
+            "help": "Write without asking for confirmation",
+            "help_first_line": "Write without asking for confirmation",
             "short": ["f"],
             "long": ["force"],
             "hide": false,
@@ -2338,8 +2999,8 @@
           {
             "name": "dry-run",
             "usage": "-n --dry-run",
-            "help": "Show what would be done without making changes",
-            "help_first_line": "Show what would be done without making changes",
+            "help": "List the secrets that would be re-encrypted without changing anything",
+            "help_first_line": "List the secrets that would be re-encrypted without changing anything",
             "short": ["n"],
             "long": ["dry-run"],
             "hide": false,
@@ -2348,8 +3009,8 @@
           {
             "name": "provider",
             "usage": "-p --provider <PROVIDER>",
-            "help": "Only re-encrypt secrets from this provider",
-            "help_first_line": "Only re-encrypt secrets from this provider",
+            "help": "Re-encrypt only secrets stored with this provider",
+            "help_first_line": "Re-encrypt only secrets stored with this provider",
             "short": ["p"],
             "long": ["provider"],
             "hide": false,
@@ -2365,8 +3026,8 @@
           {
             "name": "filter",
             "usage": "--filter <FILTER>",
-            "help": "Only re-encrypt matching secrets (regex pattern)",
-            "help_first_line": "Only re-encrypt matching secrets (regex pattern)",
+            "help": "Re-encrypt only keys matching this regular expression",
+            "help_first_line": "Re-encrypt only keys matching this regular expression",
             "short": [],
             "long": ["filter"],
             "hide": false,
@@ -2396,12 +3057,32 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Re-encrypt secrets with current provider configuration",
-        "help_long": "Re-encrypt secrets with current provider configuration\n\nWhen you add or remove recipients from an encryption provider (e.g. age), existing secrets remain encrypted with the old recipient set. This command decrypts and re-encrypts all matching secrets with the current provider configuration.",
+        "help": "Re-encrypt stored secrets with the current provider settings",
+        "help_long": "Re-encrypt stored secrets with the current provider settings\n\nDecrypts each matching secret stored with an encryption provider, such as age or a KMS, encrypts it again with that provider's current configuration, and writes the new ciphertext to the file that defines it. Run it after changing a provider's recipients or key, with an identity that can still decrypt the existing values.\n\nfnox asks for confirmation unless you pass `--force`. Only the active profile's secrets are processed, so repeat with `-P` for other profiles. `fnox sync` caches on re-encrypted secrets are cleared; run `fnox sync` again to rebuild them.",
         "name": "reencrypt",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Teams: https://fnox.jdx.dev/guide/teams\n- Age: https://fnox.jdx.dev/providers/age",
+        "examples": [
+          {
+            "code": "fnox reencrypt -p age --dry-run",
+            "header": "Preview which secrets change",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox reencrypt -p age",
+            "header": "Re-encrypt every age secret",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox -P staging reencrypt -p age --force",
+            "header": "Re-encrypt another profile without a prompt",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "remove": {
@@ -2412,8 +3093,8 @@
           {
             "name": "KEY",
             "usage": "<KEY>",
-            "help": "Secret key to remove",
-            "help_first_line": "Secret key to remove",
+            "help": "Secret to remove",
+            "help_first_line": "Secret to remove",
             "required": true,
             "double_dash": "Optional",
             "hide": false
@@ -2423,8 +3104,8 @@
           {
             "name": "global",
             "usage": "-g --global",
-            "help": "Remove from the global config file (~/.config/fnox/config.toml)",
-            "help_first_line": "Remove from the global config file (~/.config/fnox/config.toml)",
+            "help": "Remove from the global config file (`~/.config/fnox/config.toml`)",
+            "help_first_line": "Remove from the global config file (`~/.config/fnox/config.toml`)",
             "short": ["g"],
             "long": ["global"],
             "hide": false,
@@ -2433,8 +3114,8 @@
           {
             "name": "dry-run",
             "usage": "-n --dry-run",
-            "help": "Show what would be removed without making changes",
-            "help_first_line": "Show what would be removed without making changes",
+            "help": "Show what would be removed without changing the file",
+            "help_first_line": "Show what would be removed without changing the file",
             "short": ["n"],
             "long": ["dry-run"],
             "hide": false,
@@ -2457,11 +3138,32 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Remove a secret",
+        "help": "Remove a secret from a config file",
+        "help_long": "Remove a secret from a config file\n\nDeletes KEY from the config file in the current directory, or the global config with `--global`, keeping comments and formatting. For a named write profile, fnox edits that profile's table, using `fnox.<profile>.toml` when that file exists. The value stored at a remote provider is not deleted or revoked.",
         "name": "remove",
         "aliases": ["rm", "delete"],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Config files: https://fnox.jdx.dev/guide/config-files",
+        "examples": [
+          {
+            "code": "fnox remove OLD_TOKEN --dry-run",
+            "header": "Preview the change",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox remove OLD_TOKEN",
+            "header": "Remove a secret",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox -P staging remove OLD_TOKEN",
+            "header": "Remove it from the staging profile",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "scan": {
@@ -2472,8 +3174,8 @@
           {
             "name": "DIR",
             "usage": "[DIR]",
-            "help": "Directory to scan (default: current directory)",
-            "help_first_line": "Directory to scan (default: current directory)",
+            "help": "Directory to scan",
+            "help_first_line": "Directory to scan",
             "required": false,
             "double_dash": "Optional",
             "hide": false,
@@ -2484,8 +3186,8 @@
           {
             "name": "ignore",
             "usage": "-i --ignore <IGNORE>",
-            "help": "Skip files matching this glob pattern (can be used multiple times)",
-            "help_first_line": "Skip files matching this glob pattern (can be used multiple times)",
+            "help": "Skip files whose path or name matches this glob; repeatable",
+            "help_first_line": "Skip files whose path or name matches this glob; repeatable",
             "short": ["i"],
             "long": ["ignore"],
             "var": true,
@@ -2518,10 +3220,12 @@
                 "choices": ["human", "json"],
                 "details": [
                   {
-                    "value": "human"
+                    "value": "human",
+                    "help": "Readable report grouped by file"
                   },
                   {
-                    "value": "json"
+                    "value": "json",
+                    "help": "JSON with `findings` and a `summary`"
                   }
                 ]
               }
@@ -2531,8 +3235,8 @@
           {
             "name": "quiet",
             "usage": "-q --quiet",
-            "help": "Show only files with potential secrets",
-            "help_first_line": "Show only files with potential secrets",
+            "help": "Print only the paths of files with findings",
+            "help_first_line": "Print only the paths of files with findings",
             "short": ["q"],
             "long": ["quiet"],
             "hide": false,
@@ -2555,11 +3259,32 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Scan repository for potential secrets",
+        "help": "Scan files for secrets committed in plaintext",
+        "help_long": "Scan files for secrets committed in plaintext\n\nWalks DIR and reports lines that look like cloud keys, API tokens, private keys, or password assignments, with the matched value redacted. It skips gitignored files, binary files, files over 5 MiB, and directories such as `.git`, `node_modules`, `target`, and `vendor`.\n\nfnox exits 1 when it finds anything. Findings are heuristic: review each one, and do not treat a clean scan as proof that no secret is present.",
         "name": "scan",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Import and export: https://fnox.jdx.dev/guide/import-export",
+        "examples": [
+          {
+            "code": "fnox scan",
+            "header": "Scan the current directory",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox scan . --format json",
+            "header": "Print findings as JSON",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox scan . --ignore 'fixtures/**'",
+            "header": "Skip matching files",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": [],
         "complete": {
           "dir": {
@@ -2606,8 +3331,8 @@
           {
             "name": "KEY",
             "usage": "<KEY>",
-            "help": "Secret key (environment variable name)",
-            "help_first_line": "Secret key (environment variable name)",
+            "help": "Secret name, used as the environment variable name",
+            "help_first_line": "Secret name, used as the environment variable name",
             "required": true,
             "double_dash": "Optional",
             "hide": false
@@ -2615,9 +3340,9 @@
           {
             "name": "VALUE",
             "usage": "[VALUE]",
-            "help": "Secret value to store.",
-            "help_long": "Secret value to store.\n\nIf omitted: reads from stdin when piped (`echo \"x\" | fnox set KEY`), or prompts interactively with hidden input.\n\nPassing secrets as arguments exposes them in shell history and `ps` output. For sensitive values, prefer stdin or the interactive prompt.",
-            "help_first_line": "Secret value to store.",
+            "help": "Value to store; omit to read stdin or prompt",
+            "help_long": "Value to store; omit to read stdin or prompt\n\nA value passed as an argument appears in shell history and process listings. Prefer stdin or the prompt for sensitive values.",
+            "help_first_line": "Value to store; omit to read stdin or prompt",
             "required": false,
             "double_dash": "Optional",
             "hide": false
@@ -2627,8 +3352,8 @@
           {
             "name": "description",
             "usage": "-d --description <DESCRIPTION>",
-            "help": "Description of the secret",
-            "help_first_line": "Description of the secret",
+            "help": "Description to record with the secret",
+            "help_first_line": "Description to record with the secret",
             "short": ["d"],
             "long": ["description"],
             "hide": false,
@@ -2644,8 +3369,8 @@
           {
             "name": "global",
             "usage": "-g --global",
-            "help": "Save to the global config file (~/.config/fnox/config.toml)",
-            "help_first_line": "Save to the global config file (~/.config/fnox/config.toml)",
+            "help": "Write to the global config file (`~/.config/fnox/config.toml`)",
+            "help_first_line": "Write to the global config file (`~/.config/fnox/config.toml`)",
             "short": ["g"],
             "long": ["global"],
             "hide": false,
@@ -2654,8 +3379,8 @@
           {
             "name": "key-name",
             "usage": "-k --key-name <KEY_NAME>",
-            "help": "Key name in the provider (if different from env var name)",
-            "help_first_line": "Key name in the provider (if different from env var name)",
+            "help": "Name to store the value under at a remote provider (default: KEY)",
+            "help_first_line": "Name to store the value under at a remote provider (default: KEY)",
             "short": ["k"],
             "long": ["key-name"],
             "hide": false,
@@ -2671,8 +3396,8 @@
           {
             "name": "dry-run",
             "usage": "-n --dry-run",
-            "help": "Show what would be done without making changes",
-            "help_first_line": "Show what would be done without making changes",
+            "help": "Show what would be written without storing anything",
+            "help_first_line": "Show what would be written without storing anything",
             "short": ["n"],
             "long": ["dry-run"],
             "hide": false,
@@ -2681,8 +3406,8 @@
           {
             "name": "provider",
             "usage": "-p --provider <PROVIDER>",
-            "help": "Provider to store the secret in (defaults to its existing provider, then default_provider)",
-            "help_first_line": "Provider to store the secret in (defaults to its existing provider, then default_provider)",
+            "help": "Provider to store the value with (default: the secret's current provider, then `default_provider`)",
+            "help_first_line": "Provider to store the value with (default: the secret's current provider, then `default_provider`)",
             "short": ["p"],
             "long": ["provider"],
             "hide": false,
@@ -2698,8 +3423,8 @@
           {
             "name": "base64-encode",
             "usage": "--base64-encode",
-            "help": "Base64 encode the secret",
-            "help_first_line": "Base64 encode the secret",
+            "help": "Base64-encode the value before storing it",
+            "help_first_line": "Base64-encode the value before storing it",
             "short": [],
             "long": ["base64-encode"],
             "hide": false,
@@ -2708,8 +3433,8 @@
           {
             "name": "default",
             "usage": "--default <DEFAULT>",
-            "help": "Default value to use if secret is not found",
-            "help_first_line": "Default value to use if secret is not found",
+            "help": "Fallback value to use when the secret cannot be resolved",
+            "help_first_line": "Fallback value to use when the secret cannot be resolved",
             "short": [],
             "long": ["default"],
             "hide": false,
@@ -2725,8 +3450,8 @@
           {
             "name": "from-file",
             "usage": "--from-file <FROM_FILE>",
-            "help": "Read the secret value verbatim from a UTF-8 file",
-            "help_first_line": "Read the secret value verbatim from a UTF-8 file",
+            "help": "Read the value from a UTF-8 file, verbatim",
+            "help_first_line": "Read the value from a UTF-8 file, verbatim",
             "short": [],
             "long": ["from-file"],
             "hide": false,
@@ -2743,8 +3468,8 @@
           {
             "name": "if-missing",
             "usage": "--if-missing <IF_MISSING>",
-            "help": "What to do if the secret is missing (error, warn, ignore)",
-            "help_first_line": "What to do if the secret is missing (error, warn, ignore)",
+            "help": "What to do when the secret cannot be resolved: `error`, `warn`, or `ignore`",
+            "help_first_line": "What to do when the secret cannot be resolved: `error`, `warn`, or `ignore`",
             "short": [],
             "long": ["if-missing"],
             "hide": false,
@@ -2788,11 +3513,44 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Set a secret value",
+        "help": "Store a secret and add it to the config",
+        "help_long": "Store a secret and add it to the config\n\nStores the value with a provider and records KEY in the config file in the current directory, or the global config with `--global`. With an encryption provider such as age, the ciphertext goes in the config. With a remote provider such as 1Password or AWS Secrets Manager, the value is written to the provider and the config records its key there. With no provider, the value is stored in plain text.\n\nThe provider is `--provider`, else the secret's current provider, else `default_provider`. When you omit VALUE, fnox reads piped stdin (trimming surrounding whitespace) or prompts with hidden input. `--from-file` reads a file verbatim, including trailing newlines. Passing only `--description`, `--default`, or `--if-missing` updates those settings without asking for a value.",
         "name": "set",
         "aliases": ["s"],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Quick start: https://fnox.jdx.dev/guide/quick-start\n- Configuration reference: https://fnox.jdx.dev/reference/configuration",
+        "examples": [
+          {
+            "code": "fnox set DATABASE_URL",
+            "header": "Prompt for a value with hidden input",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox set API_TOKEN --provider op",
+            "header": "Store a value with a specific provider",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox set SSH_KEY --from-file ~/.ssh/id_ed25519",
+            "header": "Store a file's contents verbatim",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "printf '%s' \"$TOKEN\" | fnox set API_TOKEN",
+            "header": "Read the value from stdin",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox -P staging set DATABASE_URL",
+            "header": "Write to the staging profile",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": [],
         "complete": {
           "from_file": {
@@ -2824,11 +3582,20 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Show the companies sponsoring fnox and the jdx.dev open source tools",
+        "help": "Show the companies that sponsor fnox",
+        "help_long": "Show the companies that sponsor fnox\n\nPrints the companies sponsoring fnox and the jdx.dev open source tools, with a link to the full list.",
         "name": "sponsors",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- All sponsors: https://jdx.dev/sponsors.html",
+        "examples": [
+          {
+            "code": "fnox sponsors",
+            "header": "Show sponsors",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "sync": {
@@ -2839,8 +3606,8 @@
           {
             "name": "KEYS",
             "usage": "[KEYS]…",
-            "help": "Only sync these specific secret keys",
-            "help_first_line": "Only sync these specific secret keys",
+            "help": "Sync only these keys",
+            "help_first_line": "Sync only these keys",
             "required": false,
             "double_dash": "Optional",
             "var": true,
@@ -2851,8 +3618,8 @@
           {
             "name": "force",
             "usage": "-f --force",
-            "help": "Skip confirmation prompt",
-            "help_first_line": "Skip confirmation prompt",
+            "help": "Write without asking for confirmation",
+            "help_first_line": "Write without asking for confirmation",
             "short": ["f"],
             "long": ["force"],
             "hide": false,
@@ -2861,8 +3628,8 @@
           {
             "name": "global",
             "usage": "-g --global",
-            "help": "Write to global config (~/.config/fnox/config.toml)",
-            "help_first_line": "Write to global config (~/.config/fnox/config.toml)",
+            "help": "Write the cache to the global config file (`~/.config/fnox/config.toml`)",
+            "help_first_line": "Write the cache to the global config file (`~/.config/fnox/config.toml`)",
             "short": ["g"],
             "long": ["global"],
             "hide": false,
@@ -2871,8 +3638,8 @@
           {
             "name": "dry-run",
             "usage": "-n --dry-run",
-            "help": "Show what would be done without making changes",
-            "help_first_line": "Show what would be done without making changes",
+            "help": "List the secrets that would be synced without changing anything",
+            "help_first_line": "List the secrets that would be synced without changing anything",
             "short": ["n"],
             "long": ["dry-run"],
             "hide": false,
@@ -2881,8 +3648,8 @@
           {
             "name": "provider",
             "usage": "-p --provider <PROVIDER>",
-            "help": "Target encryption provider (defaults to default_provider)",
-            "help_first_line": "Target encryption provider (defaults to default_provider)",
+            "help": "Encryption provider to cache values with (default: `default_provider`)",
+            "help_first_line": "Encryption provider to cache values with (default: `default_provider`)",
             "short": ["p"],
             "long": ["provider"],
             "hide": false,
@@ -2898,8 +3665,8 @@
           {
             "name": "source",
             "usage": "-s --source <SOURCE>",
-            "help": "Only sync secrets from this source provider",
-            "help_first_line": "Only sync secrets from this source provider",
+            "help": "Sync only secrets from this source provider",
+            "help_first_line": "Sync only secrets from this source provider",
             "short": ["s"],
             "long": ["source"],
             "hide": false,
@@ -2915,8 +3682,8 @@
           {
             "name": "filter",
             "usage": "--filter <FILTER>",
-            "help": "Only sync matching secrets (regex pattern)",
-            "help_first_line": "Only sync matching secrets (regex pattern)",
+            "help": "Sync only keys matching this regular expression",
+            "help_first_line": "Sync only keys matching this regular expression",
             "short": [],
             "long": ["filter"],
             "hide": false,
@@ -2932,8 +3699,9 @@
           {
             "name": "local-file",
             "usage": "--local-file",
-            "help": "Write synced secrets to the local override file next to the config file: fnox.local.toml, or .fnox.local.toml when that file exists or the config is .fnox.toml",
-            "help_first_line": "Write synced secrets to the local override file next to the config file: fnox.local.toml, or .fnox.local.toml when that file exists or the config is .fnox.toml",
+            "help": "Write the cache to the local override file beside the config",
+            "help_long": "Write the cache to the local override file beside the config\n\nThe file is `fnox.local.toml`, or `.fnox.local.toml` when that file exists or the config is `.fnox.toml`. Requires `-c` to be a bare `fnox.toml` or `.fnox.toml`.",
+            "help_first_line": "Write the cache to the local override file beside the config",
             "short": [],
             "long": ["local-file"],
             "hide": false,
@@ -2957,11 +3725,32 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Sync secrets from remote providers to a local encryption provider",
+        "help": "Cache remote secrets locally, encrypted with a local provider",
+        "help_long": "Cache remote secrets locally, encrypted with a local provider\n\nFetches each secret whose provider differs from the target, encrypts the value with the target encryption provider, and stores the ciphertext in the secret's `sync` field. Later reads decrypt that copy instead of calling the source provider. The original reference stays in place, so run sync again after source values change.\n\nThe target is `--provider`, else `default_provider`, and must be an encryption provider. The cache is written to the `-c` file (default: `fnox.toml`), the global config with `--global`, or with `--local-file` a personal `fnox.local.toml` to keep out of git. A full `--local-file` sync also removes cache entries for secrets that no longer have a source.",
         "name": "sync",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Sync: https://fnox.jdx.dev/guide/sync",
+        "examples": [
+          {
+            "code": "fnox sync -p sync-age --local-file --dry-run",
+            "header": "Preview a local sync",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox sync -p sync-age --local-file",
+            "header": "Cache every remote secret in fnox.local.toml",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox sync -p sync-age --local-file DATABASE_URL",
+            "header": "Refresh one secret",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "tui": {
@@ -2987,11 +3776,26 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Interactive TUI dashboard for managing secrets",
+        "help": "Browse secrets in an interactive terminal dashboard",
+        "help_long": "Browse secrets in an interactive terminal dashboard\n\nOpens a full-screen view of the active profile's secrets and providers, where you can filter, switch profiles, reveal values, and copy them. Edits made in the dashboard are not saved; use `fnox set` or `fnox remove` to change the config. Providers that need a touch or PIN are skipped.",
         "name": "tui",
         "aliases": [],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Terminal dashboard: https://fnox.jdx.dev/guide/tui",
+        "examples": [
+          {
+            "code": "fnox tui",
+            "header": "Open the dashboard",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox -P staging tui",
+            "header": "Start in another profile",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       },
       "usage": {
@@ -3047,11 +3851,20 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Show version information",
+        "help": "Print the fnox version",
+        "help_long": "Print the fnox version\n\nPrints `fnox` followed by the version number. Include it when you report a bug.",
         "name": "version",
         "aliases": ["v"],
         "hidden_aliases": [],
-        "examples": [],
+        "after_help_long": "See also:\n- Troubleshooting: https://fnox.jdx.dev/guide/troubleshooting",
+        "examples": [
+          {
+            "code": "fnox version",
+            "header": "Print the version",
+            "help": null,
+            "lang": ""
+          }
+        ],
         "headings": []
       }
     },
@@ -3060,8 +3873,9 @@
       {
         "name": "config",
         "usage": "-c --config <CONFIG>",
-        "help": "Path to the configuration file (default: fnox.toml, searches parent directories)",
-        "help_first_line": "Path to the configuration file (default: fnox.toml, searches parent directories)",
+        "help": "Config file to load",
+        "help_long": "Config file to load\n\nThe bare names `fnox.toml`, `.fnox.toml`, `fnox.local.toml`, and `.fnox.local.toml` search the current directory and its parents. Any other path, such as `./fnox.toml`, loads only that file, its imports, and the global config.",
+        "help_first_line": "Config file to load",
         "short": ["c"],
         "long": ["config"],
         "hide": false,
@@ -3078,8 +3892,9 @@
       {
         "name": "profile",
         "usage": "-P --profile <PROFILE>",
-        "help": "Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones.",
-        "help_first_line": "Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple profiles separated by commas or repeated flags; later profiles overlay earlier ones.",
+        "help": "Profile to use; repeat or comma-separate to layer several",
+        "help_long": "Profile to use; repeat or comma-separate to layer several\n\nLater profiles override earlier ones. Defaults to `FNOX_PROFILE`, then `default`.",
+        "help_first_line": "Profile to use; repeat or comma-separate to layer several",
         "short": ["P"],
         "long": ["profile"],
         "var": true,
@@ -3096,8 +3911,8 @@
       {
         "name": "verbose",
         "usage": "-v --verbose",
-        "help": "Enable verbose logging",
-        "help_first_line": "Enable verbose logging",
+        "help": "Print debug logs to stderr",
+        "help_first_line": "Print debug logs to stderr",
         "short": ["v"],
         "long": ["verbose"],
         "hide": false,
@@ -3123,8 +3938,9 @@
       {
         "name": "if-missing",
         "usage": "--if-missing <IF_MISSING>",
-        "help": "What to do if a secret is missing (error, warn, ignore)",
-        "help_first_line": "What to do if a secret is missing (error, warn, ignore)",
+        "help": "Override `if_missing` for every secret: `error`, `warn`, or `ignore`",
+        "help_long": "Override `if_missing` for every secret: `error`, `warn`, or `ignore`\n\nTakes precedence over `FNOX_IF_MISSING` and every `if_missing` value in the config.",
+        "help_first_line": "Override `if_missing` for every secret: `error`, `warn`, or `ignore`",
         "short": [],
         "long": ["if-missing"],
         "hide": false,
@@ -3150,8 +3966,8 @@
       {
         "name": "no-daemon",
         "usage": "--no-daemon",
-        "help": "Disable daemon-backed resolution for this invocation",
-        "help_first_line": "Disable daemon-backed resolution for this invocation",
+        "help": "Resolve secrets directly instead of through the daemon",
+        "help_first_line": "Resolve secrets directly instead of through the daemon",
         "short": [],
         "long": ["no-daemon"],
         "hide": false,
@@ -3160,8 +3976,8 @@
       {
         "name": "no-defaults",
         "usage": "--no-defaults",
-        "help": "Do not merge top-level secrets into the selected profile",
-        "help_first_line": "Do not merge top-level secrets into the selected profile",
+        "help": "Use only the selected profile's secrets, without top-level `[secrets]`",
+        "help_first_line": "Use only the selected profile's secrets, without top-level `[secrets]`",
         "short": [],
         "long": ["no-defaults"],
         "hide": false,
@@ -3170,8 +3986,8 @@
       {
         "name": "non-interactive",
         "usage": "--non-interactive",
-        "help": "Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)",
-        "help_first_line": "Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)",
+        "help": "Never prompt or open a browser; use only cached or non-interactive auth",
+        "help_first_line": "Never prompt or open a browser; use only cached or non-interactive auth",
         "short": [],
         "long": ["non-interactive"],
         "hide": false,
@@ -3181,8 +3997,9 @@
       {
         "name": "write-profile",
         "usage": "--write-profile <WRITE_PROFILE>",
-        "help": "Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise.",
-        "help_first_line": "Target profile for write commands (set, remove, import, sync, provider add/remove). Required when multiple profiles are active; defaults to the single active profile otherwise.",
+        "help": "Profile that write commands modify when several profiles are active",
+        "help_long": "Profile that write commands modify when several profiles are active\n\nApplies to `set`, `remove`, `import`, `sync`, and `provider add|remove`. Required when more than one profile is active; otherwise defaults to the active profile.",
+        "help_first_line": "Profile that write commands modify when several profiles are active",
         "short": [],
         "long": ["write-profile"],
         "hide": false,
@@ -3224,6 +4041,7 @@
     "unknown_flags": null,
     "hide": false,
     "subcommand_required": true,
+    "max_term_width": 100,
     "args_override_self": true,
     "name": "fnox",
     "aliases": [],
@@ -3249,8 +4067,8 @@
         "envs": ["FNOX_AGE_KEY_FILE"],
         "cli": ["--age-key-file"],
         "bindings": {},
-        "help": "Path to a file containing the age encryption key.",
-        "long_help": "Path to a file containing the age encryption key.\n\nPrefer setting key_file on the age provider itself, or FNOX_AGE_KEY for inline key content. The --age-key-file flag is deprecated and hidden; the FNOX_AGE_KEY_FILE environment variable remains supported.\n\nPriority (highest to lowest): CLI > Environment > Default",
+        "help": "Path to an age identity file for decrypting age secrets.",
+        "long_help": "Path to an age identity file for decrypting age secrets.\n\nUsed only when `FNOX_AGE_KEY` is unset and the age provider sets neither `identity` nor `key_file`; without it, fnox falls back to `age.txt` in the fnox config directory. Prefer `key_file` on the provider. The `--age-key-file` flag is deprecated and hidden, and overrides `FNOX_AGE_KEY_FILE` when both are set.",
         "help_heading": null,
         "choices": [],
         "merge": "replace",
@@ -3263,10 +4081,7 @@
         "since": "0.1.0",
         "parse": null,
         "writes_to": null,
-        "examples": [
-          "fnox get MY_SECRET --age-key-file ~/.age/key.txt",
-          "FNOX_AGE_KEY_FILE=~/.age/key.txt fnox get MY_SECRET"
-        ],
+        "examples": ["FNOX_AGE_KEY_FILE=~/.age/key.txt fnox get MY_SECRET"],
         "default_list": [],
         "extensions": []
       },
@@ -3282,8 +4097,8 @@
         "envs": ["FNOX_HTTP_TIMEOUT"],
         "cli": [],
         "bindings": {},
-        "help": "HTTP request timeout for lease backend API calls (Vault, GCP IAM, etc.).",
-        "long_help": "HTTP request timeout for lease backend API calls (Vault, GCP IAM, etc.).\n\nAccepts a duration such as \"30s\", \"2m\", or \"1h30m\". Prevents fnox exec from hanging indefinitely on slow or unreachable servers. Set to \"0\" to disable the timeout (not recommended). An unparseable value falls back to the default.\n\nPriority: Environment > Default",
+        "help": "Timeout for HTTP requests that fnox makes itself.",
+        "long_help": "Timeout for HTTP requests that fnox makes itself.\n\nApplies to lease backends such as Vault, GCP IAM, GitHub, and Cloudflare, to Lua plugin HTTP calls, and to the Azure App Configuration provider, so a slow server cannot hang `fnox exec`. Accepts a duration such as `30s`, `2m`, or `1h30m`. `0` disables the timeout; a value that does not parse means `30s`.",
         "help_heading": null,
         "choices": [],
         "merge": "replace",
@@ -3319,8 +4134,8 @@
         "envs": ["FNOX_IF_MISSING"],
         "cli": ["--if-missing"],
         "bindings": {},
-        "help": "Runtime override for the if_missing behavior when a secret cannot be resolved.",
-        "long_help": "Runtime override for the if_missing behavior when a secret cannot be resolved.\n\nAvailable modes: \"error\" fails the command, \"warn\" prints a warning and continues, and \"ignore\" silently skips the missing secret. This overrides any if_missing value set in the configuration.\n\nPriority (highest to lowest): CLI flag > Environment > Secret level > Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)",
+        "help": "What to do when any secret cannot be resolved, overriding the config.",
+        "long_help": "What to do when any secret cannot be resolved, overriding the config.\n\n`error` fails the command, `warn` prints a warning and continues, and `ignore` continues silently. This beats every `if_missing` in the config. The full order is: `--if-missing`, `FNOX_IF_MISSING`, the secret's `if_missing`, the top-level `if_missing`, `FNOX_IF_MISSING_DEFAULT`, then `warn`. An unknown value prints a warning and means `warn`.",
         "help_heading": null,
         "choices": [],
         "merge": "replace",
@@ -3356,8 +4171,8 @@
         "envs": ["FNOX_IF_MISSING_DEFAULT"],
         "cli": [],
         "bindings": {},
-        "help": "Fallback if_missing behavior for secrets that do not set one in the configuration.",
-        "long_help": "Fallback if_missing behavior for secrets that do not set one in the configuration.\n\nAvailable modes: \"error\" fails the command, \"warn\" prints a warning and continues (default), and \"ignore\" silently skips the missing secret. Unlike FNOX_IF_MISSING, this does not override values set in the configuration.\n\nPriority (highest to lowest): CLI flag > FNOX_IF_MISSING > Secret level > Top-level config > FNOX_IF_MISSING_DEFAULT > Default (warn)",
+        "help": "What to do when a secret cannot be resolved, if the config does not say.",
+        "long_help": "What to do when a secret cannot be resolved, if the config does not say.\n\n`error` fails the command, `warn` prints a warning and continues (the built-in default), and `ignore` continues silently. Unlike `FNOX_IF_MISSING`, it applies only to secrets with no `if_missing` in the secret or at the top level of the config. An unknown value prints a warning and means `warn`.",
         "help_heading": null,
         "choices": [],
         "merge": "replace",
@@ -3371,8 +4186,8 @@
         "parse": null,
         "writes_to": null,
         "examples": [
-          "export FNOX_IF_MISSING_DEFAULT=error  # Strict by default",
-          "export FNOX_IF_MISSING_DEFAULT=ignore  # Lenient by default"
+          "export FNOX_IF_MISSING_DEFAULT=error",
+          "export FNOX_IF_MISSING_DEFAULT=ignore"
         ],
         "default_list": [],
         "extensions": []
@@ -3389,8 +4204,8 @@
         "envs": ["FNOX_NO_DEFAULTS"],
         "cli": ["--no-defaults"],
         "bindings": {},
-        "help": "When a non-default profile is selected, do not merge top-level [secrets] into the profile. Only [profiles.<name>.secrets] will be used.",
-        "long_help": "When a non-default profile is selected, do not merge top-level [secrets] into the profile. Only [profiles.<name>.secrets] will be used.\n\nPriority (highest to lowest): CLI > Environment > Default",
+        "help": "Use only the selected profile's secrets, without top-level `[secrets]`.",
+        "long_help": "Use only the selected profile's secrets, without top-level `[secrets]`.\n\nBy default a named profile inherits the top-level `[secrets]` table. With this set, only `[profiles.<name>.secrets]` (and the profile's own files) apply. `--no-defaults` overrides `FNOX_NO_DEFAULTS`.",
         "help_heading": null,
         "choices": [],
         "merge": "replace",
@@ -3425,8 +4240,8 @@
         "envs": ["FNOX_PROFILE"],
         "cli": ["--profile", "-P"],
         "bindings": {},
-        "help": "Configuration profile to use for secrets retrieval.",
-        "long_help": "Configuration profile to use for secrets retrieval.\n\nProfiles allow you to maintain multiple configurations (e.g., dev, staging, prod) in a single fnox.toml file.\n\nPriority (highest to lowest): CLI > Environment > Default",
+        "help": "Profiles to use, separated by commas.",
+        "long_help": "Profiles to use, separated by commas.\n\nSelects which `[profiles.<name>]` tables and `fnox.<name>.toml` files apply. With several profiles, later ones override earlier ones. `--profile` overrides `FNOX_PROFILE`.",
         "help_heading": null,
         "choices": [],
         "merge": "replace",
@@ -3441,7 +4256,7 @@
         "writes_to": null,
         "examples": [
           "fnox get MY_SECRET --profile production",
-          "FNOX_PROFILE=staging fnox get MY_SECRET"
+          "FNOX_PROFILE=aws,staging fnox exec -- ./deploy.sh"
         ],
         "default_list": ["default"],
         "extensions": []
@@ -3458,8 +4273,8 @@
         "envs": ["FNOX_SHELL_OUTPUT"],
         "cli": [],
         "bindings": {},
-        "help": "Control how much the shell integration prints when it loads or unloads secrets.",
-        "long_help": "Control how much the shell integration prints when it loads or unloads secrets.\n\nAvailable modes: \"none\" prints nothing, \"normal\" prints a summary when secrets are loaded or unloaded (default), and \"debug\" prints detailed information, including why the hook exited early.\n\nPriority: Environment > Default",
+        "help": "How much shell integration prints when it loads or unloads secrets.",
+        "long_help": "How much shell integration prints when it loads or unloads secrets.\n\n`none` prints nothing, `normal` prints the keys that were loaded or unloaded, and `debug` also explains what the hook did, including why it exited early. `off`, `false`, and `0` also mean `none`; `verbose` also means `debug`. Any other value means `normal`.",
         "help_heading": null,
         "choices": [],
         "merge": "replace",
@@ -3473,8 +4288,8 @@
         "parse": null,
         "writes_to": null,
         "examples": [
-          "FNOX_SHELL_OUTPUT=none fnox activate bash",
-          "FNOX_SHELL_OUTPUT=debug fnox activate zsh"
+          "export FNOX_SHELL_OUTPUT=none",
+          "export FNOX_SHELL_OUTPUT=debug"
         ],
         "default_list": [],
         "extensions": []
@@ -3503,7 +4318,35 @@
       "type_": "file"
     }
   },
-  "about": "A flexible secret management tool by @jdx",
+  "about": "Load secrets from encrypted files, password managers, and cloud secret stores",
+  "about_long": "Load secrets from encrypted files, password managers, and cloud secret stores\n\nfnox reads `fnox.toml` from the current directory and its parents, resolves each secret through the provider it names, and hands the values to your shell or to the command you run.\n\nCommands by task:\n\n - Read and run: get, list, exec, env, export, check\n - Store and migrate: set, remove, import, sync, reencrypt, edit\n - Configure: init, provider, plugin, profiles, config-files\n - Shell and tools: activate, deactivate, completion, tui, mcp\n - Diagnose: doctor, scan\n - Cache and broker: daemon, lease, proxy\n\nPut fnox options before the `--` that starts a child command, as in `fnox -P prod exec -- npm start`. Everything after `--` belongs to the child command.",
+  "after_help_long": "See also:\n- Quick start: https://fnox.jdx.dev/guide/quick-start\n- Configuration reference: https://fnox.jdx.dev/reference/configuration",
   "min_usage_version": "1.3",
+  "examples": [
+    {
+      "code": "fnox init",
+      "header": "Create a config in the current directory",
+      "help": null,
+      "lang": ""
+    },
+    {
+      "code": "fnox set DATABASE_URL",
+      "header": "Store a secret (prompts for the value)",
+      "help": null,
+      "lang": ""
+    },
+    {
+      "code": "fnox exec -- npm start",
+      "header": "Run a command with secrets in its environment",
+      "help": null,
+      "lang": ""
+    },
+    {
+      "code": "fnox -P staging list",
+      "header": "List the secrets in another profile",
+      "help": null,
+      "lang": ""
+    }
+  ],
   "unknown_flags": "error"
 }

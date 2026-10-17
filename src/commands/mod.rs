@@ -38,22 +38,59 @@ pub mod tui;
 pub mod usage;
 pub mod version;
 
+/// Load secrets from encrypted files, password managers, and cloud secret stores
+///
+/// fnox reads `fnox.toml` from the current directory and its parents, resolves
+/// each secret through the provider it names, and hands the values to your
+/// shell or to the command you run.
+///
+/// Commands by task:
+///
+///  - Read and run: get, list, exec, env, export, check
+///  - Store and migrate: set, remove, import, sync, reencrypt, edit
+///  - Configure: init, provider, plugin, profiles, config-files
+///  - Shell and tools: activate, deactivate, completion, tui, mcp
+///  - Diagnose: doctor, scan
+///  - Cache and broker: daemon, lease, proxy
+///
+/// Put fnox options before the `--` that starts a child command, as in
+/// `fnox -P prod exec -- npm start`. Everything after `--` belongs to the
+/// child command.
 #[derive(usage_rs::Cli)]
-#[usage(name = "fnox", unknown_flags = "error")]
+#[usage(name = "fnox", unknown_flags = "error", max_term_width = 100)]
 #[usage(config = crate::settings::SettingsData)]
-#[usage(about = "A flexible secret management tool by @jdx")]
 #[usage(version)]
+#[usage(
+    example("fnox init", header = "Create a config in the current directory"),
+    example(
+        "fnox set DATABASE_URL",
+        header = "Store a secret (prompts for the value)"
+    ),
+    example(
+        "fnox exec -- npm start",
+        header = "Run a command with secrets in its environment"
+    ),
+    example("fnox -P staging list", header = "List the secrets in another profile"),
+    after_long_help = "See also:\n- Quick start: https://fnox.jdx.dev/guide/quick-start\n- Configuration reference: https://fnox.jdx.dev/reference/configuration"
+)]
 pub struct Cli {
-    /// Path to the configuration file (default: fnox.toml, searches parent directories)
+    /// Config file to load
+    ///
+    /// The bare names `fnox.toml`, `.fnox.toml`, `fnox.local.toml`, and
+    /// `.fnox.local.toml` search the current directory and its parents. Any other
+    /// path, such as `./fnox.toml`, loads only that file, its imports, and the
+    /// global config.
     #[usage(short, long, default = "fnox.toml", global)]
     pub config: PathBuf,
 
-    /// Profile to use (default: default, or FNOX_PROFILE env var). Supports multiple
-    /// profiles separated by commas or repeated flags; later profiles overlay earlier ones.
+    /// Profile to use; repeat or comma-separate to layer several
+    ///
+    /// Later profiles override earlier ones. Defaults to `FNOX_PROFILE`, then
+    /// `default`.
     #[usage(short = 'P', long, global, setting = "profile")]
     pub profile: Vec<String>,
 
-    /// Enable verbose logging
+    /// Print debug logs to stderr
     #[usage(short, long, global)]
     pub verbose: bool,
 
@@ -61,7 +98,10 @@ pub struct Cli {
     #[usage(long, global, hide, setting = "age_key_file")]
     pub age_key_file: Option<PathBuf>,
 
-    /// What to do if a secret is missing (error, warn, ignore)
+    /// Override `if_missing` for every secret: `error`, `warn`, or `ignore`
+    ///
+    /// Takes precedence over `FNOX_IF_MISSING` and every `if_missing` value in
+    /// the config.
     #[usage(long, global, setting = "if_missing")]
     pub if_missing: Option<String>,
 
@@ -69,20 +109,23 @@ pub struct Cli {
     #[usage(long, global)]
     pub no_color: bool,
 
-    /// Disable daemon-backed resolution for this invocation
+    /// Resolve secrets directly instead of through the daemon
     #[usage(long, global)]
     pub no_daemon: bool,
 
-    /// Do not merge top-level secrets into the selected profile
+    /// Use only the selected profile's secrets, without top-level `[secrets]`
     #[usage(long, global, setting = "no_defaults")]
     pub no_defaults: bool,
 
-    /// Disable prompts and browser-based auth flows; use cached/non-interactive auth only (env: FNOX_NON_INTERACTIVE)
+    /// Never prompt or open a browser; use only cached or non-interactive auth
     #[usage(long, global, env = "FNOX_NON_INTERACTIVE")]
     pub non_interactive: bool,
 
-    /// Target profile for write commands (set, remove, import, sync, provider add/remove).
-    /// Required when multiple profiles are active; defaults to the single active profile otherwise.
+    /// Profile that write commands modify when several profiles are active
+    ///
+    /// Applies to `set`, `remove`, `import`, `sync`, and `provider add|remove`.
+    /// Required when more than one profile is active; otherwise defaults to the
+    /// active profile.
     #[usage(long, global)]
     pub write_profile: Option<String>,
 
@@ -92,107 +135,78 @@ pub struct Cli {
 
 #[derive(usage_rs::Subcommands)]
 pub enum Commands {
-    /// Output shell activation code to enable automatic secret loading
     Activate(activate::ActivateCommand),
 
-    /// Check if all required secrets are defined and configured
     Check(check::CheckCommand),
 
     /// Redact secrets in CI/CD output (GitHub Actions mask)
     #[usage(hide)]
     CiRedact(ci_redact::CiRedactCommand),
 
-    /// Generate shell completions
     Completion(completion::CompletionCommand),
 
-    /// List all config files that would be loaded
     ConfigFiles(config_files::ConfigFilesCommand),
 
-    /// Manage the per-user daemon
     Daemon(daemon::DaemonCommand),
 
-    /// Disable fnox shell integration in the current shell session
     Deactivate(deactivate::DeactivateCommand),
 
-    /// Show diagnostic information about the current fnox state
     Doctor(doctor::DoctorCommand),
 
-    /// Edit the configuration file
     Edit(edit::EditCommand),
 
-    /// Print the environment fnox would give a command, as JSON for other tools
     Env(env::EnvCommand),
 
-    /// Execute a command with secrets as environment variables
     Exec(exec::ExecCommand),
 
-    /// Export secrets in various formats
     Export(export::ExportCommand),
 
-    /// Get a secret value
     Get(get::GetCommand),
 
     /// Internal command used by shell hooks to load secrets
     #[usage(hide)]
     HookEnv(hook_env::HookEnvCommand),
 
-    /// Import secrets from various sources
     Import(import::ImportCommand),
 
-    /// Initialize a new fnox configuration file
     Init(init::InitCommand),
 
-    /// Manage ephemeral credential leases
     Lease(lease::LeaseCommand),
 
-    /// List all secrets
     List(list::ListCommand),
 
-    /// Start an MCP server that brokers secrets to AI agents
     Mcp(mcp::McpCommand),
 
-    /// Manage Lua provider plugins
     Plugin(plugin::PluginCommand),
 
-    /// List available profiles
     Profiles(profiles::ProfilesCommand),
 
-    /// Manage providers (defaults to list)
     Provider(provider::ProviderCommand),
 
-    /// Broker credentials into destination-scoped HTTPS requests
     Proxy(proxy::ProxyCommand),
 
-    /// Re-encrypt secrets with current provider configuration
     Reencrypt(reencrypt::ReencryptCommand),
 
-    /// Remove a secret
     Remove(remove::RemoveCommand),
 
-    /// Scan repository for potential secrets
     Scan(scan::ScanCommand),
 
     /// Generate JSON Schema for fnox configuration
     #[usage(hide)]
     Schema(schema::SchemaCommand),
 
-    /// Set a secret value
     Set(set::SetCommand),
 
-    /// Show the companies sponsoring fnox and the jdx.dev open source tools
     Sponsors(sponsors::SponsorsCommand),
 
-    /// Sync secrets from remote providers to a local encryption provider
     Sync(sync::SyncCommand),
 
-    /// Interactive TUI dashboard for managing secrets
     Tui(tui::TuiCommand),
 
     /// Generate usage specification
     #[usage(hide)]
     Usage(usage::UsageCommand),
 
-    /// Show version information
     Version(version::VersionCommand),
 }
 

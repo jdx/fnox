@@ -2,17 +2,33 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
 
+/// Remove a secret from a config file
+///
+/// Deletes KEY from the config file in the current directory, or the global
+/// config with `--global`, keeping comments and formatting. For a named write
+/// profile, fnox edits that profile's table, using `fnox.<profile>.toml` when
+/// that file exists. The value stored at a remote provider is not deleted or
+/// revoked.
 #[derive(Debug, usage_rs::Args)]
 #[usage(alias("rm", "delete"))]
+#[usage(
+    example("fnox remove OLD_TOKEN --dry-run", header = "Preview the change"),
+    example("fnox remove OLD_TOKEN", header = "Remove a secret"),
+    example(
+        "fnox -P staging remove OLD_TOKEN",
+        header = "Remove it from the staging profile"
+    ),
+    after_long_help = "See also:\n- Config files: https://fnox.jdx.dev/guide/config-files"
+)]
 pub struct RemoveCommand {
-    /// Secret key to remove
+    /// Secret to remove
     pub key: String,
 
-    /// Remove from the global config file (~/.config/fnox/config.toml)
+    /// Remove from the global config file (`~/.config/fnox/config.toml`)
     #[usage(short = 'g', long)]
     pub global: bool,
 
-    /// Show what would be removed without making changes
+    /// Show what would be removed without changing the file
     #[usage(short = 'n', long)]
     pub dry_run: bool,
 }

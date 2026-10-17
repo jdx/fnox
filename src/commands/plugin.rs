@@ -4,8 +4,20 @@ use crate::error::{FnoxError, Result};
 use crate::plugins::{self, PluginSource, UpdateOutcome};
 use std::path::PathBuf;
 
+/// Manage Lua provider plugins
+///
+/// Plugins add provider types written in Lua. They are installed per user in
+/// `$FNOX_PLUGINS_DIR` (default: `~/.local/share/fnox/plugins`) and declared per
+/// project under `[plugins]`. Without a subcommand, `fnox plugin` lists them.
 #[derive(Debug, usage_rs::Args)]
-#[usage(about = "Manage Lua provider plugins")]
+#[usage(
+    example("fnox plugin", header = "List installed and declared plugins"),
+    example(
+        "fnox plugin install",
+        header = "Install every plugin the project declares"
+    ),
+    after_long_help = "See also:\n- Lua plugins: https://fnox.jdx.dev/providers/lua"
+)]
 pub struct PluginCommand {
     #[usage(subcommand)]
     pub subcommand: Option<PluginSubcommand>,
@@ -13,35 +25,42 @@ pub struct PluginCommand {
 
 #[derive(Debug, usage_rs::Subcommands)]
 pub enum PluginSubcommand {
-    /// Install plugins from git
     Install(PluginInstallCommand),
-    /// Link a local plugin directory, for plugin development
     Link(PluginLinkCommand),
-    /// List installed and declared plugins
     #[usage(alias("list"))]
     Ls(PluginLsCommand),
-    /// Remove an installed or linked plugin
     #[usage(alias("rm", "remove"))]
     Uninstall(PluginUninstallCommand),
-    /// Update installed plugins to their declared source
     #[usage(alias("upgrade"))]
     Update(PluginUpdateCommand),
 }
 
-/// Install plugins from git
+/// Install Lua plugins from git
 ///
 /// With no arguments, installs every plugin declared under `[plugins]` that is
-/// not installed yet. A source is a git URL, optionally followed by `#<ref>`
-/// to pin a tag, branch, or commit; `owner/repo` is shorthand for GitHub.
+/// not installed yet. With NAME, installs that plugin from SOURCE, or from its
+/// `[plugins]` entry when SOURCE is omitted. A source is a git URL, optionally
+/// followed by `#<ref>` to pin a tag, branch, or commit; `owner/repo` is
+/// shorthand for GitHub. Installing does not add a `[plugins]` entry.
 #[derive(Debug, usage_rs::Args)]
 #[usage(
-    after_long_help = "Examples:\n  fnox plugin install\n  fnox plugin install corp\n  fnox plugin install corp acme/fnox-plugin-corp#v1.0.0\n  fnox plugin install corp https://git.example.com/fnox-plugin-corp.git"
+    example("fnox plugin install", header = "Install every declared plugin"),
+    example("fnox plugin install corp", header = "Install one declared plugin"),
+    example(
+        "fnox plugin install corp acme/fnox-plugin-corp#v1.0.0",
+        header = "Install a pinned version from GitHub"
+    ),
+    example(
+        "fnox plugin install corp https://git.example.com/fnox-plugin-corp.git",
+        header = "Install from any git URL"
+    ),
+    after_long_help = "See also:\n- Lua plugins: https://fnox.jdx.dev/providers/lua"
 )]
 pub struct PluginInstallCommand {
-    /// Plugin name; installs all declared plugins when omitted
+    /// Plugin to install (default: every declared plugin)
     pub name: Option<String>,
 
-    /// Git source; defaults to the name's entry under `[plugins]`
+    /// Git source (default: the plugin's entry under `[plugins]`)
     pub source: Option<String>,
 
     /// Reinstall even if the plugin is already installed
@@ -49,31 +68,74 @@ pub struct PluginInstallCommand {
     pub force: bool,
 }
 
+/// Link a local plugin directory for development
+///
+/// Installs NAME as a symlink to PATH, so edits take effect without
+/// reinstalling. `fnox plugin update` skips linked plugins.
 #[derive(Debug, usage_rs::Args)]
+#[usage(
+    example(
+        "fnox plugin link corp ~/src/fnox-plugin-corp",
+        header = "Link a checkout"
+    ),
+    example(
+        "fnox plugin link corp ./plugin --force",
+        header = "Replace an installed plugin"
+    ),
+    after_long_help = "See also:\n- Lua plugins: https://fnox.jdx.dev/providers/lua"
+)]
 pub struct PluginLinkCommand {
     /// Plugin name
     pub name: String,
 
-    /// Plugin directory containing provider.lua
+    /// Directory that contains `provider.lua`
     pub path: PathBuf,
 
-    /// Replace an existing plugin with the link
+    /// Replace an existing plugin of the same name
     #[usage(short, long)]
     pub force: bool,
 }
 
+/// List installed and declared plugins
+///
+/// Prints each installed plugin with its git source and checked-out revision,
+/// each linked plugin with its target, and each plugin declared under
+/// `[plugins]` that is not installed yet.
 #[derive(Debug, usage_rs::Args)]
+#[usage(
+    example("fnox plugin ls", header = "List plugins"),
+    after_long_help = "See also:\n- Lua plugins: https://fnox.jdx.dev/providers/lua"
+)]
 pub struct PluginLsCommand {}
 
+/// Remove an installed or linked plugin
+///
+/// Deletes the plugin's directory, or only the link for a linked plugin. Its
+/// declaration under `[plugins]` stays, so `fnox plugin install` can reinstall
+/// it.
 #[derive(Debug, usage_rs::Args)]
+#[usage(
+    example("fnox plugin uninstall corp", header = "Remove a plugin"),
+    after_long_help = "See also:\n- Lua plugins: https://fnox.jdx.dev/providers/lua"
+)]
 pub struct PluginUninstallCommand {
     /// Plugin name
     pub name: String,
 }
 
+/// Update installed plugins to their declared source
+///
+/// Checks out each plugin's declared ref, or its remote's default branch when
+/// no ref is declared. With no arguments, updates every installed plugin.
+/// Linked plugins are skipped.
 #[derive(Debug, usage_rs::Args)]
+#[usage(
+    example("fnox plugin update", header = "Update every installed plugin"),
+    example("fnox plugin update corp", header = "Update one plugin"),
+    after_long_help = "See also:\n- Lua plugins: https://fnox.jdx.dev/providers/lua"
+)]
 pub struct PluginUpdateCommand {
-    /// Plugins to update; updates all installed plugins when omitted
+    /// Plugins to update (default: every installed plugin)
     pub names: Vec<String>,
 }
 

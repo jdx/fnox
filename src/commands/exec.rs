@@ -5,24 +5,57 @@ use crate::{commands::Cli, config::Config};
 use std::process::Command;
 use tempfile::NamedTempFile;
 
+/// Run a command with secrets in its environment
+///
+/// Resolves the active profile's secrets and runs COMMAND with them set as
+/// environment variables. Secrets with `env = true` (the default) or
+/// `env = "exec"` are set; `env = false` secrets are not, and are removed if the
+/// parent environment has them. An `as_file` secret is written to a private
+/// temporary file whose path becomes the variable's value; the file is deleted
+/// when the command exits. Configured lease backends add short-lived
+/// credentials.
+///
+/// fnox also removes `FNOX_AGE_KEY`, `FNOX_AGE_KEY_FILE`, and the Enpass master
+/// password from the inherited environment, forwards Ctrl-C and `SIGTERM` to the
+/// command, and exits with the command's exit status. Put fnox options before
+/// `--`; everything after it is the command.
 #[derive(Debug, usage_rs::Args)]
 #[usage(alias = "x", alias_hidden = "run")]
+#[usage(
+    example("fnox exec -- npm start", header = "Run a command"),
+    example(
+        "fnox exec -P production --if-missing error -- ./deploy.sh",
+        header = "Use the production profile and fail on any missing secret"
+    ),
+    example(
+        "fnox exec -- sh -c 'test -n \"$DATABASE_URL\"'",
+        header = "Expand a secret in a shell expression (single quotes defer expansion)"
+    ),
+    example(
+        "fnox exec --refresh API_TOKEN -- ./script.sh",
+        header = "Re-fetch one secret instead of using the daemon cache"
+    ),
+    after_long_help = "See also:\n- Running commands: https://fnox.jdx.dev/guide/running-commands\n- Profiles: https://fnox.jdx.dev/guide/profiles"
+)]
 pub struct ExecCommand {
-    /// Re-resolve this secret from its provider instead of serving it from the
-    /// daemon cache, and cache the new value. Other secrets are still served from
-    /// the cache. Repeat to refresh several keys
+    /// Re-fetch KEY from its provider instead of the daemon cache; repeatable
+    ///
+    /// The fresh value replaces the cached one. Other secrets are still served
+    /// from the cache.
     #[usage(long, value_name = "KEY")]
     pub refresh: Vec<String>,
 
-    /// Replace the fnox process with the command so it keeps the same PID and receives
-    /// signals directly. Rejected when the command's environment would carry an as_file
-    /// secret, or when the profile configures credential leases, since fnox must clean
-    /// those up after the command exits. Unix only
+    /// Replace the fnox process with the command (Unix only)
+    ///
+    /// The command keeps fnox's process ID and receives signals directly. Not
+    /// allowed when the command would receive an `as_file` secret or the profile
+    /// configures lease backends, because fnox must clean those up after the
+    /// command exits.
     #[cfg(unix)]
     #[usage(long)]
     pub replace: bool,
 
-    /// Command to run
+    /// Command to run, with its arguments
     #[usage(
         arg,
         double_dash = "automatic",

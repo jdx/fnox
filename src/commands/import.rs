@@ -13,49 +13,70 @@ use strum::{Display, EnumString, VariantNames};
 #[derive(Debug, Clone, Copy, usage_rs::ValueEnum, Display, EnumString, VariantNames)]
 #[strum(serialize_all = "lowercase")]
 pub enum ImportFormat {
-    /// Environment variable format (KEY=value)
+    /// dotenv lines (`KEY=value` or `export KEY=value`)
     Env,
-    /// JSON format
+    /// JSON object, flat or as written by `fnox export`
     Json,
-    /// YAML format
+    /// YAML mapping, flat or as written by `fnox export`
     Yaml,
-    /// TOML format
+    /// TOML table, flat or as written by `fnox export`
     Toml,
 }
 
-/// Import secrets from various sources
+/// Encrypt secrets from a dotenv, JSON, YAML, or TOML file into the config
+///
+/// Reads key/value pairs from `--input` (or stdin), encrypts each value with the
+/// encryption provider named by `--provider`, and writes the ciphertext to the
+/// config file in the current directory, or to the global config with
+/// `--global`. Keys that already exist keep their other settings, such as
+/// `description` and `if_missing`. Remote storage providers cannot be import
+/// targets.
+///
+/// fnox lists the keys and asks for confirmation before writing. When the data
+/// comes from stdin, pass `--force` (or `--dry-run`), because stdin cannot also
+/// answer the prompt.
 #[derive(usage_rs::Args)]
 #[usage(alias("im"))]
+#[usage(
+    example("fnox import -i .env -p age --dry-run", header = "Preview an import"),
+    example("fnox import -i .env -p age", header = "Import a dotenv file"),
+    example(
+        "fnox import json -i secrets.json -p age --filter '^STRIPE_'",
+        header = "Import only matching keys from JSON"
+    ),
+    example("cat .env | fnox import -p age --force", header = "Read from stdin"),
+    after_long_help = "See also:\n- Import and export: https://fnox.jdx.dev/guide/import-export"
+)]
 pub struct ImportCommand {
-    /// Import source format
+    /// Input format
     #[usage(arg, default = "env", value_enum)]
     format: ImportFormat,
 
-    /// Skip confirmation prompts
+    /// Write without asking for confirmation
     #[usage(short, long)]
     force: bool,
 
-    /// Import to the global config file (~/.config/fnox/config.toml)
+    /// Write to the global config file (`~/.config/fnox/config.toml`)
     #[usage(short = 'g', long)]
     global: bool,
 
-    /// Source file or path to import from (default: stdin)
+    /// File to read (default: stdin)
     #[usage(short = 'i', long)]
     input: Option<PathBuf>,
 
-    /// Show what would be imported without making changes
+    /// List the keys that would be imported without writing anything
     #[usage(short = 'n', long)]
     dry_run: bool,
 
-    /// Provider to use for encrypting/storing imported secrets (required)
+    /// Encryption provider to encrypt the values with
     #[usage(short = 'p', long)]
     provider: String,
 
-    /// Only import matching secrets (regex pattern)
+    /// Import only keys matching this regular expression
     #[usage(long)]
     filter: Option<String>,
 
-    /// Prefix to add to imported secret names
+    /// Prepend this string to every imported key
     #[usage(long)]
     prefix: Option<String>,
 }

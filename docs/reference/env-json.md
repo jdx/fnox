@@ -1,13 +1,16 @@
 ---
-description: "Reference for fnox env --json: the versioned JSON contract that tools such as mise use to get the environment fnox exec would give a command."
+description: "Look up the fnox env --json contract: flags, key selection, document schema, exit codes, and daemon behavior for tools such as mise."
 ---
 
 # `fnox env --json`
 
 `fnox env --json` prints the environment that `fnox exec` would give a command, as JSON, so that tools which start processes themselves can apply it. It is the machine-readable counterpart of `fnox exec`, with key selection, no leftover files, and a versioned schema.
 
-```console
-$ fnox env --json --keys DATABASE_URL,GCP_SA_JSON
+```sh
+fnox env --json --keys DATABASE_URL,GCP_SA_JSON
+```
+
+```json
 {"schema":1,"fnox_version":"1.39.0","scope":"exec","profile":["default"],"set":{"DATABASE_URL":"postgres://…"},"files":{"GCP_SA_JSON":"{…contents…}"},"remove":["FNOX_AGE_KEY","FNOX_AGE_KEY_FILE","ENPASS_PASSWORD","FNOX_ENPASS_PASSWORD","SIGNING_KEY"],"missing":[],"leases":[]}
 ```
 
@@ -19,11 +22,11 @@ Use this instead of `fnox export --format json`, which selects keys by shell-inj
 
 ## Usage
 
-```
+```text
 fnox [global flags] env --json [--for exec|shell] [--keys K1,K2 ...] [--describe]
 ```
 
-Global flags such as `-P/--profile`, `-c/--config`, `--if-missing`, `--no-defaults`, `--non-interactive` and `--no-daemon` go **before** `env`.
+Global flags such as `-P/--profile`, `-c/--config`, `--if-missing`, `--no-defaults`, `--non-interactive`, and `--no-daemon` work before or after `env`.
 
 | Flag            | Meaning                                                                                                                               |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -192,6 +195,10 @@ Rust programs can use the document types from the [`fnox-client`](https://crates
 | Daemon enabled but not running                                                         | Starts it automatically                                            |
 | Interactive, cache misses                                                              | Resolves on its own terminal, then stores the values in the daemon |
 
-With `--non-interactive` and the daemon enabled, the daemon resolves cache misses itself. Callers that want resolution to stay in the client also pass `--no-daemon`. `--describe` never touches the daemon. See [the daemon guide](/guide/daemon).
+With `--non-interactive` and the daemon enabled, the daemon resolves cache misses itself. Callers that want resolution to stay in the client also pass `--no-daemon`. `--describe` never touches the daemon. To get the same document from a running daemon without starting `fnox`, see the [daemon guide](/guide/daemon).
 
-To get the same document from a running daemon without starting `fnox`, see [Other programs](/guide/daemon#other-programs-mise).
+## See also
+
+- [`fnox env`](/cli/env): flags and examples.
+- [Running commands](/guide/running-commands): when to use `fnox exec`, `fnox env`, and `fnox export`.
+- [Daemon](/guide/daemon): how cached resolution works.

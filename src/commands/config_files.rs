@@ -14,7 +14,29 @@ struct PartialConfig {
     import: Vec<String>,
 }
 
+/// List the config files fnox loads from the current directory
+///
+/// Prints one path per line, nearest directory first: the config files in the
+/// current directory, then those in each parent up to a file that sets
+/// `root = true`, then the global config. Each file is followed by the files it
+/// imports. Profile files such as `fnox.staging.toml` appear for the active
+/// profile. Only files that exist are listed.
+///
+/// With `-c` set to an explicit path, fnox lists that file, its imports, and the
+/// global config, matching how it loads config in that case.
 #[derive(usage_rs::Args)]
+#[usage(
+    example("fnox config-files", header = "List the files for the default profile"),
+    example(
+        "fnox -P staging config-files",
+        header = "Include the staging profile's files"
+    ),
+    example(
+        "fnox -c ./fnox.toml config-files",
+        header = "Show what an explicit path loads"
+    ),
+    after_long_help = "See also:\n- Config files: https://fnox.jdx.dev/guide/config-files"
+)]
 pub struct ConfigFilesCommand;
 
 impl ConfigFilesCommand {

@@ -5,25 +5,46 @@ use crate::providers::{OptionProviderSecretRef, OptionStringOrSecretRef, StringO
 
 use super::ProviderType;
 
+/// Add a provider entry to a config file
+///
+/// Writes a `[providers.<PROVIDER>]` entry of type PROVIDER_TYPE to the config
+/// file in the current directory, or the global config with `--global`. Most
+/// types start from a template with placeholder values that you edit
+/// afterward; `fido2` and `yubikey` run an interactive hardware setup instead.
+///
+/// The `aws` and `gcp` choices create `aws-sm` and `gcp-sm` providers. With an
+/// explicit `-P` or `--write-profile`, the entry goes under that profile.
 #[derive(Debug, usage_rs::Args)]
 #[usage(alias("a", "set"))]
+#[usage(
+    example("fnox provider add op 1password", header = "Add a 1Password provider"),
+    example(
+        "fnox provider add sync-age age --global",
+        header = "Add an age provider to the global config"
+    ),
+    example(
+        "fnox provider add corp lua --plugin fnox-plugin-corp",
+        header = "Add a Lua plugin provider"
+    ),
+    after_long_help = "See also:\n- Providers: https://fnox.jdx.dev/providers/overview\n- Connect an existing vault: https://fnox.jdx.dev/guide/existing-vault"
+)]
 pub struct AddCommand {
-    /// Provider name
+    /// Name for the provider, which secrets reference with `provider = "..."`
     pub provider: String,
 
     /// Provider type
     #[usage(arg, value_enum)]
     pub provider_type: ProviderType,
 
-    /// Add to the global config file (~/.config/fnox/config.toml)
+    /// Write to the global config file (`~/.config/fnox/config.toml`)
     #[usage(short = 'g', long)]
     pub global: bool,
 
-    /// Plugin name or path (only valid with provider type lua; defaults to the provider name)
+    /// Lua plugin name or path (type `lua` only; default: the provider name)
     #[usage(long)]
     pub plugin: Option<String>,
 
-    /// Default Proton Pass vault name (only valid with provider type proton-pass)
+    /// Default Proton Pass vault (type `proton-pass` only)
     #[usage(long)]
     pub vault: Option<String>,
 }

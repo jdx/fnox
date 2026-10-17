@@ -1,390 +1,102 @@
 ---
-description: "Reference for fnox environment variables, authentication inputs, configuration paths, missing-secret behavior, and precedence."
+description: "Look up the environment variables fnox reads: profile and missing-secret overrides, age keys, directories, daemon, shell output, and provider credentials."
 ---
 
 # Environment variables
 
-Use environment variables for runtime overrides and provider authentication. CLI flags take precedence for corresponding settings such as profile selection and missing-secret handling. Provider-specific credential precedence is documented in each provider guide.
+fnox reads these variables at startup. A command-line flag beats the matching variable, and most variables beat the corresponding setting in `fnox.toml`. Provider credentials and lease inputs follow their own rules, documented on each provider and lease page.
 
-## Configuration variables
+## Selection and behavior
 
-### `FNOX_PROFILE`
+| Variable                                                      | Values                                               | Default   | Effect                                                                                                                               |
+| ------------------------------------------------------------- | ---------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `FNOX_PROFILE`                                                | profile names, comma-separated                       | `default` | Active profiles; later ones override earlier ones. `-P` overrides it.                                                                |
+| `FNOX_NO_DEFAULTS`                                            | `true` or `1`                                        | `false`   | A named profile leaves out top-level `[secrets]`. Same as `--no-defaults`.                                                           |
+| `FNOX_IF_MISSING`                                             | `error`, `warn`, `ignore`                            | unset     | Missing-secret behavior for every secret, overriding the config. `--if-missing` overrides it.                                        |
+| `FNOX_IF_MISSING_DEFAULT`                                     | `error`, `warn`, `ignore`                            | `warn`    | Missing-secret behavior for secrets whose config sets none.                                                                          |
+| <span id="fnox-non-interactive"></span>`FNOX_NON_INTERACTIVE` | `true` or `1`                                        | unset     | Never prompt or open a browser. Same as `--non-interactive`.                                                                         |
+| `FNOX_PROMPT_AUTH`                                            | `true`, `1`, `yes`; anything else is false           | `true`    | Offer to run a provider's `auth_command` when authentication fails in a terminal. Overrides `prompt_auth` in the config.             |
+| `FNOX_DAEMON`                                                 | `on`, `true`, `yes`, `1` / `off`, `false`, `no`, `0` | unset     | Use the per-user daemon, or bypass it, regardless of `[daemon] enabled`. Other values are ignored.                                   |
+| <span id="fnox-http-timeout"></span>`FNOX_HTTP_TIMEOUT`       | duration such as `30s` or `2m`; `0` for none         | `30s`     | Timeout for HTTP requests fnox makes itself: lease backends, Lua plugins, and Azure App Configuration. An invalid value means `30s`. |
+| `FNOX_SHELL_OUTPUT`                                           | `none`, `normal`, `debug`                            | `normal`  | What shell integration prints. `off`, `false`, and `0` also mean `none`; `verbose` also means `debug`.                               |
 
-Active profile name. Supports multiple profiles as a comma-separated
-list for ordered overlay composition.
+For the full order in which `--if-missing`, these variables, and the config combine, see [`if_missing`](/reference/configuration#if-missing). For the settings that have a flag, see [runtime settings](/cli/configuration).
 
-```bash
-# Single profile
-export FNOX_PROFILE=production
+## age keys
 
-# Multiple profiles (later ones override earlier ones)
-export FNOX_PROFILE=aws,prod
-```
+| Variable            | Effect                                                                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FNOX_AGE_KEY`      | age identity contents. Takes precedence over every other identity source, including the provider's `identity` and `key_file`.               |
+| `FNOX_AGE_KEY_FILE` | Path to an age identity or SSH private key. Used only when `FNOX_AGE_KEY` is unset and the provider sets neither `identity` nor `key_file`. |
 
-**Default:** `default`
+Without either, fnox reads `age.txt` in `FNOX_CONFIG_DIR`. `fnox exec` removes both variables from the command's environment. See [age identity selection](/providers/age#set-decryption-key).
 
-**Usage:**
+## Directories
 
-```bash
-# Use production profile for all commands
-export FNOX_PROFILE=production
-fnox get DATABASE_URL
-fnox exec -- ./deploy.sh
-
-# Compose aws + prod profiles
-export FNOX_PROFILE=aws,prod
-fnox exec -- ./app
-```
-
-### `FNOX_NO_DEFAULTS`
-
-When set to `true`, do not merge top-level secrets into the selected profile.
-
-```bash
-export FNOX_NO_DEFAULTS=true
-fnox exec --profile production -- ./deploy.sh
-```
+These variables take an absolute path; fnox ignores relative or empty values. The defaults follow the XDG base directory variables when set.
 
 ### `FNOX_CONFIG_DIR`
 
-Configuration directory path.
-
-```bash
-export FNOX_CONFIG_DIR=~/.config/fnox
-```
-
-**Default:** `$XDG_CONFIG_HOME/fnox` if set, otherwise `~/.config/fnox` on Unix and `%USERPROFILE%\AppData\Local\fnox` on Windows
-
-**Usage:**
-
-```bash
-# Use custom config directory
-export FNOX_CONFIG_DIR=/opt/fnox
-fnox get DATABASE_URL
-```
+Directory for the global `config.toml` and the default `age.txt` identity. Default: `$XDG_CONFIG_HOME/fnox`, else `~/.config/fnox` on Unix and `%USERPROFILE%\AppData\Local\fnox` on Windows.
 
 ### `FNOX_STATE_DIR`
 
-State directory path. fnox stores the credential lease ledger under
-`$FNOX_STATE_DIR/leases/`.
-
-```bash
-export FNOX_STATE_DIR=/opt/fnox/state
-```
-
-**Default:** `$XDG_STATE_HOME/fnox` if set, otherwise `~/.local/state/fnox` on Unix and `%USERPROFILE%\AppData\Local\fnox` on Windows
+Directory for the per-project lease ledgers, under `leases/`. Default: `$XDG_STATE_HOME/fnox`, else `~/.local/state/fnox` on Unix and `%USERPROFILE%\AppData\Local\fnox` on Windows.
 
 ### `FNOX_DATA_DIR`
 
-Data directory path. fnox installs [Lua provider plugins](/providers/lua) under
-`$FNOX_DATA_DIR/plugins/`.
-
-```bash
-export FNOX_DATA_DIR=/opt/fnox/data
-```
-
-**Default:** `$XDG_DATA_HOME/fnox` if set, otherwise `~/.local/share/fnox` on Unix and `%USERPROFILE%\AppData\Local\fnox` on Windows
+Data directory. Default: `$XDG_DATA_HOME/fnox`, else `~/.local/share/fnox` on Unix and `%USERPROFILE%\AppData\Local\fnox` on Windows.
 
 ### `FNOX_PLUGINS_DIR`
 
-Directory for installed Lua provider plugins, one subdirectory per plugin.
+Directory for installed [Lua plugins](/providers/lua), one subdirectory per plugin. Default: `$FNOX_DATA_DIR/plugins`.
 
-**Default:** `$FNOX_DATA_DIR/plugins`
+## Editor and logging
 
-### `FNOX_PROMPT_AUTH`
+| Variable   | Effect                                                                                             |
+| ---------- | -------------------------------------------------------------------------------------------------- |
+| `EDITOR`   | Editor for `fnox edit`. Default: `vi`, or `notepad` on Windows.                                    |
+| `VISUAL`   | Used by `fnox edit` when `EDITOR` is unset.                                                        |
+| `RUST_LOG` | Log filter for stderr, such as `fnox=debug`. Takes precedence over the default set by `--verbose`. |
 
-Whether to prompt to run a provider's auth command (e.g., `aws sso login`,
-`op signin`) when provider authentication fails in a TTY. Overrides the
-`prompt_auth` config setting.
+## Provider and lease credentials
 
-```bash
-export FNOX_PROMPT_AUTH=false
-```
+Most providers read credentials from the environment, usually under both their own name and a `FNOX_`-prefixed name. Provider config can override them. Each page gives the precedence.
 
-**Default:** `true`
-
-### `FNOX_NON_INTERACTIVE`
-
-Disable prompts and browser-based auth flows; only cached or non-interactive
-auth is used. Equivalent to the `--non-interactive` flag.
-
-```bash
-export FNOX_NON_INTERACTIVE=1
-fnox exec -- ./deploy.sh
-```
-
-### `FNOX_HTTP_TIMEOUT`
-
-HTTP request timeout for lease backend API calls (Vault, GCP IAM, etc.). Set to
-`0` to disable the timeout (not recommended).
-
-```bash
-export FNOX_HTTP_TIMEOUT=60s
-```
-
-**Default:** `30s`
-
-## Encryption keys
-
-### `FNOX_AGE_KEY`
-
-Inline age identity contents. This takes precedence over the age provider's `identity` and `key_file` settings; unset it if you intend to use a different provider-specific identity.
-
-```bash
-export FNOX_AGE_KEY="AGE-SECRET-KEY-1..."
-```
-
-**Usage:**
-
-```bash
-# Set age key from file
-export FNOX_AGE_KEY="$(cat ~/.config/fnox/age.txt)"
-
-# Or set directly
-export FNOX_AGE_KEY="AGE-SECRET-KEY-1ABCDEFGHIJKLMNOPQRSTUVWXYZ..."
-```
-
-**Use when:** You want to provide the key directly (CI/CD, scripts).
-
-### `FNOX_AGE_KEY_FILE`
-
-Path to age private key file (or SSH key file).
-
-```bash
-export FNOX_AGE_KEY_FILE=~/.config/fnox/age.txt
-# Or SSH key:
-export FNOX_AGE_KEY_FILE=~/.ssh/id_ed25519
-```
-
-**Usage:**
-
-```bash
-# Use age key file
-export FNOX_AGE_KEY_FILE=~/.config/fnox/age.txt
-
-# Use SSH key
-export FNOX_AGE_KEY_FILE=~/.ssh/id_ed25519
-
-# Use in shell profile
-echo 'export FNOX_AGE_KEY_FILE=~/.ssh/id_ed25519' >> ~/.bashrc
-```
-
-**Use when:** You want a process-wide key file. For provider-specific keys, prefer `key_file` in the age provider. See the full [identity selection order](/providers/age#set-decryption-key).
-
-## Missing secret handling
-
-### `FNOX_IF_MISSING`
-
-Runtime override for missing secret behavior.
-
-```bash
-export FNOX_IF_MISSING=error  # or warn, ignore
-```
-
-**Values:**
-
-- `error` - Fail if secret is missing
-- `warn` - Print warning and continue (default)
-- `ignore` - Silently skip missing secrets
-
-**Priority:** Overrides config file settings, but CLI flags take precedence.
-
-**Usage:**
-
-```bash
-# Strict mode (fail on missing secrets)
-export FNOX_IF_MISSING=error
-fnox exec -- ./deploy.sh
-
-# Lenient mode (ignore missing secrets)
-export FNOX_IF_MISSING=ignore
-fnox exec -- npm test
-
-# Per-command override
-FNOX_IF_MISSING=error fnox exec -- ./critical-task.sh
-```
-
-### `FNOX_IF_MISSING_DEFAULT`
-
-Base default for missing secret behavior when not configured anywhere.
-
-```bash
-export FNOX_IF_MISSING_DEFAULT=error  # or warn, ignore
-```
-
-**Default:** `warn`
-
-**Priority:** Lowest priority. Only applies when:
-
-- CLI flag not set
-- `FNOX_IF_MISSING` not set
-- Secret-level `if_missing` not set
-- Top-level `if_missing` not set in config
-
-**Usage:**
-
-```bash
-# Make all projects strict by default
-export FNOX_IF_MISSING_DEFAULT=error
-echo 'export FNOX_IF_MISSING_DEFAULT=error' >> ~/.bashrc
-
-# Now all fnox commands default to error mode
-fnox exec -- ./any-command.sh
-```
-
-## Shell integration
-
-### `FNOX_DAEMON`
-
-Enable or disable daemon-backed resolution.
-
-```bash
-export FNOX_DAEMON=on   # enable daemon mode
-export FNOX_DAEMON=off  # force direct resolution
-```
-
-**Values:**
-
-- `on`, `true`, `yes`, `1` - Enable daemon-backed resolution
-- `off`, `false`, `no`, `0` - Disable daemon-backed resolution
-
-When set, this overrides the `[daemon].enabled` config setting. When enabled, supported read commands auto-start the per-user daemon and fail closed if the daemon cannot be used. The `--no-daemon` flag disables daemon use for a single invocation.
-
-See [Per-User Daemon](/guide/daemon).
-
-### `FNOX_SHELL_OUTPUT`
-
-Control shell integration output verbosity.
-
-```bash
-export FNOX_SHELL_OUTPUT=normal  # or none, debug
-```
-
-**Values:**
-
-- `none` - Silent mode (no output)
-- `normal` - Show count and secret names (default)
-- `debug` - Verbose debugging output
-
-**Usage:**
-
-```bash
-# Silent mode
-export FNOX_SHELL_OUTPUT=none
-cd my-app  # No output
-
-# Normal mode (default)
-export FNOX_SHELL_OUTPUT=normal
-cd my-app
-# fnox: +3 DATABASE_URL, API_KEY, JWT_SECRET
-
-# Debug mode
-export FNOX_SHELL_OUTPUT=debug
-cd my-app
-# fnox: Loading config from /path/to/fnox.toml
-# fnox: Active profile: default
-# fnox: Resolved 3 secrets
-# fnox: +3 DATABASE_URL, API_KEY, JWT_SECRET
-```
-
-## Provider-specific variables
-
-Provider configuration may override environment credentials. Follow the linked guide for precedence, scopes, and setup. Not every provider uses the same naming or authentication rules.
-
-| Provider                  | Common variables                                                                               | Guide                                                             |
+| Provider                  | Variables                                                                                      | Details                                                           |
 | ------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | AWS                       | `AWS_PROFILE`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION` | [AWS credentials](/providers/aws-sm#configure-aws-credentials)    |
 | Azure                     | `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_AUTHORITY_HOST`            | [Azure authentication](/providers/azure-sm#authentication)        |
 | Google Cloud              | `GOOGLE_APPLICATION_CREDENTIALS`                                                               | [Google Cloud authentication](/providers/gcp-sm#authentication)   |
-| Kubernetes                | `FNOX_K8S_CONTEXT`, `KUBECONFIG`                                                               | [Kubernetes Secrets](/providers/kubernetes#configuration)         |
+| Kubernetes                | `FNOX_K8S_CONTEXT`, `KUBECONFIG`                                                               | [Kubernetes](/providers/kubernetes#configuration)                 |
 | 1Password                 | `FNOX_OP_SERVICE_ACCOUNT_TOKEN`, `OP_SERVICE_ACCOUNT_TOKEN`                                    | [1Password](/providers/1password#authentication)                  |
 | Bitwarden                 | `FNOX_BW_SESSION`, `BW_SESSION`                                                                | [Bitwarden](/providers/bitwarden)                                 |
 | Bitwarden Secrets Manager | `FNOX_BWS_ACCESS_TOKEN`, `BWS_ACCESS_TOKEN`, `BWS_PROJECT_ID`                                  | [Bitwarden SM](/providers/bitwarden-sm#environment-variables)     |
 | Doppler                   | `FNOX_DOPPLER_TOKEN`, `DOPPLER_TOKEN`                                                          | [Doppler](/providers/doppler#token-management)                    |
 | Enpass                    | `FNOX_ENPASS_PASSWORD`, `ENPASS_PASSWORD`                                                      | [Enpass](/providers/enpass#authentication)                        |
-| FOKS                      | `FOKS_BOT_TOKEN`, `FOKS_HOST`, `FOKS_HOME` and `FNOX_` equivalents                             | [FOKS](/providers/foks#cicd)                                      |
-| Infisical                 | `INFISICAL_TOKEN`, `INFISICAL_CLIENT_ID`, `INFISICAL_CLIENT_SECRET` and `FNOX_` equivalents    | [Infisical](/providers/infisical)                                 |
+| FOKS                      | `FOKS_BOT_TOKEN`, `FOKS_HOST`, `FOKS_HOME`, and `FNOX_` equivalents                            | [FOKS](/providers/foks#cicd)                                      |
+| Infisical                 | `INFISICAL_TOKEN`, `INFISICAL_CLIENT_ID`, `INFISICAL_CLIENT_SECRET`, and `FNOX_` equivalents   | [Infisical](/providers/infisical)                                 |
 | KeePass                   | `FNOX_KEEPASS_PASSWORD`, `KEEPASS_PASSWORD`                                                    | [KeePass](/providers/keepass#authentication)                      |
 | Keeper Secrets Manager    | `FNOX_KEEPER_CONFIG`, `KSM_CONFIG`, `FNOX_KEEPER_TOKEN`, `KSM_TOKEN`                           | [Keeper SM](/providers/keeper-sm#authentication)                  |
 | Passwordstate             | `FNOX_PASSWORDSTATE_API_KEY`, `PASSWORDSTATE_API_KEY`                                          | [Passwordstate](/providers/passwordstate)                         |
-| password-store            | `PASSWORD_STORE_DIR`, `PASSWORD_STORE_GPG_OPTS` and `FNOX_` equivalents                        | [password-store](/providers/password-store#environment-variables) |
-| Proton Pass               | `PROTON_PASS_PERSONAL_ACCESS_TOKEN`, `PROTON_PASS_AGENT_REASON` and `FNOX_` equivalents        | [Proton Pass](/providers/proton-pass#session-and-key-storage)     |
-| Vault                     | `VAULT_ADDR`, `VAULT_TOKEN`, `VAULT_NAMESPACE` and `FNOX_` equivalents                         | [Vault](/providers/vault)                                         |
+| password-store            | `PASSWORD_STORE_DIR`, `PASSWORD_STORE_GPG_OPTS`, and `FNOX_` equivalents                       | [password-store](/providers/password-store#environment-variables) |
+| Proton Pass               | `PROTON_PASS_PERSONAL_ACCESS_TOKEN`, `PROTON_PASS_AGENT_REASON`, and `FNOX_` equivalents       | [Proton Pass](/providers/proton-pass#session-and-key-storage)     |
+| Vault                     | `VAULT_ADDR`, `VAULT_TOKEN`, `VAULT_NAMESPACE`, and `FNOX_` equivalents                        | [Vault](/providers/vault)                                         |
 
-Lease backends may consume the same cloud credentials or additional variables, such as `FNOX_GITHUB_APP_PRIVATE_KEY`. See the [lease backend guides](/guide/leases#supported-backends) for their inputs and output variable names.
+Lease backends read the same cloud credentials, plus backend-specific inputs such as `FNOX_GITHUB_APP_PRIVATE_KEY` for [`github-app`](/leases/github-app). See [credential leases](/guide/leases).
 
-## Editor
+## Set by fnox
 
-### `EDITOR`
+fnox sets these variables for other processes. Do not set them yourself.
 
-Editor used by `fnox edit`. If `EDITOR` is unset, fnox falls back to `VISUAL`.
+| Variable                                  | Set for                                                                                      |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `FNOX_SHELL`, `__FNOX_SESSION`            | The shell, by `fnox activate`. They record the active shell and the secrets the hook loaded. |
+| `FNOX_LEASE_DURATION`, `FNOX_LEASE_LABEL` | A [`command`](/leases/command) lease's `create_command`.                                     |
+| `FNOX_LEASE_ID`                           | A `command` lease's `revoke_command`.                                                        |
 
-```bash
-export EDITOR=vim
-fnox edit
-```
+## See also
 
-**Default:** `vi`
-
-## Examples
-
-### Development environment
-
-```bash
-# ~/.bashrc or ~/.zshrc
-
-# fnox configuration
-export FNOX_PROFILE=default
-export FNOX_AGE_KEY_FILE=~/.ssh/id_ed25519
-export FNOX_SHELL_OUTPUT=normal
-export FNOX_IF_MISSING=warn
-
-# Enable shell integration
-eval "$(fnox activate bash)"
-```
-
-### Production environment
-
-```bash
-# CI/CD or production server
-
-# Strict mode
-export FNOX_PROFILE=production
-export FNOX_IF_MISSING=error
-
-# AWS credentials (or use IAM role)
-export AWS_REGION=us-east-1
-
-# Age key from secret
-export FNOX_AGE_KEY="${CI_SECRET_AGE_KEY}"
-```
-
-### CI/CD environment
-
-```yaml
-# .github/workflows/deploy.yml
-env:
-  FNOX_PROFILE: production
-  FNOX_IF_MISSING: error
-  FNOX_AGE_KEY: ${{ secrets.FNOX_AGE_KEY }}
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-```
-
-## Priority order
-
-This ordering applies to runtime settings with equivalent CLI and environment options. Provider credential selection and age identity selection have their own documented precedence.
-
-When multiple configuration methods exist, fnox uses this priority (highest to lowest):
-
-1. **CLI flags** (`--profile`, `--if-missing`)
-2. **Environment variables** (`FNOX_PROFILE`, `FNOX_IF_MISSING`)
-3. **Configuration file** (`fnox.toml`)
-4. **Base defaults** (`FNOX_IF_MISSING_DEFAULT`)
-5. **Built-in defaults**
-
-## Next steps
-
-- [CLI Reference](/cli/) - All available commands
-- [Configuration Reference](/reference/configuration) - Configuration file format
-- [Quick Start](/guide/quick-start) - Get started with fnox
+- [Configuration reference](/reference/configuration): the `fnox.toml` settings these variables override.
+- [Runtime settings](/cli/configuration): settings available as both a flag and a variable.
+- [CI/CD](/guide/ci): non-interactive authentication in pipelines.

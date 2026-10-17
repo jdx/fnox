@@ -19,7 +19,18 @@ impl Drop for TerminalGuard {
     }
 }
 
+/// Browse secrets in an interactive terminal dashboard
+///
+/// Opens a full-screen view of the active profile's secrets and providers, where
+/// you can filter, switch profiles, reveal values, and copy them. Edits made in
+/// the dashboard are not saved; use `fnox set` or `fnox remove` to change the
+/// config. Providers that need a touch or PIN are skipped.
 #[derive(Debug, usage_rs::Args)]
+#[usage(
+    example("fnox tui", header = "Open the dashboard"),
+    example("fnox -P staging tui", header = "Start in another profile"),
+    after_long_help = "See also:\n- Terminal dashboard: https://fnox.jdx.dev/guide/tui"
+)]
 pub struct TuiCommand;
 
 impl TuiCommand {

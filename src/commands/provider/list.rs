@@ -2,8 +2,19 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::Result;
 
+/// List the providers configured for the active profile
+///
+/// Prints each provider name, sorted, one per line.
 #[derive(Debug, usage_rs::Args)]
 #[usage(alias("ls"))]
+#[usage(
+    example("fnox provider list", header = "List providers"),
+    example(
+        "fnox -P production provider list",
+        header = "List another profile's providers"
+    ),
+    after_long_help = "See also:\n- Providers: https://fnox.jdx.dev/providers/overview"
+)]
 pub struct ListCommand {
     /// Output provider names for shell completion (one per line)
     #[usage(long, hide)]

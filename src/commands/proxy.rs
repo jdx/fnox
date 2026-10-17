@@ -98,7 +98,22 @@ const AMBIENT_CREDENTIAL_ENV_VARS: &[&str] = &[
     "FNOX_PROTON_PASS_LINUX_KEYRING",
 ];
 
+/// Inject credentials into a command's HTTPS requests through a local proxy
+///
+/// `fnox proxy run` starts a local HTTPS proxy and runs a command that sees only
+/// placeholder values. When the command sends a request that matches a
+/// `[[proxy.rules]]` entry by domain, method, and path, the proxy swaps in the
+/// real secret. The proxy controls where credentials are sent; it does not
+/// sandbox the command. Both subcommands require a `[proxy]` table.
 #[derive(Debug, usage_rs::Args)]
+#[usage(
+    example("fnox proxy rules", header = "Check the rules"),
+    example(
+        "fnox proxy run -- node agent.js",
+        header = "Run a command behind the proxy"
+    ),
+    after_long_help = "See also:\n- Credential proxy: https://fnox.jdx.dev/guide/proxy"
+)]
 pub struct ProxyCommand {
     #[usage(subcommand)]
     command: ProxySubcommand,
@@ -106,16 +121,45 @@ pub struct ProxyCommand {
 
 #[derive(Debug, usage_rs::Subcommands)]
 enum ProxySubcommand {
-    /// Show the effective credential proxy rules
+    /// Print the effective proxy rules
+    ///
+    /// Validates the `[proxy]` table and prints its egress mode, audit setting,
+    /// and each rule's secret, domain, methods, paths, header, and placeholder
+    /// variable. Secrets are not resolved.
+    #[usage(
+        example("fnox proxy rules", header = "Print the rules"),
+        example(
+            "fnox -P staging proxy rules",
+            header = "Print another profile's rules"
+        ),
+        after_long_help = "See also:\n- Credential proxy: https://fnox.jdx.dev/guide/proxy"
+    )]
     Rules,
-
-    /// Run a command with placeholder credentials through the local proxy
     Run(ProxyRunCommand),
 }
 
+/// Run a command with placeholder credentials behind the proxy
+///
+/// Resolves the secrets that `[[proxy.rules]]` names, plus any secrets their
+/// providers need, starts the proxy on a local port, and runs COMMAND with:
+///
+///  - each rule's variable set to a placeholder instead of the real value
+///  - `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` pointing at the proxy
+///  - CA variables such as `SSL_CERT_FILE` pointing at the proxy's certificate
+///  - every configured secret and common cloud credential variables removed
+///
+/// The command's HTTP client must honor those proxy and CA settings. fnox exits
+/// with the command's exit status.
 #[derive(Debug, usage_rs::Args)]
+#[usage(
+    example(
+        "fnox proxy run -- node agent.js",
+        header = "Run an agent behind the proxy"
+    ),
+    after_long_help = "See also:\n- Credential proxy: https://fnox.jdx.dev/guide/proxy"
+)]
 struct ProxyRunCommand {
-    /// Command to run
+    /// Command to run, with its arguments
     #[usage(
         arg,
         double_dash = "automatic",
