@@ -57,7 +57,7 @@ A `command` lease also declares no inputs, so when one is selected fnox resolves
 
 fnox resolves the roots plus the secrets they depend on: secrets referenced with `${NAME}` in a `default`, and the secrets a provider reads from the environment (for example `OP_SERVICE_ACCOUNT_TOKEN` for a `1password` secret). For each selected lease, the secrets that lease consumes are included as well.
 
-`env = false` secrets are never printed. They are resolved only when a requested key depends on them, or when a selected `command` lease may read them. `fnox exec` follows the same rule.
+`env = false` secrets are never printed. They are resolved only when a requested key depends on them, when a selected lease consumes them as inputs, or when a selected `command` lease may read them. `fnox exec` follows the same rule.
 
 `as_file` secrets come back as raw contents in `files`, so fnox leaves no files behind. The caller writes them. Lease credentials that point at lease-time files (files fnox writes so a lease backend can read an `as_file` secret) are not usable through `fnox env`, because those files are removed when it exits; `as_file` secrets themselves come back in `files`.
 

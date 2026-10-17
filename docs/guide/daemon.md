@@ -96,7 +96,7 @@ fnox exec --refresh API_TOKEN -- ./deploy  # same, while other secrets come from
 
 `fnox check --all` uses the daemon connection when daemon mode is enabled, but it does not reuse cached secret values. It still contacts providers so it can validate the current state.
 
-`fnox exec` and `fnox env --json` resolve an `env = false` secret only when an injected secret depends on it or when a selected `command` lease may read it, and never inject or print it. Read one explicitly with `fnox get SECRET_NAME`.
+`fnox exec` and `fnox env --json` resolve an `env = false` secret only when an injected secret depends on it, when a selected lease consumes it as an input, or when a selected `command` lease may read it. They never inject or print it. Read one explicitly with `fnox get SECRET_NAME`.
 
 ## Opt out per secret or provider
 

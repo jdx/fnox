@@ -989,6 +989,33 @@ LAST = { default = "3" }
     }
 
     #[test]
+    fn resolve_set_includes_aws_web_identity_inputs_for_an_aws_sts_lease() {
+        let toml = r#"
+root = true
+[secrets]
+FOO = { default = "foo" }
+AWS_WEB_IDENTITY_TOKEN_FILE = { default = "token", as_file = true, env = false }
+AWS_ROLE_ARN = { default = "arn:aws:iam::1:role/source", env = false }
+UNUSED = { default = "unused", env = false }
+[leases.aws]
+type = "aws-sts"
+region = "us-east-1"
+profile = "ci"
+role_arn = "arn:aws:iam::1:role/r"
+"#;
+        let config: Config = toml_edit::de::from_str(toml).unwrap();
+        let profile = vec!["default".to_string()];
+        let secrets = config.get_secrets(&profile).unwrap();
+        let leases = config.get_leases(&profile).unwrap();
+
+        let sel = select(&secrets, &leases, EnvScope::Exec, Roots::Scope).unwrap();
+        let set = resolve_set(&config, &profile, &secrets, &leases, &sel).unwrap();
+        assert!(set.contains_key("AWS_WEB_IDENTITY_TOKEN_FILE"));
+        assert!(set.contains_key("AWS_ROLE_ARN"));
+        assert!(!set.contains_key("UNUSED"));
+    }
+
+    #[test]
     fn assemble_scope_mode_reports_skipped_lease_keys_as_missing() {
         let toml = r#"
 root = true
