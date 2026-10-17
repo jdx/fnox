@@ -1,7 +1,7 @@
 ---
 layout: home
-title: Secret management for development and CI
-description: Load secrets from encrypted files, password managers, and cloud services into your application’s environment with fnox.
+title: Your secrets, wherever they live
+description: fnox loads secrets from encrypted files, password managers, and cloud secret stores into your commands, from one fnox.toml, on your laptop and in CI.
 ---
 
 <script setup>

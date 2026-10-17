@@ -68,7 +68,7 @@ function writeRedirects(outDir) {
   }
 }
 const siteDescription =
-  "Manage development secrets with encrypted files or cloud providers, fast local sync, shell integration, profiles, and hardware-backed keys.";
+  "fnox loads secrets from encrypted files, password managers, and cloud secret stores into your commands, from one fnox.toml, on your laptop and in CI.";
 
 export default defineConfig({
   title: "fnox",
@@ -199,7 +199,7 @@ export default defineConfig({
   transformHead({ pageData, title, description, siteConfig }) {
     const heading =
       pageData.relativePath === "index.md"
-        ? "Encrypted and remote secrets"
+        ? "Your secrets, wherever they live"
         : pageData.title || "fnox";
     const card = socialCard(heading);
     writeSocialCard(siteConfig.outDir, card);

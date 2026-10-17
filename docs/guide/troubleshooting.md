@@ -1,107 +1,95 @@
 ---
-description: "Diagnose configuration overrides, stale caches, authentication failures, age keys, and missing environment variables."
+description: "Fix common fnox problems: the wrong value loads, a vault change doesn't show up, authentication fails, age can't decrypt, or a command doesn't see a secret."
 ---
 
 # Troubleshooting
 
-Start by checking which configuration fnox loaded, then test the provider involved. These commands help narrow the problem without printing resolved secret values:
+Start with these. None of them print secret values:
 
 ```sh
-fnox --version
-fnox config-files
-fnox profiles
-fnox list --sources
-fnox doctor
+fnox doctor             # overall health check
+fnox config-files       # which files are loaded, in order
+fnox list --sources     # each secret, its provider, and which file defined it
+fnox check --all        # does every secret resolve?
 ```
+
+Add `--profile <name>` to each if you're debugging a profile.
 
 ## The wrong value is being loaded
 
-Inspect the active profile and the files in the configuration stack:
+Some config file is overriding the one you expect. Closer directories beat parent directories, and in each directory `fnox.local.toml` beats profile files, which beat `fnox.toml`. Your global config is loaded too. `fnox list --sources` shows which file won.
 
-```sh
-fnox --profile staging config-files
-fnox --profile staging list --sources
-```
-
-Closer directories override parent directories. At each level, profile-specific and local files can override the main file. A global config is also loaded. See [configuration layering](/guide/config-files).
-
-To read only a particular project file and its imports, pass an explicit path:
+To see only what's committed in one file (plus its imports and the global config):
 
 ```sh
 fnox -c ./fnox.toml list --sources
 ```
 
-This skips directory discovery and adjacent local overrides, but still loads the global config. See [explicit config paths](/reference/configuration#explicit-config-paths).
+See [config files](/guide/config-files).
 
-## A secret changed in the vault but fnox still returns the old value
+## I changed a secret in the vault, but fnox returns the old value
 
-Check both kinds of optional cache:
+A cache is serving it.
 
-- **Encrypted local cache:** refresh it with `fnox sync --provider sync-age --local-file`. Use the name of your own sync provider.
-- **Daemon memory cache:** clear it with `fnox daemon clear`, or bypass the daemon for one invocation with `fnox --no-daemon check --all`.
+- **Sync cache:** run `fnox sync --provider <your-sync-provider> --local-file --force`.
+- **Daemon:** run `fnox daemon clear KEY`, or `fnox get --refresh KEY`.
 
-Bypassing the daemon does not remove a `sync` value from your config. Refresh the sync cache to fetch the current remote value. For a direct project-file check without local overrides, use `fnox -c ./fnox.toml --no-daemon check --all`.
+`--no-daemon` bypasses the daemon but not the sync cache. To read straight from the provider, bypass both: `fnox -c ./fnox.toml --no-daemon get KEY`.
 
 ## Authentication fails
 
-Test a single configured provider by its instance name:
+Test one provider by its name in your config:
 
 ```sh
 fnox provider test op
 ```
 
-Then follow that [provider's authentication instructions](/providers/overview). CLI-backed providers need their CLI on `PATH`; API-backed providers need the appropriate credentials and permissions.
+Then check that provider's **Authentication** section in the [provider docs](/providers/overview). Providers that wrap a CLI (`op`, `bw`, `pass`, …) need it on your `PATH` and signed in; cloud providers need credentials from their usual SDK chain.
 
-In a terminal, fnox can offer to run the provider's authentication command. `prompt_auth = false`, `FNOX_PROMPT_AUTH=false`, and `--non-interactive` affect prompting. For CI, supply non-interactive credentials before running fnox.
+In a terminal, fnox offers to run the provider's login command for you. That's disabled by `prompt_auth = false`, `FNOX_PROMPT_AUTH=false`, `--non-interactive`, or when there's no terminal, as in CI. In CI, supply credentials up front; see [CI/CD](/guide/ci).
 
-A provider connection test checks access to the service. `fnox check --all` also checks the configured secret references.
+## age can't decrypt a secret
 
-## Age cannot decrypt a secret
+Usually your key isn't one of the recipients the value was encrypted to.
 
-Check the [identity selection order](/providers/age#set-decryption-key). An exported `FNOX_AGE_KEY` takes precedence over the provider's `identity` and `key_file` settings.
+1. Print your public key and compare it with `recipients`:
 
-Compare the public recipient derived from your private key with the provider's recipients:
+   ```sh
+   age-keygen -y ~/.config/fnox/age.txt
+   ```
 
-```sh
-age-keygen -y ~/.config/fnox/age.txt
-```
+2. Check which key fnox is using. `FNOX_AGE_KEY` wins over the provider's `key_file`, which wins over `~/.config/fnox/age.txt`. A stray `FNOX_AGE_KEY` in your environment is a common cause. See [age decryption keys](/providers/age#set-decryption-key).
+3. If your key was added to `recipients` recently, someone who could already decrypt must run `fnox reencrypt`. Adding a recipient doesn't change existing ciphertext. See [team setup](/guide/teams#add-someone).
 
-Adding a recipient to the config does not update existing ciphertext. Someone who can already decrypt it must run `fnox reencrypt --provider age` for the affected profiles. See [adding a team member](/providers/age#adding-a-new-team-member).
+## A command doesn't see a secret
 
-## A command does not see a secret
-
-Check the secret's [`env` setting](/reference/configuration#env-1):
-
-- `true`: shell integration and `fnox exec`.
-- `"exec"`: subprocess injection, excluded from the interactive shell.
-- `false`: no normal environment injection; explicit reads and internal dependencies can still use it.
-
-Shell expansion happens before fnox starts. To expand a secret inside the child, use a child shell and single quotes:
-
-```sh
-fnox exec -- sh -c 'test -n "$DATABASE_URL"'
-```
-
-An `as_file = true` secret supplies a file path, not the raw contents. Configure your application to read the file.
+- **Shell expansion.** `fnox exec -- echo $KEY` expands `$KEY` in your shell before fnox runs. Use `fnox exec -- sh -c 'echo "$KEY"'`.
+- **The `env` setting.** `env = false` secrets are never injected; `env = "exec"` secrets aren't loaded into the interactive shell. See [choose which secrets reach a command](/guide/running-commands#choose-which-secrets-reach-a-command).
+- **A file secret.** With `as_file = true`, the variable holds a path, not the contents.
+- **A missing value.** With the default `if_missing = "warn"`, fnox prints a warning and starts the command without it. Run `fnox check --all`.
 
 ## Shell integration is not loading
 
-Confirm you used the activation command for your actual shell and placed it in the right startup file. Fish, Nushell, and PowerShell do not use Bash's `eval` syntax. See [shell integration](/guide/shell-integration).
+- Make sure you used the activation line for your actual shell; Fish, Nushell, and PowerShell don't use `eval`. See [shell integration](/guide/shell-integration).
+- Open a new terminal after editing the startup file.
+- If `fnox exec -- env` shows the secret but the shell doesn't, check `env` settings, then run with `FNOX_SHELL_OUTPUT=debug` to see what the hook does.
 
-Try the same command through `fnox exec`. If that works, the problem is in shell activation or injection settings. Enable hook diagnostics with `FNOX_SHELL_OUTPUT=debug` while investigating.
+## A write command asks which profile to use
 
-## A write command asks for a profile
-
-When multiple profiles are active, select a write target explicitly:
+With more than one active profile, `set`, `remove`, `import`, `sync`, and `provider add/remove` need a target:
 
 ```sh
 fnox -P aws,staging --write-profile staging set DATABASE_URL
 ```
 
-Read commands compose the profiles in order. Write commands need one destination. See [profile composition](/guide/profiles#composing-multiple-profiles).
+See [stacking profiles](/guide/profiles#stack-profiles-on-the-command-line).
 
-## Report an issue
+## `fnox set` stored a plaintext value
 
-Include the fnox version, OS, failing command, first substantive error, and a minimal configuration using dummy values. Describe the provider type and whether sync or daemon caching is enabled.
+Without a provider, `fnox set` writes a plaintext `default`. Pass `--provider <name>` or set `default_provider` in `fnox.toml`, then set the value again.
 
-Review logs and config before attaching them: `fnox get`, `fnox export`, `fnox list --values`, and verbose provider tools may print secrets. Open an issue in the [GitHub tracker](https://github.com/jdx/fnox/issues).
+## Reporting a bug
+
+Open an issue in the [tracker](https://github.com/jdx/fnox/issues) with your fnox version, OS, the failing command, the first error, and a minimal config using dummy values. Say which provider type you use and whether sync or the daemon is on.
+
+Check what you paste: `fnox get`, `fnox export`, `fnox list --values`, and verbose provider output can contain secrets.

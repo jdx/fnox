@@ -46,11 +46,11 @@ fnox resolves a relative `plugin` path from the config file that declares the pr
 
 ## Provider configuration
 
-| Field          | Required | Description                                                                                                                                                                             |
-| -------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `plugin`       | Yes      | An installed plugin name, or a path to a `.lua` file or plugin directory. Values containing `/`, starting with `.` or `~`, or ending in `.lua` are paths.                               |
-| `options`      | No       | A table of string settings, passed to hooks as `ctx.options`. Values may be [secret references](/guide/profiles#secret-references-in-provider-config), resolved before the plugin runs. |
-| `auth_command` | No       | Command fnox offers to run when the plugin raises an authentication error.                                                                                                              |
+| Field          | Required | Description                                                                                                                                                                                 |
+| -------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `plugin`       | Yes      | An installed plugin name, or a path to a `.lua` file or plugin directory. Values containing `/`, starting with `.` or `~`, or ending in `.lua` are paths.                                   |
+| `options`      | No       | A table of string settings, passed to hooks as `ctx.options`. Values may be [secret references](/guide/config-files#secret-references-in-provider-config), resolved before the plugin runs. |
+| `auth_command` | No       | Command fnox offers to run when the plugin raises an authentication error.                                                                                                                  |
 
 `fnox provider add corp lua` adds a provider whose `plugin` is the provider name. Pass `--plugin <name-or-path>` to use a different value.
 

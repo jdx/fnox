@@ -1,210 +1,69 @@
 ---
-description: "Choose whether missing secrets fail, warn, or stay silent, and supply non-sensitive defaults when appropriate."
+description: "Decide whether a secret that can't be resolved fails the command, prints a warning, or is skipped, and supply fallback defaults."
 ---
 
-# Handling missing secrets
+# Missing secrets
 
-Use the `if_missing` setting to control what happens when a secret can't be resolved. This is especially useful for CI environments or when some secrets are optional.
+When fnox can't produce a value for a secret (the provider has no such item, access is denied, the key is missing), the secret's `if_missing` policy decides what happens:
 
-## Available modes
+| `if_missing`       | Effect                                                   | Use for                                         |
+| ------------------ | -------------------------------------------------------- | ----------------------------------------------- |
+| `"error"`          | The command fails before it starts                       | Secrets the program can't run without           |
+| `"warn"` (default) | fnox prints a warning and continues without the variable | Most secrets during development                 |
+| `"ignore"`         | fnox continues silently                                  | Truly optional values, such as an analytics key |
 
-These policies apply when a command resolves multiple secrets. An explicit `fnox get KEY` may still return a provider error directly. A configured `default` is tried as a fallback before a value is considered missing.
+```toml
+if_missing = "error" # project-wide default
 
-- **`error`** - Fail the command if a secret cannot be resolved (strictest)
-- **`warn`** - Print a warning and continue (default)
-- **`ignore`** - Silently skip missing secrets
+[secrets]
+DATABASE_URL = { provider = "aws", value = "database-url" }                       # error
+SENTRY_DSN = { provider = "aws", value = "sentry-dsn", if_missing = "ignore" }    # optional
+```
 
-## Priority chain
+The policy applies to commands that resolve many secrets at once: `exec`, `export`, `check`, and shell integration. `fnox get KEY` always reports an error if it can't produce that one value.
 
-You can set `if_missing` at multiple levels. fnox uses the first match:
+## Fall back to a default
 
-1. **CLI flag** (highest priority): `--if-missing error`
-2. **Environment variable**: `FNOX_IF_MISSING=warn`
-3. **Secret-level config**: `[secrets.MY_SECRET]` with `if_missing = "error"`
-4. **Top-level config**: Global default for all secrets
-5. **Base default environment variable**: `FNOX_IF_MISSING_DEFAULT=error`
-6. **Default**: `warn` (lowest priority)
-
-## Per-secret configuration
-
-Set different behaviors for different secrets:
+A `default` is tried before a secret counts as missing, including when the provider lookup fails:
 
 ```toml
 [secrets]
-# Critical secrets must exist
-DATABASE_URL = { provider = "aws", value = "database-url", if_missing = "error" }  # Fail if missing
-
-# Optional secrets
-ANALYTICS_KEY = { provider = "aws", value = "analytics-key", if_missing = "ignore" }  # Continue silently if missing
-
-# Warn about missing secrets (default)
-CACHE_URL = { provider = "aws", value = "cache-url", if_missing = "warn" }  # Print warning if missing
+REDIS_URL = { provider = "aws", value = "redis-url", default = "redis://localhost:6379" }
 ```
 
-## Top-level default
+Defaults are plaintext. Use them for non-sensitive values and local development fallbacks, never for real credentials.
 
-Set a default for all secrets:
+## Override at run time
 
-```toml
-# Make all secrets strict by default
-if_missing = "error"
+The first of these that is set wins:
 
-[secrets]
-DATABASE_URL = { provider = "age", value = "encrypted..." }  # Inherits if_missing = "error"
-API_KEY = { provider = "age", value = "encrypted..." }  # Inherits if_missing = "error"
-OPTIONAL_FEATURE_FLAG = { default = "false", if_missing = "ignore" }  # Override - this one can be missing
+1. `--if-missing <policy>` on the command line
+2. `FNOX_IF_MISSING` environment variable
+3. `if_missing` on the secret
+4. Top-level `if_missing` in the config
+5. `FNOX_IF_MISSING_DEFAULT` environment variable
+6. `warn`
+
+Because the command-line flag and `FNOX_IF_MISSING` beat the config, they're the way to make one run stricter or looser:
+
+```sh
+fnox exec --if-missing error -- ./deploy.sh   # nothing may be missing
+FNOX_IF_MISSING=ignore fnox exec -- npm test  # e.g. a fork without secret access
 ```
 
-## Runtime override with CLI
+`FNOX_IF_MISSING_DEFAULT` sits below the config: it changes the fallback for secrets that set no policy, while respecting explicit ones. Setting `FNOX_IF_MISSING_DEFAULT=error` on a CI runner makes unconfigured secrets strict without overriding secrets marked `ignore`.
 
-Override config settings at runtime:
+## Check before you run
 
-```bash
-# Override to be lenient (useful in CI with missing secrets)
-fnox exec --if-missing ignore -- npm test
-
-# Override to be strict (ensure all secrets are present)
-fnox exec --if-missing error -- ./deploy.sh
-
-# Use warnings (default)
-fnox exec --if-missing warn -- npm start
+```sh
+fnox check          # secrets with if_missing = "error"
+fnox check --all    # every secret, including warn and ignore
 ```
 
-## Runtime override with environment variable
+Neither prints values.
 
-```bash
-# Set globally for a session
-export FNOX_IF_MISSING=warn
-fnox exec -- npm start
+## See also
 
-# Or inline
-FNOX_IF_MISSING=error fnox exec -- ./critical-task.sh
-```
-
-## Base default behavior
-
-Set a default behavior when `if_missing` is not configured anywhere:
-
-```bash
-# Change the default from "warn" to "error"
-export FNOX_IF_MISSING_DEFAULT=error
-
-# Now all secrets without explicit if_missing will fail if missing
-fnox exec -- ./my-app
-```
-
-This is useful for:
-
-- Making your entire project strict by default
-- CI/CD environments where you want failures by default
-- Development environments where you want warnings by default
-
-**Priority:** This has the lowest priority and only applies when `if_missing` is not set in:
-
-- CLI flags
-- `FNOX_IF_MISSING` env var
-- Secret-level config
-- Top-level config
-
-## CI/CD examples
-
-These workflow excerpts assume fnox and any provider CLI have been installed. Supply provider credentials for tests that require real secrets.
-
-### Forked PRs (secrets unavailable)
-
-```yaml
-# .github/workflows/test.yml
-name: Test
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run tests (some secrets may be missing in forks)
-        env:
-          FNOX_IF_MISSING: ignore # Don't fail on missing secrets
-        run: |
-          fnox exec -- npm test
-```
-
-### Production deployment (strict)
-
-```yaml
-# .github/workflows/deploy.yml
-name: Deploy
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy to production
-        env:
-          FNOX_IF_MISSING: error # Fail if any secret is missing
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        run: |
-          fnox exec --profile production -- ./deploy.sh
-```
-
-### Staging (warn on missing)
-
-```yaml
-# .github/workflows/staging.yml
-jobs:
-  deploy-staging:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to staging
-        env:
-          FNOX_IF_MISSING: warn # Print warnings but continue
-        run: |
-          fnox exec --profile staging -- ./deploy.sh
-```
-
-## Use cases
-
-### Optional analytics/monitoring
-
-```toml
-[secrets]
-# Won't break the app if missing
-SENTRY_DSN = { provider = "aws", value = "sentry-dsn", if_missing = "ignore" }
-DATADOG_API_KEY = { provider = "aws", value = "datadog-key", if_missing = "ignore" }
-```
-
-### Required database
-
-```toml
-[secrets]
-DATABASE_URL = { provider = "aws", value = "database-url", if_missing = "error" }  # Must exist or fail
-```
-
-### Development defaults
-
-```toml
-[secrets]
-REDIS_URL = { provider = "aws", value = "redis-url", default = "redis://localhost:6379", if_missing = "warn" }  # Fall back to the local URL if the provider lookup fails
-```
-
-## Behavior summary
-
-| Mode     | Behavior                | Use Case                                  |
-| -------- | ----------------------- | ----------------------------------------- |
-| `error`  | Fail command            | Required secrets (database, API keys)     |
-| `warn`   | Print warning, continue | Optional but recommended secrets          |
-| `ignore` | Silent skip             | Truly optional features (analytics, etc.) |
-
-## Next steps
-
-- [Profiles](/guide/profiles) - Different secrets per environment
-- [Import/Export](/guide/import-export) - Migrate secrets between systems
-- [Real-World Example](/guide/dev-to-production) - Complete setup with error handling
+- [CI/CD](/guide/ci): strict deploys and pull requests from forks.
+- [How fnox works](/guide/how-it-works#resolution-order): the full resolution order.
+- [Configuration reference](/reference/configuration#if-missing): the `if_missing` field.
