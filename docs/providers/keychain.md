@@ -1,327 +1,112 @@
 ---
-description: "Store local secrets in the macOS Keychain, Windows Credential Manager, or Linux Secret Service, and use them to bootstrap other providers."
+description: "Store secrets in the macOS Keychain, Windows Credential Manager, or Linux Secret Service, and use one to hold an age identity."
 ---
 
 # OS keychain
 
-Store secrets in your operating system's native secure storage.
+The `keychain` provider stores values in your operating system's credential store. `fnox.toml` holds only the entry name; `fnox set` writes the value to the keychain.
 
-## Supported platforms
+|                     |                                                                                |
+| ------------------- | ------------------------------------------------------------------------------ |
+| Config type         | `keychain`                                                                     |
+| Storage             | Local store                                                                    |
+| Writes (`fnox set`) | Yes                                                                            |
+| Requires            | macOS Keychain, Windows Credential Manager, or a Linux Secret Service on D-Bus |
 
-- **macOS:** Keychain Access (built-in)
-- **Windows:** Credential Manager (built-in)
-- **Linux:** Secret Service over D-Bus (GNOME Keyring, KWallet)
+On Linux, fnox talks to the Secret Service API directly over D-Bus, so you need a Secret Service implementation such as GNOME Keyring or KWallet running. No libsecret packages are required. macOS and Windows need no setup.
 
 ## Quick start
 
-```sh
-# Linux only: make sure a Secret Service daemon is running
-sudo apt-get install gnome-keyring  # Ubuntu/Debian
+```toml
+[providers.keychain]
+type = "keychain"
+service = "fnox"
 ```
 
-Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+```sh
+fnox set GITHUB_TOKEN --provider keychain
+fnox provider test keychain
+fnox exec -- ./release.sh
+```
+
+`fnox set` stores the entry under the secret's name and records that name in `fnox.toml`:
 
 ```toml
-[providers]
-keychain = { type = "keychain", service = "fnox" }
+[secrets]
+GITHUB_TOKEN = { provider = "keychain", value = "GITHUB_TOKEN" }
 ```
 
-```sh
-# Store a secret in OS keychain
-fnox set DATABASE_URL "postgresql://localhost/mydb" --provider keychain
+Use `--key-name` to choose a different entry name.
 
-# Retrieve from keychain
-fnox get DATABASE_URL
-```
+## Authentication
 
-## Linux setup
+Access belongs to the current OS user and requires an unlocked credential store. macOS may show an access prompt for each keychain item. fnox reads entries one at a time so those prompts never overlap.
 
-On Linux, fnox talks to the Secret Service API directly over D-Bus, so you need a Secret Service implementation such as GNOME Keyring or KWallet running (no libsecret packages are required):
-
-::: code-group
-
-```bash [Ubuntu/Debian]
-sudo apt-get install gnome-keyring
-```
-
-```bash [Fedora/RHEL]
-sudo dnf install gnome-keyring
-```
-
-```bash [Arch]
-sudo pacman -S gnome-keyring
-```
-
-:::
-
-macOS and Windows have built-in support—no installation needed.
+The provider needs a desktop session or an unlocked Secret Service, which CI runners and containers usually lack. Prefer [age](/providers/age) or a cloud provider there. You can provision one yourself; fnox's own Linux CI runs `gnome-keyring-daemon --unlock --components=secrets --daemonize`, but that means keeping the unlock password in CI.
 
 ## Configuration
 
-```toml
-[providers]
-keychain = { type = "keychain", service = "fnox", prefix = "myapp/" }  # Prefix is optional
-```
+| Field     | Required | Default | Description                                                                                            |
+| --------- | -------- | ------- | ------------------------------------------------------------------------------------------------------ |
+| `service` | Yes      | None    | Service name for every entry; isolates fnox's entries from other applications.                         |
+| `prefix`  | No       | None    | String prepended to each entry name. With `prefix = "myapp/"`, `api-key` is stored as `myapp/api-key`. |
 
-### Service name
+Both fields accept `{ secret = "NAME" }`. Every provider also accepts [`auth_command` and `daemon_cache`](/reference/configuration#provider-configuration).
 
-The `service` acts as a namespace to isolate fnox secrets from other applications:
+## Reference formats
 
-```toml
-[providers]
-keychain = { type = "keychain", service = "myapp" }
-```
+| `value`                            | Keychain entry read                        |
+| ---------------------------------- | ------------------------------------------ |
+| `api-key`                          | Service `service`, account `api-key`       |
+| `api-key` with `prefix = "myapp/"` | Service `service`, account `myapp/api-key` |
 
-### Prefix
+The entry holds the value as a single string. On macOS it appears in Keychain Access under the service name; on Windows, in Credential Manager under Windows Credentials.
 
-Optional prefix prepended to secret names:
+## Hold an age identity
 
-```toml
-[providers]
-keychain = { type = "keychain", service = "fnox", prefix = "myapp/" }  # "database-url" becomes "myapp/database-url"
-```
-
-## How it works
-
-1. **Storage:** Secrets are stored in the OS credential manager (encrypted by OS)
-2. **Config:** `fnox.toml` contains only the secret name, not the value
-3. **Retrieval:** fnox queries the OS keychain API
-4. **Service:** Acts as a namespace (isolates fnox secrets from other apps)
-5. **Prefix:** Additional namespacing within the service
-
-## Usage
-
-### Store a secret
-
-```bash
-fnox set DATABASE_URL "postgresql://localhost/mydb" --provider keychain
-```
-
-Your `fnox.toml`:
+The keychain works best for a few bootstrap secrets rather than every value. Store one age private key in the keychain and encrypt the rest with [age](/providers/age), so a project with many secrets touches the keychain once:
 
 ```toml
-[secrets]
-DATABASE_URL = { provider = "keychain", value = "DATABASE_URL" }  # ← Keychain entry name, not the actual secret
-```
+[providers.keychain]
+type = "keychain"
+service = "fnox"
 
-The actual secret is stored in the OS keychain, encrypted.
-
-### Retrieve a secret
-
-```bash
-fnox get DATABASE_URL
-```
-
-### Run commands
-
-```bash
-fnox exec -- npm run dev
-```
-
-## Recommended: use with age, not as bulk storage
-
-On macOS, access controls can prompt separately for each keychain item. If those prompts interrupt a project with many secrets, store one age identity in the keychain and use it to decrypt the rest.
-
-The pattern that scales much better is to store a single **age private key** in the keychain and encrypt all your secrets with age:
-
-```toml
-[providers]
-keychain = { type = "keychain", service = "fnox" }
-age = { type = "age", recipients = ["age1..."], identity = { provider = "keychain", value = "age-key" } }
+[providers.age]
+type = "age"
+recipients = ["age1..."]
+identity = { provider = "keychain", value = "age-key" }
 
 [secrets]
-# Many secrets, all encrypted with age — only one keychain access (the age key)
-DATABASE_URL = { provider = "age", value = "encrypted..." }
-API_KEY      = { provider = "age", value = "encrypted..." }
-STRIPE_KEY   = { provider = "age", value = "encrypted..." }
-# ...
+DATABASE_URL = { provider = "age", value = "YWdl..." } # ciphertext, abbreviated
+API_KEY = { provider = "age", value = "YWdl..." }      # ciphertext, abbreviated
 ```
 
-This way:
+To store the identity, run the command below and paste the `AGE-SECRET-KEY-1...` line from your key file at the hidden prompt:
 
-- **One keychain item for the identity.** Access prompts depend on the keychain's application permissions.
-- Adding more secrets is free — they go into the encrypted config, not into the keychain.
-- Loss of the keychain item is recoverable from any other machine that holds the same age identity.
-
-Reach for direct `provider = "keychain"` only for the handful of bootstrap secrets that don't have anything else to decrypt them (e.g., the age key itself, a 1Password service account token).
-
-## Bootstrap pattern
-
-A common pattern is to store provider tokens in the keychain:
-
-```toml
-[providers]
-keychain = { type = "keychain", service = "fnox" }
-age = { type = "age", recipients = ["age1..."] }
-
-[secrets]
-OP_SERVICE_ACCOUNT_TOKEN = { provider = "keychain", value = "op-token" }  # Store 1Password token in keychain
-DATABASE_URL = { provider = "age", value = "encrypted..." }  # Other secrets encrypted with age
+```sh
+fnox set AGE_IDENTITY --provider keychain --key-name age-key
 ```
 
-Then bootstrap:
+Then delete the `AGE_IDENTITY` entry from `[secrets]`, or add `env = false` to it, so `fnox exec` does not export the private key to your commands. Losing the keychain item is recoverable from any machine that holds the same age identity.
 
-```bash
-export OP_SERVICE_ACCOUNT_TOKEN=$(fnox get OP_SERVICE_ACCOUNT_TOKEN)
-# Now can access 1Password secrets
-fnox exec -- ./start.sh
-```
-
-## Example configurations
-
-### Personal project
-
-```toml
-[providers]
-app-keychain = { type = "keychain", service = "myapp" }
-
-[secrets]
-DATABASE_URL = { provider = "keychain", value = "database-url" }
-API_KEY = { provider = "keychain", value = "api-key" }
-```
-
-### Bootstrap tokens
-
-```toml
-[providers]
-keychain = { type = "keychain", service = "fnox-tokens" }
-
-[secrets]
-GITHUB_TOKEN = { provider = "keychain", value = "github" }
-NPM_TOKEN = { provider = "keychain", value = "npm" }
-```
-
-### Machine-specific secrets
-
-```toml
-# fnox.local.toml (gitignored)
-[providers]
-keychain = { type = "keychain", service = "fnox-local" }
-
-[secrets]
-LAPTOP_DB_URL = { provider = "keychain", value = "laptop-db" }
-```
-
-## Platform details
-
-### macOS keychain
-
-Secrets stored in:
-
-- **Login Keychain** (default)
-- **System Keychain** (requires admin)
-
-View in Keychain Access app:
-
-1. Open Keychain Access
-2. Search for service name (e.g., "fnox")
-3. Double-click to view/edit
-
-### Windows Credential Manager
-
-Secrets stored in Windows Credential Manager.
-
-View in Control Panel:
-
-1. Control Panel → User Accounts → Credential Manager
-2. Windows Credentials
-3. Look for fnox entries
-
-### Linux Secret Service
-
-Secrets stored in:
-
-- **GNOME Keyring** (GNOME desktop)
-- **KWallet** (KDE desktop)
-- **Other Secret Service implementations**
-
-View with Seahorse (GNOME):
-
-```bash
-sudo apt install seahorse
-seahorse
-```
-
-## Usage notes
-
-Access depends on the current user and an available, unlocked credential store. macOS may prompt for access to individual items. Linux needs a Secret Service implementation on D-Bus; headless setups must provide one explicitly.
-
-## Limitations
-
-### Headless environments
-
-The keychain provider needs an unlocked OS keychain or Secret Service session, which is usually unavailable in:
-
-- CI/CD (GitHub Actions, GitLab CI, etc.)
-- Docker containers (without X11/Wayland)
-- SSH sessions (without forwarding)
-- Headless servers
-
-No desktop session is required, though — only an unlocked Secret Service on the bus. If you provision one yourself, the provider works headlessly; fnox's own Linux CI does this with `gnome-keyring-daemon --unlock --components=secrets --daemonize`. That means keeping the unlock password in CI, which is the secret you were trying to protect, so for CI/CD prefer age encryption or a cloud provider.
-
-### Tests auto-skip in CI
-
-fnox's keychain tests skip automatically on macOS CI runners (where they hang) and on platforms other than macOS and Linux. On Linux CI they run against a headless `gnome-keyring-daemon`. Set `SKIP_KEYCHAIN_TESTS=1` to skip them everywhere:
-
-```bash
-# Runs locally
-mise run test:bats -- test/keychain.bats
-
-# Skip the keychain tests
-SKIP_KEYCHAIN_TESTS=1 mise run test:bats
-```
-
-## Security
-
-- **Encryption:** Managed by the platform credential store
-- **Access control:** OS enforces access (user/session isolation)
-- **Keyring unlock:** May require password entry on first access
-- **Resolved values:** fnox and the receiving process still handle plaintext in memory
+Other good candidates are tokens that unlock remote providers, such as a 1Password service account token.
 
 ## Troubleshooting
 
-### "Keyring is locked"
+### No OS keyring backend is available
 
-Unlock your keyring:
+On Linux, no Secret Service is reachable. Start one (for example `gnome-keyring-daemon --start --components=secrets`), and check that `DBUS_SESSION_BUS_ADDRESS` is set in the fnox process.
 
-**macOS:**
+### Keychain is locked or access is denied
 
-- Keyring unlocks automatically on login
+Unlock the login keychain or Secret Service collection, then accept the access prompt. `fnox provider test keychain` writes, reads, and deletes a `__fnox_test__` entry to check access.
 
-**Linux (GNOME):**
+### Entry not found
 
-```bash
-# Unlock manually
-gnome-keyring-daemon --unlock
-```
+The entry does not exist under this `service` (and `prefix`). Check the service and account name in Keychain Access, Credential Manager, or Seahorse, or store it again with `fnox set`.
 
-**Windows:**
+## See also
 
-- Credential Manager unlocks on login
-
-### "Access denied"
-
-Check that the process has access:
-
-- **macOS:** May prompt for Keychain Access permission
-- **Linux:** Ensure Secret Service is running
-- **Windows:** Check User Account Control settings
-
-### "Service not available" (Linux)
-
-Install and start Secret Service:
-
-```bash
-# Ubuntu/Debian
-sudo apt-get install gnome-keyring
-gnome-keyring-daemon --start
-
-# Or use KWallet
-sudo apt-get install kwalletmanager
-```
-
-## Next steps
-
-- [Age Encryption](/providers/age) - Team-friendly alternative
-- [Hierarchical Config](/guide/config-files) - Per-machine configuration with fnox.local.toml
-- [1Password](/providers/1password) - Team password manager
+- [age](/providers/age): encrypt the bulk of your secrets with a keychain-held identity.
+- [Configuration files](/guide/config-files): keep machine-specific providers in `fnox.local.toml`.
+- [1Password](/providers/1password): a shared password manager for teams.

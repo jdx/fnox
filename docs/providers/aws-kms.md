@@ -1,57 +1,96 @@
 ---
-description: "Encrypt values in fnox.toml with AWS KMS. Configure credentials, IAM permissions, keys, and key migration."
+description: "Encrypt values in fnox.toml with an AWS KMS key. Configure credentials, an assumed role, the minimal IAM policy, and key migration."
 ---
 
 # AWS KMS
 
-AWS Key Management Service (KMS) encrypts secrets using AWS-managed keys. The encrypted ciphertext is stored in your `fnox.toml` file.
+The `aws-kms` provider encrypts values into `fnox.toml` with an AWS Key Management Service key. The ciphertext lives in your config, but both `fnox set` and every decryption call the KMS API.
 
-## Comparison: KMS vs Secrets Manager
+|                     |                                           |
+| ------------------- | ----------------------------------------- |
+| Config type         | `aws-kms`                                 |
+| Storage             | Encrypted in config                       |
+| Writes (`fnox set`) | Yes                                       |
+| Requires            | AWS credentials and network access to KMS |
 
-| Feature        | AWS KMS                        | AWS Secrets Manager  |
-| -------------- | ------------------------------ | -------------------- |
-| Storage        | Local (encrypted in fnox.toml) | Remote (in AWS)      |
-| Secrets in git | Yes (encrypted)                | No (references only) |
-| Rotation       | Manual                         | Automatic            |
-| Offline        | No (needs AWS API)             | No (needs AWS API)   |
-
-**Use KMS when:** You want secrets in git with AWS-managed keys.
-
-**Use Secrets Manager when:** You want centralized storage without secrets in git.
+Use `aws-kms` to keep encrypted secrets in git under an AWS-managed key. To keep values out of git entirely, use [AWS Secrets Manager](/providers/aws-sm) or [AWS Parameter Store](/providers/aws-ps).
 
 ## Quick start
 
+Create a symmetric encryption key, or use an existing one:
+
 ```sh
-# Create KMS key
 aws kms create-key --description "fnox secrets encryption"
-# Note the KeyId
 ```
 
-Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+Add the provider with the key's ID, ARN, or alias:
 
 ```toml
 [providers.kms]
 type = "aws-kms"
-key_id = "arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012"
+key_id = "alias/fnox"
 region = "us-east-1"
 ```
 
-```sh
-# Encrypt a secret
-fnox set DATABASE_URL "postgresql://prod.example.com/db" --provider kms
+Store a value through the hidden prompt, then use it:
 
-# Get secret (decrypts via KMS)
-fnox get DATABASE_URL
+```sh
+fnox set DATABASE_URL --provider kms
+fnox provider test kms
+fnox exec -- npm start
 ```
 
-## Prerequisites
+## Authentication
 
-- AWS account
-- AWS credentials configured
-- KMS key created
-- IAM permissions
+fnox uses the AWS SDK's [default credential chain](https://docs.aws.amazon.com/sdkref/latest/guide/standardized-credentials.html): environment variables such as `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, `AWS_PROFILE`, SSO and shared config files, and container or instance roles. Set `profile` to pick a named profile for this provider only.
 
-## IAM permissions
+### Local development
+
+Sign in with your usual AWS CLI method. When credentials have expired in an interactive terminal, fnox offers to run `aws sso login`; override it with [`auth_command`](/reference/configuration#auth-command).
+
+### CI
+
+Prefer short-lived credentials from your CI platform's OIDC integration, such as `aws-actions/configure-aws-credentials` on GitHub Actions. The SDK picks them up from the environment. See [CI/CD](/guide/ci).
+
+### Assume a role
+
+With `role_arn` set, fnox calls `sts:AssumeRole` with the credentials from `profile` (or the default chain) and uses the role's credentials for KMS. This covers an SSO profile in one account and a key-holding role in another:
+
+```toml
+[providers.kms]
+type = "aws-kms"
+key_id = "alias/fnox"
+region = "eu-west-1"
+profile = "sso-dev"
+role_arn = "arn:aws:iam::123456789012:role/kms-user"
+```
+
+## Configuration
+
+| Field      | Required | Default       | Description                                                                                              |
+| ---------- | -------- | ------------- | -------------------------------------------------------------------------------------------------------- |
+| `key_id`   | Yes      | None          | Key ID (`1234abcd-...`), key ARN, or alias (`alias/my-key`).                                             |
+| `region`   | Yes      | None          | AWS region of the key.                                                                                   |
+| `profile`  | No       | Default chain | AWS CLI profile name from `~/.aws/config`.                                                               |
+| `role_arn` | No       | None          | IAM role to assume before calling KMS. Must have the form `arn:aws:iam::<12-digit-account>:role/<name>`. |
+| `endpoint` | No       | AWS endpoint  | Custom endpoint URL, such as `http://localhost:4566` for LocalStack. Also used for the AssumeRole call.  |
+
+All fields accept `{ secret = "NAME" }`. Every provider also accepts [`auth_command` and `daemon_cache`](/reference/configuration#provider-configuration).
+
+## How values are stored
+
+`fnox set` calls KMS `Encrypt` with `key_id` and stores the base64-encoded ciphertext blob as the secret's `value`. Decryption calls KMS `Decrypt` with the same `key_id`:
+
+```toml
+[secrets]
+DATABASE_URL = { provider = "kms", value = "AQICAHhw..." } # ciphertext, abbreviated
+```
+
+KMS `Encrypt` accepts up to 4 KB of plaintext per value. fnox decrypts up to 100 values concurrently.
+
+## Permissions
+
+The identity needs these actions on the key. `kms:DescribeKey` is used only by `fnox provider test`:
 
 ```json
 {
@@ -59,137 +98,47 @@ fnox get DATABASE_URL
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": ["kms:Decrypt", "kms:Encrypt", "kms:DescribeKey"],
+      "Action": ["kms:Encrypt", "kms:Decrypt", "kms:DescribeKey"],
       "Resource": "arn:aws:kms:REGION:ACCOUNT:key/KEY-ID"
     }
   ]
 }
 ```
 
-## Setup
+Readers who never run `fnox set` need only `kms:Decrypt`. The key policy must also allow the identity.
 
-### 1. Create KMS key
+## Move to another key
 
-Via AWS CLI:
+Rotating key material within the same KMS key needs no change in fnox. Switching to a different key ID does: fnox passes `key_id` when decrypting, so changing it before migrating values prevents the old ciphertext from decrypting.
 
-```bash
-aws kms create-key \
-  --description "fnox secrets encryption" \
-  --key-usage ENCRYPT_DECRYPT
-
-# Output includes KeyId - copy this
-```
-
-Or use [AWS Console](https://console.aws.amazon.com/kms/) → KMS → Create Key.
-
-### 2. Configure AWS credentials
-
-Same as [AWS Secrets Manager](/providers/aws-sm#configure-aws-credentials).
-
-### 3. Configure fnox provider
-
-```toml
-[providers.kms]
-type = "aws-kms"
-key_id = "arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012"
-region = "us-east-1"
-```
-
-The `key_id` can be:
-
-- Full ARN: `arn:aws:kms:us-east-1:123456789012:key/...`
-- Key ID: `12345678-1234-1234-1234-123456789012`
-- Alias: `alias/my-key`
-
-### Credentials
-
-| Field      | Required | Description                                                                                       |
-| ---------- | -------- | ------------------------------------------------------------------------------------------------- |
-| `profile`  | No       | AWS CLI profile name from `~/.aws/config`. Falls back to the default credential chain if omitted. |
-| `role_arn` | No       | IAM role to assume before calling KMS                                                             |
-
-With `role_arn` set, fnox calls `sts:AssumeRole` and uses the resulting credentials for encrypt and decrypt. The credentials from `profile` (or the default chain) are the source credentials for that call, which covers the SOPS pattern of an SSO profile plus a key-holding role in another account:
-
-```toml
-[providers.kms]
-type = "aws-kms"
-key_id = "alias/my-key"
-region = "eu-west-1"
-profile = "sso-dev"
-role_arn = "arn:aws:iam::123456789012:role/kms-user"
-```
-
-## Usage
-
-### Encrypt and store
-
-```bash
-fnox set DATABASE_URL "postgresql://prod.example.com/db" --provider kms
-```
-
-Result in `fnox.toml`:
-
-```toml
-[secrets]
-DATABASE_URL = { provider = "kms", value = "AQICAHhw...base64...ciphertext..." }  # ← Encrypted, safe to commit!
-```
-
-### Decrypt and get
-
-```bash
-fnox get DATABASE_URL
-```
-
-## How it works
-
-1. **Encryption (`fnox set`):**
-   - Calls AWS KMS `Encrypt` API
-   - Stores base64 ciphertext in fnox.toml
-
-2. **Decryption (`fnox get`):**
-   - Calls AWS KMS `Decrypt` API
-   - Returns plaintext
-
-## Multi-environment example
-
-```toml
-# Development: age encryption (free)
-[providers]
-age = { type = "age", recipients = ["age1..."] }
-
-[secrets]
-DATABASE_URL = { provider = "age", value = "encrypted-dev..." }
-
-# Production: AWS KMS
-[profiles.production.providers]
-kms = { type = "aws-kms", key_id = "arn:aws:kms:us-east-1:123456789012:key/...", region = "us-east-1" }
-
-[profiles.production.secrets]
-DATABASE_URL = { provider = "kms", value = "AQICAHhw..." }  # ← KMS encrypted ciphertext
-```
-
-## Key rotation
-
-Rotating key material within the same KMS key is different from switching to a new key ID. The fnox provider supplies `key_id` when decrypting, so changing it before migrating values can prevent the old ciphertext from decrypting.
-
-To move to another KMS key, keep the old provider configured and add a second provider for the new key. Resolve each value through the old definition and store it with the new provider:
+Keep the old provider configured and add a second provider for the new key. Resolve each value through the old definition and store it with the new provider:
 
 ```sh
 fnox get DATABASE_URL | fnox set DATABASE_URL --provider new-kms
 ```
 
-Repeat for the affected secrets and profiles, verify access, then remove the old provider when it is no longer used. Rotate the underlying application secret separately if its plaintext may have been exposed.
+Repeat for the affected secrets and profiles, verify access, then remove the old provider. Rotate the underlying application secret separately if its plaintext may have been exposed.
 
-## Costs
+## Troubleshooting
 
-Charges depend on region, storage, key type or tier, and API usage. Consult the [service pricing](https://aws.amazon.com/kms/pricing/) for current rates. fnox does not change the provider's billing model.
+### `AccessDenied` on Encrypt or Decrypt
 
-## Usage notes
+Check the IAM policy and the key policy for the action in the error, and confirm which identity fnox uses:
 
-Ciphertext lives in your config, but both encryption and decryption require AWS access. IAM policies and the KMS key policy must permit the operation. Rotating the KMS key material is distinct from changing the application secret.
+```sh
+aws sts get-caller-identity --profile sso-dev
+```
 
-## Next steps
+### `NotFoundException`
 
-- [AWS Secrets Manager](/providers/aws-sm) - Remote storage alternative
-- [Age Encryption](/providers/age) - Free local encryption
-- [Real-World Example](/guide/dev-to-production) - Complete AWS setup
+The key ID, ARN, or alias does not exist in the configured `region`, or the identity cannot see it. Check with `aws kms describe-key --key-id alias/fnox --region us-east-1`.
+
+### No credentials
+
+Run `aws sso login` (or your usual sign-in), or set `AWS_PROFILE` or the `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` pair for the fnox process.
+
+## See also
+
+- [AWS Secrets Manager](/providers/aws-sm): store values in AWS instead of in config.
+- [AWS STS lease](/leases/aws-sts): mint short-lived AWS credentials for your commands.
+- [age](/providers/age): encryption in config without a cloud dependency.

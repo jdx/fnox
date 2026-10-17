@@ -1,114 +1,118 @@
 ---
-description: "Compare fnox providers by storage model and prerequisites, then find authentication and setup instructions."
+description: "Choose a fnox provider by need, compare storage models, write support and requirements, and mix providers in one project."
 ---
 
-# Choose a provider
+# Provider catalog
 
-A provider connects a secret name to its storage. Configure an instance under `[providers.<name>]`, then use that name in each secret's `provider` field. You can use several providers in one project.
+A provider is where fnox gets a secret's value: ciphertext in `fnox.toml`, a cloud secret store, a password manager, or a store on your machine. Use this page to pick one, then follow its page for authentication and reference formats.
 
-## Start with your storage model
+## How providers work
 
-| You want to…                               | Start here                                                                                                | Keep in mind                                                       |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Get started without a cloud account        | [age quick start](/guide/quick-start)                                                                     | Keep the private key outside git and back it up                    |
-| Use your team's existing vault             | [Connect a vault](/guide/existing-vault)                                                                  | Each user or CI identity needs access                              |
-| Read remote secrets offline                | [Sync to a local age cache](/guide/sync)                                                                  | Refresh the snapshot after values change                           |
-| Use cloud IAM to control decryption        | AWS, Azure, or GCP KMS below                                                                              | Encrypt and decrypt operations need the cloud API                  |
-| Bind encryption to a hardware token        | [FIDO2](/providers/fido2), [YubiKey](/providers/yubikey), or [age plugins](/providers/age#plugin-support) | Native providers need the token for both encryption and decryption |
-| Keep a bootstrap credential on one machine | [OS keychain](/providers/keychain)                                                                        | The credential store must be available and unlocked                |
-| Generate temporary credentials             | [Credential leases](/guide/leases)                                                                        | Lease backends are configured separately from providers            |
+You declare a provider instance under `[providers.<name>]`. The table name is yours to choose; `type` selects the implementation. Each secret names the instance it reads from:
 
-## Encryption in your config
+```toml
+[providers.op]          # instance name "op"
+type = "1password"      # provider type
+vault = "Engineering"
 
-`fnox set` stores ciphertext in `fnox.toml`. The config and public recipients can be committed; private keys and bootstrap credentials stay outside the repository.
+[providers.age]
+type = "age"
+recipients = ["age1..."]
 
-| Provider                                     | Config type | Decryption requires                                    |
-| -------------------------------------------- | ----------- | ------------------------------------------------------ |
-| [age](/providers/age)                        | `age`       | An age or supported SSH identity, or an age plugin     |
-| [FIDO2](/providers/fido2)                    | `fido2`     | The original token with hmac-secret support            |
-| [YubiKey](/providers/yubikey)                | `yubikey`   | The original HMAC challenge-response key               |
-| [AWS KMS](/providers/aws-kms)                | `aws-kms`   | AWS credentials and permission to decrypt with the key |
-| [Azure Key Vault Keys](/providers/azure-kms) | `azure-kms` | Azure credentials and access to the key                |
-| [Google Cloud KMS](/providers/gcp-kms)       | `gcp-kms`   | Google Cloud credentials and access to the key         |
+[secrets]
+DATABASE_URL = { provider = "op", value = "Database/url" }      # a reference into 1Password
+LOCAL_TOKEN = { provider = "age", value = "YWdl..." }           # ciphertext, abbreviated
+```
+
+- **Mix freely.** One project can use any number of instances, including several of the same type (for example one per vault or region).
+- **Default provider.** A secret without `provider` uses `default_provider`. When exactly one provider is configured, fnox uses it automatically.
+- **What `value` means depends on the type.** Encryption providers store ciphertext; every other provider stores a reference (a name, path or ID) and keeps the value in its own store.
+- **Swap per environment.** Redefine an instance in a [profile](/guide/profiles) to point the same secret names at a different vault or account.
+
+Add an instance with `fnox provider add <name> <type>` or by editing `fnox.toml`, then check it with `fnox provider test <name>`.
+
+## Choose by need
+
+| You want to…                                    | Use                                                                                                                                                                                       |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Start without any account or service            | [age](/providers/age) ([quick start](/guide/quick-start))                                                                                                                                 |
+| Commit encrypted secrets and share them by key  | [age](/providers/age), or a cloud KMS ([AWS](/providers/aws-kms), [Azure](/providers/azure-kms), [GCP](/providers/gcp-kms)) to control decryption with IAM                                |
+| Require a hardware key to decrypt               | [FIDO2](/providers/fido2), [YubiKey](/providers/yubikey), or an [age plugin](/providers/age)                                                                                              |
+| Read what your team already keeps in a vault    | [1Password](/providers/1password), [Bitwarden](/providers/bitwarden), [HashiCorp Vault](/providers/vault), or your cloud's secret manager ([existing vault guide](/guide/existing-vault)) |
+| Write secrets to a cloud store with `fnox set`  | [AWS Secrets Manager](/providers/aws-sm), [AWS Parameter Store](/providers/aws-ps), [Azure Key Vault Secrets](/providers/azure-sm), [Google Cloud Secret Manager](/providers/gcp-sm)      |
+| Keep a personal or bootstrap credential locally | [OS keychain](/providers/keychain)                                                                                                                                                        |
+| Read vault secrets offline or faster            | Any provider plus a [local sync cache](/guide/sync) or the [daemon](/guide/daemon)                                                                                                        |
+| Get short-lived cloud credentials               | [Credential leases](/guide/leases), configured separately from providers                                                                                                                  |
+| Integrate a system with no built-in provider    | A [Lua plugin](/providers/lua)                                                                                                                                                            |
+
+"Writes" in the tables below means `fnox set KEY` stores the value through the provider. For a read-only provider, `fnox set KEY VALUE --provider <name>` records `VALUE` as the reference instead; create the item in the provider's own app or CLI. `fnox import` currently accepts encryption providers only.
+
+## Encryption in config {#encryption-in-your-config}
+
+`fnox set` encrypts the value and stores the ciphertext in `fnox.toml`. The config and public recipients can be committed; private keys and cloud credentials stay outside the repository.
+
+| Provider                                     | Config type | Writes (`fnox set`) | Requires                                               |
+| -------------------------------------------- | ----------- | ------------------- | ------------------------------------------------------ |
+| [age](/providers/age)                        | `age`       | Yes                 | An age or SSH identity, or an age plugin, to decrypt   |
+| [FIDO2](/providers/fido2)                    | `fido2`     | Yes                 | The enrolled security key with hmac-secret support     |
+| [YubiKey](/providers/yubikey)                | `yubikey`   | Yes                 | The enrolled YubiKey with HMAC-SHA1 challenge-response |
+| [AWS KMS](/providers/aws-kms)                | `aws-kms`   | Yes                 | AWS credentials with encrypt/decrypt access to the key |
+| [Azure Key Vault Keys](/providers/azure-kms) | `azure-kms` | Yes                 | Azure credentials with access to the key               |
+| [Google Cloud KMS](/providers/gcp-kms)       | `gcp-kms`   | Yes                 | Google Cloud credentials with access to the key        |
 
 ## Cloud and hosted stores
 
-`fnox.toml` contains references to values held by the service. Provider permissions control access to those values. Rotation and audit features depend on the service and its configuration; fnox does not enable them automatically.
+`fnox.toml` holds a reference; the value lives in the service, and the service's access policy decides who can read it.
 
-| Provider                                             | Config type    | Reference points to                                    |
-| ---------------------------------------------------- | -------------- | ------------------------------------------------------ |
-| [AWS Secrets Manager](/providers/aws-sm)             | `aws-sm`       | A secret name, optionally with `json_path` for a field |
-| [AWS Parameter Store](/providers/aws-ps)             | `aws-ps`       | A parameter name or path                               |
-| [Azure Key Vault Secrets](/providers/azure-sm)       | `azure-sm`     | A secret name                                          |
-| [Azure App Configuration](/providers/azure-ac)       | `azure-ac`     | A non-secret configuration key and optional label      |
-| [Google Cloud Secret Manager](/providers/gcp-sm)     | `gcp-sm`       | A secret name                                          |
-| [Kubernetes Secrets](/providers/kubernetes)          | `kubernetes`   | A named Secret and data key                            |
-| [HashiCorp Vault](/providers/vault)                  | `vault`        | A KV secret and field                                  |
-| [Doppler](/providers/doppler)                        | `doppler`      | A secret key in a project/config                       |
-| [FOKS](/providers/foks)                              | `foks`         | A key in a personal or team namespace                  |
-| [Bitwarden Secrets Manager](/providers/bitwarden-sm) | `bitwarden-sm` | A secret key in a project                              |
-| [Keeper Secrets Manager](/providers/keeper-sm)       | `keeper-sm`    | A record and field using Keeper notation               |
+| Provider                                             | Config type    | Writes (`fnox set`) | Requires                                                       |
+| ---------------------------------------------------- | -------------- | ------------------- | -------------------------------------------------------------- |
+| [AWS Parameter Store](/providers/aws-ps)             | `aws-ps`       | Yes                 | AWS credentials                                                |
+| [AWS Secrets Manager](/providers/aws-sm)             | `aws-sm`       | Yes                 | AWS credentials                                                |
+| [Azure App Configuration](/providers/azure-ac)       | `azure-ac`     | No (read-only)      | Azure credentials                                              |
+| [Azure Key Vault Secrets](/providers/azure-sm)       | `azure-sm`     | Yes                 | Azure credentials                                              |
+| [Google Cloud Secret Manager](/providers/gcp-sm)     | `gcp-sm`       | Yes                 | Google Cloud credentials                                       |
+| [Kubernetes Secrets](/providers/kubernetes)          | `kubernetes`   | No (read-only)      | Kubeconfig or in-cluster credentials with `get` on the Secrets |
+| [Bitwarden Secrets Manager](/providers/bitwarden-sm) | `bitwarden-sm` | Yes                 | `bws` CLI and a machine-account access token                   |
+| [Doppler](/providers/doppler)                        | `doppler`      | No (read-only)      | `doppler` CLI, logged in or with a service token               |
+| [FOKS](/providers/foks)                              | `foks`         | Yes                 | `foks` CLI with a running agent                                |
+| [HashiCorp Vault](/providers/vault)                  | `vault`        | Yes                 | `vault` CLI, a server address and a token                      |
+| [Keeper Secrets Manager](/providers/keeper-sm)       | `keeper-sm`    | No (read-only)      | A Keeper Secrets Manager client configuration                  |
 
-## Password managers and secret services
+## Password managers and services
 
-These providers use an existing vault or service account. Follow the individual guide for the CLI or API authentication needed on each machine.
+These read from a vault people already use. All of them are read-only in fnox: create and edit items in the password manager, then reference them.
 
-| Provider                                  | Config type     | Integration                                   |
-| ----------------------------------------- | --------------- | --------------------------------------------- |
-| [1Password](/providers/1password)         | `1password`     | `op` CLI; item and field references           |
-| [Bitwarden](/providers/bitwarden)         | `bitwarden`     | `bw` CLI, or the experimental `rbw` backend   |
-| [Enpass](/providers/enpass)               | `enpass`        | Reads the local vault file; item and field    |
-| [Infisical](/providers/infisical)         | `infisical`     | Infisical CLI; project, environment, and path |
-| [Passwordstate](/providers/passwordstate) | `passwordstate` | HTTP API; password ID or title and field      |
-| [Proton Pass](/providers/proton-pass)     | `proton-pass`   | `pass-cli`; vault, item, and field            |
+| Provider                                  | Config type     | Writes (`fnox set`) | Requires                                            |
+| ----------------------------------------- | --------------- | ------------------- | --------------------------------------------------- |
+| [1Password](/providers/1password)         | `1password`     | No (read-only)      | `op` CLI, signed in or with a service account token |
+| [Bitwarden](/providers/bitwarden)         | `bitwarden`     | No (read-only)      | `bw` CLI and an unlocked session, or `rbw`          |
+| [Enpass](/providers/enpass)               | `enpass`        | No (read-only)      | The local vault files and the master password       |
+| [Infisical](/providers/infisical)         | `infisical`     | No (read-only)      | `infisical` CLI and a token or machine identity     |
+| [Passwordstate](/providers/passwordstate) | `passwordstate` | No (read-only)      | Network access to the server and a list API key     |
+| [Proton Pass](/providers/proton-pass)     | `proton-pass`   | No (read-only)      | `pass-cli`, logged in                               |
 
 ## Local stores and defaults
 
-These use a store available on your machine, or no encrypted storage at all for plaintext defaults.
+These use a store on your machine, or no storage beyond `fnox.toml` itself.
 
-| Provider                                    | Config type      | Storage                                                             |
-| ------------------------------------------- | ---------------- | ------------------------------------------------------------------- |
-| [OS keychain](/providers/keychain)          | `keychain`       | macOS Keychain, Windows Credential Manager, or Linux Secret Service |
-| [KeePass](/providers/keepass)               | `keepass`        | A local `.kdbx` file                                                |
-| [password-store](/providers/password-store) | `password-store` | GPG-encrypted files managed by `pass`                               |
-| [gopass](/providers/gopass)                 | `gopass`         | GPG/age-encrypted, Git-synced store managed by `gopass`             |
-| [Plaintext](/providers/plain)               | `plain`          | Unencrypted values; only for non-sensitive configuration            |
+| Provider                                    | Config type      | Writes (`fnox set`)                         | Requires                                                            |
+| ------------------------------------------- | ---------------- | ------------------------------------------- | ------------------------------------------------------------------- |
+| [OS keychain](/providers/keychain)          | `keychain`       | Yes                                         | macOS Keychain, Windows Credential Manager, or Linux Secret Service |
+| [KeePass](/providers/keepass)               | `keepass`        | Yes                                         | A `.kdbx` file and its password (and key file, if used)             |
+| [password-store](/providers/password-store) | `password-store` | Yes                                         | `pass` CLI and a GPG key                                            |
+| [gopass](/providers/gopass)                 | `gopass`         | Yes                                         | `gopass` CLI and an initialized store                               |
+| [Plaintext defaults](/providers/plain)      | `plain`          | Yes, as plaintext in config; No with `file` | Nothing. Only for values that are not secret                        |
 
 ## Custom providers
 
-When no built-in provider fits, write one in Lua. A plugin can read, store, or encrypt values using HTTP, JSON, and command helpers, and can be shared as a git repository.
+| Provider                      | Config type | Writes (`fnox set`)                                        | Requires                                     |
+| ----------------------------- | ----------- | ---------------------------------------------------------- | -------------------------------------------- |
+| [Lua plugins](/providers/lua) | `lua`       | Yes if the plugin defines `encrypt` or `put`; otherwise No | A plugin file, directory or installed plugin |
 
-| Provider                      | Config type | Implementation                            |
-| ----------------------------- | ----------- | ----------------------------------------- |
-| [Lua plugins](/providers/lua) | `lua`       | A `provider.lua` file or installed plugin |
+A Lua plugin can read, store or encrypt values with HTTP, JSON and command helpers, and can be shared as a git repository.
 
-## Configure an instance
+## See also
 
-This example reads an existing item from 1Password:
-
-```toml
-[providers.op]
-type = "1password"
-vault = "Engineering"
-
-[secrets]
-DATABASE_URL = { provider = "op", value = "Database/url" }
-```
-
-Test the configured instance, then resolve the secret:
-
-```sh
-fnox provider test op
-fnox get DATABASE_URL
-fnox exec -- npm start
-```
-
-`fnox get` prints the resolved value. `fnox list` lists the secrets configured in fnox; it is not a directory of every item in your remote vault.
-
-A provider's read and write capabilities may differ. In particular, a read-only provider cannot be used with `fnox set`, and `fnox import` currently accepts encryption providers only. Check the provider guide before choosing a write or migration workflow.
-
-## Next steps
-
-- [Configuration reference](/reference/configuration): common provider fields and secret options.
-- [Profiles](/guide/profiles): select different providers for different environments.
-- [Troubleshooting](/guide/troubleshooting): diagnose a provider connection or missing value.
+- [Use an existing vault](/guide/existing-vault): connect a password manager or cloud store and cache it locally.
+- [Configuration reference](/reference/configuration): fields shared by every provider, such as `auth_command` and `daemon_cache`.
+- [Provider commands](/cli/provider): add, list, test and remove provider instances.

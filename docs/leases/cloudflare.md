@@ -1,106 +1,20 @@
 ---
-description: "Create temporary Cloudflare API tokens with fnox, using user or account ownership, scoped policies, and expiry."
+description: "Create short-lived, scoped Cloudflare API tokens with fnox from a parent token, as user or account tokens, and delete them on revoke."
 ---
 
 # Cloudflare
 
-The `cloudflare` lease backend creates short-lived, scoped Cloudflare API tokens using the [Cloudflare API Tokens API](https://developers.cloudflare.com/api/resources/user/subresources/tokens/methods/create/). A parent token with the **API Tokens: Edit** permission creates child tokens that automatically expire.
+The `cloudflare` lease backend uses a parent API token to create a child token that expires on its own, and injects the child into `fnox exec`. By default the child inherits the parent's permissions; set `policies` to narrow them.
 
-By default, the child token inherits the parent's policies except the API Tokens permission groups that cannot be delegated. You can override this by specifying explicit `policies` in the configuration.
+|              |                                                         |
+| ------------ | ------------------------------------------------------- |
+| Config type  | `cloudflare`                                            |
+| Produces     | `CLOUDFLARE_API_TOKEN` (configurable with `env_var`)    |
+| Max duration | 24 hours                                                |
+| Revocation   | Yes; fnox deletes the child token                       |
+| Needs        | A parent token with the **API Tokens: Edit** permission |
 
-Set `token_type = "account"` to use [account-owned tokens](https://developers.cloudflare.com/fundamentals/api/get-started/account-owned-tokens/) (`/accounts/{id}/tokens`) instead of user tokens. Account tokens are ideal for CI/CD and team workflows since they aren't tied to an individual user.
-
-## Configuration
-
-```toml
-[leases.cf]
-type = "cloudflare"
-account_id = "abc123def456"
-duration = "1h"
-
-[[leases.cf.policies]]
-effect = "allow"
-resources = { "com.cloudflare.api.account.zone.*" = "*" }
-
-[[leases.cf.policies.permission_groups]]
-id = "c8fed203ed3043cba015a93ad1616f1f"
-name = "Zone Read"
-```
-
-| Field        | Required | Description                                                                               |
-| ------------ | -------- | ----------------------------------------------------------------------------------------- |
-| `token_type` | No       | `"user"` (default) or `"account"` — selects user-owned vs account-owned tokens API        |
-| `account_id` | No\*     | Cloudflare account ID. Also substituted into `{account_id}` placeholders in resource keys |
-| `policies`   | No       | Array of permission policies (see below); omit to inherit from parent token               |
-| `env_var`    | No       | Environment variable name for the token (default: `"CLOUDFLARE_API_TOKEN"`)               |
-| `duration`   | No       | Token lifetime (e.g., `"1h"`, `"30m"`; default: `"15m"`, max 24h)                         |
-
-\* Required when `token_type = "account"`.
-
-### Policy fields
-
-| Field               | Required | Description                                                           |
-| ------------------- | -------- | --------------------------------------------------------------------- |
-| `effect`            | No       | `"allow"` (default) or `"deny"`                                       |
-| `permission_groups` | Yes      | Array of `{ id, name }` objects (name is optional, for documentation) |
-| `resources`         | Yes      | Resource scope map (e.g., `{ "com.cloudflare.api.account.*" = "*" }`) |
-
-To find permission group IDs, use the [Cloudflare API](https://developers.cloudflare.com/api/resources/user/subresources/tokens/subresources/permission_groups/methods/list/) or run:
-
-```bash
-curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-  "https://api.cloudflare.com/client/v4/user/tokens/permission_groups" | jq '.result[]'
-```
-
-## Prerequisites
-
-The backend needs a parent API token that can create other tokens. fnox looks for it in environment variables:
-
-1. `CLOUDFLARE_API_TOKEN`
-2. `CF_API_TOKEN`
-
-The parent token must have the **API Tokens: Edit** permission. If not found, fnox prints:
-
-```text
-Cloudflare API token not found. Set CLOUDFLARE_API_TOKEN with a token that has 'API Tokens: Edit' permission.
-```
-
-## Credentials produced
-
-| Environment Variable   | Description                  |
-| ---------------------- | ---------------------------- |
-| `CLOUDFLARE_API_TOKEN` | Short-lived scoped API token |
-
-The env var name is configurable via the `env_var` field.
-
-## Limits
-
-- **Max duration:** 24 hours
-- **Revocation:** Supported — fnox deletes the token via the Cloudflare API
-
-## Examples
-
-### Minimal (inherit parent policies)
-
-```toml
-[leases.cf]
-type = "cloudflare"
-duration = "1h"
-```
-
-The child token gets the same permissions as the parent, except for the **API Tokens** permission groups, which Cloudflare does not allow child tokens to inherit. This is the simplest setup — just ensure the parent token has the **API Tokens: Edit** permission plus whatever permissions your workflow needs.
-
-### Account-owned token
-
-```toml
-[leases.cf]
-type = "cloudflare"
-token_type = "account"
-account_id = "abc123def456"
-duration = "1h"
-```
-
-### With stored credentials
+## Quick start
 
 ```toml
 [providers.op]
@@ -112,29 +26,44 @@ CLOUDFLARE_API_TOKEN = { provider = "op", value = "Cloudflare/api token", env = 
 
 [leases.cf]
 type = "cloudflare"
-account_id = "abc123def456"
 duration = "1h"
-
-[[leases.cf.policies]]
-effect = "allow"
-resources = { "com.cloudflare.api.account.zone.*" = "*" }
-
-[[leases.cf.policies.permission_groups]]
-id = "c8fed203ed3043cba015a93ad1616f1f"
-name = "Zone Read"
-
-[[leases.cf.policies.permission_groups]]
-id = "82e64a83756745bbbb1c9c2701bf816b"
-name = "DNS Read"
 ```
 
-```bash
+```sh
 fnox exec -- sh -c 'curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" https://api.cloudflare.com/client/v4/zones'
 ```
 
-### Using {account_id} placeholder
+The command sees the child token in `CLOUDFLARE_API_TOKEN`; the parent token stays out of its environment.
 
-If you set `account_id`, you can use `{account_id}` in resource keys to avoid repeating it:
+## Bootstrap credentials
+
+fnox reads the parent token from `CLOUDFLARE_API_TOKEN`, then `CF_API_TOKEN`. Store it as a secret with one of those names, as in the quick start, or export it. `fnox lease create -i cf` prompts for it when neither is set.
+
+The parent needs **API Tokens: Edit** plus every permission the child should have. Cloudflare does not let a child token manage tokens, so the API Tokens permission groups are never passed on.
+
+## Configuration
+
+| Field        | Required         | Default                  | Description                                                                                         |
+| ------------ | ---------------- | ------------------------ | --------------------------------------------------------------------------------------------------- |
+| `token_type` | No               | `"user"`                 | `"user"` creates the token under `/user/tokens`; `"account"` under `/accounts/<account_id>/tokens`. |
+| `account_id` | With `"account"` | none                     | Account ID. Also replaces `{account_id}` in policy resource keys.                                   |
+| `policies`   | No               | parent's policies        | Policies for the child token. See [Policies](#policies).                                            |
+| `env_var`    | No               | `"CLOUDFLARE_API_TOKEN"` | Variable that receives the child token.                                                             |
+| `duration`   | No               | `"15m"`                  | Token lifetime, sent as `expires_on`. At most `"24h"`.                                              |
+
+[Account-owned tokens](https://developers.cloudflare.com/fundamentals/api/get-started/account-owned-tokens/) are not tied to a person, which suits CI and shared setups. Child tokens are named `fnox-lease-<label>`, such as `fnox-lease-fnox-exec-cf`, so you can find them in the dashboard.
+
+### Policies
+
+Without `policies`, fnox reads the parent token's policies, drops the API Tokens permission groups, and gives the child the rest. A parent that has only API Tokens permissions cannot be inherited from; configure `policies` instead.
+
+Each policy has:
+
+| Field               | Required | Description                                                                      |
+| ------------------- | -------- | -------------------------------------------------------------------------------- |
+| `effect`            | No       | `"allow"` (default) or `"deny"`.                                                 |
+| `resources`         | Yes      | Resource scope map, for example `{ "com.cloudflare.api.account.zone.*" = "*" }`. |
+| `permission_groups` | Yes      | At least one `{ id, name }` table. `name` is optional and only for readability.  |
 
 ```toml
 [leases.cf]
@@ -143,6 +72,7 @@ account_id = "abc123def456"
 duration = "2h"
 
 [[leases.cf.policies]]
+effect = "allow"
 resources = { "com.cloudflare.api.account.{account_id}" = "*" }
 
 [[leases.cf.policies.permission_groups]]
@@ -150,35 +80,33 @@ id = "e086da7e2179491d91ee5f35b3c14571"
 name = "Workers Scripts Write"
 ```
 
-### Custom env var name
+Look up permission group IDs with the [permission groups API](https://developers.cloudflare.com/api/resources/user/subresources/tokens/subresources/permission_groups/methods/list/):
 
-```toml
-[leases.cf]
-type = "cloudflare"
-env_var = "CF_TOKEN"
-duration = "30m"
-
-[[leases.cf.policies]]
-resources = { "com.cloudflare.api.account.*" = "*" }
-
-[[leases.cf.policies.permission_groups]]
-id = "c8fed203ed3043cba015a93ad1616f1f"
-name = "Zone Read"
+```sh
+curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  "https://api.cloudflare.com/client/v4/user/tokens/permission_groups" | jq '.result[] | {id, name}'
 ```
 
-### Common permission groups
+## Troubleshooting
 
-| Permission Group      | ID                                 |
-| --------------------- | ---------------------------------- |
-| Zone Read             | `c8fed203ed3043cba015a93ad1616f1f` |
-| Zone Settings Write   | `e17beae8b8cb423a99571f9c20b2b9fc` |
-| DNS Read              | `82e64a83756745bbbb1c9c2701bf816b` |
-| DNS Write             | `4755a26eedb94da69e1066d98aa820be` |
-| Workers Scripts Write | `e086da7e2179491d91ee5f35b3c14571` |
-| Workers Routes Write  | `28f4b596e7d643029c524985477ae49a` |
+### Cloudflare API token not found
 
-Use the permission groups API to find the full list for your account.
+Neither `CLOUDFLARE_API_TOKEN` nor `CF_API_TOKEN` is set when the lease is created. Under `fnox exec`, the lease is skipped with this warning unless a cached lease is still valid.
+
+### Parent token only has 'API Tokens' permissions
+
+Inheritance left the child with nothing. Add the permissions the child needs to the parent token, or configure `policies`.
+
+### HTTP 401 or 403
+
+The parent token is invalid or lacks **API Tokens: Edit**. With `token_type = "account"`, fnox verifies the parent against `/accounts/<account_id>/tokens`, so it must be valid for that account.
+
+### Resource key contains '{account_id}' placeholder
+
+A policy uses `{account_id}` but `account_id` is not set. Set it on the lease.
 
 ## See also
 
-- [Credential Leases](/guide/leases) — overview and approaches
+- [Credential leases](/guide/leases): how leases are cached, reused and revoked.
+- [Lease commands](/cli/lease): revoke a child token early with `fnox lease revoke`.
+- [Custom command](/leases/command): wrap another token API with your own script.

@@ -1,18 +1,24 @@
 ---
-description: "Create scoped GitHub App installation tokens with fnox using an app ID, installation ID, and private key."
+description: "Create one-hour GitHub App installation tokens with fnox, scoped to permissions and repositories, from the app's private key."
 ---
 
 # GitHub App
 
-The `github-app` lease backend creates short-lived [GitHub App installation access tokens](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app) using a GitHub App's private key. Installation tokens expire after 1 hour (GitHub's hard limit) and can be scoped to specific permissions and repositories.
+The `github-app` lease backend signs a JWT with a GitHub App's private key, exchanges it for an [installation access token](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app), and injects the token into `fnox exec`. Use it in CI and automation instead of a long-lived personal access token.
 
-This is ideal for CI/CD pipelines and automation workflows where you need scoped, short-lived GitHub access instead of long-lived personal access tokens.
+|              |                                                                  |
+| ------------ | ---------------------------------------------------------------- |
+| Config type  | `github-app`                                                     |
+| Produces     | `GITHUB_TOKEN` (configurable with `env_var`)                     |
+| Max duration | 1 hour, set by GitHub                                            |
+| Revocation   | Yes, with `DELETE /installation/token` when the token was cached |
+| Needs        | The app's private key                                            |
 
-:::tip Prefer GitHub OAuth for local workflows
-If you want a short-lived token for local development or user-attributed GitHub CLI/API usage, consider [`github-oauth`](/leases/github-oauth) instead. It only requires the GitHub App client ID, so you do not need to distribute or manage an app private key.
+::: tip
+For local, user-attributed access, [`github-oauth`](/leases/github-oauth) needs only the app's client ID, so there is no private key to distribute.
 :::
 
-## Configuration
+## Quick start
 
 ```toml
 [leases.github]
@@ -20,128 +26,26 @@ type = "github-app"
 app_id = "12345"
 installation_id = "67890"
 private_key_file = "~/.config/fnox/github-app.pem"
-duration = "1h"
 
 [leases.github.permissions]
 contents = "read"
 pull_requests = "write"
 ```
 
-| Field              | Required | Description                                                                          |
-| ------------------ | -------- | ------------------------------------------------------------------------------------ |
-| `app_id`           | Yes      | GitHub App ID (found in the app's settings page)                                     |
-| `installation_id`  | Yes      | Installation ID (from the app's installation URL or API)                             |
-| `private_key_file` | No\*     | Path to the GitHub App's PEM private key file (supports `~` expansion)               |
-| `env_var`          | No       | Environment variable name for the token (default: `"GITHUB_TOKEN"`)                  |
-| `permissions`      | No       | Map of permission names to access levels (omit to use all installation permissions)  |
-| `repositories`     | No       | Array of bare repository names to scope the token to (omit for all installed repos)  |
-| `api_base`         | No       | GitHub API base URL (default: `"https://api.github.com"`; set for GitHub Enterprise) |
-| `duration`         | No       | Ignored — GitHub controls token lifetime (always 1 hour)                             |
-
-\* Required unless `FNOX_GITHUB_APP_PRIVATE_KEY` is set.
-
-### Permission values
-
-Permissions use GitHub's [installation token permission names](https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app). Each permission maps to an access level:
-
-| Access Level | Description         |
-| ------------ | ------------------- |
-| `"read"`     | Read-only access    |
-| `"write"`    | Read and write      |
-| `"admin"`    | Full administrative |
-
-## Prerequisites
-
-The backend needs a GitHub App private key. fnox looks for it in order:
-
-1. `FNOX_GITHUB_APP_PRIVATE_KEY` environment variable (PEM contents)
-2. `private_key_file` config option (path to PEM file)
-
-If neither is found, fnox prints:
-
-```text
-GitHub App private key not found. Set FNOX_GITHUB_APP_PRIVATE_KEY or configure private_key_file pointing to a PEM file.
-```
-
-### Getting the app ID and installation ID
-
-1. **App ID**: Go to your GitHub App's settings page (`Settings > Developer settings > GitHub Apps > Your App`). The App ID is shown near the top.
-
-2. **Installation ID**: After installing the app on an organization or account, the installation ID is in the URL: `https://github.com/settings/installations/{installation_id}`. You can also find it via the API:
-
-```bash
-# List installations for your app (requires JWT auth)
-curl -H "Authorization: Bearer $JWT" \
-  https://api.github.com/app/installations
-```
-
-### Generating a private key
-
-In your GitHub App settings, scroll to "Private keys" and click "Generate a private key". Save the downloaded PEM file to a secure location.
-
-## Credentials produced
-
-| Environment Variable | Description                           |
-| -------------------- | ------------------------------------- |
-| `GITHUB_TOKEN`       | Short-lived installation access token |
-
-The env var name is configurable via the `env_var` field.
-
-## Limits
-
-- **Max duration:** 1 hour (enforced by GitHub)
-- **Revocation:** Supported — fnox calls `DELETE /installation/token` to immediately invalidate the token
-
-## Examples
-
-### Minimal
-
-```toml
-[leases.github]
-type = "github-app"
-app_id = "12345"
-installation_id = "67890"
-private_key_file = "~/.config/fnox/github-app.pem"
-```
-
-The token gets all permissions and repository access granted to the installation.
-
-```bash
+```sh
 fnox exec -- gh pr list
 ```
 
-### Scoped to specific permissions
+The app ID is on the app's settings page. The installation ID is the number at the end of the installation's settings URL, `https://github.com/settings/installations/<installation_id>` (or the organization equivalent).
 
-```toml
-[leases.github]
-type = "github-app"
-app_id = "12345"
-installation_id = "67890"
-private_key_file = "~/.config/fnox/github-app.pem"
+## Bootstrap credentials
 
-[leases.github.permissions]
-contents = "read"
-pull_requests = "write"
-issues = "write"
-```
+fnox reads the PEM-encoded RSA private key from the first source available:
 
-### Scoped to specific repositories
+1. `FNOX_GITHUB_APP_PRIVATE_KEY`, containing the PEM text
+2. The file at `private_key_file` (`~` is expanded)
 
-```toml
-[leases.github]
-type = "github-app"
-app_id = "12345"
-installation_id = "67890"
-private_key_file = "~/.config/fnox/github-app.pem"
-repositories = ["api", "frontend"]
-
-[leases.github.permissions]
-contents = "read"
-```
-
-### With stored private key
-
-Instead of a file, store the private key in a provider:
+To keep the key in a provider instead of a file, store it as a secret with that name. fnox resolves it for lease creation, and `env = false` keeps it out of the command:
 
 ```toml
 [providers.op]
@@ -157,9 +61,24 @@ app_id = "12345"
 installation_id = "67890"
 ```
 
-fnox resolves the private key for the lease backend internally. `env = false` keeps it out of normal subprocess injection; only the generated installation token is passed to the command.
+Generate a key under **Private keys** in the app's settings.
 
-### Custom env var
+## Configuration
+
+| Field              | Required | Default                       | Description                                                                                 |
+| ------------------ | -------- | ----------------------------- | ------------------------------------------------------------------------------------------- |
+| `app_id`           | Yes      | none                          | GitHub App ID, used as the JWT issuer.                                                      |
+| `installation_id`  | Yes      | none                          | Installation to create the token for.                                                       |
+| `private_key_file` | No\*     | none                          | Path to the app's PEM private key.                                                          |
+| `permissions`      | No       | all installation permissions  | Table of permission name to `"read"`, `"write"` or `"admin"`.                               |
+| `repositories`     | No       | all installation repositories | Repository names (without owner) to limit the token to.                                     |
+| `env_var`          | No       | `"GITHUB_TOKEN"`              | Variable that receives the token. Use `"GH_TOKEN"` for `gh` if you prefer.                  |
+| `api_base`         | No       | `"https://api.github.com"`    | API base URL, for example `https://github.example.com/api/v3` for GitHub Enterprise Server. |
+| `duration`         | No       | `"15m"`                       | Must be at most `"1h"`. Otherwise ignored; tokens always last about an hour.                |
+
+\* Required unless `FNOX_GITHUB_APP_PRIVATE_KEY` is set.
+
+`permissions` can only narrow what the installation already has. Names follow GitHub's [installation token API](https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app), for example `contents`, `pull_requests`, `issues`, `actions` and `metadata`.
 
 ```toml
 [leases.github]
@@ -167,38 +86,40 @@ type = "github-app"
 app_id = "12345"
 installation_id = "67890"
 private_key_file = "~/.config/fnox/github-app.pem"
-env_var = "GH_TOKEN"
+repositories = ["api", "frontend"]
+
+[leases.github.permissions]
+contents = "read"
 ```
 
-### GitHub Enterprise
+## Revocation
 
-```toml
-[leases.github]
-type = "github-app"
-app_id = "12345"
-installation_id = "67890"
-private_key_file = "~/.config/fnox/github-app.pem"
-api_base = "https://github.example.com/api/v3"
-```
+`fnox lease revoke <lease-id>` deletes the token on GitHub immediately. GitHub authenticates that call with the token itself, so fnox can only revoke tokens whose credentials it cached in the lease ledger. `fnox lease cleanup` handles expired tokens, which need no remote call.
 
-### Common permissions
+## Troubleshooting
 
-| Permission          | Description                            |
-| ------------------- | -------------------------------------- |
-| `contents`          | Repository contents, commits, branches |
-| `pull_requests`     | Pull requests                          |
-| `issues`            | Issues and comments                    |
-| `actions`           | GitHub Actions workflows               |
-| `packages`          | GitHub Packages                        |
-| `deployments`       | Deployment statuses                    |
-| `environments`      | Deployment environments                |
-| `metadata`          | Repository metadata (always read-only) |
-| `administration`    | Repository settings                    |
-| `members`           | Organization members                   |
-| `organization_plan` | Organization billing info              |
+### GitHub App private key not found
 
-See the [GitHub API docs](https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app) for the full list.
+`FNOX_GITHUB_APP_PRIVATE_KEY` is unset and `private_key_file` is missing or points to a file that does not exist. Under `fnox exec`, the lease is skipped with this warning unless a cached lease is still valid.
+
+### Invalid RSA private key
+
+The value is not a PEM RSA key. Use the `.pem` file GitHub generated, including its `BEGIN` and `END` lines.
+
+### HTTP 401 or 403
+
+Check `app_id` and that the key belongs to that app.
+
+### HTTP 404
+
+The `installation_id` is wrong, or the app is not installed on that account or organization.
+
+### HTTP 422
+
+`permissions` asks for more than the installation grants, or `repositories` names a repository the installation cannot access.
 
 ## See also
 
-- [Credential Leases](/guide/leases) — overview and approaches
+- [Credential leases](/guide/leases): how leases are cached, reused and revoked.
+- [GitHub OAuth](/leases/github-oauth): user access tokens through the device flow.
+- [Lease commands](/cli/lease): create, list and revoke leases.

@@ -1,312 +1,105 @@
 ---
-description: "Read and write KeePass database entries with fnox. Configure the database, password, key file, and entry paths."
+description: "Read and write entries in a local KeePass (.kdbx) database with fnox. Configure the database, key file, password, and entry paths."
 ---
 
 # KeePass
 
-Store secrets in a local KeePass database file (`.kdbx`), supporting KDBX4 format with read/write operations.
+The `keepass` provider reads and writes entries in a local KeePass database file (`.kdbx`). `fnox.toml` holds entry paths; values stay in the database. fnox opens the file directly, so no KeePass application is needed.
+
+|                     |                                     |
+| ------------------- | ----------------------------------- |
+| Config type         | `keepass`                           |
+| Storage             | Local store                         |
+| Writes (`fnox set`) | Yes                                 |
+| Requires            | A `.kdbx` database and its password |
 
 ## Quick start
 
-Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
-
 ```toml
-[providers]
-keepass = { type = "keepass", database = "~/secrets.kdbx" }
+[providers.keepass]
+type = "keepass"
+database = "~/secrets.kdbx"
 ```
 
 ```sh
-# Store a secret
-fnox set DATABASE_URL "postgresql://localhost/mydb" --provider keepass
-
-# Retrieve from database
-fnox get DATABASE_URL
+fnox set DATABASE_URL --provider keepass
+fnox provider test keepass
+fnox exec -- npm start
 ```
 
-fnox prompts for the database password without showing what you type. You can also set `FNOX_KEEPASS_PASSWORD` to use fnox without a prompt.
-
-## Configuration
-
-```toml
-[providers]
-keepass = { type = "keepass", database = "~/secrets.kdbx" }
-
-# A second instance using a keyfile
-keepass-with-keyfile = { type = "keepass", database = "~/secrets.kdbx", keyfile = "~/keyfile.key" }
-```
-
-### Database path
-
-The `database` field specifies the path to your `.kdbx` file. Relative paths are resolved from the config file that declares the provider, and `~` expands to your home directory:
-
-```toml
-[providers]
-home-db = { type = "keepass", database = "~/secrets.kdbx" }           # Home directory
-project-db = { type = "keepass", database = "./secrets/vault.kdbx" }     # Relative to this config file
-shared-db = { type = "keepass", database = "/opt/secrets/shared.kdbx" } # Absolute path
-```
-
-### Keyfile (optional)
-
-For additional security, use a keyfile alongside the password:
-
-```toml
-[providers]
-keepass = { type = "keepass", database = "~/secrets.kdbx", keyfile = "~/keyfile.key" }
-```
-
-Relative `keyfile` paths follow the same config-relative rule as `database`.
+fnox prompts for the database password. If the database file does not exist, `fnox set` creates a new KDBX4 database protected by the password you enter, along with any groups in the entry path.
 
 ## Authentication
 
-When a password is not configured, fnox prompts for it in a terminal. The prompt reads from the terminal even when standard input is piped, so `fnox exec -- mycmd` can prompt before starting `mycmd`. One prompt is used for the entries resolved from the same provider during a command. Automatic shell hooks do not prompt; use an environment variable for secrets loaded by `fnox hook-env`.
+fnox uses the first password it finds:
 
-For unattended use, set the database password via environment variable:
+1. `FNOX_KEEPASS_PASSWORD`, then `KEEPASS_PASSWORD`.
+2. The provider's `password` field.
+3. A hidden terminal prompt.
 
-- `FNOX_KEEPASS_PASSWORD` (preferred)
-- `KEEPASS_PASSWORD` (fallback)
+The prompt reads from the terminal even when standard input is piped, so `fnox exec -- mycmd` can prompt before starting `mycmd`. One prompt covers every entry fnox reads from the same database and key file during a command. Shell integration does not prompt; set an environment variable for secrets loaded by `fnox hook-env`.
 
-```bash
-# Recommended: FNOX_KEEPASS_PASSWORD
-export FNOX_KEEPASS_PASSWORD="your-master-password"
-
-# Alternative: KEEPASS_PASSWORD
-export KEEPASS_PASSWORD="your-master-password"
-```
+In [non-interactive mode](/reference/environment#fnox-non-interactive), a missing password is an authentication error. For unattended runs, supply the password through your CI secret store as `FNOX_KEEPASS_PASSWORD`.
 
 ::: warning
-The provider also accepts a `password` field, but avoid storing the password directly in the provider config. Environment variables take priority over the config value; both take priority over the prompt. In non-interactive mode, a missing password produces an authentication error.
+The provider also accepts a `password` field, but avoid storing the password directly in the provider config. Use an environment variable, or a `{ secret = "NAME" }` reference to another provider.
 :::
+
+## Configuration
+
+| Field      | Required | Default | Description                                                  |
+| ---------- | -------- | ------- | ------------------------------------------------------------ |
+| `database` | Yes      | None    | Path to the `.kdbx` file. Created on first write if missing. |
+| `keyfile`  | No       | None    | Path to a key file used together with the password.          |
+| `password` | No       | None    | Database password. Environment variables take precedence.    |
+
+Relative `database` and `keyfile` paths are resolved from the config file that declares the provider, and `~` expands to your home directory. All fields accept `{ secret = "NAME" }`. Every provider also accepts [`auth_command` and `daemon_cache`](/reference/configuration#provider-configuration).
 
 ## Reference formats
 
-KeePass supports flexible path formats:
+A reference is a `/`-separated path. If the last segment is a field name, fnox reads that field; otherwise it reads the password.
 
-| Format      | Example                      | Description                               |
-| ----------- | ---------------------------- | ----------------------------------------- |
-| Entry name  | `my-entry`                   | Gets password field (searches all groups) |
-| Entry/field | `my-entry/username`          | Gets specific field from entry            |
-| Group/entry | `work/my-entry`              | Gets password from entry in group         |
-| Full path   | `work/project/api-key/notes` | Group path + entry + field                |
+| `value`                      | What fnox reads                                          |
+| ---------------------------- | -------------------------------------------------------- |
+| `github`                     | Password of the first entry titled `github` in any group |
+| `github/username`            | Username field of that entry                             |
+| `work/github`                | Password of the entry `github` under group `work`        |
+| `work/project/api-key/notes` | Notes field of entry `api-key` under `work/project`      |
 
-### Simple entry name
+The field names are `password`, `username`, `url`, `notes`, and `title`, matched case-insensitively. Other custom fields cannot be referenced. Group names and entry titles match exactly.
 
-```toml
-[secrets]
-DATABASE_URL = { provider = "keepass", value = "database-url" }
+`fnox set` writes to the same path, creating groups and the entry as needed. It stores the password field protected inside the database. The `title` field cannot be written, because it identifies the entry:
+
+```sh
+fnox set API_USER --provider keepass --key-name production/api-service/username
 ```
 
-Searches all groups for an entry with this title and returns the password field.
+## Shared databases
 
-### Entry with field
+fnox saves through a temporary file that it syncs to disk before replacing the database. That prevents a torn write, but it does not merge changes: if several machines write the same file through a sync service, the last save wins. Back up the database and any key file.
 
-```toml
-[secrets]
-DB_USER = { provider = "keepass", value = "database/username" }
-DB_PASS = { provider = "keepass", value = "database/password" }
-DB_HOST = { provider = "keepass", value = "database/url" }
-```
-
-### Group path
-
-```toml
-[secrets]
-PROD_API_KEY = { provider = "keepass", value = "production/api/my-service" }
-DEV_API_KEY = { provider = "keepass", value = "development/api/my-service" }
-```
-
-### Full path with field
-
-```toml
-[secrets]
-API_USER = { provider = "keepass", value = "production/api/my-service/username" }
-API_NOTES = { provider = "keepass", value = "production/api/my-service/notes" }
-```
-
-## Supported fields
-
-| Field      | Description              |
-| ---------- | ------------------------ |
-| `password` | Entry password (default) |
-| `username` | Entry username           |
-| `url`      | Entry URL                |
-| `notes`    | Entry notes              |
-| `title`    | Entry title (read-only)  |
-
-Field names are case-insensitive (`Username`, `USERNAME`, `username` all work).
-
-## How it works
-
-1. **Storage:** Secrets are stored in a local `.kdbx` database file
-2. **Config:** `fnox.toml` contains the entry name/path (not the actual secret value)
-3. **Auto-creation:** Database and group structure are created automatically if they don't exist
-4. **Atomic writes:** Uses temporary files with sync-to-disk before rename to prevent data loss
-5. **Protected fields:** Password fields are stored encrypted within KDBX format
-
-## Usage
-
-### Store a secret
-
-```bash
-fnox set DATABASE_URL "postgresql://localhost/mydb" --provider keepass
-```
-
-Your `fnox.toml`:
-
-```toml
-[secrets]
-DATABASE_URL = { provider = "keepass", value = "DATABASE_URL" }  # Entry title, not the actual secret
-```
-
-### Store with specific path
-
-```bash
-# Store in a specific group with specific field
-fnox set API_USER "admin" --provider keepass --key-name "production/api-service/username"
-```
-
-### Retrieve a secret
-
-```bash
-fnox get DATABASE_URL
-```
-
-### Run commands
-
-```bash
-fnox exec -- npm run dev
-```
-
-## Example configurations
-
-### Personal password database
-
-```toml
-[providers]
-keepass = { type = "keepass", database = "~/Documents/passwords.kdbx" }
-
-[secrets]
-GITHUB_TOKEN = { provider = "keepass", value = "github/token" }
-NPM_TOKEN = { provider = "keepass", value = "npm/token" }
-```
-
-### Project-specific database
-
-```toml
-[providers]
-keepass = { type = "keepass", database = "./secrets.kdbx" }
-
-[secrets]
-DATABASE_URL = { provider = "keepass", value = "database" }
-API_KEY = { provider = "keepass", value = "api-key" }
-```
-
-### Organized by environment
-
-```toml
-[providers]
-keepass = { type = "keepass", database = "~/work/secrets.kdbx" }
-
-[secrets]
-DEV_DB = { provider = "keepass", value = "development/database/password" }
-
-[profiles.production.secrets]
-PROD_DB = { provider = "keepass", value = "production/database/password" }
-```
-
-### With keyfile
-
-```toml
-[providers]
-keepass = { type = "keepass", database = "~/secure.kdbx", keyfile = "~/secure.key" }
-
-[secrets]
-MASTER_KEY = { provider = "keepass", value = "master-key" }
-```
-
-## Usage notes
-
-The provider reads and writes a local KDBX4 database. Back up the database and any required keyfile. Coordinate writes if several machines share the same file; atomic local saves do not merge concurrent changes.
-
-## Limitations
-
-### Database sync
-
-KeePass databases are single files. For team use, sync via:
-
-- Git (with care - merge conflicts possible)
-- Syncthing
-- Dropbox/OneDrive
-- Network share
-
-For teams, consider [1Password](/providers/1password), [Bitwarden](/providers/bitwarden), or cloud providers instead.
-
-### Title field is read-only
-
-The `title` field cannot be modified via fnox - it's reserved for entry identification.
-
-## Database protection
-
-- **Encryption:** KDBX4 format uses AES-256 or ChaCha20
-- **Key derivation:** Argon2d for password-based key derivation
-- **Atomic saves:** Writes through a temporary file before replacing the database
+For team secrets, consider [1Password](/providers/1password), [Bitwarden](/providers/bitwarden), or [age](/providers/age) instead.
 
 ## Troubleshooting
 
-### "Database password not set"
+### `Database password not set`
 
-Set the password environment variable:
+fnox ran in non-interactive mode, such as from shell integration, and found no password. Set `FNOX_KEEPASS_PASSWORD` or `KEEPASS_PASSWORD` for the fnox process.
 
-```bash
-export FNOX_KEEPASS_PASSWORD="your-master-password"
-# or
-export KEEPASS_PASSWORD="your-master-password"
-```
+### `Could not read database password from terminal`
 
-### "Entry not found"
+fnox had no terminal to prompt on. Set `FNOX_KEEPASS_PASSWORD` or `KEEPASS_PASSWORD` instead.
 
-Check that:
+### `Failed to decrypt database`
 
-1. Entry exists in the database
-2. Entry title matches the reference exactly
-3. Group path is correct (if using group paths)
+The password or key file is wrong. Check the `keyfile` path and try opening the database with KeePassXC using the same credentials.
 
-View entries with KeePassXC:
+### Entry not found
 
-```bash
-# macOS
-brew install --cask keepassxc
-keepassxc ~/secrets.kdbx
-```
+Check the entry title and group path. A single-segment reference searches all groups and returns the first match; add the group path when several entries share a title.
 
-### "Cannot open database"
+## See also
 
-Verify:
-
-1. Database file exists at the specified path
-2. Password is correct
-3. Keyfile is accessible (if configured)
-4. File permissions allow read/write
-
-### "Database created but empty"
-
-fnox auto-creates databases. If you need to pre-populate:
-
-1. Create database with KeePassXC
-2. Add entries manually
-3. Reference them in fnox.toml
-
-## Running tests
-
-```bash
-# Run the KeePass tests
-mise run test:bats -- test/keepass.bats
-```
-
-The tests create a temporary database with their own password, so no external setup is needed.
-
-## Next steps
-
-- [OS Keychain](/providers/keychain) - Alternative local storage
-- [password-store](/providers/password-store) - GPG-based alternative
-- [Age Encryption](/providers/age) - Team-friendly, git-based secrets
+- [OS keychain](/providers/keychain): local storage without a database file.
+- [password-store](/providers/password-store): GPG-encrypted files synced with git.
+- [age](/providers/age): encrypted secrets committed alongside your code.

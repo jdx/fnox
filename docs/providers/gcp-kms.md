@@ -1,76 +1,119 @@
 ---
-description: "Encrypt values in fnox.toml with Google Cloud KMS. Configure a key ring, key, credentials, and IAM permissions."
+description: "Encrypt values in fnox.toml with a Google Cloud KMS key. Configure Application Default Credentials, the key path, and IAM roles."
 ---
 
 # Google Cloud KMS
 
-Google Cloud KMS encrypts secrets using GCP-managed keys. The encrypted ciphertext is stored in your `fnox.toml` file.
+The `gcp-kms` provider encrypts values into `fnox.toml` with a Google Cloud KMS symmetric key. The ciphertext lives in your config, but both `fnox set` and every decryption call the Cloud KMS API.
+
+|                     |                                                                 |
+| ------------------- | --------------------------------------------------------------- |
+| Config type         | `gcp-kms`                                                       |
+| Storage             | Encrypted in config                                             |
+| Writes (`fnox set`) | Yes                                                             |
+| Requires            | Application Default Credentials and network access to Cloud KMS |
+
+To keep values out of git entirely, use [Google Cloud Secret Manager](/providers/gcp-sm).
 
 ## Quick start
 
-Select your Google Cloud project and configure Application Default Credentials before following this example. The identity running fnox needs access to the key.
+Create a key ring and an encryption key, or use existing ones:
 
 ```sh
-# Enable Cloud KMS and create key
-gcloud services enable cloudkms.googleapis.com
-gcloud kms keyrings create "fnox-keyring" --location="us-central1"
-gcloud kms keys create "fnox-key" --keyring="fnox-keyring" --location="us-central1" --purpose="encryption"
+gcloud kms keyrings create fnox --location us-central1
+gcloud kms keys create fnox-key --keyring fnox --location us-central1 --purpose encryption
 ```
 
-Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+Add the provider:
 
 ```toml
 [providers.gcpkms]
 type = "gcp-kms"
-project = "my-project-id"
+project = "my-project"
 location = "us-central1"
-keyring = "fnox-keyring"
+keyring = "fnox"
 key = "fnox-key"
 ```
 
+Store a value through the hidden prompt, then use it:
+
 ```sh
-# Encrypt a secret
-fnox set DATABASE_URL "postgresql://prod.example.com/db" --provider gcpkms
-
-# Get secret (decrypts via KMS)
-fnox get DATABASE_URL
+fnox set DATABASE_URL --provider gcpkms
+fnox provider test gcpkms
+fnox exec -- npm start
 ```
 
-## Permissions
+## Authentication
 
-Grant crypto permissions:
+fnox uses [Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials) (ADC): `GOOGLE_APPLICATION_CREDENTIALS`, your `gcloud` ADC login, or the attached service account on Google Cloud.
 
-```bash
-gcloud kms keys add-iam-policy-binding "fnox-key" \
-  --keyring="fnox-keyring" \
-  --location="us-central1" \
-  --member="user:your-email@example.com" \
-  --role="roles/cloudkms.cryptoKeyEncrypterDecrypter"
-```
+### Local development
+
+Run `gcloud auth application-default login`. When authentication fails in an interactive terminal, fnox offers to run that command; override it with [`auth_command`](/reference/configuration#auth-command).
+
+### CI
+
+Prefer [Workload Identity Federation](https://cloud.google.com/iam/docs/workload-identity-federation) through your CI platform's auth step, which sets up ADC for later steps. A service account key file referenced by `GOOGLE_APPLICATION_CREDENTIALS` also works. See [CI/CD](/guide/ci).
 
 ## Configuration
 
+| Field      | Required | Default | Description                                           |
+| ---------- | -------- | ------- | ----------------------------------------------------- |
+| `project`  | Yes      | None    | Google Cloud project ID that owns the key ring.       |
+| `location` | Yes      | None    | Key ring location, such as `us-central1` or `global`. |
+| `keyring`  | Yes      | None    | Key ring name.                                        |
+| `key`      | Yes      | None    | Crypto key name.                                      |
+
+fnox builds the key path `projects/<project>/locations/<location>/keyRings/<keyring>/cryptoKeys/<key>`. All fields accept `{ secret = "NAME" }`. Every provider also accepts [`auth_command` and `daemon_cache`](/reference/configuration#provider-configuration).
+
+## How values are stored
+
+`fnox set` calls Cloud KMS `Encrypt` on the key and stores the base64-encoded ciphertext as the secret's `value`. Decryption calls `Decrypt` on the same key path:
+
 ```toml
-[providers.gcpkms]
-type = "gcp-kms"
-project = "my-project-id"
-location = "us-central1"
-keyring = "fnox-keyring"
-key = "fnox-key"
+[secrets]
+DATABASE_URL = { provider = "gcpkms", value = "CiQAk3..." } # ciphertext, abbreviated
 ```
 
-## How it works
+Encryption uses the key's primary version. Cloud KMS identifies the version from the ciphertext when decrypting, so rotating the key keeps old values readable as long as their versions stay enabled.
 
-Similar to [AWS KMS](/providers/aws-kms):
+## Permissions
 
-1. **Encryption:** Calls Cloud KMS, stores ciphertext in fnox.toml
-2. **Decryption:** Calls Cloud KMS to recover plaintext
+| Operation            | Permission                                | Role                                         |
+| -------------------- | ----------------------------------------- | -------------------------------------------- |
+| `fnox set`           | `cloudkms.cryptoKeyVersions.useToEncrypt` | `roles/cloudkms.cryptoKeyEncrypterDecrypter` |
+| Reading secrets      | `cloudkms.cryptoKeyVersions.useToDecrypt` | `roles/cloudkms.cryptoKeyEncrypterDecrypter` |
+| `fnox provider test` | `cloudkms.cryptoKeys.get`                 | `roles/cloudkms.viewer`                      |
 
-## Usage notes
+Grant the encrypter/decrypter role on the key:
 
-Ciphertext lives in your config. Decryption still requires network access and IAM permission on the Cloud KMS key. Keep the required key version available for existing ciphertext.
+```sh
+gcloud kms keys add-iam-policy-binding fnox-key \
+  --keyring fnox --location us-central1 \
+  --member "user:you@example.com" \
+  --role roles/cloudkms.cryptoKeyEncrypterDecrypter
+```
 
-## Next steps
+## Troubleshooting
 
-- [GCP Secret Manager](/providers/gcp-sm) - Remote storage alternative
-- [Age Encryption](/providers/age) - Free local encryption
+### `PERMISSION_DENIED`
+
+The identity lacks the permission named in the error. Check the key's bindings:
+
+```sh
+gcloud kms keys get-iam-policy fnox-key --keyring fnox --location us-central1
+```
+
+### `NOT_FOUND`
+
+Check `project`, `location`, `keyring`, and `key` against `gcloud kms keys list --keyring fnox --location us-central1`.
+
+### Could not load credentials
+
+Run `gcloud auth application-default login`, or set `GOOGLE_APPLICATION_CREDENTIALS` for the fnox process.
+
+## See also
+
+- [Google Cloud Secret Manager](/providers/gcp-sm): store values in Google Cloud instead of in config.
+- [GCP IAM lease](/leases/gcp-iam): mint short-lived Google Cloud access tokens.
+- [age](/providers/age): encryption in config without a cloud dependency.

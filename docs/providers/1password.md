@@ -1,21 +1,21 @@
 ---
-description: "Read 1Password vault items with fnox. Set up local or service-account authentication, field references, and an optional local cache."
+description: "Read 1Password items and Environments with fnox through the op CLI, using desktop sign-in locally and a service account in CI."
 ---
 
 # 1Password
 
-Read vault items with the 1Password CLI (`op`). Your `fnox.toml` contains item references; values remain in 1Password.
+Read vault items and 1Password Environments through the 1Password CLI (`op`). `fnox.toml` stores references; values stay in 1Password. The provider is read-only: create and edit items in 1Password, not with `fnox set`.
 
-For a complete team setup with offline reads, follow [connect a vault and cache locally](/guide/existing-vault).
-
-## Prerequisites
-
-- A 1Password account with access to the vault and items you need.
-- The [1Password CLI](https://developer.1password.com/docs/cli/) installed and available as `op`.
+|                     |                                                                 |
+| ------------------- | --------------------------------------------------------------- |
+| Config type         | `1password`                                                     |
+| Storage             | Remote service (1Password vault)                                |
+| Writes (`fnox set`) | No (read-only)                                                  |
+| Requires            | [`op` CLI](https://developer.1password.com/docs/cli/) on `PATH` |
 
 ## Quick start
 
-Authenticate with the CLI's interactive or desktop-app integration, then add an existing vault item to your config:
+Sign in with `op` (the desktop-app integration works), then reference an existing item:
 
 ```toml
 [providers.op]
@@ -28,66 +28,77 @@ DATABASE_URL = { provider = "op", value = "Database/url" }
 
 ```sh
 fnox provider test op
-fnox get DATABASE_URL
 fnox exec -- npm start
 ```
 
-`fnox get` prints the value. Use `fnox check --all` when you only need to verify that it resolves.
+`op` is the provider instance name; any name works. For a team setup with offline reads, follow [use an existing vault](/guide/existing-vault).
 
 ## Authentication
 
+fnox runs `op` and uses whatever session `op` has. It adds `--account` when `account` is set.
+
 ### Local development
 
-Use the [CLI's supported sign-in methods](https://developer.1password.com/docs/cli/get-started/), including integration with the desktop app. Verify access with `op vault list` before running fnox.
+Use any [`op` sign-in method](https://developer.1password.com/docs/cli/get-started/), including the desktop-app integration. Check access with `op vault list`. When `op` reports that you are not signed in, fnox offers to run `op signin` in a terminal.
 
-A service account is not required for an interactive developer session. Authentication prompts and session lifetime depend on your 1Password setup.
+### CI
 
-### CI and automation
+Create a [service account](https://developer.1password.com/docs/service-accounts/) with access to the vaults the job reads. fnox passes the first token it finds to `op` as `OP_SERVICE_ACCOUNT_TOKEN`:
 
-Create a [1Password service account](https://developer.1password.com/docs/service-accounts/) with access to the required vaults. Supply its token through your CI secret store as `OP_SERVICE_ACCOUNT_TOKEN`. fnox also accepts `FNOX_OP_SERVICE_ACCOUNT_TOKEN`, which takes precedence.
-
-This workflow step assumes fnox and `op` are installed:
+1. The provider's `token` field
+2. `FNOX_OP_SERVICE_ACCOUNT_TOKEN`
+3. `OP_SERVICE_ACCOUNT_TOKEN`
 
 ```yaml
-- name: Run tests with secrets
+- run: fnox --non-interactive exec --if-missing error -- npm test
   env:
     OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
-  run: fnox --non-interactive exec --if-missing error -- npm test
 ```
 
-Scope the service account to the vaults and operations the job needs. Do not put the token in committed plaintext configuration.
-
-## Configuration
+To keep a token on a workstation, store it with another provider and point `token` at it:
 
 ```toml
 [providers.op]
 type = "1password"
 vault = "Engineering"
-account = "my.1password.com" # Optional account selector
+token = { secret = "OP_SERVICE_ACCOUNT_TOKEN" }
+
+[secrets]
+OP_SERVICE_ACCOUNT_TOKEN = { provider = "age", value = "YWdl...", env = false } # ciphertext, abbreviated
 ```
 
-`op` is the fnox provider instance name. Use it in secret definitions and commands such as `fnox provider test op`.
+## Configuration
+
+| Field     | Required | Default        | Description                                                                                      |
+| --------- | -------- | -------------- | ------------------------------------------------------------------------------------------------ |
+| `vault`   | No       | none           | Vault for `item` and `item/field` references. Those forms fail without it.                       |
+| `account` | No       | `op`'s default | Account passed to `op --account`, for example `my.1password.com`.                                |
+| `token`   | No       | env vars       | Service account token. Overrides `FNOX_OP_SERVICE_ACCOUNT_TOKEN` and `OP_SERVICE_ACCOUNT_TOKEN`. |
+
+Each field accepts `{ secret = "NAME" }` to read its value from another secret. Fields shared by all providers, such as `auth_command` and `daemon_cache`, are in the [configuration reference](/reference/configuration).
 
 ## Reference formats
 
-| Reference                            | What fnox reads                       |
-| ------------------------------------ | ------------------------------------- |
-| `Database`                           | The item's password field             |
-| `Database/username`                  | A named field in the configured vault |
-| `op://Engineering/Database/password` | A full 1Password secret reference     |
+| `value`                              | What fnox reads                                                      |
+| ------------------------------------ | -------------------------------------------------------------------- |
+| `Database`                           | `op://<vault>/Database/password`                                     |
+| `Database/username`                  | `op://<vault>/Database/username`                                     |
+| `op://Engineering/Database/password` | That secret reference as written; `vault` is ignored                 |
+| `environment://<id>/DATABASE_URL`    | One variable from a [1Password Environment](#1password-environments) |
 
-```toml
-[secrets]
-DB_PASSWORD = { provider = "op", value = "Database" }
-DB_USER = { provider = "op", value = "Database/username" }
-API_KEY = { provider = "op", value = "op://Engineering/Service/api-key" }
+Copy full `op://` references from 1Password when a project reads from several vaults. Field names are the labels shown on the item.
+
+To add a reference without editing TOML, pass it as the value. For a read-only provider, `fnox set` records the value as the reference:
+
+```sh
+fnox set DB_USER "Database/username" --provider op
 ```
 
-Use the field names in your items. Full `op://` references can be copied from 1Password and are useful when a project reads from several vaults.
+When several secrets use the same provider, fnox resolves them with one `op inject` call, and falls back to one `op read` per secret if that call fails.
 
-## 1Password Environments
+## 1Password Environments {#1password-environments}
 
-[1Password Environments](https://developer.1password.com/docs/environments/) are named bundles of environment variables that the CLI reads as a whole. Reference a single variable with `environment://<environment-id>/<VARIABLE>`:
+[1Password Environments](https://developer.1password.com/docs/environments/) are named sets of environment variables. Reference one variable with `environment://<environment-id>/<VARIABLE>`:
 
 ```toml
 [providers.op]
@@ -98,84 +109,40 @@ DATABASE_URL = { provider = "op", value = "environment://blgexucrwfr2dtsxe2q4uu7
 STRIPE_KEY = { provider = "op", value = "environment://blgexucrwfr2dtsxe2q4uu7dp4/STRIPE_KEY" }
 ```
 
-fnox runs `op environment read <environment-id>` once per environment and serves every variable that references it from that read. Your `fnox.toml` holds only the environment ID and variable names. Environment references do not use the provider's `vault` setting, and they can sit next to vault item references in the same config.
-
-This needs a 1Password CLI build that includes `op environment`, which is in beta (2.33.0-beta.02 or later on the beta channel). Authenticate as usual: the desktop-app integration or a service account that has access to the Environment.
-
-A variable that is missing from the Environment is an error rather than an empty value.
-
-## Create and update items
-
-Create or update items in the 1Password app or with the `op` CLI, then add their references to `fnox.toml`. For custom fields, use the exact field name in the reference.
-
-The configuration can be committed because it contains references. Vault names, item names, and field names are still visible to anyone who can read the repository.
-
-## Separate environments
-
-Override the provider and references with a profile:
-
-```toml
-[providers.op]
-type = "1password"
-vault = "Development"
-
-[secrets]
-DATABASE_URL = { provider = "op", value = "Database/url" }
-
-[profiles.production.providers.op]
-type = "1password"
-vault = "Production"
-
-[profiles.production.secrets]
-DATABASE_URL = { provider = "op", value = "Database/url", if_missing = "error" }
-```
-
-```sh
-fnox exec --profile production -- ./deploy.sh
-```
-
-Profiles choose configuration, not authorization. The identity used by `op` must have access to the selected vault.
-
-## Store a bootstrap token with age
-
-If you need to keep a service account token locally, first configure [age](/providers/age), then store the token through the hidden prompt:
-
-```sh
-fnox set OP_SERVICE_ACCOUNT_TOKEN --provider age
-```
-
-Before resolving 1Password references in a new session:
-
-```sh
-export OP_SERVICE_ACCOUNT_TOKEN="$(fnox get OP_SERVICE_ACCOUNT_TOKEN)"
-```
-
-For interactive work, using your own 1Password sign-in avoids sharing a service account token across the team.
-
-## Cache for local use
-
-Use [`fnox sync`](/guide/sync) to store an encrypted snapshot under a personal age key, or enable the [daemon](/guide/daemon) for in-memory caching. Refresh caches when the vault value changes.
+- fnox runs `op environment read <id>` once per Environment and serves every variable that references it from that read.
+- Environment references ignore `vault` and can sit next to vault item references in the same provider.
+- A variable missing from the Environment is an error, not an empty value.
+- This needs an `op` build that includes `op environment`, currently on the beta channel (2.33.0-beta.02 or later). Authenticate as usual: the desktop app, or a service account that can access the Environment.
 
 ## Troubleshooting
 
 ### Authentication required
 
-Check the CLI's sign-in state and the selected account. For automation, confirm the service account token is available in the environment of the fnox process.
+`op` is not signed in to the selected account, or the service account token is not in fnox's environment. Check the session `op` sees:
+
+```sh
+op whoami
+```
+
+### Unknown secret vault
+
+A short reference (`Item` or `Item/field`) needs `vault` in the provider config. Set it, or use a full `op://vault/item/field` reference.
 
 ### Item or vault not found
 
-Check the vault name, item name, field name, and account. Verify that the authenticated user or service account has vault access:
+Check the vault, item and field names, and that the signed-in identity can access the vault. Item listings show names and metadata, so review output before sharing it.
 
 ```sh
-op vault list
 op item list --vault Engineering
 fnox provider test op
 ```
 
-Item listings expose names and metadata. Review output before including it in an issue.
+### `unknown command` for an `environment://` reference
 
-## Next steps
+Your `op` build does not include `op environment`. Install a beta build that does.
 
-- [Connect a vault](/guide/existing-vault): set up a personal age cache.
-- [Profiles](/guide/profiles): compose environment settings.
-- [1Password CLI documentation](https://developer.1password.com/docs/cli/): account setup and reference syntax.
+## See also
+
+- [Use an existing vault](/guide/existing-vault): reference 1Password items and keep a personal offline cache.
+- [CI/CD](/guide/ci): supply the service account token in a pipeline.
+- [Provider catalog](/providers/overview): compare 1Password with other providers.
