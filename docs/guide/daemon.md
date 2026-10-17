@@ -118,6 +118,8 @@ daemon_cache = false
 
 This disables cache reuse for those values. If daemon mode is enabled, fnox still talks to the daemon for supported read commands, but those entries are resolved again for every request.
 
+A value can depend on another one, such as a provider `token = { secret = "..." }` that is decrypted with age. To keep both out of the cache, set `daemon_cache = false` on both providers. [Keep production out of the daemon](/guide/sync#keep-production-out-of-the-daemon) shows a production profile set up this way.
+
 ## Security model
 
 The daemon listens on a Unix domain socket on Linux, macOS, FreeBSD and OpenBSD, and on a named pipe on Windows. It does not listen on TCP.

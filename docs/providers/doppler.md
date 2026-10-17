@@ -189,16 +189,27 @@ fnox checks for tokens in this order:
 
 ### Bootstrap pattern
 
-Store the Doppler token encrypted for easy bootstrap:
+Store the service token encrypted with age and reference it from the provider, so fnox passes it to Doppler without exporting it into your shell:
+
+```toml
+[providers.doppler]
+type = "doppler"
+project = "my-app"
+config = "dev"
+token = { secret = "DOPPLER_TOKEN" }
+
+[secrets]
+DOPPLER_TOKEN = { provider = "age", value = "<age ciphertext>", env = false }
+DATABASE_URL = { provider = "doppler", value = "DATABASE_URL" }
+```
 
 ```bash
-# Store token encrypted with age
-fnox set DOPPLER_TOKEN "dp.st.prd.xxxx" --provider age
-
-# Bootstrap from fnox
-export DOPPLER_TOKEN=$(fnox get DOPPLER_TOKEN)
+# Prompts for the token with hidden input; then add env = false to the entry
+fnox set DOPPLER_TOKEN --provider age
 fnox exec -- npm start
 ```
+
+`env = false` keeps the token out of `fnox exec` commands and shell integration; fnox still resolves it when a Doppler secret needs it. To keep the token in a gitignored file, encrypted to a PIN-protected hardware key, see [Protect the vault credential](/guide/sync#protect-the-vault-credential).
 
 ## Usage notes
 
