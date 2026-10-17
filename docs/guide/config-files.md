@@ -97,6 +97,7 @@ A top-level secret in `fnox.local.toml` overrides that secret in **every** profi
 `~/.config/fnox/config.toml` (or `$FNOX_CONFIG_DIR/config.toml`) is the base layer for every project. Use it for personal providers, such as the age key behind your sync cache, and for tokens you want everywhere:
 
 ```sh
+mkdir -p ~/.config/fnox
 age-keygen -o ~/.config/fnox/age.txt     # prints your public key (age1...)
 fnox provider add sync-age age --global  # writes a placeholder recipient
 "${EDITOR:-vi}" ~/.config/fnox/config.toml # replace "age1..." with your public key
