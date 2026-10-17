@@ -174,7 +174,8 @@ value = <span class="code-string">"db-url"</span></code></pre>
           <h3>No vault yet</h3>
           <p>
             Encrypt secrets into <code>fnox.toml</code> with age, a YubiKey, or
-            a cloud KMS key. Share access by adding teammates' public keys.
+            a cloud KMS key. With age, share access by adding teammates' public
+            keys.
           </p>
           <span class="text-link"
             >Quick start <span aria-hidden="true">↗</span></span

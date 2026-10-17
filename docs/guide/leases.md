@@ -4,7 +4,7 @@ description: "Give commands short-lived cloud credentials instead of long-lived 
 
 # Credential leases
 
-A lease is a short-lived credential that fnox creates on demand. Instead of handing your command a long-lived AWS access key, fnox uses that key once to request temporary credentials from AWS STS, and injects only the temporary ones. If a command or log leaks them, they stop working within the hour.
+A lease is a short-lived credential that fnox creates on demand. Instead of handing your command a long-lived AWS access key, fnox uses that key once to request temporary credentials from AWS STS, and injects only the temporary ones. If a command or log leaks them, they stop working when the lease expires: after the `duration` you configure, up to the backend's limit.
 
 ```toml
 [leases.aws]
@@ -58,7 +58,7 @@ region = "us-east-1"
 role_arn = "arn:aws:iam::123456789012:role/dev"
 ```
 
-Any provider works. A password manager adds its own unlock prompt; the [OS keychain](/providers/keychain) is unlocked when you log in; age keeps it encrypted in git.
+Any encrypted or remote provider works. A password manager adds its own unlock prompt; the [OS keychain](/providers/keychain) is unlocked when you log in; age keeps it encrypted in git. Don't use the [`plain`](/providers/plain) provider: it stores the value unencrypted, and `env = false` only controls injection, not storage.
 
 ### Behind a hardware key
 
@@ -120,7 +120,7 @@ Leases are recorded in a per-project ledger under `~/.local/state/fnox/leases/`.
 - the lease's configuration changes (for example, a different role ARN), or
 - you revoke it.
 
-Entries that expired or were revoked more than 24 hours ago are pruned automatically. Revoking a ledger entry for a backend that "expires on its own" doesn't invalidate the credential early.
+Entries are pruned automatically 24 hours after they expire, or 24 hours after they were created if they have no expiry, whether or not they were revoked. Revoking a ledger entry for a backend that "expires on its own" doesn't invalidate the credential early.
 
 ## Leases in profiles
 

@@ -4,7 +4,7 @@ description: "Let an AI agent or other untrusted program call APIs without seein
 
 # Credential proxy
 
-`fnox proxy run` starts a command with **placeholder** credentials and a local HTTPS proxy. When the command sends a request that matches a rule you wrote, fnox swaps the placeholder for the real value on the way out. The command never holds the real secret.
+`fnox proxy run` starts a command with **placeholder** credentials and a local HTTPS proxy. When the command sends a request that matches a rule you wrote, fnox swaps the placeholder for the real value on the way out. The command's environment holds only placeholders. (This does not stop other access by the same user; see [what it does not protect against](#what-it-does-not-protect-against).)
 
 It's built for AI coding agents and other automation that needs API access but shouldn't be trusted with the keys.
 
@@ -53,7 +53,7 @@ fnox proxy rules
 3. It starts the command with placeholders, `HTTPS_PROXY`, and the CA file in the standard environment variables.
 4. For each request, fnox verifies the real server's TLS certificate and substitutes the placeholder only if domain, method, path, and header all match a rule.
 5. If a response echoes a real secret back, fnox replaces it with the placeholder.
-6. When the command exits, fnox stops the proxy and deletes the CA file. The CA's private key and the real values never leave fnox's memory.
+6. When the command exits, fnox stops the proxy and deletes the CA file. The CA's private key never leaves fnox's memory, and real values go only to the matched service, over TLS, never to the child.
 
 ## Egress
 
