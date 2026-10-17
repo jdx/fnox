@@ -109,7 +109,7 @@ jobs:
 
 ## Pull requests from forks
 
-Workflows triggered by forks don't receive repository secrets, so fnox can't authenticate. If your tests can run without some secrets, let them be skipped:
+Workflows triggered by `pull_request` events from forks don't receive repository secrets, so fnox can't authenticate. If your tests can run without some secrets, let them be skipped:
 
 ```yaml
 - run: fnox exec -- npm test
@@ -118,6 +118,10 @@ Workflows triggered by forks don't receive repository secrets, so fnox can't aut
 ```
 
 Mark secrets the tests truly need with `if_missing = "error"` in `fnox.toml`. The environment variable overrides that, so use it only in the fork-safe job.
+
+::: warning
+`pull_request_target` workflows do receive repository secrets, even for forks. Never check out and run fork code in a `pull_request_target` job that has fnox credentials: the fork's code could read every secret fnox resolves.
+:::
 
 ## Other CI systems
 

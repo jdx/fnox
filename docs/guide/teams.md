@@ -54,7 +54,7 @@ Only someone who can already decrypt can re-encrypt.
 
 Remove their key from `recipients` and re-encrypt as above. That stops them decrypting **new** ciphertext, but they can still decrypt old ciphertext from git history, and they may have copies of the values. Rotate every secret they could read: change it at its source, then store the new value with `fnox set`.
 
-This is the main trade-off of encrypting secrets into git. If people come and go often, keep the secrets in a vault, where removing access is immediate.
+This is the main trade-off of encrypting secrets into git. If people often come and go, keep the secrets in a vault, where removing access immediately blocks future reads. Anyone with a [sync cache](/guide/sync) keeps their local copy, though, so rotate values when previously synced copies must stop working.
 
 ## Give CI its own key
 

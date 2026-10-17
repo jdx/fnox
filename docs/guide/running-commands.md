@@ -31,13 +31,13 @@ fnox exec -- sh -c 'psql "$DATABASE_URL" -c "select 1"'
 
 Useful options:
 
-| Option                 | What it does                                                                                                                         |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `-P, --profile <name>` | Use a [profile](/guide/profiles). Repeat or comma-separate to stack profiles.                                                        |
-| `--if-missing error`   | Fail if any secret can't be resolved. See [missing secrets](/guide/missing-secrets).                                                 |
-| `--refresh <KEY>`      | Re-read one secret from its provider instead of the [daemon](/guide/daemon) cache.                                                   |
-| `--replace`            | Replace the fnox process with the command (Unix only). Not allowed with file secrets or leases, which fnox must clean up afterwards. |
-| `--non-interactive`    | Never prompt or open a browser to authenticate. Use in CI.                                                                           |
+| Option                 | What it does                                                                                                                                                                                   |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-P, --profile <name>` | Use a [profile](/guide/profiles). Repeat or comma-separate to stack profiles.                                                                                                                  |
+| `--if-missing error`   | Fail if any secret can't be resolved. See [missing secrets](/guide/missing-secrets).                                                                                                           |
+| `--refresh <KEY>`      | Re-read one secret from its provider instead of the [daemon](/guide/daemon) cache.                                                                                                             |
+| `--replace`            | Replace the fnox process with the command (Unix only). Rejected when the command would receive an `as_file` secret or the profile configures leases, since fnox must clean those up afterward. |
+| `--non-interactive`    | Never prompt or open a browser to authenticate. Use in CI.                                                                                                                                     |
 
 `fnox x` is a short alias for `fnox exec`.
 

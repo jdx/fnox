@@ -20,7 +20,7 @@ fnox puts the _description_ of those secrets in one committed file and handles t
 
 - **One file, many backends.** Each secret names its provider. Mix age-encrypted values, 1Password items, and AWS Secrets Manager references in the same project.
 - **The same command everywhere.** `fnox exec -- <command>` works on your laptop, in CI, and in a deploy script. Only the credentials differ.
-- **Nothing sensitive in git.** The file holds ciphertext or references, never plaintext secrets.
+- **Nothing sensitive in git.** With a provider configured, the file holds ciphertext or references, not plaintext secrets. (Without one, `fnox set` writes a plaintext `default`, so check before committing.)
 
 ## Two ways to store secrets
 
