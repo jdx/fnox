@@ -16,7 +16,7 @@ the age key in hardware:
 [YubiKey](#yubikey), or a [TPM or FIDO2 token](#tpm-and-fido2).
 
 For a zero-to-working walkthrough of the whole setup, see
-[Golden Path Setup](/guide/golden-path).
+[Golden Path Setup](/guide/existing-vault).
 :::
 
 ## Why sync?
@@ -312,9 +312,9 @@ A personal sync cache is usually unnecessary on an ephemeral runner. If you inte
 
 ## Next steps
 
-- [Golden Path Setup](/guide/golden-path) - Zero-to-working walkthrough of this workflow
+- [Golden Path Setup](/guide/existing-vault) - Zero-to-working walkthrough of this workflow
 - [Per-User Daemon](/guide/daemon) - Cache resolved secrets in memory for a session
 - [Import/Export](/guide/import-export) - Migrate secrets between formats
 - [Shell Integration](/guide/shell-integration) - Auto-load secrets on `cd`
-- [Hierarchical Config](/guide/hierarchical-config) - Organize configs across directories
+- [Hierarchical Config](/guide/config-files) - Organize configs across directories
 - [Providers](/providers/overview) - All available providers

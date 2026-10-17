@@ -6,7 +6,7 @@ description: "Read 1Password vault items with fnox. Set up local or service-acco
 
 Read vault items with the 1Password CLI (`op`). Your `fnox.toml` contains item references; values remain in 1Password.
 
-For a complete team setup with offline reads, follow [connect a vault and cache locally](/guide/golden-path).
+For a complete team setup with offline reads, follow [connect a vault and cache locally](/guide/existing-vault).
 
 ## Prerequisites
 
@@ -176,6 +176,6 @@ Item listings expose names and metadata. Review output before including it in an
 
 ## Next steps
 
-- [Connect a vault](/guide/golden-path): set up a personal age cache.
+- [Connect a vault](/guide/existing-vault): set up a personal age cache.
 - [Profiles](/guide/profiles): compose environment settings.
 - [1Password CLI documentation](https://developer.1password.com/docs/cli/): account setup and reference syntax.

@@ -154,7 +154,7 @@ value = <span class="code-string">"YWdlLWVuY3J5cHRpb24…"</span></code></pre>
             >Start with age <span aria-hidden="true">↗</span></span
           >
         </a>
-        <a class="workflow" href="/guide/golden-path">
+        <a class="workflow" href="/guide/existing-vault">
           <span class="workflow-number" aria-hidden="true">02 / CONNECT</span>
           <h3>Existing vaults</h3>
           <p>

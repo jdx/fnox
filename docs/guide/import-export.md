@@ -287,4 +287,4 @@ kubectl create secret generic app-secrets \
 
 - [Providers](/providers/overview) - Choose providers for your secrets
 - [Profiles](/guide/profiles) - Organize secrets by environment
-- [Real-World Example](/guide/real-world-example) - Complete project setup
+- [Real-World Example](/guide/dev-to-production) - Complete project setup

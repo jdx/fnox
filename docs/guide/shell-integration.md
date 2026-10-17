@@ -135,5 +135,5 @@ If a value changed in the remote vault, refresh the [sync cache](/guide/sync) or
 
 - [Per-User Daemon](/guide/daemon) - Cache resolved secrets in memory for faster refreshes
 - [Profiles](/guide/profiles) - Manage multiple environments
-- [Hierarchical Config](/guide/hierarchical-config) - Organize secrets across directories
-- [Real-World Example](/guide/real-world-example) - See a complete setup
+- [Hierarchical Config](/guide/config-files) - Organize secrets across directories
+- [Real-World Example](/guide/dev-to-production) - See a complete setup

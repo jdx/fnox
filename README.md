@@ -36,7 +36,7 @@ fnox check --all
 fnox exec -- npm start
 ```
 
-The provider determines where the value is stored. **Without a provider, `fnox set` writes a plaintext default.** Follow the [age quick start](https://fnox.jdx.dev/guide/quick-start) for a complete encrypted setup, or [connect an existing vault](https://fnox.jdx.dev/guide/golden-path).
+The provider determines where the value is stored. **Without a provider, `fnox set` writes a plaintext default.** Follow the [age quick start](https://fnox.jdx.dev/guide/quick-start) for a complete encrypted setup, or [connect an existing vault](https://fnox.jdx.dev/guide/existing-vault).
 
 ## One config, your choice of storage
 

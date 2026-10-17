@@ -242,4 +242,4 @@ brew install bws
 - [Bitwarden Password Manager](/providers/bitwarden) - For personal vault secrets
 - [AWS Secrets Manager](/providers/aws-sm) - AWS alternative
 - [HashiCorp Vault](/providers/vault) - Self-hosted alternative
-- [Real-World Example](/guide/real-world-example) - Complete setup
+- [Real-World Example](/guide/dev-to-production) - Complete setup

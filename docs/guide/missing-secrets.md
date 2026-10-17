@@ -207,4 +207,4 @@ REDIS_URL = { provider = "aws", value = "redis-url", default = "redis://localhos
 
 - [Profiles](/guide/profiles) - Different secrets per environment
 - [Import/Export](/guide/import-export) - Migrate secrets between systems
-- [Real-World Example](/guide/real-world-example) - Complete setup with error handling
+- [Real-World Example](/guide/dev-to-production) - Complete setup with error handling

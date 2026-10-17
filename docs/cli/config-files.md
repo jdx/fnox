@@ -28,7 +28,7 @@ fnox -c ./fnox.toml config-files
 
 ## Related
 
-- [Config files and overrides](/guide/hierarchical-config)
+- [Config files and overrides](/guide/config-files)
 - [Global options](/cli/#global-flags), including profile selection and non-interactive mode.
 
 <!-- fnox examples:end -->

@@ -6,7 +6,7 @@ description: "Encrypt your first secret with age, check access, and run an appli
 
 Store your first secret with age encryption, then make it available to a command. This walkthrough uses a local key file and needs no cloud account.
 
-Already have a vault? Use [1Password with a local cache](/guide/golden-path), or choose another [provider](/providers/overview).
+Already have a vault? Use [1Password with a local cache](/guide/existing-vault), or choose another [provider](/providers/overview).
 
 ## 1. Install fnox and age
 

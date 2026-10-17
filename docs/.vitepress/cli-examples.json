@@ -22,7 +22,7 @@
   "config-files": {
     "note": "Inspect the effective file stack before debugging an unexpected value. An explicit config path skips directory discovery and adjacent local overrides; the global config still loads.",
     "commands": "fnox config-files\nfnox --profile staging config-files\nfnox -c ./fnox.toml config-files",
-    "links": ["/guide/hierarchical-config"]
+    "links": ["/guide/config-files"]
   },
   "doctor": {
     "note": "Check the local fnox setup, then test a specific provider or resolve all configured secrets to narrow down a failure.",
@@ -67,7 +67,7 @@
   "list": {
     "note": "Lists the secrets configured in fnox. It does not enumerate every remote vault item. Values are hidden unless you request --values.",
     "commands": "fnox list\nfnox list --sources\nfnox list --profile production",
-    "links": ["/guide/hierarchical-config", "/cli/tui"]
+    "links": ["/guide/config-files", "/cli/tui"]
   },
   "mcp": {
     "note": "Run a stdio MCP server from the project directory. Configure its secret allowlist and authenticate to providers before starting the client.",
@@ -87,7 +87,7 @@
   "provider/add": {
     "note": "Creates a provider configuration. Some types require interactive setup; others create placeholders that you must replace before use. For this command, the aws and gcp choices correspond to the aws-sm and gcp-sm config types.",
     "commands": "fnox provider add op 1password\nfnox provider add sync-age age --global",
-    "links": ["/providers/overview", "/guide/golden-path"]
+    "links": ["/providers/overview", "/guide/existing-vault"]
   },
   "provider/list": {
     "note": "List configured provider instances for the selected profile. To find the supported provider types, use the provider catalog.",

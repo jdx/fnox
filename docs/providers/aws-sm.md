@@ -445,5 +445,5 @@ echo $AWS_REGION
 ## Next steps
 
 - [AWS KMS](/providers/aws-kms) - Alternative with secrets in git
-- [Real-World Example](/guide/real-world-example) - Complete AWS setup
+- [Real-World Example](/guide/dev-to-production) - Complete AWS setup
 - [Profiles](/guide/profiles) - Multi-environment configuration

@@ -136,6 +136,6 @@ The committed `fnox.toml` references resolve straight from 1Password using the [
 ## Next steps
 
 - [Syncing Secrets Locally](/guide/sync) - Everything `fnox sync` can do, including hardware-backed keys
-- [Real-World Setup](/guide/real-world-example) - An alternative workflow with encrypted secrets in git
+- [Real-World Setup](/guide/dev-to-production) - An alternative workflow with encrypted secrets in git
 - [Profiles](/guide/profiles) - Different secrets for dev, staging, and production
 - [Credential Leases](/guide/leases) - Short-lived credentials from long-lived masters

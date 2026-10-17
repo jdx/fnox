@@ -61,4 +61,4 @@ fnox --help
 
 If the shell cannot find fnox, check that your install directory is on `PATH`, or that mise is [activated](https://mise.jdx.dev/getting-started.html). Open a new terminal after changing shell configuration.
 
-Continue with the [quick start](/guide/quick-start) for local encryption or [connect a vault](/guide/golden-path).
+Continue with the [quick start](/guide/quick-start) for local encryption or [connect a vault](/guide/existing-vault).

@@ -8,7 +8,7 @@ Profiles let you manage secrets for different environments (dev, staging, produc
 
 ## Basic usage
 
-Define environment-specific secrets using profiles. The examples that follow assume the named providers are configured; ciphertext is abbreviated. See the [complete setup](/guide/real-world-example) for provider definitions.
+Define environment-specific secrets using profiles. The examples that follow assume the named providers are configured; ciphertext is abbreviated. See the [complete setup](/guide/dev-to-production) for provider definitions.
 
 ```toml
 # Default profile (development)
@@ -285,5 +285,5 @@ jobs:
 
 ## Next steps
 
-- [Hierarchical Config](/guide/hierarchical-config) - Organize configs across directories (includes local overrides)
-- [Real-World Example](/guide/real-world-example) - Complete multi-environment setup
+- [Hierarchical Config](/guide/config-files) - Organize configs across directories (includes local overrides)
+- [Real-World Example](/guide/dev-to-production) - Complete multi-environment setup

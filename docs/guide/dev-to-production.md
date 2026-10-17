@@ -6,7 +6,7 @@ description: "Build an example development, staging, and production setup using 
 
 Use age-encrypted development and staging values in git, then switch to AWS Secrets Manager for production. This example shows how the pieces fit together without requiring the application to know which provider it uses.
 
-If all environments use an existing vault, start with [connect a vault](/guide/golden-path) instead.
+If all environments use an existing vault, start with [connect a vault](/guide/existing-vault) instead.
 
 ## Prerequisites
 
@@ -160,6 +160,6 @@ Removing an age recipient affects future ciphertext only. Previously accessible 
 ## Next steps
 
 - [Shell integration](/guide/shell-integration): load development secrets on directory change.
-- [Hierarchical configuration](/guide/hierarchical-config): split common and service-specific settings.
+- [Hierarchical configuration](/guide/config-files): split common and service-specific settings.
 - [Import and export](/guide/import-export): migrate existing `.env` values.
 - [Credential leases](/guide/leases): use temporary credentials for supported services.

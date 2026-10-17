@@ -34,7 +34,7 @@ For a team that already uses a remote vault, a useful workflow is:
 
 The vault remains the source of truth. The cache is a snapshot: run sync again after a secret changes. A personal age key can also use [hardware-backed decryption](/guide/sync#hardware-backed-decryption).
 
-Follow the [vault and local cache walkthrough](/guide/golden-path). If you want to start without a vault, follow the [age quick start](/guide/quick-start).
+Follow the [vault and local cache walkthrough](/guide/existing-vault). If you want to start without a vault, follow the [age quick start](/guide/quick-start).
 
 ## Choose how commands receive secrets
 
@@ -43,7 +43,7 @@ Follow the [vault and local cache walkthrough](/guide/golden-path). If you want 
 - **A file-based tool:** [`as_file = true`](/reference/configuration#as-file) supplies a temporary file path instead of the value.
 - **An API client or agent:** the [credential proxy](/guide/proxy) supplies placeholders and injects credentials into matching requests. The [MCP server](/guide/mcp) offers selected secret retrieval and command execution.
 
-Use [profiles](/guide/profiles) for environment-specific settings and [hierarchical configuration](/guide/hierarchical-config) to share configuration across directories.
+Use [profiles](/guide/profiles) for environment-specific settings and [hierarchical configuration](/guide/config-files) to share configuration across directories.
 
 ## Why a standalone CLI?
 

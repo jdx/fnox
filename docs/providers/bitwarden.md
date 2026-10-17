@@ -399,4 +399,4 @@ export BW_SESSION=$(bw unlock --raw)
 
 - [1Password](/providers/1password) - Commercial alternative
 - [OS Keychain](/providers/keychain) - Local alternative
-- [Real-World Example](/guide/real-world-example) - Complete setup
+- [Real-World Example](/guide/dev-to-production) - Complete setup

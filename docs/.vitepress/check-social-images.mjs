@@ -27,6 +27,8 @@ let posts = 0;
 const images = new Set();
 for (const file of walk(root).filter((file) => file.endsWith(".html"))) {
   const html = readFileSync(file, "utf8");
+  // Redirect stubs for moved pages have no content or social metadata.
+  if (html.includes('http-equiv="refresh"')) continue;
   assert.equal(meta(html, "og:title"), meta(html, "twitter:title"));
   assert.equal(meta(html, "og:description"), meta(html, "twitter:description"));
   // Check the actual page title rather than only counting distinct image URLs.

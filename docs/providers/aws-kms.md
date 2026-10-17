@@ -192,4 +192,4 @@ Ciphertext lives in your config, but both encryption and decryption require AWS 
 
 - [AWS Secrets Manager](/providers/aws-sm) - Remote storage alternative
 - [Age Encryption](/providers/age) - Free local encryption
-- [Real-World Example](/guide/real-world-example) - Complete AWS setup
+- [Real-World Example](/guide/dev-to-production) - Complete AWS setup

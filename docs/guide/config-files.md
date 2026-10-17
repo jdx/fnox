@@ -185,4 +185,4 @@ fnox provider add age age --global
 ## Next steps
 
 - [Profiles](/guide/profiles) - Multi-environment management
-- [Real-World Example](/guide/real-world-example) - See it all together
+- [Real-World Example](/guide/dev-to-production) - See it all together

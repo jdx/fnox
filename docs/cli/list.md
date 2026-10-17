@@ -32,7 +32,7 @@ fnox list --profile production
 
 ## Related
 
-- [Config files and overrides](/guide/hierarchical-config)
+- [Config files and overrides](/guide/config-files)
 - [Terminal dashboard](/cli/tui)
 - [Global options](/cli/#global-flags), including profile selection and non-interactive mode.
 

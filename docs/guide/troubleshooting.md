@@ -23,7 +23,7 @@ fnox --profile staging config-files
 fnox --profile staging list --sources
 ```
 
-Closer directories override parent directories. At each level, profile-specific and local files can override the main file. A global config is also loaded. See [configuration layering](/guide/hierarchical-config).
+Closer directories override parent directories. At each level, profile-specific and local files can override the main file. A global config is also loaded. See [configuration layering](/guide/config-files).
 
 To read only a particular project file and its imports, pass an explicit path:
 

@@ -417,5 +417,5 @@ echo $AWS_REGION
 
 - [AWS Secrets Manager](/providers/aws-sm) - For automatic rotation and complex secrets
 - [AWS KMS](/providers/aws-kms) - For encrypting secrets in git
-- [Real-World Example](/guide/real-world-example) - Complete AWS setup
+- [Real-World Example](/guide/dev-to-production) - Complete AWS setup
 - [Profiles](/guide/profiles) - Multi-environment configuration

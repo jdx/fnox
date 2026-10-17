@@ -1,6 +1,6 @@
 import { sidebar } from "./navigation.mjs";
 import { socialCard, writeSocialCard } from "./social-images.mjs";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitepress";
@@ -36,6 +36,37 @@ if (!versionMatch) {
 }
 const latestVersion = versionMatch?.[1] ?? "0.0.0";
 const siteUrl = "https://fnox.jdx.dev";
+
+// Pages that moved. GitHub Pages cannot send HTTP redirects, so the build
+// writes a small HTML page at each old path that forwards to the new one.
+const redirects = {
+  "/guide/golden-path": "/guide/existing-vault",
+  "/guide/hierarchical-config": "/guide/config-files",
+  "/guide/real-world-example": "/guide/dev-to-production",
+};
+
+function writeRedirects(outDir) {
+  for (const [from, to] of Object.entries(redirects)) {
+    const file = resolve(outDir, `.${from}.html`);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(
+      file,
+      `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Moved</title>
+<link rel="canonical" href="${siteUrl}${to}">
+<meta name="robots" content="noindex">
+<meta http-equiv="refresh" content="0; url=${to}">
+<script>location.replace(${JSON.stringify(to)} + location.hash)</script>
+</head>
+<body><p>This page moved to <a href="${to}">${siteUrl}${to}</a>.</p></body>
+</html>
+`,
+    );
+  }
+}
 const siteDescription =
   "Manage development secrets with encrypted files or cloud providers, fast local sync, shell integration, profiles, and hardware-backed keys.";
 
@@ -46,6 +77,9 @@ export default defineConfig({
   appearance: "dark",
   sitemap: { hostname: siteUrl },
   srcExclude: ["README.md"],
+  buildEnd(siteConfig) {
+    writeRedirects(siteConfig.outDir);
+  },
 
   themeConfig: {
     logo: "/logo.svg",
