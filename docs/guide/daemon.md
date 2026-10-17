@@ -62,6 +62,8 @@ daemon_cache = false # applies to every secret from this provider
 
 Those values are re-read on every request.
 
+When one value unlocks another, such as a provider `token = { secret = "..." }` decrypted with age, set `daemon_cache = false` on both providers to keep both out of the cache. [Keep production out of the daemon](/guide/sync#keep-production-out-of-the-daemon) shows a production profile set up this way.
+
 ## Security
 
 - Values are held in memory only; the daemon never writes them to disk.

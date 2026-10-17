@@ -66,10 +66,12 @@ config = "prd"
 token = { secret = "DOPPLER_TOKEN" }
 
 [secrets]
-DOPPLER_TOKEN = { provider = "age", value = "YWdl..." } # ciphertext, abbreviated
+DOPPLER_TOKEN = { provider = "age", value = "YWdl...", env = false } # ciphertext, abbreviated
 ```
 
-Store the token through the hidden prompt with `fnox set DOPPLER_TOKEN --provider age`.
+Store the token through the hidden prompt with `fnox set DOPPLER_TOKEN --provider age`, then add `env = false` to the entry. That keeps the token out of `fnox exec` commands and shell integration; fnox still resolves it whenever a Doppler secret needs it. Don't `export DOPPLER_TOKEN="$(fnox get DOPPLER_TOKEN)"`: that puts the token in every process you start.
+
+To keep the token in a gitignored file, encrypted to a PIN-protected hardware key, see [protect the vault credential](/guide/sync#protect-the-vault-credential).
 
 ## Configuration
 

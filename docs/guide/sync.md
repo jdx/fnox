@@ -135,13 +135,22 @@ Decrypting requires the YubiKey to be plugged in.
 ### TPM and FIDO2 {#tpm-and-fido2}
 
 ```sh
-age-plugin-tpm --generate -o ~/.config/fnox/age-tpm.txt
+age-plugin-tpm --generate --pin -o ~/.config/fnox/age-tpm.txt
 age-plugin-tpm -y ~/.config/fnox/age-tpm.txt           # public key (age1tag1...)
 
 age-plugin-fido2-hmac -g > ~/.config/fnox/age-fido2.txt # public key is in a comment
 ```
 
-Put the public key in `recipients` and the identity file in `key_file`.
+Put the public key in `recipients` and the identity file in `key_file`. Identities generated with `--tpm-recipient` use the older `age1tpm1...` form; fnox accepts both.
+
+**Use `--pin` for TPM keys.** Without it, any process running as your user can decrypt with the TPM key: the key can't leave the machine, but nothing stops a stray script or local malware from reading the cache. With a PIN, fnox asks for it:
+
+- once per distinct ciphertext per command. Everything one `fnox sync` run writes shares a single wrapped key, so reading the whole cache costs one prompt. A value stored separately with `fnox set`, such as a [vault token](#protect-the-vault-credential), adds a prompt only when a command needs it.
+- once per daemon session, if the [daemon](/guide/daemon) is on. Values with `daemon_cache = false` still prompt on every command.
+
+::: warning
+age-plugin-tpm also reads the PIN from `AGE_TPM_PIN`. Exporting it in your shell hands the PIN to every process and undoes the protection. Use it only for non-interactive testing.
+:::
 
 ### Native YubiKey and FIDO2 providers
 
@@ -152,6 +161,118 @@ fnox also has built-in [`yubikey`](/providers/yubikey) and [`fido2`](/providers/
 - the config is portable: any machine with the token can decrypt.
 
 Age plugins encrypt to a public key, so syncing doesn't touch the hardware and you can list a backup recipient. Pick native providers to avoid installing plugins, or age plugins for backup keys and hardware-free syncing.
+
+## Protect the vault credential {#protect-the-vault-credential}
+
+Some providers authenticate with a long-lived token instead of an interactive login: a Doppler or Infisical service token, a Vault token, a Bitwarden Secrets Manager access token. Exporting it in your shell profile puts it in plain text in every process you start, including scripts and coding agents that never need it. Keep it in the same hardware-backed cache instead, and let fnox hand it to the provider.
+
+This example uses Doppler and the PIN-protected TPM key from above. It works with any provider field that accepts [`{ secret = "NAME" }`](/guide/config-files#secret-references-in-provider-config).
+
+```toml
+# ~/.config/fnox/config.toml
+[providers.sync-age]
+type = "age"
+recipients = ["age1tag1..."]
+key_file = "~/.config/fnox/age-tpm.txt"
+```
+
+```toml
+# fnox.toml (committed)
+[providers.doppler]
+type = "doppler"
+project = "my-app"
+config = "dev"
+token = { secret = "DOPPLER_TOKEN" }
+
+[secrets]
+DATABASE_URL = { provider = "doppler", value = "DATABASE_URL" }
+STRIPE_KEY = { provider = "doppler", value = "STRIPE_KEY" }
+```
+
+Store the token in the gitignored local file. fnox prompts for it with hidden input:
+
+```sh
+fnox -c fnox.local.toml set DOPPLER_TOKEN --provider sync-age
+```
+
+Then add `env = false` by hand, so fnox uses the token to reach Doppler but never injects it into your shell or commands:
+
+```toml
+# fnox.local.toml (gitignored)
+[secrets]
+DOPPLER_TOKEN = { provider = "sync-age", value = "YWdl...", env = false } # ciphertext, abbreviated
+```
+
+Finally, sync the project into the same cache:
+
+```sh
+fnox sync --provider sync-age --local-file
+```
+
+Now everything on disk is ciphertext for a key that can't leave the machine, and the token never enters any environment. Values served from the cache don't decrypt the token at all; it is only used when a secret has to be fetched from Doppler.
+
+If the machine is lost or its TPM is reset, nothing can decrypt the cache or the token. Revoke the token in Doppler, issue a new one, store it again, and sync. The vault is still the source of truth.
+
+### Keep production out of the daemon {#keep-production-out-of-the-daemon}
+
+To keep the [daemon](/guide/daemon)'s single prompt per session for development while requiring the PIN on every production command, give production its own profile and set `daemon_cache = false` on **both** its age provider and its remote provider. The first keeps the decrypted token out of the cache; the second keeps the fetched production values out.
+
+::: warning Move the development cache into its own profile first
+A top-level secret in `fnox.local.toml` overrides that secret in every profile (see [local overrides](/guide/config-files#local-overrides)). If the development cache stays under top-level `[secrets]`, `fnox --profile production` reads cached development values instead of fetching from Doppler's production config. Put development under a `development` profile, or run production commands with `--no-defaults`.
+:::
+
+Development, scoped to a profile:
+
+```toml
+# fnox.toml (committed)
+[profiles.development.providers.doppler]
+type = "doppler"
+project = "my-app"
+config = "dev"
+token = { secret = "DOPPLER_TOKEN" }
+
+[profiles.development.secrets]
+DATABASE_URL = { provider = "doppler", value = "DATABASE_URL" }
+```
+
+```sh
+fnox --profile development -c fnox.local.toml set DOPPLER_TOKEN --provider sync-age
+fnox --profile development sync --provider sync-age --local-file
+```
+
+Both land under `[profiles.development.secrets]` in `fnox.local.toml`; add `env = false` to the token as before. Set `FNOX_PROFILE=development` to make it your everyday profile.
+
+Production gets its own age provider, remote provider, and token:
+
+```toml
+# ~/.config/fnox/config.toml
+[providers.prod-age]
+type = "age"
+recipients = ["age1tag1..."]
+key_file = "~/.config/fnox/age-tpm.txt"
+daemon_cache = false
+```
+
+```toml
+# fnox.production.toml (committed)
+[profiles.production.providers.doppler]
+type = "doppler"
+project = "my-app"
+config = "prd"
+token = { secret = "DOPPLER_TOKEN" }
+daemon_cache = false
+
+[profiles.production.secrets]
+DATABASE_URL = { provider = "doppler", value = "DATABASE_URL" }
+```
+
+```toml
+# fnox.local.toml (gitignored)
+[profiles.production.secrets]
+DOPPLER_TOKEN = { provider = "prod-age", value = "YWdl...", env = false } # ciphertext, abbreviated
+```
+
+Production isn't synced, so each `fnox --profile production exec` asks for the PIN, decrypts the production token, and fetches fresh values from Doppler.
 
 ## Sync versus the daemon
 

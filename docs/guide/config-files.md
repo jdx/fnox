@@ -86,9 +86,11 @@ DATABASE_URL = { default = "postgresql://localhost/alice_dev" }
 
 `default` values are plaintext. For a sensitive personal value, use an encryption provider or a vault reference here too.
 
+A top-level secret in `fnox.local.toml` overrides that secret in **every** profile, including ones defined under `[profiles.*]` or in a profile file. To override a secret for one profile only, put it under `[profiles.<name>.secrets]` in `fnox.local.toml`.
+
 ## Profile files {#profile-files}
 
-`fnox.staging.toml` is loaded only when the `staging` profile is active. Write its settings at the top level, as you would in `fnox.toml`, not under `[profiles.staging]`. It is a way to keep each environment in its own committed file instead of `[profiles.*]` sections. With several active profiles, their files load in the order the profiles were given. `fnox.default.toml` is never loaded.
+`fnox.staging.toml` is loaded only when the `staging` profile is active. Top-level providers, secrets, leases, and `default_provider` in it are treated as part of the `staging` profile, so you can write it like a plain `fnox.toml`. It is a way to keep each environment in its own committed file instead of `[profiles.*]` sections. With several active profiles, their files load in the order the profiles were given. `fnox.default.toml` is never loaded.
 
 ## Global config {#global-config}
 
