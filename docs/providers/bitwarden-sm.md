@@ -1,245 +1,124 @@
 ---
-description: "Read Bitwarden Secrets Manager values with the bws CLI, a machine-account access token, and secret UUIDs."
+description: "Read and write Bitwarden Secrets Manager secrets with fnox through the bws CLI and a machine-account access token."
 ---
 
 # Bitwarden Secrets Manager
 
-Integrate with [Bitwarden Secrets Manager](https://bitwarden.com/products/secrets-manager/) to retrieve secrets via the `bws` CLI. This is a separate product from Bitwarden Password Manager — it's designed for DevOps and infrastructure secrets.
+Read and write secrets in a [Bitwarden Secrets Manager](https://bitwarden.com/products/secrets-manager/) project through the `bws` CLI. `fnox.toml` holds secret key names; values stay in Bitwarden. This is a separate product from Bitwarden Password Manager, which uses the [`bitwarden`](/providers/bitwarden) provider.
+
+|                     |                                                                                            |
+| ------------------- | ------------------------------------------------------------------------------------------ |
+| Config type         | `bitwarden-sm`                                                                             |
+| Storage             | Remote service                                                                             |
+| Writes (`fnox set`) | Yes                                                                                        |
+| Requires            | [`bws` CLI](https://bitwarden.com/help/secrets-manager-cli/) on `PATH` and an access token |
 
 ## Quick start
 
-Create a project and access token in Bitwarden Secrets Manager first. This provider uses `bws`, not the password manager's `bw` CLI.
+Create a machine account with access to a project, generate an access token for it, and export the token:
 
 ```sh
-# Install bws CLI (see Installation below)
-brew install bws
-
-# Set access token
-export BWS_ACCESS_TOKEN="your-access-token"
+export BWS_ACCESS_TOKEN="..."
 ```
 
-Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
-
 ```toml
-[providers]
-bws = { type = "bitwarden-sm", project_id = "your-project-id" }
-```
+[providers.bws]
+type = "bitwarden-sm"
+project_id = "00000000-0000-0000-0000-000000000000"
 
-Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
-
-```toml
 [secrets]
 DATABASE_URL = { provider = "bws", value = "database-url" }
 ```
 
 ```sh
-# Use it
-fnox get DATABASE_URL
+fnox provider test bws
 fnox exec -- npm start
 ```
 
-## Prerequisites
+`database-url` is the secret's key name in the project.
 
-- [Bitwarden Secrets Manager](https://bitwarden.com/products/secrets-manager/) account
-- [Bitwarden Secrets Manager CLI](https://bitwarden.com/help/secrets-manager-cli/) (`bws`)
-- Access token (machine account or personal)
+## Authentication
 
-## Installation
+fnox reads the access token from `FNOX_BWS_ACCESS_TOKEN`, then `BWS_ACCESS_TOKEN`, and passes it to `bws`. There is no interactive login.
 
-Install the `bws` CLI:
+For local use, store the token as a fnox secret with another provider, such as [age](/providers/age):
 
-```bash
-# macOS
-brew install bws
-
-# Or download from GitHub releases
-# https://github.com/bitwarden/sdk-sm/releases
+```sh
+fnox set BWS_ACCESS_TOKEN --provider age
 ```
 
-## Setup
+`fnox exec` resolves `BWS_ACCESS_TOKEN` before it uses the Bitwarden provider. For a single `fnox get`, export the token in the environment first.
 
-### 1. Create an access token
-
-In the Bitwarden Secrets Manager web console:
-
-1. Go to **Machine accounts** (or **Service accounts**)
-2. Create a new machine account
-3. Generate an access token
-4. Note the project ID you want to access
-
-### 2. Set the access token
-
-```bash
-# Set directly
-export BWS_ACCESS_TOKEN="your-access-token"
-
-# Or store encrypted with age for bootstrap
-fnox set BWS_ACCESS_TOKEN "<your-access-token>" --provider age
-```
-
-### 3. Configure the provider
-
-```toml
-[providers]
-bws = { type = "bitwarden-sm", project_id = "your-project-id" }
-```
-
-The `project_id` can also be provided via the `BWS_PROJECT_ID` environment variable instead of in the config file.
-
-## Referencing secrets
-
-Secrets are referenced by their key name in Bitwarden Secrets Manager:
-
-```toml
-[secrets]
-DATABASE_URL = { provider = "bws", value = "database-url" }
-API_KEY = { provider = "bws", value = "stripe-api-key" }
-```
-
-### Field access
-
-By default, the secret's `value` field is returned. You can also access `key` and `note` fields:
-
-```toml
-[secrets]
-# Gets the secret value (default)
-MY_SECRET = { provider = "bws", value = "my-secret-name" }
-
-# Gets the secret's note
-MY_NOTE = { provider = "bws", value = "my-secret-name/note" }
-
-# Gets the secret's key name
-MY_KEY = { provider = "bws", value = "my-secret-name/key" }
-```
-
-Supported fields: `value` (default), `key`, `note`
-
-## Provider configuration
-
-```toml
-[providers]
-bws = { type = "bitwarden-sm", project_id = "...", profile = "..." }
-```
-
-| Field        | Required | Description                                           |
-| ------------ | -------- | ----------------------------------------------------- |
-| `project_id` | No       | BSM project ID (or set `BWS_PROJECT_ID` env var)      |
-| `profile`    | No       | bws CLI profile (for self-hosted or multiple servers) |
-
-## Environment variables
-
-| Variable                | Description                            |
-| ----------------------- | -------------------------------------- |
-| `BWS_ACCESS_TOKEN`      | Bitwarden Secrets Manager access token |
-| `FNOX_BWS_ACCESS_TOKEN` | Alternative (takes priority)           |
-| `BWS_PROJECT_ID`        | Project ID fallback (if not in config) |
-
-## Usage
-
-```bash
-# Get a secret
-fnox get DATABASE_URL
-
-# Run commands with secrets loaded
-fnox exec -- npm start
-
-# List configured secrets
-fnox list
-
-# Set a secret (creates or updates in BSM)
-fnox set NEW_SECRET "secret-value" --provider bws --key-name "my-new-secret"
-```
-
-## Multi-environment example
-
-```toml
-[providers]
-age = { type = "age", recipients = ["age1..."] }
-bws = { type = "bitwarden-sm", project_id = "dev-project-id" }
-
-[secrets]
-BWS_ACCESS_TOKEN = { provider = "age", value = "encrypted-token..." }
-DATABASE_URL = { provider = "bws", value = "dev-database-url" }
-
-[profiles.production.providers]
-bws = { type = "bitwarden-sm", project_id = "prod-project-id" }
-
-[profiles.production.secrets]
-DATABASE_URL = { provider = "bws", value = "prod-database-url" }
-```
-
-## CI/CD example
-
-### GitHub Actions
+In CI, supply the token from the CI secret store:
 
 ```yaml
-name: Deploy
-on: [push]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v4
-
-      - name: Deploy with secrets
-        env:
-          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
-        run: |
-          fnox exec -- ./deploy.sh
+- name: Deploy with secrets
+  env:
+    BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+  run: fnox exec -- ./deploy.sh
 ```
 
-## Bitwarden sm vs Bitwarden password manager
+## Configuration
 
-| Feature | Bitwarden SM (`bitwarden-sm`) | Bitwarden PM (`bitwarden`) |
-| ------- | ----------------------------- | -------------------------- |
-| CLI     | `bws`                         | `bw`                       |
-| Auth    | Access token                  | Session token              |
-| Purpose | DevOps / machine secrets      | Personal passwords         |
-| Model   | Key-value secrets in projects | Vault items with fields    |
+| Field        | Required | Default          | Description                                                                                   |
+| ------------ | -------- | ---------------- | --------------------------------------------------------------------------------------------- |
+| `project_id` | No       | `BWS_PROJECT_ID` | Project to read from and create secrets in. Required from one of the two sources.             |
+| `profile`    | No       |                  | `bws` CLI profile, passed as `--profile`. Use it for self-hosted servers or several accounts. |
+
+Every field accepts `{ secret = "NAME" }` to take its value from another fnox secret. The options shared by all providers, `auth_command` and `daemon_cache`, are in the [configuration reference](/reference/configuration#provider-configuration).
+
+### Environment variables
+
+| Variable                | Description                                              |
+| ----------------------- | -------------------------------------------------------- |
+| `FNOX_BWS_ACCESS_TOKEN` | Access token. Takes priority over `BWS_ACCESS_TOKEN`.    |
+| `BWS_ACCESS_TOKEN`      | Access token.                                            |
+| `BWS_PROJECT_ID`        | Project ID when `project_id` is not set in the provider. |
+
+## Reference formats
+
+A secret's `value` is the key name of a secret in the project, optionally followed by a field.
+
+| `value`             | What fnox reads       |
+| ------------------- | --------------------- |
+| `database-url`      | The secret's value    |
+| `database-url/note` | The secret's note     |
+| `database-url/key`  | The secret's key name |
+
+Only the `value`, `note` and `key` fields are supported. If several secrets in the project share a key name, fnox uses the first one `bws` returns.
+
+Every lookup runs `bws secret list <project_id>` once and matches key names locally, so resolving many secrets from one project costs a single CLI call.
+
+## Write secrets
+
+`fnox set` lists the project, edits the secret whose key name matches, and creates it in the project otherwise. The remote key name is the fnox key unless you pass `--key-name`:
+
+```sh
+fnox set DATABASE_URL --provider bws --key-name database-url
+```
+
+fnox passes the value to `bws` as a command-line argument, so other users on the same machine may see it in the process list while the command runs.
 
 ## Troubleshooting
 
-### "Access token not found"
+### Access token not found
 
-```bash
-export BWS_ACCESS_TOKEN=<your-token>
-# Or: export FNOX_BWS_ACCESS_TOKEN=<your-token>
+Neither `FNOX_BWS_ACCESS_TOKEN` nor `BWS_ACCESS_TOKEN` is set in the fnox process environment.
+
+### Project ID not configured
+
+Set `project_id` in the provider or export `BWS_PROJECT_ID`.
+
+### Secret not found
+
+Check the key name in the project the token can access:
+
+```sh
+bws secret list "$BWS_PROJECT_ID" --output json | jq -r '.[].key'
 ```
 
-### "Project ID not configured"
+## See also
 
-Either set it in the provider config:
-
-```toml
-[providers]
-bws = { type = "bitwarden-sm", project_id = "your-project-id" }
-```
-
-Or via environment variable:
-
-```bash
-export BWS_PROJECT_ID=<your-project-id>
-```
-
-### "Secret not found"
-
-Check the secret exists in your project:
-
-```bash
-bws secret list <project-id> --output json | jq '.[].key'
-```
-
-### "bws CLI not found"
-
-```bash
-brew install bws
-```
-
-## Next steps
-
-- [Bitwarden Password Manager](/providers/bitwarden) - For personal vault secrets
-- [AWS Secrets Manager](/providers/aws-sm) - AWS alternative
-- [HashiCorp Vault](/providers/vault) - Self-hosted alternative
-- [Real-World Example](/guide/dev-to-production) - Complete setup
+- [Bitwarden](/providers/bitwarden): read Bitwarden Password Manager vault items.
+- [Age](/providers/age): encrypt the access token for local bootstrap.
+- [CI/CD](/guide/ci): supply tokens to non-interactive jobs.

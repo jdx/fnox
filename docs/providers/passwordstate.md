@@ -1,20 +1,25 @@
 ---
-description: "Read Passwordstate passwords and fields by ID or title with fnox, an API key, and a password list."
+description: "Read Passwordstate passwords and fields with fnox over the REST API, by password ID or by title within a password list."
 ---
 
 # Passwordstate
 
-Read passwords from a Passwordstate server through its HTTP API. This provider is read-only; create and update records in Passwordstate, then commit their references in `fnox.toml`.
+Read passwords from a Click Studios Passwordstate server through its REST API. `fnox.toml` stores password IDs or titles; values stay in Passwordstate. The provider is read-only: create and edit records in Passwordstate, not with `fnox set`.
 
-## Prerequisites
+|                     |                                                 |
+| ------------------- | ----------------------------------------------- |
+| Config type         | `passwordstate`                                 |
+| Storage             | Remote service (Passwordstate password list)    |
+| Writes (`fnox set`) | No (read-only)                                  |
+| Requires            | Network access to the server and a list API key |
 
-- A reachable Passwordstate server.
-- An API key with access to the required password list and records.
-- The password list ID and either a password ID or record title.
+## Quick start
 
-No Passwordstate CLI is required.
+Export the API key for the password list, then reference records by ID or title:
 
-## Configuration
+```sh
+export PASSWORDSTATE_API_KEY="..."
+```
 
 ```toml
 [providers.passwordstate]
@@ -27,47 +32,71 @@ DB_PASSWORD = { provider = "passwordstate", value = "456" }
 DB_USER = { provider = "passwordstate", value = "456/username" }
 ```
 
-Replace the URL and IDs with values from your server. Supply the API key through `FNOX_PASSWORDSTATE_API_KEY` or `PASSWORDSTATE_API_KEY`; the `FNOX_` form takes precedence.
-
-| Field              | Required | Description                                            |
-| ------------------ | -------- | ------------------------------------------------------ |
-| `base_url`         | Yes      | Passwordstate server URL, without `/api`               |
-| `password_list_id` | Yes      | List used for title searches and connection testing    |
-| `api_key`          | No       | API key or secret reference; overrides the environment |
-| `verify_ssl`       | No       | TLS certificate verification; defaults to `"true"`     |
-
-Keep certificate verification enabled and configure a trusted certificate on the server. Do not commit a plaintext API key.
-
-## Reference formats
-
-| Reference      | Result                                               |
-| -------------- | ---------------------------------------------------- |
-| `456`          | Password field of the record with this ID            |
-| `456/username` | Named field of the record with this ID               |
-| `Database`     | Password field found by title in the configured list |
-| `Database/url` | Named field found by title in the configured list    |
-
-Supported fields are `password`, `username` (or `user`), `title`, `url`, `description`, and `notes`. Field names are case-insensitive. References accept at most one `/` separator; use IDs when a title cannot be expressed unambiguously.
-
-## Verify and run
-
 ```sh
 fnox provider test passwordstate
-fnox check --all
 fnox exec -- npm start
 ```
 
-`fnox get DB_PASSWORD` prints the resolved value when you need to inspect it directly.
+No Passwordstate CLI is needed.
+
+## Authentication
+
+fnox sends the API key in the `APIKey` header of each request. It uses the first of:
+
+1. The provider's `api_key` field
+2. `FNOX_PASSWORDSTATE_API_KEY`
+3. `PASSWORDSTATE_API_KEY`
+
+Passwordstate issues API keys per password list, so create one provider instance per list. When several lists need different keys, set `api_key = { secret = "NAME" }` on each instance and store the keys with an encryption provider rather than in plain text.
+
+## Configuration
+
+| Field              | Required | Default  | Description                                                                 |
+| ------------------ | -------- | -------- | --------------------------------------------------------------------------- |
+| `base_url`         | Yes      | none     | Server URL without `/api`, for example `https://passwordstate.example.com`. |
+| `password_list_id` | Yes      | none     | List searched for title references and used by `fnox provider test`.        |
+| `api_key`          | No       | env vars | List API key. Overrides the environment variables.                          |
+| `verify_ssl`       | No       | `"true"` | Set to `"false"` to skip TLS certificate verification.                      |
+
+Each field accepts `{ secret = "NAME" }`.
+
+::: warning
+`verify_ssl = "false"` accepts any certificate, including one presented by an attacker. Install a trusted certificate on the server instead.
+:::
+
+## Reference formats
+
+| `value`        | What fnox reads                                                |
+| -------------- | -------------------------------------------------------------- |
+| `456`          | The password field of record 456                               |
+| `456/username` | A named field of record 456                                    |
+| `Database`     | The password field of the record titled `Database` in the list |
+| `Database/url` | A named field of the record titled `Database` in the list      |
+
+- A numeric first segment is a password ID; anything else is a title, matched exactly but case-insensitively within `password_list_id`.
+- Fields: `password`, `username` (or `user`), `title`, `url`, `description`, `notes`. Field names are case-insensitive.
+- A reference can contain at most one `/`. Use the ID when a title contains `/`.
 
 ## Troubleshooting
 
-- **Authentication failure:** confirm the API key is valid and has access to the list and record.
-- **Record not found:** verify the ID, or check the exact title in the configured list.
-- **Field missing:** use one of the supported fields and confirm it has a value.
-- **Connection failure:** verify the base URL, TLS certificate, and network access from the machine running fnox.
+### HTTP 401 or 403
 
-## Next steps
+The API key is wrong, or it belongs to a different password list. Check which key fnox picks up (see [Authentication](#authentication)).
 
-- [Sync a local cache](/guide/sync): encrypt a personal snapshot for local reads.
+### Password not found
+
+Check the ID, or the exact title within the configured list.
+
+### Field not found or empty
+
+Use one of the supported field names, and confirm the field has a value on the record.
+
+### Connection failure
+
+Check `base_url`, the server's TLS certificate, and network access from the machine running fnox.
+
+## See also
+
 - [Profiles](/guide/profiles): use different lists or servers per environment.
-- [Configuration reference](/reference/configuration): common provider and secret options.
+- [Local sync cache](/guide/sync): keep an encrypted offline copy of resolved values.
+- [Provider catalog](/providers/overview): compare Passwordstate with other providers.

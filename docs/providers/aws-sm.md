@@ -1,449 +1,202 @@
 ---
-description: "Read AWS Secrets Manager values with fnox. Configure authentication, IAM permissions, prefixes, and profiles."
+description: "Read and write AWS Secrets Manager secrets with fnox: credentials, minimal IAM policy, name prefixes, role assumption, and JSON fields."
 ---
 
 # AWS Secrets Manager
 
-AWS Secrets Manager provides centralized secret management with IAM access control, audit logs, and automatic rotation.
+Store secrets in AWS Secrets Manager and keep only their names in `fnox.toml`. The provider reads and writes: `fnox set` creates or updates the secret in AWS.
+
+|                     |                                                   |
+| ------------------- | ------------------------------------------------- |
+| Config type         | `aws-sm`                                          |
+| Storage             | Remote service                                    |
+| Writes (`fnox set`) | Yes                                               |
+| Requires            | AWS credentials and network access to the AWS API |
 
 ## Quick start
 
-Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+With AWS credentials available in your shell, add a provider and store a value through the hidden prompt:
 
 ```toml
-[providers]
-aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp/" }
+[providers.sm]
+type = "aws-sm"
+region = "us-east-1"
+prefix = "myapp/"
 ```
 
 ```sh
-# Create secret in AWS
-aws secretsmanager create-secret \
-  --name "myapp/database-url" \
-  --secret-string "postgresql://prod.example.com/db"
+fnox set DATABASE_URL --provider sm
 ```
 
-Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+This creates the secret `myapp/DATABASE_URL` in AWS and adds the reference to `fnox.toml`:
 
 ```toml
 [secrets]
-DATABASE_URL = { provider = "aws", value = "database-url" }  # With prefix, fetches "myapp/database-url"
+DATABASE_URL = { provider = "sm", value = "DATABASE_URL" }
 ```
+
+To use a secret that already exists, write the reference yourself with the secret's name minus the prefix. Then check it:
 
 ```sh
-# Fetch secret
-fnox get DATABASE_URL
-```
-
-## Prerequisites
-
-- AWS account
-- AWS credentials configured (CLI, environment variables, or IAM role)
-- IAM permissions (see below)
-
-## IAM permissions
-
-### Read-only access (minimum)
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "ListSecrets",
-      "Effect": "Allow",
-      "Action": [
-        "secretsmanager:ListSecrets",
-        "secretsmanager:BatchGetSecretValue"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "ReadSecrets",
-      "Effect": "Allow",
-      "Action": [
-        "secretsmanager:GetSecretValue",
-        "secretsmanager:DescribeSecret"
-      ],
-      "Resource": "arn:aws:secretsmanager:REGION:ACCOUNT:secret:myapp/*"
-    }
-  ]
-}
-```
-
-::: warning ListSecrets and BatchGetSecretValue Permissions
-The `secretsmanager:ListSecrets` and `secretsmanager:BatchGetSecretValue` actions **must** use `"Resource": "*"` and cannot be scoped to specific ARNs.
-:::
-
-### Full access (for testing)
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "ListSecretsPermission",
-      "Effect": "Allow",
-      "Action": [
-        "secretsmanager:ListSecrets",
-        "secretsmanager:BatchGetSecretValue"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "SecretsManagerPermissions",
-      "Effect": "Allow",
-      "Action": [
-        "secretsmanager:GetSecretValue",
-        "secretsmanager:DescribeSecret",
-        "secretsmanager:PutSecretValue",
-        "secretsmanager:CreateSecret",
-        "secretsmanager:UpdateSecret",
-        "secretsmanager:DeleteSecret"
-      ],
-      "Resource": ["arn:aws:secretsmanager:REGION:ACCOUNT:secret:myapp/*"]
-    }
-  ]
-}
-```
-
-## Configuration
-
-### Configure AWS credentials
-
-Choose one:
-
-#### Option 1: environment variables
-
-```bash
-export AWS_ACCESS_KEY_ID="AKIA..."
-export AWS_SECRET_ACCESS_KEY="..."
-export AWS_REGION="us-east-1"
-```
-
-#### Option 2: AWS CLI profile
-
-```bash
-aws configure
-
-# Or use named profile
-export AWS_PROFILE=myapp
-```
-
-#### Option 3: IAM role (automatic on AWS)
-
-If running on EC2, ECS, Lambda, or other AWS services:
-
-```bash
-# No configuration needed!
-# Credentials are automatic via instance metadata
-```
-
-### Configure fnox provider
-
-```toml
-[providers]
-# Include only the optional fields you need.
-aws = { type = "aws-sm", region = "us-east-1", profile = "my-aws-profile", prefix = "myapp/" }
-```
-
-| Field      | Required | Description                                                                                       |
-| ---------- | -------- | ------------------------------------------------------------------------------------------------- |
-| `region`   | Yes      | AWS region (e.g. `us-east-1`)                                                                     |
-| `profile`  | No       | AWS CLI profile name from `~/.aws/config`. Falls back to the default credential chain if omitted. |
-| `role_arn` | No       | IAM role to assume before reading secrets                                                         |
-| `prefix`   | No       | Prepended to all secret names                                                                     |
-
-The `profile` field is useful when you have multiple AWS accounts or roles configured and want to pin a provider to a specific one without relying on `AWS_PROFILE` in the environment.
-
-### Assuming a role
-
-Set `role_arn` to have fnox call `sts:AssumeRole` and use the resulting credentials for every request. The credentials from `profile` (or the default chain) are the source credentials for that call, so an SSO profile plus a cross-account role works in one step:
-
-```toml
-[providers]
-aws = { type = "aws-sm", region = "eu-west-1", profile = "sso-dev", role_arn = "arn:aws:iam::123456789012:role/secrets-reader" }
-```
-
-This mirrors the `role` option in SOPS. If your `~/.aws/config` profile already declares `role_arn` and `source_profile`, the AWS SDK assumes that role on its own and you do not need this field.
-
-The session name is always `fnox`, and the role must trust the source identity for `sts:AssumeRole`.
-
-## Creating secrets
-
-### Via AWS CLI
-
-```bash
-# Create a secret
-aws secretsmanager create-secret \
-  --name "myapp/database-url" \
-  --secret-string "postgresql://prod.db.example.com/mydb"
-
-# Create with description
-aws secretsmanager create-secret \
-  --name "myapp/api-key" \
-  --description "Production API key for external service" \
-  --secret-string "sk_live_abc123xyz789"
-
-# Create JSON secret
-aws secretsmanager create-secret \
-  --name "myapp/db-creds" \
-  --secret-string '{"username":"admin","password":"secret123"}'
-```
-
-### Via AWS console
-
-1. Go to [AWS Secrets Manager Console](https://console.aws.amazon.com/secretsmanager/)
-2. Click "Store a new secret"
-3. Choose "Other type of secret"
-4. Enter key/value pairs or plaintext
-5. Name it with your prefix (e.g., `myapp/database-url`)
-6. Configure rotation (optional)
-7. Store
-
-## Referencing secrets
-
-Add references to `fnox.toml`:
-
-```toml
-[secrets]
-DATABASE_URL = { provider = "aws", value = "database-url" }  # → Fetches "myapp/database-url"
-API_KEY = { provider = "aws", value = "api-key" }  # → Fetches "myapp/api-key"
-# Without prefix in provider, use full name like: value = "myapp/api-key"
-```
-
-## Usage
-
-### Get a secret
-
-```bash
-fnox get DATABASE_URL
-```
-
-### Run commands
-
-```bash
-# Fetches all secrets from AWS
+fnox provider test sm
 fnox exec -- ./start-server.sh
 ```
 
-### Use different profiles
+## Authentication {#configure-aws-credentials}
 
-```bash
-# Different profile for different environments
-fnox exec --profile production -- ./deploy.sh
-```
+fnox uses the AWS SDK default credential chain, so credentials that work for the `aws` CLI work here:
 
-## Prefix behavior
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN`.
+- A profile from `~/.aws/config`, including SSO profiles, selected by `AWS_PROFILE` or the provider's `profile` field.
+- Web identity tokens (`AWS_WEB_IDENTITY_TOKEN_FILE` with `AWS_ROLE_ARN`), as used by EKS and GitHub Actions OIDC.
+- Container and EC2 instance credentials.
 
-The `prefix` is prepended to the `value`:
+The provider's `region` field sets the region for every request; `AWS_REGION` does not override it.
 
-```toml
-[providers]
-aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp/" }
+When a request fails because credentials are missing or expired in an interactive terminal, fnox offers to run `aws sso login`. Change that command with [`auth_command`](/reference/configuration#auth-command).
 
-[secrets]
-DATABASE_URL = { provider = "aws", value = "database-url" }  # → Fetches "myapp/database-url"
-API_KEY = { provider = "aws", value = "api-key" }  # → Fetches "myapp/api-key"
-```
+### CI
 
-Without prefix:
-
-```toml
-[providers]
-aws = { type = "aws-sm", region = "us-east-1" }  # No prefix
-
-[secrets]
-DATABASE_URL = { provider = "aws", value = "myapp/database-url" }  # → Fetches "myapp/database-url"
-```
-
-## Multi-environment example
-
-```toml
-# Development: age encryption
-[providers]
-age = { type = "age", recipients = ["age1..."] }
-
-[secrets]
-DATABASE_URL = { provider = "age", value = "encrypted-dev-db..." }
-
-# Staging: AWS Secrets Manager (us-east-1)
-[profiles.staging.providers]
-aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp-staging/" }
-
-[profiles.staging.secrets]
-DATABASE_URL = { provider = "aws", value = "database-url" }  # → myapp-staging/database-url
-
-# Production: AWS Secrets Manager (us-west-2) using a dedicated AWS profile
-[profiles.production.providers]
-aws = { type = "aws-sm", region = "us-west-2", profile = "prod-account", prefix = "myapp-prod/" }
-
-[profiles.production.secrets]
-DATABASE_URL = { provider = "aws", value = "database-url" }  # → myapp-prod/database-url
-```
-
-```bash
-# Development (local)
-fnox get DATABASE_URL
-
-# Staging
-fnox get DATABASE_URL --profile staging
-
-# Production
-fnox get DATABASE_URL --profile production
-```
-
-## JSON secrets
-
-AWS Secrets Manager supports JSON secrets:
-
-```bash
-# Create JSON secret
-aws secretsmanager create-secret \
-  --name "myapp/db-credentials" \
-  --secret-string '{"host":"db.example.com","port":"5432","username":"admin","password":"secret"}'
-```
-
-By default, fnox returns the entire JSON string. Use `json_path` to extract specific fields:
-
-```toml
-[providers]
-aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp/" }
-
-[secrets]
-DB_CREDENTIALS = { provider = "aws", value = "db-credentials" }
-DB_PASS = { provider = "aws", value = "db-credentials", json_path = "password" }
-```
-
-```bash
-fnox get DB_CREDENTIALS
-# Output: {"host":"db.example.com","port":"5432","username":"admin","password":"secret"}
-
-fnox get DB_PASS
-# Output: secret
-```
-
-This also supports nested JSON paths using dot notation.
-
-Literal dots in a key name need to be escaped (`\.`).
-In TOML, either use a literal string (`'\.'`) or escape the backslash itself (`"\\."`):
-
-```bash
-# Create nested JSON secret
-aws secretsmanager create-secret \
-  --name "myapp/config" \
-  --secret-string '{"database":{"host":"db.example.com","cache.key":"foo"}}'
-```
-
-```toml
-[providers]
-aws = { type = "aws-sm", region = "us-east-1", prefix = "myapp/" }
-
-[secrets]
-DB_HOST = { provider = "aws", value = "config", json_path = "database.host" }
-DB_CACHE_KEY = { provider = "aws", value = "config", json_path = 'database.cache\.key' }
-```
-
-## Secret rotation
-
-AWS Secrets Manager supports automatic rotation:
-
-```bash
-# Enable rotation via AWS CLI
-aws secretsmanager rotate-secret \
-  --secret-id "myapp/database-url" \
-  --rotation-lambda-arn "arn:aws:lambda:..."
-```
-
-Direct reads fetch the current version. Refresh an encrypted sync cache or clear the daemon cache to pick up a rotated value.
-
-## Costs
-
-Charges depend on region, storage, key type or tier, and API usage. Consult the [service pricing](https://aws.amazon.com/secrets-manager/pricing/) for current rates. fnox does not change the provider's billing model.
-
-## CI/CD example
-
-### GitHub Actions
+Give the job an AWS identity before fnox runs. In GitHub Actions, OIDC avoids long-lived keys:
 
 ```yaml
-name: Deploy
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
-
-      - name: Deploy with secrets
-        run: |
-          fnox exec --profile production -- ./deploy.sh
+permissions:
+  id-token: write # lets GitHub issue the OIDC token
+  contents: read
+steps:
+  - uses: aws-actions/configure-aws-credentials@v4
+    with:
+      role-to-assume: arn:aws:iam::123456789012:role/ci-secrets-reader
+      aws-region: us-east-1
+  - run: fnox exec -- ./deploy.sh
 ```
 
-## Usage notes
+See [CI/CD](/guide/ci) for non-interactive settings.
 
-fnox reads the current secret value from AWS when it resolves directly. If you use sync or daemon caching, refresh that cache after rotation. `json_path` can select a field from a JSON secret without creating separate AWS secrets.
+## Configuration
 
-## Comparison: AWS Secrets Manager vs AWS KMS
+```toml
+[providers.sm]
+type = "aws-sm"
+region = "us-east-1"
+profile = "my-aws-profile" # optional
+prefix = "myapp/"          # optional
+```
 
-| Feature        | AWS Secrets Manager  | AWS KMS                           |
-| -------------- | -------------------- | --------------------------------- |
-| Storage        | Remote (AWS)         | Local (encrypted in fnox.toml)    |
-| Secrets in git | No (references only) | Yes (encrypted ciphertext)        |
-| Rotation       | Automatic            | Manual                            |
-| Offline        | No                   | No (needs AWS to encrypt/decrypt) |
-| Access Control | IAM policies         | IAM policies                      |
+| Field      | Required | Default       | Description                                                                                      |
+| ---------- | -------- | ------------- | ------------------------------------------------------------------------------------------------ |
+| `region`   | Yes      |               | AWS region for all requests.                                                                     |
+| `profile`  | No       | Default chain | Profile from `~/.aws/config`. Pins the provider to one account without relying on `AWS_PROFILE`. |
+| `role_arn` | No       |               | IAM role to assume before every request. See [Assume a role](#assume-a-role).                    |
+| `prefix`   | No       |               | Prepended to every secret name, for reads and for `fnox set`.                                    |
+| `endpoint` | No       | AWS endpoint  | Custom endpoint URL, such as `http://localhost:4566` for LocalStack.                             |
 
-**Use AWS SM when:** You want centralized storage, rotation, and don't want secrets in git.
+Every field accepts `{ secret = "NAME" }` to take its value from another fnox secret. The options shared by all providers, `auth_command` and `daemon_cache`, are in the [configuration reference](/reference/configuration#provider-configuration).
 
-**Use AWS KMS when:** You want secrets in git (version control) but with AWS-managed keys.
+## Reference formats
+
+A secret's `value` is the Secrets Manager secret name. fnox prepends the provider's `prefix`.
+
+| Provider `prefix` | `value`              | Secret fnox reads          |
+| ----------------- | -------------------- | -------------------------- |
+| (none)            | `myapp/database-url` | `myapp/database-url`       |
+| `myapp/`          | `database-url`       | `myapp/database-url`       |
+| `myapp/`          | `myapp/database-url` | `myapp/myapp/database-url` |
+
+Use secret names, not ARNs: the prefix is applied to every value, and batch reads match results by name.
+
+fnox reads the `SecretString` of the current version. Binary secrets are not supported.
+
+### JSON fields
+
+When a secret holds a JSON object, select one field with [`json_path`](/reference/configuration#json-path):
+
+```toml
+[secrets]
+DB_CREDENTIALS = { provider = "sm", value = "db-credentials" } # whole JSON string
+DB_PASSWORD = { provider = "sm", value = "db-credentials", json_path = "password" }
+DB_HOST = { provider = "sm", value = "config", json_path = "database.host" } # nested key
+DB_CACHE_KEY = { provider = "sm", value = "config", json_path = 'database.cache\.key' } # key containing a dot
+```
+
+Escape a literal dot in a key name as `\.`. In TOML, use a literal string (`'\.'`) or escape the backslash (`"\\."`).
+
+## IAM permissions
+
+fnox calls these Secrets Manager actions:
+
+| Operation                                       | Actions                                                                                    |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Resolve one secret                              | `secretsmanager:GetSecretValue`                                                            |
+| Resolve several secrets, such as in `fnox exec` | `secretsmanager:BatchGetSecretValue`, plus `GetSecretValue` on each secret                 |
+| `fnox provider test`                            | `secretsmanager:ListSecrets`                                                               |
+| `fnox set`                                      | `secretsmanager:PutSecretValue`, plus `secretsmanager:CreateSecret` when the secret is new |
+
+A read-only policy for secrets under `myapp/`:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["secretsmanager:BatchGetSecretValue", "secretsmanager:ListSecrets"],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "secretsmanager:GetSecretValue",
+      "Resource": "arn:aws:secretsmanager:us-east-1:123456789012:secret:myapp/*"
+    }
+  ]
+}
+```
+
+`BatchGetSecretValue` and `ListSecrets` cannot be scoped to secret ARNs, so they need `"Resource": "*"`. To let `fnox set` write, add `secretsmanager:PutSecretValue` and `secretsmanager:CreateSecret` to the second statement. A secret encrypted with a customer-managed KMS key also needs `kms:Decrypt` on that key to read, plus `kms:GenerateDataKey` to write.
+
+## Batch reads
+
+When fnox resolves several secrets from one provider, it sends `BatchGetSecretValue` requests of up to 20 secrets each. fnox keys that point at the same secret, for example with different `json_path` values, share one fetch.
+
+## Assume a role
+
+Set `role_arn` to have fnox call `sts:AssumeRole` and use the resulting credentials for every request. The credentials from `profile`, or from the default chain, are the source credentials for that call, so an SSO profile plus a cross-account role works in one step:
+
+```toml
+[providers.sm]
+type = "aws-sm"
+region = "eu-west-1"
+profile = "sso-dev"
+role_arn = "arn:aws:iam::123456789012:role/secrets-reader"
+```
+
+The session name is always `fnox`, and the role must trust the source identity for `sts:AssumeRole`. If your `~/.aws/config` profile already declares `role_arn` and `source_profile`, the AWS SDK assumes that role itself and you do not need this field. When `endpoint` is set, the AssumeRole call goes to that endpoint too.
 
 ## Troubleshooting
 
-### "AccessDeniedException"
+### `fnox get` works but `fnox exec` is denied
 
-Check IAM permissions:
+Resolving several secrets uses `BatchGetSecretValue`, which a policy that grants only `GetSecretValue` does not cover. Add it with `"Resource": "*"`.
 
-```bash
-# Test access
-aws secretsmanager list-secrets
-aws secretsmanager get-secret-value --secret-id "myapp/database-url"
+### Secret not found
+
+Check the region and the composed name: the provider's `prefix` followed by the secret's `value`. A value that repeats the prefix reads a different secret.
+
+```sh
+aws secretsmanager describe-secret --region us-east-1 --secret-id myapp/database-url
 ```
 
-### "ResourceNotFoundException"
+### Secret has no string value
 
-Secret doesn't exist. Check:
+The secret holds binary data. fnox reads only string secrets.
 
-```bash
-# List all secrets
-aws secretsmanager list-secrets
+### Credentials expired
 
-# Check if prefix is correct in fnox.toml
-grep prefix fnox.toml
-```
+Run `aws sso login`, or your profile's equivalent, and retry. `fnox provider test sm` confirms the credentials and region.
 
-### "Invalid Region"
+## See also
 
-Verify region matches:
-
-```bash
-# Check fnox.toml region
-grep region fnox.toml
-
-# Check AWS credentials region
-echo $AWS_REGION
-```
-
-## Next steps
-
-- [AWS KMS](/providers/aws-kms) - Alternative with secrets in git
-- [Real-World Example](/guide/dev-to-production) - Complete AWS setup
-- [Profiles](/guide/profiles) - Multi-environment configuration
+- [AWS Parameter Store](/providers/aws-ps): hierarchical parameters with the same credential handling.
+- [AWS KMS](/providers/aws-kms): keep ciphertext in `fnox.toml` instead of a remote store.
+- [AWS STS](/leases/aws-sts): lease short-lived AWS credentials to commands.
+- [Connect a vault](/guide/existing-vault): add a local cache for offline reads.

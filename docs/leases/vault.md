@@ -1,173 +1,159 @@
 ---
-description: "Request dynamic credentials from HashiCorp Vault and configure field mapping, lease duration, and revocation."
+description: "Request dynamic credentials from HashiCorp Vault with fnox, map response fields to environment variables, and revoke the Vault lease."
 ---
 
 # HashiCorp Vault
 
-The `vault` lease backend reads dynamic secrets from a HashiCorp Vault secret engine. This works with any Vault dynamic secret backend — AWS, database, PKI, etc. You configure which Vault response fields map to which environment variables.
+The `vault` lease backend reads a dynamic secret from a HashiCorp Vault secrets engine, such as `aws`, `database` or `pki`, and injects the fields you map into `fnox exec`. fnox revokes the Vault lease when you revoke the fnox lease.
 
-## Configuration
+|              |                                                            |
+| ------------ | ---------------------------------------------------------- |
+| Config type  | `vault`                                                    |
+| Produces     | The variables named in `env_map`                           |
+| Max duration | 24 hours requested; the Vault role decides the actual TTL  |
+| Revocation   | Yes, through `sys/leases/revoke`                           |
+| Needs        | A Vault address and a token (or a command that prints one) |
 
-```toml
-[leases.vault-db]
-type = "vault"
-secret_path = "database/creds/my-role"
-duration = "1h"
-
-[leases.vault-db.env_map]
-username = "DB_USER"
-password = "DB_PASSWORD"
-```
-
-| Field                | Required | Description                                                                                                     |
-| -------------------- | -------- | --------------------------------------------------------------------------------------------------------------- |
-| `secret_path`        | Yes      | Vault API path for the dynamic secret                                                                           |
-| `env_map`            | Yes      | Map of Vault response field names to environment variables                                                      |
-| `address`            | No       | Vault server URL (falls back to `FNOX_VAULT_ADDR`, then `VAULT_ADDR`)                                           |
-| `token`              | No       | Vault auth token (falls back to `FNOX_VAULT_TOKEN`, then `VAULT_TOKEN`)                                         |
-| `credential_command` | No       | Shell command that prints a Vault token when no token is configured                                             |
-| `namespace`          | No       | Vault namespace for Vault Enterprise / HCP Vault (falls back to `FNOX_VAULT_NAMESPACE`, then `VAULT_NAMESPACE`) |
-| `duration`           | No       | Requested lease TTL (e.g., `"1h"`, `"30m"`; default: `"15m"`)                                                   |
-| `method`             | No       | HTTP method: `"get"` (default) or `"post"` (for pki/issue)                                                      |
-
-## Prerequisites
-
-The backend needs a Vault address and token. fnox resolves them in this order:
-
-1. `address` / `token` fields in config
-2. `FNOX_VAULT_ADDR` / `FNOX_VAULT_TOKEN` environment variables
-3. `VAULT_ADDR` / `VAULT_TOKEN` environment variables
-4. `credential_command` for the token
-
-If the address or token is missing, fnox prints one of:
-
-```text
-Vault address and token not found. Set VAULT_ADDR and VAULT_TOKEN.
-Vault address not found. Set VAULT_ADDR.
-Vault token not found. Set VAULT_TOKEN.
-```
-
-When `credential_command` is configured, fnox runs it through the platform shell and uses its trimmed stdout as the token. The command is rendered as a [Tera](https://keats.github.io/tera/) template with `address`, `secret_path`, and `namespace` variables, and fnox sets `VAULT_ADDR` and `VAULT_NAMESPACE` in the command's environment from the lease config. Output is cached for five minutes within the current fnox process so repeated lease operations do not repeat the login, and the cache is cleared if Vault rejects the token. The command must finish within 30 seconds.
-
-## Credentials produced
-
-Determined by the `env_map` configuration. The keys are field names from the Vault response, and the values are the environment variable names to inject.
-
-## Limits
-
-- **Max duration:** 24 hours
-- **Revocation:** Full support — calls `PUT /v1/sys/leases/revoke` on the Vault server
-
-## Examples
-
-### AWS dynamic secrets
+## Quick start
 
 ```toml
-[leases.vault-aws]
+[leases.db]
 type = "vault"
 address = "https://vault.example.com:8200"
-secret_path = "aws/creds/my-role"
+secret_path = "database/creds/readonly"
 duration = "1h"
 
-[leases.vault-aws.env_map]
-access_key = "AWS_ACCESS_KEY_ID"
-secret_key = "AWS_SECRET_ACCESS_KEY"
-security_token = "AWS_SESSION_TOKEN"
-```
-
-### Database credentials
-
-```toml
-[leases.vault-db]
-type = "vault"
-secret_path = "database/creds/readonly"
-duration = "30m"
-
-[leases.vault-db.env_map]
+[leases.db.env_map]
 username = "DB_USER"
 password = "DB_PASSWORD"
 ```
 
-```bash
+```sh
+export VAULT_TOKEN="$(vault print token)"
 fnox exec -- sh -c 'PGPASSWORD="$DB_PASSWORD" psql -h db.example.com -U "$DB_USER" mydb'
 ```
 
-### PKI certificates
+Each `env_map` key is a field in the Vault response's `data`; each value is the variable fnox sets.
 
-This backend selects the method and maps response fields, but does not expose arbitrary request-body parameters. Use it only with a role that can issue with these defaults; use a [custom command](/leases/command) if your request needs fields such as `common_name`.
+## Bootstrap credentials
 
-PKI and some other engines require POST requests. Set `method = "post"`:
+fnox calls the Vault HTTP API directly; it does not need the `vault` CLI. It resolves each setting from the first source that is set:
 
-```toml
-[leases.vault-pki]
-type = "vault"
-secret_path = "pki/issue/my-role"
-method = "post"
-duration = "24h"
+| Setting   | Sources, in order                                                     |
+| --------- | --------------------------------------------------------------------- |
+| Address   | `address`, `FNOX_VAULT_ADDR`, `VAULT_ADDR`                            |
+| Token     | `token`, `FNOX_VAULT_TOKEN`, `VAULT_TOKEN`, then `credential_command` |
+| Namespace | `namespace`, `FNOX_VAULT_NAMESPACE`, `VAULT_NAMESPACE`                |
 
-[leases.vault-pki.env_map]
-certificate = "TLS_CERT"
-private_key = "TLS_KEY"
-issuing_ca = "TLS_CA"
-```
-
-### With stored token
+To keep a token in a provider, define a secret named `VAULT_TOKEN`; fnox resolves it for lease creation, and `env = false` keeps it out of the command:
 
 ```toml
-[providers.op]
-type = "1password"
-vault = "Infrastructure"
-
 [secrets]
 VAULT_TOKEN = { provider = "op", value = "Vault/token", env = false }
-
-[leases.vault-aws]
-type = "vault"
-address = "https://vault.example.com:8200"
-secret_path = "aws/creds/my-role"
-
-[leases.vault-aws.env_map]
-access_key = "AWS_ACCESS_KEY_ID"
-secret_key = "AWS_SECRET_ACCESS_KEY"
-security_token = "AWS_SESSION_TOKEN"
 ```
 
-### With namespace (enterprise / HCP)
+### Credential command
+
+`credential_command` logs in on demand when no token is configured:
 
 ```toml
-[leases.vault-db]
-type = "vault"
-namespace = "admin/my-team"
-secret_path = "database/creds/app-role"
-
-[leases.vault-db.env_map]
-username = "DB_USER"
-password = "DB_PASSWORD"
-```
-
-### With credential command
-
-```toml
-[leases.vault-db]
+[leases.db]
 type = "vault"
 address = "https://vault.example.com"
 namespace = "team-a"
 credential_command = "vault login -method=oidc -token-only"
 secret_path = "database/creds/readonly"
-method = "post"
 
-[leases.vault-db.env_map]
+[leases.db.env_map]
 username = "DB_USER"
 password = "DB_PASSWORD"
 ```
 
-## Notes
+- fnox runs the command through the platform shell and uses its trimmed stdout as the token.
+- The command is a [Tera](https://keats.github.io/tera/) template with `address`, `secret_path` and `namespace` variables. fnox also sets `VAULT_ADDR` and, when configured, `VAULT_NAMESPACE` in its environment.
+- The token is reused for five minutes within one fnox process and discarded early if Vault rejects it.
+- The command must finish within 30 seconds.
 
-- **TTL is advisory.** The `duration` field is sent to Vault as a TTL hint, but many engines (database, pki, rabbitmq) ignore it and use the role's configured default TTL instead. fnox warns if the actual `lease_duration` returned by Vault differs significantly from the requested value.
-- **Static KV secrets never expire.** KV v2 responses (`data.data`) are unwrapped automatically, and a `lease_duration` of `0` is treated as "no expiry", so the lease stays active until you revoke it.
-- **GET vs POST.** Most Vault dynamic secret engines use GET (e.g., `aws/creds`, `database/creds`). Some engines like `pki/issue` require POST — set `method = "post"` for those.
+## Configuration
+
+| Field                | Required | Default  | Description                                                                |
+| -------------------- | -------- | -------- | -------------------------------------------------------------------------- |
+| `secret_path`        | Yes      | none     | API path after `/v1/`, for example `aws/creds/my-role`.                    |
+| `env_map`            | Yes      | none     | Table of response field to variable name. Needs at least one entry.        |
+| `address`            | No       | env vars | Vault server URL.                                                          |
+| `token`              | No       | env vars | Vault token. Prefer an environment variable or `credential_command`.       |
+| `credential_command` | No       | none     | Shell command that prints a token, used when no token is configured.       |
+| `namespace`          | No       | env vars | Namespace for Vault Enterprise or HCP Vault, sent as `X-Vault-Namespace`.  |
+| `method`             | No       | `"get"`  | `"get"`, or `"post"` for engines that issue on write, such as `pki/issue`. |
+| `duration`           | No       | `"15m"`  | TTL sent to Vault as `ttl`, at most `"24h"`.                               |
+
+### Response handling
+
+- **TTL is advisory.** Many engines (database, pki, rabbitmq) ignore the requested `ttl` and use the role's TTL. fnox records the `lease_duration` Vault returns and logs a warning when it differs from `duration` by more than 30 seconds.
+- **KV v2 is unwrapped.** When `data` contains a nested `data` object, fnox reads fields from the inner one.
+- **No expiry when `lease_duration` is 0.** Static KV secrets have no Vault lease, so the fnox lease stays active until you revoke it.
+- **Missing fields.** A mapped field missing from the response is skipped with a warning. If none of the mapped fields is present, lease creation fails.
+
+### Examples
+
+AWS dynamic credentials:
+
+```toml
+[leases.aws]
+type = "vault"
+secret_path = "aws/creds/my-role"
+
+[leases.aws.env_map]
+access_key = "AWS_ACCESS_KEY_ID"
+secret_key = "AWS_SECRET_ACCESS_KEY"
+security_token = "AWS_SESSION_TOKEN"
+```
+
+A PKI certificate. With `method = "post"`, fnox sends only `{"ttl": ...}` as the request body, so the role must be able to issue without fields such as `common_name`. Use a [custom command](/leases/command) when the request needs them.
+
+```toml
+[leases.pki]
+type = "vault"
+secret_path = "pki/issue/my-role"
+method = "post"
+duration = "24h"
+
+[leases.pki.env_map]
+certificate = "TLS_CERT"
+private_key = "TLS_KEY"
+issuing_ca = "TLS_CA"
+```
+
+## Permissions
+
+The token needs `read` on `secret_path` (or `update` for `method = "post"`). To revoke leases from fnox, it also needs `update` on `sys/leases/revoke`:
+
+```text
+path "sys/leases/revoke" {
+  capabilities = ["update"]
+}
+```
+
+## Troubleshooting
+
+### Vault address and token not found
+
+None of the address or token sources is set. Set `VAULT_ADDR` and `VAULT_TOKEN`, or configure `address` and `credential_command`. Under `fnox exec`, the lease is skipped with this warning unless a cached lease is still valid.
+
+### HTTP 403 when creating the lease
+
+The token lacks access to `secret_path`, or has expired. With `credential_command`, fnox discards the cached token so the next attempt logs in again.
+
+### No configured env_map keys found in Vault response data
+
+The `env_map` keys do not match the response fields. Inspect the response with `vault read <secret_path>` and use the field names under `data`.
+
+### HTTP 403 when revoking
+
+Add the `sys/leases/revoke` policy shown in [Permissions](#permissions).
 
 ## See also
 
-- [Credential Leases](/guide/leases) — overview and approaches
-- [HashiCorp Vault provider](/providers/vault) — for reading static KV secrets
+- [Credential leases](/guide/leases): how leases are cached, reused and revoked.
+- [HashiCorp Vault provider](/providers/vault): read static KV secrets.
+- [Lease commands](/cli/lease): create, list and revoke leases.

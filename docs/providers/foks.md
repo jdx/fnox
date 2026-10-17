@@ -1,232 +1,141 @@
 ---
-description: "Read and write FOKS key-value secrets with fnox using personal or team namespaces and interactive or bot authentication."
+description: "Read and write FOKS end-to-end encrypted key-value secrets with fnox, in personal or team namespaces, with interactive or bot-token auth."
 ---
 
 # FOKS
 
-Integrate with [FOKS](https://foks.pub) — the Federated Open Key Service — to store secrets in an end-to-end encrypted, self-hostable key-value store. Secrets are encrypted on the client; the server only ever sees ciphertext.
+Store secrets in [FOKS](https://foks.pub), the Federated Open Key Service: an end-to-end encrypted key-value store that you can use on the hosted [foks.app](https://foks.app) or on your own server. Values are encrypted on the client and stay in FOKS; `fnox.toml` holds key paths. The provider reads and writes through the `foks` CLI.
 
-FOKS pairs well with fnox for teams that want their secrets manager to be open source, federated, and free of cloud-vendor lock-in. The hosted instance at [foks.app](https://foks.app) and self-hosted FOKS servers behave identically. fnox just shells out to the `foks` CLI either way.
+|                     |                                                                   |
+| ------------------- | ----------------------------------------------------------------- |
+| Config type         | `foks`                                                            |
+| Storage             | Remote service (end-to-end encrypted)                             |
+| Writes (`fnox set`) | Yes                                                               |
+| Requires            | [`foks` CLI](https://foks.pub) on `PATH` and a running FOKS agent |
 
 ## Quick start
 
-```sh
-# Install the foks CLI
-brew install foks            # macOS / Linuxbrew
-# or: curl -fsSL https://pkgs.foks.pub/install.sh | sh && apt-get install foks  # Debian/Ubuntu
+Install the CLI, start the agent and sign up or log in:
 
-# Start the agent and sign up (or log in)
+```sh
+brew install foks   # other platforms: https://foks.pub
 foks ctl start
-foks signup
+foks signup         # or: foks login
 ```
 
-Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+Add a provider and store a value through the hidden prompt:
 
 ```toml
-[providers]
-foks = { type = "foks", prefix = "/fnox/" }
-
-[secrets]
-DATABASE_URL = { provider = "foks", value = "DATABASE_URL" }
+[providers.foks]
+type = "foks"
+prefix = "/fnox/"
 ```
 
 ```sh
-# Store a secret and read it back
-fnox set DATABASE_URL "postgres://..." --provider foks
-fnox get DATABASE_URL
-```
-
-## Prerequisites
-
-- The [`foks` CLI](https://foks.pub) on your `PATH`
-- A running FOKS agent (`foks ctl start`)
-- A FOKS account, either on the [hosted service](https://foks.app) or your own server
-
-## Installation
-
-```bash
-# macOS (Homebrew)
-brew install foks
-
-# Debian / Ubuntu
-curl -fsSL https://pkgs.foks.pub/install.sh | sh
-apt-get install foks
-
-# Fedora
-curl -fsSL https://pkgs.foks.pub/install.sh | sh
-dnf install foks
-
-# Arch Linux (AUR)
-yay -Sy go-foks
-
-# Windows
-winget install foks
-
-# Static binary (any platform)
-curl -fsSL https://pkgs.foks.pub/install-static.sh | sh
-```
-
-See [foks.pub](https://foks.pub) for the most up-to-date instructions.
-
-## Setup
-
-### 1. Start the agent
-
-The `foks` CLI talks to a long-running agent that holds your keys in memory (similar to `ssh-agent`). Start it once per machine; it persists across logins via launchd / systemd / the Windows Registry.
-
-```bash
-foks ctl start
-```
-
-### 2. Sign up or log in
-
-```bash
-foks signup    # new user
-foks login     # existing user, new device
-```
-
-### 3. (Optional) create a team for shared secrets
-
-If you want to share secrets with teammates, create a FOKS team:
-
-```bash
-foks team create my-team
-foks team add my-team alice
-```
-
-Each team has its own KV namespace.
-
-### 4. Configure the provider
-
-```toml
-[providers]
-foks = { type = "foks", prefix = "/fnox/" }
-```
-
-**Configuration options** (all optional):
-
-- `prefix` — Path prefix prepended to every key (must be absolute, e.g. `/fnox/` or `/apps/myapp/`). FOKS rejects relative paths; if you forget the leading `/`, the provider adds it for you.
-- `team` — A FOKS team name. When set, fnox passes `--team <name>` to every `foks kv` invocation, so secrets read and write to that team's namespace instead of your personal one.
-- `home` — A custom FOKS home directory, passed through as `--home`. Relative paths are resolved from the config file that declares the provider. Falls back to `FNOX_FOKS_HOME` / `FOKS_HOME` if not set.
-- `host` — The FOKS server hostname (e.g. `foks.app` or your self-hosted server). Required for non-interactive bot-token auth (see [CI/CD](#cicd)). Falls back to `FNOX_FOKS_HOST` / `FOKS_HOST`.
-- `bot_token` — A FOKS bot token for non-interactive auth (CI). Almost always you want to leave this unset and supply it via the `FOKS_BOT_TOKEN` env var instead, so it isn't checked into your config. Also accepts `FNOX_FOKS_BOT_TOKEN`.
-
-## Referencing secrets
-
-```toml
-[secrets]
-DATABASE_URL = { provider = "foks", value = "DATABASE_URL" }
-API_KEY      = { provider = "foks", value = "API_KEY" }
-```
-
-The `value` is the key path within the FOKS KV store, joined with the provider's `prefix`. With `prefix = "/fnox/"`, `value = "DATABASE_URL"` resolves to `foks kv get /fnox/DATABASE_URL`.
-
-## Usage
-
-```bash
-# Store a secret (FOKS encrypts it client-side before upload)
-fnox set DATABASE_URL "postgres://..." --provider foks
-
-# Fetch it
-fnox get DATABASE_URL
-
-# Run a command with secrets injected as env vars
+fnox set DATABASE_URL --provider foks
+fnox provider test foks
 fnox exec -- npm start
 ```
 
-## Personal vs team secrets
+`fnox set` writes the key `/fnox/DATABASE_URL` and adds `DATABASE_URL = { provider = "foks", value = "DATABASE_URL" }` to `fnox.toml`.
 
-Use named provider instances to mix personal and team-scoped secrets in the same config:
+## Authentication
 
-```toml
-[providers]
-me  = { type = "foks", prefix = "/fnox/" }
-ops = { type = "foks", prefix = "/fnox/", team = "ops" }
+The `foks` CLI talks to a long-running agent that holds your keys, similar to `ssh-agent`. fnox uses whatever user the agent has active. When the agent is not running or no user is logged in, fnox reports an authentication error and, in an interactive terminal, offers to run `foks ctl start`. Change that command with [`auth_command`](/reference/configuration#auth-command).
 
-[secrets]
-PERSONAL_TOKEN = { provider = "me",  value = "github-token" }
-DATABASE_URL   = { provider = "ops", value = "db/primary" }
-DEPLOY_KEY     = { provider = "ops", value = "deploy/key" }
-```
+### CI {#cicd}
 
-`PERSONAL_TOKEN` is read from your personal namespace; the rest are read from the `ops` team's namespace and stay accessible to teammates.
+In non-interactive environments, let fnox log in with a FOKS bot token. On the first authentication failure, fnox runs `foks bot use --host <host>` with the bot token, then retries the command. It tries this once per provider per run.
 
-## CI/CD {#cicd}
-
-For non-interactive environments, configure the provider with a `host` and let fnox handle authentication via a FOKS bot token. On the first auth failure, the provider runs `foks bot use --host <host>` with the token from the `FOKS_BOT_TOKEN` env var, then transparently retries.
-
-Setup:
-
-1. Create a [bot token](https://docs.foks.pub) for the user or team the runner should act as.
-2. Add the token to your CI provider's secret store as `FOKS_BOT_TOKEN`.
-3. Set `host` in the provider config (or `FOKS_HOST` env var).
+1. Create a [bot token](https://docs.foks.pub) for the user or team the runner acts as.
+2. Store it in the CI secret store as `FOKS_BOT_TOKEN`.
+3. Set `host` in the provider, or `FOKS_HOST` in the job.
 
 ```toml
-# fnox.toml
-[providers]
-foks = { type = "foks", prefix = "/fnox/", team = "ops", host = "foks.app" }
-
-[secrets]
-DATABASE_URL = { provider = "foks", value = "DATABASE_URL" }
+[providers.foks]
+type = "foks"
+prefix = "/fnox/"
+team = "ops"
+host = "foks.app"
 ```
 
 ```yaml
-# .github/workflows/deploy.yml
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    env:
-      FOKS_BOT_TOKEN: ${{ secrets.FOKS_BOT_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-      - run: brew install foks
-      - run: foks ctl start
-      - run: fnox exec -- ./deploy.sh
+- run: foks ctl start
+- run: fnox exec -- ./deploy.sh
+  env:
+    FOKS_BOT_TOKEN: ${{ secrets.FOKS_BOT_TOKEN }}
 ```
 
-If you'd rather keep `host` out of `fnox.toml`, set it via `FOKS_HOST` in the workflow env. Likewise, `bot_token` can live in the config (encrypted with a bootstrap provider like `age`) instead of the env var, but the env var is usually simpler.
+Without a host, fnox skips the bot login and logs a warning.
 
-## Usage notes
+## Configuration
 
-The provider invokes the FOKS CLI and requires its local agent. Personal and team namespaces are selected by provider configuration. CI needs the host and a bot-token bootstrap.
+| Field       | Required | Default                                      | Description                                                                                                         |
+| ----------- | -------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `prefix`    | No       |                                              | Path prepended to every key. Made absolute if you omit the leading `/`.                                             |
+| `team`      | No       | Personal namespace                           | FOKS team, passed as `--team`. Reads and writes use that team's namespace.                                          |
+| `home`      | No       | `FNOX_FOKS_HOME`, then `FOKS_HOME`           | FOKS home directory, passed as `--home`. Relative paths resolve against the config file that declares the provider. |
+| `host`      | No       | `FNOX_FOKS_HOST`, then `FOKS_HOST`           | FOKS server for bot-token login, such as `foks.app`.                                                                |
+| `bot_token` | No       | `FNOX_FOKS_BOT_TOKEN`, then `FOKS_BOT_TOKEN` | Bot token for non-interactive login. Prefer the environment variable over committing it.                            |
+
+Every field accepts `{ secret = "NAME" }` to take its value from another fnox secret. The options shared by all providers, `auth_command` and `daemon_cache`, are in the [configuration reference](/reference/configuration#provider-configuration).
+
+## Reference formats
+
+A secret's `value` is a key path. fnox joins it to the provider's `prefix` with a single `/` and makes the result absolute.
+
+| Provider `prefix`  | `value`        | Key fnox reads       |
+| ------------------ | -------------- | -------------------- |
+| (none)             | `DATABASE_URL` | `/DATABASE_URL`      |
+| `/fnox/` or `fnox` | `DATABASE_URL` | `/fnox/DATABASE_URL` |
+| `/fnox/`           | `db/primary`   | `/fnox/db/primary`   |
+
+A value that holds JSON can be narrowed with [`json_path`](/reference/configuration#json-path).
+
+`fnox set` overwrites an existing key and creates missing parent directories. The value goes to `foks kv put` on standard input, not on the command line.
+
+## Personal and team secrets
+
+Use one provider instance per namespace to mix personal and team secrets:
+
+```toml
+[providers]
+me = { type = "foks", prefix = "/fnox/" }
+ops = { type = "foks", prefix = "/fnox/", team = "ops" }
+
+[secrets]
+GITHUB_TOKEN = { provider = "me", value = "github-token" }
+DATABASE_URL = { provider = "ops", value = "db/primary" }
+```
+
+`GITHUB_TOKEN` comes from your personal namespace. `DATABASE_URL` comes from the `ops` team's namespace, which its members can also read.
 
 ## Troubleshooting
 
-### "could not connect to the FOKS agent"
+### Could not connect to the FOKS agent
 
-Start the agent and try again:
+Start the agent and check it:
 
-```bash
+```sh
 foks ctl start
 foks ctl status
 ```
 
-### "no logged-in user" / "not logged in"
+### Not logged in, or user is locked
 
-Sign up or log in:
-
-```bash
-foks signup    # new account
-foks login     # existing account
-```
+Run `foks login`. For a bot, reload the token with `foks bot use --host <host>` and check that the host matches the server that issued the token.
 
 ### Secret not found
 
-List the keys to confirm the path is what you expect:
+List keys to confirm the composed path, adding `--team` when the provider sets one:
 
-```bash
-foks kv ls /
-foks kv ls /fnox/   # if you set prefix = "/fnox/"
+```sh
+foks kv ls /fnox/
+foks kv ls --team ops /fnox/
 ```
 
-If you set a `team` in your provider config, scope the listing to the team:
+## See also
 
-```bash
-foks kv ls --team my-team /
-```
-
-## Next steps
-
-- [HashiCorp Vault](/providers/vault) — Closest comparable self-hosted alternative
-- [password-store](/providers/password-store) — GPG-based local alternative
-- [Real-World Example](/guide/dev-to-production) — Complete setup walkthrough
+- [HashiCorp Vault](/providers/vault): a self-hosted alternative.
+- [password-store](/providers/password-store): GPG-encrypted files you sync yourself.
+- [CI/CD](/guide/ci): supply bot tokens to non-interactive jobs.

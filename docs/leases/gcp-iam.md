@@ -1,79 +1,45 @@
 ---
-description: "Impersonate a Google Cloud service account to create a temporary access token for a command."
+description: "Impersonate a Google Cloud service account with fnox and inject a short-lived OAuth2 access token into commands."
 ---
 
 # GCP IAM
 
-The `gcp-iam` lease backend calls the [IAM Credentials API](https://cloud.google.com/iam/docs/reference/credentials/rest/v1/projects.serviceAccounts/generateAccessToken) to generate a short-lived OAuth2 access token by impersonating a service account.
+The `gcp-iam` lease backend impersonates a service account through the [IAM Credentials API](https://cloud.google.com/iam/docs/reference/credentials/rest/v1/projects.serviceAccounts/generateAccessToken) and injects the resulting access token into `fnox exec`. Use it to run `gcloud` or API calls as a service account without handing out its key.
 
-## Configuration
+|              |                                                                     |
+| ------------ | ------------------------------------------------------------------- |
+| Config type  | `gcp-iam`                                                           |
+| Produces     | `CLOUDSDK_AUTH_ACCESS_TOKEN` (configurable with `env_var`)          |
+| Max duration | 1 hour                                                              |
+| Revocation   | None; tokens expire on their own                                    |
+| Needs        | Google credentials with Service Account Token Creator on the target |
+
+## Quick start
 
 ```toml
 [leases.gcp]
 type = "gcp-iam"
-service_account_email = "my-sa@my-project.iam.gserviceaccount.com"
+service_account_email = "deployer@my-project.iam.gserviceaccount.com"
 duration = "1h"
 ```
 
-| Field                   | Required | Description                                                                       |
-| ----------------------- | -------- | --------------------------------------------------------------------------------- |
-| `service_account_email` | Yes      | Service account to impersonate                                                    |
-| `scopes`                | No       | OAuth2 scopes (default: `["https://www.googleapis.com/auth/cloud-platform"]`)     |
-| `env_var`               | No       | Environment variable name for the token (default: `"CLOUDSDK_AUTH_ACCESS_TOKEN"`) |
-| `duration`              | No       | Lease duration (e.g., `"1h"`, `"30m"`; default: `"15m"`)                          |
-
-## Prerequisites
-
-The backend needs GCP credentials to call the IAM Credentials API. fnox looks for them in this order:
-
-1. `GOOGLE_APPLICATION_CREDENTIALS` environment variable (path to service account JSON)
-2. `GCP_SERVICE_ACCOUNT_KEY` environment variable
-3. `~/.config/gcloud/application_default_credentials.json` (from `gcloud auth application-default login`)
-
-If none are found, fnox prints:
-
-```text
-GCP credentials not found. Run 'gcloud auth application-default login' or set GOOGLE_APPLICATION_CREDENTIALS.
+```sh
+gcloud auth application-default login
+fnox exec -- gcloud storage ls
 ```
 
-## Credentials produced
+`gcloud` reads `CLOUDSDK_AUTH_ACCESS_TOKEN` directly. Other tools and client libraries generally do not read an access token from the environment; set `env_var` and pass the value to them explicitly.
 
-| Environment Variable         | Description         |
-| ---------------------------- | ------------------- |
-| `CLOUDSDK_AUTH_ACCESS_TOKEN` | OAuth2 access token |
+## Bootstrap credentials
 
-The default `CLOUDSDK_AUTH_ACCESS_TOKEN` is used by the `gcloud` CLI. For a custom application, configure an environment variable and explicitly pass its value to the application's authentication library; do not assume every Google Cloud SDK reads an OAuth token from the environment.
+fnox gets the caller's token through Google's credential discovery, in this order: a service-account key file named by `GOOGLE_APPLICATION_CREDENTIALS`, the application-default credentials file from `gcloud auth application-default login`, the metadata server, then the `gcloud` CLI.
 
-```toml
-# Field within [leases.gcp]
-env_var = "MY_GCP_ACCESS_TOKEN"
-```
+Before creating a lease, fnox checks that one of these exists, and skips the lease otherwise:
 
-## Limits
+- `GOOGLE_APPLICATION_CREDENTIALS` is set
+- `gcloud/application_default_credentials.json` exists in the platform config directory (`~/.config/gcloud/` on Linux)
 
-- **Max duration:** 1 hour for this backend
-- **Revocation:** No-op — tokens expire automatically
-
-## IAM setup
-
-The calling identity needs the **Service Account Token Creator** role on the target service account:
-
-```bash
-gcloud iam service-accounts add-iam-policy-binding \
-  my-sa@my-project.iam.gserviceaccount.com \
-  --member="user:you@example.com" \
-  --role="roles/iam.serviceAccountTokenCreator"
-```
-
-The IAM Credentials API must be enabled:
-
-```bash
-gcloud services enable iamcredentials.googleapis.com --project=my-project
-```
-
-## Examples
-
-### With stored credentials
+To keep a service-account key in a provider, store the JSON as a secret with `as_file = true`. fnox writes it to a temporary file for lease creation and points `GOOGLE_APPLICATION_CREDENTIALS` at it; `env = false` keeps it out of the command:
 
 ```toml
 [providers.op]
@@ -82,39 +48,47 @@ vault = "Development"
 
 [secrets]
 GOOGLE_APPLICATION_CREDENTIALS = { provider = "op", value = "GCP SA/key file", as_file = true, env = false }
-
-[leases.gcp]
-type = "gcp-iam"
-service_account_email = "my-sa@my-project.iam.gserviceaccount.com"
-duration = "1h"
 ```
 
-```bash
-fnox exec -- gcloud storage ls
+## Configuration
+
+| Field                   | Required | Default                                              | Description                               |
+| ----------------------- | -------- | ---------------------------------------------------- | ----------------------------------------- |
+| `service_account_email` | Yes      | none                                                 | Service account to impersonate.           |
+| `scopes`                | No       | `["https://www.googleapis.com/auth/cloud-platform"]` | OAuth2 scopes for the impersonated token. |
+| `env_var`               | No       | `"CLOUDSDK_AUTH_ACCESS_TOKEN"`                       | Variable that receives the token.         |
+| `duration`              | No       | `"15m"`                                              | Token lifetime, at most `"1h"`.           |
+
+`scopes` limits what the leased token can do. The caller's own token always uses the `cloud-platform` scope to call the IAM Credentials API.
+
+## Permissions
+
+The calling identity needs `roles/iam.serviceAccountTokenCreator` on the target service account, and the IAM Credentials API must be enabled in the project:
+
+```sh
+gcloud iam service-accounts add-iam-policy-binding \
+  deployer@my-project.iam.gserviceaccount.com \
+  --member="user:you@example.com" \
+  --role="roles/iam.serviceAccountTokenCreator"
+gcloud services enable iamcredentials.googleapis.com --project=my-project
 ```
 
-### With gcloud login
+## Troubleshooting
 
-```bash
-gcloud auth application-default login
+### GCP credentials not found
 
-# fnox picks up ADC automatically
-fnox exec -- gcloud storage ls
-```
+Neither check above passed. Run `gcloud auth application-default login`, or set `GOOGLE_APPLICATION_CREDENTIALS` to a service-account key file. Under `fnox exec`, the lease is skipped with this warning unless a cached lease is still valid.
 
-### Custom scopes
+### Permission denied impersonating the service account
 
-```toml
-[leases.gcp]
-type = "gcp-iam"
-service_account_email = "my-sa@my-project.iam.gserviceaccount.com"
-scopes = [
-  "https://www.googleapis.com/auth/cloud-platform",
-  "https://www.googleapis.com/auth/bigquery"
-]
-```
+The caller lacks Service Account Token Creator on the target, or the IAM Credentials API is disabled. See [Permissions](#permissions).
+
+### Lease duration exceeds maximum
+
+`duration` is longer than one hour. Set it to `"1h"` or less.
 
 ## See also
 
-- [Credential Leases](/guide/leases) — overview and approaches
-- [GCP Secret Manager provider](/providers/gcp-sm) — for storing secrets in GCP
+- [Credential leases](/guide/leases): how leases are cached, reused and revoked.
+- [Google Cloud Secret Manager](/providers/gcp-sm): store secrets in Google Cloud and read them with the same credentials.
+- [Lease commands](/cli/lease): create, list and revoke leases.

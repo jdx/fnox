@@ -1,14 +1,21 @@
 ---
-description: "Use plaintext defaults for non-sensitive settings and understand what fnox writes when no provider is selected."
+description: "Keep non-sensitive settings as plaintext in fnox.toml, or read values from an unencrypted .env, JSON, YAML, or TOML file."
 ---
 
-# Plaintext defaults
+# Plain text
 
-Use plaintext for non-sensitive settings such as log levels, ports, and public URLs. Plaintext values are readable by anyone with access to the config file.
+The `plain` provider returns values without encryption: either the `value` written in `fnox.toml`, or a key looked up in an unencrypted file. Use it for non-sensitive settings such as log levels, ports, and public URLs. Anyone who can read the file can read the values.
 
-## Default values
+|                     |                                                   |
+| ------------------- | ------------------------------------------------- |
+| Config type         | `plain`                                           |
+| Storage             | Plaintext in config, or a local file              |
+| Writes (`fnox set`) | Yes, into `fnox.toml`; No (read-only) with `file` |
+| Requires            | Nothing                                           |
 
-A secret can provide a default without a provider:
+## Quick start
+
+For a public setting, a `default` with no provider is usually simplest:
 
 ```toml
 [secrets]
@@ -19,9 +26,7 @@ API_URL = { default = "http://localhost:3000" }
 
 `fnox set` also writes a plaintext default when neither the secret nor the configuration selects a provider. To encrypt a value, configure an [encryption provider](/providers/overview#encryption-in-your-config) first.
 
-## Explicit plain provider
-
-The `plain` provider returns `value` unchanged:
+When a test or configuration needs a provider-backed value without encryption, use the `plain` provider. It returns `value` unchanged:
 
 ```toml
 [providers.plain]
@@ -31,11 +36,18 @@ type = "plain"
 LOG_LEVEL = { provider = "plain", value = "debug" }
 ```
 
-Use this when a test or configuration needs a provider-backed value without encryption. A `default` is usually simpler for public settings.
+## Configuration
 
-## Reading from a plaintext file
+| Field    | Required    | Default | Description                                                              |
+| -------- | ----------- | ------- | ------------------------------------------------------------------------ |
+| `file`   | No          | None    | Plaintext file to read values from. Requires `format`.                   |
+| `format` | With `file` | None    | File format: `env`, `shell`, `json`, `yaml`, or `toml`. Requires `file`. |
 
-Set `file` and `format` to look values up in an unencrypted file instead. Each secret's `value` names the key to read from that file:
+Relative `file` paths resolve against the config file that declares the provider, and `~` expands to your home directory. Both fields accept `{ secret = "NAME" }`. Every provider also accepts [`auth_command` and `daemon_cache`](/reference/configuration#provider-configuration).
+
+## Read from a plaintext file
+
+With `file` and `format` set, each secret's `value` names the key to read from that file:
 
 ```toml
 [providers.dotenv]
@@ -57,7 +69,7 @@ SERVICE_TOKEN='abc$123'
 
 `fnox get API_TOKEN` prints `abc$123`.
 
-`format` is required whenever `file` is set; fnox does not guess it from the file name. It accepts every format that [`fnox export`](/cli/export) writes:
+fnox does not guess the format from the file name. `format` accepts every format that [`fnox export`](/cli/export) writes:
 
 | `format` | Contents                                                                            |
 | -------- | ----------------------------------------------------------------------------------- |
@@ -66,8 +78,6 @@ SERVICE_TOKEN='abc$123'
 | `json`   | An object of keys to values, or the `{"secrets": {...}}` document from fnox export. |
 | `yaml`   | A mapping of keys to values, or the `secrets:` document from fnox export.           |
 | `toml`   | A table of keys to values, or the `[secrets]` document from fnox export.            |
-
-Relative `file` paths resolve against the config file that declares the provider, and `~` expands to your home directory.
 
 fnox reads the file when it resolves secrets from the provider, and secrets resolved together share a single read. The file may be read more than once in a single command, for example when one secret's `default` refers to another secret from the same file.
 
@@ -92,12 +102,22 @@ If the provider lookup fails, fnox can use the default. The default is plaintext
 
 ## Review before committing
 
-Check both `value` and `default` fields. Setting `provider = "age"` does not encrypt a string you manually type into `value`; let `fnox set` generate the ciphertext.
+Check both `value` and `default` fields. Setting `provider = "age"` does not encrypt a string you type into `value` by hand; let `fnox set` generate the ciphertext.
 
 [`fnox scan`](/cli/scan) can flag potential secrets in files. It is a heuristic scan, not a guarantee that a repository or its history is free of secrets. If a real credential was exposed, rotate it at its source.
 
-## Next steps
+## Troubleshooting
 
-- [Age quick start](/guide/quick-start): store sensitive values with encryption.
-- [Missing secrets and defaults](/guide/missing-secrets): choose when to fall back, warn, or fail.
+### `file` requires `format` to be set
+
+Add `format` with one of `env`, `shell`, `json`, `yaml`, or `toml`. Setting `format` without `file` is also an error.
+
+### Key not found in the file
+
+Check that the key is defined in the file and spelled as in `value`, then run `fnox provider test dotenv`, which reads and parses the file.
+
+## See also
+
+- [Quick start](/guide/quick-start): store sensitive values with encryption.
+- [Missing secrets](/guide/missing-secrets): choose when to fall back, warn, or fail.
 - [Configuration reference](/reference/configuration#default): interpolate defaults and set provider references.
