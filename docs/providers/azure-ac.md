@@ -21,6 +21,8 @@ Sign in with `az login` and create a key-value in the store:
 az appconfig kv set --name myapp-config --key api-url --value "https://api.example.com" --auth-mode login
 ```
 
+Creating the key needs write access, such as the **App Configuration Data Owner** role. fnox itself only reads, so the [Data Reader role](#permissions) is enough to run it.
+
 Add the provider and a reference:
 
 ```toml
