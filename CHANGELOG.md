@@ -1,6 +1,25 @@
 # Changelog
 
-## [1.40.0](https://github.com/jdx/fnox/compare/v1.39.0..v1.40.0) - 2026-10-13
+## [1.41.0](https://github.com/jdx/fnox/compare/v1.40.0..v1.41.0) - 2026-10-17
+
+### 🚀 Features
+
+- **(gopass)** add gopass provider by [@jdx](https://github.com/jdx) in [#980](https://github.com/jdx/fnox/pull/980)
+
+### 🐛 Bug Fixes
+
+- **(exec)** stop resolving env = false secrets nothing needs by [@andersonkrs](https://github.com/andersonkrs) in [#984](https://github.com/jdx/fnox/pull/984)
+
+### 🔍 Other Changes
+
+- pin perf-runner image by tag and stop automerging it by [@jdx](https://github.com/jdx) in [#982](https://github.com/jdx/fnox/pull/982)
+
+### 📦️ Dependency Updates
+
+- update rust crate xx to v2.6.3 by [@renovate[bot]](https://github.com/renovate[bot]) in [#983](https://github.com/jdx/fnox/pull/983)
+- update jdx crates by [@renovate[bot]](https://github.com/renovate[bot]) in [#985](https://github.com/jdx/fnox/pull/985)
+
+## [1.40.0](https://github.com/jdx/fnox/compare/v1.39.0..v1.40.0) - 2026-10-16
 
 ### 🚀 Features
 
@@ -12,19 +31,25 @@
 
 ### 🐛 Bug Fixes
 
+- **(age)** prompt for a hardware PIN once per command by [@andersonkrs](https://github.com/andersonkrs) in [#978](https://github.com/jdx/fnox/pull/978)
 - **(provider)** honor Azure service principal env vars and add managed identity by [@jdx](https://github.com/jdx) in [#964](https://github.com/jdx/fnox/pull/964)
 - **(release)** wait for each crate on crates.io and finish partial publishes by [@jdx](https://github.com/jdx) in [#946](https://github.com/jdx/fnox/pull/946)
+- **(set)** read piped stdin when --description is given by [@jdx](https://github.com/jdx) in [#976](https://github.com/jdx/fnox/pull/976)
 
 ### 🛡️ Security
 
+- **(daemon)** support Windows via a named-pipe transport by [@jdx](https://github.com/jdx) in [#974](https://github.com/jdx/fnox/pull/974)
 - **(deps)** update github actions by [@renovate[bot]](https://github.com/renovate[bot]) in [#970](https://github.com/jdx/fnox/pull/970)
+- **(deps)** bump jactionlint to 2.2.0 and mbx to 1.24.0 by [@jdx](https://github.com/jdx) in [#971](https://github.com/jdx/fnox/pull/971)
 - require zizmor in final by [@jdx](https://github.com/jdx) in [#961](https://github.com/jdx/fnox/pull/961)
+- replace prettier with oxfmt by [@jdx](https://github.com/jdx) in [#977](https://github.com/jdx/fnox/pull/977)
 
 ### 🔍 Other Changes
 
 - **(ci)** lint workflows with jactionlint by [@jdx](https://github.com/jdx) in [#957](https://github.com/jdx/fnox/pull/957)
 - **(ci)** switch to jactionlint v2 and drop zizmor by [@jdx](https://github.com/jdx) in [#962](https://github.com/jdx/fnox/pull/962)
 - **(release)** remove unused Claude Code CLI install from release-plz by [@jdx](https://github.com/jdx) in [#956](https://github.com/jdx/fnox/pull/956)
+- **(release)** shorten minimum release age to 2 days by [@jdx](https://github.com/jdx) in [0661aa3](https://github.com/jdx/fnox/commit/0661aa380911993af5317ad5163cbf011a530295)
 - use Namespace cache instead of rust-cache on Namespace runners by [@jdx](https://github.com/jdx) in [#947](https://github.com/jdx/fnox/pull/947)
 - label release PRs with release by [@jdx](https://github.com/jdx) in [#950](https://github.com/jdx/fnox/pull/950)
 - add shared release fix notifications by [@jdx](https://github.com/jdx) in [#958](https://github.com/jdx/fnox/pull/958)
@@ -36,10 +61,11 @@
 - update rust crate usage-rs to v7 by [@jdx](https://github.com/jdx) in [#960](https://github.com/jdx/fnox/pull/960)
 - lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#966](https://github.com/jdx/fnox/pull/966)
 - update dependency hk to latest by [@renovate[bot]](https://github.com/renovate[bot]) in [#969](https://github.com/jdx/fnox/pull/969)
+- update rust crate usage-rs to v7.0.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#972](https://github.com/jdx/fnox/pull/972)
 
 ### New Contributors
 
-- @andersonkrs made their first contribution in [#965](https://github.com/jdx/fnox/pull/965)
+- @andersonkrs made their first contribution in [#978](https://github.com/jdx/fnox/pull/978)
 - @joshbode made their first contribution in [#954](https://github.com/jdx/fnox/pull/954)
 
 ## [1.39.0](https://github.com/jdx/fnox/compare/v1.38.1..v1.39.0) - 2026-10-06
