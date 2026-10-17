@@ -59,6 +59,8 @@ For each secret, fnox uses the first of these that produces a value:
 3. **Default.** The `default` field. It is also used if the provider lookup fails. Defaults can [reference other secrets](/reference/configuration#default).
 4. **Environment.** An environment variable of the same name that is already set.
 
+A provider _error_ (access denied, network failure, item not found) is different from having no value. If the provider fails and the secret has no `default`, fnox reports the error and does not fall back to the environment.
+
 If none of these produces a value, the secret's [`if_missing`](/guide/missing-secrets) policy decides whether the command fails, warns, or continues.
 
 ## Three kinds of cache

@@ -37,13 +37,14 @@ See the [provider catalog](/providers/overview) for every supported backend.
 
 ## How your program gets the secrets
 
-| You want to…                                                                    | Use                                                              |
-| ------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| Run one command with secrets                                                    | [`fnox exec`](/guide/running-commands)                           |
-| Load secrets into your shell when you `cd` into a project                       | [Shell integration](/guide/shell-integration)                    |
-| Give a tool a file path instead of a value (for example, a service-account key) | [`as_file = true`](/guide/running-commands#secrets-as-files)     |
-| Let an AI agent call an API without seeing the key                              | [Credential proxy](/guide/proxy) or the [MCP server](/guide/mcp) |
-| Hand short-lived cloud credentials to a command                                 | [Credential leases](/guide/leases)                               |
+| You want to…                                                                    | Use                                                          |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Run one command with secrets                                                    | [`fnox exec`](/guide/running-commands)                       |
+| Load secrets into your shell when you `cd` into a project                       | [Shell integration](/guide/shell-integration)                |
+| Give a tool a file path instead of a value (for example, a service-account key) | [`as_file = true`](/guide/running-commands#secrets-as-files) |
+| Let an AI agent call an API without seeing the key                              | [Credential proxy](/guide/proxy)                             |
+| Let an AI agent fetch only the secrets you allow                                | [MCP server](/guide/mcp)                                     |
+| Hand short-lived cloud credentials to a command                                 | [Credential leases](/guide/leases)                           |
 
 ## When remote vaults are slow
 
