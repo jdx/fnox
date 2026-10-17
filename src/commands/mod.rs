@@ -76,8 +76,9 @@ pub mod version;
 pub struct Cli {
     /// Config file to load
     ///
-    /// The bare names `fnox.toml` and `.fnox.toml` search the current directory
-    /// and its parents. Any other path loads only that file, its imports, and the
+    /// The bare names `fnox.toml`, `.fnox.toml`, `fnox.local.toml`, and
+    /// `.fnox.local.toml` search the current directory and its parents. Any other
+    /// path, such as `./fnox.toml`, loads only that file, its imports, and the
     /// global config.
     #[usage(short, long, default = "fnox.toml", global)]
     pub config: PathBuf,

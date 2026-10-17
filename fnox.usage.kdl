@@ -31,7 +31,7 @@ flag "-c --config" help="Config file to load" global=#true default=fnox.toml {
     long_help #"""
 Config file to load
 
-The bare names `fnox.toml` and `.fnox.toml` search the current directory and its parents. Any other path loads only that file, its imports, and the global config.
+The bare names `fnox.toml`, `.fnox.toml`, `fnox.local.toml`, and `.fnox.local.toml` search the current directory and its parents. Any other path, such as `./fnox.toml`, loads only that file, its imports, and the global config.
 """#
     arg <CONFIG>
 }
@@ -97,7 +97,9 @@ cmd check help="Verify that the active profile's secrets resolve, without printi
     long_help #"""
 Verify that the active profile's secrets resolve, without printing them
 
-Validates the config, then resolves each secret that uses a provider and whose `if_missing` is `error`. Secrets with no value source and references to unknown providers are reported as well. Values are never printed.
+Validates the config, then resolves each secret that uses a provider and whose `if_missing` is `error`. References to unknown providers are reported as well. Values are never printed.
+
+Secrets without a provider are not resolved. One with no default is reported only when its own `if_missing` is `error` or `warn`; `--if-missing` and `FNOX_IF_MISSING` do not apply to it, so an environment-only secret that is unset can still pass.
 
 `--all` also resolves secrets whose `if_missing` is `warn` or `ignore`; their failures are reported as warnings, or not at all for `ignore`. Problems go to stderr, and fnox exits 1 when any error is found.
 """#
@@ -109,7 +111,7 @@ See also:
     flag "-a --all" help="Also resolve secrets whose `if_missing` is `warn` or `ignore`"
     flag "-h --help" help="Print help" action=help builtin=#true
     example "fnox check --all" header="Resolve every secret in the active profile"
-    example "fnox check --if-missing error" header="Fail on any secret that does not resolve"
+    example "fnox check --if-missing error" header="Treat every provider-backed secret as required"
     example "fnox -P production check --all" header="Check another profile"
 }
 cmd ci-redact help="Redact secrets in CI/CD output (GitHub Actions mask)" hide=#true {
@@ -1124,7 +1126,7 @@ config {
         example "fnox exec --profile dev --no-defaults -- ./my-app"
         example "FNOX_NO_DEFAULTS=true fnox exec --profile dev -- ./my-app"
     }
-    prop "shell_integration_output" type="string" default="normal" since="0.1.0" help="How much shell integration prints when it loads or unloads secrets." long_help="How much shell integration prints when it loads or unloads secrets.\n\n`none` prints nothing, `normal` prints the keys that were loaded or unloaded, and `debug` also explains what the hook did, including why it exited early. Any other value means `normal`." {
+    prop "shell_integration_output" type="string" default="normal" since="0.1.0" help="How much shell integration prints when it loads or unloads secrets." long_help="How much shell integration prints when it loads or unloads secrets.\n\n`none` prints nothing, `normal` prints the keys that were loaded or unloaded, and `debug` also explains what the hook did, including why it exited early. `off`, `false`, and `0` also mean `none`; `verbose` also means `debug`. Any other value means `normal`." {
         env "FNOX_SHELL_OUTPUT"
         example "export FNOX_SHELL_OUTPUT=none"
         example "export FNOX_SHELL_OUTPUT=debug"

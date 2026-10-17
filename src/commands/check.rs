@@ -8,8 +8,13 @@ use crate::commands::Cli;
 /// Verify that the active profile's secrets resolve, without printing them
 ///
 /// Validates the config, then resolves each secret that uses a provider and
-/// whose `if_missing` is `error`. Secrets with no value source and references to
-/// unknown providers are reported as well. Values are never printed.
+/// whose `if_missing` is `error`. References to unknown providers are reported
+/// as well. Values are never printed.
+///
+/// Secrets without a provider are not resolved. One with no default is
+/// reported only when its own `if_missing` is `error` or `warn`; `--if-missing`
+/// and `FNOX_IF_MISSING` do not apply to it, so an environment-only secret that
+/// is unset can still pass.
 ///
 /// `--all` also resolves secrets whose `if_missing` is `warn` or `ignore`; their
 /// failures are reported as warnings, or not at all for `ignore`. Problems go to
@@ -23,7 +28,7 @@ use crate::commands::Cli;
     ),
     example(
         "fnox check --if-missing error",
-        header = "Fail on any secret that does not resolve"
+        header = "Treat every provider-backed secret as required"
     ),
     example("fnox -P production check --all", header = "Check another profile"),
     after_long_help = "See also:\n- Troubleshooting: https://fnox.jdx.dev/guide/troubleshooting\n- Missing secrets: https://fnox.jdx.dev/guide/missing-secrets"

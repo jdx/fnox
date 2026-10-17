@@ -35,7 +35,7 @@ The upward search stops at the first directory whose config sets [`root = true`]
 
 ### Explicit config paths
 
-`-c, --config` with a path other than the bare name `fnox.toml` or `.fnox.toml` turns off directory discovery. fnox loads that file, the files it imports, and the global config, without parent directories, profile files, or local overrides. To load a file with no global layer, point `FNOX_CONFIG_DIR` at a directory without a `config.toml`:
+`-c, --config` with a path other than the bare names `fnox.toml`, `.fnox.toml`, `fnox.local.toml`, or `.fnox.local.toml` turns off directory discovery. Write `./fnox.local.toml` to load a local file on its own. fnox loads that file, the files it imports, and the global config, without parent directories, profile files, or local overrides. To load a file with no global layer, point `FNOX_CONFIG_DIR` at a directory without a `config.toml`:
 
 ```sh
 FNOX_CONFIG_DIR=/nonexistent fnox -c ./ci.toml get MY_SECRET
@@ -89,11 +89,11 @@ DATABASE_URL = { provider = "aws", value = "database-url" }
 | `age_key_file`     | path                            | none     | Accepted for compatibility; has no effect.                                           |
 | `providers`        | table                           | `{}`     | [Provider instances](#providers), by name.                                           |
 | `secrets`          | table                           | `{}`     | [Secrets](#secrets) for the default profile, by name.                                |
-| `profiles`         | table                           | `{}`     | [Named profiles](#profile-configuration).                                                         |
+| `profiles`         | table                           | `{}`     | [Named profiles](#profile-configuration).                                            |
 | `leases`           | table                           | `{}`     | [Lease backends](#lease-backend-settings), by name.                                  |
 | `plugins`          | table                           | `{}`     | [Lua plugin sources](#plugins), by name.                                             |
 | `daemon`           | table                           | none     | [Daemon settings](#daemon).                                                          |
-| `mcp`              | table                           | none     | [MCP server settings](#mcp-server-settings).                                                         |
+| `mcp`              | table                           | none     | [MCP server settings](#mcp-server-settings).                                         |
 | `proxy`            | table                           | none     | [Credential proxy rules](#proxy).                                                    |
 
 ### `default_provider`

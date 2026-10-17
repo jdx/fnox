@@ -72,8 +72,9 @@ pub struct SettingsData {
     /// How much shell integration prints when it loads or unloads secrets.
     ///
     /// `none` prints nothing, `normal` prints the keys that were loaded or unloaded, and
-    /// `debug` also explains what the hook did, including why it exited early. Any other
-    /// value means `normal`.
+    /// `debug` also explains what the hook did, including why it exited early. `off`,
+    /// `false`, and `0` also mean `none`; `verbose` also means `debug`. Any other value
+    /// means `normal`.
     #[usage(
         env = "FNOX_SHELL_OUTPUT",
         default = "normal",

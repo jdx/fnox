@@ -127,7 +127,7 @@ FNOX_PROFILE=aws,staging fnox exec -- ./deploy.sh
 
 How much shell integration prints when it loads or unloads secrets.
 
-`none` prints nothing, `normal` prints the keys that were loaded or unloaded, and `debug` also explains what the hook did, including why it exited early. Any other value means `normal`.
+`none` prints nothing, `normal` prints the keys that were loaded or unloaded, and `debug` also explains what the hook did, including why it exited early. `off`, `false`, and `0` also mean `none`; `verbose` also means `debug`. Any other value means `normal`.
 
 ```sh
 export FNOX_SHELL_OUTPUT=none

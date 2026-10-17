@@ -29,7 +29,7 @@ Put fnox options before the `--` that starts a child command, as in `fnox -P pro
 
 - **`-c --config <CONFIG>`** — Config file to load
 
-  The bare names `fnox.toml` and `.fnox.toml` search the current directory and its parents. Any other path loads only that file, its imports, and the global config.
+  The bare names `fnox.toml`, `.fnox.toml`, `fnox.local.toml`, and `.fnox.local.toml` search the current directory and its parents. Any other path, such as `./fnox.toml`, loads only that file, its imports, and the global config.
 
   **Default:** `fnox.toml`
 
