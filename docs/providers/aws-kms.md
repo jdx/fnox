@@ -17,10 +17,11 @@ Use `aws-kms` to keep encrypted secrets in git under an AWS-managed key. To keep
 
 ## Quick start
 
-Create a symmetric encryption key, or use an existing one:
+Create a symmetric encryption key and give it an alias, or use an existing key:
 
 ```sh
-aws kms create-key --description "fnox secrets encryption"
+KEY_ID=$(aws kms create-key --description "fnox secrets encryption" --query KeyMetadata.KeyId --output text)
+aws kms create-alias --alias-name alias/fnox --target-key-id "$KEY_ID"
 ```
 
 Add the provider with the key's ID, ARN, or alias:
