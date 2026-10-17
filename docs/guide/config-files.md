@@ -1,188 +1,148 @@
 ---
-description: "Share configuration across directories and understand how global, project, profile, and local files override one another."
+description: "How fnox finds and merges config files: parent directories, profile files, gitignored local overrides, the global config, and imports."
 ---
 
-# Hierarchical configuration
+# Config files
 
-fnox searches parent directories for `fnox.toml`, `.fnox.toml`, and `.config/fnox.toml` files and merges them. Use this to share providers and common settings across a monorepo.
+fnox merges several files into one configuration. This lets a monorepo share providers at the root, each service add its own secrets, and each developer keep personal overrides out of git.
 
-## How it works
+## Which files are loaded
 
-fnox builds configuration by merging multiple sources, starting with the global config and walking up the directory tree:
+From the current directory, fnox walks up toward the filesystem root and loads every config it finds, plus your global config. Later files override earlier ones:
+
+| Order | File                                                 | Committed?     |
+| ----- | ---------------------------------------------------- | -------------- |
+| 1     | `~/.config/fnox/config.toml` (global)                | No, personal   |
+| 2     | `fnox.toml` in the outermost parent directory        | Yes            |
+| 3     | `fnox.<profile>.toml` there, for each active profile | Yes            |
+| 4     | `fnox.local.toml` there                              | No, gitignored |
+| …     | the same three files in each directory closer to you |                |
+| last  | `fnox.local.toml` in the current directory           | No, gitignored |
+
+So a closer directory always beats its parent, and within one directory `fnox.local.toml` beats profile files, which beat `fnox.toml`.
+
+Each file can also be hidden (`.fnox.toml`, `.fnox.local.toml`) or live in a `.config/` directory (`.config/fnox.toml`, `.config/fnox.staging.toml`, `.config/fnox.local.toml`). They work the same. If a directory has more than one form, `fnox.toml` loads first, then `.fnox.toml`, then `.config/fnox.toml`.
+
+See what is loaded, in order:
+
+```sh
+fnox config-files
+fnox list --sources   # which file defined each secret
+```
+
+## A monorepo example
 
 ```text
 project/
-├── fnox.toml              # Root config
-├── fnox.local.toml        # Root local overrides (optional)
+├── fnox.toml            # providers and shared secrets
 └── services/
     ├── api/
-    │   ├── fnox.toml      # API config
-    │   └── fnox.local.toml # API local overrides (optional)
+    │   └── fnox.toml    # API secrets
     └── worker/
-        ├── fnox.toml      # Worker config
-        └── fnox.local.toml # Worker local overrides (optional)
+        └── fnox.toml    # worker secrets
 ```
-
-When you run fnox from `project/services/api/`, the merge order is (lowest to highest priority):
-
-1. Loads `~/.config/fnox/config.toml` (global config, if exists)
-2. Loads `project/fnox.toml` (parent)
-3. Loads `project/fnox.local.toml` (parent local, if exists)
-4. Loads `project/services/api/fnox.toml` (current)
-5. Loads `project/services/api/fnox.local.toml` (current local, if exists)
-
-Each level merges the main config, any profile-specific file (`fnox.<profile>.toml`), and local overrides, with child configs taking precedence over parent configs, and profile and local files taking precedence over the main config at the same level. If more than one location exists at a level, root-level files load first, then hidden files, then `.config` files. Global config provides the base layer available to all projects.
-
-## Example setup
-
-### Root config (common secrets)
 
 ```toml
 # project/fnox.toml
-
-[providers]
-age = { type = "age", recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"] }
+[providers.age]
+type = "age"
+recipients = ["age1..."]
 
 [secrets]
 LOG_LEVEL = { default = "info" }
-ENVIRONMENT = { default = "development" }
-JWT_SECRET = { provider = "age", value = "encrypted-shared-jwt..." }
+JWT_SECRET = { provider = "age", value = "YWdl..." }
 ```
-
-### API service config
 
 ```toml
 # project/services/api/fnox.toml
-
 [secrets]
-API_PORT = { default = "3000" }
-DATABASE_URL = { provider = "age", value = "encrypted-api-db..." }
-LOG_LEVEL = { default = "debug" }  # Override shared secret - more verbose for API during dev
+DATABASE_URL = { provider = "age", value = "YWdl..." }
+LOG_LEVEL = { default = "debug" }
 ```
 
-### Worker service config
+From `services/api/`, fnox sees `JWT_SECRET` from the root, `DATABASE_URL` from the API, and `LOG_LEVEL = "debug"`. From `services/worker/`, `LOG_LEVEL` stays `info`.
+
+To stop the upward search at a directory, set `root = true` in its `fnox.toml`. The global config still loads.
+
+## Merging rules
+
+- **Secrets** merge by name. A closer file's definition of `DATABASE_URL` replaces the whole definition from a parent.
+- **Providers** merge by name, and each provider is replaced as a unit. A `[providers.age]` in `fnox.local.toml` does not add fields to the committed `[providers.age]`; it replaces it. Give personal providers a distinct name such as `sync-age`.
+- **Top-level settings** such as `default_provider` and `if_missing` take the closest value.
+
+## Local overrides {#local-overrides}
+
+`fnox.local.toml` is for things that should never be committed: personal values, a local database URL, or the encrypted cache that [`fnox sync`](/guide/sync) writes. Add it to `.gitignore`:
+
+```sh
+printf 'fnox.local.toml\n.fnox.local.toml\n' >> .gitignore
+```
 
 ```toml
-# project/services/worker/fnox.toml
-
+# fnox.local.toml
 [secrets]
-QUEUE_URL = { provider = "age", value = "encrypted-queue-url..." }
-WORKER_CONCURRENCY = { default = "4" }
+DATABASE_URL = { default = "postgresql://localhost/alice_dev" }
 ```
 
-## Resulting secrets
+`default` values are plaintext. For a sensitive personal value, use an encryption provider or a vault reference here too.
 
-The comments below summarize the resolved configuration; the CLI displays a table of names, providers, and sources.
+A top-level secret in `fnox.local.toml` overrides that secret in **every** profile, including ones defined under `[profiles.*]` or in a profile file. To override a secret for one profile only, put it under `[profiles.<name>.secrets]` in `fnox.local.toml`.
 
-From `project/services/api/`:
+## Profile files {#profile-files}
 
-```bash
-fnox list --sources
-# ENVIRONMENT=development       (from root)
-# JWT_SECRET=***                (from root)
-# LOG_LEVEL=debug               (from api, overrides root)
-# API_PORT=3000                 (from api)
-# DATABASE_URL=***              (from api)
+`fnox.staging.toml` is loaded only when the `staging` profile is active. Top-level providers, secrets, leases, and `default_provider` in it are treated as part of the `staging` profile, so you can write it like a plain `fnox.toml`. It is a way to keep each environment in its own committed file instead of `[profiles.*]` sections. With several active profiles, their files load in the order the profiles were given. `fnox.default.toml` is never loaded.
+
+## Global config {#global-config}
+
+`~/.config/fnox/config.toml` (or `$FNOX_CONFIG_DIR/config.toml`) is the base layer for every project. Use it for personal providers, such as the age key behind your sync cache, and for tokens you want everywhere:
+
+```sh
+mkdir -p ~/.config/fnox
+age-keygen -o ~/.config/fnox/age.txt     # prints your public key (age1...)
+fnox provider add sync-age age --global  # writes a placeholder recipient
+"${EDITOR:-vi}" ~/.config/fnox/config.toml # replace "age1..." with your public key
+fnox set GITHUB_TOKEN --global --provider sync-age
 ```
 
-From `project/services/worker/`:
+## Imports
 
-```bash
-fnox list --sources
-# ENVIRONMENT=development       (from root)
-# JWT_SECRET=***                (from root)
-# LOG_LEVEL=info                (from root)
-# QUEUE_URL=***                 (from worker)
-# WORKER_CONCURRENCY=4          (from worker)
-```
-
-## Imports vs hierarchy
-
-**Hierarchy** (automatic):
-
-- Walks up directory tree
-- Merges all `fnox.toml` and `fnox.local.toml` files found
-- Child configs override parent configs
-- Local configs override main configs at the same level
-
-**Imports** (explicit):
+`import` pulls other files into a config explicitly, regardless of directory. Paths are relative to the importing file, and the importing file's own settings win:
 
 ```toml
-# Explicit file imports
-import = ["./shared/secrets.toml", "./envs/dev.toml"]
+import = ["../shared/providers.toml", "./envs/common.toml"]
 ```
 
-Use hierarchy for location-based config (monorepos). Use imports for cross-cutting concerns (shared secret bundles).
+Use directory layering for "everything under this folder", and imports for a shared bundle that several unrelated projects use.
 
-## Local overrides
+## Use one file only
 
-Use `fnox.local.toml` for user-specific overrides without committing to version control:
+Pass an explicit path to skip the directory search and local overrides:
 
-```bash
-# Add to .gitignore
-echo "fnox.local.toml" >> .gitignore
-
-# Create local overrides
-cat > fnox.local.toml << 'EOF'
-[secrets.DATABASE_URL]
-default = "postgresql://localhost/mylocal"
-
-[secrets.DEBUG_MODE]
-default = "true"
-EOF
+```sh
+fnox -c ./fnox.toml check --all
 ```
 
-**Common use cases:**
+fnox then loads that file, its imports, and the global config. This is useful for checking exactly what is committed.
 
-- Override team secrets for local development
-- Personal API keys and tokens
-- Machine-specific configuration (laptop vs desktop)
-- Testing different providers locally
+## Secret references in provider config {#secret-references-in-provider-config}
 
-**Tips:**
+Many provider fields accept `{ secret = "NAME" }` instead of a literal, so a provider's own credential can be stored as a secret:
 
-- Always add `fnox.local.toml` to `.gitignore`
-- Provide a `fnox.local.toml.example` (committed) for team guidance
-- Use explicit paths to bypass parent configs and local overrides: `fnox -c ./fnox.toml get SECRET` (the file's own `import`s and the global config are still loaded)
-- `fnox sync --local-file` writes an adjacent local override for discovered configs, including `.config/fnox.toml`.
+```toml
+[providers.vault]
+type = "vault"
+address = "https://vault.example.com:8200"
+token = { secret = "VAULT_TOKEN" }
 
-## Global configuration
-
-For machine-wide secrets that apply to all projects, use the global config. Configure the `age` provider and its recipient before running these write commands:
-
-```bash
-# Initialize global config
-fnox init --global
-
-# Add secrets to global config
-fnox set GITHUB_TOKEN --global --provider age
-fnox set NPM_TOKEN --global --provider age
-
-# Add providers to global config
-fnox provider add age age --global
+[secrets]
+VAULT_TOKEN = { provider = "age", value = "YWdl...", env = false }
+DATABASE_URL = { provider = "vault", value = "database/password" }
 ```
 
-**Location**: `~/.config/fnox/config.toml` (customizable via `FNOX_CONFIG_DIR`)
+fnox resolves `VAULT_TOKEN` first (from config, then the environment), then uses it to configure the provider. Cycles are reported as errors.
 
-**Use cases**:
+## See also
 
-- Personal API tokens (GitHub, npm, etc.)
-- Machine-specific credentials
-- Default encryption provider available everywhere
-
-**Note**: Global config is always loaded, even when `root = true` stops parent directory recursion or `-c/--config` points at an explicit file.
-
-## Tips
-
-- **Keep root config minimal:** Only shared providers and secrets
-- **Service-specific secrets in subdirectories:** Each service manages its own
-- **Use `fnox.local.toml` for development:** Personal overrides without affecting team
-- **Use global config for personal tokens:** Machine-wide secrets like `GITHUB_TOKEN`
-- **Profile inheritance works too:** Each level can define profile-specific overrides
-- **Use `root = true` to stop recursion:** Prevents searching parent directories (but not global config)
-- **Use a project config directory to declutter:** `.config/fnox.toml` works the same as `fnox.toml`; profile and local variants such as `.config/fnox.staging.toml` and `.config/fnox.local.toml` are supported too. Initialize a new one with `fnox --config .config/fnox.toml init`.
-
-## Next steps
-
-- [Profiles](/guide/profiles) - Multi-environment management
-- [Real-World Example](/guide/dev-to-production) - See it all together
+- [Profiles](/guide/profiles): environment overrides within a file.
+- [Configuration reference](/reference/configuration): every field.
+- [Troubleshooting](/guide/troubleshooting#the-wrong-value-is-being-loaded): when the wrong value wins.

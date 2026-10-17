@@ -1,70 +1,29 @@
 ---
-description: "Connect a 1Password vault, create a personal encrypted cache with age, and use it from your shell."
+description: "Reference secrets that already live in 1Password or another vault, commit only the references, and cache values locally for fast offline reads."
 ---
 
-# Connect a vault and cache locally
+# Use an existing vault
 
-Keep secrets in 1Password, commit their references in `fnox.toml`, and use `fnox sync` to create an encrypted personal cache. Daily reads then use your local age key without contacting 1Password. This is [the golden path](/guide/what-is-fnox#the-golden-path) for teams with an existing vault.
+If your team already keeps secrets in a vault, fnox doesn't move them. You commit _references_ to vault items in `fnox.toml`, and each person reads them with their own vault login. Optionally, `fnox sync` keeps an encrypted copy on your machine so everyday commands don't need the vault at all.
 
-The same recipe works with any remote provider — swap 1Password for [AWS Secrets Manager](/providers/aws-sm), [Bitwarden](/providers/bitwarden), [Doppler](/providers/doppler), or any other [remote provider](/providers/overview).
+This page uses 1Password. The same steps work with any remote provider, such as [Bitwarden](/providers/bitwarden), [AWS Secrets Manager](/providers/aws-sm), [HashiCorp Vault](/providers/vault), or [Doppler](/providers/doppler); only the provider block and reference format change.
 
-## Prerequisites
+## Before you start
 
 - [fnox installed](/guide/installation)
-- The [1Password CLI](https://developer.1password.com/docs/cli/) installed and signed in (`op signin`)
-- `age` installed (`brew install age` / `apt install age`)
+- The [1Password CLI](https://developer.1password.com/docs/cli/get-started/) (`op`) installed and signed in. Check with `op vault list`.
 
-## Step 1: one-time machine setup
+## 1. Reference your vault items
 
-Create a personal age key and a machine-wide `sync-age` provider. You do this once per machine, then reuse it in every project:
+In your project, create `fnox.toml`:
 
-```bash
-# Generate your personal age key
-mkdir -p ~/.config/fnox
-age-keygen -o ~/.config/fnox/age.txt
-
-# Add the machine-wide provider, then replace its age1... placeholder
-# with the "public key:" line from ~/.config/fnox/age.txt
-fnox provider add sync-age age --global
-"${EDITOR:-vi}" "${FNOX_CONFIG_DIR:-$HOME/.config/fnox}/config.toml"
-```
-
-Point the provider at your key file so decryption works without any environment setup:
-
-```toml
-# ~/.config/fnox/config.toml
-[providers.sync-age]
-type = "age"
-recipients = ["age1..."] # your public key
-key_file = "~/.config/fnox/age.txt"
-```
-
-::: tip Harden it with hardware
-Instead of a key file on disk, the age key can live in [Apple's Secure Enclave (Touch ID)](/guide/sync#apple-secure-enclave-touch-id), a [YubiKey](/guide/sync#yubikey), or a [TPM or FIDO2 token](/guide/sync#tpm-and-fido2). Only this step changes — everything below stays the same.
-:::
-
-## Step 2: put secrets in 1Password
-
-The vault is the single source of truth. Use existing items, or create them:
-
-```bash
-op item create --category=login --vault=Engineering --title=Database \
-  'url=postgresql://db.example.com/myapp'
-op item create --category=login --vault=Engineering --title=Stripe \
-  'secret-key=sk_live_...'
-```
-
-## Step 3: commit references in fnox.TOML
-
-In the project, reference the 1Password items — no secret material goes into git:
-
-```bash
-cd my-api
+```sh
 fnox init --skip-wizard
 ```
 
+Add a provider for the vault and a reference for each secret:
+
 ```toml
-# fnox.toml (committed)
 [providers.op]
 type = "1password"
 vault = "Engineering"
@@ -74,68 +33,74 @@ DATABASE_URL = { provider = "op", value = "Database/url" }
 STRIPE_KEY = { provider = "op", value = "Stripe/secret-key" }
 ```
 
-Make sure the local cache never gets committed:
+`op` is a name you choose for this provider; `1password` is its type. `Database/url` means "the `url` field of the `Database` item". See [1Password reference formats](/providers/1password#reference-formats) for the full syntax.
 
-```bash
-echo "fnox.local.toml" >> .gitignore
-git add fnox.toml .gitignore
-git commit -m "chore: add fnox config"
+## 2. Check and run
+
+```sh
+fnox provider test op
+fnox check --all
+fnox exec -- npm start
 ```
 
-## Step 4: sync
+Each command reads from 1Password through `op`, so you may be asked to authenticate. Commit `fnox.toml`: it contains vault, item, and field names, but no secret values.
 
-Pull every secret from 1Password once and cache it locally, re-encrypted to your personal age key:
+At this point you have a working setup. The rest of this page is optional.
 
-```bash
+## 3. Cache locally (optional)
+
+Reading from a remote vault on every command can be slow, and it doesn't work offline. `fnox sync` fetches every value once and stores it in a gitignored `fnox.local.toml`, encrypted to a personal age key. Later reads decrypt locally.
+
+Create your personal key and a machine-wide provider for it. You do this once per machine:
+
+```sh
+mkdir -p ~/.config/fnox
+age-keygen -o ~/.config/fnox/age.txt   # prints your public key (age1...)
+fnox provider add sync-age age --global
+```
+
+Then edit `~/.config/fnox/config.toml` so the provider uses your public key:
+
+```toml
+[providers.sync-age]
+type = "age"
+recipients = ["age1..."] # your public key
+```
+
+Now sync the project:
+
+```sh
+echo "fnox.local.toml" >> .gitignore
 fnox sync --provider sync-age --local-file
 ```
 
-This writes the encrypted values into the gitignored `fnox.local.toml`. From now on fnox decrypts locally instead of calling 1Password — see [Syncing Secrets Locally](/guide/sync) for exactly what this looks like on disk.
+`fnox exec`, `fnox get`, and shell integration now read the cached values without calling 1Password.
 
-## Step 5: enable shell integration
+The cache does not refresh by itself. After a value changes in the vault, sync again:
 
-```bash
-# Add to your shell profile
-eval "$(fnox activate zsh)"
-```
-
-For other shells and startup file locations, see [shell integration](/guide/shell-integration). Entering the project now loads secrets from the local cache:
-
-```bash
-~/projects $ cd my-api
-fnox: +2 DATABASE_URL, STRIPE_KEY
-~/projects/my-api $
-```
-
-## Keep the cache current
-
-The cache does not refresh automatically. After a secret changes in 1Password, re-sync:
-
-```bash
+```sh
 fnox sync --provider sync-age --local-file --force
 ```
 
-**Onboard a teammate:** grant vault access, then have them complete Step 1 on their machine, clone the repo, and run Step 4. Their cache is encrypted to their own key — nothing is shared except the vault.
+The [sync guide](/guide/sync) explains what is written where, and how to keep the age key in hardware such as Touch ID, a YubiKey, or a TPM. If your vault authenticates with a long-lived service token rather than an interactive login, keep that token in the same cache too: see [protect the vault credential](/guide/sync#protect-the-vault-credential).
 
-**Add a secret:** Add the item to 1Password, add its reference to `fnox.toml`, commit, and everyone re-syncs.
+## 4. Load secrets in your shell (optional)
 
-## What about CI?
-
-In CI, authenticate to the vault directly. Install fnox and the 1Password CLI before this workflow step:
-
-```yaml
-# GitHub Actions
-- name: Run tests
-  env:
-    OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
-  run: fnox exec -- npm test
+```sh
+# ~/.zshrc
+eval "$(fnox activate zsh)"
 ```
 
-The committed `fnox.toml` references resolve straight from 1Password using the [service account token](https://developer.1password.com/docs/service-accounts/). Alternatively, keep a separate set of [age-encrypted secrets in git](/providers/age) for CI.
+Secrets now load when you `cd` into the project and unload when you leave. See [shell integration](/guide/shell-integration) for other shells.
 
-## Next steps
+## Working as a team
 
-- [Syncing Secrets Locally](/guide/sync) - Everything `fnox sync` can do, including hardware-backed keys
-- [Real-World Setup](/guide/dev-to-production) - An alternative workflow with encrypted secrets in git
-- [Profiles](/guide/profiles) - Different secrets for dev, staging, and production
-- [Credential Leases](/guide/leases) - Short-lived credentials from long-lived masters
+- **New teammate:** grant them vault access. They clone the repo and run `fnox exec` (and, if they want a cache, steps 3–4 on their machine). Nothing else is shared.
+- **New secret:** add the item to the vault, add its reference to `fnox.toml`, and commit. Anyone with a cache syncs again.
+- **CI:** authenticate to the vault with a service account and run `fnox exec` as usual. See [CI/CD](/guide/ci).
+
+## See also
+
+- [Provider catalog](/providers/overview): every supported vault and its reference format.
+- [Profiles](/guide/profiles): read a different vault for production.
+- [Local sync cache](/guide/sync): hardware-backed keys and sync options.

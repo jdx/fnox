@@ -1,199 +1,111 @@
 ---
-description: "Cache vault secrets with a personal encryption provider. Learn where the cache lives, how to refresh it, and when it works offline."
+description: "Cache vault secrets on your machine, encrypted to a personal key, for fast offline reads. Learn what fnox sync writes, how to refresh it, and how to use hardware keys."
 ---
 
-# Syncing secrets locally
+# Local sync cache
 
-`fnox sync` fetches secrets from their source providers and re-encrypts them with a target encryption provider. Use `--local-file` to write the cache to `fnox.local.toml`, and add that file to `.gitignore`. A local target such as age supports offline reads; a cloud KMS target still needs its cloud API.
+`fnox sync` reads every secret from its provider once and stores a copy in your gitignored `fnox.local.toml`, encrypted to a key only you hold. Later commands decrypt that copy locally instead of calling the vault.
 
-::: tip The golden path
-This is the recommended way to use fnox: secrets live in a remote vault like
-1Password, `fnox.toml` only holds references to them, and `fnox sync` caches
-them locally under a personal age key. The vault stays the single source of
-truth, but day-to-day reads use local decryption and work offline. To go further, keep
-the age key in hardware:
-[Apple's Secure Enclave (Touch ID)](#apple-secure-enclave-touch-id), a
-[YubiKey](#yubikey), or a [TPM or FIDO2 token](#tpm-and-fido2).
+Use it when your secrets live in a remote vault and you want reads that are fast, work offline, and don't trigger an authentication prompt each time. The vault stays the source of truth; the cache is a snapshot you refresh when values change.
 
-For a zero-to-working walkthrough of the whole setup, see
-[Golden Path Setup](/guide/existing-vault).
-:::
+## Set up
 
-## Why sync?
+You need a project whose `fnox.toml` references a vault (see [use an existing vault](/guide/existing-vault)) and a personal encryption provider. Create the provider once per machine in your global config:
 
-A typical team setup stores secrets in a shared provider like 1Password:
+```sh
+mkdir -p ~/.config/fnox
+age-keygen -o ~/.config/fnox/age.txt     # prints your public key
+fnox provider add sync-age age --global  # then set recipients in ~/.config/fnox/config.toml
+```
 
 ```toml
-# fnox.toml (committed)
-[providers.op]
-type = "1password"
-vault = "Engineering"
-
-[secrets]
-DATABASE_URL = { provider = "op", value = "Database/url" }
-STRIPE_KEY = { provider = "op", value = "Stripe/secret-key" }
-SENDGRID_KEY = { provider = "op", value = "SendGrid/api-key" }
-```
-
-Without a fnox cache, reads query the provider. Its own CLI may cache data or require a network connection and an authentication prompt. Sync gives fnox a local encrypted copy that it can read independently of the source provider.
-
-With `fnox sync`, you pull those values once and cache them locally with a fast, offline encryption provider:
-
-```bash
-fnox sync --provider sync-age --local-file
-```
-
-Subsequent reads decrypt with age locally. The cache stays unchanged until you run sync again.
-
-## How it works
-
-1. fnox reads all secrets from your merged config
-2. It resolves each secret's plaintext value from the original remote provider
-3. It encrypts each value with the target provider (e.g., age)
-4. It writes the encrypted cache into `fnox.local.toml` as a `sync` field on each secret
-
-When fnox resolves secrets, it checks for a `sync` field first and uses that instead of calling the original provider.
-
-## Basic usage
-
-```bash
-# Set up a personal age provider if you haven't already. Replace the generated
-# age1... placeholder in ~/.config/fnox/config.toml with your recipient.
-fnox provider add sync-age age --global
-
-# Sync everything to fnox.local.toml
-fnox sync --provider sync-age --local-file
-```
-
-Using a distinct name such as `sync-age` avoids colliding with an `age` provider
-that the project may already use for secrets encrypted in git. The global
-provider is machine-scoped and can be reused across checkouts. You can instead
-put the personal provider in `fnox.local.toml` if each project needs different
-settings.
-
-`--local-file` requires normal config discovery: run from the project directory with the default config name. It rejects explicit paths such as `-c ./fnox.toml`, because those paths would not load the adjacent local cache on later reads.
-
-### Preview what would be synced
-
-```bash
-fnox sync --provider sync-age --local-file --dry-run
-```
-
-### Sync specific secrets
-
-```bash
-fnox sync --provider sync-age --local-file DATABASE_URL STRIPE_KEY
-```
-
-### Sync only secrets from a specific source
-
-```bash
-fnox sync --provider sync-age --local-file --source op
-```
-
-### Filter by regex pattern
-
-```bash
-fnox sync --provider sync-age --local-file --filter "^DB_"
-```
-
-## What it looks like
-
-If you keep the personal provider in the project-local override, your files
-look like this after syncing. With the global setup above, the
-`[providers.sync-age]` block lives in `~/.config/fnox/config.toml` instead.
-
-**fnox.toml** (committed — the source of truth):
-
-```toml
-[providers.op]
-type = "1password"
-vault = "Engineering"
-
-[secrets]
-DATABASE_URL = { provider = "op", value = "Database/url" }
-STRIPE_KEY = { provider = "op", value = "Stripe/secret-key" }
-SENDGRID_KEY = { provider = "op", value = "SendGrid/api-key" }
-```
-
-**fnox.local.toml** (gitignored — your local cache):
-
-```toml
+# ~/.config/fnox/config.toml
 [providers.sync-age]
 type = "age"
-recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
+recipients = ["age1..."] # your public key
+```
 
+Use a distinct name such as `sync-age`. A project may already have a provider called `age` for secrets shared through git, and a local provider with the same name would [replace it](/guide/config-files#merging-rules).
+
+Then, in the project:
+
+```sh
+echo "fnox.local.toml" >> .gitignore
+fnox sync --provider sync-age --local-file
+```
+
+## What it writes
+
+`fnox.toml` is unchanged:
+
+```toml
+[providers.op]
+type = "1password"
+vault = "Engineering"
+
+[secrets]
+DATABASE_URL = { provider = "op", value = "Database/url" }
+```
+
+`fnox.local.toml` gets each secret's definition plus a `sync` entry holding the ciphertext:
+
+```toml
 [secrets.DATABASE_URL]
 provider = "op"
 value = "Database/url"
 
 [secrets.DATABASE_URL.sync]
 provider = "sync-age"
-value = "YWdlLWVuY3J5cHRpb24..."
-
-[secrets.STRIPE_KEY]
-provider = "op"
-value = "Stripe/secret-key"
-
-[secrets.STRIPE_KEY.sync]
-provider = "sync-age"
-value = "YWdlLWVuY3J5cHRpb24..."
-
-[secrets.SENDGRID_KEY]
-provider = "op"
-value = "SendGrid/api-key"
-
-[secrets.SENDGRID_KEY.sync]
-provider = "sync-age"
-value = "YWdlLWVuY3J5cHRpb24..."
+value = "YWdl..." # ciphertext, abbreviated
 ```
 
-The ciphertext above is abbreviated; let `fnox sync` generate the actual values. The original provider references remain in `fnox.toml`. When you `cd` into the project, fnox sees the `sync` field and decrypts with age locally — no 1Password calls.
+When fnox resolves a secret that has a `sync` entry, it decrypts that and never calls the original provider.
 
-::: tip Sync cache vs. encrypted secrets in git
-A sync cache is personal: its recipient belongs in the global config or
-`fnox.local.toml`.
+## Refresh
 
-For age-encrypted secrets committed to git, commit a separate provider whose
-recipients include the whole team and CI. After changing that list, run
-`fnox reencrypt --provider <team-provider-name>` to update the committed
-ciphertext.
+The cache never updates itself. After a value changes in the vault:
 
-Provider definitions are replaced as a unit when configs are merged. A local
-`[providers.age]` does not deep-merge with a committed provider of the same
-name, so use a distinct name such as `sync-age` for the cache.
-:::
+```sh
+fnox sync --provider sync-age --local-file --force
+```
 
-## Hardware-backed decryption
+`--force` skips the confirmation prompt. To refresh only some secrets, name them, or filter:
 
-The sync cache is only as secure as the age key that decrypts it. Rather than
-keeping that key in a plaintext file on disk, you can hold it in hardware
-through an [age plugin](/providers/age#plugin-support). Syncing works the same
-either way; all that changes is the provider's recipient and identity. Secure
-Enclave and TPM keys never leave the machine they were created on, a YubiKey
-travels with you, and FIDO2-HMAC sits somewhere in between (the identity gets
-copied into host memory during decryption).
+```sh
+fnox sync --provider sync-age --local-file DATABASE_URL STRIPE_KEY
+fnox sync --provider sync-age --local-file --source op       # only secrets from provider "op"
+fnox sync --provider sync-age --local-file --filter '^DB_'   # regex on names
+fnox sync --provider sync-age --local-file --dry-run         # preview
+```
 
-### Apple Secure Enclave (Touch ID)
+Run sync from the project directory without `-c`: `--local-file` writes next to the discovered config, and an explicit config path wouldn't load that file on later reads.
 
-On macOS, [age-plugin-se](https://github.com/remko/age-plugin-se) generates the
-age key inside Apple's Secure Enclave. The private key can't be exported, so
-decryption only works on that Mac — and, depending on the access control policy
-you pick at keygen time, only after a Touch ID prompt.
+## Offline use
 
-```bash
-# 1. Install the plugin (must be on PATH)
+A local target such as age decrypts with no network access. A cloud KMS provider also works as a sync target, but then every read needs that cloud's API.
+
+## Hardware-backed keys {#hardware-backed-decryption}
+
+The cache is only as safe as the key that decrypts it. Instead of `age.txt` on disk, you can keep the key in hardware through an [age plugin](/providers/age#plugin-support). Only the provider's recipient and identity file change; syncing works the same.
+
+| Hardware                        | Plugin                                                                                   | Key leaves the device?                 | Works on another machine? |
+| ------------------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------- |
+| Apple Secure Enclave (Touch ID) | [age-plugin-se](https://github.com/remko/age-plugin-se)                                  | No                                     | No                        |
+| YubiKey                         | [age-plugin-yubikey](https://github.com/str4d/age-plugin-yubikey)                        | No                                     | Yes, plug it in           |
+| TPM 2.0                         | [age-plugin-tpm](https://github.com/Foxboron/age-plugin-tpm)                             | No                                     | No                        |
+| FIDO2 key with hmac-secret      | [age-plugin-fido2-hmac](https://github.com/olastor/age-plugin-fido2-hmac) (experimental) | Unwrapped into memory while decrypting | Yes                       |
+
+The plugin binary must be on your `PATH` wherever you decrypt.
+
+### Apple Secure Enclave (Touch ID) {#apple-secure-enclave-touch-id}
+
+Requires macOS 14 or later on a Mac with a Secure Enclave.
+
+```sh
 brew install age-plugin-se
-
-# 2. Generate a hardware-bound identity
-mkdir -p ~/.config/fnox
 age-plugin-se keygen --access-control=any-biometry -o ~/.config/fnox/age-se.txt
-# Public key: age1se1...
+# prints: Public key: age1se1...
 ```
-
-Put the printed `age1se1...` recipient in the provider config. The global
-config is a good home for it, since every project on the machine can then reuse
-the same key:
 
 ```toml
 # ~/.config/fnox/config.toml
@@ -203,118 +115,175 @@ recipients = ["age1se1..."]
 key_file = "~/.config/fnox/age-se.txt"
 ```
 
-Then sync as usual:
+Sync again, and reads now go through the Secure Enclave. Whether you are asked for Touch ID depends on the `--access-control` policy you chose. `age-se.txt` is a reference to the key, not the key itself.
 
-```bash
-fnox sync --provider sync-age --local-file
-```
+If `FNOX_AGE_KEY` is set in your environment, unset it: it takes precedence over `key_file`.
 
-That's it — `fnox get`, `fnox exec`, and shell integration now decrypt the
-cache through the Secure Enclave. Whether you're prompted for Touch ID depends
-on the `--access-control` policy you chose (`any-biometry`,
-`any-biometry-or-passcode`, `none`, …).
+### YubiKey {#yubikey}
 
-::: warning
-`age-se.txt` doesn't contain the private key — it's a reference to the key in
-the Secure Enclave — but treat it like an identity file anyway. If you have
-`FNOX_AGE_KEY` exported, unset it: it takes precedence over the provider's
-`key_file`. Requires macOS 14+ and a Mac with a Secure Enclave.
-:::
-
-### YubiKey
-
-If you use a YubiKey with the [age-plugin-yubikey](https://github.com/str4d/age-plugin-yubikey), syncing works the same way. Your age provider just uses the YubiKey identity:
+With [age-plugin-yubikey](https://github.com/str4d/age-plugin-yubikey) set up, use its recipient and identity:
 
 ```toml
 [providers.sync-age]
 type = "age"
-recipients = ["age1yubikey1q..."]  # YubiKey recipient
+recipients = ["age1yubikey1..."]
+key_file = "~/.config/fnox/age-yubikey.txt" # from age-plugin-yubikey --identity
 ```
 
-```bash
+Decrypting requires the YubiKey to be plugged in.
+
+### TPM and FIDO2 {#tpm-and-fido2}
+
+```sh
+age-plugin-tpm --generate --pin -o ~/.config/fnox/age-tpm.txt
+age-plugin-tpm -y ~/.config/fnox/age-tpm.txt           # public key (age1tag1...)
+
+age-plugin-fido2-hmac -g > ~/.config/fnox/age-fido2.txt # public key is in a comment
+```
+
+Put the public key in `recipients` and the identity file in `key_file`. Identities generated with `--tpm-recipient` use the older `age1tpm1...` form; fnox accepts both.
+
+**Use `--pin` for TPM keys.** Without it, any process running as your user can decrypt with the TPM key: the key can't leave the machine, but nothing stops a stray script or local malware from reading the cache. With a PIN, fnox asks for it:
+
+- once per distinct ciphertext per command. Everything one `fnox sync` run writes shares a single wrapped key, so reading the whole cache costs one prompt. A value stored separately with `fnox set`, such as a [vault token](#protect-the-vault-credential), adds a prompt only when a command needs it.
+- once per daemon session, if the [daemon](/guide/daemon) is on. Values with `daemon_cache = false` still prompt on every command.
+
+::: warning
+age-plugin-tpm also reads the PIN from `AGE_TPM_PIN`. Exporting it in your shell hands the PIN to every process and undoes the protection. Use it only for non-interactive testing.
+:::
+
+### Native YubiKey and FIDO2 providers
+
+fnox also has built-in [`yubikey`](/providers/yubikey) and [`fido2`](/providers/fido2) providers that need no plugin. They derive a symmetric key from the token, so:
+
+- the token must be present for `fnox sync` itself, not only for reads;
+- only that one token can decrypt (no backup recipient);
+- the config is portable: any machine with the token can decrypt.
+
+Age plugins encrypt to a public key, so syncing doesn't touch the hardware and you can list a backup recipient. Pick native providers to avoid installing plugins, or age plugins for backup keys and hardware-free syncing.
+
+## Protect the vault credential {#protect-the-vault-credential}
+
+Some providers authenticate with a long-lived token instead of an interactive login: a Doppler service token, a Vault token, or a Bitwarden Secrets Manager access token. Exporting it in your shell profile puts it in plain text in every process you start, including scripts and coding agents that never need it. Keep it in the same hardware-backed cache instead, and let fnox hand it to the provider.
+
+This example uses Doppler and the PIN-protected TPM key from above. It works with any provider field that accepts [`{ secret = "NAME" }`](/guide/config-files#secret-references-in-provider-config).
+
+```toml
+# ~/.config/fnox/config.toml
+[providers.sync-age]
+type = "age"
+recipients = ["age1tag1..."]
+key_file = "~/.config/fnox/age-tpm.txt"
+```
+
+```toml
+# fnox.toml (committed)
+[providers.doppler]
+type = "doppler"
+project = "my-app"
+config = "dev"
+token = { secret = "DOPPLER_TOKEN" }
+
+[secrets]
+DATABASE_URL = { provider = "doppler", value = "DATABASE_URL" }
+STRIPE_KEY = { provider = "doppler", value = "STRIPE_KEY" }
+```
+
+Store the token in the gitignored local file. fnox prompts for it with hidden input:
+
+```sh
+fnox -c fnox.local.toml set DOPPLER_TOKEN --provider sync-age
+```
+
+Then add `env = false` by hand, so fnox uses the token to reach Doppler but never injects it into your shell or commands:
+
+```toml
+# fnox.local.toml (gitignored)
+[secrets]
+DOPPLER_TOKEN = { provider = "sync-age", value = "YWdl...", env = false } # ciphertext, abbreviated
+```
+
+Finally, sync the project into the same cache:
+
+```sh
 fnox sync --provider sync-age --local-file
 ```
 
-Secrets are encrypted to your YubiKey's age identity, so decrypting the cache
-requires the key to be plugged in. Unlike a Secure Enclave or TPM key, the
-YubiKey isn't tied to one machine: plug it into any machine that has the plugin
-and the identity reference and you can decrypt there too. See [Age Plugin
-Support](/providers/age#plugin-support) for details and other plugins.
+Now everything on disk is ciphertext for a key that can't leave the machine, and the token never enters any environment. Values served from the cache don't decrypt the token at all; it is only used when a secret has to be fetched from Doppler.
 
-### TPM and FIDO2
+If the machine is lost or its TPM is reset, nothing can decrypt the cache or the token. Revoke the token in Doppler, issue a new one, store it again, and sync. The vault is still the source of truth.
 
-No Secure Enclave or YubiKey? Most machines still have some form of hardware
-key storage:
+### Keep production out of the daemon {#keep-production-out-of-the-daemon}
 
-- [age-plugin-tpm](https://github.com/Foxboron/age-plugin-tpm) stores the age
-  key in the TPM 2.0 chip found in most modern laptops. Like the Secure
-  Enclave, the key is stuck to that machine. Current releases produce
-  recipients starting with `age1tag1...`.
-- [age-plugin-fido2-hmac](https://github.com/olastor/age-plugin-fido2-hmac)
-  works with FIDO2 security keys that support the `hmac-secret` extension
-  (recipients start with `age1zdy...`). It's still experimental, and during
-  decryption the age identity gets unwrapped into host memory — anyone who
-  steals it from there can decrypt without the token.
+To keep the [daemon](/guide/daemon)'s single prompt per session for development while requiring the PIN on every production command, give production its own profile and set `daemon_cache = false` on **both** its age provider and its remote provider. The first keeps the decrypted token out of the cache; the second keeps the fetched production values out.
 
-Install the plugin for your platform, then generate an identity:
+::: warning Move the development cache into its own profile first
+A top-level secret in `fnox.local.toml` overrides that secret in every profile (see [local overrides](/guide/config-files#local-overrides)). If the development cache stays under top-level `[secrets]`, `fnox --profile production` reads cached development values instead of fetching from Doppler's production config. Put development under a `development` profile, or run production commands with `--no-defaults`.
+:::
 
-```bash
-# TPM
-age-plugin-tpm --generate -o ~/.config/fnox/age-tpm.txt
-age-plugin-tpm -y ~/.config/fnox/age-tpm.txt
+Development, scoped to a profile:
 
-# FIDO2-HMAC; writes the identity and prints its public key in a comment
-age-plugin-fido2-hmac -g > ~/.config/fnox/age-fido2.txt
+```toml
+# fnox.toml (committed)
+[profiles.development.providers.doppler]
+type = "doppler"
+project = "my-app"
+config = "dev"
+token = { secret = "DOPPLER_TOKEN" }
+
+[profiles.development.secrets]
+DATABASE_URL = { provider = "doppler", value = "DATABASE_URL" }
 ```
 
-Add the resulting recipient to the provider's `recipients`, point `key_file`
-at the identity file, and sync as usual. If the identity must never touch host
-memory, use a YubiKey rather than FIDO2-HMAC.
-
-### Age plugins vs. native hardware providers
-
-fnox also ships native [`yubikey`](/providers/yubikey) and
-[`fido2`](/providers/fido2) providers that skip age entirely: they derive a
-symmetric AES-256-GCM key from the hardware token and can be used as sync
-targets the same way (`fnox sync --provider secure --local-file`). The
-trade-offs:
-
-- **Native providers** need no plugin binary — fnox talks to the token
-  directly — and the config is fully portable: move `fnox.local.toml` to
-  another machine, plug in the same token, and it decrypts. But the encryption
-  is symmetric, so the token must be present (and touched) for `fnox sync`
-  itself, not just for decryption, and only that one token can ever decrypt
-  the cache.
-- **Age plugins** encrypt to a public recipient, so syncing never touches the
-  hardware — only decryption does — and a provider can list several recipients
-  (e.g. a YubiKey plus a backup key). In exchange, the plugin binary must be
-  installed wherever you decrypt.
-
-For a personal sync cache either works well; pick the native providers if you
-don't want to install age plugins, and the age route if you want backup
-recipients or hardware-free syncing.
-
-## Refreshing the cache
-
-When secrets change in the remote provider, re-run sync to update the local cache:
-
-```bash
-fnox sync --provider sync-age --local-file --force
+```sh
+fnox --profile development -c fnox.local.toml set DOPPLER_TOKEN --provider sync-age
+fnox --profile development sync --provider sync-age --local-file
 ```
 
-The `--force` flag skips the confirmation prompt. fnox re-fetches from the original provider and re-encrypts.
+Both land under `[profiles.development.secrets]` in `fnox.local.toml`; add `env = false` to the token as before. Set `FNOX_PROFILE=development` to make it your everyday profile.
 
-## What about CI?
+Production gets its own age provider, remote provider, and token:
 
-CI can read the committed references directly using a service account token or cloud identity. Install fnox and any required provider CLI, then supply authentication through your CI secret store.
+```toml
+# ~/.config/fnox/config.toml
+[providers.prod-age]
+type = "age"
+recipients = ["age1tag1..."]
+key_file = "~/.config/fnox/age-tpm.txt"
+daemon_cache = false
+```
 
-A personal sync cache is usually unnecessary on an ephemeral runner. If you intentionally cache in CI, manage its encryption key, expiry, and refresh policy separately from developers' caches.
+```toml
+# fnox.production.toml (committed)
+[profiles.production.providers.doppler]
+type = "doppler"
+project = "my-app"
+config = "prd"
+token = { secret = "DOPPLER_TOKEN" }
+daemon_cache = false
 
-## Next steps
+[profiles.production.secrets]
+DATABASE_URL = { provider = "doppler", value = "DATABASE_URL" }
+```
 
-- [Golden Path Setup](/guide/existing-vault) - Zero-to-working walkthrough of this workflow
-- [Per-User Daemon](/guide/daemon) - Cache resolved secrets in memory for a session
-- [Import/Export](/guide/import-export) - Migrate secrets between formats
-- [Shell Integration](/guide/shell-integration) - Auto-load secrets on `cd`
-- [Hierarchical Config](/guide/config-files) - Organize configs across directories
-- [Providers](/providers/overview) - All available providers
+```toml
+# fnox.local.toml (gitignored)
+[profiles.production.secrets]
+DOPPLER_TOKEN = { provider = "prod-age", value = "YWdl...", env = false } # ciphertext, abbreviated
+```
+
+Production isn't synced, so each `fnox --profile production exec` asks for the PIN, decrypts the production token, and fetches fresh values from Doppler.
+
+## Sync versus the daemon
+
+Both make remote secrets fast. Sync stores encrypted copies on disk that survive restarts and work offline. The [daemon](/guide/daemon) keeps resolved values in memory for a session, needs no setup beyond turning it on, and forgets everything when it stops. You can use both.
+
+## In CI
+
+Skip it. CI runners are ephemeral and can read the vault directly with a service credential. See [CI/CD](/guide/ci).
+
+## See also
+
+- [Use an existing vault](/guide/existing-vault): the full vault-plus-cache setup.
+- [`fnox sync` reference](/cli/sync): every flag.
+- [age provider](/providers/age): identities, SSH keys, and plugins.

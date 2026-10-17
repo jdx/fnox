@@ -1,61 +1,16 @@
 ---
-description: "Expose selected secrets and command execution through the fnox MCP server, with explicit tool and secret allowlists."
+description: "Run fnox as an MCP server so AI agents can fetch selected secrets or run commands with them, with allowlists for tools and secrets and redacted output."
 ---
 
 # MCP server
 
-`fnox mcp` starts a [Model Context Protocol](https://modelcontextprotocol.io/) server over stdio, allowing AI agents like Claude Code to access secrets without having them directly in the environment.
+`fnox mcp` runs a [Model Context Protocol](https://modelcontextprotocol.io/) server over stdio. An AI agent such as Claude Code connects to it and can ask for secrets, or run a command with secrets injected, instead of finding them in its own environment.
 
-## Access model
+You decide which tools the agent gets and which secrets it can reach.
 
-The server resolves selected secrets on first access and caches them in memory for the session. `get_secret` returns values directly. `exec` runs a command with the allowed secrets and returns its output. Neither tool is an operating-system sandbox; configure the allowlist for the task.
+## Set up
 
-## Quick setup
-
-### 1. Configure secrets normally
-
-```toml
-# fnox.toml
-[providers.op]
-type = "1password"
-vault = "Engineering"
-
-[secrets]
-GITHUB_TOKEN = { provider = "op", value = "GitHub/agent-token", env = "exec" }
-API_KEY = { provider = "op", value = "Service/api-key", env = "exec" }
-```
-
-Authenticate to the provider before starting the MCP server; it runs non-interactively. The values above are references to existing vault items.
-
-### 2. Configure which tools to expose
-
-```toml
-[mcp]
-tools = ["get_secret", "exec"]  # default: both enabled
-```
-
-The `tools` array controls which tools are available to the agent. For example, to only allow executing commands without exposing raw secrets, set `tools = ["exec"]`. To only allow retrieving secrets directly, set `tools = ["get_secret"]`.
-
-### Secret allowlist
-
-By default, all profile secrets are available to the MCP server. You can restrict which secrets are visible:
-
-```toml
-[mcp]
-secrets = ["GITHUB_TOKEN", "NPM_TOKEN"]  # only these are available
-```
-
-When `secrets` is set:
-
-- `get_secret` can only retrieve listed secrets; other names return "not found"
-- `exec` only injects listed secrets as environment variables
-- Unlisted secrets are never resolved (no unnecessary auth prompts)
-
-When `secrets` is omitted, all profile secrets are available (the default).
-
-### 3. Configure your AI agent
-
-For Claude Code, add to `.mcp.json` in your project root:
+Add the server to your agent's MCP config. For Claude Code, create `.mcp.json` in the project:
 
 ```json
 {
@@ -68,46 +23,41 @@ For Claude Code, add to `.mcp.json` in your project root:
 }
 ```
 
-To use a specific profile:
+Use `"args": ["-P", "staging", "mcp"]` to serve a profile. The agent must start the server from the project directory so fnox finds `fnox.toml`, or pass `-c <path>`.
 
-```json
-{
-  "mcpServers": {
-    "fnox": {
-      "command": "fnox",
-      "args": ["-P", "staging", "mcp"]
-    }
-  }
-}
+The server never prompts, so sign in to your providers (for example `op signin`) before starting the agent.
+
+## Choose what the agent can do
+
+```toml
+[mcp]
+tools = ["exec"]                         # default: ["get_secret", "exec"]
+secrets = ["GITHUB_TOKEN", "NPM_TOKEN"]  # default: every secret in the profile
 ```
 
-## Tools
+| Tool         | What the agent gets                                                                                           |
+| ------------ | ------------------------------------------------------------------------------------------------------------- |
+| `get_secret` | The value of one secret, by name.                                                                             |
+| `exec`       | Runs a command with the secrets injected and returns its output, with secret values replaced by `[REDACTED]`. |
 
-### `get_secret`
+`secrets` limits both tools: unlisted secrets are never resolved, injected, or returned. Disabled tools aren't advertised to the agent at all.
 
-Retrieves a single secret by name. The agent provides the secret name (must match a key in your `fnox.toml` secrets section) and receives the resolved value.
+## How it behaves
 
-### `exec`
+- On the first tool call, fnox resolves the allowed secrets in one batch, so you approve one YubiKey touch or SSO prompt per session rather than one per call. `env = false` secrets are resolved only when `get_secret` asks for them.
+- Values stay in the server's memory for the session and are gone when the agent disconnects. `as_file` secrets are written to temporary files for the duration of an `exec` call.
+- `exec` captures output (up to 1 MiB) instead of sharing the terminal, and times out after `exec_timeout_secs` (default 300).
 
-Executes a command with all secrets injected as environment variables. The agent provides a command and arguments, and receives stdout/stderr output. Note that the agent controls the command, so it could run `printenv` or `echo $SECRET` to read injected values — `exec` provides **audit visibility** (you can see what commands were run), not secret isolation.
+## What it does and doesn't protect
 
-Start the MCP client from the project directory so fnox can discover its configuration, or pass an explicit `-c` path in the server arguments.
+`exec` without `get_secret` keeps raw values out of the agent's conversation in normal use, and every command it runs is visible to you. It is **not** isolation: the agent chooses the command, and a command can encode or send a value somewhere. Redaction matches literal values only, so base64 or other transformed output isn't caught. You can turn redaction off with `redact_output = false`, but there's rarely a reason to.
 
-## How it works
+Shell integration is a separate channel. If your interactive shell already has secrets loaded, an agent started from it can read them regardless of `[mcp]`. Set `env = "exec"` to keep secrets out of the shell (see [running commands](/guide/running-commands#choose-which-secrets-reach-a-command)).
 
-1. The MCP server starts in non-interactive mode (no stdin prompts)
-2. On the **first tool call**, all env-injectable profile secrets (`env = true` or `env = "exec"`) are resolved in a single batch — this amortizes the cost of YubiKey taps or SSO prompts. Secrets configured with `env = false` are resolved on-demand when individually requested via `get_secret`.
-3. Resolved secrets are cached in process memory for the session
-4. Subsequent tool calls use the cache
-5. When the agent disconnects (EOF), the process exits and all secrets are cleared from memory
+For stronger isolation, give the agent API access through the [credential proxy](/guide/proxy) instead, and run it in a sandbox.
 
-## Security considerations
+## See also
 
-- Secrets live only in process memory — except for `as_file = true` secrets, which are written to ephemeral temp files for subprocess injection and deleted when the command completes
-- The `exec` tool captures stdout/stderr (does not inherit stdio, which would corrupt the JSON-RPC stream) and caps output at 1 MiB to prevent unbounded memory usage
-- Non-interactive mode prevents provider auth prompts from interfering with the protocol
-- The `exec` tool redacts resolved secret values from stdout/stderr before returning output to the agent — commands like `printenv` or `echo $SECRET` will show `[REDACTED]` instead of the raw value. Redaction performs literal string matching and does not detect base64-encoded or otherwise transformed values. To disable (not recommended): `mcp.redact_output = false`
-- With `tools = ["exec"]`, direct `get_secret` access is disabled. Output redaction reduces accidental disclosure, but an agent-controlled command can transform or transmit a value; it does not provide secret isolation
-- Use `mcp.secrets` to limit which secrets the agent can access — unlisted secrets are never resolved or injected
-- Disabled tools are not advertised in `tools/list` — agents only see tools they can actually call
-- The MCP allowlist only controls the MCP channel — secrets injected into your shell by shell integration are still visible to any agent running there. Set the top-level `env = "exec"` default (see the [configuration reference](/reference/configuration#env)) to keep secrets out of the interactive shell entirely; they remain available through `fnox exec` and the MCP tools
+- [Credential proxy](/guide/proxy): the agent never sees real credentials.
+- [Configuration reference](/reference/configuration#mcp-server-settings): every `[mcp]` field.
+- [`fnox mcp` reference](/cli/mcp).

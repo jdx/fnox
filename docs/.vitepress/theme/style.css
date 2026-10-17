@@ -305,6 +305,7 @@
 }
 .storage-switch {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   margin: 18px 22px 0;
 }

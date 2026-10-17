@@ -5,52 +5,30 @@
 [![CI](https://github.com/jdx/fnox/actions/workflows/ci.yml/badge.svg)](https://github.com/jdx/fnox/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-fnox loads secrets into your commands from encrypted files, password managers, and cloud services. Keep the configuration in `fnox.toml`, choose where each secret lives, and use the same command in development and CI:
+fnox reads secrets from encrypted files, password managers, and cloud secret stores, and hands them to your program as environment variables. One `fnox.toml` says where each secret lives, and the same command works on your laptop and in CI:
 
 ```sh
 fnox exec -- npm start
 ```
 
-[Documentation](https://fnox.jdx.dev) · [Quick start](https://fnox.jdx.dev/guide/quick-start) · [Providers](https://fnox.jdx.dev/providers/overview) · [CLI reference](https://fnox.jdx.dev/cli/)
+**[Documentation](https://fnox.jdx.dev)** · [Quick start](https://fnox.jdx.dev/guide/quick-start) · [Providers](https://fnox.jdx.dev/providers/overview) · [CLI reference](https://fnox.jdx.dev/cli/)
 
-## Get started
-
-Install with [mise](https://mise.jdx.dev):
-
-```sh
-mise use -g fnox
-```
-
-Or with Rust: `cargo install fnox --locked`. See [installation](https://fnox.jdx.dev/guide/installation) for other methods and updates.
-
-In your project, run the setup wizard and configure a provider before storing a secret:
-
-```sh
-fnox init
-
-# Use the default provider selected in the wizard; the value is prompted
-fnox set DATABASE_URL
-
-# Check access, then run your application
-fnox check --all
-fnox exec -- npm start
-```
-
-The provider determines where the value is stored. **Without a provider, `fnox set` writes a plaintext default.** Follow the [age quick start](https://fnox.jdx.dev/guide/quick-start) for a complete encrypted setup, or [connect an existing vault](https://fnox.jdx.dev/guide/existing-vault).
-
-## One config, your choice of storage
-
-With a remote provider, `value` is a reference. This example reads an existing 1Password item:
+## What it looks like
 
 ```toml
-# fnox.toml
+# fnox.toml — safe to commit
+[providers.age]
+type = "age"
+recipients = ["age1..."]           # public keys of everyone who may decrypt
+
 [providers.op]
 type = "1password"
 vault = "Engineering"
 
 [secrets]
-DATABASE_URL = { provider = "op", value = "Database/url" }
-LOG_LEVEL = { default = "info" } # Non-sensitive configuration
+DATABASE_URL = { provider = "age", value = "YWdl..." }   # ciphertext written by `fnox set`
+STRIPE_KEY = { provider = "op", value = "Stripe/secret-key" } # a 1Password item
+LOG_LEVEL = { default = "info" }                          # plain, non-sensitive setting
 
 [profiles.production.providers.aws]
 type = "aws-sm"
@@ -58,42 +36,52 @@ region = "us-east-1"
 prefix = "myapp/"
 
 [profiles.production.secrets]
-DATABASE_URL = { provider = "aws", value = "database-url", if_missing = "error" }
+DATABASE_URL = { provider = "aws", value = "database-url" } # AWS Secrets Manager in production
 ```
 
 ```sh
-fnox exec -- npm start
-fnox exec --profile production -- ./deploy.sh
+fnox exec -- npm start                       # development values
+fnox exec --profile production -- ./deploy   # production values
 ```
 
-With an encryption provider, `fnox set` writes ciphertext into `fnox.toml`. Commit the ciphertext and public recipients; keep private keys outside the repository. Teammates need a matching private key or access to the configured vault.
+Your program just reads `DATABASE_URL`. Nothing sensitive is in git: encrypted values need a private key to read, and vault references need access to the vault.
 
-## Fit secrets into your workflow
+## Install
 
-- **[Load on directory change](https://fnox.jdx.dev/guide/shell-integration).** Shell hooks load and unload secrets as you move between projects. Bash, Zsh, Fish, Nushell, and PowerShell are supported.
-- **[Cache a vault locally](https://fnox.jdx.dev/guide/sync).** `fnox sync` encrypts a personal cache for offline use with a local provider such as age. Refresh it when vault values change.
-- **[Cache in memory](https://fnox.jdx.dev/guide/daemon).** The optional daemon reuses resolved values during your session.
-- **[Separate environments](https://fnox.jdx.dev/guide/profiles).** Compose profiles, share settings across a monorepo, and keep personal overrides in `fnox.local.toml`.
-- **[Use temporary credentials](https://fnox.jdx.dev/guide/leases).** Create short-lived credentials with AWS STS, GitHub Apps, Vault, and other lease backends.
-- **[Scope agent access](https://fnox.jdx.dev/guide/proxy).** Pass placeholders to a command and inject credentials into matching HTTPS requests. An [MCP server](https://fnox.jdx.dev/guide/mcp) also exposes selected secrets and command execution.
+```sh
+mise use -g fnox
+```
+
+Or `cargo install fnox --locked`, `nix profile install github:jdx/fnox`, or a binary from [GitHub Releases](https://github.com/jdx/fnox/releases). See [installation](https://fnox.jdx.dev/guide/installation).
+
+## Get started
+
+- **No vault yet?** The [quick start](https://fnox.jdx.dev/guide/quick-start) encrypts your first secret with age in about five minutes.
+- **Already use 1Password, Bitwarden, AWS, Vault, …?** [Use an existing vault](https://fnox.jdx.dev/guide/existing-vault): commit references and optionally cache values locally.
+
+## Features
+
+- **[Mix providers](https://fnox.jdx.dev/providers/overview)** per secret: encrypted in git, password managers, cloud secret stores, local keychains.
+- **[Profiles](https://fnox.jdx.dev/guide/profiles)** for development, staging, and production, plus [layered config files](https://fnox.jdx.dev/guide/config-files) for monorepos and personal overrides.
+- **[Shell integration](https://fnox.jdx.dev/guide/shell-integration)** loads secrets when you `cd` into a project (Bash, Zsh, Fish, Nushell, PowerShell).
+- **[Offline cache](https://fnox.jdx.dev/guide/sync)** of vault secrets, encrypted to your own key, optionally behind Touch ID or a YubiKey; or an in-memory [daemon](https://fnox.jdx.dev/guide/daemon).
+- **[Short-lived credentials](https://fnox.jdx.dev/guide/leases)** from AWS STS, GCP, Azure, GitHub Apps, Vault, Cloudflare, or your own command.
+- **[Safe for AI agents](https://fnox.jdx.dev/guide/proxy)**: a credential proxy injects real keys only into approved requests, and an [MCP server](https://fnox.jdx.dev/guide/mcp) exposes only the secrets you allow.
+- **[CI-ready](https://fnox.jdx.dev/guide/ci)**: one credential for the runner, the same `fnox exec` command, log masking on GitHub Actions.
 
 ## Providers
 
-Mix providers in the same project. Each provider guide covers authentication, configuration, and reference formats.
+| Where values live        | Providers                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Encrypted in `fnox.toml` | [age](https://fnox.jdx.dev/providers/age), [FIDO2](https://fnox.jdx.dev/providers/fido2), [YubiKey](https://fnox.jdx.dev/providers/yubikey), [AWS KMS](https://fnox.jdx.dev/providers/aws-kms), [Azure Key Vault keys](https://fnox.jdx.dev/providers/azure-kms), [Google Cloud KMS](https://fnox.jdx.dev/providers/gcp-kms)                                                                                                                                                                                                                                                                                                                                               |
+| Cloud and hosted stores  | [AWS Secrets Manager](https://fnox.jdx.dev/providers/aws-sm), [AWS Parameter Store](https://fnox.jdx.dev/providers/aws-ps), [Azure Key Vault](https://fnox.jdx.dev/providers/azure-sm), [Azure App Configuration](https://fnox.jdx.dev/providers/azure-ac), [Google Secret Manager](https://fnox.jdx.dev/providers/gcp-sm), [Kubernetes](https://fnox.jdx.dev/providers/kubernetes), [HashiCorp Vault](https://fnox.jdx.dev/providers/vault), [Doppler](https://fnox.jdx.dev/providers/doppler), [FOKS](https://fnox.jdx.dev/providers/foks), [Bitwarden Secrets Manager](https://fnox.jdx.dev/providers/bitwarden-sm), [Keeper](https://fnox.jdx.dev/providers/keeper-sm) |
+| Password managers        | [1Password](https://fnox.jdx.dev/providers/1password), [Bitwarden](https://fnox.jdx.dev/providers/bitwarden), [Enpass](https://fnox.jdx.dev/providers/enpass), [Infisical](https://fnox.jdx.dev/providers/infisical), [Passwordstate](https://fnox.jdx.dev/providers/passwordstate), [Proton Pass](https://fnox.jdx.dev/providers/proton-pass)                                                                                                                                                                                                                                                                                                                             |
+| Local stores             | [OS keychain](https://fnox.jdx.dev/providers/keychain), [KeePass](https://fnox.jdx.dev/providers/keepass), [password-store](https://fnox.jdx.dev/providers/password-store), [gopass](https://fnox.jdx.dev/providers/gopass)                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Your own                 | [Lua plugins](https://fnox.jdx.dev/providers/lua)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
-| Where values live                     | Providers                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Encrypted in your config              | [age](https://fnox.jdx.dev/providers/age), [FIDO2](https://fnox.jdx.dev/providers/fido2), [YubiKey](https://fnox.jdx.dev/providers/yubikey), [AWS KMS](https://fnox.jdx.dev/providers/aws-kms), [Azure KMS](https://fnox.jdx.dev/providers/azure-kms), [GCP KMS](https://fnox.jdx.dev/providers/gcp-kms)                                                                                                                                                                                                                                                                                                                                                                              |
-| Cloud and hosted stores               | [AWS Secrets Manager](https://fnox.jdx.dev/providers/aws-sm), [AWS Parameter Store](https://fnox.jdx.dev/providers/aws-ps), [Azure Key Vault](https://fnox.jdx.dev/providers/azure-sm), [Azure App Configuration](https://fnox.jdx.dev/providers/azure-ac), [GCP Secret Manager](https://fnox.jdx.dev/providers/gcp-sm), [Kubernetes Secrets](https://fnox.jdx.dev/providers/kubernetes), [Vault](https://fnox.jdx.dev/providers/vault), [Doppler](https://fnox.jdx.dev/providers/doppler), [FOKS](https://fnox.jdx.dev/providers/foks), [Bitwarden Secrets Manager](https://fnox.jdx.dev/providers/bitwarden-sm), [Keeper Secrets Manager](https://fnox.jdx.dev/providers/keeper-sm) |
-| Password managers and secret services | [1Password](https://fnox.jdx.dev/providers/1password), [Bitwarden](https://fnox.jdx.dev/providers/bitwarden), [Enpass](https://fnox.jdx.dev/providers/enpass), [Infisical](https://fnox.jdx.dev/providers/infisical), [Passwordstate](https://fnox.jdx.dev/providers/passwordstate), [Proton Pass](https://fnox.jdx.dev/providers/proton-pass)                                                                                                                                                                                                                                                                                                                                        |
-| Local stores                          | [OS keychain](https://fnox.jdx.dev/providers/keychain), [KeePass](https://fnox.jdx.dev/providers/keepass), [password-store](https://fnox.jdx.dev/providers/password-store), [gopass](https://fnox.jdx.dev/providers/gopass)                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| Non-sensitive configuration           | [Plaintext defaults](https://fnox.jdx.dev/providers/plain)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+## Contributing
 
-See the [provider comparison](https://fnox.jdx.dev/providers/overview) to choose a storage model. Cloud KMS providers require network access even though their ciphertext lives locally.
-
-## Contribute
-
-Start with [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, tests, and documentation changes. Report bugs in the [issue tracker](https://github.com/jdx/fnox/issues).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and tests. Report bugs in the [issue tracker](https://github.com/jdx/fnox/issues); ask questions in [Discussions](https://github.com/jdx/fnox/discussions).
 
 ## Sponsors
 
