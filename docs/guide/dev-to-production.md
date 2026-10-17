@@ -122,7 +122,7 @@ jobs:
 
 A new teammate:
 
-1. Installs fnox and creates a key: `age-keygen -o ~/.config/fnox/age.txt`.
+1. Installs fnox and creates a key: `mkdir -p ~/.config/fnox && age-keygen -o ~/.config/fnox/age.txt`.
 2. Sends you the public key.
 
 You add it to `recipients`, run `fnox reencrypt --provider age` for the default and staging profiles, and commit. They pull, run `fnox check --all`, and they're set. Grant AWS access separately if they deploy.
