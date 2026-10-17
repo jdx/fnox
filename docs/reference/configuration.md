@@ -89,11 +89,11 @@ DATABASE_URL = { provider = "aws", value = "database-url" }
 | `age_key_file`     | path                            | none     | Accepted for compatibility; has no effect.                                           |
 | `providers`        | table                           | `{}`     | [Provider instances](#providers), by name.                                           |
 | `secrets`          | table                           | `{}`     | [Secrets](#secrets) for the default profile, by name.                                |
-| `profiles`         | table                           | `{}`     | [Named profiles](#profiles).                                                         |
+| `profiles`         | table                           | `{}`     | [Named profiles](#profile-configuration).                                                         |
 | `leases`           | table                           | `{}`     | [Lease backends](#lease-backend-settings), by name.                                  |
 | `plugins`          | table                           | `{}`     | [Lua plugin sources](#plugins), by name.                                             |
 | `daemon`           | table                           | none     | [Daemon settings](#daemon).                                                          |
-| `mcp`              | table                           | none     | [MCP server settings](#mcp).                                                         |
+| `mcp`              | table                           | none     | [MCP server settings](#mcp-server-settings).                                                         |
 | `proxy`            | table                           | none     | [Credential proxy rules](#proxy).                                                    |
 
 ### `default_provider`
@@ -278,7 +278,7 @@ USERNAME = { provider = "pass", value = "master", line = 2 }
 
 `fnox sync` writes `sync = { provider = "...", value = "..." }`, where `value` is the secret encrypted with `provider`. Resolution uses it instead of the original provider until `fnox sync` replaces it or `fnox reencrypt` clears it. Let `fnox sync` maintain this field. See [sync](/guide/sync).
 
-## Profiles
+## Profiles {#profile-configuration}
 
 ```toml
 [profiles.production]
@@ -343,7 +343,7 @@ idle_timeout = "8h"
 
 See [daemon](/guide/daemon).
 
-## `mcp`
+## `mcp` {#mcp-server-settings}
 
 ```toml
 [mcp]
