@@ -125,7 +125,7 @@ kubectl config get-contexts
 
 ### Access denied
 
-A `401` or `403` means the identity lacks `get` on that Secret or the wrong context was selected. fnox errors do not include API messages, kubeconfig contents, credentials or Secret values.
+A `401` means the credentials were rejected: check that the token or certificate in the selected context is valid and not expired. A `403` means the identity is authenticated but lacks `get` on that Secret. Selecting the wrong context can cause either. fnox errors do not include API messages, kubeconfig contents, credentials or Secret values.
 
 ```sh
 kubectl auth can-i get secret/myapp-database -n payments

@@ -20,8 +20,9 @@ To keep values out of git entirely, use [Google Cloud Secret Manager](/providers
 Create a key ring and an encryption key, or use existing ones:
 
 ```sh
-gcloud kms keyrings create fnox --location us-central1
-gcloud kms keys create fnox-key --keyring fnox --location us-central1 --purpose encryption
+gcloud services enable cloudkms.googleapis.com --project my-project
+gcloud kms keyrings create fnox --location us-central1 --project my-project
+gcloud kms keys create fnox-key --keyring fnox --location us-central1 --purpose encryption --project my-project
 ```
 
 Add the provider:

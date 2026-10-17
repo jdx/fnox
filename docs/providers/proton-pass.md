@@ -45,12 +45,13 @@ fnox runs `pass-cli` and uses its stored session. When the CLI reports that you 
 
 ### Personal access tokens
 
-For CI or headless machines, create a Proton Pass personal access token and log in with it, either through the environment or the login flag:
+For CI or headless machines, create a Proton Pass personal access token, supply it as `PROTON_PASS_PERSONAL_ACCESS_TOKEN` from the CI secret store, and log in:
 
 ```sh
-PROTON_PASS_PERSONAL_ACCESS_TOKEN="pst_..." pass-cli login
-pass-cli login --personal-access-token "pst_..."
+pass-cli login   # reads PROTON_PASS_PERSONAL_ACCESS_TOKEN from the environment
 ```
+
+Avoid `--personal-access-token` and inline assignments with a literal token: they expose it in process listings and shell history.
 
 ### Agent tokens
 

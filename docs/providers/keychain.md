@@ -99,7 +99,7 @@ On Linux, no Secret Service is reachable. Start one (for example `gnome-keyring-
 
 ### Keychain is locked or access is denied
 
-Unlock the login keychain or Secret Service collection, then accept the access prompt. `fnox provider test keychain` writes, reads, and deletes a `__fnox_test__` entry to check access.
+Unlock the login keychain or Secret Service collection, then accept the access prompt. `fnox provider test keychain` writes, reads, and deletes an entry named `__fnox_test__` under the provider's `service` and `prefix` to check access. An existing entry with that name is overwritten and then deleted, so don't store anything under it.
 
 ### Entry not found
 

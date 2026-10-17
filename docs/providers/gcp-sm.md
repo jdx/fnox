@@ -29,6 +29,7 @@ prefix = "myapp-"
 ```
 
 ```sh
+gcloud services enable secretmanager.googleapis.com --project my-project-id   # once per project
 fnox set DATABASE_URL --provider gcp
 ```
 

@@ -49,7 +49,9 @@ fnox passes the address, token and namespace to the `vault` CLI. Each comes from
 | Token     | `token`, `FNOX_VAULT_TOKEN`, `VAULT_TOKEN`, then `credential_command`. Required. |
 | Namespace | `namespace`, `FNOX_VAULT_NAMESPACE`, `VAULT_NAMESPACE`                           |
 
-The token is not read from the CLI's token helper (`~/.vault-token`). After `vault login`, export `VAULT_TOKEN`, or configure `credential_command` so fnox logs in itself. When authentication fails in an interactive terminal, fnox offers to run `vault login`. Change that command with [`auth_command`](/reference/configuration#auth-command).
+The token is not read from the CLI's token helper (`~/.vault-token`). After `vault login`, export `VAULT_TOKEN`, or configure `credential_command` so fnox logs in itself.
+
+When authentication fails in an interactive terminal, fnox offers to run its `auth_command`, `vault login` by default. fnox doesn't capture that command's output, so the retry still fails unless `VAULT_TOKEN` or `credential_command` provides a token. For on-demand login, use `credential_command` (below). Change the prompt's command with [`auth_command`](/reference/configuration#auth-command).
 
 ### Provider-scoped login
 

@@ -20,8 +20,8 @@ Use `aws-kms` to keep encrypted secrets in git under an AWS-managed key. To keep
 Create a symmetric encryption key and give it an alias, or use an existing key:
 
 ```sh
-KEY_ID=$(aws kms create-key --description "fnox secrets encryption" --query KeyMetadata.KeyId --output text)
-aws kms create-alias --alias-name alias/fnox --target-key-id "$KEY_ID"
+KEY_ID=$(aws kms create-key --region us-east-1 --description "fnox secrets encryption" --query KeyMetadata.KeyId --output text)
+aws kms create-alias --region us-east-1 --alias-name alias/fnox --target-key-id "$KEY_ID"
 ```
 
 Add the provider with the key's ID, ARN, or alias:
@@ -128,6 +128,12 @@ Check the IAM policy and the key policy for the action in the error, and confirm
 
 ```sh
 aws sts get-caller-identity --profile sso-dev
+```
+
+This shows the source identity. With `role_arn` set, fnox calls KMS as the assumed role instead, so check that the source identity may assume the role and that the role itself has the KMS permissions:
+
+```sh
+aws sts assume-role --profile sso-dev --role-arn arn:aws:iam::123456789012:role/kms-user --role-session-name fnox-check
 ```
 
 ### `NotFoundException`

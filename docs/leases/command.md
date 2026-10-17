@@ -27,12 +27,12 @@ duration = "1h"
 #!/bin/sh
 # scripts/get-k8s-token.sh
 set -eu
-TOKEN=$(kubectl create token my-service-account --duration="${FNOX_LEASE_DURATION}s")
-EXPIRY=$(date -u -d "+${FNOX_LEASE_DURATION} seconds" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
-  || date -u -v+"${FNOX_LEASE_DURATION}"S +%Y-%m-%dT%H:%M:%SZ)
-jq -n --arg token "$TOKEN" --arg exp "$EXPIRY" \
-  '{credentials: {KUBE_TOKEN: $token}, expires_at: $exp}'
+# -o json returns the TokenRequest, including the expiry the API server actually granted
+kubectl create token my-service-account --duration="${FNOX_LEASE_DURATION}s" -o json |
+  jq '{credentials: {KUBE_TOKEN: .status.token}, expires_at: .status.expirationTimestamp}'
 ```
+
+The API server may grant a shorter or longer lifetime than requested, so the script reports `.status.expirationTimestamp` rather than computing an expiry from `FNOX_LEASE_DURATION`.
 
 ```sh
 fnox exec -- sh -c 'kubectl --token "$KUBE_TOKEN" get pods'

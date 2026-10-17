@@ -26,7 +26,7 @@ LOCAL_TOKEN = { provider = "age", value = "YWdl..." }           # ciphertext, ab
 
 - **Mix freely.** One project can use any number of instances, including several of the same type (for example one per vault or region).
 - **Default provider.** A secret without `provider` uses `default_provider`. When exactly one provider is configured, fnox uses it automatically.
-- **What `value` means depends on the type.** Encryption providers store ciphertext; every other provider stores a reference (a name, path or ID) and keeps the value in its own store.
+- **What `value` means depends on the type.** Encryption providers store ciphertext; remote and local storage providers store a reference (a name, path or ID) and keep the value in their own store; the `plain` provider stores the value unencrypted in `fnox.toml`.
 - **Swap per environment.** Redefine an instance in a [profile](/guide/profiles) to point the same secret names at a different vault or account.
 
 Add an instance with `fnox provider add <name> <type>` or by editing `fnox.toml`, then check it with `fnox provider test <name>`.

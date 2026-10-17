@@ -64,7 +64,9 @@ auth = "managed-identity"
 
 Every field accepts `{ secret = "NAME" }` to take its value from another fnox secret. The options shared by all providers, `auth_command` and `daemon_cache`, are in the [configuration reference](/reference/configuration#provider-configuration).
 
-The `endpoint` must be an HTTPS App Configuration domain: `*.azconfig.io` or `*.appconfig.azure.com` in the public cloud, `*.azconfig.azure.us` or `*.appconfig.azure.us` in Azure Government, and `*.azconfig.azure.cn` or `*.appconfig.azure.cn` in Azure China. Anything else is rejected, since the endpoint is where fnox sends your Entra token. The token audience follows the domain, so sovereign-cloud stores work without extra configuration.
+Set `endpoint` to your store's endpoint, `https://<store>.azconfig.io` in the public cloud, `https://<store>.azconfig.azure.us` in Azure Government, or `https://<store>.azconfig.azure.cn` in Azure China. The token audience follows the cloud, so sovereign-cloud stores work without extra configuration.
+
+Because the endpoint is where fnox sends your Entra token, fnox rejects any host outside the App Configuration domains. Besides the store domains above, the validation also accepts the `appconfig.azure.com`, `appconfig.azure.us`, and `appconfig.azure.cn` domains.
 
 ## Reference formats
 

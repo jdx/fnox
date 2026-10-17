@@ -60,11 +60,15 @@ When a request fails because credentials are missing or expired in an interactiv
 Give the job an AWS identity before fnox runs. In GitHub Actions, OIDC avoids long-lived keys:
 
 ```yaml
-- uses: aws-actions/configure-aws-credentials@v4
-  with:
-    role-to-assume: arn:aws:iam::123456789012:role/ci-secrets-reader
-    aws-region: us-east-1
-- run: fnox exec -- ./deploy.sh
+permissions:
+  id-token: write # lets GitHub issue the OIDC token
+  contents: read
+steps:
+  - uses: aws-actions/configure-aws-credentials@v4
+    with:
+      role-to-assume: arn:aws:iam::123456789012:role/ci-secrets-reader
+      aws-region: us-east-1
+  - run: fnox exec -- ./deploy.sh
 ```
 
 See [CI/CD](/guide/ci) for non-interactive settings.
