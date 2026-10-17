@@ -353,7 +353,7 @@ daemon_cache = false
 
 The [provider catalog](/providers/overview) links to authentication, configuration, and reference formats for every supported provider. Fields such as `region`, `vault`, `prefix`, and `key_file` apply only to the types that document them.
 
-Many provider fields accept `{ secret = "NAME" }` in place of a literal value. See [secret references in provider config](/guide/profiles#secret-references-in-provider-config). Avoid a dependency cycle in which a provider needs a secret stored in itself.
+Many provider fields accept `{ secret = "NAME" }` in place of a literal value. See [secret references in provider config](/guide/config-files#secret-references-in-provider-config). Avoid a dependency cycle in which a provider needs a secret stored in itself.
 
 ## Secret configuration
 

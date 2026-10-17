@@ -1,142 +1,82 @@
-# Example fnox configuration file
+#:schema https://fnox.jdx.dev/schema.json
 #
-# This file demonstrates the various features of fnox:
-# - Multiple environments (default, staging, production)
-# - Different secret sources (encrypted, provider, default, env var)
-# - Per-secret metadata (description, if_missing behavior)
-# - Provider configuration
-# - Configuration imports and merging
+# Example fnox.toml. Full reference: https://fnox.jdx.dev/reference/configuration
+#
+# Every value below is safe to commit: age values are ciphertext, and
+# provider values are references to items in a vault.
 
-# Optional: Import other configuration files
-import = [
-    # "../shared-config.toml",
-    # "/etc/fnox/global.toml"
-]
+# Used by `fnox set` when --provider is not given.
+default_provider = "age"
 
-# Optional: Stop parent directory search at this level
+# Fail commands when a secret can't be resolved ("error" | "warn" | "ignore").
+if_missing = "warn"
+
+# Stop searching parent directories for more fnox.toml files.
 # root = true
 
-# Optional: Configure encryption
-# Generate a key with: age-keygen -o ~/.config/fnox/age.txt
-# Copy the public key (age1...) to the recipients list below
-[encryption]
-key_type = "age"
+# Pull in shared settings. Paths are relative to this file.
+# import = ["../shared/fnox.toml"]
+
+# ---------------------------------------------------------------------------
+# Providers: where values come from. The table name is yours to choose;
+# `type` selects the backend. See https://fnox.jdx.dev/providers/overview
+# ---------------------------------------------------------------------------
+
+# Encrypt values into this file. Each recipient is a public key that may decrypt.
+[providers.age]
+type = "age"
 recipients = [
-    "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+  "age1...", # replace with your public key before running `fnox set`
 ]
 
-# Optional: Configure secret providers
-[providers.onepass]
+# Read items from 1Password through the `op` CLI.
+[providers.op]
 type = "1password"
 vault = "Development"
 
-[providers.aws_prod]
-type = "aws"
-region = "us-east-1"
-prefix = "myapp/"
-
-[providers.vault_dev]
-type = "vault"
-path = "secret/myapp"
-# address = "http://localhost:8200" # Optional, falls back to FNOX_VAULT_ADDR or VAULT_ADDR
-
-# Default profile secrets (top level)
-# Used when --profile is not specified or FNOX_PROFILE is not set
+# ---------------------------------------------------------------------------
+# Secrets for the default profile. The key is the environment variable name.
+# ---------------------------------------------------------------------------
 [secrets]
 
-# Example: Encrypted secret
-# This will be automatically encrypted when you run: fnox set DATABASE_URL <value>
-DATABASE_URL = { description = "Database connection string", if_missing = "error", encrypted = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0..." }
+# Encrypted with age. `fnox set DATABASE_URL` writes the ciphertext.
+DATABASE_URL = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0...", description = "Database connection string", if_missing = "error" }
 
-# Example: Secret fetched from current environment variable
-# If NPM_TOKEN is set in the environment, it will be used
-# Otherwise, a warning will be shown (if_missing = "warn")
-NPM_TOKEN = { description = "NPM registry authentication token", if_missing = "warn" }
+# The `secret-key` field of the `Stripe` item in 1Password.
+STRIPE_KEY = { provider = "op", value = "Stripe/secret-key" }
 
-# Example: Secret with a default value
-# If NODE_ENV is not set in the environment, "development" will be used
+# A plaintext default for non-sensitive configuration.
 NODE_ENV = { default = "development" }
 
-# Example: Simple encrypted secret (no metadata)
-API_KEY = { encrypted = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0..." }
+# No provider or default: taken from the environment if set, otherwise skipped.
+NPM_TOKEN = { description = "npm registry token", if_missing = "ignore" }
 
-# Example: Secret with provider reference
-# This will be fetched from the 1Password vault at runtime
-STRIPE_KEY = { description = "Stripe API key", provider = "onepass", key = "stripe-dev-key", if_missing = "warn" }
+# Injected into `fnox exec` commands but not into an interactive shell.
+SENTRY_DSN = { provider = "op", value = "Sentry/dsn", env = "exec", if_missing = "ignore" }
 
-# Staging profile
-# Use with: fnox exec --profile staging -- <command>
-# Or set: export FNOX_PROFILE=staging
+# Given to the command as a path to a temporary file instead of the value.
+GOOGLE_APPLICATION_CREDENTIALS = { provider = "op", value = "GCP service account/key.json", as_file = true, if_missing = "ignore" }
+
+# ---------------------------------------------------------------------------
+# Profiles override the default profile. Select one with --profile or
+# FNOX_PROFILE. Anything not overridden is inherited.
+# ---------------------------------------------------------------------------
+
 [profiles.staging.secrets]
-
-# Fetch from AWS Secrets Manager
-DATABASE_URL = { description = "Staging database connection", provider = "aws_prod", key = "staging/database-url", if_missing = "error" }
-
-# Fetch from 1Password
-NPM_TOKEN = { provider = "onepass", key = "npm-token", if_missing = "error" }
-
-# Simple default value
+DATABASE_URL = { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0..." }
 NODE_ENV = { default = "staging" }
 
-# Encrypted value specific to staging
-API_KEY = { encrypted = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0..." }
+# Production reads from AWS Secrets Manager.
+[profiles.production.providers.aws]
+type = "aws-sm"
+region = "us-east-1"
+prefix = "myapp/" # value = "database-url" reads the secret "myapp/database-url"
 
-# Production profile
-# Use with: fnox exec --profile production -- <command>
 [profiles.production.secrets]
-
-# Production secrets are typically fetched from a secure provider
-DATABASE_URL = { description = "Production database (read-write)", provider = "aws_prod", key = "prod/database-url", if_missing = "error" }
-
-REDIS_URL = { description = "Production Redis cluster", provider = "aws_prod", key = "prod/redis-url", if_missing = "error" }
-
-NPM_TOKEN = { provider = "onepass", if_missing = "error" }
-
+DATABASE_URL = { provider = "aws", value = "database-url", if_missing = "error" }
+REDIS_URL = { provider = "aws", value = "redis-url", if_missing = "error" }
 NODE_ENV = { default = "production" }
 
-# Critical secrets are encrypted
-API_KEY = { encrypted = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0..." }
-JWT_SECRET = { encrypted = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0..." }
-
-# Custom profile example
-# You can create any number of custom profiles
 [profiles.ci.secrets]
 DATABASE_URL = { default = "postgresql://localhost:5432/test" }
 NODE_ENV = { default = "test" }
-CI = { default = "true" }
-
-# Example commands:
-#
-# Initialize:
-#   fnox init
-#
-# Set a secret (will be encrypted if encryption is configured):
-#   fnox set DATABASE_URL "postgresql://user:pass@localhost/db"
-#   fnox set API_KEY "secret-key" --profile production
-#
-# Set only metadata (value from env var):
-#   fnox set NPM_TOKEN --description "NPM token" --if-missing warn
-#
-# Get a secret:
-#   fnox get DATABASE_URL
-#   fnox get API_KEY --profile production
-#
-# List secrets:
-#   fnox list
-#   fnox list --profile production --values
-#
-# Run a command with secrets:
-#   fnox exec -- npm start
-#   fnox exec --profile production -- node app.js
-#   fnox exec --profile staging -- ./deploy.sh
-#
-# Manage providers:
-#   fnox provider list
-#   fnox provider add my-vault vault
-#   fnox provider remove my-vault
-#
-# Configuration features:
-# - Recursive loading: fnox searches parent directories for fnox.toml files
-# - Import files: Use import = ["path/to/config.toml"] to include other configs
-# - Root boundary: Set root = true to stop parent directory search
-# - Explicit paths: Use -c path/to/config.toml to bypass recursive search

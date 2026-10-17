@@ -229,4 +229,4 @@ foks kv ls --team my-team /
 
 - [HashiCorp Vault](/providers/vault) — Closest comparable self-hosted alternative
 - [password-store](/providers/password-store) — GPG-based local alternative
-- [Real-World Example](/guide/real-world-example) — Complete setup walkthrough
+- [Real-World Example](/guide/dev-to-production) — Complete setup walkthrough

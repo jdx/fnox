@@ -493,4 +493,4 @@ password-store has a rich ecosystem:
 - [Age Encryption](/providers/age) - Modern alternative to GPG
 - [OS Keychain](/providers/keychain) - OS-native storage
 - [1Password](/providers/1password) - Commercial password manager
-- [Real-World Example](/guide/real-world-example) - Complete setup guide
+- [Real-World Example](/guide/dev-to-production) - Complete setup guide

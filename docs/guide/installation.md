@@ -1,64 +1,65 @@
 ---
-description: "Install fnox with mise, Cargo, or a prebuilt binary, then verify and update your installation."
+description: "Install fnox with mise, Cargo, Nix, or a prebuilt binary for macOS, Linux, or Windows."
 ---
 
 # Installation
 
-Install the fnox CLI, verify it is on your `PATH`, then [configure your first provider](/guide/quick-start).
+fnox is a single binary for macOS, Linux, and Windows. Install it with any of the methods below, then continue with the [quick start](/guide/quick-start).
 
-## With mise
-
-If you use [mise](https://mise.jdx.dev), install fnox globally:
+## mise (recommended)
 
 ```sh
 mise use -g fnox
 ```
 
-To manage the version in a project, run `mise use fnox` from that project instead. Commit the resulting mise configuration so teammates use the same version.
+To pin a version for a project instead, run `mise use fnox` in the project and commit `mise.toml`. Teammates and CI then get the same version. Upgrade with `mise upgrade fnox`.
 
-To update a mise-managed installation:
-
-```sh
-mise upgrade fnox
-```
-
-Installing fnox does not automatically upgrade it on every run. See [mise upgrade](https://mise.jdx.dev/cli/upgrade.html) for version constraints and update options.
-
-## With cargo
-
-With a supported Rust toolchain installed:
+## Cargo
 
 ```sh
 cargo install fnox --locked
 ```
 
-This builds from source using the published lockfile. Ensure Cargo's binary directory (`~/.cargo/bin` on Unix) is on your `PATH`. Check the package's `rust-version` in [Cargo.toml](https://github.com/jdx/fnox/blob/main/Cargo.toml) for the minimum Rust version.
+This builds from source. The minimum Rust version is the `rust-version` in [Cargo.toml](https://github.com/jdx/fnox/blob/main/Cargo.toml). Run the same command again to upgrade.
 
-Run the same command again to install a newer published release.
+## Nix
+
+The repository is a Nix flake:
+
+```sh
+nix profile install github:jdx/fnox
+```
 
 ## Prebuilt binaries
 
-Download the archive for your operating system and architecture from [GitHub Releases](https://github.com/jdx/fnox/releases). Extract `fnox` into a directory on your `PATH`.
+Download the archive for your platform from [GitHub Releases](https://github.com/jdx/fnox/releases) and put `fnox` somewhere on your `PATH`. Builds are published for macOS (Apple silicon and Intel), Linux (x86_64 and arm64, glibc and musl), and Windows (x86_64 and arm64).
 
-Provider requirements are separate from fnox installation. For example, 1Password needs `op`, Bitwarden needs `bw`, and generating an age key needs `age-keygen`. Each [provider guide](/providers/overview) lists its prerequisites.
-
-## From a checkout
-
-```sh
-git clone https://github.com/jdx/fnox
-cd fnox
-cargo install --path . --locked
-```
-
-For development, use the debug build and project tasks in the [contributing guide](/contributing).
-
-## Verify the installation
+## Verify
 
 ```sh
 fnox --version
-fnox --help
 ```
 
-If the shell cannot find fnox, check that your install directory is on `PATH`, or that mise is [activated](https://mise.jdx.dev/getting-started.html). Open a new terminal after changing shell configuration.
+If your shell can't find `fnox`, check that the install directory (`~/.cargo/bin` for Cargo) is on your `PATH`, or that [mise is activated](https://mise.jdx.dev/getting-started.html), then open a new terminal.
 
-Continue with the [quick start](/guide/quick-start) for local encryption or [connect a vault](/guide/golden-path).
+## Provider tools
+
+fnox itself has no runtime dependencies, but some providers call a vendor CLI: 1Password needs `op`, Bitwarden needs `bw`, and so on. Each [provider page](/providers/overview) lists what it needs. The quick start uses `age-keygen` from [age](https://github.com/FiloSottile/age) to create a key:
+
+```sh
+mise use -g age
+```
+
+## Shell completions
+
+```sh
+fnox completion zsh > "${fpath[1]}/_fnox"
+fnox completion bash > ~/.local/share/bash-completion/completions/fnox
+fnox completion fish > ~/.config/fish/completions/fnox.fish
+```
+
+## See also
+
+- [Quick start](/guide/quick-start): encrypt your first secret.
+- [Use an existing vault](/guide/existing-vault): connect 1Password or another vault.
+- [Contributing](/contributing): build fnox from a checkout.

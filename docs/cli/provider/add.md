@@ -39,7 +39,7 @@ fnox provider add sync-age age --global
 ## Related
 
 - [Provider catalog](/providers/overview)
-- [Connect a vault](/guide/golden-path)
+- [Connect a vault](/guide/existing-vault)
 - [Global options](/cli/#global-flags), including profile selection and non-interactive mode.
 
 <!-- fnox examples:end -->

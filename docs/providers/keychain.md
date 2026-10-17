@@ -323,5 +323,5 @@ sudo apt-get install kwalletmanager
 ## Next steps
 
 - [Age Encryption](/providers/age) - Team-friendly alternative
-- [Hierarchical Config](/guide/hierarchical-config) - Per-machine configuration with fnox.local.toml
+- [Hierarchical Config](/guide/config-files) - Per-machine configuration with fnox.local.toml
 - [1Password](/providers/1password) - Team password manager

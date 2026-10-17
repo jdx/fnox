@@ -1,45 +1,41 @@
 ---
-description: "Encrypt your first secret with age, check access, and run an application with fnox. No cloud account required."
+description: "Encrypt your first secret with age, commit it safely, and run a command with it. Takes about five minutes and needs no cloud account."
 ---
 
 # Quick start
 
-Store your first secret with age encryption, then make it available to a command. This walkthrough uses a local key file and needs no cloud account.
+In this walkthrough you encrypt a secret into `fnox.toml` with [age](https://age-encryption.org), then run a command that receives it as an environment variable. Everything stays on your machine; no account or vault is needed.
 
-Already have a vault? Use [1Password with a local cache](/guide/golden-path), or choose another [provider](/providers/overview).
+Already using 1Password, Bitwarden, AWS, or another vault? Follow [use an existing vault](/guide/existing-vault) instead.
 
 ## 1. Install fnox and age
 
-With [mise](https://mise.jdx.dev):
-
 ```sh
 mise use -g fnox age
-fnox --version
 ```
 
-See [installation](/guide/installation) for other fnox installation methods. The age CLI supplies `age-keygen`; fnox handles encryption itself.
+See [installation](/guide/installation) for other methods. fnox does its own encryption; you only need age for its `age-keygen` command.
 
-## 2. Create your encryption key
+## 2. Create a key
 
 ```sh
 mkdir -p ~/.config/fnox
 age-keygen -o ~/.config/fnox/age.txt
-age-keygen -y ~/.config/fnox/age.txt
 ```
 
-The last command prints your public recipient, beginning with `age1`. Copy it for the next step. If you already have `age.txt`, reuse it and run only the last command.
+`age-keygen` prints your **public key**, which starts with `age1`. Copy it. (If you already have `age.txt`, print the public key with `age-keygen -y ~/.config/fnox/age.txt`.)
 
-Keep `age.txt` private and back it up. The public recipient can go in git; the private key file cannot. fnox automatically reads `age.txt` from its [configuration directory](/reference/environment#fnox-config-dir). If you use a different directory, set the provider's [`key_file`](/providers/age#configuration).
+`age.txt` is your **private key**. fnox reads it from this location automatically. Back it up and never commit it: anyone with this file can decrypt your secrets.
 
 ## 3. Configure the project
 
-From your project directory:
+In your project directory:
 
 ```sh
 fnox init --skip-wizard
 ```
 
-Edit the new `fnox.toml` to contain the following, replacing `age1...` with the public recipient you copied:
+Open the new `fnox.toml` and replace its contents with this, pasting your public key:
 
 ```toml
 #:schema https://fnox.jdx.dev/schema.json
@@ -47,60 +43,59 @@ default_provider = "age"
 
 [providers.age]
 type = "age"
-recipients = ["age1..."] # Replace with your public recipient
+recipients = ["age1..."] # your public key
 ```
 
-`--skip-wizard` creates an empty configuration. These provider settings are what enable encryption; initialization alone does not encrypt secrets.
+This defines one provider named `age` and makes it the default for new secrets. The `#:schema` line gives editors completion and validation.
 
-## 4. Store and check a secret
+## 4. Store a secret
 
 ```sh
 fnox set DATABASE_URL
 ```
 
-At the hidden prompt, enter a value such as `postgresql://localhost/mydb`. fnox uses `default_provider = "age"` and writes encrypted ciphertext into `fnox.toml`.
+Type a value such as `postgresql://localhost/mydb` at the hidden prompt. fnox encrypts it and adds it to `fnox.toml`:
 
-```sh
-# Verify that configured secrets can be resolved
-fnox check --all
-
-# Inspect names and providers without displaying resolved values
-fnox list
+```toml
+[secrets]
+DATABASE_URL = { provider = "age", value = "YWdl..." } # ciphertext, abbreviated
 ```
 
-Use `fnox get DATABASE_URL` when you need the value itself. It prints the decrypted secret to stdout.
+Check that fnox can decrypt everything, without printing any values:
+
+```sh
+fnox check --all
+```
 
 ## 5. Run a command
 
 ```sh
 fnox exec -- npm start
-# Or:
-fnox exec -- python app.py
 ```
 
-The command receives `DATABASE_URL` as an environment variable. Your parent shell is unchanged. To verify injection without an application or printing the value:
+`npm start` runs with `DATABASE_URL` in its environment. Your shell is unchanged. Everything after `--` is the command; fnox options go before it.
+
+To confirm the variable arrives without printing it:
 
 ```sh
-fnox exec -- sh -c 'test -n "$DATABASE_URL" && printf "Database secret is available\n"'
+fnox exec -- sh -c 'test -n "$DATABASE_URL" && echo "DATABASE_URL is set"'
 ```
 
-Put fnox options before `--`; everything after it belongs to the command.
+When you need the value itself, `fnox get DATABASE_URL` prints it.
 
-## 6. Commit the configuration
+## 6. Commit
 
-Add these entries to your existing `.gitignore`:
+`fnox.toml` now contains only ciphertext and your public key, so it is safe to commit. Ignore the files that hold personal overrides:
 
-```text
-fnox.local.toml
-.fnox.local.toml
-.env
+```sh
+printf 'fnox.local.toml\n.fnox.local.toml\n' >> .gitignore
+git add fnox.toml .gitignore
+git commit -m "chore: add fnox"
 ```
 
-Review `fnox.toml`, then commit it with `.gitignore`. The age secret's `value` is ciphertext. Any `default` values remain plaintext, so reserve them for non-sensitive configuration.
+## Next
 
-## Where to go next
-
-- [Shell integration](/guide/shell-integration): load secrets automatically when you enter a project.
-- [Profiles](/guide/profiles): use separate development, staging, and production values.
-- [Age team setup](/providers/age#team-workflow): add teammates and re-encrypt for their keys.
-- [Troubleshooting](/guide/troubleshooting): diagnose configuration and authentication problems.
+- **Load secrets automatically** when you `cd` into the project: [shell integration](/guide/shell-integration).
+- **Share with your team** by adding their public keys: [team setup](/guide/teams).
+- **Use different values** for staging and production: [profiles](/guide/profiles).
+- **Use secrets in CI**: [CI/CD](/guide/ci).

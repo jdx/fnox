@@ -1,12 +1,12 @@
 const page = (text, link) => ({ text, link });
 
 const start = {
-  text: "Start here",
+  text: "Getting started",
   items: [
     page("What is fnox?", "/guide/what-is-fnox"),
     page("Installation", "/guide/installation"),
     page("Quick start", "/guide/quick-start"),
-    page("Connect a vault", "/guide/golden-path"),
+    page("Use an existing vault", "/guide/existing-vault"),
     page("How fnox works", "/guide/how-it-works"),
   ],
 };
@@ -24,32 +24,34 @@ const reference = {
 const guide = [
   start,
   {
-    text: "Everyday use",
+    text: "Daily use",
     items: [
-      page("Run commands", "/cli/exec"),
+      page("Running commands", "/guide/running-commands"),
       page("Shell integration", "/guide/shell-integration"),
       page("Profiles", "/guide/profiles"),
-      page("Config files and overrides", "/guide/hierarchical-config"),
-      page("Missing secrets and defaults", "/guide/missing-secrets"),
+      page("Config files", "/guide/config-files"),
+      page("Missing secrets", "/guide/missing-secrets"),
       page("Import and export", "/guide/import-export"),
-      page("Terminal dashboard", "/guide/tui"),
+      page("Terminal UI", "/guide/tui"),
+    ],
+  },
+  {
+    text: "Teams and CI",
+    items: [
+      page("Team setup", "/guide/teams"),
+      page("CI/CD", "/guide/ci"),
+      page("Development to production", "/guide/dev-to-production"),
+      page("mise", "/guide/mise-integration"),
     ],
   },
   {
     text: "Caching and credentials",
     items: [
-      page("Sync a local cache", "/guide/sync"),
-      page("Cache in memory", "/guide/daemon"),
+      page("Local sync cache", "/guide/sync"),
+      page("Memory cache (daemon)", "/guide/daemon"),
       page("Credential leases", "/guide/leases"),
       page("Credential proxy", "/guide/proxy"),
       page("MCP server", "/guide/mcp"),
-    ],
-  },
-  {
-    text: "Recipes",
-    items: [
-      page("mise tasks", "/guide/mise-integration"),
-      page("Development to production", "/guide/real-world-example"),
     ],
   },
   reference,

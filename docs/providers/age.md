@@ -408,6 +408,6 @@ grep recipients fnox.toml
 
 ## Next steps
 
-- [Real-World Example](/guide/real-world-example) - Complete project setup with age
+- [Real-World Example](/guide/dev-to-production) - Complete project setup with age
 - [Profiles](/guide/profiles) - Multi-environment configuration
 - [AWS KMS](/providers/aws-kms) - Alternative with AWS-managed keys

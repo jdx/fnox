@@ -17,11 +17,12 @@ async function copyInstall() {
   <main class="fnox-home">
     <section class="home-hero" aria-labelledby="home-title">
       <div class="hero-copy">
-        <h1 id="home-title">Secret management for development and CI</h1>
+        <h1 id="home-title">Your secrets, wherever they live</h1>
         <p class="hero-lead">
-          Load secrets from encrypted files, password managers, and cloud
-          services into your application’s environment. Configure where each
-          value comes from in <code>fnox.toml</code>.
+          fnox reads secrets from encrypted files, password managers, and cloud
+          secret stores, and hands them to your program as environment
+          variables. One <code>fnox.toml</code> says where each one lives. The
+          same command works on your laptop and in CI.
         </p>
         <div class="hero-actions">
           <a class="home-button primary" href="/guide/quick-start"
@@ -54,7 +55,7 @@ async function copyInstall() {
           <div class="demo-file">
             <img src="/logo.svg" alt="" width="24" height="24" /> fnox.toml
           </div>
-          <span class="demo-label">COMMIT THE CONFIG</span>
+          <span class="demo-label">COMMITTED TO GIT</span>
         </div>
         <div
           class="storage-switch"
@@ -66,7 +67,7 @@ async function copyInstall() {
             :aria-pressed="storage === 'vault'"
             @click="storage = 'vault'"
           >
-            Vault references
+            Vault reference
           </button>
           <button
             type="button"
@@ -75,11 +76,18 @@ async function copyInstall() {
           >
             Encrypted in git
           </button>
+          <button
+            type="button"
+            :aria-pressed="storage === 'profiles'"
+            @click="storage = 'profiles'"
+          >
+            Dev and prod
+          </button>
         </div>
-        <!-- Keep both examples rendered for VitePress's static-content hydration. -->
+        <!-- Keep every example rendered for VitePress's static-content hydration. -->
         <pre
           v-show="storage === 'vault'"
-        ><code><span class="code-comment"># Connect the vault you already use</span>
+        ><code><span class="code-comment"># Point at the vault you already use</span>
 <span class="code-section">[providers.op]</span>
 type = <span class="code-string">"1password"</span>
 vault = <span class="code-string">"Engineering"</span>
@@ -92,39 +100,58 @@ value = <span class="code-string">"Database/url"</span></code></pre>
         ><code><span class="code-comment"># fnox set writes the ciphertext for you</span>
 <span class="code-section">[providers.age]</span>
 type = <span class="code-string">"age"</span>
-recipients = <span class="code-string">["age1…"]</span>
+recipients = [<span class="code-string">"age1…"</span>]
 
 <span class="code-section">[secrets.DATABASE_URL]</span>
 provider = <span class="code-string">"age"</span>
-value = <span class="code-string">"YWdlLWVuY3J5cHRpb24…"</span></code></pre>
+value = <span class="code-string">"YWdl…"</span></code></pre>
+        <pre
+          v-show="storage === 'profiles'"
+        ><code><span class="code-comment"># Development: encrypted in git</span>
+<span class="code-section">[secrets.DATABASE_URL]</span>
+provider = <span class="code-string">"age"</span>
+value = <span class="code-string">"YWdl…"</span>
+
+<span class="code-comment"># Production: AWS Secrets Manager</span>
+<span class="code-section">[profiles.production.secrets.DATABASE_URL]</span>
+provider = <span class="code-string">"aws"</span>
+value = <span class="code-string">"db-url"</span></code></pre>
         <div class="demo-run">
-          <span class="demo-label">RUN WITH SECRETS</span>
-          <pre><code><span class="prompt">$</span> fnox exec -- npm start</code></pre>
+          <span class="demo-label">RUN</span>
+          <pre><code><span class="prompt">$</span> {{
+            storage === "profiles"
+              ? "fnox exec -P production -- ./deploy"
+              : "fnox exec -- npm start"
+          }}</code></pre>
           <p>
-            <span aria-hidden="true">↳</span> DATABASE_URL is available to your
-            app.
+            <span aria-hidden="true">↳</span> Your app reads
+            <code>DATABASE_URL</code> as usual.
           </p>
         </div>
         <p class="demo-caption">
           {{
             storage === "vault"
-              ? "Commit the vault reference without putting the secret value in git."
-              : "Ciphertext and recipient are abbreviated. Keep your private key outside git."
+              ? "Only the item reference is committed. Each person reads it with their own vault login."
+              : storage === "encrypted"
+                ? "Only ciphertext and public keys are committed. Private keys stay on each machine."
+                : "Same app, same variable. The profile picks the source. Provider blocks omitted."
           }}
         </p>
       </div>
     </section>
 
     <section class="provider-strip" aria-label="Supported providers">
-      <span class="strip-label">SUPPORTED PROVIDERS</span>
+      <span class="strip-label">WORKS WITH</span>
       <div>
-        <a href="/providers/age">age</a>
         <a href="/providers/1password">1Password</a>
-        <a href="/providers/aws-sm">AWS</a>
-        <a href="/providers/azure-sm">Azure</a>
-        <a href="/providers/gcp-sm">Google Cloud</a>
         <a href="/providers/bitwarden">Bitwarden</a>
-        <a href="/providers/vault">Vault</a>
+        <a href="/providers/aws-sm">AWS</a>
+        <a href="/providers/gcp-sm">Google Cloud</a>
+        <a href="/providers/azure-sm">Azure</a>
+        <a href="/providers/vault">HashiCorp Vault</a>
+        <a href="/providers/doppler">Doppler</a>
+        <a href="/providers/age">age</a>
+        <a href="/providers/keychain">OS keychain</a>
         <a class="all-providers" href="/providers/overview"
           >All providers <span aria-hidden="true">→</span></a
         >
@@ -134,46 +161,48 @@ value = <span class="code-string">"YWdlLWVuY3J5cHRpb24…"</span></code></pre>
     <section class="home-section" aria-labelledby="workflow-title">
       <div class="section-heading">
         <div>
-          <h2 id="workflow-title">Choose where secrets are stored</h2>
+          <h2 id="workflow-title">Pick your starting point</h2>
         </div>
         <p>
-          Each secret can use a different provider, so you can combine encrypted
-          values with references to your team’s existing vaults.
+          Each secret names its own provider, so you can start one way and mix
+          in another later.
         </p>
       </div>
       <div class="workflow-grid">
         <a class="workflow" href="/guide/quick-start">
           <span class="workflow-number" aria-hidden="true">01 / ENCRYPT</span>
-          <h3>Encrypted values in git</h3>
+          <h3>No vault yet</h3>
           <p>
-            Encrypt with age, a hardware key, or cloud KMS. Review configuration
-            alongside your code and share access through public recipients or
-            provider permissions.
+            Encrypt secrets into <code>fnox.toml</code> with age, a YubiKey, or
+            a cloud KMS key. With age, share access by adding teammates' public
+            keys.
           </p>
           <span class="text-link"
-            >Start with age <span aria-hidden="true">↗</span></span
+            >Quick start <span aria-hidden="true">↗</span></span
           >
         </a>
-        <a class="workflow" href="/guide/golden-path">
+        <a class="workflow" href="/guide/existing-vault">
           <span class="workflow-number" aria-hidden="true">02 / CONNECT</span>
-          <h3>Existing vaults</h3>
+          <h3>A team vault</h3>
           <p>
-            Reference the secrets your team already manages. Add a personal
-            encrypted cache with fnox sync for local, offline access using age.
+            Commit references to 1Password, Bitwarden, AWS, or Vault items.
+            Cache them locally with <code>fnox sync</code> for fast, offline
+            reads.
           </p>
           <span class="text-link"
-            >Connect a vault <span aria-hidden="true">↗</span></span
+            >Use an existing vault <span aria-hidden="true">↗</span></span
           >
         </a>
-        <a class="workflow" href="/guide/profiles">
-          <span class="workflow-number" aria-hidden="true">03 / RUN</span>
-          <h3>Environment profiles</h3>
+        <a class="workflow" href="/guide/ci">
+          <span class="workflow-number" aria-hidden="true">03 / SHIP</span>
+          <h3>CI and production</h3>
           <p>
-            Use profiles for development, staging, and production. Change the
-            secret source without changing the way you launch your application.
+            Give the runner one credential and run the same
+            <code>fnox exec</code>. Use profiles to switch to production
+            sources.
           </p>
           <span class="text-link"
-            >Work with profiles <span aria-hidden="true">↗</span></span
+            >Set up CI <span aria-hidden="true">↗</span></span
           >
         </a>
       </div>
@@ -181,13 +210,13 @@ value = <span class="code-string">"YWdlLWVuY3J5cHRpb24…"</span></code></pre>
 
     <section class="home-section everyday" aria-labelledby="everyday-title">
       <div class="everyday-intro">
-        <h2 id="everyday-title">Use secrets in your workflow</h2>
+        <h2 id="everyday-title">Built for daily work</h2>
         <p>
-          Load secrets when you enter a project, cache repeated reads, or issue
-          temporary credentials when a service supports them.
+          Secrets load when you enter a project, stay fast when your vault is
+          remote, and stay out of reach of tools that shouldn't have them.
         </p>
         <a class="text-link" href="/guide/how-it-works"
-          >See how fnox works <span aria-hidden="true">→</span></a
+          >How fnox works <span aria-hidden="true">→</span></a
         >
       </div>
       <div class="capability-list">
@@ -195,37 +224,38 @@ value = <span class="code-string">"YWdlLWVuY3J5cHRpb24…"</span></code></pre>
           ><div>
             <h3>Shell integration</h3>
             <p>
-              Shell hooks load and unload values as you move between projects.
+              Load a project's secrets on <code>cd</code> and unload them when
+              you leave. Bash, Zsh, Fish, Nushell, and PowerShell.
             </p>
           </div>
           <span aria-hidden="true">↗</span></a
         >
-        <a href="/guide/daemon"
+        <a href="/guide/sync"
           ><div>
-            <h3>In-memory caching</h3>
+            <h3>Offline cache</h3>
             <p>
-              An opt-in daemon keeps resolved values in memory during your
-              session.
+              Keep an encrypted copy of vault secrets on your machine,
+              optionally behind Touch ID or a YubiKey.
             </p>
           </div>
           <span aria-hidden="true">↗</span></a
         >
         <a href="/guide/leases"
           ><div>
-            <h3>Temporary credentials</h3>
+            <h3>Short-lived credentials</h3>
             <p>
-              Create temporary credentials with AWS STS, GitHub Apps, Vault, and
-              more.
+              Hand commands temporary AWS, GCP, Azure, GitHub, or Vault
+              credentials instead of long-lived keys.
             </p>
           </div>
           <span aria-hidden="true">↗</span></a
         >
         <a href="/guide/proxy"
           ><div>
-            <h3>Credentials for agent requests</h3>
+            <h3>Safe for AI agents</h3>
             <p>
-              Pass placeholders to an agent and inject real values into matching
-              HTTPS requests.
+              Give an agent placeholders and inject real credentials only into
+              the API requests you allow.
             </p>
           </div>
           <span aria-hidden="true">↗</span></a
@@ -236,8 +266,8 @@ value = <span class="code-string">"YWdlLWVuY3J5cHRpb24…"</span></code></pre>
     <section class="home-start" aria-labelledby="start-title">
       <img src="/logo.svg" alt="" width="64" height="64" loading="lazy" />
       <div>
-        <h2 id="start-title">Set up your first provider</h2>
-        <p>Install fnox, configure a provider, and run your first command.</p>
+        <h2 id="start-title">Encrypt your first secret</h2>
+        <p>Five minutes, no account required.</p>
       </div>
       <a class="home-button primary" href="/guide/quick-start"
         >Follow the quick start <span aria-hidden="true">→</span></a

@@ -1,24 +1,25 @@
 ---
-description: "Run mise tasks with fnox-managed secrets and understand the limitations of the fnox environment plugin."
+description: "Install fnox with mise, pin its version per project, and run mise tasks with secrets by wrapping them in fnox exec."
 ---
 
 # mise integration
 
-Use [mise](https://mise.jdx.dev) to install fnox and run project tasks. Put `fnox exec` in tasks that need secrets so those tasks work from a shell, an editor, or CI.
+[mise](https://mise.jdx.dev) and fnox are designed to work together: mise installs fnox and runs your tasks, and fnox supplies the secrets those tasks need.
 
-## Install fnox for the project
+## Pin fnox in the project
 
 ```sh
 mise use fnox
 ```
 
-This adds fnox to the project's mise configuration. To install it for all projects, use `mise use -g fnox` instead.
+This adds fnox to `mise.toml`, so every teammate and CI runner (via [`jdx/mise-action`](/guide/ci#_1-install-fnox)) uses the same version.
 
 ## Run tasks with secrets
 
-Add tasks to `mise.toml`:
+Wrap the commands that need secrets in `fnox exec`:
 
 ```toml
+# mise.toml
 [tasks.dev]
 run = "fnox exec -- npm run dev"
 
@@ -29,50 +30,38 @@ run = "fnox exec -- npm test"
 run = "fnox exec --profile production --if-missing error -- ./deploy.sh"
 ```
 
-Run them normally:
-
 ```sh
 mise run dev
-mise run test
-mise run deploy
 ```
 
-fnox owns secret resolution, including profiles, file secrets, lease creation, and cache settings. CI must still authenticate to the configured provider before running these tasks.
+The wrapper makes each task's secrets explicit and independent of how the calling shell was set up, so the task behaves the same from a terminal, an editor, or CI.
 
-## Load secrets in the interactive shell
+## Shell integration alongside mise
 
-[fnox shell integration](/guide/shell-integration) can run alongside mise activation. Add the appropriate fnox activation command to your shell's startup file:
+`mise activate` and `fnox activate` can both be in your shell startup file; they don't interfere. Keep the `fnox exec` wrapper in tasks anyway. To keep secrets out of the interactive shell entirely, set `env = "exec"` in `fnox.toml` (see [running commands](/guide/running-commands#choose-which-secrets-reach-a-command)).
 
-```bash
-# Bash: ~/.bashrc
-eval "$(fnox activate bash)"
-```
+## Speed up remote providers
 
-For tasks, keep the explicit `fnox exec` wrapper even when shell integration is enabled. It makes the task's secret requirements independent of the calling shell.
+If tasks read from a remote vault and feel slow, turn on a fnox cache. Both work with tasks that call `fnox exec`:
 
-Use top-level `env = "exec"` in `fnox.toml` if you want secrets available only to commands launched through fnox, rather than every process in the interactive shell.
+- [Sync](/guide/sync): an encrypted local copy that survives restarts and works offline.
+- [Daemon](/guide/daemon): resolved values kept in memory for your session. mise can also read the daemon's cache directly through the [`fnox env --json`](/reference/env-json) protocol.
 
-## Choose a cache
+## The `mise-env-fnox` plugin
 
-If remote reads are slow, configure caching in fnox:
-
-- [Sync](/guide/sync) creates a persistent encrypted local snapshot. Use age or another local provider for offline access.
-- The [daemon](/guide/daemon) keeps resolved values in memory during a session.
-
-Both work when a mise task invokes `fnox exec`.
-
-## Experimental environment plugin
-
-The [`jdx/mise-env-fnox`](https://github.com/jdx/mise-env-fnox) environment plugin is an incomplete experiment and does not track all fnox features. Existing users can consult its repository for its current configuration and limitations.
-
-For a maintained setup, remove the `_.fnox-env` entry from mise's `[env]` configuration and use the task wrappers or shell activation shown above. Remove the plugin registration only if nothing else in your mise configuration uses it.
+The [`jdx/mise-env-fnox`](https://github.com/jdx/mise-env-fnox) environment plugin was an experiment and doesn't support all fnox features. If you use it, replace the `_.fnox-env` entry in mise's `[env]` with the task wrappers above.
 
 ## Troubleshooting
 
 ```sh
-mise exec -- fnox --version
-mise exec -- fnox config-files
-mise exec -- fnox check --all
+mise exec -- fnox --version        # is fnox installed?
+mise exec -- fnox config-files     # is the config found?
+mise exec -- fnox check --all      # do the secrets resolve?
 ```
 
-These checks distinguish tool installation, config discovery, and secret resolution problems. Continue with [fnox troubleshooting](/guide/troubleshooting) if the CLI is available but secrets do not resolve.
+Each command narrows the problem to installation, config discovery, or secret resolution. Then see [troubleshooting](/guide/troubleshooting).
+
+## See also
+
+- [Running commands](/guide/running-commands): what `fnox exec` does.
+- [CI/CD](/guide/ci): run the same tasks in CI.

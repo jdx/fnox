@@ -1,141 +1,96 @@
 ---
-description: "Enable the optional fnox daemon to cache resolved secrets in memory, inspect its status, and clear stale values."
+description: "Turn on the optional fnox daemon to keep resolved secrets in memory for your session, so repeated reads from remote providers are instant."
 ---
 
-# Cache secrets in memory
+# Memory cache (daemon)
 
-The fnox daemon keeps resolved secrets in memory for your user session. It is useful when your config points at remote providers such as 1Password, Bitwarden, AWS Secrets Manager, or Vault and repeated `fnox get`, `fnox exec`, or shell hook refreshes feel slow.
+The fnox daemon is an optional per-user background process that keeps resolved secrets in memory. The first `fnox exec` in a session reads from your providers; later ones are served from memory. It helps most when your config points at remote vaults and you run many short commands, or use [shell integration](/guide/shell-integration), which resolves at every directory change.
 
-The daemon is opt-in. fnox does not use it unless you enable it in config or set `FNOX_DAEMON=on`.
-
-## Enable it
-
-Add a top-level `[daemon]` section:
+## Turn it on
 
 ```toml
+# fnox.toml, or ~/.config/fnox/config.toml for every project
 [daemon]
 enabled = true
-idle_timeout = "8h"
+idle_timeout = "8h" # default
 ```
 
-When enabled, supported read commands auto-start the daemon. You can also manage it directly:
+Or for your session: `export FNOX_DAEMON=on`. Read commands start the daemon automatically when they need it. To skip it for one command, use `--no-daemon`; to turn it off for a session, `export FNOX_DAEMON=off`.
 
-```bash
-fnox daemon start
+```sh
 fnox daemon status
-fnox daemon clear
 fnox daemon stop
 ```
 
-On a cache miss, an interactive fnox client resolves the requested secrets in
-the foreground and sends the results to the daemon for memory-only caching.
-This keeps terminal-dependent authentication, such as a FIDO2 PIN and hardware
-key touch, attached to the terminal that invoked fnox. Explicitly
-non-interactive clients resolve misses in the daemon and never prompt.
+## Refresh a changed secret
 
-Use `--no-daemon` for a single direct resolution:
+The daemon doesn't know when a value changes in your vault. After rotating a secret, refresh just that one:
 
-```bash
-fnox --no-daemon get DATABASE_URL
+```sh
+fnox get --refresh API_TOKEN               # re-read now and cache the new value
+fnox exec --refresh API_TOKEN -- ./deploy  # same, while the rest come from the cache
+fnox daemon clear API_TOKEN                # just evict it
+fnox daemon clear                          # evict everything
 ```
 
-Or disable it for a shell/session:
+The cache is also dropped automatically when:
 
-```bash
-export FNOX_DAEMON=off
-```
+- the daemon stops, or exits after `idle_timeout` with no requests;
+- a config file, the selected profile, a provider setting, or a relevant `FNOX_*` or provider credential variable (such as `AWS_*`) changes.
 
 ## What uses it
 
-Daemon-backed resolution applies to read-oriented commands:
+Read commands: `exec`, `get`, `export`, `list --values`, `env --json`, shell integration, `tui`, `mcp`, and `proxy run`. `check --all` connects to the daemon but always re-reads from providers, so it reports the current state.
 
-- `fnox exec`
-- `fnox env --json`
-- `fnox get`
-- `fnox hook-env`
-- `fnox export`
-- `fnox list --values`
-- `fnox check --all`
-- `fnox tui`
-- `fnox mcp`
-- `fnox proxy run`
-- `fnox ci-redact`
+Commands that write or administer (`set`, `remove`, `sync`, `reencrypt`, `edit`, `provider`, `lease create`) always resolve directly.
 
-Mutation and admin commands still resolve directly, including `sync`, `reencrypt`, `edit`, `set`, `remove`, `provider`, and `lease create`.
+## Prompts and hardware keys
 
-## Other programs (mise)
+On a cache miss, fnox resolves the secret in your terminal and hands the result to the daemon. That way 1Password or SSO prompts, FIDO2 PINs, and YubiKey touches happen where you can see them. With `--non-interactive`, misses are resolved inside the daemon and never prompt.
 
-Programs that start processes themselves can read the daemon's cache directly, without running `fnox`. The [`fnox-client`](https://crates.io/crates/fnox-client) crate is a small Rust client for this: one round trip over the daemon's Unix socket or Windows named pipe answers with the same JSON document as [`fnox env --json`](/reference/env-json), and mise uses it to start tasks with the secrets they were granted.
-
-- **Ask describe first.** `fnox env --json --describe` reports `daemon_enabled`, whether fnox would use the daemon for this project. Send a request to the daemon only when it is `true`, so a project that disables the daemon never has its environment sent to it.
-- **It only reads.** Such a client never starts the daemon, never stores values in it, and never makes it call a provider. If no daemon is running, it says so.
-- **A miss is resolved by fnox.** When a requested secret is not cached (or needs a lease), the program runs `fnox env --json` itself. That command resolves on your terminal, so prompts and hardware-key touches work, and it fills the cache for next time.
-- **`disabled` is decided per project.** One daemon can run while some projects do not enable it. For those, and for any request made with `FNOX_DAEMON=off`, the daemon answers `disabled` and the program resolves directly, as `fnox` does.
-- **The environment matters.** The daemon's cache is keyed on `FNOX_*` variables and provider credentials such as `AWS_*`, so a program must send exactly the environment it gives `fnox env --json`. Otherwise every request misses.
-
-The wire protocol is version 6, which adds a `hello` handshake and the `resolve_env` request these clients use. Version 6 also changes the socket path. After upgrading fnox, a daemon from the previous version keeps running until its idle timeout, and `fnox daemon clear` still reaches it. The first daemon-enabled command after the upgrade starts a new daemon, so its cache starts empty.
-
-## Cache behavior
-
-The daemon cache is memory-only. Secret values are not written to disk by the daemon.
-
-Remote changes do not automatically invalidate cached values. After rotating a secret in its source provider, refresh just that secret so the rest of the cache stays warm:
-
-```bash
-fnox daemon clear API_TOKEN                # evict one key from every running daemon
-fnox get --refresh API_TOKEN               # re-resolve it now and cache the new value
-fnox exec --refresh API_TOKEN -- ./deploy  # same, while other secrets come from the cache
-```
-
-`--refresh` can be repeated on `fnox exec` to refresh several keys. Cached values are also discarded when:
-
-- You run `fnox daemon clear` without keys, which clears all running profile-scoped daemon caches
-- You run `fnox daemon stop`
-- The daemon exits after its idle timeout
-- Config files, profile settings, provider references, post-processing options, or relevant `FNOX_*` and provider environment variables change
-
-`fnox check --all` uses the daemon connection when daemon mode is enabled, but it does not reuse cached secret values. It still contacts providers so it can validate the current state.
-
-`fnox exec` and `fnox env --json` resolve an `env = false` secret only when an injected secret depends on it, when a selected lease consumes it as an input, or when a selected `command` lease may read it. They never inject or print it. Read one explicitly with `fnox get SECRET_NAME`.
-
-## Opt out per secret or provider
-
-Set `daemon_cache = false` on a secret that should be resolved again on each request:
+## Exclude a secret or provider
 
 ```toml
 [secrets]
 PAYMENT_API_KEY = { provider = "op", value = "Payments/api-key", daemon_cache = false }
-```
 
-Set it on a provider to bypass daemon caching for every secret that uses that provider:
-
-```toml
 [providers.op]
 type = "1password"
 vault = "Engineering"
-daemon_cache = false
+daemon_cache = false # applies to every secret from this provider
 ```
 
-This disables cache reuse for those values. If daemon mode is enabled, fnox still talks to the daemon for supported read commands, but those entries are resolved again for every request.
+Those values are re-read on every request.
 
-A value can depend on another one, such as a provider `token = { secret = "..." }` that is decrypted with age. To keep both out of the cache, set `daemon_cache = false` on both providers. [Keep production out of the daemon](/guide/sync#keep-production-out-of-the-daemon) shows a production profile set up this way.
+When one value unlocks another, such as a provider `token = { secret = "..." }` decrypted with age, set `daemon_cache = false` on both providers to keep both out of the cache. [Keep production out of the daemon](/guide/sync#keep-production-out-of-the-daemon) shows a production profile set up this way.
 
-## Security model
+## Security
 
-The daemon listens on a Unix domain socket on Linux, macOS, FreeBSD and OpenBSD, and on a named pipe on Windows. It does not listen on TCP.
+- Values are held in memory only; the daemon never writes them to disk.
+- It listens on a Unix domain socket (Linux, macOS, FreeBSD, OpenBSD) in a private runtime directory, or a named pipe on Windows that only your user can open. There is no network listener.
+- Both sides check that the other belongs to the same user before exchanging data.
 
-On Unix the socket is created in a user-owned runtime directory with strict permissions. On Windows the pipe is named after your user's SID and its access list admits only that user. It rejects remote clients, and the daemon refuses to adopt a pipe that another process created first. In both cases the daemon verifies that each client belongs to the same user before accepting requests, and clients verify the daemon peer before sending request data.
+Anything running as your user can ask the daemon for cached values, just as it could run `fnox get`. If that's a concern for a secret, set `daemon_cache = false` on it.
 
-On unsupported platforms, daemon mode returns a clear unsupported error. Use `--no-daemon` or `FNOX_DAEMON=off` to force direct resolution.
+## Other programs {#other-programs-mise}
 
-## Daemon vs sync
+Tools that start processes themselves, such as mise, can read the daemon's cache directly with the [`fnox-client`](https://crates.io/crates/fnox-client) Rust crate. A request returns the same document as [`fnox env --json`](/reference/env-json).
 
-Use the daemon when you want faster repeated reads during a session and are comfortable keeping resolved values in memory.
+Rules for client authors:
 
-Use [syncing secrets locally](/guide/sync) when you want an encrypted local cache that survives restarts and can work offline.
+- Run `fnox env --json --describe` first, and talk to the daemon only if it reports `daemon_enabled: true`.
+- The client only reads: it never starts the daemon, stores values, or triggers provider calls. On a miss, run `fnox env --json` yourself; that resolves in the user's terminal and fills the cache.
+- Send exactly the environment you would give `fnox env --json`. The cache is keyed on `FNOX_*` and provider credential variables, so a different environment always misses.
+- A `disabled` answer means this project, or `FNOX_DAEMON=off` in the request, doesn't use the daemon. Resolve directly.
 
-## Next steps
+The wire protocol is version 6. After upgrading fnox, the old daemon keeps running until its idle timeout, and the first command after the upgrade starts a new one with an empty cache.
 
-- [Shell Integration](/guide/shell-integration) - Auto-load secrets on `cd`
-- [Syncing Secrets Locally](/guide/sync) - Store an encrypted local cache
-- [CLI Reference](/cli/daemon) - Daemon command details
+## Daemon or sync?
+
+Use the daemon for speed within a session. Use [sync](/guide/sync) when you also want reads to work offline and survive restarts. They work together.
+
+## See also
+
+- [Local sync cache](/guide/sync): encrypted, persistent, offline.
+- [`fnox daemon` reference](/cli/daemon): `start`, `status`, `clear`, `stop`.
+- [Configuration reference](/reference/configuration#daemon): `[daemon]` and `daemon_cache`.

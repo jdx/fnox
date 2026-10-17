@@ -397,4 +397,4 @@ fnox set INFISICAL_TOKEN "new-token" --provider age
 
 - [1Password](/providers/1password) - Alternative password manager
 - [Vault](/providers/vault) - More established alternative
-- [Real-World Example](/guide/real-world-example) - Complete setup
+- [Real-World Example](/guide/dev-to-production) - Complete setup

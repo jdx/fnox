@@ -248,4 +248,4 @@ doppler secrets --project my-project --config prd
 
 - [Infisical](/providers/infisical) - Alternative cloud secrets manager
 - [HashiCorp Vault](/providers/vault) - Self-hosted alternative
-- [Real-World Example](/guide/real-world-example) - Complete setup
+- [Real-World Example](/guide/dev-to-production) - Complete setup
