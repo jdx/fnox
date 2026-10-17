@@ -89,15 +89,8 @@ impl ExecCommand {
         }
         crate::daemon::refresh(cli, &config, &self.refresh).await?;
 
-        let (plan, lease_files) = child_env::plan(
-            cli,
-            &config,
-            &profile,
-            EnvScope::Exec,
-            Roots::AllProfile,
-            "exec",
-        )
-        .await?;
+        let (plan, lease_files) =
+            child_env::plan(cli, &config, &profile, EnvScope::Exec, Roots::Scope, "exec").await?;
 
         // Apply in order: remove, then set, then files. Explicit secrets and
         // lease credentials win over the ambient scrub because `remove` never

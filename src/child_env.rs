@@ -53,8 +53,6 @@ pub fn ambient_scrub_keys() -> impl Iterator<Item = &'static str> {
 
 /// Which keys a plan is built for.
 pub enum Roots<'a> {
-    /// Every secret is resolved, including `env = false` ones (what `fnox exec` does today).
-    AllProfile,
     /// Every secret whose mode is in scope, plus what they depend on.
     Scope,
     /// Exactly these keys, validated by [`select`].
@@ -70,8 +68,6 @@ pub struct Selection {
     pub requested: Option<Vec<String>>,
     /// Leases that run, in config order.
     pub leases: Vec<String>,
-    /// Resolve every profile secret instead of the dependency closure of the roots.
-    pub resolve_all: bool,
 }
 
 /// The error for a rejected key set, with the help text `fnox env` prints.
@@ -128,20 +124,11 @@ pub fn select(
     };
 
     let keys = match roots {
-        Roots::AllProfile => {
-            return Ok(Selection {
-                roots: in_scope_roots(),
-                requested: None,
-                leases: all_leases(),
-                resolve_all: true,
-            });
-        }
         Roots::Scope => {
             return Ok(Selection {
                 roots: in_scope_roots(),
                 requested: None,
                 leases: all_leases(),
-                resolve_all: false,
             });
         }
         Roots::Keys(keys) => keys,
@@ -226,7 +213,6 @@ pub fn select(
             .filter(|name| selected_leases.contains(name.as_str()))
             .cloned()
             .collect(),
-        resolve_all: false,
     })
 }
 
@@ -238,9 +224,6 @@ pub fn resolve_set(
     leases: &IndexMap<String, LeaseBackendConfig>,
     sel: &Selection,
 ) -> Result<IndexMap<String, SecretConfig>> {
-    if sel.resolve_all {
-        return Ok(secrets.clone());
-    }
     // A selected lease that does not declare its inputs (a `command` lease) may
     // read any secret, as it can under `fnox exec`. Resolution covers the whole
     // profile; assembly still emits only the roots.
@@ -413,7 +396,7 @@ pub async fn plan(
         select(&secrets, &leases, scope, roots).map_err(|rejection| rejection_error(&rejection))?;
     let set = resolve_set(config, profile, &secrets, &leases, &sel)?;
 
-    let resolved = if set.is_empty() && !sel.resolve_all {
+    let resolved = if set.is_empty() {
         IndexMap::new()
     } else {
         crate::daemon::resolve_batch(cli, config, profile, &set, scope_purpose(scope), true).await?
@@ -762,12 +745,6 @@ create_command = "true"
         let sel = select(&secrets, &leases, EnvScope::Exec, Roots::Scope).unwrap();
         assert_eq!(sel.leases, ["gh", "cmd"]);
         assert_eq!(sel.roots, ["SHELL_OK", "EXEC_ONLY", "FILE_SECRET"]);
-        assert!(!sel.resolve_all);
-        assert!(
-            select(&secrets, &leases, EnvScope::Exec, Roots::AllProfile)
-                .unwrap()
-                .resolve_all
-        );
     }
 
     // ---- assemble ----
@@ -834,7 +811,7 @@ FNOX_AGE_KEY_FILE = { default = "k", as_file = true }
         let env = assemble_for(
             EnvScope::Exec,
             toml,
-            Roots::AllProfile,
+            Roots::Scope,
             &resolved(&[
                 ("FNOX_AGE_KEY", Some("explicit")),
                 ("FNOX_AGE_KEY_FILE", Some("k")),
@@ -855,7 +832,7 @@ FNOX_AGE_KEY_FILE = { default = "k", as_file = true }
         let env = assemble_for(
             EnvScope::Exec,
             &toml,
-            Roots::AllProfile,
+            Roots::Scope,
             &resolved(&[("GH_TOKEN", Some("master"))]),
             &creds(&[("GH_TOKEN", "short-lived")]),
             &["gh"],
@@ -881,7 +858,7 @@ LAST = { default = "3" }
         .unwrap()
         .get_leases(&["default".to_string()])
         .unwrap();
-        let sel = select(&secrets, &leases, EnvScope::Exec, Roots::AllProfile).unwrap();
+        let sel = select(&secrets, &leases, EnvScope::Exec, Roots::Scope).unwrap();
         let env = assemble(
             EnvScope::Exec,
             &secrets,
@@ -910,11 +887,11 @@ LAST = { default = "3" }
     }
 
     #[test]
-    fn assemble_env_false_none_goes_to_remove_in_all_profile() {
+    fn assemble_env_false_none_goes_to_remove() {
         let env = assemble_for(
             EnvScope::Exec,
             BASE,
-            Roots::AllProfile,
+            Roots::Scope,
             &resolved(&[
                 ("SHELL_OK", Some("a")),
                 ("EXEC_ONLY", Some("b")),
@@ -978,12 +955,12 @@ LAST = { default = "3" }
     }
 
     #[test]
-    fn assemble_all_profile_still_sets_a_lease_credential_over_an_env_false_secret() {
+    fn assemble_scope_still_sets_a_lease_credential_over_an_env_false_secret() {
         let toml = format!("{BASE}\n[secrets.OTHER_CRED]\ndefault = \"master\"\nenv = false\n");
         let env = assemble_for(
             EnvScope::Exec,
             &toml,
-            Roots::AllProfile,
+            Roots::Scope,
             &resolved(&[("OTHER_CRED", Some("master"))]),
             &creds(&[("OTHER_CRED", "lease")]),
             &["gh"],
