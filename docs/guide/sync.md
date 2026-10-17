@@ -275,8 +275,12 @@ memory, use a YubiKey rather than FIDO2-HMAC.
 Without `--pin`, any process running as your user on that machine can use the
 TPM key, so the key stays on the machine but nothing stops local malware or a
 stray script from decrypting the cache. With `--pin`, every decrypt needs the
-PIN. fnox asks for it once per command, even when the command decrypts several
-values with the same identity. With the [daemon](/guide/daemon) enabled, the
+PIN. Within one command, fnox asks once for each distinct age ciphertext it
+decrypts, and reuses the result when the same ciphertext comes up again. Values
+written by one `fnox sync` run share a single wrapped key, so reading the whole
+cache costs one prompt; a secret encrypted on its own, such as a token stored
+with `fnox set`, is a separate ciphertext and adds a prompt when a command
+needs it. With the [daemon](/guide/daemon) enabled, the
 first command prompts in your terminal and the daemon caches the results in
 memory, so later commands don't prompt again until the daemon idles out or you
 run `fnox daemon clear`. Values with `daemon_cache = false` still prompt on
@@ -374,8 +378,9 @@ What you get:
 - **The token stays out of the environment.** No `export DOPPLER_TOKEN=...`;
   only fnox reads it, and only when a secret has to be fetched from Doppler.
   Values served from the sync cache don't decrypt the token at all.
-- **One PIN prompt per command.** With the [daemon](/guide/daemon), one per
-  daemon session.
+- **Few PIN prompts.** Reading the synced values costs one prompt per command,
+  and the token adds a second only when a command has to fetch from Doppler.
+  With the [daemon](/guide/daemon), the prompts happen once per daemon session.
 
 If the machine is lost or its TPM is reset, the cache and the token can't be
 decrypted anywhere else. Revoke the service token in Doppler, issue a new one,
