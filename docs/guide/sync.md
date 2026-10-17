@@ -392,7 +392,42 @@ To keep the daemon's convenience for development while forcing a PIN prompt
 on every production command, use a [profile](/guide/profiles) for production
 and set `daemon_cache = false` on both its age provider and its remote
 provider. The first stops the decrypted token from being cached, the second
-stops the fetched production secrets from being cached:
+stops the fetched production secrets from being cached.
+
+::: warning Move the development cache into its own profile first
+Top-level secrets in `fnox.local.toml` are inherited by every profile and take
+precedence over `fnox.production.toml`. If the development cache from the
+previous section stays under the top-level `[secrets]`, `fnox --profile
+production` reads the cached development values instead of fetching from
+Doppler's `prd` config. Put development under a `development` profile (or run
+production commands with [`--no-defaults`](/guide/profiles)).
+:::
+
+Development then looks like the previous section, scoped to a profile:
+
+```toml
+# fnox.toml (committed)
+[profiles.development.providers.doppler]
+type = "doppler"
+project = "my-app"
+config = "dev"
+token = { secret = "DOPPLER_TOKEN" }
+
+[profiles.development.secrets]
+DATABASE_URL = { provider = "doppler", value = "DATABASE_URL" }
+```
+
+```bash
+fnox --profile development -c fnox.local.toml set DOPPLER_TOKEN --provider sync-age
+fnox --profile development sync --provider sync-age --local-file
+```
+
+The token and the synced values land under `[profiles.development.secrets]`
+in `fnox.local.toml`; add `env = false` to the token as before. Set
+`FNOX_PROFILE=development` in your shell or project environment to make it the
+everyday profile.
+
+Production gets its own age provider, remote provider and token:
 
 ```toml
 # ~/.config/fnox/config.toml
