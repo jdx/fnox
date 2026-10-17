@@ -164,7 +164,7 @@ Age plugins encrypt to a public key, so syncing doesn't touch the hardware and y
 
 ## Protect the vault credential {#protect-the-vault-credential}
 
-Some providers authenticate with a long-lived token instead of an interactive login: a Doppler or Infisical service token, a Vault token, a Bitwarden Secrets Manager access token. Exporting it in your shell profile puts it in plain text in every process you start, including scripts and coding agents that never need it. Keep it in the same hardware-backed cache instead, and let fnox hand it to the provider.
+Some providers authenticate with a long-lived token instead of an interactive login: a Doppler service token, a Vault token, or a Bitwarden Secrets Manager access token. Exporting it in your shell profile puts it in plain text in every process you start, including scripts and coding agents that never need it. Keep it in the same hardware-backed cache instead, and let fnox hand it to the provider.
 
 This example uses Doppler and the PIN-protected TPM key from above. It works with any provider field that accepts [`{ secret = "NAME" }`](/guide/config-files#secret-references-in-provider-config).
 
