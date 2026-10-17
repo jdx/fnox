@@ -1,109 +1,117 @@
 ---
-description: "Read Keeper Secrets Manager records with fnox using application configuration, one-time token bootstrap, and Keeper notation."
+description: "Read Keeper Secrets Manager records with fnox using Keeper notation, an application configuration file, or one-time token bootstrap."
 ---
 
 # Keeper Secrets Manager
 
-Use [Keeper Secrets Manager](https://docs.keeper.io/keeperpam/secrets-manager) through Keeper's official Rust SDK. The provider is read-only: fnox retrieves secrets but does not create or update Keeper records.
+Read records from [Keeper Secrets Manager](https://docs.keeper.io/keeperpam/secrets-manager) through Keeper's official Rust SDK. `fnox.toml` holds Keeper notation; values stay in Keeper. The provider is read-only: fnox does not create or update Keeper records.
+
+|                     |                                                                     |
+| ------------------- | ------------------------------------------------------------------- |
+| Config type         | `keeper-sm`                                                         |
+| Storage             | Remote service                                                      |
+| Writes (`fnox set`) | No (read-only)                                                      |
+| Requires            | A Secrets Manager client configuration and network access to Keeper |
 
 ## Quick start
 
-Create a Keeper Secrets Manager application and client device, then download its JSON configuration file.
+Create a Secrets Manager application with access to the shared folder that holds your records, add a client device, and download its JSON configuration file. Then reference fields by record UID:
 
 ```toml
-[providers]
-keeper = { type = "keeper-sm", config_file = "~/.keeper/ksm-config.json" }
+[providers.keeper]
+type = "keeper-sm"
+config_file = "~/.keeper/ksm-config.json"
 
 [secrets]
-DB_PASSWORD = { provider = "keeper", value = "HDQTnxkTcPSOsHNAlbI4aQ/field/password" }
-DB_USER = { provider = "keeper", value = "HDQTnxkTcPSOsHNAlbI4aQ/field/login" }
+DB_USER = { provider = "keeper", value = "RECORD_UID/field/login" }
+DB_PASSWORD = { provider = "keeper", value = "RECORD_UID/field/password" }
 ```
 
-Keeper notation may include the `keeper://` prefix, but it is optional:
-
-```toml
-[secrets]
-DB_PASSWORD = { provider = "keeper", value = "keeper://HDQTnxkTcPSOsHNAlbI4aQ/field/password" }
+```sh
+fnox provider test keeper
+fnox exec -- ./start-server.sh
 ```
 
 ## Authentication
 
-The provider checks authentication sources in this order:
+The provider loads its client configuration from the first of these sources:
 
-1. `config_file` in the provider configuration
-2. `FNOX_KEEPER_CONFIG`
-3. `KSM_CONFIG`
-4. `~/.keeper/ksm-config.json`
+1. `config_file` in the provider configuration.
+2. `FNOX_KEEPER_CONFIG`.
+3. `KSM_CONFIG`.
+4. `~/.keeper/ksm-config.json`.
 
-`FNOX_KEEPER_CONFIG` and `KSM_CONFIG` may contain either the JSON client configuration or its Base64 encoding.
+`FNOX_KEEPER_CONFIG` and `KSM_CONFIG` may contain either the JSON client configuration or its Base64 encoding, which suits CI secret stores.
 
-The Keeper configuration contains private client and application keys. Protect it like any other credential. Files created by the Keeper SDK use mode `0600` on Unix.
+The configuration contains private client and application keys. Protect it like any other credential. Files created by the Keeper SDK use mode `0600` on Unix.
 
 ### One-time token bootstrap
 
-To bind a new client device, configure a file and provide a one-time token:
+To bind a new client device without downloading a configuration, set `config_file` and provide a one-time token once:
 
-```toml
-[providers]
-keeper = { type = "keeper-sm", config_file = "~/.keeper/ksm-config.json" }
-```
-
-```bash
-export KSM_TOKEN="US:YOUR_ONE_TIME_TOKEN"
+```sh
+export KSM_TOKEN="US:..."
 fnox provider test keeper
 unset KSM_TOKEN
 ```
 
-The `token` field in the provider configuration takes priority over both environment variables, and `FNOX_KEEPER_TOKEN` takes priority over `KSM_TOKEN`. Bootstrap requires `config_file` because Keeper writes the bound client credentials during the first network request. Remove the one-time token after successful initialization.
-
-## Configuration
-
-| Field         | Required | Description                                     |
-| ------------- | -------- | ----------------------------------------------- |
-| `config_file` | No       | JSON client configuration file                  |
-| `token`       | No       | One-time bootstrap token; secret refs supported |
+Bootstrap requires `config_file` because Keeper writes the bound client credentials there during the first request. The token comes from the provider's `token` field, then `FNOX_KEEPER_TOKEN`, then `KSM_TOKEN`. Remove it after the first successful run.
 
 The `token` field can reference a bootstrap secret managed by another fnox provider:
 
 ```toml
-[providers]
-keeper = { type = "keeper-sm", config_file = "~/.keeper/ksm-config.json", token = { secret = "KEEPER_BOOTSTRAP_TOKEN" } }
+[providers.keeper]
+type = "keeper-sm"
+config_file = "~/.keeper/ksm-config.json"
+token = { secret = "KEEPER_BOOTSTRAP_TOKEN" }
 ```
 
-## Keeper notation
+## Configuration
 
-The secret `value` is passed to Keeper's notation resolver. Common selectors include:
+| Field         | Required | Default                                                         | Description                                                                                                            |
+| ------------- | -------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `config_file` | No       | `FNOX_KEEPER_CONFIG`, `KSM_CONFIG`, `~/.keeper/ksm-config.json` | Client configuration file. Relative paths resolve against the config file that declares the provider; `~` is expanded. |
+| `token`       | No       | `FNOX_KEEPER_TOKEN`, then `KSM_TOKEN`                           | One-time bootstrap token. Requires `config_file`.                                                                      |
 
-```toml
-[secrets]
-LOGIN = { provider = "keeper", value = "RECORD_UID/field/login" }
-PASSWORD = { provider = "keeper", value = "RECORD_UID/field/password" }
-API_KEY = { provider = "keeper", value = "RECORD_UID/custom_field/API Key" }
-TITLE = { provider = "keeper", value = "RECORD_UID/title" }
-```
+Every field accepts `{ secret = "NAME" }` to take its value from another fnox secret. The options shared by all providers, `auth_command` and `daemon_cache`, are in the [configuration reference](/reference/configuration#provider-configuration).
 
-String fields are returned directly. Structured Keeper values are serialized as compact JSON strings.
+### Environment variables
 
-## Environment variables
+| Variable             | Description                                                            |
+| -------------------- | ---------------------------------------------------------------------- |
+| `FNOX_KEEPER_CONFIG` | JSON or Base64 client configuration. Takes priority over `KSM_CONFIG`. |
+| `KSM_CONFIG`         | JSON or Base64 client configuration.                                   |
+| `FNOX_KEEPER_TOKEN`  | One-time bootstrap token. Takes priority over `KSM_TOKEN`.             |
+| `KSM_TOKEN`          | One-time bootstrap token.                                              |
 
-| Variable             | Description                                       |
-| -------------------- | ------------------------------------------------- |
-| `FNOX_KEEPER_CONFIG` | JSON or Base64 client configuration; first choice |
-| `KSM_CONFIG`         | Keeper-standard client configuration fallback     |
-| `FNOX_KEEPER_TOKEN`  | One-time bootstrap token; first choice            |
-| `KSM_TOKEN`          | Keeper-standard one-time token fallback           |
+## Reference formats
+
+A secret's `value` is passed to Keeper's notation resolver. The `keeper://` prefix is optional.
+
+| `value`                              | What fnox reads                |
+| ------------------------------------ | ------------------------------ |
+| `RECORD_UID/field/login`             | The record's login field       |
+| `RECORD_UID/field/password`          | The record's password field    |
+| `RECORD_UID/custom_field/API Key`    | A custom field named `API Key` |
+| `RECORD_UID/title`                   | The record's title             |
+| `keeper://RECORD_UID/field/password` | Same as without the prefix     |
+
+String fields are returned as-is. Structured values are returned as compact JSON, which you can narrow with [`json_path`](/reference/configuration#json-path).
+
+When fnox resolves several secrets from one provider, it looks them up in parallel, up to 10 at a time. During a one-time token bootstrap, it binds the device first.
 
 ## Troubleshooting
 
-Run the connection test:
+### Configuration file does not exist
 
-```bash
-fnox provider test keeper
-```
+No configuration was found at `config_file` or `~/.keeper/ksm-config.json`, and no one-time token was set. Download the configuration, set `KSM_CONFIG`, or bootstrap with a token.
 
-The test asks Keeper for all records accessible to the configured application. Confirm that the application has access to the shared folder containing the referenced record and that the client configuration is readable.
+### Record or field not found
 
-## Next steps
+`fnox provider test keeper` asks Keeper for every record the application can access. If it succeeds but a reference fails, check the record UID and field name, and that the application has access to the shared folder that contains the record.
 
-- [Profiles](/guide/profiles): select the application configuration for an environment.
-- [Sync a local cache](/guide/sync): cache accessible records under a personal encryption key.
+## See also
+
+- [Profiles](/guide/profiles): select an application configuration per environment.
+- [Sync](/guide/sync): cache records under a personal encryption key.
+- [CI/CD](/guide/ci): supply the client configuration to non-interactive jobs.

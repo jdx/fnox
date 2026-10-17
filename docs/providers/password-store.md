@@ -1,496 +1,123 @@
 ---
-description: "Read and write password-store secrets with fnox and pass. Configure GPG access, paths, and shared recipient keys."
+description: "Read and write password-store (pass) entries with fnox. Configure a prefix, store directory, GPG options, and multi-line entries."
 ---
 
-# Password-store
+# password-store
 
-Integrate with the standard Unix password manager (`pass`) to store and retrieve secrets from GPG-encrypted files.
+The `password-store` provider reads and writes entries through [pass](https://www.passwordstore.org/), the standard Unix password manager that keeps each secret in a GPG-encrypted file. `fnox.toml` holds entry paths; values stay in your store.
+
+|                     |                                                          |
+| ------------------- | -------------------------------------------------------- |
+| Config type         | `password-store`                                         |
+| Storage             | Local store                                              |
+| Writes (`fnox set`) | Yes                                                      |
+| Requires            | `pass` on `PATH`, an initialized store, and your GPG key |
 
 ## Quick start
 
-```sh
-# Install pass (password-store)
-brew install pass  # macOS
-# OR: sudo apt install pass  # Linux
-
-# Initialize password-store (one-time setup)
-pass init <your-gpg-key-id>
-```
-
-Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
-
-```toml
-[providers]
-pass = { type = "password-store", prefix = "fnox/" }
-```
+Install `pass` and GnuPG, and initialize a store with your GPG key if you have not already:
 
 ```sh
-# Store a secret in password-store
-fnox set DATABASE_URL "postgresql://localhost/mydb" --provider pass
-
-# Retrieve from password-store
-fnox get DATABASE_URL
-
-# Use in shell commands
-fnox exec -- npm start
+pass init <gpg-key-id>
 ```
 
-## Prerequisites
-
-- GPG (GNU Privacy Guard) installed and configured
-- GPG key pair generated
-- [pass](https://www.passwordstore.org/) (password-store) installed
-
-## Installation
-
-### Install GPG
-
-::: code-group
-
-```bash [macOS]
-brew install gnupg
-```
-
-```bash [Ubuntu/Debian]
-sudo apt install gnupg
-```
-
-```bash [Fedora/RHEL]
-sudo dnf install gnupg2
-```
-
-```bash [Arch]
-sudo pacman -S gnupg
-```
-
-:::
-
-### Install password-store
-
-::: code-group
-
-```bash [macOS]
-brew install pass
-```
-
-```bash [Ubuntu/Debian]
-sudo apt install pass
-```
-
-```bash [Fedora/RHEL]
-sudo dnf install pass
-```
-
-```bash [Arch]
-sudo pacman -S pass
-```
-
-:::
-
-## Setup
-
-### 1. Generate GPG key (if needed)
-
-If you don't have a GPG key:
-
-```bash
-# Generate a new GPG key
-gpg --full-generate-key
-
-# List your GPG keys
-gpg --list-secret-keys --keyid-format LONG
-```
-
-Note your key ID from the output (the long hex string after `sec`).
-
-### 2. Initialize password-store
-
-```bash
-# Initialize with your GPG key ID
-pass init <your-gpg-key-id>
-
-# Example:
-pass init 3AA5C34371567BD2
-
-# Or with email:
-pass init user@example.com
-```
-
-This creates `~/.password-store/` directory.
-
-### 3. (Optional) configure custom store directory
-
-```sh
-# Set custom store location
-export PASSWORD_STORE_DIR=/path/to/custom/store
-
-# Or configure in fnox
-```
-
-Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
-
-```toml
-[providers]
-pass = { type = "password-store", store_dir = "/path/to/custom/store" }
-```
-
-## Configuration
-
-Add password-store provider to `fnox.toml`:
-
-```toml
-[providers]
-pass = { type = "password-store", prefix = "fnox/" }
-```
-
-### Configuration options
-
-```toml
-[providers.pass]
-type = "password-store"
-prefix = "fnox/"  # Optional: prepend to all secret paths (default: none)
-store_dir = "./password-store"  # Optional: custom store location (default: ~/.password-store)
-gpg_opts = "--no-throw-keyids"  # Optional: extra GPG options, passed as PASSWORD_STORE_GPG_OPTS
-```
-
-Relative `store_dir` paths are resolved from the config file that declares the provider. Paths beginning with `~` expand to your home directory, and absolute paths are used unchanged.
-
-## How it works
-
-1. **Storage:** Secrets are stored as GPG-encrypted files in `~/.password-store/` (or custom location)
-2. **Config:** `fnox.toml` contains only the secret path/reference (not the actual value)
-3. **Encryption:** When you run `fnox set`, it calls `pass insert` to GPG-encrypt and store the secret
-4. **Retrieval:** When you run `fnox get`, it calls `pass show` to decrypt and retrieve the secret
-5. **Prefix:** If configured, the prefix is prepended to the secret path (e.g., `value = "api-key"` becomes `fnox/api-key`)
-6. **Hierarchy:** Supports nested paths for organizing secrets (e.g., `work/github/token`)
-
-## Usage
-
-### Store a secret
-
-```bash
-# Simple secret
-fnox set DATABASE_URL "postgresql://localhost/mydb" --provider pass
-
-# With nested path (using --key-name)
-fnox set DB_PASSWORD "secret123" --provider pass --key-name "database/production"
-
-# With prefix configured, "database/production" becomes "fnox/database/production"
-```
-
-Your `fnox.toml`:
-
-```toml
-[secrets]
-DATABASE_URL = { provider = "pass", value = "DATABASE_URL" }  # Stored at fnox/DATABASE_URL
-DB_PASSWORD = { provider = "pass", value = "database/production" }  # Stored at fnox/database/production
-```
-
-### Retrieve a secret
-
-```bash
-fnox get DATABASE_URL
-```
-
-### Run commands with secrets
-
-```bash
-fnox exec -- npm run dev
-```
-
-### List secrets in password-store
-
-```bash
-# View password-store structure
-pass
-
-# Or with specific prefix
-pass ls fnox/
-```
-
-## Reference formats
-
-```toml
-[secrets]
-# Simple name (with prefix)
-MY_SECRET = { provider = "pass", value = "api-key" }
-# → Stored at: fnox/api-key.gpg
-
-# Nested path
-DB_PASSWORD = { provider = "pass", value = "database/production" }
-# → Stored at: fnox/database/production.gpg
-
-# Without prefix in config
-API_TOKEN = { provider = "pass", value = "tokens/github" }
-# → Stored at: tokens/github.gpg (no prefix)
-```
-
-## Selecting a line
-
-A common `pass` convention is to pack related values into a single entry:
-the password on line 1 and other fields (username, URL, etc.) on the lines
-below. The `pass` CLI exposes this with `pass show <entry> --clip=N` to
-copy the Nth line.
-
-fnox supports the same with the `line` field on a secret. It is **1-indexed**
-and selects a single line from whatever the provider returned:
+Add the provider:
 
 ```toml
 [providers.pass]
 type = "password-store"
 prefix = "fnox/"
+```
 
+```sh
+fnox set DATABASE_URL --provider pass
+fnox provider test pass
+fnox exec -- npm start
+```
+
+With `prefix = "fnox/"`, `fnox set DATABASE_URL` writes the entry `fnox/DATABASE_URL` and records `DATABASE_URL` in `fnox.toml`.
+
+## Authentication
+
+fnox runs `pass`, which runs GPG. Decryption uses your GPG key through `gpg-agent`, which may ask for the key's passphrase. Run `pass show <entry>` once to unlock the agent if fnox reports a GPG error. Anyone whose key is in the store's `.gpg-id` can decrypt.
+
+## Configuration
+
+| Field       | Required | Default                                | Description                                                                |
+| ----------- | -------- | -------------------------------------- | -------------------------------------------------------------------------- |
+| `prefix`    | No       | None                                   | String prepended to every entry path. Include a trailing `/` for a folder. |
+| `store_dir` | No       | `pass`'s default (`~/.password-store`) | Store directory, passed to `pass` as `PASSWORD_STORE_DIR`.                 |
+| `gpg_opts`  | No       | None                                   | Extra GPG options, passed to `pass` as `PASSWORD_STORE_GPG_OPTS`.          |
+
+Relative `store_dir` paths are resolved from the config file that declares the provider. Paths beginning with `~` expand to your home directory, and absolute paths are used unchanged. All fields accept `{ secret = "NAME" }`. Every provider also accepts [`auth_command` and `daemon_cache`](/reference/configuration#provider-configuration).
+
+### Environment variables
+
+When `store_dir` or `gpg_opts` is unset, fnox reads these, in priority order:
+
+| Setting     | Variables                                                      |
+| ----------- | -------------------------------------------------------------- |
+| Store       | `FNOX_PASSWORD_STORE_DIR`, then `PASSWORD_STORE_DIR`           |
+| GPG options | `FNOX_PASSWORD_STORE_GPG_OPTS`, then `PASSWORD_STORE_GPG_OPTS` |
+
+The provider fields take priority over both.
+
+## Reference formats
+
+| `value`               | Entry read (with `prefix = "fnox/"`) |
+| --------------------- | ------------------------------------ |
+| `api-key`             | `fnox/api-key`                       |
+| `database/production` | `fnox/database/production`           |
+
+fnox reads an entry with `pass show` and trims leading and trailing whitespace. It returns the whole entry, including any extra lines.
+
+### Select a line
+
+A common `pass` convention puts the password on line 1 and other fields on later lines. Select one with the secret's `line` option, which is 1-indexed:
+
+```toml
 [secrets]
-# `pass show fnox/database` returns:
-#   <password>
-#   <username>
 DB_PASSWORD = { provider = "pass", value = "database", line = 1 }
 DB_USERNAME = { provider = "pass", value = "database", line = 2 }
 ```
 
-Create a multi-line entry with `pass insert -m` (see [Multiline Secrets](#multiline-secrets)
-below). Without `line`, fnox returns the entire entry unchanged.
+`line` cannot be combined with `json_path`.
 
-`line` is mutually exclusive with `json_path`. It is also a read-only
-selector — see the warning under [Multiline Secrets](#multiline-secrets)
-for how to edit one line of an existing entry.
+## Write entries
 
-## Git integration
+`fnox set` writes the entry with `pass insert -m -f`, replacing the whole entry. Use `--key-name` for a path other than the secret's name, and `--from-file` for multi-line values:
 
-password-store has built-in git support:
-
-```bash
-# Initialize git repo in password-store
-pass git init
-
-# Add remote
-pass git remote add origin https://github.com/username/password-store.git
-
-# Configure git
-pass git config user.name "Your Name"
-pass git config user.email "you@example.com"
-
-# Changes are automatically committed
-fnox set API_KEY "new-key" --provider pass  # Auto-commits!
-
-# Push changes
-pass git push
+```sh
+fnox set DB_PASSWORD --provider pass --key-name database/production
+fnox set SSH_PRIVATE_KEY --provider pass --from-file ~/.ssh/id_ed25519
 ```
 
-## Team workflow
-
-### Encrypt for each teammate
-
-Encrypt for multiple team members (more secure):
-
-```bash
-# Re-init with multiple GPG keys
-pass init <key-id-1> <key-id-2> <key-id-3>
-
-# Or add recipients later
-cd ~/.password-store
-echo "<key-id-1> <key-id-2> <key-id-3>" > .gpg-id
-pass init -p / $(cat .gpg-id)
-```
-
-Then push to shared git repository:
-
-```bash
-pass git push
-```
-
-Team members pull:
-
-```bash
-git clone https://github.com/team/password-store.git ~/.password-store
-pass  # Verify they can decrypt
-```
-
-## Multi-environment example
-
-```toml
-# Development (password-store)
-[providers]
-pass = { type = "password-store", prefix = "fnox/dev/" }
-
-[secrets]
-DATABASE_URL = { provider = "pass", value = "database-url" }  # fnox/dev/database-url
-
-# Production (AWS Secrets Manager)
-[profiles.production.providers]
-aws = { type = "aws-sm", region = "us-east-1" }
-
-[profiles.production.secrets]
-DATABASE_URL = { provider = "aws", value = "database-url" }
-```
-
-## Bootstrap pattern
-
-Store provider tokens in password-store:
-
-```toml
-[providers]
-pass = { type = "password-store", prefix = "tokens/" }
-aws = { type = "aws-sm", region = "us-east-1" }
-
-[secrets]
-AWS_ACCESS_KEY_ID = { provider = "pass", value = "aws-access-key" }
-AWS_SECRET_ACCESS_KEY = { provider = "pass", value = "aws-secret-key" }
-DATABASE_URL = { provider = "aws", value = "db-url" }  # Retrieved from AWS
-```
-
-Bootstrap:
-
-```bash
-export AWS_ACCESS_KEY_ID=$(fnox get AWS_ACCESS_KEY_ID)
-export AWS_SECRET_ACCESS_KEY=$(fnox get AWS_SECRET_ACCESS_KEY)
-fnox exec -- ./deploy.sh  # Now can access AWS secrets
-```
-
-## Multiline secrets
-
-password-store fully supports multiline secrets:
-
-```bash
-# Store multiline secret
-fnox set SSH_PRIVATE_KEY --from-file ~/.ssh/id_rsa --provider pass
-
-# Or using heredoc with pass directly
-pass insert -m work/ssh-key <<EOF
------BEGIN RSA PRIVATE KEY-----
-MIIEpAIBAAKCAQEA...
------END RSA PRIVATE KEY-----
-EOF
-```
-
-::: warning Editing existing multiline entries
-`fnox set` always replaces the entire pass entry — it cannot edit a
-single line in place. To change one field of a multi-line entry without
-losing the others, use `pass edit <entry>` (or `pass insert -m -f` to
-re-write all lines) directly. This applies whether or not the secret
-uses the [`line`](#selecting-a-line) selector.
+::: warning Editing multi-line entries
+`fnox set` cannot edit a single line in place. To change one field of a multi-line entry without losing the others, use `pass edit <entry>`. This applies whether or not the secret uses `line`.
 :::
 
-## Environment variables
-
-password-store respects standard environment variables:
-
-```bash
-# Custom store location
-export PASSWORD_STORE_DIR=/path/to/store
-export FNOX_PASSWORD_STORE_DIR=/path/to/store  # fnox-specific
-
-# GPG options
-export PASSWORD_STORE_GPG_OPTS="--no-throw-keyids"
-export FNOX_PASSWORD_STORE_GPG_OPTS="--armor"  # fnox-specific
-```
-
-The `FNOX_*` variants take priority over the standard ones, and `store_dir`/`gpg_opts` in the provider config take priority over both.
-
-## Sync across machines
-
-### Using git
-
-```bash
-# Machine 1: Push
-pass git push
-
-# Machine 2: Pull
-cd ~/.password-store
-git pull
-```
-
-### Using sync service
-
-password-store is just a directory of GPG files. Sync with:
-
-- **Dropbox:** Symlink `~/.password-store` to Dropbox
-- **Syncthing:** Sync the directory
-- **rsync:** Manual sync between machines
-
-## Usage notes
-
-The provider reads and writes entries through `pass`. GPG recipients control decryption; git can synchronize the encrypted files but is not a secret-access audit log. Keep private keys backed up separately.
+If the store is a git repository, `pass` commits each change; push with `pass git push`. To share a store, list every teammate's key with `pass init <key-id-1> <key-id-2>`.
 
 ## Troubleshooting
 
-### "password store is empty"
+### Entry is not in the password store
 
-Initialize password-store:
+Check the full path, including `prefix`, with `pass ls fnox/`.
 
-```bash
-pass init <your-gpg-key-id>
-```
+### `decryption failed: No secret key`
 
-### "GPG: decryption failed: No secret key"
+Your GPG private key for one of the store's recipients is not available. Check with `gpg --list-secret-keys`.
 
-Your GPG private key is not available:
+### `Inappropriate ioctl for device`
 
-```bash
-# Check available keys
-gpg --list-secret-keys
+GPG cannot find a terminal for the passphrase prompt. Set `export GPG_TTY=$(tty)` in your shell profile, or unlock the agent first with `pass show <entry>`.
 
-# Import key if needed
-gpg --import private-key.gpg
-```
+### `pass` not found
 
-### "GPG: public key decryption failed: Inappropriate ioctl for device"
+Install password-store so `pass` is on `PATH` (`brew install pass`, `sudo apt install pass`).
 
-Set GPG TTY:
+## See also
 
-```bash
-export GPG_TTY=$(tty)
-
-# Add to shell profile
-echo 'export GPG_TTY=$(tty)' >> ~/.bashrc
-```
-
-### "pass: passphrase entry cancelled"
-
-GPG agent needs unlocking. Enter your GPG key passphrase when prompted.
-
-### Custom store directory not working
-
-Ensure `PASSWORD_STORE_DIR` or `store_dir` in config is set:
-
-```bash
-export PASSWORD_STORE_DIR=/path/to/store
-# OR in fnox.toml:
-# pass = { type = "password-store", store_dir = "/path/to/store" }
-```
-
-### Changes not being committed to git
-
-Ensure git is initialized:
-
-```bash
-cd ~/.password-store
-git status  # Should show a git repo
-# If not:
-pass git init
-```
-
-## Security considerations
-
-- **Encryption:** GPG encrypts files with your public key
-- **Access control:** Filesystem permissions + GPG key passphrase
-- **Git history:** Old secrets remain in git history (use `pass git` carefully)
-- **Key security:** Protect your GPG private key
-- **Passphrase:** Use a strong GPG key passphrase
-
-## Third-party tools
-
-password-store has a rich ecosystem:
-
-- **[QtPass](https://qtpass.org/)** - Cross-platform GUI
-- **[Android Password Store](https://github.com/android-password-store/Android-Password-Store)** - Android app
-- **[passff](https://github.com/passff/passff)** - Firefox extension
-- **[browserpass](https://github.com/browserpass/browserpass-extension)** - Browser extension
-- **[gopass](https://github.com/gopasspw/gopass)** - Go implementation with extra features
-
-## Next steps
-
-- [Age Encryption](/providers/age) - Modern alternative to GPG
-- [OS Keychain](/providers/keychain) - OS-native storage
-- [1Password](/providers/1password) - Commercial password manager
-- [Real-World Example](/guide/dev-to-production) - Complete setup guide
+- [gopass](/providers/gopass): a pass-compatible manager with mounts and age support.
+- [age](/providers/age): encrypted secrets in `fnox.toml` without GPG.
+- [KeePass](/providers/keepass): a single-file local database.

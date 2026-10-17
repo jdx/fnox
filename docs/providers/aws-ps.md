@@ -1,421 +1,178 @@
 ---
-description: "Read and write AWS Systems Manager Parameter Store secrets with fnox, including path prefixes and environment-specific profiles."
+description: "Read and write AWS Systems Manager Parameter Store values with fnox: credentials, minimal IAM policy, path prefixes, and role assumption."
 ---
 
 # AWS Parameter Store
 
-AWS Systems Manager Parameter Store stores values under hierarchical paths. Use the `aws-ps` provider to read and write parameters, including encrypted `SecureString` values.
+Store values in AWS Systems Manager Parameter Store and keep only their names in `fnox.toml`. The provider reads and writes: `fnox set` stores the value as a `SecureString` parameter.
+
+|                     |                                                   |
+| ------------------- | ------------------------------------------------- |
+| Config type         | `aws-ps`                                          |
+| Storage             | Remote service                                    |
+| Writes (`fnox set`) | Yes                                               |
+| Requires            | AWS credentials and network access to the AWS API |
 
 ## Quick start
 
-Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+With AWS credentials available in your shell, add a provider and store a value through the hidden prompt:
 
 ```toml
-[providers]
-ps = { type = "aws-ps", region = "us-east-1", prefix = "/myapp/prod/" }
+[providers.ps]
+type = "aws-ps"
+region = "us-east-1"
+prefix = "/myapp/prod/"
 ```
 
 ```sh
-# Create parameter in AWS
-aws ssm put-parameter \
-  --name "/myapp/prod/database-url" \
-  --value "postgresql://prod.example.com/db" \
-  --type "SecureString"
+fnox set DATABASE_URL --provider ps
 ```
 
-Add these definitions to `fnox.toml`. Merge them into any existing tables with the same names:
+This writes the parameter `/myapp/prod/DATABASE_URL` and adds the reference to `fnox.toml`:
 
 ```toml
 [secrets]
-DATABASE_URL = { provider = "ps", value = "database-url" }  # With prefix, fetches "/myapp/prod/database-url"
+DATABASE_URL = { provider = "ps", value = "DATABASE_URL" }
 ```
+
+To use a parameter that already exists, write the reference yourself with its name minus the prefix. Then check it:
 
 ```sh
-# Fetch secret
-fnox get DATABASE_URL
-```
-
-## Prerequisites
-
-- AWS account
-- AWS credentials configured (CLI, environment variables, or IAM role)
-- IAM permissions (see below)
-
-## IAM permissions
-
-### Read-only access (minimum)
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "DescribeParameters",
-      "Effect": "Allow",
-      "Action": "ssm:DescribeParameters",
-      "Resource": "*"
-    },
-    {
-      "Sid": "ReadParameters",
-      "Effect": "Allow",
-      "Action": ["ssm:GetParameter", "ssm:GetParameters"],
-      "Resource": "arn:aws:ssm:REGION:ACCOUNT:parameter/myapp/*"
-    }
-  ]
-}
-```
-
-::: warning DescribeParameters Permission
-The `ssm:DescribeParameters` action **must** use `"Resource": "*"` and cannot be scoped to specific ARNs.
-:::
-
-### Full access (for testing)
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "DescribeParameters",
-      "Effect": "Allow",
-      "Action": "ssm:DescribeParameters",
-      "Resource": "*"
-    },
-    {
-      "Sid": "ParameterStorePermissions",
-      "Effect": "Allow",
-      "Action": [
-        "ssm:GetParameter",
-        "ssm:GetParameters",
-        "ssm:PutParameter",
-        "ssm:DeleteParameter"
-      ],
-      "Resource": ["arn:aws:ssm:REGION:ACCOUNT:parameter/myapp/*"]
-    }
-  ]
-}
-```
-
-## Configuration
-
-### Configure AWS credentials
-
-Choose one:
-
-#### Option 1: environment variables
-
-```bash
-export AWS_ACCESS_KEY_ID="AKIA..."
-export AWS_SECRET_ACCESS_KEY="..."
-export AWS_REGION="us-east-1"
-```
-
-#### Option 2: AWS CLI profile
-
-```bash
-aws configure
-
-# Or use named profile
-export AWS_PROFILE=myapp
-```
-
-#### Option 3: IAM role (automatic on AWS)
-
-If running on EC2, ECS, Lambda, or other AWS services:
-
-```bash
-# No configuration needed!
-# Credentials are automatic via instance metadata
-```
-
-### Configure fnox provider
-
-```toml
-[providers]
-# Include only the optional fields you need.
-ps = { type = "aws-ps", region = "us-east-1", profile = "my-aws-profile", prefix = "/myapp/prod/" }
-```
-
-| Field      | Required | Description                                                                                       |
-| ---------- | -------- | ------------------------------------------------------------------------------------------------- |
-| `region`   | Yes      | AWS region (e.g. `us-east-1`)                                                                     |
-| `profile`  | No       | AWS CLI profile name from `~/.aws/config`. Falls back to the default credential chain if omitted. |
-| `role_arn` | No       | IAM role to assume before reading parameters                                                      |
-| `prefix`   | No       | Prepended to all parameter names                                                                  |
-
-The `profile` field is useful when you have multiple AWS accounts or roles configured and want to pin a provider to a specific one without relying on `AWS_PROFILE` in the environment.
-
-Set `role_arn` to have fnox call `sts:AssumeRole` and use the resulting credentials for every request. The credentials from `profile` (or the default chain) are the source credentials for that call:
-
-```toml
-[providers]
-ps = { type = "aws-ps", region = "eu-west-1", profile = "sso-dev", role_arn = "arn:aws:iam::123456789012:role/param-reader" }
-```
-
-## Creating parameters
-
-### Via AWS CLI
-
-```bash
-# Create a SecureString parameter (encrypted)
-aws ssm put-parameter \
-  --name "/myapp/prod/database-url" \
-  --value "postgresql://prod.db.example.com/mydb" \
-  --type "SecureString"
-
-# Create with description
-aws ssm put-parameter \
-  --name "/myapp/prod/api-key" \
-  --description "Production API key for external service" \
-  --value "sk_live_abc123xyz789" \
-  --type "SecureString"
-
-# Update existing parameter
-aws ssm put-parameter \
-  --name "/myapp/prod/api-key" \
-  --value "sk_live_newkey456" \
-  --type "SecureString" \
-  --overwrite
-```
-
-### Via fnox
-
-```bash
-# Store a secret directly via fnox
-fnox set DATABASE_URL "postgresql://prod.db.example.com/mydb" --provider ps
-```
-
-### Via AWS console
-
-1. Go to [AWS Systems Manager Console](https://console.aws.amazon.com/systems-manager/parameters)
-2. Click "Create parameter"
-3. Name it with your path (e.g., `/myapp/prod/database-url`)
-4. Choose "SecureString" for sensitive values
-5. Enter the value
-6. Create
-
-## Referencing parameters
-
-Add references to `fnox.toml`:
-
-```toml
-[secrets]
-DATABASE_URL = { provider = "ps", value = "database-url" }  # → Fetches "/myapp/prod/database-url"
-API_KEY = { provider = "ps", value = "api-key" }  # → Fetches "/myapp/prod/api-key"
-# Without prefix in provider, use full path like: value = "/myapp/prod/api-key"
-```
-
-## Usage
-
-### Get a secret
-
-```bash
-fnox get DATABASE_URL
-```
-
-### Run commands
-
-```bash
-# Fetches all secrets from Parameter Store
+fnox provider test ps
 fnox exec -- ./start-server.sh
 ```
 
-### Use different profiles
+## Authentication
 
-```bash
-# Different profile for different environments
-fnox exec --profile production -- ./deploy.sh
-```
+The provider authenticates exactly like [AWS Secrets Manager](/providers/aws-sm#configure-aws-credentials): the AWS SDK default credential chain, optionally pinned to a `profile`. The provider's `region` field sets the region for every request; `AWS_REGION` does not override it.
 
-## Prefix behavior
+When a request fails because credentials are missing or expired in an interactive terminal, fnox offers to run `aws sso login`. Change that command with [`auth_command`](/reference/configuration#auth-command). For CI, see [CI/CD](/guide/ci).
 
-The `prefix` is prepended to the `value`:
+## Configuration
 
 ```toml
-[providers]
-ps = { type = "aws-ps", region = "us-east-1", prefix = "/myapp/prod/" }
-
-[secrets]
-DATABASE_URL = { provider = "ps", value = "database-url" }  # → Fetches "/myapp/prod/database-url"
-API_KEY = { provider = "ps", value = "api-key" }  # → Fetches "/myapp/prod/api-key"
+[providers.ps]
+type = "aws-ps"
+region = "us-east-1"
+profile = "my-aws-profile" # optional
+prefix = "/myapp/prod/"    # optional
 ```
 
-Without prefix:
+| Field      | Required | Default       | Description                                                                                      |
+| ---------- | -------- | ------------- | ------------------------------------------------------------------------------------------------ |
+| `region`   | Yes      |               | AWS region for all requests.                                                                     |
+| `profile`  | No       | Default chain | Profile from `~/.aws/config`. Pins the provider to one account without relying on `AWS_PROFILE`. |
+| `role_arn` | No       |               | IAM role to assume before every request. See [Assume a role](#assume-a-role).                    |
+| `prefix`   | No       |               | Prepended to every parameter name, for reads and for `fnox set`.                                 |
+| `endpoint` | No       | AWS endpoint  | Custom endpoint URL, such as `http://localhost:4566` for LocalStack.                             |
+
+Every field accepts `{ secret = "NAME" }` to take its value from another fnox secret. The options shared by all providers, `auth_command` and `daemon_cache`, are in the [configuration reference](/reference/configuration#provider-configuration).
+
+## Reference formats
+
+A secret's `value` is the parameter name. fnox prepends the provider's `prefix` as-is, so include the leading and trailing `/` you need.
+
+| Provider `prefix` | `value`                    | Parameter fnox reads       |
+| ----------------- | -------------------------- | -------------------------- |
+| (none)            | `/myapp/prod/database/url` | `/myapp/prod/database/url` |
+| `/myapp/prod/`    | `database/url`             | `/myapp/prod/database/url` |
+| `/myapp/prod`     | `database/url`             | `/myapp/proddatabase/url`  |
+
+fnox requests every parameter with decryption, so `SecureString` values come back as plaintext and `String` values are returned unchanged. A parameter that holds JSON can be narrowed with [`json_path`](/reference/configuration#json-path).
+
+### One provider per path
+
+Path prefixes map well onto environments. Give each environment its own provider instance and select it with a [profile](/guide/profiles):
 
 ```toml
-[providers]
-ps = { type = "aws-ps", region = "us-east-1" }  # No prefix
+[providers.ps]
+type = "aws-ps"
+region = "us-east-1"
+prefix = "/myapp/staging/"
+
+[profiles.production.providers.ps]
+type = "aws-ps"
+region = "us-east-1"
+profile = "prod-account"
+prefix = "/myapp/prod/"
 
 [secrets]
-DATABASE_URL = { provider = "ps", value = "/myapp/prod/database-url" }  # → Full path
-```
-
-## Hierarchical organization
-
-Parameter Store supports path-based organization:
-
-```text
-/myapp/
-  prod/
-    database/
-      url
-      password
-    api/
-      key
-      secret
-  staging/
-    database/
-      url
-      password
-```
-
-```toml
-[providers]
-prod = { type = "aws-ps", region = "us-east-1", prefix = "/myapp/prod/" }
-staging = { type = "aws-ps", region = "us-east-1", prefix = "/myapp/staging/" }
-
-[secrets]
-DATABASE_URL = { provider = "prod", value = "database/url" }
-
-[profiles.staging.secrets]
-DATABASE_URL = { provider = "staging", value = "database/url" }
-```
-
-## Multi-environment example
-
-```toml
-# Development: age encryption
-[providers]
-age = { type = "age", recipients = ["age1..."] }
-
-[secrets]
-DATABASE_URL = { provider = "age", value = "encrypted-dev-db..." }
-
-# Staging: AWS Parameter Store
-[profiles.staging.providers]
-ps = { type = "aws-ps", region = "us-east-1", prefix = "/myapp/staging/" }
-
-[profiles.staging.secrets]
-DATABASE_URL = { provider = "ps", value = "database/url" }
-
-# Production: AWS Parameter Store using a dedicated AWS profile
-[profiles.production.providers]
-ps = { type = "aws-ps", region = "us-east-1", profile = "prod-account", prefix = "/myapp/prod/" }
-
-[profiles.production.secrets]
 DATABASE_URL = { provider = "ps", value = "database/url" }
 ```
 
-```bash
-# Development (local)
-fnox get DATABASE_URL
+## IAM permissions
 
-# Staging
-fnox get DATABASE_URL --profile staging
+fnox calls these Systems Manager actions:
 
-# Production
-fnox get DATABASE_URL --profile production
+| Operation                                       | Actions                  |
+| ----------------------------------------------- | ------------------------ |
+| Resolve one secret                              | `ssm:GetParameter`       |
+| Resolve several secrets, such as in `fnox exec` | `ssm:GetParameters`      |
+| `fnox provider test`                            | `ssm:DescribeParameters` |
+| `fnox set`                                      | `ssm:PutParameter`       |
+
+A read-only policy for parameters under `/myapp/`:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "ssm:DescribeParameters",
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["ssm:GetParameter", "ssm:GetParameters"],
+      "Resource": "arn:aws:ssm:us-east-1:123456789012:parameter/myapp/*"
+    }
+  ]
+}
 ```
 
-## Costs
+`ssm:DescribeParameters` cannot be scoped to parameter ARNs, so it needs `"Resource": "*"`. To let `fnox set` write, add `ssm:PutParameter` to the second statement.
 
-Charges depend on region, storage, key type or tier, and API usage. Consult the [service pricing](https://aws.amazon.com/systems-manager/pricing/) for current rates. fnox does not change the provider's billing model.
+`fnox set` writes a `SecureString` with the account's default `aws/ssm` key and overwrites an existing parameter of the same name. Reading a `SecureString` encrypted with a customer managed KMS key also needs `kms:Decrypt` on that key.
 
-## Comparison: Parameter Store vs Secrets Manager
+## Batch reads
 
-| Feature       | Parameter Store               | Secrets Manager           |
-| ------------- | ----------------------------- | ------------------------- |
-| Max Size      | 4KB (8KB advanced)            | 64KB                      |
-| Rotation      | Manual                        | Automatic                 |
-| Versioning    | Limited                       | Full versioning           |
-| Organization  | Hierarchical paths (`/a/b/c`) | Flat with tags            |
-| Cross-account | Via resource policies         | Via resource policies     |
-| Best For      | Config values, simple secrets | Complex secrets, rotation |
+When fnox resolves several secrets from one provider, it sends `GetParameters` requests of up to 10 names each, with up to 10 requests in flight. fnox keys that point at the same parameter share one fetch.
 
-**Use Parameter Store when:**
+## Assume a role
 
-- You have simple secrets or configuration values
-- Cost is a concern
-- You want hierarchical organization
-- You don't need automatic rotation
+Set `role_arn` to have fnox call `sts:AssumeRole` and use the resulting credentials for every request. The credentials from `profile`, or from the default chain, are the source credentials for that call:
 
-**Use Secrets Manager when:**
-
-- You need automatic secret rotation
-- You have complex JSON secrets
-- You need full versioning history
-
-## CI/CD example
-
-### GitHub Actions
-
-```yaml
-name: Deploy
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
-
-      - name: Deploy with secrets
-        run: |
-          fnox exec --profile production -- ./deploy.sh
+```toml
+[providers.ps]
+type = "aws-ps"
+region = "eu-west-1"
+profile = "sso-dev"
+role_arn = "arn:aws:iam::123456789012:role/param-reader"
 ```
 
-## Usage notes
-
-Use `SecureString` for sensitive parameter values. The provider applies its prefix to the configured parameter name; include the leading and trailing separators you need. Refresh any fnox cache after updating a parameter.
+The session name is always `fnox`, and the role must trust the source identity for `sts:AssumeRole`. When `endpoint` is set, the AssumeRole call goes to that endpoint too.
 
 ## Troubleshooting
 
-### "AccessDeniedException"
+### `fnox get` works but `fnox exec` is denied
 
-Check IAM permissions:
+Resolving several secrets uses `ssm:GetParameters`, a separate action from `ssm:GetParameter`. Grant both.
 
-```bash
-# Test access
-aws ssm describe-parameters
-aws ssm get-parameter --name "/myapp/prod/database-url" --with-decryption
+### Parameter not found
+
+Check the region and the composed name: the provider's `prefix` followed by the secret's `value`, including the `/` between them.
+
+```sh
+aws ssm get-parameters-by-path --region us-east-1 --path /myapp/prod/ --recursive --query 'Parameters[].Name'
 ```
 
-### "ParameterNotFound"
+### Credentials expired
 
-Parameter doesn't exist. Check:
+Run `aws sso login`, or your profile's equivalent, and retry. `fnox provider test ps` confirms the credentials and region.
 
-```bash
-# List parameters with path
-aws ssm get-parameters-by-path --path "/myapp/prod/" --recursive
+## See also
 
-# Check if prefix is correct in fnox.toml
-grep prefix fnox.toml
-```
-
-### "Invalid Region"
-
-Verify region matches:
-
-```bash
-# Check fnox.toml region
-grep region fnox.toml
-
-# Check AWS credentials region
-echo $AWS_REGION
-```
-
-## Next steps
-
-- [AWS Secrets Manager](/providers/aws-sm) - For automatic rotation and complex secrets
-- [AWS KMS](/providers/aws-kms) - For encrypting secrets in git
-- [Real-World Example](/guide/dev-to-production) - Complete AWS setup
-- [Profiles](/guide/profiles) - Multi-environment configuration
+- [AWS Secrets Manager](/providers/aws-sm): larger values, rotation, and batch reads of up to 20 secrets.
+- [AWS KMS](/providers/aws-kms): keep ciphertext in `fnox.toml` instead of a remote store.
+- [AWS STS](/leases/aws-sts): lease short-lived AWS credentials to commands.
