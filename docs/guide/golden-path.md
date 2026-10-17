@@ -41,6 +41,8 @@ key_file = "~/.config/fnox/age.txt"
 
 ::: tip Harden it with hardware
 Instead of a key file on disk, the age key can live in [Apple's Secure Enclave (Touch ID)](/guide/sync#apple-secure-enclave-touch-id), a [YubiKey](/guide/sync#yubikey), or a [TPM or FIDO2 token](/guide/sync#tpm-and-fido2). Only this step changes — everything below stays the same.
+
+If your vault uses a long-lived service token instead of an interactive login, store that token in the same cache too. See [Protect the vault credential](/guide/sync#protect-the-vault-credential).
 :::
 
 ## Step 2: put secrets in 1Password
