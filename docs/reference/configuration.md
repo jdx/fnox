@@ -87,7 +87,7 @@ DATABASE_URL = { provider = "aws", value = "database-url" }
 | `root`             | boolean                         | `false`  | Stop the upward directory search at this file.                                       |
 | `prompt_auth`      | boolean                         | `true`   | Offer to run a provider's auth command when authentication fails.                    |
 | `age_key_file`     | path                            | none     | Accepted for compatibility; has no effect.                                           |
-| `providers`        | table                           | `{}`     | [Provider instances](#providers), by name.                                           |
+| `providers`        | table                           | `{}`     | [Provider instances](#provider-configuration), by name.                              |
 | `secrets`          | table                           | `{}`     | [Secrets](#secrets) for the default profile, by name.                                |
 | `profiles`         | table                           | `{}`     | [Named profiles](#profile-configuration).                                            |
 | `leases`           | table                           | `{}`     | [Lease backends](#lease-backend-settings), by name.                                  |
@@ -147,7 +147,7 @@ When a provider fails to authenticate in a terminal, fnox offers to run its [`au
 
 Parsed for compatibility with older configs, but nothing reads it. Set [`key_file`](/providers/age#set-decryption-key) on the age provider, or set `FNOX_AGE_KEY_FILE`.
 
-## Providers
+## Providers {#provider-configuration}
 
 ```toml
 [providers.op]
@@ -174,7 +174,7 @@ backend = "rbw"
 auth_command = "rbw unlock"
 ```
 
-### Secret references in provider fields
+### Secret references in provider fields {#provider-specific-fields}
 
 Many provider fields accept `{ secret = "NAME" }` instead of a literal, so a provider's credentials can be secrets themselves. fnox looks the name up among the configured secrets first, then in the environment, and reports a dependency cycle as an error.
 
@@ -264,7 +264,7 @@ fnox writes the value to a temporary file that only you can read, and sets the v
 GOOGLE_APPLICATION_CREDENTIALS = { provider = "op", value = "GCP/key file", as_file = true }
 ```
 
-### `json_path` and `line`
+### `json_path` and `line` {#json-path}
 
 `json_path` parses the value as JSON and extracts a field, using dot notation for nested keys. `line` returns the Nth line, counting from 1. They cannot be combined.
 
