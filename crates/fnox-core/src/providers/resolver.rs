@@ -416,6 +416,20 @@ mod tests {
         .unwrap();
         assert_eq!(plain.as_deref(), Some("no-markers"));
 
+        // A map entry that happens to be called `credential_command` is not the
+        // self-rendered field; the generated resolver names map entries `field.key`.
+        let map_entry = resolve_required(
+            &config,
+            &profile,
+            "lua",
+            "options.credential_command",
+            &StringOrSecretRef::Literal("{{ fnox.profile }}".to_string()),
+            &mut ctx,
+        )
+        .await
+        .unwrap();
+        assert_eq!(map_entry, "staging");
+
         let passthrough = resolve_option(
             &config,
             &profile,

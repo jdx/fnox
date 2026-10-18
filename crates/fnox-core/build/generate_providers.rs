@@ -890,7 +890,7 @@ fn generate_resolver_fields(provider: &ProviderToml) -> Vec<TokenStream> {
                         #field_name: {
                             let mut resolved = indexmap::IndexMap::with_capacity(#local_ident.len());
                             for (key, value) in #local_ident {
-                                let value = super::super::resolver::resolve_required(config, profile, provider_name, key, value, ctx).await?;
+                                let value = super::super::resolver::resolve_required(config, profile, provider_name, &format!("{}.{}", #name_str, key), value, ctx).await?;
                                 resolved.insert(key.clone(), value);
                             }
                             resolved
