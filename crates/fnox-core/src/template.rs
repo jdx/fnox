@@ -1,6 +1,6 @@
 //! Tera templating for config values.
 //!
-//! Config strings that contain a Tera marker (`{{` or `{%`) are rendered with a
+//! Config strings that contain a Tera delimiter (`{{`, `{%` or `{#`) are rendered with a
 //! small, read-only context before use. Strings without a marker are returned
 //! untouched, so existing values keep working. To write a literal marker, wrap it
 //! in Tera's raw block:
@@ -20,9 +20,11 @@ use crate::error::{FnoxError, Result};
 use std::borrow::Cow;
 use tera::{Context, Tera};
 
-/// Returns true if `input` contains a Tera expression or statement marker.
+/// Returns true if `input` contains a Tera expression, statement or comment
+/// delimiter. Any of them makes the whole string a template, so a literal
+/// delimiter always needs a `{% raw %}` block.
 pub fn has_marker(input: &str) -> bool {
-    input.contains("{{") || input.contains("{%")
+    input.contains("{{") || input.contains("{%") || input.contains("{#")
 }
 
 fn build_context(profiles: &[String]) -> Context {
@@ -116,6 +118,25 @@ mod tests {
         )
         .unwrap();
         assert_eq!(out, "{{ literal }}");
+    }
+
+    #[test]
+    fn comment_delimiter_makes_a_template() {
+        assert!(has_marker("pa{#ss"));
+        let out = render("a{# note #}b", &profiles(&["prod"]), "test").unwrap();
+        assert_eq!(out, "ab");
+        assert!(render("pa{#ss", &profiles(&["prod"]), "test").is_err());
+    }
+
+    #[test]
+    fn raw_block_keeps_a_literal_comment_delimiter() {
+        let out = render(
+            "{{ fnox.profile }}-{% raw %}pa{#ss{% endraw %}",
+            &profiles(&["prod"]),
+            "test",
+        )
+        .unwrap();
+        assert_eq!(out, "prod-pa{#ss");
     }
 
     #[test]

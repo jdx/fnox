@@ -282,7 +282,7 @@ USERNAME = { provider = "pass", value = "master", line = 2 }
 
 ## Templates {#templates}
 
-A secret `default` and any literal string in a provider field is rendered as a [Tera](https://keats.github.io/tera/docs/) template when it contains `{{` or `{%`. Strings without those markers are used as written, so existing values are unaffected.
+A secret `default` and any literal string in a provider field is rendered as a [Tera](https://keats.github.io/tera/docs/) template when it contains `{{`, `{%` or `{#`. Strings without those delimiters are used as written.
 
 | Variable        | Value                                                                     |
 | --------------- | ------------------------------------------------------------------------- |
@@ -301,7 +301,7 @@ SST_STAGE = { default = "{{ fnox.profile }}" }
 
 With `fnox exec --profile staging -- sst deploy`, `SST_STAGE` is `staging` and the provider reads the AWS profile `staging`. `FNOX_PROFILE` is not set in the child process.
 
-An undefined variable or a syntax error fails with a message naming the field. To keep a literal marker, wrap it in a raw block:
+An undefined variable or a syntax error fails with a message naming the field. Any of those three delimiters makes the whole string a template, including a lone `{#` that is not a comment. To keep a literal marker, wrap it in a raw block:
 
 ```toml
 [secrets]
