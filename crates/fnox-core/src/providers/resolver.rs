@@ -127,11 +127,7 @@ pub fn resolve_provider_config_with_context<'a>(
 
 /// Describe a provider field for template error messages.
 fn provider_field(provider_name: &str, field_name: &str) -> String {
-    if field_name.is_empty() {
-        format!("config of provider '{provider_name}'")
-    } else {
-        format!("'{field_name}' of provider '{provider_name}'")
-    }
+    format!("'{field_name}' of provider '{provider_name}'")
 }
 
 /// Resolve a required `StringOrSecretRef` field to its actual string value.
@@ -161,6 +157,7 @@ pub fn resolve_option<'a>(
     config: &'a Config,
     profile: &'a [String],
     provider_name: &'a str,
+    field_name: &'a str,
     value: &'a OptionStringOrSecretRef,
     ctx: &'a mut ResolutionContext,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<String>>> + Send + 'a>> {
@@ -168,7 +165,7 @@ pub fn resolve_option<'a>(
         match value.as_ref() {
             None => Ok(None),
             Some(StringOrSecretRef::Literal(s)) => {
-                crate::template::render(s, profile, &provider_field(provider_name, ""))
+                crate::template::render(s, profile, &provider_field(provider_name, field_name))
                     .map(|s| Some(s.into_owned()))
             }
             Some(StringOrSecretRef::SecretRef { secret }) => {
@@ -360,6 +357,7 @@ mod tests {
             &config,
             &profile,
             "aws",
+            "profile",
             &OptionStringOrSecretRef::literal("{{ fnox.profile }}"),
             &mut ctx,
         )
@@ -371,12 +369,26 @@ mod tests {
             &config,
             &profile,
             "aws",
+            "profile",
             &OptionStringOrSecretRef::literal("no-markers"),
             &mut ctx,
         )
         .await
         .unwrap();
         assert_eq!(plain.as_deref(), Some("no-markers"));
+
+        let err = resolve_option(
+            &config,
+            &profile,
+            "aws",
+            "profile",
+            &OptionStringOrSecretRef::literal("{{ nope }}"),
+            &mut ctx,
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("'profile' of provider 'aws'"), "{err}");
     }
 
     #[test]

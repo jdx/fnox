@@ -873,7 +873,7 @@ fn generate_resolver_fields(provider: &ProviderToml) -> Vec<TokenStream> {
                 }
                 "optional" => {
                     quote! {
-                        #field_name: super::super::resolver::resolve_option(config, profile, provider_name, #local_ident, ctx).await?
+                        #field_name: super::super::resolver::resolve_option(config, profile, provider_name, #name_str, #local_ident, ctx).await?
                     }
                 }
                 "vec_string" => {
