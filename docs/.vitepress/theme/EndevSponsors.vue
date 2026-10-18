@@ -157,7 +157,7 @@ onMounted(async () => {
 }
 
 .dark .EndevSponsorsLogo:hover {
-  background: var(--vp-c-bg-mute);
+  background: var(--vp-c-bg-elv);
 }
 
 .EndevSponsorsLogo img {
