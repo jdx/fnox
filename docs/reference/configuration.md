@@ -245,6 +245,8 @@ BASE_URL = { default = "example.com" }
 
 An undefined reference or a cycle is an error. A reference to a secret that resolves to nothing under `warn` or `ignore` expands to an empty string. Expansion applies only to `default`.
 
+A `default` can also contain a [template](#templates). Templates render first, then `${NAME}` expands.
+
 ### `env` {#env-1}
 
 | Value            | Shell integration and `fnox export` | `fnox exec` | `fnox get` |
@@ -277,6 +279,36 @@ USERNAME = { provider = "pass", value = "master", line = 2 }
 ### `sync`
 
 `fnox sync` writes `sync = { provider = "...", value = "..." }`, where `value` is the secret encrypted with `provider`. Resolution uses it instead of the original provider until `fnox sync` replaces it or `fnox reencrypt` clears it. Let `fnox sync` maintain this field. See [sync](/guide/sync).
+
+## Templates {#templates}
+
+A secret `default` and any literal string in a provider field that also accepts `{ secret = "NAME" }` is rendered as a [Tera](https://keats.github.io/tera/docs/) template when it contains `{{`, `{%` or `{#`. Strings without those delimiters are used as written.
+
+| Variable        | Value                                                                     |
+| --------------- | ------------------------------------------------------------------------- |
+| `fnox.profile`  | The highest-priority selected profile, or `default` when none is selected |
+| `fnox.profiles` | Every selected profile as a list, lowest priority first                   |
+
+```toml
+[providers.aws]
+type = "aws-ps"
+region = "eu-central-1"
+profile = "{{ fnox.profile }}"
+
+[secrets]
+SST_STAGE = { default = "{{ fnox.profile }}" }
+```
+
+With `fnox exec --profile staging -- sst deploy`, `SST_STAGE` is `staging` and the provider reads the AWS profile `staging`. `FNOX_PROFILE` is not set in the child process.
+
+An undefined variable or a syntax error fails with a message naming the field. Any of those three delimiters makes the whole string a template, including a lone `{#` that is not a comment. To keep a literal marker, wrap it in a raw block:
+
+```toml
+[secrets]
+TEMPLATE = { default = "{% raw %}{{ not rendered }}{% endraw %}" }
+```
+
+`${NAME}` references may appear inside a template branch, and only the references in the rendered result are required. Templates do not apply to `value`, `description`, list fields such as age `recipients`, or `credential_command`, which has its own `{{ address }}`-style context. A `default` is rendered when it is used, so a bad template in an unused default does not fail a secret whose provider returns a value.
 
 ## Profiles {#profile-configuration}
 

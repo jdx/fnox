@@ -125,20 +125,52 @@ pub fn resolve_provider_config_with_context<'a>(
     })
 }
 
+/// Describe a provider field for template error messages.
+fn provider_field(provider_name: &str, field_name: &str) -> String {
+    format!("'{field_name}' of provider '{provider_name}'")
+}
+
+/// Fields that are templates rendered later with their own context
+/// (`credential_command` sees `address`, `path` and `namespace`), so the profile
+/// context must not render them first.
+const SELF_RENDERED_FIELDS: &[&str] = &["credential_command"];
+
+/// Render the profile template context into a literal provider field value.
+fn render_literal(
+    value: &str,
+    profile: &[String],
+    provider_name: &str,
+    field_name: &str,
+) -> Result<String> {
+    if SELF_RENDERED_FIELDS.contains(&field_name) {
+        return Ok(value.to_string());
+    }
+    crate::template::render(value, profile, &provider_field(provider_name, field_name))
+        .map(|rendered| rendered.into_owned())
+}
+
 /// Resolve a required `StringOrSecretRef` field to its actual string value.
 pub fn resolve_required<'a>(
     config: &'a Config,
     profile: &'a [String],
     provider_name: &'a str,
-    _field_name: &'a str,
+    field_name: &'a str,
     value: &'a StringOrSecretRef,
     ctx: &'a mut ResolutionContext,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send + 'a>> {
     Box::pin(async move {
         match value {
-            StringOrSecretRef::Literal(s) => Ok(s.clone()),
+            StringOrSecretRef::Literal(s) => render_literal(s, profile, provider_name, field_name),
             StringOrSecretRef::SecretRef { secret } => {
-                resolve_secret_ref(config, profile, provider_name, secret, ctx).await
+                resolve_secret_ref(
+                    config,
+                    profile,
+                    provider_name,
+                    secret,
+                    !SELF_RENDERED_FIELDS.contains(&field_name),
+                    ctx,
+                )
+                .await
             }
         }
     })
@@ -149,16 +181,26 @@ pub fn resolve_option<'a>(
     config: &'a Config,
     profile: &'a [String],
     provider_name: &'a str,
+    field_name: &'a str,
     value: &'a OptionStringOrSecretRef,
     ctx: &'a mut ResolutionContext,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<String>>> + Send + 'a>> {
     Box::pin(async move {
         match value.as_ref() {
             None => Ok(None),
-            Some(StringOrSecretRef::Literal(s)) => Ok(Some(s.clone())),
+            Some(StringOrSecretRef::Literal(s)) => {
+                render_literal(s, profile, provider_name, field_name).map(Some)
+            }
             Some(StringOrSecretRef::SecretRef { secret }) => {
-                let resolved =
-                    resolve_secret_ref(config, profile, provider_name, secret, ctx).await?;
+                let resolved = resolve_secret_ref(
+                    config,
+                    profile,
+                    provider_name,
+                    secret,
+                    !SELF_RENDERED_FIELDS.contains(&field_name),
+                    ctx,
+                )
+                .await?;
                 Ok(Some(resolved))
             }
         }
@@ -244,6 +286,7 @@ fn resolve_secret_ref<'a>(
     profile: &'a [String],
     provider_name: &'a str,
     secret_name: &'a str,
+    render_templates: bool,
     ctx: &'a mut ResolutionContext,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send + 'a>> {
     Box::pin(async move {
@@ -303,7 +346,15 @@ fn resolve_secret_ref<'a>(
 
             // Secret has a default value
             if let Some(ref default) = secret_config.default {
-                return Ok(default.clone());
+                if !render_templates {
+                    return Ok(default.clone());
+                }
+                return crate::template::render(
+                    default,
+                    profile,
+                    &format!("default of secret '{secret_name}'"),
+                )
+                .map(|default| default.into_owned());
             }
         }
 
@@ -322,6 +373,88 @@ fn resolve_secret_ref<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn literal_provider_fields_render_templates() {
+        let config = Config::new();
+        let profile = vec!["staging".to_string()];
+        let mut ctx = ResolutionContext::new();
+
+        let required = resolve_required(
+            &config,
+            &profile,
+            "aws",
+            "profile",
+            &StringOrSecretRef::Literal("team-{{ fnox.profile }}".to_string()),
+            &mut ctx,
+        )
+        .await
+        .unwrap();
+        assert_eq!(required, "team-staging");
+
+        let optional = resolve_option(
+            &config,
+            &profile,
+            "aws",
+            "profile",
+            &OptionStringOrSecretRef::literal("{{ fnox.profile }}"),
+            &mut ctx,
+        )
+        .await
+        .unwrap();
+        assert_eq!(optional.as_deref(), Some("staging"));
+
+        let plain = resolve_option(
+            &config,
+            &profile,
+            "aws",
+            "profile",
+            &OptionStringOrSecretRef::literal("no-markers"),
+            &mut ctx,
+        )
+        .await
+        .unwrap();
+        assert_eq!(plain.as_deref(), Some("no-markers"));
+
+        // A map entry that happens to be called `credential_command` is not the
+        // self-rendered field; the generated resolver names map entries `field.key`.
+        let map_entry = resolve_required(
+            &config,
+            &profile,
+            "lua",
+            "options.credential_command",
+            &StringOrSecretRef::Literal("{{ fnox.profile }}".to_string()),
+            &mut ctx,
+        )
+        .await
+        .unwrap();
+        assert_eq!(map_entry, "staging");
+
+        let passthrough = resolve_option(
+            &config,
+            &profile,
+            "vault",
+            "credential_command",
+            &OptionStringOrSecretRef::literal("login --addr {{ address }}"),
+            &mut ctx,
+        )
+        .await
+        .unwrap();
+        assert_eq!(passthrough.as_deref(), Some("login --addr {{ address }}"));
+
+        let err = resolve_option(
+            &config,
+            &profile,
+            "aws",
+            "profile",
+            &OptionStringOrSecretRef::literal("{{ nope }}"),
+            &mut ctx,
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("'profile' of provider 'aws'"), "{err}");
+    }
 
     #[test]
     fn test_resolution_context_cycle_detection() {
@@ -375,6 +508,7 @@ inherits = ["a"]
             &["a".to_string()],
             "provider",
             "FNOX_CYCLE_TEST_SECRET",
+            true,
             &mut ctx,
         )
         .await
@@ -383,5 +517,47 @@ inherits = ["a"]
             error,
             FnoxError::ProfileInheritanceCycle { cycle } if cycle == "a -> b -> a"
         ));
+    }
+
+    #[tokio::test]
+    async fn secret_reference_to_templated_default_is_rendered() {
+        let mut config = Config::new();
+        let mut secret = crate::config::SecretConfig::new();
+        secret.default = Some("{{ fnox.profile }}".to_string());
+        config.secrets.insert("AWS_PROFILE".to_string(), secret);
+        let profile = vec!["default".to_string()];
+        let mut ctx = ResolutionContext::new();
+
+        let resolved = resolve_option(
+            &config,
+            &profile,
+            "aws",
+            "profile",
+            &OptionStringOrSecretRef(Some(StringOrSecretRef::SecretRef {
+                secret: "AWS_PROFILE".to_string(),
+            })),
+            &mut ctx,
+        )
+        .await
+        .unwrap();
+        assert_eq!(resolved.as_deref(), Some("default"));
+
+        // A self-rendered field keeps the referenced default as written.
+        let mut vault = crate::config::SecretConfig::new();
+        vault.default = Some("login --addr {{ address }}".to_string());
+        config.secrets.insert("VAULT_LOGIN".to_string(), vault);
+        let raw = resolve_option(
+            &config,
+            &profile,
+            "vault",
+            "credential_command",
+            &OptionStringOrSecretRef(Some(StringOrSecretRef::SecretRef {
+                secret: "VAULT_LOGIN".to_string(),
+            })),
+            &mut ctx,
+        )
+        .await
+        .unwrap();
+        assert_eq!(raw.as_deref(), Some("login --addr {{ address }}"));
     }
 }
