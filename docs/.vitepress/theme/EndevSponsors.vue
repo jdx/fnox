@@ -135,6 +135,7 @@ onMounted(async () => {
 
 .EndevSponsorsLogo {
   align-items: center;
+  background: #171717;
   border: 1px solid var(--vp-c-divider);
   border-radius: 8px;
   display: inline-flex;
@@ -147,8 +148,16 @@ onMounted(async () => {
 }
 
 .EndevSponsorsLogo:hover {
-  background: var(--vp-c-bg-soft);
+  background: #242424;
   border-color: var(--vp-c-brand-1);
+}
+
+.dark .EndevSponsorsLogo {
+  background: var(--vp-c-bg-soft);
+}
+
+.dark .EndevSponsorsLogo:hover {
+  background: color-mix(in srgb, var(--vp-c-bg-soft), white 8%);
 }
 
 .EndevSponsorsLogo img {
@@ -157,11 +166,6 @@ onMounted(async () => {
   max-width: 120px;
   object-fit: contain;
   width: auto;
-  filter: brightness(0) opacity(0.82);
-}
-
-:global(.dark) .EndevSponsorsLogo img {
-  filter: none;
 }
 
 .EndevSponsorsCta {
