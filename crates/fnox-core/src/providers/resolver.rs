@@ -125,18 +125,30 @@ pub fn resolve_provider_config_with_context<'a>(
     })
 }
 
+/// Describe a provider field for template error messages.
+fn provider_field(provider_name: &str, field_name: &str) -> String {
+    if field_name.is_empty() {
+        format!("config of provider '{provider_name}'")
+    } else {
+        format!("'{field_name}' of provider '{provider_name}'")
+    }
+}
+
 /// Resolve a required `StringOrSecretRef` field to its actual string value.
 pub fn resolve_required<'a>(
     config: &'a Config,
     profile: &'a [String],
     provider_name: &'a str,
-    _field_name: &'a str,
+    field_name: &'a str,
     value: &'a StringOrSecretRef,
     ctx: &'a mut ResolutionContext,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send + 'a>> {
     Box::pin(async move {
         match value {
-            StringOrSecretRef::Literal(s) => Ok(s.clone()),
+            StringOrSecretRef::Literal(s) => {
+                crate::template::render(s, profile, &provider_field(provider_name, field_name))
+                    .map(|s| s.into_owned())
+            }
             StringOrSecretRef::SecretRef { secret } => {
                 resolve_secret_ref(config, profile, provider_name, secret, ctx).await
             }
@@ -155,7 +167,10 @@ pub fn resolve_option<'a>(
     Box::pin(async move {
         match value.as_ref() {
             None => Ok(None),
-            Some(StringOrSecretRef::Literal(s)) => Ok(Some(s.clone())),
+            Some(StringOrSecretRef::Literal(s)) => {
+                crate::template::render(s, profile, &provider_field(provider_name, ""))
+                    .map(|s| Some(s.into_owned()))
+            }
             Some(StringOrSecretRef::SecretRef { secret }) => {
                 let resolved =
                     resolve_secret_ref(config, profile, provider_name, secret, ctx).await?;
@@ -322,6 +337,47 @@ fn resolve_secret_ref<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn literal_provider_fields_render_templates() {
+        let config = Config::new();
+        let profile = vec!["staging".to_string()];
+        let mut ctx = ResolutionContext::new();
+
+        let required = resolve_required(
+            &config,
+            &profile,
+            "aws",
+            "profile",
+            &StringOrSecretRef::Literal("team-{{ fnox.profile }}".to_string()),
+            &mut ctx,
+        )
+        .await
+        .unwrap();
+        assert_eq!(required, "team-staging");
+
+        let optional = resolve_option(
+            &config,
+            &profile,
+            "aws",
+            &OptionStringOrSecretRef::literal("{{ fnox.profile }}"),
+            &mut ctx,
+        )
+        .await
+        .unwrap();
+        assert_eq!(optional.as_deref(), Some("staging"));
+
+        let plain = resolve_option(
+            &config,
+            &profile,
+            "aws",
+            &OptionStringOrSecretRef::literal("no-markers"),
+            &mut ctx,
+        )
+        .await
+        .unwrap();
+        assert_eq!(plain.as_deref(), Some("no-markers"));
+    }
 
     #[test]
     fn test_resolution_context_cycle_detection() {

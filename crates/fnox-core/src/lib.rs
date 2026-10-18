@@ -28,6 +28,7 @@ pub mod source_registry;
 pub mod spanned;
 pub mod suggest;
 pub mod temp_file_secrets;
+pub mod template;
 
 // Re-export commonly used items
 pub use error::{FnoxError, Result};

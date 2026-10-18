@@ -548,6 +548,8 @@ pub async fn resolve_secret(
     key: &str,
     secret_config: &SecretConfig,
 ) -> Result<Option<String>> {
+    let rendered = render_secret_templates(profile, key, secret_config)?;
+    let secret_config = rendered.as_ref().unwrap_or(secret_config);
     crate::providers::age::with_decrypt_scope(resolve_secret_raw(
         config,
         profile,
@@ -555,6 +557,29 @@ pub async fn resolve_secret(
         secret_config,
     ))
     .await
+}
+
+/// Render Tera templates in a secret's `default`, returning `None` when there is
+/// nothing to render. Templates render before `${NAME}` interpolation.
+///
+/// Rendering happens once per entry point (`resolve_secret` and the batch
+/// resolver), never on already-rendered values, so `{% raw %}` escapes survive.
+fn render_secret_templates(
+    profile: &[String],
+    key: &str,
+    secret_config: &SecretConfig,
+) -> Result<Option<SecretConfig>> {
+    let Some(default) = secret_config.default.as_deref() else {
+        return Ok(None);
+    };
+    if !crate::template::has_marker(default) {
+        return Ok(None);
+    }
+    let rendered =
+        crate::template::render(default, profile, &format!("default of secret '{key}'"))?;
+    let mut secret_config = secret_config.clone();
+    secret_config.default = Some(rendered.into_owned());
+    Ok(Some(secret_config))
 }
 
 async fn resolve_interpolated_default_value(
@@ -842,6 +867,15 @@ async fn resolve_secrets_batch_in_scope(
     secrets: &IndexMap<String, SecretConfig>,
     pre_resolved: &IndexMap<String, Option<String>>,
 ) -> Result<IndexMap<String, Option<String>>> {
+    let mut rendered_secrets = None;
+    for (key, secret_config) in secrets {
+        if let Some(rendered) = render_secret_templates(profile, key, secret_config)? {
+            rendered_secrets
+                .get_or_insert_with(|| secrets.clone())
+                .insert(key.clone(), rendered);
+        }
+    }
+    let secrets = rendered_secrets.as_ref().unwrap_or(secrets);
     // Classify each secret: provider-backed vs no-provider
     let mut secret_provider: HashMap<String, (String, String)> = HashMap::new(); // key -> (provider_name, provider_value)
     let mut no_provider = Vec::new();
@@ -2104,6 +2138,77 @@ mod tests {
                 .get("DATABASE_URL")
                 .and_then(|value| value.as_ref()),
             Some(&"postgres://@localhost/fnox".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_resolve_secret_renders_template_default_for_active_profile() {
+        let mut config = Config::new();
+        config.secrets.insert(
+            "AWS_PROFILE".to_string(),
+            default_secret("{{ fnox.profile }}"),
+        );
+
+        let secret_config = config.secrets.get("AWS_PROFILE").unwrap();
+        let resolved = resolve_secret(&config, &profile("staging"), "AWS_PROFILE", secret_config)
+            .await
+            .unwrap();
+
+        assert_eq!(resolved, Some("staging".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_template_renders_before_secret_interpolation() {
+        let mut config = Config::new();
+        config.secrets.insert(
+            "DB_URL".to_string(),
+            default_secret("postgres://${DB_USER}@{{ fnox.profile }}.db/fnox"),
+        );
+        // Declare everything in the profile so the test does not depend on the
+        // process-wide `no_defaults` setting other tests may change.
+        let mut prod = crate::config::ProfileConfig::new();
+        prod.secrets
+            .insert("DB_URL".to_string(), config.secrets["DB_URL"].clone());
+        prod.secrets
+            .insert("DB_USER".to_string(), default_secret("app"));
+        config.profiles.insert("prod".to_string(), prod);
+
+        let secret_config = config.secrets.get("DB_URL").unwrap();
+        let single = resolve_secret(&config, &profile("prod"), "DB_URL", secret_config)
+            .await
+            .unwrap();
+        assert_eq!(single, Some("postgres://app@prod.db/fnox".to_string()));
+
+        let prod_secrets = config.get_secrets(&profile("prod")).unwrap();
+        let batch = resolve_secrets_batch(&config, &profile("prod"), &prod_secrets)
+            .await
+            .unwrap();
+        assert_eq!(
+            batch.get("DB_URL").and_then(|v| v.as_ref()),
+            Some(&"postgres://app@prod.db/fnox".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_raw_block_survives_resolution_without_double_rendering() {
+        let mut config = Config::new();
+        config.secrets.insert(
+            "LITERAL".to_string(),
+            default_secret("{% raw %}{{ keep }}{% endraw %}"),
+        );
+
+        let secret_config = config.secrets.get("LITERAL").unwrap();
+        let single = resolve_secret(&config, &profile("default"), "LITERAL", secret_config)
+            .await
+            .unwrap();
+        assert_eq!(single, Some("{{ keep }}".to_string()));
+
+        let batch = resolve_secrets_batch(&config, &profile("default"), &config.secrets)
+            .await
+            .unwrap();
+        assert_eq!(
+            batch.get("LITERAL").and_then(|v| v.as_ref()),
+            Some(&"{{ keep }}".to_string())
         );
     }
 
