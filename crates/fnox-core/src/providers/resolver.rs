@@ -162,7 +162,15 @@ pub fn resolve_required<'a>(
         match value {
             StringOrSecretRef::Literal(s) => render_literal(s, profile, provider_name, field_name),
             StringOrSecretRef::SecretRef { secret } => {
-                resolve_secret_ref(config, profile, provider_name, secret, ctx).await
+                resolve_secret_ref(
+                    config,
+                    profile,
+                    provider_name,
+                    secret,
+                    !SELF_RENDERED_FIELDS.contains(&field_name),
+                    ctx,
+                )
+                .await
             }
         }
     })
@@ -184,8 +192,15 @@ pub fn resolve_option<'a>(
                 render_literal(s, profile, provider_name, field_name).map(Some)
             }
             Some(StringOrSecretRef::SecretRef { secret }) => {
-                let resolved =
-                    resolve_secret_ref(config, profile, provider_name, secret, ctx).await?;
+                let resolved = resolve_secret_ref(
+                    config,
+                    profile,
+                    provider_name,
+                    secret,
+                    !SELF_RENDERED_FIELDS.contains(&field_name),
+                    ctx,
+                )
+                .await?;
                 Ok(Some(resolved))
             }
         }
@@ -271,6 +286,7 @@ fn resolve_secret_ref<'a>(
     profile: &'a [String],
     provider_name: &'a str,
     secret_name: &'a str,
+    render_templates: bool,
     ctx: &'a mut ResolutionContext,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send + 'a>> {
     Box::pin(async move {
@@ -330,6 +346,9 @@ fn resolve_secret_ref<'a>(
 
             // Secret has a default value
             if let Some(ref default) = secret_config.default {
+                if !render_templates {
+                    return Ok(default.clone());
+                }
                 return crate::template::render(
                     default,
                     profile,
@@ -475,6 +494,7 @@ inherits = ["a"]
             &["a".to_string()],
             "provider",
             "FNOX_CYCLE_TEST_SECRET",
+            true,
             &mut ctx,
         )
         .await
@@ -507,5 +527,23 @@ inherits = ["a"]
         .await
         .unwrap();
         assert_eq!(resolved.as_deref(), Some("default"));
+
+        // A self-rendered field keeps the referenced default as written.
+        let mut vault = crate::config::SecretConfig::new();
+        vault.default = Some("login --addr {{ address }}".to_string());
+        config.secrets.insert("VAULT_LOGIN".to_string(), vault);
+        let raw = resolve_option(
+            &config,
+            &profile,
+            "vault",
+            "credential_command",
+            &OptionStringOrSecretRef(Some(StringOrSecretRef::SecretRef {
+                secret: "VAULT_LOGIN".to_string(),
+            })),
+            &mut ctx,
+        )
+        .await
+        .unwrap();
+        assert_eq!(raw.as_deref(), Some("login --addr {{ address }}"));
     }
 }
