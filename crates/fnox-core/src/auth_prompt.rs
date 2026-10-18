@@ -7,6 +7,7 @@ use crate::config::Config;
 use crate::error::{FnoxError, Result};
 use crate::providers::ProviderConfig;
 use demand::Confirm;
+use std::borrow::Cow;
 use std::process::Command;
 
 /// Prompts the user to run an auth command and executes it if they agree.
@@ -28,9 +29,10 @@ pub fn prompt_and_run_auth(
         return Ok(false);
     }
 
-    let Some(auth_command) = provider_config.default_auth_command() else {
+    let Some(auth_command) = auth_command(provider_config) else {
         return Ok(false);
     };
+    let auth_command = auth_command.as_ref();
 
     // Show the error and prompt
     eprintln!(
@@ -66,6 +68,48 @@ pub fn prompt_and_run_auth(
             "Failed to run auth command: {}",
             e
         ))),
+    }
+}
+
+/// The auth command to offer for a provider.
+///
+/// AWS providers with a literal `profile` and no `auth_command` override log in to that
+/// profile. A bare `aws sso login` uses the `default` profile, which may not exist or may
+/// not be the one the provider reads from.
+fn auth_command(provider_config: &ProviderConfig) -> Option<Cow<'_, str>> {
+    let profile = match provider_config {
+        ProviderConfig::AwsKms {
+            profile,
+            auth_command: None,
+            ..
+        }
+        | ProviderConfig::AwsParameterStore {
+            profile,
+            auth_command: None,
+            ..
+        }
+        | ProviderConfig::AwsSecretsManager {
+            profile,
+            auth_command: None,
+            ..
+        } => profile.as_ref().and_then(|p| p.as_literal()),
+        _ => None,
+    };
+    let default = provider_config.default_auth_command()?;
+    match profile.and_then(quote_arg) {
+        Some(profile) => Some(Cow::Owned(format!("{default} --profile {profile}"))),
+        None => Some(Cow::Borrowed(default)),
+    }
+}
+
+/// Quote an argument for the shell `run_auth_command` uses.
+fn quote_arg(arg: &str) -> Option<Cow<'_, str>> {
+    if cfg!(target_os = "windows") {
+        arg.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+            .then_some(Cow::Borrowed(arg))
+    } else {
+        shlex::try_quote(arg).ok()
     }
 }
 
@@ -125,6 +169,52 @@ mod tests {
         };
         let result = prompt_and_run_auth(&config, &provider_config, "1password", &error);
         assert!(!result.unwrap());
+    }
+
+    fn aws_provider(extra: serde_json::Value) -> ProviderConfig {
+        let mut value = serde_json::json!({"type": "aws-ps", "region": "eu-central-1"});
+        value
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        serde_json::from_value(value).unwrap()
+    }
+
+    #[test]
+    fn aws_auth_command_uses_provider_profile() {
+        let cases = [
+            (serde_json::json!({}), Some("aws sso login")),
+            (
+                serde_json::json!({"profile": "production"}),
+                Some("aws sso login --profile production"),
+            ),
+            (
+                serde_json::json!({"profile": "production", "auth_command": "custom login"}),
+                Some("custom login"),
+            ),
+            (
+                serde_json::json!({"profile": "production", "auth_command": ""}),
+                None,
+            ),
+            (
+                serde_json::json!({"profile": {"secret": "AWS_PROFILE_NAME"}}),
+                Some("aws sso login"),
+            ),
+        ];
+        for (extra, expected) in cases {
+            let provider = aws_provider(extra.clone());
+            assert_eq!(auth_command(&provider).as_deref(), expected, "{extra}");
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn aws_auth_command_quotes_profile() {
+        let provider = aws_provider(serde_json::json!({"profile": "a b; rm -rf ~"}));
+        assert_eq!(
+            auth_command(&provider).as_deref(),
+            Some("aws sso login --profile 'a b; rm -rf ~'")
+        );
     }
 
     #[test]
