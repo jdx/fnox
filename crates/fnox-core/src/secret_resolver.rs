@@ -231,7 +231,7 @@ fn collect_interpolation_closure(
                 || default_can_be_used_in_batch(self.config, self.profile, secret_config))
                 && let Some(default) = &secret_config.default
             {
-                for reference in extract_default_references(default) {
+                for reference in default_references(self.profile, key, default) {
                     if !self.secrets.contains_key(&reference) {
                         return Err(default_reference_error(key, &reference));
                     }
@@ -293,7 +293,7 @@ pub fn dependency_closure(
         let mut deps: Vec<String> = Vec::new();
 
         if let Some(default) = &secret.default {
-            deps.extend(extract_default_references(default));
+            deps.extend(default_references(profile, &key, default));
         }
 
         let provider_name = if let Some(sync) = &secret.sync {
@@ -475,6 +475,7 @@ fn default_context(
 }
 
 fn resolve_default_fallbacks(
+    profile: &[String],
     keys: &[String],
     secrets: &IndexMap<String, SecretConfig>,
     resolved_so_far: &HashMap<String, Option<String>>,
@@ -498,7 +499,7 @@ fn resolve_default_fallbacks(
             let refs = secret_config
                 .default
                 .as_deref()
-                .map(extract_default_references)
+                .map(|default| default_references(profile, &key, default))
                 .unwrap_or_default();
             let unresolved_external_ref = refs.iter().any(|reference| {
                 !context.contains_key(reference) && !pending_set.contains(reference)
@@ -514,7 +515,7 @@ fn resolve_default_fallbacks(
                 continue;
             }
 
-            if let Some(default) = resolve_default_value(&key, secret_config, &context)? {
+            if let Some(default) = resolve_default_value(profile, &key, secret_config, &context)? {
                 results.insert(key.clone(), Some(default.clone()));
                 context.insert(key.clone(), Some(default));
                 resolved.insert(key);
@@ -548,8 +549,6 @@ pub async fn resolve_secret(
     key: &str,
     secret_config: &SecretConfig,
 ) -> Result<Option<String>> {
-    let rendered = render_secret_templates(profile, key, secret_config)?;
-    let secret_config = rendered.as_ref().unwrap_or(secret_config);
     crate::providers::age::with_decrypt_scope(resolve_secret_raw(
         config,
         profile,
@@ -559,27 +558,28 @@ pub async fn resolve_secret(
     .await
 }
 
-/// Render Tera templates in a secret's `default`, returning `None` when there is
-/// nothing to render. Templates render before `${NAME}` interpolation.
+/// A secret's `default` with Tera templates rendered for the active profile.
 ///
-/// Rendering happens once per entry point (`resolve_secret` and the batch
-/// resolver), never on already-rendered values, so `{% raw %}` escapes survive.
-fn render_secret_templates(
+/// Templates render before `${NAME}` interpolation, and only where the default is
+/// used or scanned, so an unused default with a bad template doesn't block a
+/// secret whose provider returns a value. Always render from the raw config
+/// value: rendering the output again would break `{% raw %}` escapes.
+fn rendered_default<'a>(
     profile: &[String],
     key: &str,
-    secret_config: &SecretConfig,
-) -> Result<Option<SecretConfig>> {
-    let Some(default) = secret_config.default.as_deref() else {
-        return Ok(None);
-    };
-    if !crate::template::has_marker(default) {
-        return Ok(None);
-    }
-    let rendered =
-        crate::template::render(default, profile, &format!("default of secret '{key}'"))?;
-    let mut secret_config = secret_config.clone();
-    secret_config.default = Some(rendered.into_owned());
-    Ok(Some(secret_config))
+    default: &'a str,
+) -> Result<std::borrow::Cow<'a, str>> {
+    crate::template::render(default, profile, &format!("default of secret '{key}'"))
+}
+
+/// The `${NAME}` references in a secret's rendered default.
+///
+/// A template that fails to render yields no references here. The error surfaces
+/// when the default is actually used.
+fn default_references(profile: &[String], key: &str, default: &str) -> Vec<String> {
+    rendered_default(profile, key, default)
+        .map(|rendered| extract_default_references(&rendered))
+        .unwrap_or_default()
 }
 
 async fn resolve_interpolated_default_value(
@@ -591,7 +591,8 @@ async fn resolve_interpolated_default_value(
     let Some(default) = &secret_config.default else {
         return Ok(None);
     };
-    if !has_default_interpolation(default) {
+    let default = rendered_default(profile, key, default)?;
+    if !has_default_interpolation(&default) {
         return Ok(None);
     }
 
@@ -616,7 +617,7 @@ async fn resolve_interpolated_default_value(
         return Ok(Some(value));
     }
     let resolved_context: HashMap<String, Option<String>> = resolved.into_iter().collect();
-    let default = render_default_template(key, default, &resolved_context)?;
+    let default = render_default_template(key, &default, &resolved_context)?;
     Ok(Some(apply_post_processing(default, secret_config)?))
 }
 
@@ -646,17 +647,15 @@ async fn resolve_secret_raw(
     }
 
     // Priority 2: Default value
-    if secret_config
-        .default
-        .as_deref()
-        .is_some_and(has_default_interpolation)
+    if let Some(default) = secret_config.default.as_deref()
+        && has_default_interpolation(&rendered_default(profile, key, default)?)
         && let Some(value) =
             resolve_interpolated_default_value(config, profile, key, secret_config).await?
     {
         return Ok(Some(value));
     }
 
-    if let Some(value) = resolve_default_value(key, secret_config, &HashMap::new())? {
+    if let Some(value) = resolve_default_value(profile, key, secret_config, &HashMap::new())? {
         return Ok(Some(value));
     }
 
@@ -809,6 +808,7 @@ fn handle_missing_secret(
 }
 
 fn resolve_default_value(
+    profile: &[String],
     key: &str,
     secret_config: &SecretConfig,
     resolved_so_far: &HashMap<String, Option<String>>,
@@ -818,10 +818,11 @@ fn resolve_default_value(
     };
 
     tracing::debug!("Using default value for secret '{}'", key);
-    let value = if has_default_interpolation(default) {
-        render_default_template(key, default, resolved_so_far)?
+    let default = rendered_default(profile, key, default)?;
+    let value = if has_default_interpolation(&default) {
+        render_default_template(key, &default, resolved_so_far)?
     } else {
-        default.clone()
+        default.into_owned()
     };
     Ok(Some(apply_post_processing(value, secret_config)?))
 }
@@ -867,15 +868,6 @@ async fn resolve_secrets_batch_in_scope(
     secrets: &IndexMap<String, SecretConfig>,
     pre_resolved: &IndexMap<String, Option<String>>,
 ) -> Result<IndexMap<String, Option<String>>> {
-    let mut rendered_secrets = None;
-    for (key, secret_config) in secrets {
-        if let Some(rendered) = render_secret_templates(profile, key, secret_config)? {
-            rendered_secrets
-                .get_or_insert_with(|| secrets.clone())
-                .insert(key.clone(), rendered);
-        }
-    }
-    let secrets = rendered_secrets.as_ref().unwrap_or(secrets);
     // Classify each secret: provider-backed vs no-provider
     let mut secret_provider: HashMap<String, (String, String)> = HashMap::new(); // key -> (provider_name, provider_value)
     let mut no_provider = Vec::new();
@@ -924,7 +916,7 @@ async fn resolve_secrets_batch_in_scope(
             continue;
         };
 
-        let refs = extract_default_references(default);
+        let refs = default_references(profile, key, default);
         if hard_default && refs.iter().any(|reference| reference == key) {
             return Err(FnoxError::Config(format!(
                 "Secret '{}' has an interpolation cycle in default value",
@@ -1212,7 +1204,7 @@ async fn resolve_no_provider_secret(
     secret_config: &SecretConfig,
     resolved_so_far: &HashMap<String, Option<String>>,
 ) -> Result<Option<String>> {
-    if let Some(value) = resolve_default_value(key, secret_config, resolved_so_far)? {
+    if let Some(value) = resolve_default_value(profile, key, secret_config, resolved_so_far)? {
         return Ok(Some(value));
     }
 
@@ -1251,8 +1243,13 @@ async fn resolve_provider_batch(
                 .iter()
                 .map(|(key, _)| key.clone())
                 .collect();
-            let fallback_resolved =
-                resolve_default_fallbacks(&fallback_keys, secrets, resolved_so_far, &mut results)?;
+            let fallback_resolved = resolve_default_fallbacks(
+                profile,
+                &fallback_keys,
+                secrets,
+                resolved_so_far,
+                &mut results,
+            )?;
             for (key, _) in &provider_secrets {
                 if fallback_resolved.contains(key) {
                     let secret_config = &secrets[key];
@@ -1295,8 +1292,13 @@ async fn resolve_provider_batch(
             .iter()
             .map(|(key, _)| key.clone())
             .collect();
-        let fallback_resolved =
-            resolve_default_fallbacks(&fallback_keys, secrets, resolved_so_far, &mut results)?;
+        let fallback_resolved = resolve_default_fallbacks(
+            profile,
+            &fallback_keys,
+            secrets,
+            resolved_so_far,
+            &mut results,
+        )?;
         for (key, _) in &provider_secrets {
             if fallback_resolved.contains(key) {
                 let secret_config = &secrets[key];
@@ -1371,6 +1373,7 @@ async fn try_batch_with_auth_retry(
                 return match try_get_secrets_batch(ctx, provider_secrets).await {
                     Ok(retry_results) => {
                         process_batch_results(
+                            ctx.profile,
                             ctx.secrets,
                             ctx.config,
                             retry_results,
@@ -1380,6 +1383,7 @@ async fn try_batch_with_auth_retry(
                         Ok(std::mem::take(results))
                     }
                     Err(retry_error) => handle_batch_error(
+                        ctx.profile,
                         ctx.secrets,
                         ctx.config,
                         provider_secrets,
@@ -1391,6 +1395,7 @@ async fn try_batch_with_auth_retry(
             }
             // No auth error, or user declined auth prompt. Process original results.
             process_batch_results(
+                ctx.profile,
                 ctx.secrets,
                 ctx.config,
                 batch_results,
@@ -1406,6 +1411,7 @@ async fn try_batch_with_auth_retry(
                 match try_get_secrets_batch(ctx, provider_secrets).await {
                     Ok(batch_results) => {
                         process_batch_results(
+                            ctx.profile,
                             ctx.secrets,
                             ctx.config,
                             batch_results,
@@ -1415,6 +1421,7 @@ async fn try_batch_with_auth_retry(
                         Ok(std::mem::take(results))
                     }
                     Err(retry_error) => handle_batch_error(
+                        ctx.profile,
                         ctx.secrets,
                         ctx.config,
                         provider_secrets,
@@ -1426,6 +1433,7 @@ async fn try_batch_with_auth_retry(
             } else {
                 // No auth prompt or user declined - apply if_missing handling per secret
                 handle_batch_error(
+                    ctx.profile,
                     ctx.secrets,
                     ctx.config,
                     provider_secrets,
@@ -1440,6 +1448,7 @@ async fn try_batch_with_auth_retry(
 
 /// Handle a batch error by applying if_missing logic to each secret
 fn handle_batch_error(
+    profile: &[String],
     secrets: &IndexMap<String, SecretConfig>,
     config: &Config,
     provider_secrets: &[(String, String)],
@@ -1452,7 +1461,7 @@ fn handle_batch_error(
         .map(|(key, _)| key.clone())
         .collect();
     let fallback_resolved =
-        resolve_default_fallbacks(&fallback_keys, secrets, resolved_so_far, results)?;
+        resolve_default_fallbacks(profile, &fallback_keys, secrets, resolved_so_far, results)?;
     for (key, _) in provider_secrets {
         if fallback_resolved.contains(key) {
             let secret_config = &secrets[key];
@@ -1515,6 +1524,7 @@ async fn try_get_secrets_batch(
 
 /// Process batch results and populate the results map
 fn process_batch_results(
+    profile: &[String],
     secrets: &IndexMap<String, SecretConfig>,
     config: &Config,
     batch_results: HashMap<String, Result<String>>,
@@ -1547,7 +1557,7 @@ fn process_batch_results(
 
     let fallback_keys: Vec<String> = failed.iter().map(|(key, _)| key.clone()).collect();
     let fallback_resolved =
-        resolve_default_fallbacks(&fallback_keys, secrets, resolved_so_far, results)?;
+        resolve_default_fallbacks(profile, &fallback_keys, secrets, resolved_so_far, results)?;
 
     for (key, e) in failed {
         if fallback_resolved.contains(&key) {
@@ -1985,6 +1995,7 @@ mod tests {
         let resolved_so_far = HashMap::new();
         let mut results = HashMap::new();
         process_batch_results(
+            &profile("default"),
             &secrets,
             &config,
             batch_results,
@@ -2023,6 +2034,7 @@ mod tests {
         let resolved_so_far = HashMap::new();
         let mut results = HashMap::new();
         process_batch_results(
+            &profile("default"),
             &secrets,
             &config,
             batch_results,
@@ -2049,6 +2061,7 @@ mod tests {
         let resolved_so_far = HashMap::new();
         let mut results = HashMap::new();
         let err = process_batch_results(
+            &profile("default"),
             &secrets,
             &config,
             batch_results,
@@ -2186,6 +2199,82 @@ mod tests {
         assert_eq!(
             batch.get("DB_URL").and_then(|v| v.as_ref()),
             Some(&"postgres://app@prod.db/fnox".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_unused_default_with_bad_template_does_not_block_provider_value() {
+        let mut config = Config::new();
+        config.providers.insert(
+            "plain".to_string(),
+            ProviderConfig::Plain {
+                file: crate::providers::OptionStringOrSecretRef::none(),
+                format: crate::providers::OptionStringOrSecretRef::none(),
+                auth_command: None,
+                daemon_cache: None,
+            },
+        );
+        let mut secret = plain_provider_secret("from-provider");
+        secret.default = Some("{{ nope }}".to_string());
+        config.secrets.insert("TOKEN".to_string(), secret);
+
+        let secret_config = config.secrets.get("TOKEN").unwrap();
+        let single = resolve_secret(&config, &profile("default"), "TOKEN", secret_config)
+            .await
+            .unwrap();
+        assert_eq!(single, Some("from-provider".to_string()));
+
+        let batch = resolve_secrets_batch(&config, &profile("default"), &config.secrets)
+            .await
+            .unwrap();
+        assert_eq!(
+            batch.get("TOKEN").and_then(|v| v.as_ref()),
+            Some(&"from-provider".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_bad_template_errors_when_the_default_is_used() {
+        let mut config = Config::new();
+        config
+            .secrets
+            .insert("BAD".to_string(), default_secret("{{ nope }}"));
+
+        let secret_config = config.secrets.get("BAD").unwrap();
+        let err = resolve_secret(&config, &profile("default"), "BAD", secret_config)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("default of secret 'BAD'"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn test_unselected_template_branch_does_not_require_its_references() {
+        let mut config = Config::new();
+        let template =
+            r#"{% if fnox.profile == "prod" %}${PROD_HOST}{% else %}${DEV_HOST}{% endif %}"#;
+        let mut staging = crate::config::ProfileConfig::new();
+        staging
+            .secrets
+            .insert("HOST".to_string(), default_secret(template));
+        staging
+            .secrets
+            .insert("DEV_HOST".to_string(), default_secret("dev.example.com"));
+        config.profiles.insert("staging".to_string(), staging);
+
+        let secrets = config.get_secrets(&profile("staging")).unwrap();
+        let secret_config = secrets.get("HOST").unwrap();
+        let single = resolve_secret(&config, &profile("staging"), "HOST", secret_config)
+            .await
+            .unwrap();
+        assert_eq!(single, Some("dev.example.com".to_string()));
+
+        let batch = resolve_secrets_batch(&config, &profile("staging"), &secrets)
+            .await
+            .unwrap();
+        assert_eq!(
+            batch.get("HOST").and_then(|v| v.as_ref()),
+            Some(&"dev.example.com".to_string())
         );
     }
 

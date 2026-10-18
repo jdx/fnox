@@ -130,6 +130,25 @@ fn provider_field(provider_name: &str, field_name: &str) -> String {
     format!("'{field_name}' of provider '{provider_name}'")
 }
 
+/// Fields that are templates rendered later with their own context
+/// (`credential_command` sees `address`, `path` and `namespace`), so the profile
+/// context must not render them first.
+const SELF_RENDERED_FIELDS: &[&str] = &["credential_command"];
+
+/// Render the profile template context into a literal provider field value.
+fn render_literal(
+    value: &str,
+    profile: &[String],
+    provider_name: &str,
+    field_name: &str,
+) -> Result<String> {
+    if SELF_RENDERED_FIELDS.contains(&field_name) {
+        return Ok(value.to_string());
+    }
+    crate::template::render(value, profile, &provider_field(provider_name, field_name))
+        .map(|rendered| rendered.into_owned())
+}
+
 /// Resolve a required `StringOrSecretRef` field to its actual string value.
 pub fn resolve_required<'a>(
     config: &'a Config,
@@ -141,10 +160,7 @@ pub fn resolve_required<'a>(
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send + 'a>> {
     Box::pin(async move {
         match value {
-            StringOrSecretRef::Literal(s) => {
-                crate::template::render(s, profile, &provider_field(provider_name, field_name))
-                    .map(|s| s.into_owned())
-            }
+            StringOrSecretRef::Literal(s) => render_literal(s, profile, provider_name, field_name),
             StringOrSecretRef::SecretRef { secret } => {
                 resolve_secret_ref(config, profile, provider_name, secret, ctx).await
             }
@@ -165,8 +181,7 @@ pub fn resolve_option<'a>(
         match value.as_ref() {
             None => Ok(None),
             Some(StringOrSecretRef::Literal(s)) => {
-                crate::template::render(s, profile, &provider_field(provider_name, field_name))
-                    .map(|s| Some(s.into_owned()))
+                render_literal(s, profile, provider_name, field_name).map(Some)
             }
             Some(StringOrSecretRef::SecretRef { secret }) => {
                 let resolved =
@@ -315,7 +330,12 @@ fn resolve_secret_ref<'a>(
 
             // Secret has a default value
             if let Some(ref default) = secret_config.default {
-                return Ok(default.clone());
+                return crate::template::render(
+                    default,
+                    profile,
+                    &format!("default of secret '{secret_name}'"),
+                )
+                .map(|default| default.into_owned());
             }
         }
 
@@ -376,6 +396,18 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(plain.as_deref(), Some("no-markers"));
+
+        let passthrough = resolve_option(
+            &config,
+            &profile,
+            "vault",
+            "credential_command",
+            &OptionStringOrSecretRef::literal("login --addr {{ address }}"),
+            &mut ctx,
+        )
+        .await
+        .unwrap();
+        assert_eq!(passthrough.as_deref(), Some("login --addr {{ address }}"));
 
         let err = resolve_option(
             &config,
@@ -451,5 +483,29 @@ inherits = ["a"]
             error,
             FnoxError::ProfileInheritanceCycle { cycle } if cycle == "a -> b -> a"
         ));
+    }
+
+    #[tokio::test]
+    async fn secret_reference_to_templated_default_is_rendered() {
+        let mut config = Config::new();
+        let mut secret = crate::config::SecretConfig::new();
+        secret.default = Some("{{ fnox.profile }}".to_string());
+        config.secrets.insert("AWS_PROFILE".to_string(), secret);
+        let profile = vec!["default".to_string()];
+        let mut ctx = ResolutionContext::new();
+
+        let resolved = resolve_option(
+            &config,
+            &profile,
+            "aws",
+            "profile",
+            &OptionStringOrSecretRef(Some(StringOrSecretRef::SecretRef {
+                secret: "AWS_PROFILE".to_string(),
+            })),
+            &mut ctx,
+        )
+        .await
+        .unwrap();
+        assert_eq!(resolved.as_deref(), Some("default"));
     }
 }
