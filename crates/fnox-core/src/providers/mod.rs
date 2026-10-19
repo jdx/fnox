@@ -258,6 +258,13 @@ pub trait Provider: Send + Sync {
         vec![ProviderCapability::RemoteRead]
     }
 
+    /// The auth command to offer when this instance fails to authenticate, built from its
+    /// resolved fields. A config `auth_command` override takes precedence. `None` falls back
+    /// to the provider type's static default.
+    fn auth_command(&self) -> Option<String> {
+        None
+    }
+
     /// Finish setup that can fail before the provider is used.
     ///
     /// Called when a provider is created from config, so a broken provider

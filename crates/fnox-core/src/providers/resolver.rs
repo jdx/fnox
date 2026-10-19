@@ -375,6 +375,28 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    async fn aws_prefix_renders_template() {
+        let provider_config: ProviderConfig = serde_json::from_value(serde_json::json!({
+            "type": "aws-ps",
+            "region": "eu-central-1",
+            "prefix": "/lambda/myapp-{{ fnox.profile }}/something/",
+        }))
+        .unwrap();
+        let resolved = resolve_provider_config(
+            &Config::new(),
+            &["staging".to_string()],
+            "aws",
+            &provider_config,
+        )
+        .await
+        .unwrap();
+        let ResolvedProviderConfig::AwsParameterStore { prefix, .. } = resolved else {
+            panic!("expected aws-ps");
+        };
+        assert_eq!(prefix.as_deref(), Some("/lambda/myapp-staging/something/"));
+    }
+
+    #[tokio::test]
     async fn literal_provider_fields_render_templates() {
         let config = Config::new();
         let profile = vec!["staging".to_string()];

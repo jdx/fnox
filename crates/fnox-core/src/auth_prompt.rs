@@ -19,6 +19,7 @@ pub fn prompt_and_run_auth(
     config: &Config,
     provider_config: &ProviderConfig,
     provider_name: &str,
+    resolved_auth_command: Option<&str>,
     error: &FnoxError,
 ) -> Result<bool> {
     if !error.is_auth_error() {
@@ -29,10 +30,9 @@ pub fn prompt_and_run_auth(
         return Ok(false);
     }
 
-    let Some(auth_command) = auth_command(provider_config) else {
+    let Some(auth_command) = provider_config.default_auth_command(resolved_auth_command) else {
         return Ok(false);
     };
-    let auth_command = auth_command.as_ref();
 
     // Show the error and prompt
     eprintln!(
@@ -71,39 +71,8 @@ pub fn prompt_and_run_auth(
     }
 }
 
-/// The auth command to offer for a provider.
-///
-/// AWS providers with a literal `profile` and no `auth_command` override log in to that
-/// profile. A bare `aws sso login` uses the `default` profile, which may not exist or may
-/// not be the one the provider reads from.
-fn auth_command(provider_config: &ProviderConfig) -> Option<Cow<'_, str>> {
-    let profile = match provider_config {
-        ProviderConfig::AwsKms {
-            profile,
-            auth_command: None,
-            ..
-        }
-        | ProviderConfig::AwsParameterStore {
-            profile,
-            auth_command: None,
-            ..
-        }
-        | ProviderConfig::AwsSecretsManager {
-            profile,
-            auth_command: None,
-            ..
-        } => profile.as_ref().and_then(|p| p.as_literal()),
-        _ => None,
-    };
-    let default = provider_config.default_auth_command()?;
-    match profile.and_then(quote_arg) {
-        Some(profile) => Some(Cow::Owned(format!("{default} --profile {profile}"))),
-        None => Some(Cow::Borrowed(default)),
-    }
-}
-
 /// Quote an argument for the shell `run_auth_command` uses.
-fn quote_arg(arg: &str) -> Option<Cow<'_, str>> {
+pub(crate) fn quote_arg(arg: &str) -> Option<Cow<'_, str>> {
     if cfg!(target_os = "windows") {
         arg.chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
@@ -153,7 +122,7 @@ mod tests {
             hint: "check".to_string(),
             url: "https://example.com".to_string(),
         };
-        let result = prompt_and_run_auth(&config, &provider_config, "1password", &error);
+        let result = prompt_and_run_auth(&config, &provider_config, "1password", None, &error);
         assert!(!result.unwrap());
     }
 
@@ -167,7 +136,7 @@ mod tests {
             hint: "check".to_string(),
             url: "https://example.com".to_string(),
         };
-        let result = prompt_and_run_auth(&config, &provider_config, "1password", &error);
+        let result = prompt_and_run_auth(&config, &provider_config, "1password", None, &error);
         assert!(!result.unwrap());
     }
 
@@ -180,13 +149,49 @@ mod tests {
         serde_json::from_value(value).unwrap()
     }
 
-    #[test]
-    fn aws_auth_command_uses_provider_profile() {
+    /// The auth command offered for an AWS provider resolved for `fnox_profiles`.
+    async fn aws_auth_command(
+        config: &Config,
+        extra: serde_json::Value,
+        fnox_profiles: &[&str],
+    ) -> Option<String> {
+        let provider_config = aws_provider(extra);
+        let fnox_profiles: Vec<String> = fnox_profiles.iter().map(|p| p.to_string()).collect();
+        let provider = crate::providers::get_provider_resolved(
+            config,
+            &fnox_profiles,
+            "aws",
+            &provider_config,
+        )
+        .await
+        .unwrap();
+        provider_config
+            .default_auth_command(provider.auth_command().as_deref())
+            .map(str::to_string)
+    }
+
+    #[tokio::test]
+    async fn aws_auth_command_uses_resolved_profile() {
+        let mut config = Config::new();
+        let mut secret = crate::config::SecretConfig::new();
+        secret.default = Some("from-secret".to_string());
+        config
+            .secrets
+            .insert("AWS_PROFILE_NAME".to_string(), secret);
+
         let cases = [
             (serde_json::json!({}), Some("aws sso login")),
             (
                 serde_json::json!({"profile": "production"}),
                 Some("aws sso login --profile production"),
+            ),
+            (
+                serde_json::json!({"profile": "{{ fnox.profile }}"}),
+                Some("aws sso login --profile staging"),
+            ),
+            (
+                serde_json::json!({"profile": {"secret": "AWS_PROFILE_NAME"}}),
+                Some("aws sso login --profile from-secret"),
             ),
             (
                 serde_json::json!({"profile": "production", "auth_command": "custom login"}),
@@ -196,23 +201,29 @@ mod tests {
                 serde_json::json!({"profile": "production", "auth_command": ""}),
                 None,
             ),
-            (
-                serde_json::json!({"profile": {"secret": "AWS_PROFILE_NAME"}}),
-                Some("aws sso login"),
-            ),
         ];
         for (extra, expected) in cases {
-            let provider = aws_provider(extra.clone());
-            assert_eq!(auth_command(&provider).as_deref(), expected, "{extra}");
+            assert_eq!(
+                aws_auth_command(&config, extra.clone(), &["staging"])
+                    .await
+                    .as_deref(),
+                expected,
+                "{extra}"
+            );
         }
     }
 
     #[cfg(not(target_os = "windows"))]
-    #[test]
-    fn aws_auth_command_quotes_profile() {
-        let provider = aws_provider(serde_json::json!({"profile": "a b; rm -rf ~"}));
+    #[tokio::test]
+    async fn aws_auth_command_quotes_profile() {
         assert_eq!(
-            auth_command(&provider).as_deref(),
+            aws_auth_command(
+                &Config::new(),
+                serde_json::json!({"profile": "a b; rm -rf ~"}),
+                &[]
+            )
+            .await
+            .as_deref(),
             Some("aws sso login --profile 'a b; rm -rf ~'")
         );
     }

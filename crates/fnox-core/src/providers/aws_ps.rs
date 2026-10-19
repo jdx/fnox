@@ -327,6 +327,10 @@ impl crate::providers::Provider for AwsParameterStoreProvider {
         vec![crate::providers::ProviderCapability::RemoteStorage]
     }
 
+    fn auth_command(&self) -> Option<String> {
+        super::aws_shared::sso_login_command(self.profile.as_deref())
+    }
+
     async fn get_secret(&self, value: &str) -> Result<String> {
         let parameter_name = self.get_parameter_name(value);
         tracing::debug!(

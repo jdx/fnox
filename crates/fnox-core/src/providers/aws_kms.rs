@@ -212,6 +212,10 @@ impl crate::providers::Provider for AwsKmsProvider {
         vec![crate::providers::ProviderCapability::Encryption]
     }
 
+    fn auth_command(&self) -> Option<String> {
+        super::aws_shared::sso_login_command(self.profile.as_deref())
+    }
+
     async fn get_secret(&self, value: &str) -> Result<String> {
         // value contains the base64-encoded encrypted blob
         self.decrypt(value).await
