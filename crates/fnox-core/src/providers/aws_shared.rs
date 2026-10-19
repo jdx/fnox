@@ -46,6 +46,13 @@ pub async fn load_sdk_config(
         .build())
 }
 
+/// `aws sso login` for the provider's resolved profile. A bare `aws sso login` uses the
+/// `default` profile, which may not exist or may not be the one the provider reads from.
+pub fn sso_login_command(profile: Option<&str>) -> Option<String> {
+    let profile = crate::auth_prompt::quote_arg(profile?)?;
+    Some(format!("aws sso login --profile {profile}"))
+}
+
 /// IAM role ARNs are `arn:<partition>:iam::<account>:role/<name>` - the region segment is always
 /// empty and the account is always 12 digits.
 fn validate_role_arn(role_arn: &str) -> Result<()> {

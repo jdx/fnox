@@ -421,7 +421,7 @@ fn generate_provider_methods(
             Self::#variant { auth_command, .. } => match auth_command.as_deref() {
                 Some("") => None,
                 Some(cmd) => Some(cmd),
-                None => #static_default,
+                None => resolved.or(#static_default),
             }
         });
         let daemon_cache_arm = if provider.daemon_cache_supported {
@@ -552,8 +552,9 @@ fn generate_provider_methods(
             }
 
             /// Get the auth command for this provider.
-            /// Returns the instance-level override if set, otherwise the static default.
-            pub fn default_auth_command(&self) -> Option<&str> {
+            /// Returns the instance-level override if set, otherwise `resolved` (the command
+            /// offered by the resolved provider instance), otherwise the static default.
+            pub fn default_auth_command<'a>(&'a self, resolved: Option<&'a str>) -> Option<&'a str> {
                 match self {
                     #(#auth_command_arms),*
                 }

@@ -259,6 +259,10 @@ impl crate::providers::Provider for AwsSecretsManagerProvider {
         vec![crate::providers::ProviderCapability::RemoteStorage]
     }
 
+    fn auth_command(&self) -> Option<String> {
+        super::aws_shared::sso_login_command(self.profile.as_deref())
+    }
+
     async fn get_secret(&self, value: &str) -> Result<String> {
         let secret_name = self.get_secret_name(value);
         tracing::debug!(

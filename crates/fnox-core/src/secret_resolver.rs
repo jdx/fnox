@@ -733,19 +733,27 @@ async fn try_resolve_with_auth_retry(
     provider_value: &str,
 ) -> Result<Option<String>> {
     // Initial secret retrieval attempt before any authentication retry logic
+    let mut auth_command = None;
     match try_get_secret(
         config,
         profile,
         provider_name,
         provider_config,
         provider_value,
+        &mut auth_command,
     )
     .await
     {
         Ok(value) => Ok(Some(value)),
         Err(error) => {
             // Try auth prompt and retry
-            if prompt_and_run_auth(config, provider_config, provider_name, &error)? {
+            if prompt_and_run_auth(
+                config,
+                provider_config,
+                provider_name,
+                auth_command.as_deref(),
+                &error,
+            )? {
                 // Auth command ran successfully, retry
                 try_get_secret(
                     config,
@@ -753,6 +761,7 @@ async fn try_resolve_with_auth_retry(
                     provider_name,
                     provider_config,
                     provider_value,
+                    &mut auth_command,
                 )
                 .await
                 .map(Some)
@@ -765,13 +774,15 @@ async fn try_resolve_with_auth_retry(
 }
 
 /// Helper to get a single secret from a provider without auth retry logic.
-/// Creates the provider instance and calls `get_secret`.
+/// Creates the provider instance and calls `get_secret`. Stores the instance's auth
+/// command in `auth_command` for the auth prompt.
 async fn try_get_secret(
     config: &Config,
     profile: &[String],
     provider_name: &str,
     provider_config: &ProviderConfig,
     provider_value: &str,
+    auth_command: &mut Option<String>,
 ) -> Result<String> {
     if crate::env::is_non_interactive() && provider_config.requires_interactive_auth() {
         return Err(FnoxError::Provider(format!(
@@ -781,6 +792,7 @@ async fn try_get_secret(
     }
 
     let provider = get_provider_resolved(config, profile, provider_name, provider_config).await?;
+    *auth_command = provider.auth_command();
     provider.get_secret(provider_value).await
 }
 
@@ -1358,7 +1370,8 @@ async fn try_batch_with_auth_retry(
     results: &mut HashMap<String, Option<String>>,
 ) -> Result<HashMap<String, Option<String>>> {
     // Initial batch secret retrieval attempt before any authentication retry logic
-    match try_get_secrets_batch(ctx, provider_secrets).await {
+    let mut auth_command = None;
+    match try_get_secrets_batch(ctx, provider_secrets, &mut auth_command).await {
         Ok(batch_results) => {
             let auth_error = extract_auth_error_from_batch(&batch_results);
             if let Some(ref auth_err) = auth_error
@@ -1366,11 +1379,12 @@ async fn try_batch_with_auth_retry(
                     ctx.config,
                     ctx.provider_config,
                     ctx.provider_name,
+                    auth_command.as_deref(),
                     auth_err,
                 )?
             {
                 // Auth prompt successful, retry the batch operation.
-                return match try_get_secrets_batch(ctx, provider_secrets).await {
+                return match try_get_secrets_batch(ctx, provider_secrets, &mut auth_command).await {
                     Ok(retry_results) => {
                         process_batch_results(
                             ctx.profile,
@@ -1406,9 +1420,15 @@ async fn try_batch_with_auth_retry(
         }
         Err(error) => {
             // Try auth prompt and retry
-            if prompt_and_run_auth(ctx.config, ctx.provider_config, ctx.provider_name, &error)? {
+            if prompt_and_run_auth(
+                ctx.config,
+                ctx.provider_config,
+                ctx.provider_name,
+                auth_command.as_deref(),
+                &error,
+            )? {
                 // Auth command ran successfully, retry
-                match try_get_secrets_batch(ctx, provider_secrets).await {
+                match try_get_secrets_batch(ctx, provider_secrets, &mut auth_command).await {
                     Ok(batch_results) => {
                         process_batch_results(
                             ctx.profile,
@@ -1507,10 +1527,12 @@ fn extract_auth_error_from_batch(
 }
 
 /// Helper to get multiple secrets in batch from a provider without auth retry logic.
-/// Creates the provider instance and calls `get_secrets_batch` on it.
+/// Creates the provider instance and calls `get_secrets_batch` on it. Stores the
+/// instance's auth command in `auth_command` for the auth prompt.
 async fn try_get_secrets_batch(
     ctx: &ProviderBatchContext<'_>,
     provider_secrets: &[(String, String)],
+    auth_command: &mut Option<String>,
 ) -> Result<HashMap<String, Result<String>>> {
     let provider = get_provider_resolved(
         ctx.config,
@@ -1519,6 +1541,7 @@ async fn try_get_secrets_batch(
         ctx.provider_config,
     )
     .await?;
+    *auth_command = provider.auth_command();
     Ok(provider.get_secrets_batch(provider_secrets).await)
 }
 
