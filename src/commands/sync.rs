@@ -276,14 +276,8 @@ impl SyncCommand {
                                         source_provider != target_provider_name
                                     })
                                 });
-                            // An entry rewritten by this sync (same file and profile
-                            // table) gets its new cache from the write below.
-                            let rewritten_here = path == &target_path
-                                && profile == &write_profile
-                                && secrets_to_sync.contains_key(*key);
                             secret.sync.as_ref().is_some_and(|sync| sync.local_source)
                                 && !has_profile_source
-                                && !rewritten_here
                         })
                         .map(|(key, secret)| {
                             let mut secret = secret.clone();
@@ -528,7 +522,14 @@ impl SyncCommand {
             Config::update_secrets_in_source(&no_secrets, removals, profile, path)?;
         }
         for (path, profile, unsynced) in &unsynced_local_entries {
-            Config::update_secrets_in_source(unsynced, &[], profile, path)?;
+            // Entries this sync wrote carry a fresh cache; keep it.
+            let mut unsynced = unsynced.clone();
+            if path == &target_path && profile == &write_profile {
+                unsynced.retain(|key, _| !synced_secrets.contains_key(key));
+            }
+            if !unsynced.is_empty() {
+                Config::update_secrets_in_source(&unsynced, &[], profile, path)?;
+            }
         }
 
         if synced_count > 0 {
