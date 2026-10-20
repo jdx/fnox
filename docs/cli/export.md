@@ -6,14 +6,20 @@ description: "Print or write resolved secrets as env, shell, JSON, YAML, or TOML
 
 # `fnox export`
 
-- **Usage:** `fnox export [FLAGS]`
+- **Usage:** `fnox export [FLAGS] [KEY]…`
 - **Aliases:** `ex`
 
 Print or write resolved secrets as env, shell, JSON, YAML, or TOML
 
 Resolves the active profile's secrets and prints them in the chosen format, or writes them to `--output`. By default only secrets with `env = true` are included, matching shell integration; `--all` adds `env = "exec"` and `env = false` secrets. An `as_file` secret is exported as the path of a temporary file that holds its value.
 
+Name one or more KEYs to export only those secrets. Only the named secrets are resolved, so other secrets cost no provider calls or auth prompts. Naming a key includes it whatever its `env` setting, so `--all` is not needed. An unknown key is an error.
+
 JSON, YAML, and TOML put the values in a `secrets` object, which `fnox import` reads back. The output contains real values, and `--output` creates the file with your default permissions, so set a restrictive umask first.
+
+## Arguments
+
+- **`[KEY]…`** — Secrets to export; all eligible secrets when omitted
 
 ## Flags
 
@@ -44,6 +50,12 @@ fnox export
 
 ```sh
 fnox export --format json
+```
+
+**Export only some secrets**
+
+```sh
+fnox export --format json DATABASE_URL API_KEY
 ```
 
 **Load secrets into the current shell**

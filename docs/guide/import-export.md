@@ -47,6 +47,7 @@ fnox export                       # KEY=value
 fnox export --format shell        # export KEY=value, for `source`
 fnox export --format json         # also yaml, toml
 fnox export -o .env               # write to a file
+fnox export API_KEY DB_URL        # only these secrets
 fnox export --profile production --format json
 ```
 
@@ -55,6 +56,7 @@ Exported values are **plaintext**. Wrapping a command in [`fnox exec`](/guide/ru
 Notes:
 
 - Export follows shell rules: secrets with `env = "exec"` or `env = false` are left out unless you add `--all`.
+- Name keys (`fnox export API_KEY`) to export only those. Only the named secrets are resolved, so nothing else is fetched or prompts for auth. A named key is included whatever its `env` setting, and an unknown key is an error.
 - `as_file` secrets export as paths to temporary files, not their contents.
 - JSON, YAML, and TOML output wraps values in a `secrets` object next to `metadata`. Use `jq '.secrets'` to get a flat map that `fnox import` accepts.
 - Programs that start processes should use [`fnox env --json`](/reference/env-json) instead. It handles file secrets and variables to unset, and reports errors as JSON.

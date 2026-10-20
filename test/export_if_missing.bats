@@ -94,3 +94,52 @@ TOML
 	# Should output clean env format even though secret failed to resolve
 	assert_output ""
 }
+
+@test "fnox export KEY exports only named secrets, including env = false" {
+	cat >fnox.toml <<'TOML'
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets.A_SECRET]
+provider = "plain"
+value = "alpha"
+
+[secrets.B_SECRET]
+provider = "plain"
+value = "beta"
+
+[secrets.HIDDEN_SECRET]
+provider = "plain"
+value = "hidden"
+env = false
+TOML
+
+	run "$FNOX_BIN" export A_SECRET
+	assert_success
+	assert_output "A_SECRET=alpha"
+
+	run "$FNOX_BIN" export --format json B_SECRET HIDDEN_SECRET
+	assert_success
+	assert_output --partial '"B_SECRET": "beta"'
+	assert_output --partial '"HIDDEN_SECRET": "hidden"'
+	refute_output --partial 'A_SECRET'
+}
+
+@test "fnox export KEY fails on an unknown key" {
+	cat >fnox.toml <<'TOML'
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets.A_SECRET]
+provider = "plain"
+value = "alpha"
+TOML
+
+	run "$FNOX_BIN" export A_SECRET MISSING_SECRET
+	assert_failure
+	assert_output --partial "MISSING_SECRET"
+}
