@@ -2439,7 +2439,7 @@ dependencies = [
 
 [[package]]
 name = "fnox"
-version = "1.41.0"
+version = "1.42.0"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -2490,7 +2490,7 @@ dependencies = [
 
 [[package]]
 name = "fnox-client"
-version = "1.41.0"
+version = "1.42.0"
 dependencies = [
  "blake3",
  "indexmap 2.14.2",
@@ -2504,7 +2504,7 @@ dependencies = [
 
 [[package]]
 name = "fnox-core"
-version = "1.41.0"
+version = "1.42.0"
 dependencies = [
  "aes-gcm 0.11.1",
  "age",

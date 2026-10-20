@@ -1,6 +1,24 @@
 # Changelog
 
-## [1.41.0](https://github.com/jdx/fnox/compare/v1.40.0..v1.41.0) - 2026-10-18
+## [1.42.0](https://github.com/jdx/fnox/compare/v1.41.0..v1.42.0) - 2026-10-20
+
+### 🚀 Features
+
+- **(export)** export only named secrets with positional KEY arguments by [@jdx](https://github.com/jdx) in [#1002](https://github.com/jdx/fnox/pull/1002)
+- **(provider)** support managed identity in the azure-token lease by [@jdx](https://github.com/jdx) in [#1003](https://github.com/jdx/fnox/pull/1003)
+
+### 🐛 Bug Fixes
+
+- **(provider)** use the resolved AWS profile in the SSO login prompt by [@balintant](https://github.com/balintant) in [#998](https://github.com/jdx/fnox/pull/998)
+- **(sync)** keep personal fnox.local.toml secrets across --local-file syncs by [@jdx](https://github.com/jdx) in [#1004](https://github.com/jdx/fnox/pull/1004)
+
+### 📦️ Dependency Updates
+
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#995](https://github.com/jdx/fnox/pull/995)
+- update rust crate usage-rs to v7.1.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#997](https://github.com/jdx/fnox/pull/997)
+- update webpki-root-certs and rustls-webpki for eMudhra CA revocation by [@jdx](https://github.com/jdx) in [#1005](https://github.com/jdx/fnox/pull/1005)
+
+## [1.41.0](https://github.com/jdx/fnox/compare/v1.40.0..v1.41.0) - 2026-10-19
 
 ### 🚀 Features
 
