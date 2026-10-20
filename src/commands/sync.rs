@@ -268,8 +268,17 @@ impl SyncCommand {
                         .into_iter()
                         .flat_map(|secrets| secrets.iter())
                         .filter(|(key, secret)| {
+                            // Another profile may still source this key from a
+                            // remote provider, so check this profile's own source.
+                            let has_profile_source =
+                                profile_secrets.get(*key).is_some_and(|secret| {
+                                    secret.provider().is_some_and(|source_provider| {
+                                        source_provider != target_provider_name
+                                    })
+                                });
                             secret.sync.as_ref().is_some_and(|sync| sync.local_source)
                                 && !secrets_to_sync.contains_key(*key)
+                                && !has_profile_source
                         })
                         .map(|(key, secret)| {
                             let mut secret = secret.clone();
@@ -307,6 +316,15 @@ impl SyncCommand {
         let stale_local_secrets = stale_local_entries
             .iter()
             .flat_map(|(_, _, secrets)| secrets)
+            .fold(Vec::new(), |mut names, name| {
+                if !names.contains(name) {
+                    names.push(name.clone());
+                }
+                names
+            });
+        let unsynced_local_secrets = unsynced_local_entries
+            .iter()
+            .flat_map(|(_, _, secrets)| secrets.keys())
             .fold(Vec::new(), |mut names, name| {
                 if !names.contains(name) {
                     names.push(name.clone());
@@ -358,6 +376,12 @@ impl SyncCommand {
                     console::style(key).cyan()
                 );
             }
+            for key in &unsynced_local_secrets {
+                println!(
+                    "  {} (clear obsolete local cache)",
+                    console::style(key).cyan()
+                );
+            }
             return Ok(());
         }
 
@@ -377,6 +401,9 @@ impl SyncCommand {
             }
             for key in &stale_local_secrets {
                 println!("  {} (remove stale local cache)", key);
+            }
+            for key in &unsynced_local_secrets {
+                println!("  {} (clear obsolete local cache)", key);
             }
 
             println!("\nContinue? [y/N]");
