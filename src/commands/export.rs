@@ -2,6 +2,7 @@ use crate::commands::Cli;
 use crate::config::Config;
 use crate::error::{FnoxError, Result};
 use crate::shell;
+use crate::suggest::{find_similar, format_suggestions};
 use crate::temp_file_secrets::create_persistent_secret_file;
 use console;
 use indexmap::IndexMap;
@@ -33,6 +34,11 @@ pub enum ExportFormat {
 /// `env = false` secrets. An `as_file` secret is exported as the path of a
 /// temporary file that holds its value.
 ///
+/// Name one or more KEYs to export only those secrets. Only the named secrets
+/// are resolved, so other secrets cost no provider calls or auth prompts.
+/// Naming a key includes it whatever its `env` setting, so `--all` is not
+/// needed. An unknown key is an error.
+///
 /// JSON, YAML, and TOML put the values in a `secrets` object, which
 /// `fnox import` reads back. The output contains real values, and `--output`
 /// creates the file with your default permissions, so set a restrictive umask
@@ -42,6 +48,10 @@ pub enum ExportFormat {
 #[usage(
     example("fnox export", header = "Print dotenv lines"),
     example("fnox export --format json", header = "Print JSON"),
+    example(
+        "fnox export --format json DATABASE_URL API_KEY",
+        header = "Export only some secrets"
+    ),
     example(
         "eval \"$(fnox export --format shell)\"",
         header = "Load secrets into the current shell"
@@ -53,6 +63,10 @@ pub enum ExportFormat {
     after_long_help = "See also:\n- Import and export: https://fnox.jdx.dev/guide/import-export"
 )]
 pub struct ExportCommand {
+    /// Secrets to export; all eligible secrets when omitted
+    #[usage(arg)]
+    key: Vec<String>,
+
     /// Output format
     #[usage(short, long, default = "env", value_enum)]
     format: ExportFormat,
@@ -102,11 +116,34 @@ impl ExportCommand {
         // Export is a shell-injection surface, so exclude secrets not meant for
         // the shell unless --all is passed. Filtering before resolution avoids
         // auth prompts for hidden secrets.
-        if !self.all {
+        if !self.key.is_empty() {
+            // Naming a key is explicit opt-in, so it bypasses the env filter.
+            for key in &self.key {
+                if !profile_secrets.contains_key(key) {
+                    let available_keys: Vec<_> =
+                        profile_secrets.keys().map(|s| s.as_str()).collect();
+                    let similar = find_similar(key, available_keys);
+                    return Err(FnoxError::SecretNotFound {
+                        key: key.clone(),
+                        profile: Config::display_profiles(&profile),
+                        config_path: config.secret_sources.get(key).cloned(),
+                        suggestion: format_suggestions(&similar),
+                    });
+                }
+            }
+            // Resolve the named secrets plus whatever they interpolate or need
+            // for provider auth, as `fnox exec` does; only the named ones are
+            // exported below.
+            profile_secrets = crate::secret_resolver::dependency_closure(
+                &config,
+                &profile,
+                &profile_secrets,
+                &self.key,
+            )?;
+        } else if !self.all {
             profile_secrets.retain(|_, sc| sc.env_mode().in_shell());
         }
 
-        // Resolve secrets using batch resolution for better performance
         let resolved_secrets = crate::daemon::resolve_batch(
             cli,
             &config,
@@ -121,6 +158,9 @@ impl ExportCommand {
         // For file-based secrets, create persistent temp files
         let mut secrets = IndexMap::new();
         for (key, value_opt) in resolved_secrets {
+            if !self.key.is_empty() && !self.key.contains(&key) {
+                continue;
+            }
             if let Some(value) = value_opt {
                 // Check if this secret should be file-based
                 if let Some(secret_config) = profile_secrets.get(&key) {

@@ -891,9 +891,20 @@
       },
       "export": {
         "full_cmd": ["export"],
-        "usage": "export [FLAGS]",
+        "usage": "export [FLAGS] [KEY]…",
         "subcommands": {},
-        "args": [],
+        "args": [
+          {
+            "name": "KEY",
+            "usage": "[KEY]…",
+            "help": "Secrets to export; all eligible secrets when omitted",
+            "help_first_line": "Secrets to export; all eligible secrets when omitted",
+            "required": false,
+            "double_dash": "Optional",
+            "var": true,
+            "hide": false
+          }
+        ],
         "flags": [
           {
             "name": "format",
@@ -1004,7 +1015,7 @@
         "hide": false,
         "args_override_self": true,
         "help": "Print or write resolved secrets as env, shell, JSON, YAML, or TOML",
-        "help_long": "Print or write resolved secrets as env, shell, JSON, YAML, or TOML\n\nResolves the active profile's secrets and prints them in the chosen format, or writes them to `--output`. By default only secrets with `env = true` are included, matching shell integration; `--all` adds `env = \"exec\"` and `env = false` secrets. An `as_file` secret is exported as the path of a temporary file that holds its value.\n\nJSON, YAML, and TOML put the values in a `secrets` object, which `fnox import` reads back. The output contains real values, and `--output` creates the file with your default permissions, so set a restrictive umask first.",
+        "help_long": "Print or write resolved secrets as env, shell, JSON, YAML, or TOML\n\nResolves the active profile's secrets and prints them in the chosen format, or writes them to `--output`. By default only secrets with `env = true` are included, matching shell integration; `--all` adds `env = \"exec\"` and `env = false` secrets. An `as_file` secret is exported as the path of a temporary file that holds its value.\n\nName one or more KEYs to export only those secrets. Only the named secrets are resolved, so other secrets cost no provider calls or auth prompts. Naming a key includes it whatever its `env` setting, so `--all` is not needed. An unknown key is an error.\n\nJSON, YAML, and TOML put the values in a `secrets` object, which `fnox import` reads back. The output contains real values, and `--output` creates the file with your default permissions, so set a restrictive umask first.",
         "name": "export",
         "aliases": ["ex"],
         "hidden_aliases": [],
@@ -1019,6 +1030,12 @@
           {
             "code": "fnox export --format json",
             "header": "Print JSON",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox export --format json DATABASE_URL API_KEY",
+            "header": "Export only some secrets",
             "help": null,
             "lang": ""
           },
