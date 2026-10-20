@@ -276,8 +276,14 @@ impl SyncCommand {
                                         source_provider != target_provider_name
                                     })
                                 });
+                            // An entry rewritten by this sync (same file and profile
+                            // table) gets its new cache from the write below.
+                            let rewritten_here = path == &target_path
+                                && profile == &write_profile
+                                && secrets_to_sync.contains_key(*key);
                             secret.sync.as_ref().is_some_and(|sync| sync.local_source)
                                 && !has_profile_source
+                                && !rewritten_here
                         })
                         .map(|(key, secret)| {
                             let mut secret = secret.clone();
