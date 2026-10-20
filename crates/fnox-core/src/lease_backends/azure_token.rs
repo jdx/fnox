@@ -81,6 +81,19 @@ impl AzureTokenBackend {
         })
     }
 
+    fn failure_hint(&self) -> String {
+        let identity = match &self.auth {
+            AzureAuth::ManagedIdentity {
+                client_id: Some(id),
+            } => format!(" (user-assigned identity {id})"),
+            _ => String::new(),
+        };
+        format!(
+            "Failed to acquire Azure token. {}{identity}, and check the scope.",
+            self.auth.hint()
+        )
+    }
+
     fn build_credential(&self) -> Result<Arc<dyn TokenCredential>> {
         self.auth.build_credential("Azure Token", URL)
     }
@@ -104,16 +117,7 @@ impl LeaseBackend for AzureTokenBackend {
                 .map_err(|e: azure_core::Error| FnoxError::ProviderAuthFailed {
                     provider: "Azure Token".to_string(),
                     details: e.to_string(),
-                    hint: format!(
-                        "Failed to acquire Azure token. {}{}, and check the scope.",
-                        self.auth.hint(),
-                        match &self.auth {
-                            AzureAuth::ManagedIdentity {
-                                client_id: Some(id),
-                            } => format!(" (user-assigned identity {id})"),
-                            _ => String::new(),
-                        }
-                    ),
+                    hint: self.failure_hint(),
                     url: URL.to_string(),
                 })?;
 
@@ -160,6 +164,25 @@ mod tests {
         assert!(consumed_env_vars(Some("managed-identity")).is_empty());
         assert_eq!(required_env_vars(None).len(), 3);
         assert_eq!(consumed_env_vars(None), CONSUMED_ENV_VARS);
+    }
+
+    #[test]
+    fn failure_hint_names_user_assigned_identity() {
+        let backend = AzureTokenBackend::new(
+            "s".into(),
+            "T".into(),
+            Some("managed-identity"),
+            Some("abc-123".into()),
+        )
+        .unwrap();
+        assert!(
+            backend
+                .failure_hint()
+                .contains("user-assigned identity abc-123")
+        );
+        let system =
+            AzureTokenBackend::new("s".into(), "T".into(), Some("managed-identity"), None).unwrap();
+        assert!(!system.failure_hint().contains("user-assigned"));
     }
 
     #[test]
