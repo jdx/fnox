@@ -277,7 +277,6 @@ impl SyncCommand {
                                     })
                                 });
                             secret.sync.as_ref().is_some_and(|sync| sync.local_source)
-                                && !secrets_to_sync.contains_key(*key)
                                 && !has_profile_source
                         })
                         .map(|(key, secret)| {
