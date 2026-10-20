@@ -251,6 +251,51 @@ EOF
 	assert_output "personal2"
 }
 
+@test "fnox sync --local-file keeps inherited personal secrets removable" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local keygen_output
+	keygen_output=$(age-keygen -o key.txt 2>&1)
+	local public_key
+	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+	export FNOX_AGE_KEY
+	FNOX_AGE_KEY=$(grep "^AGE-SECRET-KEY" key.txt)
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.source]
+type = "plain"
+EOF
+	cat >fnox.local.toml <<EOF
+[secrets]
+PARENT_PERSONAL = { provider = "source", value = "personal" }
+EOF
+	mkdir child
+	cat >child/fnox.toml <<EOF
+[secrets]
+CHILD = { provider = "source", value = "child" }
+EOF
+	cat >child/fnox.local.toml <<EOF
+[providers.age]
+type = "age"
+recipients = ["$public_key"]
+EOF
+
+	cd child
+	assert_fnox_success sync -p age --local-file --force
+	run grep -c 'local_source' fnox.local.toml
+	assert_output "0"
+
+	sed -i.bak '/PARENT_PERSONAL/d' ../fnox.local.toml
+	assert_fnox_success sync -p age --local-file --force
+	assert_output --partial "Removed 1 stale entries from the local cache"
+	run grep 'PARENT_PERSONAL' fnox.local.toml
+	assert_failure
+}
+
 @test "fnox sync --local-file resolves provider secret references from updated source config" {
 	if ! command -v age-keygen >/dev/null 2>&1 || ! command -v age >/dev/null 2>&1; then
 		skip "age-keygen and age are required"

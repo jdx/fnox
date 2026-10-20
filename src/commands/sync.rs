@@ -7,7 +7,7 @@ use console;
 use indexmap::IndexMap;
 use regex::Regex;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Cache remote secrets locally, encrypted with a local provider
 ///
@@ -427,14 +427,7 @@ impl SyncCommand {
                     secret_config.sync = Some(SyncConfig {
                         provider: target_provider_name.clone(),
                         value: encrypted,
-                        local_source: secret_config
-                            .source_path
-                            .as_deref()
-                            .and_then(|path| path.file_name())
-                            .and_then(|name| name.to_str())
-                            .is_some_and(|name| {
-                                matches!(name, "fnox.local.toml" | ".fnox.local.toml")
-                            }),
+                        local_source: is_local_source(&secret_config, &target_path, &write_profile),
                     });
                     synced_secrets.insert(key.clone(), secret_config);
                     synced_count += 1;
@@ -494,4 +487,28 @@ impl SyncCommand {
 
         Ok(())
     }
+}
+
+/// Whether the secret's source entry lives in the file and profile table that
+/// `--local-file` is about to write, so the cached copy replaces the personal
+/// original instead of shadowing an inherited secret.
+fn is_local_source(secret: &SecretConfig, target_path: &Path, write_profile: &str) -> bool {
+    let Some(source_path) = secret.source_path.as_deref() else {
+        return false;
+    };
+    let same_table = if secret.source_is_profile {
+        secret.source_profile.as_deref() == Some(write_profile)
+    } else {
+        write_profile == "default"
+    };
+    let same_file = match (source_path.canonicalize(), target_path.canonicalize()) {
+        (Ok(source), Ok(target)) => source == target,
+        _ => source_path == target_path,
+    };
+    same_table
+        && same_file
+        && matches!(
+            source_path.file_name().and_then(|name| name.to_str()),
+            Some("fnox.local.toml" | ".fnox.local.toml")
+        )
 }
