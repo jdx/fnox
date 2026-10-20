@@ -202,6 +202,55 @@ EOF
 	assert_failure
 }
 
+@test "fnox sync --local-file keeps personal secrets defined in fnox.local.toml" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local keygen_output
+	keygen_output=$(age-keygen -o key.txt 2>&1)
+	local public_key
+	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+	export FNOX_AGE_KEY
+	FNOX_AGE_KEY=$(grep "^AGE-SECRET-KEY" key.txt)
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.source]
+type = "plain"
+
+[secrets]
+SHARED = { provider = "source", value = "shared" }
+EOF
+	cat >fnox.local.toml <<EOF
+[providers.age]
+type = "age"
+recipients = ["$public_key"]
+
+[secrets]
+PERSONAL = { provider = "source", value = "personal" }
+EOF
+
+	assert_fnox_success sync -p age --local-file --force
+	assert_output --partial "Synced 2 secrets"
+
+	sed -i.bak 's/value = "personal"/value = "personal2"/' fnox.local.toml
+	assert_fnox_success sync -p age --local-file --force
+	assert_output --partial "Synced 2 secrets"
+	refute_output --partial "Removed"
+	assert_fnox_success get PERSONAL
+	assert_output "personal2"
+
+	sed -i.bak '/SHARED =/d' fnox.toml
+	assert_fnox_success sync -p age --local-file --force
+	assert_output --partial "Removed 1 stale entries from the local cache"
+	run grep 'SHARED' fnox.local.toml
+	assert_failure
+	assert_fnox_success get PERSONAL
+	assert_output "personal2"
+}
+
 @test "fnox sync --local-file resolves provider secret references from updated source config" {
 	if ! command -v age-keygen >/dev/null 2>&1 || ! command -v age >/dev/null 2>&1; then
 		skip "age-keygen and age are required"

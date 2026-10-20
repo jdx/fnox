@@ -427,6 +427,14 @@ impl SyncCommand {
                     secret_config.sync = Some(SyncConfig {
                         provider: target_provider_name.clone(),
                         value: encrypted,
+                        local_source: secret_config
+                            .source_path
+                            .as_deref()
+                            .and_then(|path| path.file_name())
+                            .and_then(|name| name.to_str())
+                            .is_some_and(|name| {
+                                matches!(name, "fnox.local.toml" | ".fnox.local.toml")
+                            }),
                     });
                     synced_secrets.insert(key.clone(), secret_config);
                     synced_count += 1;
