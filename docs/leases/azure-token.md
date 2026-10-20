@@ -1,18 +1,18 @@
 ---
-description: "Get a short-lived Microsoft Entra ID access token for an Azure resource scope with fnox, from a service principal or Azure CLI login."
+description: "Get a short-lived Microsoft Entra ID access token for an Azure resource scope with fnox, from a service principal, Azure CLI login, or managed identity."
 ---
 
 # Azure token
 
 The `azure-token` lease backend gets an OAuth2 access token from Microsoft Entra ID for one resource scope and injects it into `fnox exec`. Use it for tools and API calls that accept a bearer token.
 
-|              |                                                    |
-| ------------ | -------------------------------------------------- |
-| Config type  | `azure-token`                                      |
-| Produces     | `AZURE_ACCESS_TOKEN` (configurable with `env_var`) |
-| Max duration | 1 hour; Azure sets the actual lifetime             |
-| Revocation   | None; tokens expire on their own                   |
-| Needs        | A service principal secret, or an Azure CLI login  |
+|              |                                                                       |
+| ------------ | --------------------------------------------------------------------- |
+| Config type  | `azure-token`                                                         |
+| Produces     | `AZURE_ACCESS_TOKEN` (configurable with `env_var`)                    |
+| Max duration | 1 hour; Azure sets the actual lifetime                                |
+| Revocation   | None; tokens expire on their own                                      |
+| Needs        | A service principal secret, an Azure CLI login, or a managed identity |
 
 ## Quick start
 
@@ -37,7 +37,17 @@ fnox uses the first source available:
 1. A service principal, when `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_CLIENT_SECRET` are all set and non-empty.
 2. The Azure CLI or Azure Developer CLI login. Before creating a lease, fnox checks that `az` is on `PATH`.
 
-Managed identity is not supported by this backend. To keep a service principal in a provider, define secrets with the same names; fnox resolves them for lease creation, and `env = false` keeps them out of the command:
+To use the managed identity of the Azure host instead (for example a CI runner or VM), opt in with `auth = "managed-identity"`. fnox never tries it automatically, and skips the `az` check:
+
+```toml
+[leases.azure]
+type = "azure-token"
+scope = "https://management.azure.com/.default"
+auth = "managed-identity"
+managed_identity_client_id = "00000000-0000-0000-0000-000000000000" # omit for system-assigned
+```
+
+To keep a service principal in a provider, define secrets with the same names; fnox resolves them for lease creation, and `env = false` keeps them out of the command:
 
 ```toml
 [providers.op]
@@ -54,11 +64,13 @@ AZURE_CLIENT_SECRET = { provider = "op", value = "Azure SP/client secret", env =
 
 ## Configuration
 
-| Field      | Required | Default                | Description                                                                                                        |
-| ---------- | -------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `scope`    | Yes      | none                   | Resource scope, for example `https://management.azure.com/.default`.                                               |
-| `env_var`  | No       | `"AZURE_ACCESS_TOKEN"` | Variable that receives the token.                                                                                  |
-| `duration` | No       | `"15m"`                | Must be at most `"1h"`. Azure sets the real lifetime, so shorter values log a warning and are ignored; use `"1h"`. |
+| Field                        | Required | Default                | Description                                                                                                        |
+| ---------------------------- | -------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `scope`                      | Yes      | none                   | Resource scope, for example `https://management.azure.com/.default`.                                               |
+| `env_var`                    | No       | `"AZURE_ACCESS_TOKEN"` | Variable that receives the token.                                                                                  |
+| `auth`                       | No       | `"default"`            | `"default"` or `"managed-identity"`.                                                                               |
+| `managed_identity_client_id` | No       | none                   | Client ID of a user-assigned managed identity. Requires `auth = "managed-identity"`; omit for system-assigned.     |
+| `duration`                   | No       | `"15m"`                | Must be at most `"1h"`. Azure sets the real lifetime, so shorter values log a warning and are ignored; use `"1h"`. |
 
 Common scopes:
 

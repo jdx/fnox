@@ -12,7 +12,17 @@ const URL: &str = "https://fnox.jdx.dev/leases/azure-token";
 /// All env var names the Azure Token backend may consume at runtime.
 pub const CONSUMED_ENV_VARS: &[&str] = azure_shared::SERVICE_PRINCIPAL_ENV_VARS;
 
-pub fn check_prerequisites() -> Option<String> {
+pub fn check_prerequisites(
+    auth: Option<&str>,
+    managed_identity_client_id: &Option<String>,
+) -> Option<String> {
+    match AzureAuth::from_config(auth, managed_identity_client_id.clone()) {
+        // Managed identity never needs `az` or a service principal.
+        Ok(AzureAuth::ManagedIdentity { .. }) => return None,
+        // Invalid settings are reported when the backend is created.
+        Err(_) => return None,
+        Ok(AzureAuth::Default) => {}
+    }
     if azure_shared::service_principal_env().is_some() {
         return None;
     }
@@ -35,15 +45,25 @@ pub fn required_env_vars() -> Vec<(&'static str, &'static str)> {
 pub struct AzureTokenBackend {
     scope: String,
     env_var: String,
+    auth: AzureAuth,
 }
 
 impl AzureTokenBackend {
-    pub fn new(scope: String, env_var: String) -> Self {
-        Self { scope, env_var }
+    pub fn new(
+        scope: String,
+        env_var: String,
+        auth: Option<&str>,
+        managed_identity_client_id: Option<String>,
+    ) -> Result<Self> {
+        Ok(Self {
+            scope,
+            env_var,
+            auth: AzureAuth::from_config(auth, managed_identity_client_id)?,
+        })
     }
 
     fn build_credential(&self) -> Result<Arc<dyn TokenCredential>> {
-        AzureAuth::Default.build_credential("Azure Token", URL)
+        self.auth.build_credential("Azure Token", URL)
     }
 }
 
@@ -65,7 +85,10 @@ impl LeaseBackend for AzureTokenBackend {
                 .map_err(|e: azure_core::Error| FnoxError::ProviderAuthFailed {
                     provider: "Azure Token".to_string(),
                     details: e.to_string(),
-                    hint: "Failed to acquire Azure token. Check credentials and scope.".to_string(),
+                    hint: format!(
+                        "Failed to acquire Azure token. {}, and check the scope.",
+                        self.auth.hint()
+                    ),
                     url: URL.to_string(),
                 })?;
 
@@ -94,5 +117,23 @@ impl LeaseBackend for AzureTokenBackend {
     fn max_lease_duration(&self) -> Duration {
         // Azure controls token lifetime (~1 hour), not configurable by caller
         Duration::from_secs(3600)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn managed_identity_skips_prerequisites() {
+        assert!(check_prerequisites(Some("managed-identity"), &None).is_none());
+    }
+
+    #[test]
+    fn rejects_client_id_without_managed_identity() {
+        assert!(AzureTokenBackend::new("s".into(), "T".into(), None, Some("abc".into())).is_err());
+        assert!(
+            AzureTokenBackend::new("s".into(), "T".into(), Some("managed-identity"), None).is_ok()
+        );
     }
 }

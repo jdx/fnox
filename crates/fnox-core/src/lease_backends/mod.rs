@@ -154,6 +154,12 @@ pub enum LeaseBackendConfig {
         env_var: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         duration: Option<String>,
+        /// "default" (service principal env vars, then Azure CLI login) or "managed-identity"
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        auth: Option<String>,
+        /// Client ID of a user-assigned managed identity; requires `auth = "managed-identity"`
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        managed_identity_client_id: Option<String>,
     },
     /// Cloudflare API Token
     Cloudflare {
@@ -239,7 +245,11 @@ impl LeaseBackendConfig {
                 credential_command,
                 ..
             } => vault::check_prerequisites(address, token, credential_command),
-            LeaseBackendConfig::AzureToken { .. } => azure_token::check_prerequisites(),
+            LeaseBackendConfig::AzureToken {
+                auth,
+                managed_identity_client_id,
+                ..
+            } => azure_token::check_prerequisites(auth.as_deref(), managed_identity_client_id),
             LeaseBackendConfig::Cloudflare { .. } => cloudflare::check_prerequisites(),
             LeaseBackendConfig::GithubApp {
                 private_key_file, ..
@@ -367,9 +377,18 @@ impl LeaseBackendConfig {
                 env_map.clone(),
                 method.clone(),
             )?)),
-            LeaseBackendConfig::AzureToken { scope, env_var, .. } => Ok(Box::new(
-                azure_token::AzureTokenBackend::new(scope.clone(), env_var.clone()),
-            )),
+            LeaseBackendConfig::AzureToken {
+                scope,
+                env_var,
+                auth,
+                managed_identity_client_id,
+                ..
+            } => Ok(Box::new(azure_token::AzureTokenBackend::new(
+                scope.clone(),
+                env_var.clone(),
+                auth.as_deref(),
+                managed_identity_client_id.clone(),
+            )?)),
             LeaseBackendConfig::Cloudflare {
                 token_type,
                 account_id,
