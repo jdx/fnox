@@ -272,6 +272,12 @@ pub struct Config {
 pub struct SyncConfig {
     pub provider: String,
     pub value: String,
+    /// The secret's source reference is defined in the local override file
+    /// itself (a personal secret), not inherited from shared config. A
+    /// `--local-file` sync keeps such entries as sources instead of treating
+    /// them as removable cache copies.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub local_source: bool,
 }
 
 /// Configuration for a single secret
@@ -924,6 +930,19 @@ impl Config {
         Ok(config)
     }
 
+    /// Drop cache copies from a local override file's secrets. Entries marked
+    /// `local_source` are personal secrets whose reference lives in this file,
+    /// so they stay as plain sources with the cached value removed.
+    fn strip_local_sync_cache(secrets: &mut IndexMap<String, SecretConfig>) {
+        secrets.retain(|_, secret| match &secret.sync {
+            None => true,
+            Some(sync) => sync.local_source,
+        });
+        for secret in secrets.values_mut() {
+            secret.sync = None;
+        }
+    }
+
     /// Recursively search for fnox.toml files and merge them
     /// Returns (config, found_any) where found_any indicates if any config file was found
     fn load_recursive(
@@ -962,14 +981,12 @@ impl Config {
                     Some("fnox.local.toml" | ".fnox.local.toml")
                 );
                 if is_local && !include_local_sync {
-                    file_config
-                        .secrets
-                        .retain(|_, secret| secret.sync.is_none());
+                    Self::strip_local_sync_cache(&mut file_config.secrets);
                     file_config
                         .secret_sources
                         .retain(|key, _| file_config.secrets.contains_key(key));
                     for profile in file_config.profiles.values_mut() {
-                        profile.secrets.retain(|_, secret| secret.sync.is_none());
+                        Self::strip_local_sync_cache(&mut profile.secrets);
                         profile
                             .secret_sources
                             .retain(|key, _| profile.secrets.contains_key(key));
@@ -2380,6 +2397,9 @@ impl SecretConfig {
             let mut sync_table = toml_edit::InlineTable::new();
             sync_table.insert("provider", toml_edit::Value::from(sync.provider.as_str()));
             sync_table.insert("value", toml_edit::Value::from(sync.value.as_str()));
+            if sync.local_source {
+                sync_table.insert("local_source", toml_edit::Value::from(true));
+            }
             sync_table.fmt();
             inline.insert("sync", toml_edit::Value::InlineTable(sync_table));
         }
@@ -2442,6 +2462,9 @@ impl SecretConfig {
                 let mut sync_table = toml_edit::InlineTable::new();
                 sync_table.insert("provider", Value::from(sync.provider.as_str()));
                 sync_table.insert("value", Value::from(sync.value.as_str()));
+                if sync.local_source {
+                    sync_table.insert("local_source", Value::from(true));
+                }
                 sync_table.fmt();
                 Value::InlineTable(sync_table)
             }),
@@ -3423,6 +3446,7 @@ inherits = []
         secret.sync = Some(SyncConfig {
             provider: "age".to_string(),
             value: "encrypted-blob".to_string(),
+            local_source: false,
         });
 
         let raw = secret.for_raw_resolve();
@@ -3549,6 +3573,7 @@ DEV_INHERITED = { provider = "plain", value = "d" }
         secret.sync = Some(SyncConfig {
             provider: "age".to_string(),
             value: "blob".to_string(),
+            local_source: false,
         });
 
         let raw = secret.for_raw_resolve();

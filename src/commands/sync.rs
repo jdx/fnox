@@ -7,7 +7,7 @@ use console;
 use indexmap::IndexMap;
 use regex::Regex;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Cache remote secrets locally, encrypted with a local provider
 ///
@@ -247,6 +247,9 @@ impl SyncCommand {
             cache_profiles.push(write_profile.clone());
         }
         let mut stale_local_entries = Vec::new();
+        // Personal secrets whose source no longer needs syncing (for example it
+        // now uses the target provider) keep their entry but lose the old cache.
+        let mut unsynced_local_entries = Vec::new();
         if is_full_local_sync {
             for path in &local_cache_paths {
                 let local_config = Config::load(path)?;
@@ -261,6 +264,30 @@ impl SyncCommand {
                             .get(profile.as_str())
                             .map(|profile| &profile.secrets)
                     };
+                    let unsynced = cached_secrets
+                        .into_iter()
+                        .flat_map(|secrets| secrets.iter())
+                        .filter(|(key, secret)| {
+                            // Another profile may still source this key from a
+                            // remote provider, so check this profile's own source.
+                            let has_profile_source =
+                                profile_secrets.get(*key).is_some_and(|secret| {
+                                    secret.provider().is_some_and(|source_provider| {
+                                        source_provider != target_provider_name
+                                    })
+                                });
+                            secret.sync.as_ref().is_some_and(|sync| sync.local_source)
+                                && !has_profile_source
+                        })
+                        .map(|(key, secret)| {
+                            let mut secret = secret.clone();
+                            secret.sync = None;
+                            (key.clone(), secret)
+                        })
+                        .collect::<IndexMap<_, _>>();
+                    if !unsynced.is_empty() {
+                        unsynced_local_entries.push((path.clone(), profile.clone(), unsynced));
+                    }
                     let stale = cached_secrets
                         .into_iter()
                         .flat_map(|secrets| secrets.iter())
@@ -271,7 +298,9 @@ impl SyncCommand {
                                         source_provider != target_provider_name
                                     })
                                 });
-                            secret.sync.is_some()
+                            // A `local_source` entry is the personal secret's own
+                            // definition, so it is never a removable cache copy.
+                            secret.sync.as_ref().is_some_and(|sync| !sync.local_source)
                                 && !secrets_to_sync.contains_key(*key)
                                 && !has_profile_source
                         })
@@ -292,12 +321,31 @@ impl SyncCommand {
                 }
                 names
             });
+        let unsynced_local_secrets = unsynced_local_entries
+            .iter()
+            .flat_map(|(_, _, secrets)| secrets.keys())
+            .fold(Vec::new(), |mut names, name| {
+                if !names.contains(name) {
+                    names.push(name.clone());
+                }
+                names
+            });
+        let unsynced_label = |key: &str| {
+            if secrets_to_sync.contains_key(key) {
+                "clear obsolete local cache unless refreshed above"
+            } else {
+                "clear obsolete local cache"
+            }
+        };
         let stale_local_entry_count = stale_local_entries
             .iter()
             .map(|(_, _, secrets)| secrets.len())
             .sum::<usize>();
 
-        if secrets_to_sync.is_empty() && stale_local_secrets.is_empty() {
+        if secrets_to_sync.is_empty()
+            && stale_local_secrets.is_empty()
+            && unsynced_local_entries.is_empty()
+        {
             println!("No secrets to sync");
             return Ok(());
         }
@@ -334,6 +382,9 @@ impl SyncCommand {
                     console::style(key).cyan()
                 );
             }
+            for key in &unsynced_local_secrets {
+                println!("  {} ({})", console::style(key).cyan(), unsynced_label(key));
+            }
             return Ok(());
         }
 
@@ -353,6 +404,9 @@ impl SyncCommand {
             }
             for key in &stale_local_secrets {
                 println!("  {} (remove stale local cache)", key);
+            }
+            for key in &unsynced_local_secrets {
+                println!("  {} ({})", key, unsynced_label(key));
             }
 
             println!("\nContinue? [y/N]");
@@ -427,6 +481,7 @@ impl SyncCommand {
                     secret_config.sync = Some(SyncConfig {
                         provider: target_provider_name.clone(),
                         value: encrypted,
+                        local_source: is_local_source(&secret_config, &target_path, &write_profile),
                     });
                     synced_secrets.insert(key.clone(), secret_config);
                     synced_count += 1;
@@ -441,7 +496,10 @@ impl SyncCommand {
             }
         }
 
-        if synced_secrets.is_empty() && stale_local_secrets.is_empty() {
+        if synced_secrets.is_empty()
+            && stale_local_secrets.is_empty()
+            && unsynced_local_entries.is_empty()
+        {
             println!("No secrets were synced (all skipped)");
             return Ok(());
         }
@@ -467,6 +525,16 @@ impl SyncCommand {
         {
             Config::update_secrets_in_source(&no_secrets, removals, profile, path)?;
         }
+        for (path, profile, unsynced) in &unsynced_local_entries {
+            // Entries this sync wrote carry a fresh cache; keep it.
+            let mut unsynced = unsynced.clone();
+            if path == &target_path && profile == &write_profile {
+                unsynced.retain(|key, _| !synced_secrets.contains_key(key));
+            }
+            if !unsynced.is_empty() {
+                Config::update_secrets_in_source(&unsynced, &[], profile, path)?;
+            }
+        }
 
         if synced_count > 0 {
             println!(
@@ -486,4 +554,28 @@ impl SyncCommand {
 
         Ok(())
     }
+}
+
+/// Whether the secret's source entry lives in the file and profile table that
+/// `--local-file` is about to write, so the cached copy replaces the personal
+/// original instead of shadowing an inherited secret.
+fn is_local_source(secret: &SecretConfig, target_path: &Path, write_profile: &str) -> bool {
+    let Some(source_path) = secret.source_path.as_deref() else {
+        return false;
+    };
+    let same_table = if secret.source_is_profile {
+        secret.source_profile.as_deref() == Some(write_profile)
+    } else {
+        write_profile == "default"
+    };
+    let same_file = match (source_path.canonicalize(), target_path.canonicalize()) {
+        (Ok(source), Ok(target)) => source == target,
+        _ => source_path == target_path,
+    };
+    same_table
+        && same_file
+        && matches!(
+            source_path.file_name().and_then(|name| name.to_str()),
+            Some("fnox.local.toml" | ".fnox.local.toml")
+        )
 }

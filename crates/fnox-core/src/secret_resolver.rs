@@ -2707,6 +2707,7 @@ DB = { default = "d" }
         secrets.get_mut("DB").unwrap().sync = Some(crate::config::SyncConfig {
             provider: "op".to_string(),
             value: "item".to_string(),
+            local_source: false,
         });
         assert_eq!(
             closure_keys(&config, &secrets, &["DB"]),

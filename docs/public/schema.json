@@ -1435,6 +1435,10 @@
         },
         "value": {
           "type": "string"
+        },
+        "local_source": {
+          "description": "The secret's source reference is defined in the local override file\nitself (a personal secret), not inherited from shared config. A\n`--local-file` sync keeps such entries as sources instead of treating\nthem as removable cache copies.",
+          "type": "boolean"
         }
       },
       "required": ["provider", "value"]
