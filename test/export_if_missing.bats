@@ -165,25 +165,34 @@ TOML
 	assert_output "DATABASE_URL=postgres://localhost/app"
 }
 
-@test "fnox export KEY skips fallback-only dependencies of a working secret" {
+@test "fnox export KEY honors if_missing for the named secret" {
 	cat >fnox.toml <<'TOML'
 root = true
+
+[providers.age]
+type = "age"
+recipients = ["age1cdk0klj88zzhg0ncfhe4ul9ja5k58w2st3fpkhmy0f46vlsuh5wq0s0gr9"]
 
 [providers.plain]
 type = "plain"
 
-[secrets.API_KEY]
-provider = "plain"
-value = "working"
-default = "${BACKUP}"
+[secrets.OPTIONAL]
+provider = "age"
+value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBaaTFhczNBYnN3S1c0NjZwZnlDN2NUMTVaSTFXd2k1OWhnWUJvckVxYmh3CjNRSmhxSWJiYXU3eHoyNlcyOVVLRWNnUlFJeFBjL2N0YlA5K2hUaU04VDQKLS0tIGN6UVYzMHZJUUhKNmlkQjFOaXRXYUpjbzBOaHRMZkFFVVRPa3FaQUs2dHcKf3AcueEBLdl8lzRwKXik+OvDVg48g44QoPZu0j0NLV4lPLDqoq0="
+if_missing = "warn"
 
-[secrets.BACKUP]
-provider = "missing"
-value = "x"
-if_missing = "error"
+[secrets.PRESENT]
+provider = "plain"
+value = "here"
 TOML
 
-	run "$FNOX_BIN" export --no-daemon API_KEY
+	export FNOX_AGE_KEY="/tmp/nonexistent-age-key.txt"
+
+	run "$FNOX_BIN" export --no-daemon OPTIONAL PRESENT
 	assert_success
-	assert_output "API_KEY=working"
+	assert_output --partial "PRESENT=here"
+	refute_output --partial "OPTIONAL="
+
+	run "$FNOX_BIN" --if-missing error export --no-daemon OPTIONAL PRESENT
+	assert_failure
 }

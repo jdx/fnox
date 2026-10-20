@@ -131,86 +131,36 @@ impl ExportCommand {
                     });
                 }
             }
-            // A provider may read credentials from other fnox secrets (e.g.
-            // `OP_SERVICE_ACCOUNT_TOKEN`). Resolve those first so they reach the
-            // environment, without resolving anything else.
-            let providers = config.get_providers(&profile)?;
-            let default_provider = config.get_default_provider(&profile).ok().flatten();
-            let mut credential_roots: Vec<String> = Vec::new();
-            for key in &self.key {
-                let secret = &profile_secrets[key];
-                if secret.value().is_none() {
-                    continue;
-                }
-                let name = secret.provider().or(default_provider.as_deref());
-                if let Some(provider) = name.and_then(|name| providers.get(name)) {
-                    for dep in provider.env_dependencies() {
-                        if profile_secrets.contains_key(*dep) {
-                            credential_roots.push(dep.to_string());
-                        }
-                    }
-                }
-            }
-            if !credential_roots.is_empty() {
-                let credentials = crate::secret_resolver::dependency_closure(
-                    &config,
-                    &profile,
-                    &profile_secrets,
-                    &credential_roots,
-                )?;
-                crate::daemon::resolve_batch(
-                    cli,
-                    &config,
-                    &profile,
-                    &credentials,
-                    crate::daemon::Purpose::Export,
-                    true,
-                )
-                .await?;
-            }
-            profile_secrets = self
-                .key
-                .iter()
-                .map(|key| (key.clone(), profile_secrets[key].clone()))
-                .collect();
+            // Resolve the named secrets plus whatever they interpolate or need
+            // for provider auth, as `fnox exec` does; only the named ones are
+            // exported below.
+            profile_secrets = crate::secret_resolver::dependency_closure(
+                &config,
+                &profile,
+                &profile_secrets,
+                &self.key,
+            )?;
         } else if !self.all {
             profile_secrets.retain(|_, sc| sc.env_mode().in_shell());
         }
 
-        // Named keys are resolved one at a time like `fnox get`, which pulls in
-        // only the secrets each value interpolates. Batch resolution would also
-        // resolve fallback-only dependencies that a working secret never uses.
-        let resolved_secrets = if self.key.is_empty() {
-            crate::daemon::resolve_batch(
-                cli,
-                &config,
-                &profile,
-                &profile_secrets,
-                crate::daemon::Purpose::Export,
-                true,
-            )
-            .await?
-        } else {
-            let mut resolved = IndexMap::new();
-            for (key, secret_config) in &profile_secrets {
-                let value = crate::daemon::resolve_one(
-                    cli,
-                    &config,
-                    &profile,
-                    key,
-                    secret_config,
-                    crate::daemon::Purpose::Export,
-                )
-                .await?;
-                resolved.insert(key.clone(), value);
-            }
-            resolved
-        };
+        let resolved_secrets = crate::daemon::resolve_batch(
+            cli,
+            &config,
+            &profile,
+            &profile_secrets,
+            crate::daemon::Purpose::Export,
+            true,
+        )
+        .await?;
 
         // Build secrets map, preserving insertion order
         // For file-based secrets, create persistent temp files
         let mut secrets = IndexMap::new();
         for (key, value_opt) in resolved_secrets {
+            if !self.key.is_empty() && !self.key.contains(&key) {
+                continue;
+            }
             if let Some(value) = value_opt {
                 // Check if this secret should be file-based
                 if let Some(secret_config) = profile_secrets.get(&key) {
