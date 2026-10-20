@@ -240,6 +240,14 @@
             },
             "duration": {
               "type": ["string", "null"]
+            },
+            "auth": {
+              "description": "\"default\" (service principal env vars, then Azure CLI login) or \"managed-identity\"",
+              "type": ["string", "null"]
+            },
+            "managed_identity_client_id": {
+              "description": "Client ID of a user-assigned managed identity; requires `auth = \"managed-identity\"`",
+              "type": ["string", "null"]
             }
           },
           "required": ["type", "scope"]
