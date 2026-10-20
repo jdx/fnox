@@ -69,6 +69,7 @@ EOF
 }
 
 @test "azure-token lease: create outputs credentials in json format" {
+	skip "disabled: CI Azure client secret expired (AADSTS7000222)"
 	create_azure_token_config
 
 	run "$FNOX_BIN" lease create test_azure --duration 30m --format json
@@ -78,6 +79,7 @@ EOF
 }
 
 @test "azure-token lease: create outputs credentials in env format" {
+	skip "disabled: CI Azure client secret expired (AADSTS7000222)"
 	create_azure_token_config
 
 	run "$FNOX_BIN" lease create test_azure --duration 30m --format env
@@ -86,6 +88,7 @@ EOF
 }
 
 @test "azure-token lease: exec injects credentials into subprocess" {
+	skip "disabled: CI Azure client secret expired (AADSTS7000222)"
 	create_azure_token_config
 
 	run "$FNOX_BIN" exec -- env
@@ -94,6 +97,7 @@ EOF
 }
 
 @test "azure-token lease: custom env_var name" {
+	skip "disabled: CI Azure client secret expired (AADSTS7000222)"
 	create_azure_token_config_custom_var
 
 	run "$FNOX_BIN" lease create test_azure --duration 30m --format json
@@ -102,6 +106,7 @@ EOF
 }
 
 @test "azure-token lease: list shows created lease" {
+	skip "disabled: CI Azure client secret expired (AADSTS7000222)"
 	create_azure_token_config
 
 	run "$FNOX_BIN" lease create test_azure --duration 30m --format json
@@ -114,6 +119,7 @@ EOF
 }
 
 @test "azure-token lease: revoke is a no-op (succeeds silently)" {
+	skip "disabled: CI Azure client secret expired (AADSTS7000222)"
 	create_azure_token_config
 
 	run "$FNOX_BIN" lease create test_azure --duration 30m --format json
