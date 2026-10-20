@@ -272,7 +272,9 @@ impl LeaseBackendConfig {
                 credential_command,
                 ..
             } => vault::required_env_vars(address, token, credential_command),
-            LeaseBackendConfig::AzureToken { .. } => azure_token::required_env_vars(),
+            LeaseBackendConfig::AzureToken { auth, .. } => {
+                azure_token::required_env_vars(auth.as_deref())
+            }
             LeaseBackendConfig::Cloudflare { .. } => cloudflare::required_env_vars(),
             LeaseBackendConfig::GithubApp { .. } => github_app::required_env_vars(),
             LeaseBackendConfig::GithubOauth { .. } => github_oauth::required_env_vars(),
@@ -326,7 +328,9 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::AwsSts { .. } => aws_sts::CONSUMED_ENV_VARS,
             LeaseBackendConfig::GcpIam { .. } => gcp_iam::CONSUMED_ENV_VARS,
             LeaseBackendConfig::Vault { .. } => vault::CONSUMED_ENV_VARS,
-            LeaseBackendConfig::AzureToken { .. } => azure_token::CONSUMED_ENV_VARS,
+            LeaseBackendConfig::AzureToken { auth, .. } => {
+                azure_token::consumed_env_vars(auth.as_deref())
+            }
             LeaseBackendConfig::Command { .. } => command::CONSUMED_ENV_VARS,
             LeaseBackendConfig::Cloudflare { .. } => cloudflare::CONSUMED_ENV_VARS,
             LeaseBackendConfig::GithubApp { .. } => github_app::CONSUMED_ENV_VARS,

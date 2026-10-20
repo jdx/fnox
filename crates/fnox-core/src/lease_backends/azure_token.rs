@@ -34,7 +34,19 @@ pub fn check_prerequisites(
     }
 }
 
-pub fn required_env_vars() -> Vec<(&'static str, &'static str)> {
+/// Env vars the backend may consume; managed identity reads none of them.
+pub fn consumed_env_vars(auth: Option<&str>) -> &'static [&'static str] {
+    if auth == Some("managed-identity") {
+        &[]
+    } else {
+        CONSUMED_ENV_VARS
+    }
+}
+
+pub fn required_env_vars(auth: Option<&str>) -> Vec<(&'static str, &'static str)> {
+    if auth == Some("managed-identity") {
+        return Vec::new();
+    }
     vec![
         ("AZURE_CLIENT_ID", "Azure application (client) ID"),
         ("AZURE_CLIENT_SECRET", "Azure client secret"),
@@ -55,6 +67,13 @@ impl AzureTokenBackend {
         auth: Option<&str>,
         managed_identity_client_id: Option<String>,
     ) -> Result<Self> {
+        // An empty ID would silently select the system-assigned identity.
+        if managed_identity_client_id.as_deref() == Some("") {
+            return Err(FnoxError::Config(
+                "managed_identity_client_id must not be empty; omit it to use the system-assigned identity"
+                    .to_string(),
+            ));
+        }
         Ok(Self {
             scope,
             env_var,
@@ -86,8 +105,14 @@ impl LeaseBackend for AzureTokenBackend {
                     provider: "Azure Token".to_string(),
                     details: e.to_string(),
                     hint: format!(
-                        "Failed to acquire Azure token. {}, and check the scope.",
-                        self.auth.hint()
+                        "Failed to acquire Azure token. {}{}, and check the scope.",
+                        self.auth.hint(),
+                        match &self.auth {
+                            AzureAuth::ManagedIdentity {
+                                client_id: Some(id),
+                            } => format!(" (user-assigned identity {id})"),
+                            _ => String::new(),
+                        }
                     ),
                     url: URL.to_string(),
                 })?;
@@ -127,6 +152,27 @@ mod tests {
     #[test]
     fn managed_identity_skips_prerequisites() {
         assert!(check_prerequisites(Some("managed-identity"), &None).is_none());
+    }
+
+    #[test]
+    fn managed_identity_needs_no_service_principal_env() {
+        assert!(required_env_vars(Some("managed-identity")).is_empty());
+        assert!(consumed_env_vars(Some("managed-identity")).is_empty());
+        assert_eq!(required_env_vars(None).len(), 3);
+        assert_eq!(consumed_env_vars(None), CONSUMED_ENV_VARS);
+    }
+
+    #[test]
+    fn rejects_empty_client_id() {
+        assert!(
+            AzureTokenBackend::new(
+                "s".into(),
+                "T".into(),
+                Some("managed-identity"),
+                Some(String::new())
+            )
+            .is_err()
+        );
     }
 
     #[test]
