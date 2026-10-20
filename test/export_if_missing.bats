@@ -164,3 +164,26 @@ TOML
 	assert_success
 	assert_output "DATABASE_URL=postgres://localhost/app"
 }
+
+@test "fnox export KEY skips fallback-only dependencies of a working secret" {
+	cat >fnox.toml <<'TOML'
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets.API_KEY]
+provider = "plain"
+value = "working"
+default = "${BACKUP}"
+
+[secrets.BACKUP]
+provider = "missing"
+value = "x"
+if_missing = "error"
+TOML
+
+	run "$FNOX_BIN" export --no-daemon API_KEY
+	assert_success
+	assert_output "API_KEY=working"
+}
