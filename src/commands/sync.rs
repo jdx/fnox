@@ -247,6 +247,9 @@ impl SyncCommand {
             cache_profiles.push(write_profile.clone());
         }
         let mut stale_local_entries = Vec::new();
+        // Personal secrets whose source no longer needs syncing (for example it
+        // now uses the target provider) keep their entry but lose the old cache.
+        let mut unsynced_local_entries = Vec::new();
         if is_full_local_sync {
             for path in &local_cache_paths {
                 let local_config = Config::load(path)?;
@@ -261,6 +264,22 @@ impl SyncCommand {
                             .get(profile.as_str())
                             .map(|profile| &profile.secrets)
                     };
+                    let unsynced = cached_secrets
+                        .into_iter()
+                        .flat_map(|secrets| secrets.iter())
+                        .filter(|(key, secret)| {
+                            secret.sync.as_ref().is_some_and(|sync| sync.local_source)
+                                && !secrets_to_sync.contains_key(*key)
+                        })
+                        .map(|(key, secret)| {
+                            let mut secret = secret.clone();
+                            secret.sync = None;
+                            (key.clone(), secret)
+                        })
+                        .collect::<IndexMap<_, _>>();
+                    if !unsynced.is_empty() {
+                        unsynced_local_entries.push((path.clone(), profile.clone(), unsynced));
+                    }
                     let stale = cached_secrets
                         .into_iter()
                         .flat_map(|secrets| secrets.iter())
@@ -299,7 +318,10 @@ impl SyncCommand {
             .map(|(_, _, secrets)| secrets.len())
             .sum::<usize>();
 
-        if secrets_to_sync.is_empty() && stale_local_secrets.is_empty() {
+        if secrets_to_sync.is_empty()
+            && stale_local_secrets.is_empty()
+            && unsynced_local_entries.is_empty()
+        {
             println!("No secrets to sync");
             return Ok(());
         }
@@ -444,7 +466,10 @@ impl SyncCommand {
             }
         }
 
-        if synced_secrets.is_empty() && stale_local_secrets.is_empty() {
+        if synced_secrets.is_empty()
+            && stale_local_secrets.is_empty()
+            && unsynced_local_entries.is_empty()
+        {
             println!("No secrets were synced (all skipped)");
             return Ok(());
         }
@@ -469,6 +494,9 @@ impl SyncCommand {
             .filter(|(path, profile, _)| path != &target_path || profile != &write_profile)
         {
             Config::update_secrets_in_source(&no_secrets, removals, profile, path)?;
+        }
+        for (path, profile, unsynced) in &unsynced_local_entries {
+            Config::update_secrets_in_source(unsynced, &[], profile, path)?;
         }
 
         if synced_count > 0 {
