@@ -131,6 +131,43 @@ impl ExportCommand {
                     });
                 }
             }
+            // A provider may read credentials from other fnox secrets (e.g.
+            // `OP_SERVICE_ACCOUNT_TOKEN`). Resolve those first so they reach the
+            // environment, without resolving anything else.
+            let providers = config.get_providers(&profile)?;
+            let default_provider = config.get_default_provider(&profile).ok().flatten();
+            let mut credential_roots: Vec<String> = Vec::new();
+            for key in &self.key {
+                let secret = &profile_secrets[key];
+                if secret.value().is_none() {
+                    continue;
+                }
+                let name = secret.provider().or(default_provider.as_deref());
+                if let Some(provider) = name.and_then(|name| providers.get(name)) {
+                    for dep in provider.env_dependencies() {
+                        if profile_secrets.contains_key(*dep) {
+                            credential_roots.push(dep.to_string());
+                        }
+                    }
+                }
+            }
+            if !credential_roots.is_empty() {
+                let credentials = crate::secret_resolver::dependency_closure(
+                    &config,
+                    &profile,
+                    &profile_secrets,
+                    &credential_roots,
+                )?;
+                crate::daemon::resolve_batch(
+                    cli,
+                    &config,
+                    &profile,
+                    &credentials,
+                    crate::daemon::Purpose::Export,
+                    true,
+                )
+                .await?;
+            }
             profile_secrets = self
                 .key
                 .iter()
