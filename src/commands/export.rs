@@ -118,25 +118,27 @@ impl ExportCommand {
         // auth prompts for hidden secrets.
         if !self.key.is_empty() {
             // Naming a key is explicit opt-in, so it bypasses the env filter.
-            let mut selected = IndexMap::new();
             for key in &self.key {
-                if selected.contains_key(key) {
-                    continue;
-                }
-                let secret = profile_secrets.get(key).ok_or_else(|| {
+                if !profile_secrets.contains_key(key) {
                     let available_keys: Vec<_> =
                         profile_secrets.keys().map(|s| s.as_str()).collect();
                     let similar = find_similar(key, available_keys);
-                    FnoxError::SecretNotFound {
+                    return Err(FnoxError::SecretNotFound {
                         key: key.clone(),
                         profile: Config::display_profiles(&profile),
                         config_path: config.secret_sources.get(key).cloned(),
                         suggestion: format_suggestions(&similar),
-                    }
-                })?;
-                selected.insert(key.clone(), secret.clone());
+                    });
+                }
             }
-            profile_secrets = selected;
+            // Resolve the named secrets plus whatever they interpolate or need
+            // for provider auth; only the named ones are exported below.
+            profile_secrets = crate::secret_resolver::dependency_closure(
+                &config,
+                &profile,
+                &profile_secrets,
+                &self.key,
+            )?;
         } else if !self.all {
             profile_secrets.retain(|_, sc| sc.env_mode().in_shell());
         }
@@ -156,6 +158,9 @@ impl ExportCommand {
         // For file-based secrets, create persistent temp files
         let mut secrets = IndexMap::new();
         for (key, value_opt) in resolved_secrets {
+            if !self.key.is_empty() && !self.key.contains(&key) {
+                continue;
+            }
             if let Some(value) = value_opt {
                 // Check if this secret should be file-based
                 if let Some(secret_config) = profile_secrets.get(&key) {

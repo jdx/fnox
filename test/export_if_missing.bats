@@ -143,3 +143,24 @@ TOML
 	assert_failure
 	assert_output --partial "MISSING_SECRET"
 }
+
+@test "fnox export KEY resolves interpolated dependencies but exports only named keys" {
+	cat >fnox.toml <<'TOML'
+root = true
+
+[secrets.DB_HOST]
+default = "localhost"
+
+[secrets.DATABASE_URL]
+default = "postgres://${DB_HOST}/app"
+
+[secrets.UNRELATED]
+provider = "missing"
+value = "x"
+if_missing = "error"
+TOML
+
+	run "$FNOX_BIN" export --no-daemon DATABASE_URL
+	assert_success
+	assert_output "DATABASE_URL=postgres://localhost/app"
+}
