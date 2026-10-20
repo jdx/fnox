@@ -271,7 +271,9 @@ impl SyncCommand {
                                         source_provider != target_provider_name
                                     })
                                 });
-                            secret.sync.is_some()
+                            // A `local_source` entry is the personal secret's own
+                            // definition, so it is never a removable cache copy.
+                            secret.sync.as_ref().is_some_and(|sync| !sync.local_source)
                                 && !secrets_to_sync.contains_key(*key)
                                 && !has_profile_source
                         })
