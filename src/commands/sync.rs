@@ -330,6 +330,13 @@ impl SyncCommand {
                 }
                 names
             });
+        let unsynced_label = |key: &str| {
+            if secrets_to_sync.contains_key(key) {
+                "clear obsolete local cache unless refreshed above"
+            } else {
+                "clear obsolete local cache"
+            }
+        };
         let stale_local_entry_count = stale_local_entries
             .iter()
             .map(|(_, _, secrets)| secrets.len())
@@ -376,10 +383,7 @@ impl SyncCommand {
                 );
             }
             for key in &unsynced_local_secrets {
-                println!(
-                    "  {} (clear obsolete local cache)",
-                    console::style(key).cyan()
-                );
+                println!("  {} ({})", console::style(key).cyan(), unsynced_label(key));
             }
             return Ok(());
         }
@@ -402,7 +406,7 @@ impl SyncCommand {
                 println!("  {} (remove stale local cache)", key);
             }
             for key in &unsynced_local_secrets {
-                println!("  {} (clear obsolete local cache)", key);
+                println!("  {} ({})", key, unsynced_label(key));
             }
 
             println!("\nContinue? [y/N]");
