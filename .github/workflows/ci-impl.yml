@@ -224,7 +224,7 @@ jobs:
           # Wait for Vault to be ready
           sleep 2
       - name: Run bats tests - tranche ${{ matrix.tranche }}
-        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4
+        uses: jdx/workflows/retry@7e4ea6cf326e2b3bb4335f733381af531aaa699d # v1.2.1
         env:
           TRANCHE: ${{ matrix.tranche }}
           TRANCHE_COUNT: 2
@@ -336,7 +336,7 @@ jobs:
             exit 1
           fi
       - name: Check formatting
-        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4
+        uses: jdx/workflows/retry@7e4ea6cf326e2b3bb4335f733381af531aaa699d # v1.2.1
         with:
           timeout_minutes: 5
           max_attempts: 3
