@@ -282,7 +282,7 @@ USERNAME = { provider = "pass", value = "master", line = 2 }
 
 ## Templates {#templates}
 
-A secret `default` and any literal string in a provider field that also accepts `{ secret = "NAME" }` is rendered as a [Tera](https://keats.github.io/tera/docs/) template when it contains `{{`, `{%` or `{#`. Strings without those delimiters are used as written.
+A secret `default` and any literal string in a provider field that also accepts `{ secret = "NAME" }` is rendered as a [Tera](https://keats.github.io/tera/docs/) template when it contains <code v-pre>{{</code>, <code v-pre>{%</code> or <code v-pre>{#</code>. Strings without those delimiters are used as written.
 
 | Variable        | Value                                                                     |
 | --------------- | ------------------------------------------------------------------------- |
@@ -308,7 +308,7 @@ An undefined variable or a syntax error fails with a message naming the field. A
 TEMPLATE = { default = "{% raw %}{{ not rendered }}{% endraw %}" }
 ```
 
-`${NAME}` references may appear inside a template branch, and only the references in the rendered result are required. Templates do not apply to `value`, `description`, list fields such as age `recipients`, or `credential_command`, which has its own `{{ address }}`-style context. A `default` is rendered when it is used, so a bad template in an unused default does not fail a secret whose provider returns a value.
+`${NAME}` references may appear inside a template branch, and only the references in the rendered result are required. Templates do not apply to `value`, `description`, list fields such as age `recipients`, or `credential_command`, which has its own <code v-pre>{{ address }}</code>-style context. A `default` is rendered when it is used, so a bad template in an unused default does not fail a secret whose provider returns a value.
 
 ## Profiles {#profile-configuration}
 
