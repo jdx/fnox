@@ -6,7 +6,7 @@ pub struct Fish;
 impl Shell for Fish {
     fn activate(&self, opts: ActivateOptions) -> String {
         let mut out = String::new();
-        let exe = opts.exe.display().to_string();
+        let exe = fish_quote(&opts.exe.display().to_string());
 
         // Export shell type
         out.push_str("set -gx FNOX_SHELL fish\n");
@@ -18,11 +18,11 @@ function fnox
     set command $argv[1]
 
     # The binary can disappear (for example after an upgrade or uninstall), so
-    # deactivation must not depend on it.
-    if test "$command" = deactivate; and not test -x "{exe}"
+    # deactivation must not depend on it. __FNOX_SESSION is kept so a later
+    # activation can still unset the loaded secrets and delete their files.
+    if test "$command" = deactivate; and not test -x {exe}
         functions -e __fnox_env_eval __fnox_cd_hook 2>/dev/null
         set -e FNOX_SHELL 2>/dev/null
-        set -e __FNOX_SESSION 2>/dev/null
         functions -e fnox 2>/dev/null
         return
     end
@@ -96,6 +96,10 @@ end
     fn unset_env(&self, key: &str) -> String {
         format!("set -e \"{}\"\n", fish_escape(key))
     }
+}
+
+fn fish_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\\', "\\\\").replace('\'', "\\'"))
 }
 
 fn fish_escape(value: &str) -> String {

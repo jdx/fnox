@@ -6,7 +6,7 @@ pub struct Zsh;
 impl Shell for Zsh {
     fn activate(&self, opts: ActivateOptions) -> String {
         let mut out = String::new();
-        let exe = opts.exe.display().to_string();
+        let exe = super::posix_quote(&opts.exe.display().to_string()).into_owned();
 
         // Export shell type
         out.push_str("export FNOX_SHELL=zsh\n");
@@ -35,13 +35,15 @@ fnox() {{
   shift
 
   # The binary can disappear (for example after an upgrade or uninstall), so
-  # deactivation must not depend on it.
-  if [ "$command" = deactivate ] && [ ! -x "{exe}" ]; then
+  # deactivation must not depend on it. __FNOX_SESSION (and the PID that owns
+  # it) is kept so a later activation can still unset the loaded secrets and
+  # delete their files.
+  if [ "$command" = deactivate ] && [ ! -x {exe} ]; then
     precmd_functions=( ${{precmd_functions[@]:#_fnox_hook}} )
     chpwd_functions=( ${{chpwd_functions[@]:#_fnox_hook}} )
     add-zsh-hook -d zshexit _fnox_cleanup 2>/dev/null
     unset -f fnox _fnox_hook _fnox_cleanup
-    unset FNOX_SHELL __FNOX_SESSION __FNOX_ZSH_PID
+    unset FNOX_SHELL
     return
   fi
 

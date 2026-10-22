@@ -841,18 +841,52 @@ teardown() {
 	refute_output --partial "installs/1.0.0/fnox"
 }
 
+@test "fnox activate quotes an invoked path containing spaces" {
+	mkdir -p "$TEST_TEMP_DIR/with space/1.0.0"
+	cp "$FNOX_BIN" "$TEST_TEMP_DIR/with space/1.0.0/fnox"
+	ln -s 1.0.0 "$TEST_TEMP_DIR/with space/latest"
+
+	run "$TEST_TEMP_DIR/with space/latest/fnox" activate bash
+
+	assert_success
+	assert_output --partial "'$TEST_TEMP_DIR/with space/latest/fnox'"
+}
+
 @test "fnox deactivate works in bash after the binary is removed" {
-	mkdir -p "$TEST_TEMP_DIR/installs/1.0.0"
+	mkdir -p "$TEST_TEMP_DIR/installs/1.0.0" "$TEST_TEMP_DIR/project" "$TEST_TEMP_DIR/empty"
 	cp "$FNOX_BIN" "$TEST_TEMP_DIR/installs/1.0.0/fnox"
 	ln -s 1.0.0 "$TEST_TEMP_DIR/installs/latest"
+	cat >"$TEST_TEMP_DIR/project/fnox.toml" <<-'EOF'
+		[providers.plain]
+		type = "plain"
+
+		[secrets.UPGRADE_SECRET]
+		provider = "plain"
+		value = "upgrade-value"
+	EOF
 
 	run bash -c '
+		cd "$1/project"
 		eval "$("$1"/installs/latest/fnox activate bash --no-hook-env)"
+		eval "$(fnox hook-env -s bash)"
+		echo "loaded=${UPGRADE_SECRET:-}"
 		rm -r "$1"/installs/1.0.0
 		fnox deactivate
 		[ "$(type -t fnox)" = function ] || echo "fnox function removed"
-	' _ "$TEST_TEMP_DIR"
+
+		# a replacement binary can still clean up what was loaded
+		mkdir "$1/installs/2.0.0"
+		cp "$2" "$1/installs/2.0.0/fnox"
+		rm "$1/installs/latest"
+		ln -s 2.0.0 "$1/installs/latest"
+		cd "$1/empty"
+		eval "$("$1"/installs/latest/fnox activate bash --no-hook-env)"
+		eval "$(fnox hook-env -s bash)"
+		echo "after=${UPGRADE_SECRET:-unset}"
+	' _ "$TEST_TEMP_DIR" "$FNOX_BIN"
 
 	assert_success
+	assert_output --partial "loaded=upgrade-value"
 	assert_output --partial "fnox function removed"
+	assert_output --partial "after=unset"
 }
