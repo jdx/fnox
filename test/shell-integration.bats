@@ -92,7 +92,7 @@ teardown() {
 	[ "$(grep -c 'fnox: +1' <<<"$output")" -eq 2 ]
 }
 
-@test "fnox pwsh reactivation reinstalls the location handler after another tool replaced it" {
+@test "fnox pwsh reactivation reinstalls the location handler and runs the hook once" {
 	command -v pwsh >/dev/null || skip "pwsh not installed"
 	mkdir -p project
 	cat >project/fnox.toml <<-'EOF'
@@ -101,12 +101,19 @@ teardown() {
 	EOF
 	cat >run.ps1 <<-'EOF'
 		(& $env:FNOX_BIN activate pwsh) | Out-String | Invoke-Expression
-		$ExecutionContext.SessionState.InvokeCommand.LocationChangedAction = [EventHandler[System.Management.Automation.LocationChangedEventArgs]] { param($s, $e) }
+		# Another tool wraps fnox's handler and keeps forwarding to it
+		$__prev = $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction
+		$__fwd = { param($s, $e) if ($__prev) { $__prev.Invoke($s, $e) } }.GetNewClosure()
+		$ExecutionContext.SessionState.InvokeCommand.LocationChangedAction = [EventHandler[System.Management.Automation.LocationChangedEventArgs]] $__fwd
 		(& $env:FNOX_BIN deactivate) | Out-String | Invoke-Expression
 		(& $env:FNOX_BIN activate pwsh) | Out-String | Invoke-Expression
 		function global:prompt { "p" }
+		$global:__hook_calls = 0
+		$__orig_hook = ${function:_fnox_hook}
+		function global:_fnox_hook { $global:__hook_calls++; & $__orig_hook }
 		Set-Location project
 		"in: '$env:FNOX_REPRO'"
+		"hook calls: $global:__hook_calls"
 		Set-Location ..
 		"out: '$env:FNOX_REPRO'"
 	EOF
@@ -115,9 +122,8 @@ teardown() {
 
 	assert_success
 	assert_output --partial "in: 'loaded'"
+	assert_output --partial "hook calls: 1"
 	assert_output --partial "out: ''"
-	# Only the newest handler runs the hook
-	[ "$(grep -c 'fnox: +1' <<<"$output")" -eq 1 ]
 }
 
 @test "fnox activate nu generates valid nushell code" {
