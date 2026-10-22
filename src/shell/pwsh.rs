@@ -82,7 +82,9 @@ function __enable_fnox_prompt {{
         $Global:__fnox_pwsh_location_handler = [EventHandler[System.Management.Automation.LocationChangedEventArgs]] {{
             param([object] $sender, [System.Management.Automation.LocationChangedEventArgs] $e)
             if (Test-Path -Path Function:\_fnox_hook) {{
+                $__fnox_exit_code = $global:LASTEXITCODE
                 _fnox_hook
+                $global:LASTEXITCODE = $__fnox_exit_code
             }}
             if ($Global:__fnox_pwsh_previous_location_action) {{
                 $Global:__fnox_pwsh_previous_location_action.Invoke($sender, $e)
