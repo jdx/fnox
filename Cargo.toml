@@ -85,6 +85,8 @@ rpassword = "7"
 rcgen = { version = "0.14", default-features = false, features = ["aws_lc_rs", "pem"] }
 rmcp = { version = "3", features = ["server", "transport-io", "macros"] }
 rmp-serde = "1"
+# age loads its translations through rust-embed, which in debug builds reads them from the cargo registry at runtime; embed them so a debug binary run on another machine does not panic
+rust-embed = { version = "8", features = ["debug-embed"] }
 rusqlite = { version = "0.40", features = ["bundled-sqlcipher-vendored-openssl"] }
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std"] }
 rustls-native-certs = "0.8"
