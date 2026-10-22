@@ -55,6 +55,102 @@ teardown() {
 	assert_output --partial "function fnox {"
 	assert_output --partial "function Global:_fnox_hook {"
 	assert_output --partial "__enable_fnox_prompt"
+	assert_output --partial "LocationChangedAction"
+	assert_output --partial "\$global:LASTEXITCODE = \$__fnox_exit_code"
+}
+
+@test "fnox pwsh hooks survive a prompt replacement and preserve exit status" {
+	command -v pwsh >/dev/null || skip "pwsh not installed"
+	mkdir -p project
+	cat >project/fnox.toml <<-'EOF'
+		[secrets]
+		FNOX_REPRO = { default = "loaded" }
+	EOF
+	cat >run.ps1 <<-'EOF'
+		(& $env:FNOX_BIN activate pwsh) | Out-String | Invoke-Expression
+		function global:prompt { "prompt sees: `$?=$? LASTEXITCODE=$LASTEXITCODE" }
+		Set-Location project
+		"in: '$env:FNOX_REPRO'"
+		Set-Location ..
+		"out: '$env:FNOX_REPRO'"
+		Set-Location project
+		pwsh -NoProfile -Command 'exit 3'
+		prompt
+		(& $env:FNOX_BIN activate pwsh) | Out-String | Invoke-Expression
+		Set-Location ..
+		"reactivated out: '$env:FNOX_REPRO'"
+	EOF
+	export FNOX_BIN
+	run pwsh -NoProfile -File run.ps1
+
+	assert_success
+	assert_output --partial "in: 'loaded'"
+	assert_output --partial "out: ''"
+	assert_output --partial 'prompt sees: $?=False LASTEXITCODE=3'
+	assert_output --partial "reactivated out: ''"
+	# The change summary is printed once per load and once per unload
+	[ "$(grep -c 'fnox: +1' <<<"$output")" -eq 2 ]
+}
+
+@test "fnox pwsh reactivation reinstalls the location handler and runs the hook once" {
+	command -v pwsh >/dev/null || skip "pwsh not installed"
+	mkdir -p project
+	cat >project/fnox.toml <<-'EOF'
+		[secrets]
+		FNOX_REPRO = { default = "loaded" }
+	EOF
+	cat >run.ps1 <<-'EOF'
+		(& $env:FNOX_BIN activate pwsh) | Out-String | Invoke-Expression
+		# Another tool wraps fnox's handler and keeps forwarding to it
+		$__prev = $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction
+		$__fwd = { param($s, $e) if ($__prev) { $__prev.Invoke($s, $e) } }.GetNewClosure()
+		$ExecutionContext.SessionState.InvokeCommand.LocationChangedAction = [EventHandler[System.Management.Automation.LocationChangedEventArgs]] $__fwd
+		(& $env:FNOX_BIN deactivate) | Out-String | Invoke-Expression
+		(& $env:FNOX_BIN activate pwsh) | Out-String | Invoke-Expression
+		function global:prompt { "p" }
+		$global:__hook_calls = 0
+		$__orig_hook = ${function:_fnox_hook}
+		function global:_fnox_hook { $global:__hook_calls++; & $__orig_hook }
+		Set-Location project
+		"in: '$env:FNOX_REPRO'"
+		"hook calls: $global:__hook_calls"
+		Set-Location ..
+		"out: '$env:FNOX_REPRO'"
+	EOF
+	export FNOX_BIN
+	run pwsh -NoProfile -File run.ps1
+
+	assert_success
+	assert_output --partial "in: 'loaded'"
+	assert_output --partial "hook calls: 1"
+	assert_output --partial "out: ''"
+}
+
+@test "fnox pwsh deactivate keeps a prompt another tool installed" {
+	command -v pwsh >/dev/null || skip "pwsh not installed"
+	cat >run.ps1 <<-'EOF'
+		function global:prompt { "original" }
+		(& $env:FNOX_BIN activate pwsh) | Out-String | Invoke-Expression
+		(& $env:FNOX_BIN deactivate) | Out-String | Invoke-Expression
+		"restored: $(prompt)"
+		(& $env:FNOX_BIN activate pwsh) | Out-String | Invoke-Expression
+		function global:prompt { "other tool" }
+		(& $env:FNOX_BIN deactivate) | Out-String | Invoke-Expression
+		"kept: $(prompt)"
+		# Reactivating wraps the other tool's prompt again, so the prompt hook still runs
+		(& $env:FNOX_BIN activate pwsh) | Out-String | Invoke-Expression
+		$global:__hook_calls = 0
+		$__orig_hook = ${function:_fnox_hook}
+		function global:_fnox_hook { $global:__hook_calls++; & $__orig_hook }
+		"reactivated: $(prompt) hook calls: $global:__hook_calls"
+	EOF
+	export FNOX_BIN
+	run pwsh -NoProfile -File run.ps1
+
+	assert_success
+	assert_output --partial "restored: original"
+	assert_output --partial "kept: other tool"
+	assert_output --partial "reactivated: other tool hook calls: 1"
 }
 
 @test "fnox activate nu generates valid nushell code" {
