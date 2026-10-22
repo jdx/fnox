@@ -2558,6 +2558,7 @@ dependencies = [
  "reqwest 0.13.5",
  "rpassword",
  "rusqlite",
+ "rust-embed",
  "schemars 1.2.3",
  "serde",
  "serde_json",
