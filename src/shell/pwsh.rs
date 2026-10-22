@@ -60,13 +60,32 @@ function Global:_fnox_hook {{
 }}
 
 function __enable_fnox_prompt {{
-    if (-not $__fnox_pwsh_previous_prompt_function) {{
+    if (-not $Global:__fnox_pwsh_previous_prompt_function) {{
         $Global:__fnox_pwsh_previous_prompt_function = $function:prompt
         function global:prompt {{
+            $__fnox_success = $?
+            $__fnox_exit_code = $global:LASTEXITCODE
             if (Test-Path -Path Function:\_fnox_hook) {{
                 _fnox_hook
             }}
-            & $__fnox_pwsh_previous_prompt_function
+            $global:LASTEXITCODE = $__fnox_exit_code
+            if (-not $__fnox_success) {{
+                # Restore $? to false for prompts (e.g. starship) that read it
+                Write-Error '' -ErrorAction Ignore
+            }}
+            & $Global:__fnox_pwsh_previous_prompt_function
+        }}
+    }}
+    if (-not $Global:__fnox_pwsh_previous_location_action) {{
+        $Global:__fnox_pwsh_previous_location_action = $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction
+        $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction = [EventHandler[System.Management.Automation.LocationChangedEventArgs]] {{
+            param([object] $sender, [System.Management.Automation.LocationChangedEventArgs] $e)
+            if (Test-Path -Path Function:\_fnox_hook) {{
+                _fnox_hook
+            }}
+            if ($Global:__fnox_pwsh_previous_location_action) {{
+                $Global:__fnox_pwsh_previous_location_action.Invoke($sender, $e)
+            }}
         }}
     }}
 }}
@@ -85,6 +104,10 @@ _fnox_hook"#,
 if ($Global:__fnox_pwsh_previous_prompt_function) {
     $function:prompt = $Global:__fnox_pwsh_previous_prompt_function
     Remove-Variable -Name __fnox_pwsh_previous_prompt_function -Scope Global -ErrorAction SilentlyContinue
+}
+if ($ExecutionContext.SessionState.InvokeCommand.LocationChangedAction) {
+    $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction = $Global:__fnox_pwsh_previous_location_action
+    Remove-Variable -Name __fnox_pwsh_previous_location_action -Scope Global -ErrorAction SilentlyContinue
 }
 Remove-Item -ErrorAction SilentlyContinue -Path Function:\fnox
 Remove-Item -ErrorAction SilentlyContinue -Path Function:\_fnox_hook

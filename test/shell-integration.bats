@@ -55,6 +55,8 @@ teardown() {
 	assert_output --partial "function fnox {"
 	assert_output --partial "function Global:_fnox_hook {"
 	assert_output --partial "__enable_fnox_prompt"
+	assert_output --partial "LocationChangedAction"
+	assert_output --partial "\$global:LASTEXITCODE = \$__fnox_exit_code"
 }
 
 @test "fnox activate nu generates valid nushell code" {
