@@ -137,6 +137,12 @@ teardown() {
 		function global:prompt { "other tool" }
 		(& $env:FNOX_BIN deactivate) | Out-String | Invoke-Expression
 		"kept: $(prompt)"
+		# Reactivating wraps the other tool's prompt again, so the prompt hook still runs
+		(& $env:FNOX_BIN activate pwsh) | Out-String | Invoke-Expression
+		$global:__hook_calls = 0
+		$__orig_hook = ${function:_fnox_hook}
+		function global:_fnox_hook { $global:__hook_calls++; & $__orig_hook }
+		"reactivated: $(prompt) hook calls: $global:__hook_calls"
 	EOF
 	export FNOX_BIN
 	run pwsh -NoProfile -File run.ps1
@@ -144,6 +150,7 @@ teardown() {
 	assert_success
 	assert_output --partial "restored: original"
 	assert_output --partial "kept: other tool"
+	assert_output --partial "reactivated: other tool hook calls: 1"
 }
 
 @test "fnox activate nu generates valid nushell code" {

@@ -60,12 +60,19 @@ function Global:_fnox_hook {{
 }}
 
 function __enable_fnox_prompt {{
-    if (-not $Global:__fnox_pwsh_previous_prompt_function) {{
-        $Global:__fnox_pwsh_previous_prompt_function = $function:prompt
-        function global:prompt {{
+    # Wrap the current prompt unless fnox's wrapper is already the active one. Each wrapper
+    # closes over its own previous prompt, so reinstalling can never make a wrapper call
+    # itself, and only the newest wrapper runs the hook.
+    $__fnox_current_prompt = $function:prompt
+    if (-not $Global:__fnox_pwsh_prompt_wrapper -or -not [object]::ReferenceEquals($__fnox_current_prompt, $Global:__fnox_pwsh_prompt_wrapper)) {{
+        $__fnox_previous_prompt = $__fnox_current_prompt
+        $__fnox_prompt_generation = [guid]::NewGuid()
+        $Global:__fnox_pwsh_previous_prompt_function = $__fnox_previous_prompt
+        $Global:__fnox_pwsh_prompt_generation = $__fnox_prompt_generation
+        $__fnox_prompt_block = {{
             $__fnox_success = $?
             $__fnox_exit_code = $global:LASTEXITCODE
-            if (Test-Path -Path Function:\_fnox_hook) {{
+            if ($Global:__fnox_pwsh_prompt_generation -eq $__fnox_prompt_generation -and (Test-Path -Path Function:\_fnox_hook)) {{
                 _fnox_hook
             }}
             $global:LASTEXITCODE = $__fnox_exit_code
@@ -73,8 +80,9 @@ function __enable_fnox_prompt {{
                 # Restore $? to false for prompts (e.g. starship) that read it
                 Write-Error '' -ErrorAction Ignore
             }}
-            & $Global:__fnox_pwsh_previous_prompt_function
-        }}
+            & $__fnox_previous_prompt
+        }}.GetNewClosure()
+        $function:prompt = $__fnox_prompt_block
         $Global:__fnox_pwsh_prompt_wrapper = $function:prompt
     }}
     # A retained handler variable is not proof the handler is still installed (another tool
@@ -118,7 +126,7 @@ if ($Global:__fnox_pwsh_previous_prompt_function -and [object]::ReferenceEquals(
     # Only restore when fnox's wrapper is still the active prompt; otherwise another
     # tool replaced it and must keep its prompt (and its chain to the saved one).
     $function:prompt = $Global:__fnox_pwsh_previous_prompt_function
-    Remove-Variable -Name __fnox_pwsh_previous_prompt_function, __fnox_pwsh_prompt_wrapper -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name __fnox_pwsh_previous_prompt_function, __fnox_pwsh_prompt_wrapper, __fnox_pwsh_prompt_generation -Scope Global -ErrorAction SilentlyContinue
 }
 if ($Global:__fnox_pwsh_location_handler -and $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction -eq $Global:__fnox_pwsh_location_handler) {
     # Only restore when fnox's handler is still the active one; otherwise another
