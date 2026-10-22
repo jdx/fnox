@@ -92,6 +92,32 @@ teardown() {
 	[ "$(grep -c 'fnox: +1' <<<"$output")" -eq 2 ]
 }
 
+@test "fnox pwsh reactivation reinstalls the location handler after another tool replaced it" {
+	command -v pwsh >/dev/null || skip "pwsh not installed"
+	mkdir -p project
+	cat >project/fnox.toml <<-'EOF'
+		[secrets]
+		FNOX_REPRO = { default = "loaded" }
+	EOF
+	cat >run.ps1 <<-'EOF'
+		(& $env:FNOX_BIN activate pwsh) | Out-String | Invoke-Expression
+		$ExecutionContext.SessionState.InvokeCommand.LocationChangedAction = [EventHandler[System.Management.Automation.LocationChangedEventArgs]] { param($s, $e) }
+		(& $env:FNOX_BIN deactivate) | Out-String | Invoke-Expression
+		(& $env:FNOX_BIN activate pwsh) | Out-String | Invoke-Expression
+		function global:prompt { "p" }
+		Set-Location project
+		"in: '$env:FNOX_REPRO'"
+		Set-Location ..
+		"out: '$env:FNOX_REPRO'"
+	EOF
+	export FNOX_BIN
+	run pwsh -NoProfile -File run.ps1
+
+	assert_success
+	assert_output --partial "in: 'loaded'"
+	assert_output --partial "out: ''"
+}
+
 @test "fnox activate nu generates valid nushell code" {
 	run "$FNOX_BIN" activate nu
 

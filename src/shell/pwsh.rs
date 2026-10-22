@@ -76,20 +76,25 @@ function __enable_fnox_prompt {{
             & $Global:__fnox_pwsh_previous_prompt_function
         }}
     }}
-    if (-not $Global:__fnox_pwsh_location_handler) {{
-        # The previous handler may legitimately be null, so track installation separately
-        $Global:__fnox_pwsh_previous_location_action = $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction
-        $Global:__fnox_pwsh_location_handler = [EventHandler[System.Management.Automation.LocationChangedEventArgs]] {{
+    # A retained handler variable is not proof the handler is still installed (another tool
+    # may have replaced it), so compare with the active action. Each handler closes over its
+    # own previous action, so reinstalling can never make a handler call itself.
+    $__fnox_current = $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction
+    if (-not $Global:__fnox_pwsh_location_handler -or $__fnox_current -ne $Global:__fnox_pwsh_location_handler) {{
+        $__fnox_previous = $__fnox_current
+        $__fnox_block = {{
             param([object] $sender, [System.Management.Automation.LocationChangedEventArgs] $e)
             if (Test-Path -Path Function:\_fnox_hook) {{
                 $__fnox_exit_code = $global:LASTEXITCODE
                 _fnox_hook
                 $global:LASTEXITCODE = $__fnox_exit_code
             }}
-            if ($Global:__fnox_pwsh_previous_location_action) {{
-                $Global:__fnox_pwsh_previous_location_action.Invoke($sender, $e)
+            if ($__fnox_previous) {{
+                $__fnox_previous.Invoke($sender, $e)
             }}
-        }}
+        }}.GetNewClosure()
+        $Global:__fnox_pwsh_previous_location_action = $__fnox_previous
+        $Global:__fnox_pwsh_location_handler = [EventHandler[System.Management.Automation.LocationChangedEventArgs]] $__fnox_block
         $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction = $Global:__fnox_pwsh_location_handler
     }}
 }}
