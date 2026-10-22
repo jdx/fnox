@@ -75,6 +75,7 @@ function __enable_fnox_prompt {{
             }}
             & $Global:__fnox_pwsh_previous_prompt_function
         }}
+        $Global:__fnox_pwsh_prompt_wrapper = $function:prompt
     }}
     # A retained handler variable is not proof the handler is still installed (another tool
     # may have replaced it), so compare with the active action. Each handler closes over its
@@ -113,9 +114,11 @@ _fnox_hook"#,
 
     fn deactivate(&self) -> String {
         r#"
-if ($Global:__fnox_pwsh_previous_prompt_function) {
+if ($Global:__fnox_pwsh_previous_prompt_function -and [object]::ReferenceEquals($function:prompt, $Global:__fnox_pwsh_prompt_wrapper)) {
+    # Only restore when fnox's wrapper is still the active prompt; otherwise another
+    # tool replaced it and must keep its prompt (and its chain to the saved one).
     $function:prompt = $Global:__fnox_pwsh_previous_prompt_function
-    Remove-Variable -Name __fnox_pwsh_previous_prompt_function -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name __fnox_pwsh_previous_prompt_function, __fnox_pwsh_prompt_wrapper -Scope Global -ErrorAction SilentlyContinue
 }
 if ($Global:__fnox_pwsh_location_handler -and $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction -eq $Global:__fnox_pwsh_location_handler) {
     # Only restore when fnox's handler is still the active one; otherwise another

@@ -126,6 +126,26 @@ teardown() {
 	assert_output --partial "out: ''"
 }
 
+@test "fnox pwsh deactivate keeps a prompt another tool installed" {
+	command -v pwsh >/dev/null || skip "pwsh not installed"
+	cat >run.ps1 <<-'EOF'
+		function global:prompt { "original" }
+		(& $env:FNOX_BIN activate pwsh) | Out-String | Invoke-Expression
+		(& $env:FNOX_BIN deactivate) | Out-String | Invoke-Expression
+		"restored: $(prompt)"
+		(& $env:FNOX_BIN activate pwsh) | Out-String | Invoke-Expression
+		function global:prompt { "other tool" }
+		(& $env:FNOX_BIN deactivate) | Out-String | Invoke-Expression
+		"kept: $(prompt)"
+	EOF
+	export FNOX_BIN
+	run pwsh -NoProfile -File run.ps1
+
+	assert_success
+	assert_output --partial "restored: original"
+	assert_output --partial "kept: other tool"
+}
+
 @test "fnox activate nu generates valid nushell code" {
 	run "$FNOX_BIN" activate nu
 
