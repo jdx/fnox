@@ -116,6 +116,8 @@ teardown() {
 	assert_success
 	assert_output --partial "in: 'loaded'"
 	assert_output --partial "out: ''"
+	# Only the newest handler runs the hook
+	[ "$(grep -c 'fnox: +1' <<<"$output")" -eq 1 ]
 }
 
 @test "fnox activate nu generates valid nushell code" {

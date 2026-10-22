@@ -82,9 +82,11 @@ function __enable_fnox_prompt {{
     $__fnox_current = $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction
     if (-not $Global:__fnox_pwsh_location_handler -or $__fnox_current -ne $Global:__fnox_pwsh_location_handler) {{
         $__fnox_previous = $__fnox_current
+        $__fnox_generation = [guid]::NewGuid()
         $__fnox_block = {{
             param([object] $sender, [System.Management.Automation.LocationChangedEventArgs] $e)
-            if (Test-Path -Path Function:\_fnox_hook) {{
+            # Only the newest handler runs the hook; older ones left in another tool's chain just forward
+            if ($Global:__fnox_pwsh_location_generation -eq $__fnox_generation -and (Test-Path -Path Function:\_fnox_hook)) {{
                 $__fnox_exit_code = $global:LASTEXITCODE
                 _fnox_hook
                 $global:LASTEXITCODE = $__fnox_exit_code
@@ -94,6 +96,7 @@ function __enable_fnox_prompt {{
             }}
         }}.GetNewClosure()
         $Global:__fnox_pwsh_previous_location_action = $__fnox_previous
+        $Global:__fnox_pwsh_location_generation = $__fnox_generation
         $Global:__fnox_pwsh_location_handler = [EventHandler[System.Management.Automation.LocationChangedEventArgs]] $__fnox_block
         $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction = $Global:__fnox_pwsh_location_handler
     }}
@@ -118,7 +121,7 @@ if ($Global:__fnox_pwsh_location_handler -and $ExecutionContext.SessionState.Inv
     # Only restore when fnox's handler is still the active one; otherwise another
     # tool chained after it and the saved previous handler must stay reachable.
     $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction = $Global:__fnox_pwsh_previous_location_action
-    Remove-Variable -Name __fnox_pwsh_previous_location_action, __fnox_pwsh_location_handler -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name __fnox_pwsh_previous_location_action, __fnox_pwsh_location_handler, __fnox_pwsh_location_generation -Scope Global -ErrorAction SilentlyContinue
 }
 Remove-Item -ErrorAction SilentlyContinue -Path Function:\fnox
 Remove-Item -ErrorAction SilentlyContinue -Path Function:\_fnox_hook
