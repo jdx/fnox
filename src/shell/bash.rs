@@ -6,7 +6,7 @@ pub struct Bash;
 impl Shell for Bash {
     fn activate(&self, opts: ActivateOptions) -> String {
         let mut out = String::new();
-        let exe = opts.exe.display().to_string();
+        let exe = super::posix_quote(&opts.exe.display().to_string()).into_owned();
 
         // Export shell type
         out.push_str("export FNOX_SHELL=bash\n");
@@ -22,6 +22,17 @@ fnox() {{
     return
   fi
   shift
+
+  # The binary can disappear (for example after an upgrade or uninstall), so
+  # deactivation must not depend on it. __FNOX_SESSION is kept so a later
+  # activation can still unset the loaded secrets and delete their files.
+  if [ "$command" = deactivate ] && [ ! -x {exe} ]; then
+    PROMPT_COMMAND="${{PROMPT_COMMAND//_fnox_hook;/}}"
+    PROMPT_COMMAND="${{PROMPT_COMMAND//_fnox_hook/}}"
+    unset -f fnox _fnox_hook
+    unset FNOX_SHELL
+    return
+  fi
 
   case "$command" in
   deactivate|shell)
