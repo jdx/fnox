@@ -74,7 +74,7 @@ teardown() {
 	assert_output --partial "export FNOX_SHELL=bash"
 	assert_output --partial "fnox()"
 	refute_output --partial "_fnox_hook()"
-	refute_output --partial "PROMPT_COMMAND"
+	refute_output --partial "PROMPT_COMMAND=\"_fnox_hook"
 }
 
 @test "fnox activate pwsh --no-hook-env skips hook setup" {
@@ -827,4 +827,32 @@ teardown() {
 	assert_success
 	assert_output --partial 'export LOCAL_ONLY_SECRET=local-only-value'
 	assert_output --partial '__FNOX_SESSION='
+}
+
+@test "fnox activate keeps the symlinked path it was invoked through" {
+	mkdir -p "$TEST_TEMP_DIR/installs/1.0.0"
+	cp "$FNOX_BIN" "$TEST_TEMP_DIR/installs/1.0.0/fnox"
+	ln -s 1.0.0 "$TEST_TEMP_DIR/installs/latest"
+
+	run "$TEST_TEMP_DIR/installs/latest/fnox" activate bash
+
+	assert_success
+	assert_output --partial "$TEST_TEMP_DIR/installs/latest/fnox"
+	refute_output --partial "installs/1.0.0/fnox"
+}
+
+@test "fnox deactivate works in bash after the binary is removed" {
+	mkdir -p "$TEST_TEMP_DIR/installs/1.0.0"
+	cp "$FNOX_BIN" "$TEST_TEMP_DIR/installs/1.0.0/fnox"
+	ln -s 1.0.0 "$TEST_TEMP_DIR/installs/latest"
+
+	run bash -c '
+		eval "$("$1"/installs/latest/fnox activate bash --no-hook-env)"
+		rm -r "$1"/installs/1.0.0
+		fnox deactivate
+		[ "$(type -t fnox)" = function ] || echo "fnox function removed"
+	' _ "$TEST_TEMP_DIR"
+
+	assert_success
+	assert_output --partial "fnox function removed"
 }

@@ -17,6 +17,16 @@ impl Shell for Fish {
 function fnox
     set command $argv[1]
 
+    # The binary can disappear (for example after an upgrade or uninstall), so
+    # deactivation must not depend on it.
+    if test "$command" = deactivate; and not test -x "{exe}"
+        functions -e __fnox_env_eval __fnox_cd_hook 2>/dev/null
+        set -e FNOX_SHELL 2>/dev/null
+        set -e __FNOX_SESSION 2>/dev/null
+        functions -e fnox 2>/dev/null
+        return
+    end
+
     switch "$command"
         case deactivate shell
             eval (command {exe} "$command" $argv[2..-1])

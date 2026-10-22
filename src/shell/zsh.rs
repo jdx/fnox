@@ -34,6 +34,17 @@ fnox() {{
   fi
   shift
 
+  # The binary can disappear (for example after an upgrade or uninstall), so
+  # deactivation must not depend on it.
+  if [ "$command" = deactivate ] && [ ! -x "{exe}" ]; then
+    precmd_functions=( ${{precmd_functions[@]:#_fnox_hook}} )
+    chpwd_functions=( ${{chpwd_functions[@]:#_fnox_hook}} )
+    add-zsh-hook -d zshexit _fnox_cleanup 2>/dev/null
+    unset -f fnox _fnox_hook _fnox_cleanup
+    unset FNOX_SHELL __FNOX_SESSION __FNOX_ZSH_PID
+    return
+  fi
+
   case "$command" in
   deactivate|shell)
     output="$({exe} "$command" "$@")"

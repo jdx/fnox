@@ -23,6 +23,16 @@ fnox() {{
   fi
   shift
 
+  # The binary can disappear (for example after an upgrade or uninstall), so
+  # deactivation must not depend on it.
+  if [ "$command" = deactivate ] && [ ! -x "{exe}" ]; then
+    PROMPT_COMMAND="${{PROMPT_COMMAND//_fnox_hook;/}}"
+    PROMPT_COMMAND="${{PROMPT_COMMAND//_fnox_hook/}}"
+    unset -f fnox _fnox_hook
+    unset FNOX_SHELL __FNOX_SESSION
+    return
+  fi
+
   case "$command" in
   deactivate|shell)
     eval "$({exe} "$command" "$@")"
