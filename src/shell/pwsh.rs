@@ -76,9 +76,10 @@ function __enable_fnox_prompt {{
             & $Global:__fnox_pwsh_previous_prompt_function
         }}
     }}
-    if (-not $Global:__fnox_pwsh_previous_location_action) {{
+    if (-not $Global:__fnox_pwsh_location_handler) {{
+        # The previous handler may legitimately be null, so track installation separately
         $Global:__fnox_pwsh_previous_location_action = $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction
-        $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction = [EventHandler[System.Management.Automation.LocationChangedEventArgs]] {{
+        $Global:__fnox_pwsh_location_handler = [EventHandler[System.Management.Automation.LocationChangedEventArgs]] {{
             param([object] $sender, [System.Management.Automation.LocationChangedEventArgs] $e)
             if (Test-Path -Path Function:\_fnox_hook) {{
                 _fnox_hook
@@ -87,6 +88,7 @@ function __enable_fnox_prompt {{
                 $Global:__fnox_pwsh_previous_location_action.Invoke($sender, $e)
             }}
         }}
+        $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction = $Global:__fnox_pwsh_location_handler
     }}
 }}
 __enable_fnox_prompt
@@ -105,9 +107,11 @@ if ($Global:__fnox_pwsh_previous_prompt_function) {
     $function:prompt = $Global:__fnox_pwsh_previous_prompt_function
     Remove-Variable -Name __fnox_pwsh_previous_prompt_function -Scope Global -ErrorAction SilentlyContinue
 }
-if ($ExecutionContext.SessionState.InvokeCommand.LocationChangedAction) {
+if ($Global:__fnox_pwsh_location_handler -and $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction -eq $Global:__fnox_pwsh_location_handler) {
+    # Only restore when fnox's handler is still the active one; otherwise another
+    # tool chained after it and the saved previous handler must stay reachable.
     $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction = $Global:__fnox_pwsh_previous_location_action
-    Remove-Variable -Name __fnox_pwsh_previous_location_action -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name __fnox_pwsh_previous_location_action, __fnox_pwsh_location_handler -Scope Global -ErrorAction SilentlyContinue
 }
 Remove-Item -ErrorAction SilentlyContinue -Path Function:\fnox
 Remove-Item -ErrorAction SilentlyContinue -Path Function:\_fnox_hook

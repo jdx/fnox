@@ -59,6 +59,39 @@ teardown() {
 	assert_output --partial "\$global:LASTEXITCODE = \$__fnox_exit_code"
 }
 
+@test "fnox pwsh hooks survive a prompt replacement and preserve exit status" {
+	command -v pwsh >/dev/null || skip "pwsh not installed"
+	mkdir -p project
+	cat >project/fnox.toml <<-'EOF'
+		[secrets]
+		FNOX_REPRO = { default = "loaded" }
+	EOF
+	cat >run.ps1 <<-'EOF'
+		(& $env:FNOX_BIN activate pwsh) | Out-String | Invoke-Expression
+		function global:prompt { "prompt sees: `$?=$? LASTEXITCODE=$LASTEXITCODE" }
+		Set-Location project
+		"in: '$env:FNOX_REPRO'"
+		Set-Location ..
+		"out: '$env:FNOX_REPRO'"
+		Set-Location project
+		pwsh -NoProfile -Command 'exit 3'
+		prompt
+		(& $env:FNOX_BIN activate pwsh) | Out-String | Invoke-Expression
+		Set-Location ..
+		"reactivated out: '$env:FNOX_REPRO'"
+	EOF
+	export FNOX_BIN
+	run pwsh -NoProfile -File run.ps1
+
+	assert_success
+	assert_output --partial "in: 'loaded'"
+	assert_output --partial "out: ''"
+	assert_output --partial 'prompt sees: $?=False LASTEXITCODE=3'
+	assert_output --partial "reactivated out: ''"
+	# The change summary is printed once per load and once per unload
+	[ "$(grep -c 'fnox: +1' <<<"$output")" -eq 2 ]
+}
+
 @test "fnox activate nu generates valid nushell code" {
 	run "$FNOX_BIN" activate nu
 
