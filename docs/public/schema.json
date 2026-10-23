@@ -122,6 +122,17 @@
           "type": "null"
         }
       ]
+    },
+    "audit": {
+      "description": "Local access audit log (opt-in)",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AuditConfig"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "additionalProperties": false,
@@ -1624,6 +1635,21 @@
       },
       "additionalProperties": false,
       "required": ["secret", "domain"]
+    },
+    "AuditConfig": {
+      "description": "Local access audit log configuration",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Append one JSON line per secret read (name, command, profile, provider;\nnever values). Default: false. Override with `FNOX_AUDIT`.",
+          "type": ["boolean", "null"]
+        },
+        "path": {
+          "description": "Log file path. Default: `audit.log` in the fnox state directory\n(`~/.local/state/fnox`). Override with `FNOX_AUDIT_PATH`.",
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

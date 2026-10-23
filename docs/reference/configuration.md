@@ -375,6 +375,21 @@ idle_timeout = "8h"
 
 See [daemon](/guide/daemon).
 
+## `audit`
+
+```toml
+[audit]
+enabled = true
+path = "~/.local/state/fnox/audit.log"
+```
+
+| Field     | Type    | Default                 | Description                                                                                        |
+| --------- | ------- | ----------------------- | -------------------------------------------------------------------------------------------------- |
+| `enabled` | boolean | `false`                 | Append one JSON line per secret read. `FNOX_AUDIT` overrides it.                                   |
+| `path`    | path    | `<state dir>/audit.log` | Log file. A leading `~` is expanded. `FNOX_AUDIT_PATH` overrides it. Set it in your global config. |
+
+Entries name the secret, never its value. See [audit log](/guide/audit).
+
 ## `mcp` {#mcp-server-settings}
 
 ```toml

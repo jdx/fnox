@@ -92,6 +92,35 @@ See also:
     example "eval \"$(fnox activate zsh)\"" header="Zsh (add to ~/.zshrc)"
     example "fnox activate fish | source" header="Fish (add to ~/.config/fish/config.fish)"
 }
+cmd audit help="Show the local access audit log" {
+    long_help #"""
+Show the local access audit log
+
+Prints the most recent entries of the log written when `[audit] enabled = true` (or `FNOX_AUDIT=on`) is set: when each secret was read, by which command, under which profile, and through which provider. Values are never recorded. The log is a file the current user can write, so it is a record of fnox's activity, not tamper-proof evidence.
+"""#
+    after_long_help #"""
+See also:
+- Audit log: https://fnox.jdx.dev/guide/audit
+"""#
+    flag "-c --command" help="Only entries from this command, such as `exec`, `get`, `hook-env`, `mcp`, or `proxy`" {
+        arg <COMMAND>
+    }
+    flag "-n --limit" help="Number of entries to show, most recent last (default: 20)" {
+        arg <LIMIT>
+    }
+    flag "-p --provider" help="Only entries for this provider" {
+        arg <PROVIDER>
+    }
+    flag "-s --secret" help="Only entries for this secret name" {
+        arg <SECRET>
+    }
+    flag --json help="Print entries as JSON lines"
+    flag --path help="Print the log file path and exit"
+    flag "-h --help" help="Print help" action=help builtin=#true
+    example "fnox audit" header="Show the last 20 reads"
+    example "fnox audit --secret DATABASE_URL -n 5" header="Show recent reads of one secret"
+    example "fnox audit --command mcp --json" header="Show reads made through the MCP server as JSON lines"
+}
 cmd check help="Verify that the active profile's secrets resolve, without printing them" {
     alias c
     long_help #"""

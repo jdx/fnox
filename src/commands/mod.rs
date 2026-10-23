@@ -5,6 +5,7 @@ use crate::error::{FnoxError, Result};
 use crate::config::Config;
 
 pub mod activate;
+pub mod audit;
 pub mod check;
 pub mod ci_redact;
 pub mod completion;
@@ -136,6 +137,8 @@ pub struct Cli {
 #[derive(usage_rs::Subcommands)]
 pub enum Commands {
     Activate(activate::ActivateCommand),
+
+    Audit(audit::AuditCommand),
 
     Check(check::CheckCommand),
 
@@ -334,6 +337,7 @@ impl Commands {
                 .map_err(|e| FnoxError::Config(e.to_string())),
 
             // Commands that need config
+            Commands::Audit(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Check(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::CiRedact(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Doctor(cmd) => cmd.run(cli, self.load_config(cli)?).await,

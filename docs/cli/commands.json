@@ -76,6 +76,145 @@
         ],
         "headings": []
       },
+      "audit": {
+        "full_cmd": ["audit"],
+        "usage": "audit [FLAGS]",
+        "subcommands": {},
+        "args": [],
+        "flags": [
+          {
+            "name": "command",
+            "usage": "-c --command <COMMAND>",
+            "help": "Only entries from this command, such as `exec`, `get`, `hook-env`, `mcp`, or `proxy`",
+            "help_first_line": "Only entries from this command, such as `exec`, `get`, `hook-env`, `mcp`, or `proxy`",
+            "short": ["c"],
+            "long": ["command"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "COMMAND",
+              "usage": "<COMMAND>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            }
+          },
+          {
+            "name": "limit",
+            "usage": "-n --limit <LIMIT>",
+            "help": "Number of entries to show, most recent last (default: 20)",
+            "help_first_line": "Number of entries to show, most recent last (default: 20)",
+            "short": ["n"],
+            "long": ["limit"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "LIMIT",
+              "usage": "<LIMIT>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            }
+          },
+          {
+            "name": "provider",
+            "usage": "-p --provider <PROVIDER>",
+            "help": "Only entries for this provider",
+            "help_first_line": "Only entries for this provider",
+            "short": ["p"],
+            "long": ["provider"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "PROVIDER",
+              "usage": "<PROVIDER>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            }
+          },
+          {
+            "name": "secret",
+            "usage": "-s --secret <SECRET>",
+            "help": "Only entries for this secret name",
+            "help_first_line": "Only entries for this secret name",
+            "short": ["s"],
+            "long": ["secret"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "SECRET",
+              "usage": "<SECRET>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            }
+          },
+          {
+            "name": "json",
+            "usage": "--json",
+            "help": "Print entries as JSON lines",
+            "help_first_line": "Print entries as JSON lines",
+            "short": [],
+            "long": ["json"],
+            "hide": false,
+            "global": false
+          },
+          {
+            "name": "path",
+            "usage": "--path",
+            "help": "Print the log file path and exit",
+            "help_first_line": "Print the log file path and exit",
+            "short": [],
+            "long": ["path"],
+            "hide": false,
+            "global": false
+          },
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
+        "mounts": [],
+        "unknown_flags": null,
+        "hide": false,
+        "args_override_self": true,
+        "help": "Show the local access audit log",
+        "help_long": "Show the local access audit log\n\nPrints the most recent entries of the log written when `[audit] enabled = true` (or `FNOX_AUDIT=on`) is set: when each secret was read, by which command, under which profile, and through which provider. Values are never recorded. The log is a file the current user can write, so it is a record of fnox's activity, not tamper-proof evidence.",
+        "name": "audit",
+        "aliases": [],
+        "hidden_aliases": [],
+        "after_help_long": "See also:\n- Audit log: https://fnox.jdx.dev/guide/audit",
+        "examples": [
+          {
+            "code": "fnox audit",
+            "header": "Show the last 20 reads",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox audit --secret DATABASE_URL -n 5",
+            "header": "Show recent reads of one secret",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox audit --command mcp --json",
+            "header": "Show reads made through the MCP server as JSON lines",
+            "help": null,
+            "lang": ""
+          }
+        ],
+        "headings": []
+      },
       "check": {
         "full_cmd": ["check"],
         "usage": "check [-a --all]",

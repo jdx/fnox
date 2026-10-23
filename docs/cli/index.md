@@ -61,6 +61,7 @@ Put fnox options before the `--` that starts a child command, as in `fnox -P pro
 ## Subcommands
 
 - [`fnox activate [--no-hook-env] [SHELL]`](/cli/activate.md)
+- [`fnox audit [FLAGS]`](/cli/audit.md)
 - [`fnox check [-a --all]`](/cli/check.md)
 - [`fnox completion <SHELL>`](/cli/completion.md)
 - [`fnox config-files`](/cli/config-files.md)
