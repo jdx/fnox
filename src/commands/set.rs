@@ -244,7 +244,7 @@ impl SetCommand {
 
         if self.generate
             && !self.force
-            && Config::target_has_secret_value(&self.key, &write_profile, &target_path)?
+            && Config::target_has_secret(&self.key, &write_profile, &target_path)?
         {
             return Err(FnoxError::Config(format!(
                 "Secret '{}' already exists; pass --force to replace it with a generated value",

@@ -1338,15 +1338,11 @@ impl Config {
         Ok(())
     }
 
-    /// Whether `target` itself already holds a value or default for `secret_name`.
+    /// Whether `target` itself already has an entry for `secret_name`.
     ///
     /// Reads the file directly so entries shadowed by a more specific config
     /// (such as `fnox.local.toml`) are still seen.
-    pub fn target_has_secret_value(
-        secret_name: &str,
-        profile: &str,
-        target: &Path,
-    ) -> Result<bool> {
+    pub fn target_has_secret(secret_name: &str, profile: &str, target: &Path) -> Result<bool> {
         use toml_edit::DocumentMut;
 
         if !target.exists() {

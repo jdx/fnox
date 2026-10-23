@@ -79,3 +79,18 @@ EOT
 	assert_success
 	assert_output --regexp 'generated: [A-Za-z0-9_-]{60}'
 }
+
+@test "set --generate refuses to replace a provider reference without a value" {
+	cat >fnox.toml <<'EOT'
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+REF = { provider = "plain" }
+EOT
+	run "$FNOX_BIN" set REF --generate --provider plain
+	assert_failure
+	assert_output --partial "--force"
+}
