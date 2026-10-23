@@ -946,6 +946,8 @@ Scan files for secrets committed in plaintext
 Walks DIR and reports lines that look like cloud keys, API tokens, private keys, or password assignments, with the matched value redacted. It skips gitignored files, binary files, files over 5 MiB, and directories such as `.git`, `node_modules`, `target`, and `vendor`.
 
 fnox exits 1 when it finds anything. Findings are heuristic: review each one, and do not treat a clean scan as proof that no secret is present.
+
+With `--values`, fnox instead resolves the active profile's secrets and reports every file that contains one of their actual values. This has far fewer false positives than the pattern heuristics. Values are never printed, only the name of the matching secret. Empty secrets and secrets shorter than 8 characters are skipped. Add `--staged` to check the content staged in git (the index) rather than the working tree, and `--install-hook` to install a pre-commit hook that runs `fnox scan --values --staged`.
 """#
     after_long_help #"""
 See also:
@@ -954,6 +956,8 @@ See also:
     flag "-i --ignore" help="Skip files whose path or name matches this glob; repeatable" var=#true {
         arg <IGNORE>
     }
+    flag "-q --quiet" help="Print only the paths of files with findings"
+    flag --append help="With --install-hook, append to an existing pre-commit hook instead of refusing"
     flag --format help="Output format" default=human {
         arg <FORMAT> {
             choices {
@@ -962,13 +966,19 @@ See also:
             }
         }
     }
-    flag "-q --quiet" help="Print only the paths of files with findings"
+    flag --include-ignored help="Also scan files ignored by .gitignore (working tree scans only)"
+    flag --install-hook help="Install a git pre-commit hook that runs `fnox scan --values --staged`"
+    flag --staged help="Scan content staged in git (the index) instead of the working tree"
+    flag --values help="Resolve the active profile's secrets and report files containing their values"
     flag "-h --help" help="Print help" action=help builtin=#true
     arg "[DIR]" help="Directory to scan" default=.
     complete dir type=dir
     example "fnox scan" header="Scan the current directory"
     example "fnox scan . --format json" header="Print findings as JSON"
     example "fnox scan . --ignore 'fixtures/**'" header="Skip matching files"
+    example "fnox scan --values" header="Find files containing this profile's real secret values"
+    example "fnox scan --values --staged" header="Check only what is staged for commit"
+    example "fnox scan --install-hook" header="Install a pre-commit hook that scans staged secrets"
 }
 cmd schema help="Generate JSON Schema for fnox configuration" hide=#true {
     flag "-h --help" help="Print help" action=help builtin=#true

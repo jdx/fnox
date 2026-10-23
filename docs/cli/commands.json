@@ -3219,6 +3219,26 @@
             }
           },
           {
+            "name": "quiet",
+            "usage": "-q --quiet",
+            "help": "Print only the paths of files with findings",
+            "help_first_line": "Print only the paths of files with findings",
+            "short": ["q"],
+            "long": ["quiet"],
+            "hide": false,
+            "global": false
+          },
+          {
+            "name": "append",
+            "usage": "--append",
+            "help": "With --install-hook, append to an existing pre-commit hook instead of refusing",
+            "help_first_line": "With --install-hook, append to an existing pre-commit hook instead of refusing",
+            "short": [],
+            "long": ["append"],
+            "hide": false,
+            "global": false
+          },
+          {
             "name": "format",
             "usage": "--format <FORMAT>",
             "help": "Output format",
@@ -3250,12 +3270,42 @@
             "default": ["human"]
           },
           {
-            "name": "quiet",
-            "usage": "-q --quiet",
-            "help": "Print only the paths of files with findings",
-            "help_first_line": "Print only the paths of files with findings",
-            "short": ["q"],
-            "long": ["quiet"],
+            "name": "include-ignored",
+            "usage": "--include-ignored",
+            "help": "Also scan files ignored by .gitignore (working tree scans only)",
+            "help_first_line": "Also scan files ignored by .gitignore (working tree scans only)",
+            "short": [],
+            "long": ["include-ignored"],
+            "hide": false,
+            "global": false
+          },
+          {
+            "name": "install-hook",
+            "usage": "--install-hook",
+            "help": "Install a git pre-commit hook that runs `fnox scan --values --staged`",
+            "help_first_line": "Install a git pre-commit hook that runs `fnox scan --values --staged`",
+            "short": [],
+            "long": ["install-hook"],
+            "hide": false,
+            "global": false
+          },
+          {
+            "name": "staged",
+            "usage": "--staged",
+            "help": "Scan content staged in git (the index) instead of the working tree",
+            "help_first_line": "Scan content staged in git (the index) instead of the working tree",
+            "short": [],
+            "long": ["staged"],
+            "hide": false,
+            "global": false
+          },
+          {
+            "name": "values",
+            "usage": "--values",
+            "help": "Resolve the active profile's secrets and report files containing their values",
+            "help_first_line": "Resolve the active profile's secrets and report files containing their values",
+            "short": [],
+            "long": ["values"],
             "hide": false,
             "global": false
           },
@@ -3277,7 +3327,7 @@
         "hide": false,
         "args_override_self": true,
         "help": "Scan files for secrets committed in plaintext",
-        "help_long": "Scan files for secrets committed in plaintext\n\nWalks DIR and reports lines that look like cloud keys, API tokens, private keys, or password assignments, with the matched value redacted. It skips gitignored files, binary files, files over 5 MiB, and directories such as `.git`, `node_modules`, `target`, and `vendor`.\n\nfnox exits 1 when it finds anything. Findings are heuristic: review each one, and do not treat a clean scan as proof that no secret is present.",
+        "help_long": "Scan files for secrets committed in plaintext\n\nWalks DIR and reports lines that look like cloud keys, API tokens, private keys, or password assignments, with the matched value redacted. It skips gitignored files, binary files, files over 5 MiB, and directories such as `.git`, `node_modules`, `target`, and `vendor`.\n\nfnox exits 1 when it finds anything. Findings are heuristic: review each one, and do not treat a clean scan as proof that no secret is present.\n\nWith `--values`, fnox instead resolves the active profile's secrets and reports every file that contains one of their actual values. This has far fewer false positives than the pattern heuristics. Values are never printed, only the name of the matching secret. Empty secrets and secrets shorter than 8 characters are skipped. Add `--staged` to check the content staged in git (the index) rather than the working tree, and `--install-hook` to install a pre-commit hook that runs `fnox scan --values --staged`.",
         "name": "scan",
         "aliases": [],
         "hidden_aliases": [],
@@ -3298,6 +3348,24 @@
           {
             "code": "fnox scan . --ignore 'fixtures/**'",
             "header": "Skip matching files",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox scan --values",
+            "header": "Find files containing this profile's real secret values",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox scan --values --staged",
+            "header": "Check only what is staged for commit",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox scan --install-hook",
+            "header": "Install a pre-commit hook that scans staged secrets",
             "help": null,
             "lang": ""
           }

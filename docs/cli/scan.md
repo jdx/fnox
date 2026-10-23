@@ -14,6 +14,8 @@ Walks DIR and reports lines that look like cloud keys, API tokens, private keys,
 
 fnox exits 1 when it finds anything. Findings are heuristic: review each one, and do not treat a clean scan as proof that no secret is present.
 
+With `--values`, fnox instead resolves the active profile's secrets and reports every file that contains one of their actual values. This has far fewer false positives than the pattern heuristics. Values are never printed, only the name of the matching secret. Empty secrets and secrets shorter than 8 characters are skipped. Add `--staged` to check the content staged in git (the index) rather than the working tree, and `--install-hook` to install a pre-commit hook that runs `fnox scan --values --staged`.
+
 ## Arguments
 
 - **`[DIR]`** — Directory to scan
@@ -23,13 +25,18 @@ fnox exits 1 when it finds anything. Findings are heuristic: review each one, an
 ## Flags
 
 - **`-i --ignore <IGNORE>`** — Skip files whose path or name matches this glob; repeatable
+- **`-q --quiet`** — Print only the paths of files with findings
+- **`--append`** — With --install-hook, append to an existing pre-commit hook instead of refusing
 - **`--format <FORMAT>`** — Output format
 
   **Choices:** `human`, `json`
 
   **Default:** `human`
 
-- **`-q --quiet`** — Print only the paths of files with findings
+- **`--include-ignored`** — Also scan files ignored by .gitignore (working tree scans only)
+- **`--install-hook`** — Install a git pre-commit hook that runs `fnox scan --values --staged`
+- **`--staged`** — Scan content staged in git (the index) instead of the working tree
+- **`--values`** — Resolve the active profile's secrets and report files containing their values
 - **`-h --help`** — Print help
 
 ## Examples
@@ -50,6 +57,24 @@ fnox scan . --format json
 
 ```sh
 fnox scan . --ignore 'fixtures/**'
+```
+
+**Find files containing this profile's real secret values**
+
+```sh
+fnox scan --values
+```
+
+**Check only what is staged for commit**
+
+```sh
+fnox scan --values --staged
+```
+
+**Install a pre-commit hook that scans staged secrets**
+
+```sh
+fnox scan --install-hook
 ```
 
 ## See also
