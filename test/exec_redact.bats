@@ -82,7 +82,7 @@ teardown() {
 @test "exec --redact delivers all output to a slow consumer" {
 	# 200000 bytes overflow the pipe buffer, so output is still in flight when
 	# the command exits and the consumer only starts reading after 3s.
-	run bash -c "'$FNOX_BIN' exec --redact -- sh -c 'head -c 200000 /dev/zero | tr \"\\0\" x; echo; echo \$SECRET' | (sleep 3; wc -c)"
+	run bash -c "'$FNOX_BIN' exec --redact -- sh -c 'head -c 200000 /dev/zero | tr \"\\0\" x; echo; echo \$SECRET' | (sleep 3; wc -c | tr -d ' ')"
 	assert_success
 	# 200000 x's + newline + "[REDACTED]\n"
 	assert_output "200012"
