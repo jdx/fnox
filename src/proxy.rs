@@ -3,13 +3,15 @@ use crate::error::{FnoxError, Result};
 use base64::Engine;
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use indexmap::IndexMap;
+use ipnet::IpNet;
 use rcgen::{BasicConstraints, Certificate, CertificateParams, IsCa, Issuer, KeyPair};
 use reqwest::Method;
 use rustls::ServerConfig;
 use rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
-use std::sync::Arc;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::sync::{Arc, LazyLock};
 use tempfile::NamedTempFile;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
@@ -19,6 +21,9 @@ use tokio_rustls::TlsAcceptor;
 const MAX_HEADER_BYTES: usize = 64 * 1024;
 const MAX_BODY_BYTES: usize = 10 * 1024 * 1024;
 const DEFAULT_HEADER: &str = "authorization";
+/// Clients such as git first connect without credentials and retry after a
+/// 407 on the same connection; give up after this many unauthenticated tries.
+const MAX_AUTH_ATTEMPTS: usize = 3;
 
 fn proxy_error(message: impl Into<String>) -> FnoxError {
     FnoxError::Config(format!("proxy: {}", message.into()))
@@ -93,8 +98,168 @@ struct ProxyPolicy {
     egress: ProxyEgress,
     audit: bool,
     rules: Vec<PreparedRule>,
+    allow_domains: Vec<String>,
+    destinations: Arc<DestinationPolicy>,
+    /// Password clients must send in `Proxy-Authorization`. Without it, any
+    /// local process, including other users' on a shared host, could have
+    /// credentials injected into its requests.
+    token: String,
     redactions: Vec<Redaction>,
     client: reqwest::Client,
+}
+
+/// Address ranges that are not reachable on the public internet: loopback,
+/// private, link-local (which holds cloud metadata endpoints), shared, and
+/// reserved space. IPv4-mapped IPv6 addresses are canonicalized before this
+/// check, and NAT64 and 6to4 addresses are checked by their embedded IPv4.
+static NON_PUBLIC_NETWORKS: LazyLock<Vec<IpNet>> = LazyLock::new(|| {
+    [
+        "0.0.0.0/8",
+        "10.0.0.0/8",
+        "100.64.0.0/10",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "172.16.0.0/12",
+        "192.0.0.0/24",
+        "192.0.2.0/24",
+        "192.168.0.0/16",
+        "198.18.0.0/15",
+        "198.51.100.0/24",
+        "203.0.113.0/24",
+        "224.0.0.0/3",
+        "::/96",
+        "64:ff9b:1::/48",
+        "100::/64",
+        "2001:db8::/32",
+        "fc00::/7",
+        "fe80::/10",
+        "fec0::/10",
+        "ff00::/8",
+    ]
+    .into_iter()
+    .map(|network| network.parse().expect("static network is valid"))
+    .collect()
+});
+
+fn is_public(ip: IpAddr) -> bool {
+    let ip = ip.to_canonical();
+    if let IpAddr::V6(v6) = ip
+        && let Some(embedded) = embedded_ipv4(v6)
+    {
+        return is_public(IpAddr::V4(embedded));
+    }
+    !NON_PUBLIC_NETWORKS
+        .iter()
+        .any(|network| network.contains(&ip))
+}
+
+/// The IPv4 address a NAT64 (`64:ff9b::/96`) or 6to4 (`2002::/16`) address
+/// reaches.
+fn embedded_ipv4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
+    let segments = ip.segments();
+    let octets = ip.octets();
+    if segments[..6] == [0x64, 0xff9b, 0, 0, 0, 0] {
+        Some(Ipv4Addr::new(
+            octets[12], octets[13], octets[14], octets[15],
+        ))
+    } else if segments[0] == 0x2002 {
+        Some(Ipv4Addr::new(octets[2], octets[3], octets[4], octets[5]))
+    } else {
+        None
+    }
+}
+
+/// Which resolved addresses the proxy may connect to.
+#[derive(Debug, Default)]
+struct DestinationPolicy {
+    allowed: Vec<IpNet>,
+}
+
+#[derive(Debug)]
+enum DestinationError {
+    Lookup(std::io::Error),
+    /// Every address the name resolved to is non-public and not allowed.
+    Refused,
+}
+
+impl std::fmt::Display for DestinationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Lookup(error) => write!(f, "failed to resolve destination: {error}"),
+            Self::Refused => f.write_str("destination resolves to a non-public address"),
+        }
+    }
+}
+
+impl std::error::Error for DestinationError {}
+
+impl DestinationPolicy {
+    fn permits(&self, ip: IpAddr) -> bool {
+        let ip = ip.to_canonical();
+        is_public(ip) || self.allowed.iter().any(|network| network.contains(&ip))
+    }
+
+    /// Resolves `host` and keeps only addresses the proxy may connect to.
+    /// Callers connect to these addresses, never to the name again, so a
+    /// second lookup cannot rebind it to a refused address.
+    async fn resolve(
+        &self,
+        host: &str,
+        port: u16,
+    ) -> std::result::Result<Vec<SocketAddr>, DestinationError> {
+        let resolved: Vec<SocketAddr> = tokio::net::lookup_host((host, port))
+            .await
+            .map_err(DestinationError::Lookup)?
+            .collect();
+        if resolved.is_empty() {
+            return Err(DestinationError::Lookup(std::io::Error::other(
+                "no addresses found",
+            )));
+        }
+        let permitted: Vec<_> = resolved
+            .into_iter()
+            .filter(|address| self.permits(address.ip()))
+            .collect();
+        if permitted.is_empty() {
+            return Err(DestinationError::Refused);
+        }
+        Ok(permitted)
+    }
+}
+
+/// Applies the destination policy to the upstream client's own lookups.
+struct DestinationResolver(Arc<DestinationPolicy>);
+
+impl reqwest::dns::Resolve for DestinationResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        let destinations = self.0.clone();
+        let host = name.as_str().to_string();
+        Box::pin(async move {
+            let addresses = destinations.resolve(&host, 0).await?;
+            Ok(Box::new(addresses.into_iter()) as reqwest::dns::Addrs)
+        })
+    }
+}
+
+fn parse_network(entry: &str) -> Result<IpNet> {
+    entry
+        .parse::<IpNet>()
+        .or_else(|_| entry.parse::<IpAddr>().map(IpNet::from))
+        .map(|network| network.trunc())
+        .map_err(|_| {
+            proxy_error(format!(
+                "allow_private entry '{entry}' is not an IP address or CIDR block"
+            ))
+        })
+}
+
+fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+    left.len() == right.len()
+        && left
+            .iter()
+            .zip(right)
+            .fold(0u8, |difference, (a, b)| difference | (a ^ b))
+            == 0
 }
 
 #[derive(Debug)]
@@ -171,6 +336,49 @@ impl ProxyPolicy {
         self.rules
             .iter()
             .any(|rule| domain_matches(&rule.domain, domain))
+    }
+
+    /// Whether a destination without a rule may be tunneled uninspected.
+    fn allows_tunnel(&self, domain: &str) -> bool {
+        self.egress == ProxyEgress::Permissive
+            || self
+                .allow_domains
+                .iter()
+                .any(|pattern| domain_matches(pattern, domain))
+    }
+
+    /// Checks a `Proxy-Authorization` header value. Only `Basic` is accepted;
+    /// the user name is ignored and the password must be the session token.
+    fn accepts_credentials(&self, header: &str) -> bool {
+        let Some((scheme, encoded)) = header.trim().split_once(' ') else {
+            return false;
+        };
+        if !scheme.eq_ignore_ascii_case("basic") {
+            return false;
+        }
+        let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(encoded.trim()) else {
+            return false;
+        };
+        let password = decoded
+            .iter()
+            .position(|byte| *byte == b':')
+            .map_or(&[][..], |colon| &decoded[colon + 1..]);
+        constant_time_eq(password, self.token.as_bytes())
+    }
+
+    /// Logs a request the proxy turned away. Like `proxied request` lines,
+    /// it never includes headers, bodies, or values.
+    fn audit_refused(&self, method: &str, destination: &str, path: Option<&str>, reason: &str) {
+        if self.audit {
+            tracing::info!(
+                target: "fnox::proxy",
+                method,
+                destination,
+                path = path.unwrap_or("-"),
+                reason,
+                "refused request"
+            );
+        }
     }
 
     fn authorize(
@@ -335,12 +543,48 @@ pub struct ProxyPlan {
     pub child_env: IndexMap<String, String>,
 }
 
+/// Stops other processes of the same user, including the proxied command,
+/// from reading this process's memory or environment through `/proc` or a
+/// debugger. A child returns to the default when it execs a new program.
+pub fn deny_inspection() {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        // SAFETY: PR_SET_DUMPABLE takes only integer arguments.
+        if unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0, 0, 0, 0) } != 0 {
+            tracing::warn!(
+                "failed to protect proxy memory from inspection: {}",
+                std::io::Error::last_os_error()
+            );
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // SAFETY: PT_DENY_ATTACH ignores its pid, address, and data arguments.
+        if unsafe { libc::ptrace(libc::PT_DENY_ATTACH, 0, std::ptr::null_mut(), 0) } != 0 {
+            tracing::warn!(
+                "failed to protect proxy memory from inspection: {}",
+                std::io::Error::last_os_error()
+            );
+        }
+    }
+}
+
 pub fn validate_config(config: &ProxyConfig) -> Result<()> {
     if config.rules.is_empty() {
         return Err(proxy_error("no rules are configured"));
     }
     for rule in &config.rules {
         validate_rule(rule)?;
+    }
+    for domain in &config.allow_domains {
+        if !is_valid_domain_pattern(domain) {
+            return Err(proxy_error(format!(
+                "allow_domains entry '{domain}' is not a valid domain"
+            )));
+        }
+    }
+    for entry in &config.allow_private {
+        parse_network(entry)?;
     }
     Ok(())
 }
@@ -462,15 +706,31 @@ impl ProxyPlan {
         }
         redactions.sort_by_key(|redaction| std::cmp::Reverse(redaction.value.len()));
 
+        let destinations = Arc::new(DestinationPolicy {
+            allowed: config
+                .allow_private
+                .iter()
+                .map(|entry| parse_network(entry))
+                .collect::<Result<_>>()?,
+        });
+
         Ok(Self {
             policy: Arc::new(ProxyPolicy {
                 egress: config.egress,
                 audit: config.audit,
                 rules: prepared,
+                allow_domains: config
+                    .allow_domains
+                    .iter()
+                    .map(|domain| domain.to_ascii_lowercase())
+                    .collect(),
+                destinations: destinations.clone(),
+                token: data_encoding::HEXLOWER.encode(&rand::random::<[u8; 16]>()),
                 redactions,
                 client: reqwest::Client::builder()
                     .http1_only()
                     .no_proxy()
+                    .dns_resolver(Arc::new(DestinationResolver(destinations)))
                     .redirect(reqwest::redirect::Policy::none())
                     .build()
                     .map_err(|error| {
@@ -482,34 +742,34 @@ impl ProxyPlan {
     }
 }
 
+fn is_valid_domain_pattern(domain: &str) -> bool {
+    if domain.trim().is_empty()
+        || domain.contains('/')
+        || domain.contains(':')
+        || domain.ends_with('.')
+        || domain.chars().any(char::is_whitespace)
+    {
+        return false;
+    }
+    // `*` is only valid as a leading `*.` label, and the rest must still name a
+    // registrable-looking domain so that `*.com` cannot be written by accident.
+    let host = domain.strip_prefix("*.").unwrap_or(domain);
+    let wildcard = host.len() != domain.len();
+    !(host.contains('*')
+        || host.starts_with('.')
+        || host.contains("..")
+        || (wildcard && !host.contains('.')))
+}
+
 fn validate_rule(rule: &ProxyRule) -> Result<()> {
     if rule.secret.trim().is_empty() {
         return Err(proxy_error("rule secret cannot be empty"));
     }
-    let invalid_domain = || {
-        proxy_error(format!(
+    if !is_valid_domain_pattern(&rule.domain) {
+        return Err(proxy_error(format!(
             "rule for '{}' has an invalid domain '{}'",
             rule.secret, rule.domain
-        ))
-    };
-    if rule.domain.trim().is_empty()
-        || rule.domain.contains('/')
-        || rule.domain.contains(':')
-        || rule.domain.ends_with('.')
-        || rule.domain.chars().any(char::is_whitespace)
-    {
-        return Err(invalid_domain());
-    }
-    // `*` is only valid as a leading `*.` label, and the rest must still name a
-    // registrable-looking domain so that `*.com` cannot be written by accident.
-    let host = rule.domain.strip_prefix("*.").unwrap_or(&rule.domain);
-    let wildcard = host.len() != rule.domain.len();
-    if host.contains('*')
-        || host.starts_with('.')
-        || host.contains("..")
-        || (wildcard && !host.contains('.'))
-    {
-        return Err(invalid_domain());
+        )));
     }
     if rule.header.is_some() && rule.query.is_some() {
         return Err(proxy_error(format!(
@@ -628,15 +888,94 @@ impl CertificateAuthority {
     }
 }
 
+/// Where the proxy accepts clients.
+pub enum ProxyListener {
+    /// A random port on `127.0.0.1`.
+    Loopback,
+    /// A Unix socket at this path, created with mode 0600. The path must not
+    /// exist and should be in a directory only the user can enter. This lets
+    /// a sandboxed process reach the proxy without sharing the host's network.
+    #[cfg(unix)]
+    #[cfg_attr(not(test), allow(dead_code))] // used by the upcoming agent sandbox
+    Unix(std::path::PathBuf),
+}
+
+/// Accepts client connections for the proxy, dropping ones it must refuse.
+trait ProxyAccept: Send + 'static {
+    type Stream: AsyncRead + AsyncWrite + Unpin + Send + 'static;
+
+    fn accept_client(
+        &self,
+    ) -> impl std::future::Future<Output = std::io::Result<Option<Self::Stream>>> + Send;
+}
+
+impl ProxyAccept for TcpListener {
+    type Stream = TcpStream;
+
+    async fn accept_client(&self) -> std::io::Result<Option<TcpStream>> {
+        let (stream, peer) = self.accept().await?;
+        if !peer.ip().is_loopback() {
+            tracing::warn!("rejected non-loopback proxy client: {peer}");
+            return Ok(None);
+        }
+        Ok(Some(stream))
+    }
+}
+
+#[cfg(unix)]
+impl ProxyAccept for tokio::net::UnixListener {
+    type Stream = tokio::net::UnixStream;
+
+    async fn accept_client(&self) -> std::io::Result<Option<tokio::net::UnixStream>> {
+        Ok(Some(self.accept().await?.0))
+    }
+}
+
+fn serve<L: ProxyAccept>(
+    listener: L,
+    policy: Arc<ProxyPolicy>,
+    authority: Arc<CertificateAuthority>,
+    mut shutdown: oneshot::Receiver<()>,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                _ = &mut shutdown => break,
+                accepted = listener.accept_client() => {
+                    let stream = match accepted {
+                        Ok(Some(stream)) => stream,
+                        Ok(None) => continue,
+                        Err(error) => {
+                            tracing::warn!("proxy accept failed: {error}");
+                            tokio::task::yield_now().await;
+                            continue;
+                        }
+                    };
+                    let policy = policy.clone();
+                    let authority = authority.clone();
+                    tokio::spawn(async move {
+                        if let Err(error) = handle_connection(stream, policy, authority).await {
+                            tracing::debug!("proxy connection failed: {error}");
+                        }
+                    });
+                }
+            }
+        }
+    })
+}
+
 pub struct RunningProxy {
-    pub address: std::net::SocketAddr,
+    address: Option<SocketAddr>,
+    #[cfg(unix)]
+    socket_path: Option<std::path::PathBuf>,
+    token: String,
     ca_file: NamedTempFile,
     shutdown: Option<oneshot::Sender<()>>,
     task: tokio::task::JoinHandle<()>,
 }
 
 impl RunningProxy {
-    pub async fn start(plan: ProxyPlan) -> Result<Self> {
+    pub async fn start(plan: ProxyPlan, listen: ProxyListener) -> Result<Self> {
         let authority = Arc::new(CertificateAuthority::new()?);
         let mut ca_file = tempfile::Builder::new()
             .prefix("fnox-proxy-ca-")
@@ -648,49 +987,52 @@ impl RunningProxy {
             .flush()
             .map_err(|error| proxy_error(format!("failed to flush CA file: {error}")))?;
 
-        let listener = TcpListener::bind(("127.0.0.1", 0))
-            .await
-            .map_err(|error| proxy_error(format!("failed to bind listener: {error}")))?;
-        let address = listener
-            .local_addr()
-            .map_err(|error| proxy_error(format!("failed to read listener address: {error}")))?;
         let policy = plan.policy;
-        let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
-        let task = tokio::spawn(async move {
-            loop {
-                tokio::select! {
-                    _ = &mut shutdown_rx => break,
-                    accepted = listener.accept() => {
-                        let (stream, peer) = match accepted {
-                            Ok(accepted) => accepted,
-                            Err(error) => {
-                                tracing::warn!("proxy accept failed: {error}");
-                                tokio::task::yield_now().await;
-                                continue;
-                            }
-                        };
-                        if !peer.ip().is_loopback() {
-                            tracing::warn!("rejected non-loopback proxy client: {peer}");
-                            continue;
-                        }
-                        let policy = policy.clone();
-                        let authority = authority.clone();
-                        tokio::spawn(async move {
-                            if let Err(error) = handle_connection(stream, policy, authority).await {
-                                tracing::debug!("proxy connection failed: {error}");
-                            }
-                        });
-                    }
-                }
+        let token = policy.token.clone();
+        let (shutdown_tx, shutdown_rx) = oneshot::channel();
+        let mut address = None;
+        #[cfg(unix)]
+        let mut socket_path = None;
+        let task = match listen {
+            ProxyListener::Loopback => {
+                let listener = TcpListener::bind(("127.0.0.1", 0))
+                    .await
+                    .map_err(|error| proxy_error(format!("failed to bind listener: {error}")))?;
+                address = Some(listener.local_addr().map_err(|error| {
+                    proxy_error(format!("failed to read listener address: {error}"))
+                })?);
+                serve(listener, policy, authority, shutdown_rx)
             }
-        });
+            #[cfg(unix)]
+            ProxyListener::Unix(path) => {
+                use std::os::unix::fs::PermissionsExt;
+                let listener = tokio::net::UnixListener::bind(&path).map_err(|error| {
+                    proxy_error(format!("failed to bind socket {}: {error}", path.display()))
+                })?;
+                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).map_err(
+                    |error| proxy_error(format!("failed to restrict proxy socket: {error}")),
+                )?;
+                socket_path = Some(path);
+                serve(listener, policy, authority, shutdown_rx)
+            }
+        };
 
         Ok(Self {
             address,
+            #[cfg(unix)]
+            socket_path,
+            token,
             ca_file,
             shutdown: Some(shutdown_tx),
             task,
         })
+    }
+
+    /// The `HTTPS_PROXY` URL for a loopback listener, carrying the session
+    /// token as the proxy password.
+    pub fn proxy_url(&self) -> Option<String> {
+        self.address
+            .map(|address| format!("http://fnox:{}@{address}", self.token))
     }
 
     pub fn ca_path(&self) -> &std::path::Path {
@@ -701,7 +1043,11 @@ impl RunningProxy {
         if let Some(shutdown) = self.shutdown.take() {
             let _ = shutdown.send(());
         }
-        let _ = self.task.await;
+        let _ = (&mut self.task).await;
+        #[cfg(unix)]
+        if let Some(path) = &self.socket_path {
+            let _ = std::fs::remove_file(path);
+        }
     }
 }
 
@@ -738,41 +1084,124 @@ fn write_pem_certificate(file: &mut impl Write, der: &[u8]) -> std::io::Result<(
     writeln!(file, "-----END CERTIFICATE-----")
 }
 
-async fn handle_connection(
-    stream: TcpStream,
-    policy: Arc<ProxyPolicy>,
-    authority: Arc<CertificateAuthority>,
-) -> Result<()> {
-    let mut reader = BufReader::new(stream);
-    let request_line = read_line_limited(&mut reader, MAX_HEADER_BYTES).await?;
+/// The request line and `Proxy-Authorization` header of a request sent to
+/// the proxy itself, before any tunnel is established.
+struct ProxyRequestHead {
+    method: String,
+    target: String,
+    authorization: Option<String>,
+}
+
+async fn read_proxy_request_head<R>(reader: &mut R) -> Result<ProxyRequestHead>
+where
+    R: tokio::io::AsyncBufRead + Unpin,
+{
+    let request_line = read_line_limited(reader, MAX_HEADER_BYTES).await?;
     let mut header_bytes = request_line.len();
+    let mut authorization = None;
     loop {
-        let line = read_line_limited(&mut reader, MAX_HEADER_BYTES - header_bytes).await?;
+        let line = read_line_limited(reader, MAX_HEADER_BYTES - header_bytes).await?;
         header_bytes += line.len();
         if line == "\r\n" || line == "\n" {
             break;
         }
+        if let Some((name, value)) = line.split_once(':')
+            && name.trim().eq_ignore_ascii_case("proxy-authorization")
+        {
+            authorization = Some(value.trim().to_string());
+        }
     }
-
     let mut parts = request_line.split_whitespace();
-    let method = parts.next().unwrap_or_default();
-    let target = parts.next().unwrap_or_default();
-    if method != "CONNECT" {
-        let mut stream = reader.into_inner();
-        write_error(&mut stream, 400, "HTTPS CONNECT is required").await?;
-        return Ok(());
-    }
-    let (domain, port) = parse_connect_target(target)?;
-    let mut stream = reader.into_inner();
+    Ok(ProxyRequestHead {
+        method: parts.next().unwrap_or_default().to_string(),
+        target: parts.next().unwrap_or_default().to_string(),
+        authorization,
+    })
+}
 
-    if !policy.has_domain(&domain) {
-        if policy.egress == ProxyEgress::Strict {
-            write_error(&mut stream, 403, "destination is not allowed").await?;
+async fn handle_connection<S>(
+    stream: S,
+    policy: Arc<ProxyPolicy>,
+    authority: Arc<CertificateAuthority>,
+) -> Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send,
+{
+    let mut reader = BufReader::new(stream);
+    let mut challenged: Option<ProxyRequestHead> = None;
+    let mut attempts = 0;
+    let head = loop {
+        let head = match read_proxy_request_head(&mut reader).await {
+            Ok(head) => head,
+            Err(error) => {
+                // A client that never answers the challenge was refused.
+                if let Some(head) = challenged {
+                    policy.audit_refused(
+                        &head.method,
+                        &head.target,
+                        None,
+                        "missing proxy credentials",
+                    );
+                    return Ok(());
+                }
+                return Err(error);
+            }
+        };
+        match head.authorization.as_deref() {
+            Some(credentials) if policy.accepts_credentials(credentials) => break head,
+            Some(_) => {
+                let reason = "invalid proxy credentials";
+                policy.audit_refused(&head.method, &head.target, None, reason);
+                write_auth_required(reader.get_mut(), true).await?;
+                return Ok(());
+            }
+            None => {}
+        }
+        attempts += 1;
+        if attempts >= MAX_AUTH_ATTEMPTS {
+            let reason = "missing proxy credentials";
+            policy.audit_refused(&head.method, &head.target, None, reason);
+            write_auth_required(reader.get_mut(), true).await?;
             return Ok(());
         }
-        let mut upstream = TcpStream::connect((domain.as_str(), port))
-            .await
-            .map_err(|error| proxy_error(format!("failed to connect to {domain}: {error}")))?;
+        write_auth_required(reader.get_mut(), false).await?;
+        challenged = Some(head);
+    };
+
+    let mut stream = reader.into_inner();
+    if head.method != "CONNECT" {
+        let reason = "HTTPS CONNECT is required";
+        policy.audit_refused(&head.method, &head.target, None, reason);
+        write_error(&mut stream, 400, reason).await?;
+        return Ok(());
+    }
+    let (domain, port) = parse_connect_target(&head.target)?;
+    let refuse = async |stream: &mut S, status: u16, reason: &str| {
+        policy.audit_refused("CONNECT", &head.target, None, reason);
+        write_error(stream, status, reason).await
+    };
+
+    if !policy.has_domain(&domain) {
+        if !policy.allows_tunnel(&domain) {
+            return refuse(&mut stream, 403, "destination is not allowed").await;
+        }
+        let addresses = match policy.destinations.resolve(&domain, port).await {
+            Ok(addresses) => addresses,
+            Err(error @ DestinationError::Refused) => {
+                return refuse(&mut stream, 403, &error.to_string()).await;
+            }
+            Err(error) => {
+                tracing::debug!("{domain}: {error}");
+                return write_error(&mut stream, 502, "failed to resolve destination").await;
+            }
+        };
+        let mut upstream = match TcpStream::connect(&addresses[..]).await {
+            Ok(upstream) => upstream,
+            Err(error) => {
+                tracing::debug!("failed to connect to {domain}: {error}");
+                return write_error(&mut stream, 502, "failed to connect to destination").await;
+            }
+        };
         stream
             .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
             .await
@@ -783,8 +1212,19 @@ async fn handle_connection(
         return Ok(());
     }
     if port != 443 {
-        write_error(&mut stream, 403, "credential injection requires port 443").await?;
-        return Ok(());
+        return refuse(&mut stream, 403, "credential injection requires port 443").await;
+    }
+    // The upstream client re-checks every lookup it makes, but checking here
+    // first refuses IP literals (which skip DNS) and gives a clear error.
+    match policy.destinations.resolve(&domain, port).await {
+        Ok(_) => {}
+        Err(error @ DestinationError::Refused) => {
+            return refuse(&mut stream, 403, &error.to_string()).await;
+        }
+        Err(error) => {
+            tracing::debug!("{domain}: {error}");
+            return write_error(&mut stream, 502, "failed to resolve destination").await;
+        }
     }
 
     stream
@@ -840,9 +1280,13 @@ where
             return Ok(());
         }
     };
+    let refuse = async |stream: &mut S, path: &str, reason: &str| {
+        policy.audit_refused(&request.method, domain, Some(path), reason);
+        write_error(stream, 403, reason).await
+    };
     if has_ambiguous_path_encoding(&request.target) {
-        write_error(stream, 403, "request path contains an ambiguous encoding").await?;
-        return Ok(());
+        let path = request.target.split('?').next().unwrap_or_default();
+        return refuse(stream, path, "request path contains an ambiguous encoding").await;
     }
     let mut url = match reqwest::Url::parse(&format!("https://{domain}{}", request.target)) {
         Ok(url) => url,
@@ -856,18 +1300,19 @@ where
             return Ok(());
         }
     };
-    if url.host_str() != Some(domain) {
-        write_error(stream, 403, "request URL changed the approved destination").await?;
-        return Ok(());
-    }
     let path = url.path().to_string();
+    if url.host_str() != Some(domain) {
+        return refuse(
+            stream,
+            &path,
+            "request URL changed the approved destination",
+        )
+        .await;
+    }
     let mut headers = request.headers;
     let injected = match policy.authorize(domain, &request.method, &mut url, &mut headers) {
         Ok(injected) => injected,
-        Err(error) => {
-            write_error(stream, 403, &error.to_string()).await?;
-            return Ok(());
-        }
+        Err(error) => return refuse(stream, &path, &error.to_string()).await,
     };
 
     if policy.audit {
@@ -1130,6 +1575,24 @@ fn redact_bytes(input: &[u8], redactions: &[Redaction]) -> Vec<u8> {
     output
 }
 
+/// Challenges the client for proxy credentials. Unless `close` is set, the
+/// connection stays open so the client can retry on it.
+async fn write_auth_required<S>(stream: &mut S, close: bool) -> Result<()>
+where
+    S: AsyncWrite + Unpin,
+{
+    let body = "proxy credentials are required\n";
+    let connection = if close { "close" } else { "keep-alive" };
+    let response = format!(
+        "HTTP/1.1 407 Proxy Authentication Required\r\nproxy-authenticate: Basic realm=\"fnox\"\r\ncontent-type: text/plain\r\ncontent-length: {}\r\nconnection: {connection}\r\n\r\n{body}",
+        body.len()
+    );
+    stream
+        .write_all(response.as_bytes())
+        .await
+        .map_err(|error| proxy_error(format!("failed to write proxy error: {error}")))
+}
+
 async fn write_error<S>(stream: &mut S, status: u16, message: &str) -> Result<()>
 where
     S: AsyncWrite + Unpin,
@@ -1170,6 +1633,7 @@ mod tests {
                 paths: vec!["/repos/example/**".to_string()],
                 placeholder: Some("ghp_placeholder".to_string()),
             }],
+            ..ProxyConfig::default()
         }
     }
 
@@ -1197,7 +1661,9 @@ mod tests {
 
     #[tokio::test]
     async fn proxy_trust_bundle_includes_native_roots_and_session_ca() {
-        let running = RunningProxy::start(policy()).await.unwrap();
+        let running = RunningProxy::start(policy(), ProxyListener::Loopback)
+            .await
+            .unwrap();
         let bundle = std::fs::read_to_string(running.ca_path()).unwrap();
 
         assert!(
@@ -1442,6 +1908,7 @@ mod tests {
             egress: ProxyEgress::Strict,
             audit: false,
             rules,
+            ..ProxyConfig::default()
         };
         ProxyPlan::new(
             &config,
@@ -1694,5 +2161,277 @@ mod tests {
             String::from_utf8(body).unwrap(),
             "a=key_placeholder b=key_placeholder c=key_placeholder d=key_placeholderx"
         );
+    }
+
+    #[test]
+    fn classifies_non_public_addresses() {
+        for address in [
+            "127.0.0.1",
+            "10.1.2.3",
+            "172.20.0.1",
+            "192.168.1.1",
+            "169.254.169.254",
+            "100.100.100.200",
+            "0.0.0.0",
+            "224.0.0.1",
+            "255.255.255.255",
+            "::",
+            "::1",
+            "fe80::1",
+            "fd00:ec2::254",
+            "::ffff:127.0.0.1",
+            "::ffff:169.254.169.254",
+            "64:ff9b::a9fe:a9fe",
+            "2002:7f00:1::1",
+        ] {
+            assert!(
+                !is_public(address.parse().unwrap()),
+                "{address} should not be public"
+            );
+        }
+        for address in [
+            "8.8.8.8",
+            "140.82.112.6",
+            "2606:4700:4700::1111",
+            "64:ff9b::808:808",
+        ] {
+            assert!(
+                is_public(address.parse().unwrap()),
+                "{address} should be public"
+            );
+        }
+    }
+
+    #[test]
+    fn allow_private_permits_listed_networks_only() {
+        let destinations = DestinationPolicy {
+            allowed: vec![
+                parse_network("10.0.0.0/8").unwrap(),
+                parse_network("127.0.0.1").unwrap(),
+            ],
+        };
+        assert!(destinations.permits("10.9.8.7".parse().unwrap()));
+        assert!(destinations.permits("::ffff:127.0.0.1".parse().unwrap()));
+        assert!(!destinations.permits("127.0.0.2".parse().unwrap()));
+        assert!(!destinations.permits("169.254.169.254".parse().unwrap()));
+        assert!(destinations.permits("8.8.8.8".parse().unwrap()));
+    }
+
+    #[test]
+    fn validates_allow_lists() {
+        let mut config = config();
+        config.allow_domains = vec!["*.com".to_string()];
+        assert!(validate_config(&config).is_err());
+        config.allow_domains = vec![
+            "registry.npmjs.org".to_string(),
+            "*.githubusercontent.com".to_string(),
+        ];
+        assert!(validate_config(&config).is_ok());
+        config.allow_private = vec!["10.0.0.0/33".to_string()];
+        assert!(validate_config(&config).is_err());
+        config.allow_private = vec![
+            "10.0.0.0/8".to_string(),
+            "fd00::/8".to_string(),
+            "192.168.1.5".to_string(),
+        ];
+        assert!(validate_config(&config).is_ok());
+    }
+
+    fn basic(credentials: &str) -> String {
+        format!(
+            "Basic {}",
+            base64::engine::general_purpose::STANDARD.encode(credentials)
+        )
+    }
+
+    #[test]
+    fn credentials_must_carry_the_session_token() {
+        let plan = policy();
+        let proxy = &plan.policy;
+        let token = &proxy.token;
+        assert_eq!(token.len(), 32);
+        assert!(proxy.accepts_credentials(&basic(&format!("fnox:{token}"))));
+        // The scheme is case-insensitive and the user name is ignored.
+        let lowercase = basic(&format!("anyone:{token}")).replacen("Basic", "basic", 1);
+        assert!(proxy.accepts_credentials(&lowercase));
+        assert!(!proxy.accepts_credentials(&basic("fnox:wrong")));
+        assert!(!proxy.accepts_credentials(&basic(token)));
+        assert!(!proxy.accepts_credentials(&format!("Bearer {token}")));
+        assert!(!proxy.accepts_credentials("Basic not-base64!"));
+        assert_ne!(
+            token,
+            &policy().policy.token,
+            "each session gets its own token"
+        );
+    }
+
+    async fn read_response<S: AsyncRead + Unpin>(stream: &mut S) -> String {
+        let mut head = Vec::new();
+        let mut byte = [0u8; 1];
+        while !head.ends_with(b"\r\n\r\n") {
+            if stream.read(&mut byte).await.unwrap() == 0 {
+                break;
+            }
+            head.push(byte[0]);
+        }
+        let head = String::from_utf8(head).unwrap();
+        let length = head
+            .lines()
+            .find_map(|line| line.strip_prefix("content-length: "))
+            .map_or(0, |length| length.trim().parse().unwrap());
+        let mut body = vec![0; length];
+        stream.read_exact(&mut body).await.unwrap();
+        head + &String::from_utf8(body).unwrap()
+    }
+
+    async fn connect<S: AsyncRead + AsyncWrite + Unpin>(
+        stream: &mut S,
+        target: &str,
+        credentials: Option<&str>,
+    ) -> String {
+        let authorization = credentials
+            .map(|credentials| format!("Proxy-Authorization: {}\r\n", basic(credentials)))
+            .unwrap_or_default();
+        let head = format!("CONNECT {target} HTTP/1.1\r\nHost: {target}\r\n{authorization}\r\n");
+        stream.write_all(head.as_bytes()).await.unwrap();
+        read_response(stream).await
+    }
+
+    async fn echo_server() -> SocketAddr {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            while let Ok((mut stream, _)) = listener.accept().await {
+                tokio::spawn(async move {
+                    let (mut reader, mut writer) = stream.split();
+                    let _ = tokio::io::copy(&mut reader, &mut writer).await;
+                });
+            }
+        });
+        address
+    }
+
+    async fn assert_echoes<S: AsyncRead + AsyncWrite + Unpin>(stream: &mut S) {
+        stream.write_all(b"ping").await.unwrap();
+        let mut echoed = [0u8; 4];
+        stream.read_exact(&mut echoed).await.unwrap();
+        assert_eq!(&echoed, b"ping");
+    }
+
+    fn tunnel_config(allow_private: &[&str]) -> ProxyConfig {
+        let mut config = config();
+        config.allow_domains = vec!["localhost".to_string()];
+        config.allow_private = allow_private.iter().map(|s| s.to_string()).collect();
+        config
+    }
+
+    fn plan_from(config: ProxyConfig) -> ProxyPlan {
+        ProxyPlan::new(
+            &config,
+            &[("GITHUB_TOKEN".to_string(), "real-token".to_string())]
+                .into_iter()
+                .collect(),
+        )
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn loopback_proxy_challenges_then_accepts_credentials_on_one_connection() {
+        let echo = echo_server().await;
+        let running = RunningProxy::start(
+            plan_from(tunnel_config(&["127.0.0.1"])),
+            ProxyListener::Loopback,
+        )
+        .await
+        .unwrap();
+        let url = running.proxy_url().unwrap();
+        assert!(url.starts_with(&format!("http://fnox:{}@127.0.0.1:", running.token)));
+        let mut stream = TcpStream::connect(running.address.unwrap()).await.unwrap();
+        let target = format!("localhost:{}", echo.port());
+
+        let challenge = connect(&mut stream, &target, None).await;
+        assert!(challenge.starts_with("HTTP/1.1 407 "), "{challenge}");
+        assert!(
+            challenge.contains("proxy-authenticate: Basic"),
+            "{challenge}"
+        );
+        assert!(challenge.contains("connection: keep-alive"), "{challenge}");
+
+        let credentials = format!("fnox:{}", running.token);
+        let established = connect(&mut stream, &target, Some(&credentials)).await;
+        assert!(established.starts_with("HTTP/1.1 200 "), "{established}");
+        assert_echoes(&mut stream).await;
+        running.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn proxy_refuses_bad_credentials_and_unlisted_or_private_destinations() {
+        let echo = echo_server().await;
+        let mut config = tunnel_config(&[]);
+        config.rules[0].domain = "localhost".to_string();
+        config.allow_domains = vec!["127.0.0.1".to_string()];
+        let running = RunningProxy::start(plan_from(config), ProxyListener::Loopback)
+            .await
+            .unwrap();
+        let address = running.address.unwrap();
+        let credentials = format!("fnox:{}", running.token);
+        let attempt = async |target: &str, credentials: Option<&str>| {
+            let mut stream = TcpStream::connect(address).await.unwrap();
+            connect(&mut stream, target, credentials).await
+        };
+
+        let wrong = attempt("example.com:443", Some("fnox:wrong")).await;
+        assert!(wrong.starts_with("HTTP/1.1 407 "), "{wrong}");
+        assert!(wrong.contains("connection: close"), "{wrong}");
+
+        let unlisted = attempt("example.com:443", Some(&credentials)).await;
+        assert!(unlisted.starts_with("HTTP/1.1 403 "), "{unlisted}");
+        assert!(
+            unlisted.contains("destination is not allowed"),
+            "{unlisted}"
+        );
+
+        // An allowed tunnel to a loopback address is still refused.
+        let tunnel = attempt(&format!("127.0.0.1:{}", echo.port()), Some(&credentials)).await;
+        assert!(tunnel.starts_with("HTTP/1.1 403 "), "{tunnel}");
+        assert!(tunnel.contains("non-public address"), "{tunnel}");
+
+        // So is a rule's domain that resolves to loopback.
+        let injected = attempt("localhost:443", Some(&credentials)).await;
+        assert!(injected.starts_with("HTTP/1.1 403 "), "{injected}");
+        assert!(injected.contains("non-public address"), "{injected}");
+        running.shutdown().await;
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn unix_socket_listener_is_private_and_removed_on_shutdown() {
+        use std::os::unix::fs::PermissionsExt;
+        let echo = echo_server().await;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("proxy.sock");
+        let running = RunningProxy::start(
+            plan_from(tunnel_config(&["127.0.0.0/8"])),
+            ProxyListener::Unix(path.clone()),
+        )
+        .await
+        .unwrap();
+        assert_eq!(running.proxy_url(), None);
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
+
+        let mut stream = tokio::net::UnixStream::connect(&path).await.unwrap();
+        let credentials = format!("fnox:{}", running.token);
+        let established = connect(
+            &mut stream,
+            &format!("localhost:{}", echo.port()),
+            Some(&credentials),
+        )
+        .await;
+        assert!(established.starts_with("HTTP/1.1 200 "), "{established}");
+        assert_echoes(&mut stream).await;
+
+        running.shutdown().await;
+        assert!(!path.exists());
     }
 }

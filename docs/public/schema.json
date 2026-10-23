@@ -1576,6 +1576,22 @@
             "$ref": "#/$defs/ProxyRule"
           },
           "default": []
+        },
+        "allow_domains": {
+          "description": "Domains tunneled without credentials or inspection, even when `egress`\nis `strict`. Patterns follow `rules[].domain`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "allow_private": {
+          "description": "Non-public networks the proxy may connect to, as IP addresses or CIDR\nblocks. Loopback, link-local (including cloud metadata endpoints),\nprivate, and other non-public addresses are refused unless listed.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
         }
       },
       "additionalProperties": false

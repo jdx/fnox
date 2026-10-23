@@ -494,6 +494,17 @@ pub struct ProxyConfig {
     /// Destination-scoped credential substitution rules.
     #[serde(default)]
     pub rules: Vec<ProxyRule>,
+
+    /// Domains tunneled without credentials or inspection, even when `egress`
+    /// is `strict`. Patterns follow `rules[].domain`.
+    #[serde(default)]
+    pub allow_domains: Vec<String>,
+
+    /// Non-public networks the proxy may connect to, as IP addresses or CIDR
+    /// blocks. Loopback, link-local (including cloud metadata endpoints),
+    /// private, and other non-public addresses are refused unless listed.
+    #[serde(default)]
+    pub allow_private: Vec<String>,
 }
 
 impl Default for ProxyConfig {
@@ -502,6 +513,8 @@ impl Default for ProxyConfig {
             egress: ProxyEgress::Strict,
             audit: true,
             rules: Vec::new(),
+            allow_domains: Vec::new(),
+            allow_private: Vec::new(),
         }
     }
 }

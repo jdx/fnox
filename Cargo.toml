@@ -57,6 +57,7 @@ hkdf = "0.13"
 hmac = "0.13"
 ignore = "0.4"
 indexmap = { version = "2", features = ["serde"] }
+ipnet = "2"
 jsonwebtoken = { version = "11", features = ["aws_lc_rs"] }
 k8s-openapi = { version = "0.28", features = ["v1_32"] }
 keepass = { version = "0.15", features = ["save_kdbx4"] }
@@ -155,10 +156,12 @@ demand = { workspace = true }
 globset = { workspace = true }
 ignore = { workspace = true }
 indexmap = { workspace = true }
+ipnet = { workspace = true }
 libc = { workspace = true }
 miette = { workspace = true }
 miniz_oxide = { workspace = true }
 nix = { workspace = true }
+rand = { workspace = true }
 ratatui = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }

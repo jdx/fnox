@@ -76,16 +76,36 @@ fnox proxy rules
 
 ## What happens
 
-1. fnox resolves the secrets named in rules, plus anything their providers need.
-2. It starts a proxy on `127.0.0.1` with a temporary certificate authority.
-3. It starts the command with placeholders, `HTTPS_PROXY`, and the CA file in the standard environment variables.
-4. For each request, fnox verifies the real server's TLS certificate and substitutes the placeholder only if domain, method, path, and the header or query parameter all match a rule.
+1. fnox blocks other processes from reading its memory, then resolves the secrets named in rules, plus anything their providers need.
+2. It starts a proxy on `127.0.0.1` with a temporary certificate authority and a random password for this session.
+3. It starts the command with placeholders, `HTTPS_PROXY` (with the password in the URL), and the CA file in the standard environment variables.
+4. For each request, fnox checks the proxy password, verifies the real server's TLS certificate, and substitutes the placeholder only if domain, method, path, and the header or query parameter all match a rule.
 5. If a response echoes a real secret back, fnox replaces it with the placeholder.
 6. When the command exits, fnox stops the proxy and deletes the CA file. The CA's private key never leaves fnox's memory, and real values go only to the matched service, over TLS, never to the child.
+
+The password stops other local programs, including other users' on a shared machine, from using the proxy to send your credentials. Clients read it from `HTTPS_PROXY` automatically. On Linux, fnox also marks itself non-dumpable, so the command can't read fnox's memory or environment through `/proc`. On macOS, it refuses debugger attachment.
 
 ## Egress
 
 `egress = "strict"` (the default) refuses any host without a rule. `egress = "permissive"` lets unmatched traffic through as an uninspected tunnel. Use strict for agents.
+
+To let a few hosts through without credentials while staying strict, list them in `allow_domains`. They use the same patterns as rule domains:
+
+```toml
+[proxy]
+allow_domains = ["registry.npmjs.org", "*.githubusercontent.com"]
+```
+
+### Private networks
+
+fnox refuses to connect to addresses that aren't on the public internet: loopback, private ranges such as `10.0.0.0/8`, link-local addresses, which include cloud metadata endpoints like `169.254.169.254`, and other reserved space. This applies to rules, `allow_domains`, and permissive egress. It checks every address a name resolves to and connects only to the addresses it checked, so DNS can't redirect a request to a local service.
+
+If a rule's API lives on your internal network, allow that network:
+
+```toml
+[proxy]
+allow_private = ["10.20.0.0/16", "192.168.1.5"]
+```
 
 ## Limits
 
@@ -110,6 +130,8 @@ Tested on Linux (x86-64) against a real HTTPS API, with a placeholder in a heade
 | Go 1.27.2 (`net/http`)          | Works                                       |
 | git 2.53.0                      | Routed through the proxy and trusted its CA |
 
+All of these send the proxy password from `HTTPS_PROXY`. curl, wget, Python, Node, and Go send it with the first request. git waits for the proxy to ask, and fnox asks on the same connection.
+
 Not tested: Deno, Bun, the JVM, .NET, Rust programs that bundle their own roots, Node versions that ignore `NODE_USE_ENV_PROXY`, macOS, and Windows. A program that uses its own trust store may ignore the CA variables and fail the TLS handshake. A client that ignores the proxy variables connects directly, and the real server then receives the placeholder instead of the secret (confirmed with Node and the proxy variables removed).
 
 To check a client, run it once and read the audit line:
@@ -118,7 +140,9 @@ To check a client, run it once and read the audit line:
 fnox proxy run -- your-client https://api.example.com/
 ```
 
-`injected=["GITHUB_TOKEN"]` means the placeholder was substituted. `injected=[]` with a `proxied request` line means the request arrived but didn't carry a placeholder in the allowed header or parameter. A missing audit line is not proof that the client bypassed the proxy: the line is only written for requests that pass the rules, so it is also absent when `audit = false`, when the request was refused (the client sees a 403), and when the client rejected the proxy's CA and never sent a request. Check the client's own connection errors first, make sure `audit` is on, and run with `RUST_LOG=fnox::proxy=debug` if you need more detail.
+`injected=["GITHUB_TOKEN"]` means the placeholder was substituted. `injected=[]` with a `proxied request` line means the request arrived but didn't carry a placeholder in the allowed header or parameter. A `refused request` line gives the `reason`: for example, the destination has no rule, the route or method doesn't match, the address isn't public, or the client didn't send the proxy password (a client that strips credentials from proxy URLs fails this way).
+
+Uninspected tunnels (`allow_domains` and permissive egress) aren't logged. A missing audit line is not proof that the client bypassed the proxy: it is also absent when `audit = false` and when the client rejected the proxy's CA and never sent a request. Check the client's own connection errors first, make sure `audit` is on, and run with `RUST_LOG=fnox::proxy=debug` if you need more detail.
 
 ## What it does not protect against
 
@@ -130,11 +154,11 @@ An isolated environment has to do three things:
 
 1. **Keep your credentials out of reach.** Don't mount `~/.config/fnox`, your age keys, or provider credentials such as `~/.aws`, `~/.config/op`, or the keychain. Don't install the `fnox` binary inside it, so the agent can't run `fnox get`.
 2. **Block direct network access.** Without this, a client that ignores the proxy variables can connect straight to the internet.
-3. **Leave a route to the proxy.** The proxy listens on `127.0.0.1` and accepts only loopback clients, so the isolated process must share the host's loopback interface or reach it through a forwarder you run on the host. It also needs read access to the CA file named by `SSL_CERT_FILE`.
+3. **Leave a route to the proxy.** The proxy listens on `127.0.0.1` and accepts only loopback clients, so the isolated process must share the host's loopback interface or reach it through a forwarder you run on the host. It also needs read access to the CA file named by `SSL_CERT_FILE`. Sharing loopback doesn't expose your other local services through the proxy: it refuses loopback and private destinations unless `allow_private` lists them.
 
 The environment variables set by `fnox proxy run` have to cross the boundary too. With Docker, for example, forward them by name (`-e HTTPS_PROXY -e SSL_CERT_FILE`) and mount the CA file read-only at the same path. fnox doesn't ship an isolation wrapper, so verify your setup with the audit-line check above, and confirm that a request made without the proxy fails.
 
-With `audit = true` (the default), fnox logs each request's method, domain, path, and which secret was injected. It never logs headers, bodies, or values.
+With `audit = true` (the default), fnox logs each request's method, domain, path, and which secret was injected, and each refused request with its reason. It never logs headers, bodies, or values.
 
 ## See also
 

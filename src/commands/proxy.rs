@@ -1,7 +1,7 @@
 use crate::commands::Cli;
 use crate::config::{Config, ProxyConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
-use crate::proxy::{ProxyPlan, RunningProxy};
+use crate::proxy::{ProxyListener, ProxyPlan, RunningProxy};
 use indexmap::IndexMap;
 use std::process::Stdio;
 
@@ -144,7 +144,8 @@ enum ProxySubcommand {
 /// providers need, starts the proxy on a local port, and runs COMMAND with:
 ///
 ///  - each rule's variable set to a placeholder instead of the real value
-///  - `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` pointing at the proxy
+///  - `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` pointing at the proxy, with
+///    a per-session password that other local processes don't have
 ///  - CA variables such as `SSL_CERT_FILE` pointing at the proxy's certificate
 ///  - every configured secret and common cloud credential variables removed
 ///
@@ -186,6 +187,12 @@ fn show_rules(proxy: &ProxyConfig) -> Result<()> {
     crate::proxy::validate_config(proxy)?;
     println!("egress: {:?}", proxy.egress);
     println!("audit: {}", proxy.audit);
+    if !proxy.allow_domains.is_empty() {
+        println!("allow_domains: {}", proxy.allow_domains.join(","));
+    }
+    if !proxy.allow_private.is_empty() {
+        println!("allow_private: {}", proxy.allow_private.join(","));
+    }
     for rule in &proxy.rules {
         let methods = if rule.methods.is_empty() {
             "*".to_string()
@@ -278,6 +285,8 @@ impl ProxyRunCommand {
             .as_ref()
             .ok_or_else(|| FnoxError::Config("No [proxy] configuration found".to_string()))?;
         crate::proxy::validate_config(proxy_config)?;
+        // Before any secret is resolved into this process's memory.
+        crate::proxy::deny_inspection();
         let profile = Config::get_profiles(&cli.profile);
         let all_secrets = config.get_secrets(&profile)?;
         let requested = collect_requested_secrets(&config, &profile, proxy_config, &all_secrets)?;
@@ -304,8 +313,10 @@ impl ProxyRunCommand {
 
         let plan = ProxyPlan::new(proxy_config, &values)?;
         let child_env = plan.child_env.clone();
-        let running = RunningProxy::start(plan).await?;
-        let proxy_url = format!("http://{}", running.address);
+        let running = RunningProxy::start(plan, ProxyListener::Loopback).await?;
+        let proxy_url = running
+            .proxy_url()
+            .expect("a loopback proxy has a proxy URL");
         let ca_path = running.ca_path().to_string_lossy().to_string();
 
         tracing::warn!(

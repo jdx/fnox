@@ -13,7 +13,8 @@ Run a command with placeholder credentials behind the proxy
 Resolves the secrets that `[[proxy.rules]]` names, plus any secrets their providers need, starts the proxy on a local port, and runs COMMAND with:
 
 - each rule's variable set to a placeholder instead of the real value
-- `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` pointing at the proxy
+- `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` pointing at the proxy, with
+  a per-session password that other local processes don't have
 - CA variables such as `SSL_CERT_FILE` pointing at the proxy's certificate
 - every configured secret and common cloud credential variables removed
 
