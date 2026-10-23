@@ -1366,11 +1366,7 @@ impl Config {
                 .and_then(|p| p.get(profile))
                 .and_then(|p| p.get("secrets"))
         };
-        Ok(secrets
-            .and_then(|t| t.get(secret_name))
-            .is_some_and(|item| {
-                item.is_str() || item.get("value").is_some() || item.get("default").is_some()
-            }))
+        Ok(secrets.and_then(|t| t.get(secret_name)).is_some())
     }
 
     /// Save a single secret update back to its source file
