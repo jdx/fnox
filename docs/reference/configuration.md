@@ -404,19 +404,25 @@ secret = "GITHUB_TOKEN"
 domain = "api.github.com"
 methods = ["GET", "POST"]
 paths = ["/repos/example/**"]
+
+[[proxy.rules]]
+secret = "MAPS_KEY"
+domain = "*.maps.example.com"
+query = "key"
 ```
 
-| Field                 | Type                       | Default           | Description                                                             |
-| --------------------- | -------------------------- | ----------------- | ----------------------------------------------------------------------- |
-| `egress`              | `"strict"`, `"permissive"` | `"strict"`        | Reject destinations without a rule, or tunnel them without credentials. |
-| `audit`               | boolean                    | `true`            | Log request metadata. Headers, bodies, and values are never logged.     |
-| `rules[].secret`      | string                     | required          | Secret to inject, from the active profile.                              |
-| `rules[].domain`      | string                     | required          | Exact TLS server name the secret may be sent to.                        |
-| `rules[].env`         | string                     | `rules[].secret`  | Variable that holds the placeholder in the command's environment.       |
-| `rules[].header`      | string                     | `"authorization"` | Header, case-insensitive, in which the placeholder is replaced.         |
-| `rules[].methods`     | array of strings           | every method      | Allowed HTTP methods.                                                   |
-| `rules[].paths`       | array of globs             | every path        | Allowed URL paths.                                                      |
-| `rules[].placeholder` | string                     | generated         | Placeholder value given to the command.                                 |
+| Field                 | Type                       | Default           | Description                                                                                           |
+| --------------------- | -------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------- |
+| `egress`              | `"strict"`, `"permissive"` | `"strict"`        | Reject destinations without a rule, or tunnel them without credentials.                               |
+| `audit`               | boolean                    | `true`            | Log request metadata. Headers, bodies, and values are never logged.                                   |
+| `rules[].secret`      | string                     | required          | Secret to inject, from the active profile.                                                            |
+| `rules[].domain`      | string                     | required          | TLS server name the secret may be sent to. A leading `*.` matches one subdomain label.                |
+| `rules[].env`         | string                     | `rules[].secret`  | Variable that holds the placeholder in the command's environment.                                     |
+| `rules[].header`      | string                     | `"authorization"` | Header, case-insensitive, in which the placeholder is replaced. Not allowed with `query`.             |
+| `rules[].query`       | string                     | none              | Query parameter in which the placeholder is replaced, instead of a header. Not allowed with `header`. |
+| `rules[].methods`     | array of strings           | every method      | Allowed HTTP methods.                                                                                 |
+| `rules[].paths`       | array of globs             | every path        | Allowed URL paths.                                                                                    |
+| `rules[].placeholder` | string                     | generated         | Placeholder value given to the command.                                                               |
 
 A later config file that sets `[proxy]` replaces the whole table, so it must restate every rule it allows. See [credential proxy](/guide/proxy).
 

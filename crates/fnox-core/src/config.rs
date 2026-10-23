@@ -494,16 +494,23 @@ pub struct ProxyRule {
     /// Secret name from the active fnox profile.
     pub secret: String,
 
-    /// Exact TLS server name to which the secret may be sent.
+    /// TLS server name to which the secret may be sent. A leading `*.` matches
+    /// exactly one subdomain label, such as `*.example.com`.
     pub domain: String,
 
     /// Environment variable exposed to the child. Defaults to `secret`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub env: Option<String>,
 
-    /// Case-insensitive HTTP header in which placeholder substitution is allowed.
-    #[serde(default = "default_proxy_header")]
-    pub header: String,
+    /// Case-insensitive HTTP header in which placeholder substitution is
+    /// allowed. Defaults to `authorization` unless `query` is set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header: Option<String>,
+
+    /// Query parameter in which placeholder substitution is allowed, instead
+    /// of a header. Mutually exclusive with `header`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
 
     /// Allowed HTTP methods. An empty list allows every method.
     #[serde(default)]
@@ -516,10 +523,6 @@ pub struct ProxyRule {
     /// Placeholder passed to the child. A unique value is generated when omitted.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placeholder: Option<String>,
-}
-
-fn default_proxy_header() -> String {
-    "authorization".to_string()
 }
 
 fn default_true() -> bool {
@@ -3381,7 +3384,8 @@ inherits = []
             secret: secret.into(),
             domain: domain.into(),
             env: None,
-            header: default_proxy_header(),
+            header: None,
+            query: None,
             methods: Vec::new(),
             paths: Vec::new(),
             placeholder: None,

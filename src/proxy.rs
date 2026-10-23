@@ -1,4 +1,4 @@
-use crate::config::{ProxyConfig, ProxyEgress};
+use crate::config::{ProxyConfig, ProxyEgress, ProxyRule};
 use crate::error::{FnoxError, Result};
 use base64::Engine;
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
@@ -18,16 +18,60 @@ use tokio_rustls::TlsAcceptor;
 
 const MAX_HEADER_BYTES: usize = 64 * 1024;
 const MAX_BODY_BYTES: usize = 10 * 1024 * 1024;
+const DEFAULT_HEADER: &str = "authorization";
 
 fn proxy_error(message: impl Into<String>) -> FnoxError {
     FnoxError::Config(format!("proxy: {}", message.into()))
+}
+
+/// Where in a request a rule allows its placeholder to be replaced.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Target {
+    /// Lowercased header name.
+    Header(String),
+    /// Decoded, case-sensitive query parameter name.
+    Query(String),
+}
+
+impl Target {
+    fn for_rule(rule: &ProxyRule) -> Self {
+        match &rule.query {
+            Some(name) => Self::Query(name.clone()),
+            None => Self::Header(
+                rule.header
+                    .as_deref()
+                    .unwrap_or(DEFAULT_HEADER)
+                    .to_ascii_lowercase(),
+            ),
+        }
+    }
+}
+
+/// Describes where a rule substitutes its placeholder, such as `header=authorization`.
+pub fn target_label(rule: &ProxyRule) -> String {
+    match Target::for_rule(rule) {
+        Target::Header(name) => format!("header={name}"),
+        Target::Query(name) => format!("query={name}"),
+    }
+}
+
+/// Whether a rule's `domain` pattern covers a CONNECT target. A leading `*.`
+/// matches exactly one subdomain label, never the apex or deeper names.
+fn domain_matches(pattern: &str, domain: &str) -> bool {
+    match pattern.strip_prefix("*.") {
+        Some(suffix) => domain
+            .strip_suffix(suffix)
+            .and_then(|label| label.strip_suffix('.'))
+            .is_some_and(|label| !label.is_empty() && !label.contains('.')),
+        None => pattern == domain,
+    }
 }
 
 #[derive(Debug)]
 struct PreparedRule {
     secret: String,
     domain: String,
-    header: String,
+    target: Target,
     methods: HashSet<String>,
     paths: Option<GlobSet>,
     placeholder: String,
@@ -61,20 +105,23 @@ struct Redaction {
 
 impl ProxyPolicy {
     fn has_domain(&self, domain: &str) -> bool {
-        self.rules.iter().any(|rule| rule.domain == domain)
+        self.rules
+            .iter()
+            .any(|rule| domain_matches(&rule.domain, domain))
     }
 
     fn authorize(
         &self,
         domain: &str,
         method: &str,
-        path: &str,
+        url: &mut reqwest::Url,
         headers: &mut [(String, String)],
     ) -> Result<Vec<String>> {
+        let path = url.path().to_string();
         let domain_rules: Vec<_> = self
             .rules
             .iter()
-            .filter(|rule| rule.domain == domain)
+            .filter(|rule| domain_matches(&rule.domain, domain))
             .collect();
         if domain_rules.is_empty() {
             return Err(proxy_error(format!(
@@ -84,7 +131,7 @@ impl ProxyPolicy {
 
         if !domain_rules
             .iter()
-            .any(|rule| rule.route_matches(method, path))
+            .any(|rule| rule.route_matches(method, &path))
         {
             return Err(proxy_error(format!(
                 "{method} {domain}{path} does not match an allowed route"
@@ -98,10 +145,14 @@ impl ProxyPolicy {
                 continue;
             }
 
-            let occurrences: usize = headers
+            let query = QuerySegments::parse(url.query());
+            let in_headers: usize = headers
                 .iter()
                 .map(|(_, value)| value.matches(&rule.placeholder).count())
                 .sum();
+            let in_path = path.matches(&rule.placeholder).count();
+            let in_query = query.occurrences(&rule.placeholder);
+            let occurrences = in_headers + in_path + in_query;
             if occurrences == 0 {
                 continue;
             }
@@ -112,26 +163,104 @@ impl ProxyPolicy {
                 )));
             }
 
-            let (header_name, header_value) = headers
-                .iter_mut()
-                .find(|(_, value)| value.contains(&rule.placeholder))
-                .expect("placeholder occurrence was counted");
-            let allowed = domain_rules.iter().any(|candidate| {
-                candidate.placeholder == rule.placeholder
-                    && candidate.route_matches(method, path)
-                    && header_name.eq_ignore_ascii_case(&candidate.header)
-            });
-            if !allowed {
-                return Err(proxy_error(format!(
-                    "placeholder for '{}' appeared outside its allowed route or header",
+            let outside = || {
+                proxy_error(format!(
+                    "placeholder for '{}' appeared outside its allowed route or target",
                     rule.secret
-                )));
-            }
+                ))
+            };
+            let allows = |target: &dyn Fn(&Target) -> bool| {
+                domain_rules.iter().any(|candidate| {
+                    candidate.placeholder == rule.placeholder
+                        && candidate.route_matches(method, &path)
+                        && target(&candidate.target)
+                })
+            };
 
-            *header_value = header_value.replacen(&rule.placeholder, &rule.value, 1);
+            if in_path > 0 {
+                return Err(outside());
+            } else if in_headers > 0 {
+                let (header_name, header_value) = headers
+                    .iter_mut()
+                    .find(|(_, value)| value.contains(&rule.placeholder))
+                    .expect("placeholder occurrence was counted");
+                if !allows(
+                    &|target| matches!(target, Target::Header(name) if header_name.eq_ignore_ascii_case(name)),
+                ) {
+                    return Err(outside());
+                }
+                *header_value = header_value.replacen(&rule.placeholder, &rule.value, 1);
+            } else {
+                let name = query
+                    .param_containing(&rule.placeholder)
+                    .ok_or_else(outside)?;
+                if !allows(&|target| matches!(target, Target::Query(allowed) if *allowed == name)) {
+                    return Err(outside());
+                }
+                url.set_query(Some(&query.replaced(&rule.placeholder, &rule.value)));
+            }
             injected.push(rule.secret.clone());
         }
         Ok(injected)
+    }
+}
+
+/// A request's raw query string split on `&`, keeping the original bytes of
+/// every segment so that only the substituted one is re-encoded.
+struct QuerySegments {
+    raw: Vec<String>,
+}
+
+impl QuerySegments {
+    fn parse(query: Option<&str>) -> Self {
+        Self {
+            raw: query
+                .map(|query| query.split('&').map(str::to_string).collect())
+                .unwrap_or_default(),
+        }
+    }
+
+    fn decoded(segment: &str) -> Option<(String, String)> {
+        url::form_urlencoded::parse(segment.as_bytes())
+            .next()
+            .map(|(name, value)| (name.into_owned(), value.into_owned()))
+    }
+
+    fn occurrences(&self, placeholder: &str) -> usize {
+        self.raw
+            .iter()
+            .filter_map(|segment| Self::decoded(segment))
+            .map(|(name, value)| {
+                name.matches(placeholder).count() + value.matches(placeholder).count()
+            })
+            .sum()
+    }
+
+    /// The decoded name of the parameter whose value holds the placeholder, or
+    /// `None` when the placeholder is in a parameter name instead.
+    fn param_containing(&self, placeholder: &str) -> Option<String> {
+        self.raw
+            .iter()
+            .filter_map(|segment| Self::decoded(segment))
+            .find(|(_, value)| value.contains(placeholder))
+            .map(|(name, _)| name)
+    }
+
+    fn replaced(&self, placeholder: &str, value: &str) -> String {
+        self.raw
+            .iter()
+            .map(|segment| match Self::decoded(segment) {
+                Some((_, decoded)) if decoded.contains(placeholder) => {
+                    let name = segment.split_once('=').map_or(segment.as_str(), |(n, _)| n);
+                    let replaced = decoded.replacen(placeholder, value, 1);
+                    let encoded: String =
+                        url::form_urlencoded::byte_serialize(replaced.as_bytes()).collect();
+                    format!("{name}={encoded}")
+                }
+                _ => segment.clone(),
+            })
+            .collect::<Vec<_>>()
+            .join("&")
     }
 }
 
@@ -219,7 +348,7 @@ impl ProxyPlan {
             prepared.push(PreparedRule {
                 secret: rule.secret.clone(),
                 domain: rule.domain.to_ascii_lowercase(),
-                header: rule.header.to_ascii_lowercase(),
+                target: Target::for_rule(rule),
                 methods: rule
                     .methods
                     .iter()
@@ -250,15 +379,26 @@ impl ProxyPlan {
             }
         }
 
+        // A query value can be echoed back percent-encoded, for example in a
+        // `Location` header, so redact the encoded form of those secrets too.
         let mut seen_values = HashSet::new();
-        let mut redactions: Vec<_> = prepared
-            .iter()
-            .filter(|rule| seen_values.insert(rule.value.clone()))
-            .map(|rule| Redaction {
-                value: rule.value.as_bytes().to_vec(),
-                placeholder: rule.placeholder.as_bytes().to_vec(),
-            })
-            .collect();
+        let mut redactions = Vec::new();
+        for rule in &prepared {
+            let encoded: String =
+                url::form_urlencoded::byte_serialize(rule.value.as_bytes()).collect();
+            let variants = match rule.target {
+                Target::Query(_) if encoded != rule.value => vec![rule.value.clone(), encoded],
+                _ => vec![rule.value.clone()],
+            };
+            for value in variants {
+                if seen_values.insert(value.clone()) {
+                    redactions.push(Redaction {
+                        value: value.into_bytes(),
+                        placeholder: rule.placeholder.as_bytes().to_vec(),
+                    });
+                }
+            }
+        }
         redactions.sort_by_key(|redaction| std::cmp::Reverse(redaction.value.len()));
 
         Ok(Self {
@@ -281,29 +421,57 @@ impl ProxyPlan {
     }
 }
 
-fn validate_rule(rule: &crate::config::ProxyRule) -> Result<()> {
+fn validate_rule(rule: &ProxyRule) -> Result<()> {
     if rule.secret.trim().is_empty() {
         return Err(proxy_error("rule secret cannot be empty"));
     }
+    let invalid_domain = || {
+        proxy_error(format!(
+            "rule for '{}' has an invalid domain '{}'",
+            rule.secret, rule.domain
+        ))
+    };
     if rule.domain.trim().is_empty()
         || rule.domain.contains('/')
         || rule.domain.contains(':')
         || rule.domain.ends_with('.')
         || rule.domain.chars().any(char::is_whitespace)
     {
+        return Err(invalid_domain());
+    }
+    // `*` is only valid as a leading `*.` label, and the rest must still name a
+    // registrable-looking domain so that `*.com` cannot be written by accident.
+    let host = rule.domain.strip_prefix("*.").unwrap_or(&rule.domain);
+    let wildcard = host.len() != rule.domain.len();
+    if host.contains('*')
+        || host.starts_with('.')
+        || host.contains("..")
+        || (wildcard && !host.contains('.'))
+    {
+        return Err(invalid_domain());
+    }
+    if rule.header.is_some() && rule.query.is_some() {
         return Err(proxy_error(format!(
-            "rule for '{}' has an invalid domain",
+            "rule for '{}' sets both header and query; choose one",
             rule.secret
         )));
     }
-    if rule.header.trim().is_empty()
-        || !rule
-            .header
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+    if let Some(header) = &rule.header
+        && (header.trim().is_empty()
+            || !header
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-'))
     {
         return Err(proxy_error(format!(
             "rule for '{}' has an invalid header name",
+            rule.secret
+        )));
+    }
+    if let Some(query) = &rule.query
+        && query.is_empty()
+    {
+        return Err(proxy_error(format!(
+            "rule for '{}' has an empty query parameter name",
             rule.secret
         )));
     }
@@ -615,7 +783,7 @@ where
         write_error(stream, 403, "request path contains an ambiguous encoding").await?;
         return Ok(());
     }
-    let url = match reqwest::Url::parse(&format!("https://{domain}{}", request.target)) {
+    let mut url = match reqwest::Url::parse(&format!("https://{domain}{}", request.target)) {
         Ok(url) => url,
         Err(error) => {
             write_error(
@@ -631,9 +799,9 @@ where
         write_error(stream, 403, "request URL changed the approved destination").await?;
         return Ok(());
     }
-    let path = url.path();
+    let path = url.path().to_string();
     let mut headers = request.headers;
-    let injected = match policy.authorize(domain, &request.method, path, &mut headers) {
+    let injected = match policy.authorize(domain, &request.method, &mut url, &mut headers) {
         Ok(injected) => injected,
         Err(error) => {
             write_error(stream, 403, &error.to_string()).await?;
@@ -646,7 +814,7 @@ where
             target: "fnox::proxy",
             method = %request.method,
             domain,
-            path,
+            path = %path,
             injected = ?injected,
             "proxied request"
         );
@@ -933,12 +1101,25 @@ mod tests {
                 secret: "GITHUB_TOKEN".to_string(),
                 domain: "api.github.com".to_string(),
                 env: None,
-                header: "authorization".to_string(),
+                header: Some("authorization".to_string()),
+                query: None,
                 methods: vec!["GET".to_string()],
                 paths: vec!["/repos/example/**".to_string()],
                 placeholder: Some("ghp_placeholder".to_string()),
             }],
         }
+    }
+
+    fn authorize(
+        plan: &ProxyPlan,
+        domain: &str,
+        method: &str,
+        target: &str,
+        headers: &mut [(String, String)],
+    ) -> Result<(Vec<String>, String)> {
+        let mut url = reqwest::Url::parse(&format!("https://{domain}{target}")).unwrap();
+        let injected = plan.policy.authorize(domain, method, &mut url, headers)?;
+        Ok((injected, url.to_string()))
     }
 
     fn policy() -> ProxyPlan {
@@ -994,10 +1175,14 @@ mod tests {
             "Authorization".to_string(),
             "Bearer ghp_placeholder".to_string(),
         )];
-        let injected = plan
-            .policy
-            .authorize("api.github.com", "GET", "/repos/example/fnox", &mut headers)
-            .unwrap();
+        let (injected, _) = authorize(
+            &plan,
+            "api.github.com",
+            "GET",
+            "/repos/example/fnox",
+            &mut headers,
+        )
+        .unwrap();
         assert_eq!(injected, ["GITHUB_TOKEN"]);
         assert_eq!(headers[0].1, "Bearer real-token");
     }
@@ -1010,14 +1195,14 @@ mod tests {
             "Bearer ghp_placeholder".to_string(),
         )];
         assert!(
-            plan.policy
-                .authorize(
-                    "api.github.com",
-                    "DELETE",
-                    "/repos/example/fnox",
-                    &mut headers,
-                )
-                .is_err()
+            authorize(
+                &plan,
+                "api.github.com",
+                "DELETE",
+                "/repos/example/fnox",
+                &mut headers,
+            )
+            .is_err()
         );
     }
 
@@ -1026,9 +1211,14 @@ mod tests {
         let plan = policy();
         let mut headers = vec![("X-Leak".to_string(), "ghp_placeholder".to_string())];
         assert!(
-            plan.policy
-                .authorize("api.github.com", "GET", "/repos/example/fnox", &mut headers,)
-                .is_err()
+            authorize(
+                &plan,
+                "api.github.com",
+                "GET",
+                "/repos/example/fnox",
+                &mut headers
+            )
+            .is_err()
         );
     }
 
@@ -1047,7 +1237,8 @@ mod tests {
             secret: "SHORT_TOKEN".to_string(),
             domain: "api.github.com".to_string(),
             env: None,
-            header: "x-api-key".to_string(),
+            header: Some("x-api-key".to_string()),
+            query: None,
             methods: vec![],
             paths: vec![],
             placeholder: Some("short-placeholder".to_string()),
@@ -1091,7 +1282,8 @@ mod tests {
             secret: "GITHUB_TOKEN".to_string(),
             domain: "api.github.com".to_string(),
             env: None,
-            header: "authorization".to_string(),
+            header: Some("authorization".to_string()),
+            query: None,
             methods: vec!["GET".to_string()],
             paths: vec!["/repos/example/pulls/**".to_string()],
             placeholder: Some("ghp_placeholder".to_string()),
@@ -1108,14 +1300,14 @@ mod tests {
             "Bearer ghp_placeholder".to_string(),
         )];
 
-        plan.policy
-            .authorize(
-                "api.github.com",
-                "GET",
-                "/repos/example/pulls/1",
-                &mut headers,
-            )
-            .unwrap();
+        authorize(
+            &plan,
+            "api.github.com",
+            "GET",
+            "/repos/example/pulls/1",
+            &mut headers,
+        )
+        .unwrap();
 
         assert_eq!(headers[0].1, "Bearer real-token");
     }
@@ -1167,7 +1359,8 @@ mod tests {
             secret: "OTHER_TOKEN".to_string(),
             domain: "api.github.com".to_string(),
             env: None,
-            header: "x-api-key".to_string(),
+            header: Some("x-api-key".to_string()),
+            query: None,
             methods: vec![],
             paths: vec![],
             placeholder: Some("ghp_placeholder_suffix".to_string()),
@@ -1179,5 +1372,220 @@ mod tests {
         .into_iter()
         .collect();
         assert!(ProxyPlan::new(&config, &values).is_err());
+    }
+
+    fn plan_with(rules: Vec<ProxyRule>, value: &str) -> Result<ProxyPlan> {
+        let config = ProxyConfig {
+            egress: ProxyEgress::Strict,
+            audit: false,
+            rules,
+        };
+        ProxyPlan::new(
+            &config,
+            &[("API_KEY".to_string(), value.to_string())]
+                .into_iter()
+                .collect(),
+        )
+    }
+
+    fn query_rule(domain: &str, query: &str) -> ProxyRule {
+        ProxyRule {
+            secret: "API_KEY".to_string(),
+            domain: domain.to_string(),
+            env: None,
+            header: None,
+            query: Some(query.to_string()),
+            methods: vec![],
+            paths: vec![],
+            placeholder: Some("key_placeholder".to_string()),
+        }
+    }
+
+    #[test]
+    fn substitutes_in_named_query_parameter() {
+        let plan = plan_with(vec![query_rule("maps.example.com", "key")], "real-key").unwrap();
+        let (injected, url) = authorize(
+            &plan,
+            "maps.example.com",
+            "GET",
+            "/geocode?q=a%20b&key=key_placeholder&z=1",
+            &mut [],
+        )
+        .unwrap();
+        assert_eq!(injected, ["API_KEY"]);
+        assert_eq!(
+            url,
+            "https://maps.example.com/geocode?q=a%20b&key=real-key&z=1"
+        );
+    }
+
+    #[test]
+    fn percent_encodes_substituted_query_value() {
+        let plan = plan_with(vec![query_rule("maps.example.com", "key")], "a+b/c=d&e").unwrap();
+        let (_, url) = authorize(
+            &plan,
+            "maps.example.com",
+            "GET",
+            "/?key=key_placeholder",
+            &mut [],
+        )
+        .unwrap();
+        assert_eq!(url, "https://maps.example.com/?key=a%2Bb%2Fc%3Dd%26e");
+    }
+
+    #[test]
+    fn rejects_query_placeholder_in_other_parameter_path_or_header() {
+        let plan = plan_with(vec![query_rule("maps.example.com", "key")], "real-key").unwrap();
+        for target in [
+            "/?other=key_placeholder",
+            "/?key_placeholder=1",
+            "/key_placeholder?key=1",
+        ] {
+            assert!(
+                authorize(&plan, "maps.example.com", "GET", target, &mut []).is_err(),
+                "{target} must be refused"
+            );
+        }
+        let mut headers = vec![("Authorization".to_string(), "key_placeholder".to_string())];
+        assert!(authorize(&plan, "maps.example.com", "GET", "/", &mut headers).is_err());
+    }
+
+    #[test]
+    fn rejects_query_placeholder_repeated_or_in_both_places() {
+        let plan = plan_with(vec![query_rule("maps.example.com", "key")], "real-key").unwrap();
+        assert!(
+            authorize(
+                &plan,
+                "maps.example.com",
+                "GET",
+                "/?key=key_placeholder&key=key_placeholder",
+                &mut [],
+            )
+            .is_err()
+        );
+        let mut headers = vec![("X-Key".to_string(), "key_placeholder".to_string())];
+        assert!(
+            authorize(
+                &plan,
+                "maps.example.com",
+                "GET",
+                "/?key=key_placeholder",
+                &mut headers,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn header_rule_rejects_placeholder_in_query() {
+        let plan = policy();
+        assert!(
+            authorize(
+                &plan,
+                "api.github.com",
+                "GET",
+                "/repos/example/fnox?token=ghp_placeholder",
+                &mut [],
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn query_rule_without_placeholder_leaves_url_untouched() {
+        let plan = plan_with(vec![query_rule("maps.example.com", "key")], "real-key").unwrap();
+        let (injected, url) =
+            authorize(&plan, "maps.example.com", "GET", "/?a=1&&b", &mut []).unwrap();
+        assert!(injected.is_empty());
+        assert_eq!(url, "https://maps.example.com/?a=1&&b");
+    }
+
+    #[test]
+    fn redacts_percent_encoded_query_secret() {
+        let plan = plan_with(vec![query_rule("maps.example.com", "key")], "a b&c").unwrap();
+        let mut body = b"Location: /?key=a+b%26c and a b&c".to_vec();
+        redact_values(&mut body, &plan.policy.redactions);
+        assert_eq!(body, b"Location: /?key=key_placeholder and key_placeholder");
+    }
+
+    #[test]
+    fn wildcard_domain_matches_exactly_one_label() {
+        assert!(domain_matches("*.example.com", "a.example.com"));
+        assert!(!domain_matches("*.example.com", "example.com"));
+        assert!(!domain_matches("*.example.com", "a.b.example.com"));
+        assert!(!domain_matches("*.example.com", "evilexample.com"));
+        assert!(!domain_matches("*.example.com", ".example.com"));
+        assert!(domain_matches("api.example.com", "api.example.com"));
+        assert!(!domain_matches("api.example.com", "a.api.example.com"));
+    }
+
+    #[test]
+    fn wildcard_rule_authorizes_matching_subdomain_only() {
+        let plan = plan_with(vec![query_rule("*.example.com", "key")], "real-key").unwrap();
+        assert!(plan.policy.has_domain("maps.example.com"));
+        assert!(!plan.policy.has_domain("example.com"));
+        assert!(!plan.policy.has_domain("a.b.example.com"));
+        let (injected, _) = authorize(
+            &plan,
+            "maps.example.com",
+            "GET",
+            "/?key=key_placeholder",
+            &mut [],
+        )
+        .unwrap();
+        assert_eq!(injected, ["API_KEY"]);
+        assert!(
+            authorize(
+                &plan,
+                "example.com",
+                "GET",
+                "/?key=key_placeholder",
+                &mut []
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn validates_wildcard_domains() {
+        for good in ["*.example.com", "*.s3.amazonaws.com"] {
+            assert!(
+                plan_with(vec![query_rule(good, "key")], "v").is_ok(),
+                "{good} should be accepted"
+            );
+        }
+        for bad in [
+            "*",
+            "*.",
+            "*.com",
+            "**.example.com",
+            "a.*.example.com",
+            "*example.com",
+            "*..example.com",
+            "api.*",
+            "*.example.com.",
+        ] {
+            assert!(
+                plan_with(vec![query_rule(bad, "key")], "v").is_err(),
+                "{bad} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_rule_with_both_header_and_query() {
+        let mut rule = query_rule("api.example.com", "key");
+        rule.header = Some("x-api-key".to_string());
+        assert!(plan_with(vec![rule], "v").is_err());
+        assert!(plan_with(vec![query_rule("api.example.com", "")], "v").is_err());
+    }
+
+    #[test]
+    fn labels_rule_targets() {
+        assert_eq!(target_label(&config().rules[0]), "header=authorization");
+        assert_eq!(
+            target_label(&query_rule("api.example.com", "key")),
+            "query=key"
+        );
     }
 }
