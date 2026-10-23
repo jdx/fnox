@@ -47,7 +47,7 @@ The provider is `--provider`, else the secret's current provider, else `default_
 
   **Choices:** `error`, `warn`, `ignore`
 
-- **`--length <LENGTH>`** — Length in characters of a generated value (default: 32; ignored for uuid)
+- **`--length <LENGTH>`** — Length in characters of a generated value (default: 32; ignored for uuid; base64 cannot be 1 more than a multiple of 4)
 - **`--show`** — Print the generated value after storing it
 - **`-h --help`** — Print help
 

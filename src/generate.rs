@@ -33,6 +33,11 @@ pub fn generate(kind: GenerateKind, length: usize) -> Result<String> {
             "--length must be between 1 and {MAX_LENGTH}, got {length}"
         )));
     }
+    if kind == GenerateKind::Base64 && length % 4 == 1 {
+        return Err(FnoxError::Config(format!(
+            "--length {length} cannot be valid unpadded base64; use a length that is not 1 more than a multiple of 4"
+        )));
+    }
     Ok(match kind {
         GenerateKind::Password => {
             // 64 symbols divide 256 evenly, so masking a random byte is unbiased.
@@ -51,11 +56,10 @@ pub fn generate(kind: GenerateKind, length: usize) -> Result<String> {
             out
         }
         GenerateKind::Base64 => {
-            let mut bytes = vec![0u8; (length * 3).div_ceil(4)];
+            // length % 4 != 1, so length * 3 / 4 bytes encode to exactly `length` chars.
+            let mut bytes = vec![0u8; length * 3 / 4];
             rand::fill(&mut bytes[..]);
-            let mut out = data_encoding::BASE64URL_NOPAD.encode(&bytes);
-            out.truncate(length);
-            out
+            data_encoding::BASE64URL_NOPAD.encode(&bytes)
         }
         GenerateKind::Uuid => unreachable!(),
     })
@@ -90,6 +94,9 @@ mod tests {
             GenerateKind::Base64,
         ] {
             for len in [1, 2, 3, 4, 5, 31, 32, 33, MAX_LENGTH] {
+                if kind == GenerateKind::Base64 && len % 4 == 1 {
+                    continue;
+                }
                 assert_eq!(generate(kind, len).unwrap().len(), len, "{kind} {len}");
             }
         }
@@ -104,8 +111,22 @@ mod tests {
             h.bytes()
                 .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
         );
-        let b = generate(GenerateKind::Base64, 101).unwrap();
+        let b = generate(GenerateKind::Base64, 102).unwrap();
         assert!(b.bytes().all(|c| URL_SAFE.contains(&c)));
+    }
+
+    #[test]
+    fn base64_decodes_and_rejects_impossible_lengths() {
+        for len in [2, 3, 4, 6, 7, 8, 31, 32, 34, 43, 44, MAX_LENGTH] {
+            let v = generate(GenerateKind::Base64, len).unwrap();
+            assert!(
+                data_encoding::BASE64URL_NOPAD.decode(v.as_bytes()).is_ok(),
+                "{len}"
+            );
+        }
+        for len in [1, 5, 33] {
+            assert!(generate(GenerateKind::Base64, len).is_err(), "{len}");
+        }
     }
 
     #[test]

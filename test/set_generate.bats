@@ -61,3 +61,21 @@ teardown() {
 	assert_success
 	refute_output --partial "value:"
 }
+
+@test "set --generate refuses when fnox.local.toml shadows the target entry" {
+	run "$FNOX_BIN" set TOKEN old --provider plain
+	assert_success
+	cat >fnox.local.toml <<'EOT'
+[secrets]
+TOKEN = { provider = "plain", value = "local" }
+EOT
+	run "$FNOX_BIN" set TOKEN --generate --provider plain
+	assert_failure
+	assert_output --partial "--force"
+}
+
+@test "set --generate --dry-run --show prints the generated value" {
+	run "$FNOX_BIN" set TOKEN --generate --dry-run --show --length 60 --provider plain
+	assert_success
+	assert_output --regexp 'generated: [A-Za-z0-9_-]{60}'
+}

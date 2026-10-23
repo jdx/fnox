@@ -1338,6 +1338,45 @@ impl Config {
         Ok(())
     }
 
+    /// Whether `target` itself already holds a value or default for `secret_name`.
+    ///
+    /// Reads the file directly so entries shadowed by a more specific config
+    /// (such as `fnox.local.toml`) are still seen.
+    pub fn target_has_secret_value(
+        secret_name: &str,
+        profile: &str,
+        target: &Path,
+    ) -> Result<bool> {
+        use toml_edit::DocumentMut;
+
+        if !target.exists() {
+            return Ok(false);
+        }
+        let content = fs::read_to_string(target).map_err(|source| FnoxError::ConfigReadFailed {
+            path: target.to_path_buf(),
+            source,
+        })?;
+        let doc = content.parse::<DocumentMut>().map_err(|e| {
+            FnoxError::Config(format!(
+                "Failed to parse TOML in {}: {}",
+                target.display(),
+                e
+            ))
+        })?;
+        let secrets = if profile == "default" || is_profile_file(target) {
+            doc.get("secrets")
+        } else {
+            doc.get("profiles")
+                .and_then(|p| p.get(profile))
+                .and_then(|p| p.get("secrets"))
+        };
+        Ok(secrets
+            .and_then(|t| t.get(secret_name))
+            .is_some_and(|item| {
+                item.is_str() || item.get("value").is_some() || item.get("default").is_some()
+            }))
+    }
+
     /// Save a single secret update back to its source file
     /// Always saves to the default_target (local config file), creating a local
     /// override if the secret exists in a parent config. This aligns with the

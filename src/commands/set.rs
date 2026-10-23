@@ -149,7 +149,7 @@ pub struct SetCommand {
     #[usage(long, value_enum)]
     pub if_missing: Option<IfMissing>,
 
-    /// Length in characters of a generated value (default: 32; ignored for uuid)
+    /// Length in characters of a generated value (default: 32; ignored for uuid; base64 cannot be 1 more than a multiple of 4)
     #[usage(long, requires = "generate")]
     pub length: Option<usize>,
 
@@ -244,9 +244,7 @@ impl SetCommand {
 
         if self.generate
             && !self.force
-            && existing_secret
-                .as_ref()
-                .is_some_and(|s| s.value().is_some() || s.default.is_some())
+            && Config::target_has_secret_value(&self.key, &write_profile, &target_path)?
         {
             return Err(FnoxError::Config(format!(
                 "Secret '{}' already exists; pass --force to replace it with a generated value",
@@ -459,10 +457,7 @@ impl SetCommand {
             if let Some(provider) = secret_config.provider() {
                 println!("  provider: {}", console::style(provider).green());
             }
-            if let Some(value) = secret_config
-                .value()
-                .filter(|_| generated.is_none() || self.show)
-            {
+            if let Some(value) = secret_config.value().filter(|_| generated.is_none()) {
                 // Use character-aware truncation to avoid panicking on multi-byte UTF-8
                 let display_value = if value.chars().count() > 50 {
                     format!("{}...", value.chars().take(50).collect::<String>())
@@ -471,13 +466,16 @@ impl SetCommand {
                 };
                 println!("  value: {}", console::style(display_value).dim());
             }
+            if let Some(value) = generated.as_ref().filter(|_| self.show) {
+                println!("  generated: {}", console::style(value).dim());
+            }
             if let Some(ref desc) = secret_config.description {
                 println!("  description: {}", console::style(desc).dim());
             }
             if let Some(default) = secret_config
                 .default
                 .as_ref()
-                .filter(|_| generated.is_none() || self.show)
+                .filter(|_| generated.is_none())
             {
                 println!("  default: {}", console::style(default).dim());
             }

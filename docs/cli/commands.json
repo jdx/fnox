@@ -3579,8 +3579,8 @@
           {
             "name": "length",
             "usage": "--length <LENGTH>",
-            "help": "Length in characters of a generated value (default: 32; ignored for uuid)",
-            "help_first_line": "Length in characters of a generated value (default: 32; ignored for uuid)",
+            "help": "Length in characters of a generated value (default: 32; ignored for uuid; base64 cannot be 1 more than a multiple of 4)",
+            "help_first_line": "Length in characters of a generated value (default: 32; ignored for uuid; base64 cannot be 1 more than a multiple of 4)",
             "short": [],
             "long": ["length"],
             "hide": false,

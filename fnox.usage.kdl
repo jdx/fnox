@@ -1033,7 +1033,7 @@ Uses the OS random number generator. The value is stored through the normal prov
             }
         }
     }
-    flag --length help="Length in characters of a generated value (default: 32; ignored for uuid)" requires=--generate {
+    flag --length help="Length in characters of a generated value (default: 32; ignored for uuid; base64 cannot be 1 more than a multiple of 4)" requires=--generate {
         arg <LENGTH>
     }
     flag --show help="Print the generated value after storing it" requires=--generate
