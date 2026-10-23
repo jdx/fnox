@@ -3179,7 +3179,7 @@
             "hide": false,
             "args_override_self": true,
             "help": "Run a command with placeholder credentials behind the proxy",
-            "help_long": "Run a command with placeholder credentials behind the proxy\n\nResolves the secrets that `[[proxy.rules]]` names, plus any secrets their providers need, starts the proxy on a local port, and runs COMMAND with:\n\n - each rule's variable set to a placeholder instead of the real value\n - `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` pointing at the proxy\n - CA variables such as `SSL_CERT_FILE` pointing at the proxy's certificate\n - every configured secret and common cloud credential variables removed\n\nThe command's HTTP client must honor those proxy and CA settings. fnox exits with the command's exit status.",
+            "help_long": "Run a command with placeholder credentials behind the proxy\n\nResolves the secrets that `[[proxy.rules]]` names, plus any secrets their providers need, starts the proxy on a local port, and runs COMMAND with:\n\n - each rule's variable set to a placeholder instead of the real value\n - `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` pointing at the proxy, with\n   a per-session password that other users' processes don't have\n - CA variables such as `SSL_CERT_FILE` pointing at the proxy's certificate\n - every configured secret and common cloud credential variables removed\n\nThe command's HTTP client must honor those proxy and CA settings. fnox exits with the command's exit status.",
             "name": "run",
             "aliases": [],
             "hidden_aliases": [],

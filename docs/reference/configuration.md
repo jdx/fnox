@@ -418,6 +418,8 @@ Redaction is not a sandbox: a command can transform a value before printing it. 
 [proxy]
 egress = "strict"
 audit = true
+allow_domains = ["registry.npmjs.org"]
+allow_private = ["10.20.0.0/16"]
 
 [[proxy.rules]]
 secret = "GITHUB_TOKEN"
@@ -431,18 +433,20 @@ domain = "*.maps.example.com"
 query = "key"
 ```
 
-| Field                 | Type                       | Default           | Description                                                                                           |
-| --------------------- | -------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------- |
-| `egress`              | `"strict"`, `"permissive"` | `"strict"`        | Reject destinations without a rule, or tunnel them without credentials.                               |
-| `audit`               | boolean                    | `true`            | Log request metadata. Headers, bodies, and values are never logged.                                   |
-| `rules[].secret`      | string                     | required          | Secret to inject, from the active profile.                                                            |
-| `rules[].domain`      | string                     | required          | TLS server name the secret may be sent to. A leading `*.` matches one subdomain label.                |
-| `rules[].env`         | string                     | `rules[].secret`  | Variable that holds the placeholder in the command's environment.                                     |
-| `rules[].header`      | string                     | `"authorization"` | Header, case-insensitive, in which the placeholder is replaced. Not allowed with `query`.             |
-| `rules[].query`       | string                     | none              | Query parameter in which the placeholder is replaced, instead of a header. Not allowed with `header`. |
-| `rules[].methods`     | array of strings           | every method      | Allowed HTTP methods.                                                                                 |
-| `rules[].paths`       | array of globs             | every path        | Allowed URL paths.                                                                                    |
-| `rules[].placeholder` | string                     | generated         | Placeholder value given to the command.                                                               |
+| Field                 | Type                       | Default           | Description                                                                                                      |
+| --------------------- | -------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `egress`              | `"strict"`, `"permissive"` | `"strict"`        | Reject destinations without a rule, or tunnel them without credentials.                                          |
+| `audit`               | boolean                    | `true`            | Log proxied and refused requests. Headers, bodies, and values are never logged.                                  |
+| `allow_domains`       | array of strings           | none              | Domains tunneled without credentials, even with strict egress. Same patterns as `rules[].domain`.                |
+| `allow_private`       | array of IPs or CIDRs      | none              | Non-public networks the proxy may connect to. Loopback, link-local, and private addresses are refused otherwise. |
+| `rules[].secret`      | string                     | required          | Secret to inject, from the active profile.                                                                       |
+| `rules[].domain`      | string                     | required          | TLS server name the secret may be sent to. A leading `*.` matches one subdomain label.                           |
+| `rules[].env`         | string                     | `rules[].secret`  | Variable that holds the placeholder in the command's environment.                                                |
+| `rules[].header`      | string                     | `"authorization"` | Header, case-insensitive, in which the placeholder is replaced. Not allowed with `query`.                        |
+| `rules[].query`       | string                     | none              | Query parameter in which the placeholder is replaced, instead of a header. Not allowed with `header`.            |
+| `rules[].methods`     | array of strings           | every method      | Allowed HTTP methods.                                                                                            |
+| `rules[].paths`       | array of globs             | every path        | Allowed URL paths.                                                                                               |
+| `rules[].placeholder` | string                     | generated         | Placeholder value given to the command.                                                                          |
 
 A later config file that sets `[proxy]` replaces the whole table, so it must restate every rule it allows. See [credential proxy](/guide/proxy).
 
