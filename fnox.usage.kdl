@@ -328,7 +328,7 @@ Takes names and globs like `--only` and applies after it. A secret that a select
         long_help #"""
 Resolve only these secrets, plus the secrets they depend on; repeatable
 
-Each NAME is a secret name or a glob such as `AWS_*`; comma-separate several. Other secrets are not resolved, so their providers are never called and they cannot fail the run. `if_missing` still applies to the selected secrets. An unknown name, or a glob that matches nothing, is an error. Leases run only when NAME matches a variable they produce.
+Each NAME is a secret name or a glob such as `AWS_*`; comma-separate several. Other secrets are not resolved, so their providers are never called and they cannot fail the run. `if_missing` still applies to the selected secrets. An unknown name, or a glob that matches nothing, is an error. Leases run only when NAME matches a variable they produce; `command` leases are skipped.
 """#
         arg <NAME>
     }

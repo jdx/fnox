@@ -80,7 +80,7 @@ fnox exec --except LEGACY_API_KEY -- npm start
 - **`if_missing` still applies** to selected secrets: with `if_missing = "error"`, a selected secret that cannot be resolved fails the run.
 - **Typos are errors.** An unknown name (with close matches suggested) or an `--only` glob that matches nothing fails before anything is resolved, instead of silently running without the secret.
 - **`as_file` secrets** follow the same filter: only selected ones are written to temporary files.
-- **Leases** run only when `--only` names a variable they produce, and are skipped when `--except` names one. With only `--except`, other leases (including `command` leases) still run.
+- **Leases** run only when `--only` names a variable they produce, and are skipped when `--except` names one. With only `--except`, other leases still run. A `command` lease can read any secret, so it is skipped whenever `--only` or `--except` is used.
 - **The [daemon](/guide/daemon) cache** is per secret, so a filtered run neither reads nor hides the others: a later unfiltered run still resolves everything.
 - A variable already in your environment under an excluded secret's name is left alone.
 

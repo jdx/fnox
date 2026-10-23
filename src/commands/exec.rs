@@ -62,7 +62,7 @@ pub struct ExecCommand {
     /// several. Other secrets are not resolved, so their providers are never
     /// called and they cannot fail the run. `if_missing` still applies to the
     /// selected secrets. An unknown name, or a glob that matches nothing, is an
-    /// error. Leases run only when NAME matches a variable they produce.
+    /// error. Leases run only when NAME matches a variable they produce; `command` leases are skipped.
     #[usage(long, value_name = "NAME", delimiter = ',')]
     pub only: Vec<String>,
 

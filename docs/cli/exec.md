@@ -27,7 +27,7 @@ fnox also removes `FNOX_AGE_KEY`, `FNOX_AGE_KEY_FILE`, and the Enpass master pas
 
 - **`--only <NAME>`** — Resolve only these secrets, plus the secrets they depend on; repeatable
 
-  Each NAME is a secret name or a glob such as `AWS_*`; comma-separate several. Other secrets are not resolved, so their providers are never called and they cannot fail the run. `if_missing` still applies to the selected secrets. An unknown name, or a glob that matches nothing, is an error. Leases run only when NAME matches a variable they produce.
+  Each NAME is a secret name or a glob such as `AWS_*`; comma-separate several. Other secrets are not resolved, so their providers are never called and they cannot fail the run. `if_missing` still applies to the selected secrets. An unknown name, or a glob that matches nothing, is an error. Leases run only when NAME matches a variable they produce; `command` leases are skipped.
 
 - **`--refresh <KEY>`** — Re-fetch KEY from its provider instead of the daemon cache; repeatable
 

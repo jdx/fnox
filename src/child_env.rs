@@ -224,9 +224,11 @@ pub fn select(
 
 /// [`select`] for [`Roots::Filter`].
 ///
-/// A lease whose produced variables are not statically known (a `command`
-/// lease) cannot be matched by `--only`, so it is skipped then, and runs
-/// otherwise. A lease is skipped when `--except` names a variable it produces.
+/// A lease whose inputs are not statically known (a `command` lease) may read
+/// any secret, which would make [`resolve_set`] resolve the whole profile, so
+/// it is skipped whenever a filter is active. Other leases run when `--only`
+/// names a variable they produce (or `--only` is absent) and `--except` names
+/// none of them.
 fn select_filtered(
     secrets: &IndexMap<String, SecretConfig>,
     leases: &IndexMap<String, LeaseBackendConfig>,
@@ -264,6 +266,9 @@ fn select_filtered(
         .iter()
         .filter(|(_, lease)| {
             if scope != EnvScope::Exec {
+                return false;
+            }
+            if !lease.has_known_inputs() {
                 return false;
             }
             let vars = lease_vars(lease);
@@ -844,8 +849,9 @@ create_command = "true"
         let f = filter(&[], &["EXEC_ONLY"]);
         let sel = select(&secrets, &leases, EnvScope::Exec, Roots::Filter(&f)).unwrap();
         assert_eq!(sel.roots, ["SHELL_OK", "FILE_SECRET"]);
-        // Both leases still run: `--except` names none of their variables.
-        assert_eq!(sel.leases, ["gh", "cmd"]);
+        // The `command` lease is skipped: it may read any secret, so running
+        // it would resolve the whole profile, `--except` secrets included.
+        assert_eq!(sel.leases, ["gh"]);
     }
 
     #[test]
@@ -866,7 +872,7 @@ create_command = "true"
         let (secrets, leases) = fixture(BASE);
         let f = filter(&[], &["GH_*"]);
         let sel = select(&secrets, &leases, EnvScope::Exec, Roots::Filter(&f)).unwrap();
-        assert_eq!(sel.leases, ["cmd"]);
+        assert!(sel.leases.is_empty());
     }
 
     #[test]
