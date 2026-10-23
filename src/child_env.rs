@@ -462,6 +462,10 @@ pub async fn plan(
     roots: Roots<'_>,
     lease_label: &str,
 ) -> Result<(ChildEnv, Vec<tempfile::NamedTempFile>)> {
+    let filter = match &roots {
+        Roots::Filter(filter) => Some(*filter),
+        _ => None,
+    };
     let secrets = config.get_secrets(profile)?;
     let leases = config.get_leases(profile)?;
     let sel =
@@ -533,18 +537,21 @@ pub async fn plan(
 
     // The lease-time files stay alive for the caller: a lease credential may
     // be a path to one of them, and `fnox exec` keeps them until the child exits.
-    Ok((
-        assemble(
-            scope,
-            &secrets,
-            &leases,
-            &sel,
-            &resolved,
-            &lease_creds,
-            leases_used,
-        ),
-        _temp_files,
-    ))
+    let mut env = assemble(
+        scope,
+        &secrets,
+        &leases,
+        &sel,
+        &resolved,
+        &lease_creds,
+        leases_used,
+    );
+    // A selected lease may produce more variables than the filter names; the
+    // rest must not reach the command or overwrite inherited values.
+    if let Some(filter) = filter {
+        env.set.retain(|key, _| filter.allows(key));
+    }
+    Ok((env, _temp_files))
 }
 
 /// The document `fnox env --json` prints for `env`.
