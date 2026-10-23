@@ -37,9 +37,31 @@ Useful options:
 | `--if-missing error`   | Fail if any secret can't be resolved. See [missing secrets](/guide/missing-secrets).                                                                                                           |
 | `--refresh <KEY>`      | Re-read one secret from its provider instead of the [daemon](/guide/daemon) cache.                                                                                                             |
 | `--replace`            | Replace the fnox process with the command (Unix only). Rejected when the command would receive an `as_file` secret or the profile configures leases, since fnox must clean those up afterward. |
+| `--redact`             | Replace secret values with `[REDACTED]` in the command's piped or redirected output. See [redact output](#redact-output).                                                                      |
+| `--no-redact`          | Turn redaction off when the config or `FNOX_EXEC_REDACT` enables it.                                                                                                                           |
 | `--non-interactive`    | Never prompt or open a browser to authenticate. Use in CI.                                                                                                                                     |
 
 `fnox x` is a short alias for `fnox exec`.
+
+### Redact output
+
+Secrets that a command prints end up in CI logs and files. With `--redact`, fnox replaces each secret value in the command's stdout and stderr with `[REDACTED]`:
+
+```sh
+fnox exec --redact -- sh -c 'echo "token=$API_TOKEN"' | tee build.log
+# token=[REDACTED]
+```
+
+To make it the default, set `redact_exec = true` in `fnox.toml` or `FNOX_EXEC_REDACT=1`. `--redact` and `--no-redact` override both. It is off by default.
+
+- **Only piped output is filtered.** Each of stdout and stderr is redacted only when it is not a terminal, so interactive programs (editors, REPLs, anything checking `isatty`) run untouched. Output to your terminal is never redacted.
+- **Streaming.** Output is filtered as it is produced. A value split across reads is still caught; fnox holds back at most the longest secret's length of trailing bytes, and only when they could be the start of a secret. Memory use does not grow with output size.
+- **What counts as a secret.** Every value fnox sets in the command's environment, including `as_file` contents. When values overlap, the longest wins. Values are trimmed, and values shorter than 3 characters are skipped so ordinary output is not mangled.
+- **Exit status is unchanged**, including death by signal. `--replace` is rejected when redaction is on (by flag, config or `FNOX_EXEC_REDACT`) and output is piped, since fnox must stay running to filter; pass `--no-redact` to use it anyway. If a background process keeps the output pipe open after the command exits, fnox stops waiting once the output has been idle for two seconds. If writing the filtered output fails, fnox reports an error even when the command succeeded.
+
+::: warning Redaction is not a sandbox
+fnox matches the exact value (after trimming). A command that transforms a secret before printing it, such as base64, URL encoding, splitting it across lines, or hashing, is not caught. Treat redaction as protection against accidental leaks in logs, not against a command that is trying to exfiltrate a value.
+:::
 
 ## Choose which secrets reach a command
 

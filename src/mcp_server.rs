@@ -527,9 +527,7 @@ impl FnoxMcpServer {
     }
 }
 
-/// Minimum secret length for redaction. Secrets shorter than this are skipped
-/// to avoid false-positive redaction that corrupts output readability.
-const MIN_REDACT_LENGTH: usize = 3;
+use crate::redact::redactable;
 
 /// Replace all occurrences of secret values in `text` with `[REDACTED]`.
 ///
@@ -544,8 +542,7 @@ const MIN_REDACT_LENGTH: usize = 3;
 fn redact_secrets(text: &str, secret_values: &[(String, String)]) -> Result<String, McpError> {
     let values: Vec<&str> = secret_values
         .iter()
-        .map(|(_, v)| v.trim())
-        .filter(|v| !v.is_empty() && v.len() >= MIN_REDACT_LENGTH)
+        .filter_map(|(_, v)| redactable(v))
         .collect();
 
     if values.is_empty() {

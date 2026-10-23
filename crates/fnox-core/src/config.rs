@@ -233,6 +233,11 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_auth: Option<bool>,
 
+    /// Redact secret values from `fnox exec` output when it is piped or
+    /// redirected (default: false). Output to a terminal is never touched.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub redact_exec: Option<bool>,
+
     /// MCP server configuration
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp: Option<McpConfig>,
@@ -1135,6 +1140,11 @@ impl Config {
             merged.prompt_auth = overlay.prompt_auth;
         }
 
+        // Merge redact_exec (overlay takes precedence)
+        if overlay.redact_exec.is_some() {
+            merged.redact_exec = overlay.redact_exec;
+        }
+
         // Merge mcp (overlay takes precedence, field-by-field to avoid
         // silently re-enabling tools when overlay only sets exec_timeout_secs)
         if let Some(overlay_mcp) = overlay.mcp {
@@ -1587,6 +1597,7 @@ impl Config {
             if_missing: None,
             env: None,
             prompt_auth: None,
+            redact_exec: None,
             mcp: None,
             daemon: None,
             proxy: None,
@@ -1805,6 +1816,14 @@ impl Config {
 
         // Only prompt if enabled, not explicitly non-interactive, and we're in a TTY
         enabled && !env::is_non_interactive() && atty::is(atty::Stream::Stdin)
+    }
+
+    /// Whether `fnox exec` redacts piped output by default.
+    /// Priority: env var > config > default (false)
+    pub fn should_redact_exec(&self) -> bool {
+        (*env::FNOX_EXEC_REDACT)
+            .or(self.redact_exec)
+            .unwrap_or(false)
     }
 
     /// Get secrets for the default profile (mutable)

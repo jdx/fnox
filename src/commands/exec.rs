@@ -1,8 +1,10 @@
 use crate::child_env::{self, EnvScope, Roots};
 use crate::error::{FnoxError, Result};
+use crate::redact::Redactor;
 use crate::temp_file_secrets::create_ephemeral_secret_file;
 use crate::{commands::Cli, config::Config};
-use std::process::Command;
+use std::io::IsTerminal;
+use std::process::{Command, Stdio};
 use tempfile::NamedTempFile;
 
 /// Run a command with secrets in its environment
@@ -19,6 +21,12 @@ use tempfile::NamedTempFile;
 /// password from the inherited environment, forwards Ctrl-C and `SIGTERM` to the
 /// command, and exits with the command's exit status. Put fnox options before
 /// `--`; everything after it is the command.
+///
+/// With `--redact` (or `redact_exec = true` / `FNOX_EXEC_REDACT=1`), secret values
+/// are replaced with `[REDACTED]` in the command's stdout and stderr, but only for
+/// a stream that is piped or redirected; a terminal is left untouched so
+/// interactive programs keep working. This is not a sandbox: a command can
+/// transform a value before printing it.
 #[derive(Debug, usage_rs::Args)]
 #[usage(alias = "x", alias_hidden = "run")]
 #[usage(
@@ -38,6 +46,19 @@ use tempfile::NamedTempFile;
     after_long_help = "See also:\n- Running commands: https://fnox.jdx.dev/guide/running-commands\n- Profiles: https://fnox.jdx.dev/guide/profiles"
 )]
 pub struct ExecCommand {
+    /// Never redact output, even if the config or `FNOX_EXEC_REDACT` enables it
+    #[usage(long)]
+    pub no_redact: bool,
+
+    /// Replace secret values with `[REDACTED]` in piped or redirected output
+    ///
+    /// Applies to each of stdout and stderr only when that stream is not a
+    /// terminal. Values shorter than 3 characters are not redacted. Overrides
+    /// `redact_exec` in the config and `FNOX_EXEC_REDACT`. Not allowed with
+    /// `--replace` (use `--no-redact`).
+    #[usage(long, conflicts = "--no-redact")]
+    pub redact: bool,
+
     /// Re-fetch KEY from its provider instead of the daemon cache; repeatable
     ///
     /// The fresh value replaces the cached one. Other secrets are still served
@@ -85,8 +106,15 @@ impl ExecCommand {
         let profile_secrets = config.get_secrets(&profile)?;
         let leases = config.get_leases(&profile)?;
 
+        let redact_on = self.redact || (!self.no_redact && config.should_redact_exec());
+
         #[cfg(unix)]
         if self.replace {
+            let would_filter =
+                redact_on && !(std::io::stdout().is_terminal() && std::io::stderr().is_terminal());
+            if self.redact || would_filter {
+                return Err(FnoxError::ExecReplaceRedact);
+            }
             let file_secrets = profile_secrets
                 .iter()
                 .filter(|(_, secret)| secret.as_file && secret.env_mode().in_exec())
@@ -158,6 +186,35 @@ impl ExecCommand {
             });
         }
 
+        let redact_out = redact_on && !std::io::stdout().is_terminal();
+        let redact_err = redact_on && !std::io::stderr().is_terminal();
+        let redactor = if redact_out || redact_err {
+            let values = plan.set.values().chain(plan.files.values());
+            let skipped = plan
+                .set
+                .values()
+                .chain(plan.files.values())
+                .filter(|v| crate::redact::redactable(v).is_none())
+                .count();
+            if skipped > 0 {
+                tracing::debug!(
+                    "{skipped} secret value(s) are empty or shorter than {} characters and will not be redacted",
+                    crate::redact::MIN_REDACT_LENGTH
+                );
+            }
+            Redactor::new(values.map(String::as_str))
+        } else {
+            None
+        };
+        let redact_out = redact_out && redactor.is_some();
+        let redact_err = redact_err && redactor.is_some();
+        if redact_out {
+            cmd.stdout(Stdio::piped());
+        }
+        if redact_err {
+            cmd.stderr(Stdio::piped());
+        }
+
         let mut child = cmd.spawn().map_err(|e| FnoxError::CommandExecutionFailed {
             command: self.command.join(" "),
             source: e,
@@ -181,15 +238,73 @@ impl ExecCommand {
             }
         }
 
-        let status = child
-            .wait()
-            .map_err(|e| FnoxError::CommandExecutionFailed {
-                command: self.command.join(" "),
-                source: e,
-            })?;
+        // Filter piped output on helper threads so neither stream can stall the other.
+        // A background process that inherited the pipe can keep it open after the
+        // command exits, so once the command is gone a reader that has been idle
+        // (not reading and not delivering output) for a grace period is abandoned
+        // rather than holding fnox open. A slow downstream consumer is never cut off.
+        let (done_tx, done_rx) = std::sync::mpsc::channel::<std::io::Result<()>>();
+        let redactor = redactor.map(std::sync::Arc::new);
+        let mut activity = Vec::new();
+        if let (Some(r), Some(mut pipe)) = (redactor.clone(), child.stdout.take()) {
+            let (tx, act) = (done_tx.clone(), std::sync::Arc::new(Activity::default()));
+            activity.push(act.clone());
+            std::thread::spawn(move || {
+                let res = r.copy(
+                    ActivityIo::new(&mut pipe, &act),
+                    ActivityIo::new(std::io::stdout(), &act),
+                );
+                tx.send(drain_after_error(res, &mut pipe)).ok();
+            });
+        }
+        if let (Some(r), Some(mut pipe)) = (redactor, child.stderr.take()) {
+            let (tx, act) = (done_tx.clone(), std::sync::Arc::new(Activity::default()));
+            activity.push(act.clone());
+            std::thread::spawn(move || {
+                let res = r.copy(
+                    ActivityIo::new(&mut pipe, &act),
+                    ActivityIo::new(std::io::stderr(), &act),
+                );
+                tx.send(drain_after_error(res, &mut pipe)).ok();
+            });
+        }
+        drop(done_tx);
+        let wait_result = child.wait();
+        let mut copy_error = None;
+        let mut pending = activity.len();
+        while pending > 0 {
+            match done_rx.recv_timeout(std::time::Duration::from_secs(2)) {
+                Ok(Err(e)) if e.kind() != std::io::ErrorKind::BrokenPipe => {
+                    copy_error = Some(e);
+                    pending -= 1;
+                }
+                Ok(_) => pending -= 1,
+                Err(_) => {
+                    // Keep waiting while any unfinished reader moved data or is mid-write.
+                    let busy = activity.iter().fold(false, |busy, a| a.take_busy() || busy);
+                    if !busy {
+                        break;
+                    }
+                }
+            }
+        }
+        let status = wait_result.map_err(|e| FnoxError::CommandExecutionFailed {
+            command: self.command.join(" "),
+            source: e,
+        })?;
 
         // Temp files are cleaned up when _temp_files drops here
         drop(_temp_files);
+
+        // Lost output must not look like success.
+        if let Some(source) = copy_error
+            && status.success()
+        {
+            return Err(FnoxError::CommandExecutionFailed {
+                command: self.command.join(" "),
+                source,
+            });
+        }
 
         if !status.success() {
             // Exit silently — the child already printed its own errors.
@@ -206,6 +321,77 @@ impl ExecCommand {
 
         Ok(())
     }
+}
+
+/// Progress marker for one output reader, shared with the thread that waits on it.
+#[derive(Default)]
+struct Activity {
+    moved: std::sync::atomic::AtomicBool,
+    writing: std::sync::atomic::AtomicBool,
+}
+
+impl Activity {
+    /// Whether data moved or a write is in flight since the last call.
+    fn take_busy(&self) -> bool {
+        use std::sync::atomic::Ordering::SeqCst;
+        self.moved.swap(false, SeqCst) || self.writing.load(SeqCst)
+    }
+}
+
+/// Wraps a reader or writer and records its progress in an [`Activity`].
+struct ActivityIo<'a, T> {
+    inner: T,
+    act: &'a Activity,
+}
+
+impl<'a, T> ActivityIo<'a, T> {
+    fn new(inner: T, act: &'a Activity) -> Self {
+        Self { inner, act }
+    }
+}
+
+impl<T: std::io::Read> std::io::Read for ActivityIo<'_, T> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        self.act
+            .moved
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        Ok(n)
+    }
+}
+
+impl<T: std::io::Write> std::io::Write for ActivityIo<'_, T> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        use std::sync::atomic::Ordering::SeqCst;
+        self.act.writing.store(true, SeqCst);
+        let res = self.inner.write(buf);
+        self.act.writing.store(false, SeqCst);
+        self.act.moved.store(true, SeqCst);
+        res
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        use std::sync::atomic::Ordering::SeqCst;
+        self.act.writing.store(true, SeqCst);
+        let res = self.inner.flush();
+        self.act.writing.store(false, SeqCst);
+        res
+    }
+}
+
+/// After a failed write, keep consuming the child's output so it never blocks on a
+/// full pipe. A closed reader (`BrokenPipe`) is left alone: the child should see
+/// it, as it would with a plain shell pipe.
+fn drain_after_error(
+    res: std::io::Result<()>,
+    pipe: &mut impl std::io::Read,
+) -> std::io::Result<()> {
+    if let Err(e) = &res
+        && e.kind() != std::io::ErrorKind::BrokenPipe
+    {
+        std::io::copy(pipe, &mut std::io::sink()).ok();
+    }
+    res
 }
 
 #[cfg(unix)]
