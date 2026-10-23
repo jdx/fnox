@@ -34,8 +34,8 @@ fnox exec -- aws s3 ls
 
 - [`fnox lease cleanup`](/cli/lease/cleanup.md)
 - [`fnox lease create [FLAGS] [BACKEND_NAME]`](/cli/lease/create.md)
-- [`fnox lease list [--active] [--expired]`](/cli/lease/list.md)
-- [`fnox lease revoke <LEASE_ID>`](/cli/lease/revoke.md)
+- [`fnox lease list [FLAGS]`](/cli/lease/list.md)
+- [`fnox lease revoke [-a --all] [TARGET]`](/cli/lease/revoke.md)
 
 ## See also
 

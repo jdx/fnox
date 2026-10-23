@@ -595,7 +595,7 @@ See also:
         long_help #"""
 List leases recorded for this project
 
-Prints the ID, backend, expiry, and status (`active`, `expired`, or `revoked`) of each lease in the project's ledger. Long IDs are shortened. The ledger tracks leases fnox created; it is not an inventory of credentials at the provider.
+Prints the ID, backend, label, expiry, and status (`active`, `expired`, or `revoked`) of each lease in the project's ledger. Long IDs are shortened in the table; `fnox lease revoke` accepts the shortened form as a prefix, and `--json` prints full IDs. The ledger tracks leases fnox created; it is not an inventory of credentials at the provider.
 """#
         after_long_help #"""
 See also:
@@ -603,25 +603,31 @@ See also:
 """#
         flag --active help="Show only leases that have not expired or been revoked"
         flag --expired help="Show only expired leases"
+        flag --json help="Print leases as a JSON array with full IDs, labels, and timestamps; cached credentials are never included"
         flag "-h --help" help="Print help" action=help builtin=#true
         example "fnox lease list" header="List every recorded lease"
         example "fnox lease list --active" header="List leases that are still valid"
+        example "fnox lease list --json" header="Print full lease IDs and metadata as JSON"
     }
-    cmd revoke help="Revoke a lease by ID" {
+    cmd revoke help="Revoke leases by ID, ID prefix, or backend" {
         long_help #"""
-Revoke a lease by ID
+Revoke leases by ID, ID prefix, or backend
 
-Asks the lease backend to revoke LEASE_ID, then marks it revoked in the project's ledger. If the backend cannot revoke it, for example because its credentials only expire on their own, fnox warns and revokes only the ledger entry.
+Asks the lease backend to revoke each matching lease, then marks it revoked in the project's ledger. If the backend cannot revoke a lease, for example because its credentials only expire on their own, fnox warns and revokes only the ledger entry.
 
-LEASE_ID must be the full ID. `fnox lease list` shortens long IDs; `fnox lease create --format json` prints the full one as `lease_id`.
+TARGET is a lease ID, a unique prefix of one (as shown by `fnox lease list`), or a backend name from `[leases.<name>]`, which revokes every active lease of that backend. Use `--all` to revoke every active lease in the project. `--all` and backend names skip expired leases, which `fnox lease cleanup` handles; naming an expired lease by ID or prefix still revokes it.
 """#
         after_long_help #"""
 See also:
 - Credential leases: https://fnox.jdx.dev/guide/leases
 """#
+        flag "-a --all" help="Revoke every active lease in this project"
         flag "-h --help" help="Print help" action=help builtin=#true
-        arg <LEASE_ID> help="Full ID of the lease to revoke"
+        arg "[TARGET]" help="Lease ID, unique ID prefix, or backend name"
         example "fnox lease revoke LEASE_ID" header="Revoke a lease"
+        example "fnox lease revoke aws-1a2b3c" header="Revoke a lease by a unique ID prefix"
+        example "fnox lease revoke aws" header="Revoke every active lease of the aws backend"
+        example "fnox lease revoke --all" header="Revoke every active lease"
     }
     example "fnox lease list --active" header="List active leases"
     example "fnox exec -- aws s3 ls" header="Let fnox exec create or reuse a lease"

@@ -111,10 +111,15 @@ Some backends can use credentials already in your environment, such as an `aws s
 
 ```sh
 fnox lease list --active
+fnox lease list --json                 # full IDs, labels, and timestamps for scripts
 fnox lease create aws --duration 15m   # create one now, with a custom duration
-fnox lease revoke <lease-id>
+fnox lease revoke LEASE_ID             # a full ID or any unique prefix of it
+fnox lease revoke aws                  # every active lease of the `aws` backend
+fnox lease revoke --all                # every active lease in this project
 fnox lease cleanup                     # revoke expired leases that need it (Vault, Cloudflare)
 ```
+
+`fnox lease list` shortens long IDs with `...`; `fnox lease revoke` accepts that shortened form as a prefix. If a prefix matches more than one lease, fnox lists the matches and revokes nothing.
 
 ## How caching works {#how-caching-works}
 
