@@ -101,6 +101,59 @@ struct ProxyPolicy {
 struct Redaction {
     value: Vec<u8>,
     placeholder: Vec<u8>,
+    /// Also match the value written with percent escapes (any hex case, any
+    /// subset of bytes escaped) and `+` for a space, as a server may echo a
+    /// query secret back in a `Location` header or body.
+    lenient: bool,
+}
+
+impl Redaction {
+    /// Length of the input prefix that spells this redaction's value, if any.
+    fn match_len(&self, input: &[u8]) -> Option<usize> {
+        if !self.lenient {
+            return input.starts_with(&self.value).then_some(self.value.len());
+        }
+        let mut consumed = 0;
+        for &expected in &self.value {
+            let rest = &input[consumed..];
+            let first = *rest.first()?;
+            if first == expected || (first == b'+' && expected == b' ') {
+                consumed += 1;
+            } else if first == b'%'
+                && rest.len() >= 3
+                && decode_hex_pair(rest[1], rest[2]) == Some(expected)
+            {
+                consumed += 3;
+            } else {
+                return None;
+            }
+        }
+        Some(consumed)
+    }
+}
+
+fn decode_hex_pair(high: u8, low: u8) -> Option<u8> {
+    let digit = |byte: u8| char::from(byte).to_digit(16);
+    Some((digit(high)? * 16 + digit(low)?) as u8)
+}
+
+fn percent_decode(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%'
+            && index + 2 < bytes.len()
+            && let Some(byte) = decode_hex_pair(bytes[index + 1], bytes[index + 2])
+        {
+            decoded.push(byte);
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8_lossy(&decoded).into_owned()
 }
 
 impl ProxyPolicy {
@@ -150,7 +203,10 @@ impl ProxyPolicy {
                 .iter()
                 .map(|(_, value)| value.matches(&rule.placeholder).count())
                 .sum();
-            let in_path = path.matches(&rule.placeholder).count();
+            let in_path = path
+                .matches(&rule.placeholder)
+                .count()
+                .max(percent_decode(&path).matches(&rule.placeholder).count());
             let in_query = query.occurrences(&rule.placeholder);
             let occurrences = in_headers + in_path + in_query;
             if occurrences == 0 {
@@ -379,24 +435,19 @@ impl ProxyPlan {
             }
         }
 
-        // A query value can be echoed back percent-encoded, for example in a
-        // `Location` header, so redact the encoded form of those secrets too.
-        let mut seen_values = HashSet::new();
-        let mut redactions = Vec::new();
+        let mut redactions: Vec<Redaction> = Vec::new();
         for rule in &prepared {
-            let encoded: String =
-                url::form_urlencoded::byte_serialize(rule.value.as_bytes()).collect();
-            let variants = match rule.target {
-                Target::Query(_) if encoded != rule.value => vec![rule.value.clone(), encoded],
-                _ => vec![rule.value.clone()],
-            };
-            for value in variants {
-                if seen_values.insert(value.clone()) {
-                    redactions.push(Redaction {
-                        value: value.into_bytes(),
-                        placeholder: rule.placeholder.as_bytes().to_vec(),
-                    });
-                }
+            let lenient = matches!(rule.target, Target::Query(_));
+            match redactions
+                .iter_mut()
+                .find(|redaction| redaction.value == rule.value.as_bytes())
+            {
+                Some(existing) => existing.lenient |= lenient,
+                None => redactions.push(Redaction {
+                    value: rule.value.as_bytes().to_vec(),
+                    placeholder: rule.placeholder.as_bytes().to_vec(),
+                    lenient,
+                }),
             }
         }
         redactions.sort_by_key(|redaction| std::cmp::Reverse(redaction.value.len()));
@@ -841,7 +892,8 @@ where
     let mut response = match outbound.send().await {
         Ok(response) => response,
         Err(error) => {
-            tracing::debug!("upstream request failed: {error}");
+            // reqwest errors embed the request URL, which can carry a query secret.
+            tracing::debug!("upstream request failed: {}", error.without_url());
             write_error(stream, 502, "upstream request failed").await?;
             return Ok(());
         }
@@ -866,7 +918,7 @@ where
             Ok(Some(chunk)) => chunk,
             Ok(None) => break,
             Err(error) => {
-                tracing::debug!("failed to read upstream response: {error}");
+                tracing::debug!("failed to read upstream response: {}", error.without_url());
                 write_error(stream, 502, "failed to read upstream response").await?;
                 return Ok(());
             }
@@ -1053,12 +1105,13 @@ fn redact_bytes(input: &[u8], redactions: &[Redaction]) -> Vec<u8> {
     let mut output = Vec::with_capacity(input.len());
     let mut offset = 0;
     while offset < input.len() {
-        if let Some(redaction) = redactions
-            .iter()
-            .find(|redaction| input[offset..].starts_with(&redaction.value))
-        {
+        if let Some((redaction, length)) = redactions.iter().find_map(|redaction| {
+            redaction
+                .match_len(&input[offset..])
+                .map(|length| (redaction, length))
+        }) {
             output.extend_from_slice(&redaction.placeholder);
-            offset += redaction.value.len();
+            offset += length;
         } else {
             output.push(input[offset]);
             offset += 1;
@@ -1587,5 +1640,38 @@ mod tests {
             target_label(&query_rule("api.example.com", "key")),
             "query=key"
         );
+    }
+
+    #[test]
+    fn redacts_any_percent_encoding_of_query_secret() {
+        let plan = plan_with(vec![query_rule("maps.example.com", "key")], "a b&c/d").unwrap();
+        let mut body =
+            b"/?k=a%20b%26c%2Fd /?k=a%20b%26c/d /?k=a+b%26c%2fd /?k=%61%20b&c/d".to_vec();
+        redact_values(&mut body, &plan.policy.redactions);
+        assert_eq!(
+            String::from_utf8(body).unwrap(),
+            "/?k=key_placeholder /?k=key_placeholder /?k=key_placeholder /?k=key_placeholder"
+        );
+    }
+
+    #[test]
+    fn header_secret_redaction_stays_exact() {
+        let mut body = b"token=real%2Dtoken real-token".to_vec();
+        redact_values(&mut body, &policy().policy.redactions);
+        assert_eq!(body, b"token=real%2Dtoken ghp_placeholder");
+    }
+
+    #[test]
+    fn rejects_percent_encoded_placeholder_in_path() {
+        let plan = plan_with(vec![query_rule("maps.example.com", "key")], "real-key").unwrap();
+        for target in [
+            "/key%5Fplaceholder?key=key_placeholder",
+            "/key_placeholder?key=key_placeholder",
+        ] {
+            assert!(
+                authorize(&plan, "maps.example.com", "GET", target, &mut []).is_err(),
+                "{target} must be refused"
+            );
+        }
     }
 }

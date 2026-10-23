@@ -118,7 +118,7 @@ To check a client, run it once and read the audit line:
 fnox proxy run -- your-client https://api.example.com/
 ```
 
-`injected=["GITHUB_TOKEN"]` means the placeholder was substituted. `injected=[]` with a `proxied request` line means the request arrived but didn't carry a placeholder in the allowed header or parameter. No line at all means the client didn't use the proxy.
+`injected=["GITHUB_TOKEN"]` means the placeholder was substituted. `injected=[]` with a `proxied request` line means the request arrived but didn't carry a placeholder in the allowed header or parameter. A missing audit line is not proof that the client bypassed the proxy: the line is only written for requests that pass the rules, so it is also absent when `audit = false`, when the request was refused (the client sees a 403), and when the client rejected the proxy's CA and never sent a request. Check the client's own connection errors first, make sure `audit` is on, and run with `RUST_LOG=fnox::proxy=debug` if you need more detail.
 
 ## What it does not protect against
 
