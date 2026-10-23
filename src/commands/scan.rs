@@ -390,25 +390,14 @@ fn git<S: AsRef<std::ffi::OsStr>>(dir: &Path, args: &[S]) -> Result<Vec<u8>> {
 /// blob can be looked up even when the name is not valid UTF-8.
 struct StagedFile {
     path: Vec<u8>,
+    /// Blob id from the index; looked up by id so odd file names (such as
+    /// `1:notes.txt`, which git would read as a stage selector) cannot misresolve.
+    sha: String,
 }
 
 impl StagedFile {
     fn display(&self) -> String {
         String::from_utf8_lossy(&self.path).into_owned()
-    }
-
-    fn index_spec(&self) -> std::ffi::OsString {
-        let mut spec = b":".to_vec();
-        spec.extend_from_slice(&self.path);
-        #[cfg(unix)]
-        {
-            use std::os::unix::ffi::OsStringExt;
-            std::ffi::OsString::from_vec(spec)
-        }
-        #[cfg(not(unix))]
-        {
-            std::ffi::OsString::from(String::from_utf8_lossy(&spec).into_owned())
-        }
     }
 }
 
@@ -440,29 +429,68 @@ fn staged_files(dir: &Path) -> Result<(PathBuf, Vec<StagedFile>)> {
         if new_mode == "120000" || new_mode == "160000" {
             continue;
         }
+        let Some(sha) = meta.split_whitespace().nth(3) else {
+            continue;
+        };
         files.push(StagedFile {
             path: path.to_vec(),
+            sha: sha.to_string(),
         });
     }
     Ok((top, files))
 }
 
-/// Read a staged blob, or `None` if it is over the size limit.
-fn read_staged_blob(top: &Path, file: &StagedFile) -> Result<Option<Vec<u8>>> {
-    let spec = file.index_spec();
-    let size = git(
-        top,
-        &[
-            std::ffi::OsString::from("cat-file"),
-            "-s".into(),
-            spec.clone(),
-        ],
-    )?;
-    let size: u64 = String::from_utf8_lossy(&size).trim().parse().unwrap_or(0);
-    if size > MAX_FILE_SIZE {
-        return Ok(None);
+/// Blob sizes for all staged files in a single `git cat-file --batch-check`.
+fn staged_sizes(top: &Path, files: &[StagedFile]) -> Result<Vec<u64>> {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    if files.is_empty() {
+        return Ok(Vec::new());
     }
-    Ok(Some(git(top, &[std::ffi::OsString::from("show"), spec])?))
+    let mut child = Command::new("git")
+        .arg("-C")
+        .arg(top)
+        .args(["cat-file", "--batch-check"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|err| FnoxError::Config(format!("Failed to run git: {err}")))?;
+    let input: String = files.iter().map(|f| format!("{}\n", f.sha)).collect();
+    let mut stdin = child.stdin.take().expect("piped stdin");
+    // Write from a thread so a full stdout pipe cannot deadlock a large input.
+    let writer = std::thread::spawn(move || stdin.write_all(input.as_bytes()));
+    let output = child
+        .wait_with_output()
+        .map_err(|err| FnoxError::Config(format!("Failed to run git: {err}")))?;
+    let _ = writer.join();
+    if !output.status.success() {
+        return Err(FnoxError::Config(format!(
+            "git cat-file --batch-check failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+    // Lines: "<sha> <type> <size>"
+    let sizes: Vec<u64> = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(|line| {
+            line.split_whitespace()
+                .nth(2)
+                .and_then(|size| size.parse().ok())
+                .unwrap_or(u64::MAX)
+        })
+        .collect();
+    if sizes.len() != files.len() {
+        return Err(FnoxError::Config(
+            "git cat-file --batch-check returned an unexpected number of results".to_string(),
+        ));
+    }
+    Ok(sizes)
+}
+
+fn read_staged_blob(top: &Path, file: &StagedFile) -> Result<Vec<u8>> {
+    git(top, &["cat-file", "blob", file.sha.as_str()])
 }
 
 fn scan_staged(
@@ -473,16 +501,18 @@ fn scan_staged(
     let mut findings = Vec::new();
     let mut files_scanned = 0;
     let (top, files) = staged_files(dir)?;
+    let sizes = staged_sizes(&top, &files)?;
 
-    for file in files {
+    for (file, size) in files.into_iter().zip(sizes) {
         let path = file.display();
         if ignored_by_globs(ignore_globs, Path::new(&path), Path::new(&path)) {
             continue;
         }
-        let Some(bytes) = read_staged_blob(&top, &file)? else {
+        if size > MAX_FILE_SIZE {
             tracing::debug!("Skipping large staged file {path}");
             continue;
-        };
+        }
+        let bytes = read_staged_blob(&top, &file)?;
         if bytes.contains(&0) {
             tracing::debug!("Skipping binary staged file {path}");
             continue;
@@ -1080,7 +1110,7 @@ mod tests {
         let (top, files) = staged_files(dir).unwrap();
         let staged = files.iter().find(|f| f.path == b"staged.txt").unwrap();
         assert_eq!(
-            read_staged_blob(&top, staged).unwrap().unwrap(),
+            read_staged_blob(&top, staged).unwrap(),
             b"token=staged-secret-value\n"
         );
         assert!(files.iter().all(|f| f.path != b"unstaged.txt"));
@@ -1214,5 +1244,19 @@ mod tests {
             fs::metadata(&hook).unwrap().permissions().mode() & 0o111,
             0o111
         );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn staged_reader_handles_stage_selector_lookalike_names() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        git_ok(dir, &["init", "-q"]);
+        fs::write(dir.join("1:notes.txt"), "k=selector-name-secret\n").unwrap();
+        git_ok(dir, &["add", "-A"]);
+
+        let secrets = [secret("K", "selector-name-secret")];
+        let report = scan_staged(dir, None, Matcher::Values(&secrets)).unwrap();
+        assert_eq!(report.summary.findings, 1);
     }
 }
