@@ -698,7 +698,7 @@ mod tests {
             format!(
                 "{:?}",
                 Request::ResolveEnv(ResolveEnvRequest {
-                    protocol: 6,
+                    protocol: 7,
                     cwd: PathBuf::from("/p"),
                     config: PathBuf::from("c"),
                     profile: Vec::new(),

@@ -52,6 +52,7 @@ const guide = [
       page("Credential leases", "/guide/leases"),
       page("Credential proxy", "/guide/proxy"),
       page("MCP server", "/guide/mcp"),
+      page("Audit log", "/guide/audit"),
     ],
   },
   reference,
@@ -171,7 +172,7 @@ export function sidebar(commands) {
         "sponsors",
       ],
     ],
-    ["Caching and agents", ["daemon", "lease", "proxy", "mcp"]],
+    ["Caching and agents", ["daemon", "lease", "proxy", "mcp", "audit"]],
   ];
   const cli = [
     {

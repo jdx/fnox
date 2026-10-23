@@ -8,6 +8,7 @@
 //! The `fnox` binary depends on this crate and adds CLI-shaped bits (commands, MCP
 //! server, TUI, shell integration, hook-env machinery) on top.
 
+pub mod audit;
 pub mod auth_prompt;
 pub mod config;
 pub mod config_path;

@@ -147,6 +147,21 @@ pub fn is_valid_profile_name(name: &str) -> bool {
     fnox_client::profile::is_valid_name(name)
 }
 
+/// `FNOX_AUDIT` overrides `[audit] enabled`: `on`/`true`/`1`/`yes` or `off`/`false`/`0`/`no`.
+/// Read at call time so a daemon request's environment overlay applies.
+pub fn audit_override() -> Option<bool> {
+    match var("FNOX_AUDIT").ok()?.to_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
+    }
+}
+
+/// `FNOX_AUDIT_PATH` overrides `[audit] path`.
+pub fn audit_path_override() -> Option<PathBuf> {
+    var_path("FNOX_AUDIT_PATH")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

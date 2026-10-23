@@ -195,8 +195,8 @@ fn the_client_reads_what_the_cli_cached() {
 
     // 7. hello.
     let info = f.client(&f.env).hello().unwrap();
-    assert_eq!(info.protocol, 6);
-    assert_eq!(info.min_protocol, 6);
+    assert_eq!(info.protocol, 7);
+    assert_eq!(info.min_protocol, 7);
     assert_eq!(info.fnox_version, env!("CARGO_PKG_VERSION"));
     assert!(info.pid > 0);
 
@@ -223,7 +223,7 @@ fn an_undeclared_profile_is_an_error_not_a_hit() {
 
     let client = f.client(&f.env);
     let request = Request::ResolveEnv(ResolveEnvRequest {
-        protocol: 6,
+        protocol: 7,
         cwd: f.p.clone(),
         config: PathBuf::from("fnox.toml"),
         profile: vec!["nope".to_string()],

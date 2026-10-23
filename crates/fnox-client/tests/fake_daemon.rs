@@ -113,7 +113,7 @@ fn env_is_a_hit_and_the_request_carries_what_it_should() {
 
     let request: serde_json::Value = serde_json::from_str(&server.join().unwrap()).unwrap();
     assert_eq!(request["type"], "resolve_env");
-    assert_eq!(request["protocol"], 6);
+    assert_eq!(request["protocol"], 7);
     assert_eq!(request["scope"], "exec");
     assert_eq!(request["cwd"], "/p");
     assert_eq!(request["config"], "fnox.toml");
@@ -198,13 +198,13 @@ fn unsupported_protocol_reports_the_daemons_range() {
     let f = fixture();
     let _server = serve(
         f.listener,
-        reply(r#"{"status":"unsupported_protocol","min":6,"max":6}"#),
+        reply(r#"{"status":"unsupported_protocol","min":7,"max":7}"#),
     );
     assert!(matches!(
         ask(&f.client, None, &[]),
         EnvOutcome::VersionMismatch {
-            min: Some(6),
-            max: Some(6)
+            min: Some(7),
+            max: Some(7)
         }
     ));
 }
@@ -336,17 +336,17 @@ fn hello_reports_the_daemon() {
     let server = serve(
         f.listener,
         reply(
-            r#"{"status":"hello","protocol":6,"min_protocol":6,"fnox_version":"1.40.0","pid":123}"#,
+            r#"{"status":"hello","protocol":7,"min_protocol":7,"fnox_version":"1.40.0","pid":123}"#,
         ),
     );
     let info = f.client.hello().unwrap();
-    assert_eq!(info.protocol, 6);
-    assert_eq!(info.min_protocol, 6);
+    assert_eq!(info.protocol, 7);
+    assert_eq!(info.min_protocol, 7);
     assert_eq!(info.fnox_version, "1.40.0");
     assert_eq!(info.pid, 123);
     assert_eq!(
         server.join().unwrap().trim(),
-        r#"{"type":"hello","protocol":6}"#
+        r#"{"type":"hello","protocol":7}"#
     );
 }
 

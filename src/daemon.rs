@@ -141,6 +141,32 @@ impl DaemonState {
     }
 }
 
+/// Appends audit-log entries (names only) for secrets that resolved, when auditing is on.
+fn audit_reads(
+    config: &Config,
+    profile: &[String],
+    purpose: &str,
+    config_path: &Path,
+    secrets: &IndexMap<String, SecretConfig>,
+    resolved: &IndexMap<String, Option<String>>,
+    cached: &HashSet<String>,
+) {
+    if !fnox_core::audit::is_enabled(config) {
+        return;
+    }
+    let read: IndexMap<String, SecretConfig> = secrets
+        .iter()
+        .filter(|(key, _)| resolved.contains_key(*key))
+        .map(|(key, secret)| (key.clone(), secret.clone()))
+        .collect();
+    let read = crate::secret_resolver::with_read_dependencies(config, profile, &read, &|key| {
+        cached.contains(key)
+    });
+    fnox_core::audit::record_reads(config, profile, purpose, config_path, &read, &|key| {
+        cached.contains(key)
+    });
+}
+
 pub async fn resolve_batch(
     cli: &Cli,
     config: &Config,
@@ -178,7 +204,17 @@ pub async fn resolve_batch_with_context(
                 .map(|(key, secret)| (key.clone(), secret.clone()))
                 .collect()
         };
-        return resolve_secrets_batch(config, profile, &secrets).await;
+        let resolved = resolve_secrets_batch(config, profile, &secrets).await?;
+        audit_reads(
+            config,
+            profile,
+            purpose.as_str(),
+            &ctx.config,
+            &secrets,
+            &resolved,
+            &HashSet::new(),
+        );
+        return Ok(resolved);
     }
 
     let keys = secrets.keys().cloned().collect();
@@ -214,6 +250,7 @@ pub async fn resolve_batch_with_context(
                     .map(|(key, secret)| (key.clone(), secret.clone()))
                     .collect()
             };
+            let cached_keys = cached_values.keys().cloned().collect::<HashSet<_>>();
             let foreground_keys = keys.into_iter().collect::<HashSet<_>>();
             let foreground_secrets = secrets
                 .iter()
@@ -235,6 +272,15 @@ pub async fn resolve_batch_with_context(
                     values.insert(key.clone(), value);
                 }
             }
+            audit_reads(
+                config,
+                profile,
+                purpose.as_str(),
+                &ctx.config,
+                &secrets,
+                &values,
+                &cached_keys,
+            );
             if let Err(error) = store_foreground_values(
                 ctx,
                 config,
@@ -254,6 +300,35 @@ pub async fn resolve_batch_with_context(
             "Invalid daemon response for ResolveBatch".to_string(),
         )),
     }
+}
+
+fn audit_one(
+    config: &Config,
+    profile: &[String],
+    purpose: Purpose,
+    config_path: &Path,
+    key: &str,
+    secret_config: &SecretConfig,
+    cached: bool,
+) {
+    let secrets = [(key.to_string(), secret_config.clone())]
+        .into_iter()
+        .collect();
+    let resolved = [(key.to_string(), None)].into_iter().collect();
+    let cached = if cached {
+        HashSet::from([key.to_string()])
+    } else {
+        HashSet::new()
+    };
+    audit_reads(
+        config,
+        profile,
+        purpose.as_str(),
+        config_path,
+        &secrets,
+        &resolved,
+        &cached,
+    );
 }
 
 pub async fn resolve_one(
@@ -284,7 +359,18 @@ pub async fn resolve_one_with_context(
     purpose: Purpose,
 ) -> Result<Option<String>> {
     if !should_use_daemon(ctx, config) {
-        return crate::secret_resolver::resolve_secret(config, profile, key, secret_config).await;
+        let value =
+            crate::secret_resolver::resolve_secret(config, profile, key, secret_config).await?;
+        audit_one(
+            config,
+            profile,
+            purpose,
+            &ctx.config,
+            key,
+            secret_config,
+            false,
+        );
+        return Ok(value);
     }
 
     let one_request = ResolveOneRequest {
@@ -308,6 +394,15 @@ pub async fn resolve_one_with_context(
         } => {
             let value =
                 crate::secret_resolver::resolve_secret(config, profile, key, secret_config).await?;
+            audit_one(
+                config,
+                profile,
+                purpose,
+                &ctx.config,
+                key,
+                secret_config,
+                false,
+            );
             let values = [(key.to_string(), value.clone())].into_iter().collect();
             let batch_request = ResolveBatchRequest {
                 cwd: one_request.cwd,
@@ -1111,7 +1206,18 @@ async fn process_request(
                     epoch: Some(foreground.epoch),
                 });
             }
-            let values = resolve_with_cache(&config, &req.profile, secrets, &req, state).await?;
+            let (values, cached) =
+                resolve_with_cache_tracking(&config, &req.profile, secrets.clone(), &req, state)
+                    .await?;
+            audit_reads(
+                &config,
+                &req.profile,
+                &req.purpose,
+                &req.config,
+                &secrets,
+                &values,
+                &cached,
+            );
             Ok(Response::Resolved { values })
         }
         Request::ResolveOne(req) => {
@@ -1161,8 +1267,23 @@ async fn process_request(
                     epoch: Some(foreground.epoch),
                 });
             }
-            let values =
-                resolve_with_cache(&config, &batch_req.profile, secrets, &batch_req, state).await?;
+            let (values, cached) = resolve_with_cache_tracking(
+                &config,
+                &batch_req.profile,
+                secrets.clone(),
+                &batch_req,
+                state,
+            )
+            .await?;
+            audit_reads(
+                &config,
+                &batch_req.profile,
+                &batch_req.purpose,
+                &batch_req.config,
+                &secrets,
+                &values,
+                &cached,
+            );
             Ok(Response::Resolved { values })
         }
     }
@@ -1263,6 +1384,22 @@ async fn resolve_env_response(
     if !misses.is_empty() {
         return Ok(Response::EnvMiss { keys: misses });
     }
+
+    let read: IndexMap<String, SecretConfig> = sel
+        .roots
+        .iter()
+        .filter_map(|key| secrets.get(key).map(|s| (key.clone(), s.clone())))
+        .collect();
+    let cached: HashSet<String> = sel.roots.iter().cloned().collect();
+    audit_reads(
+        config,
+        &req.profile,
+        purpose,
+        &req.config,
+        &read,
+        &resolved,
+        &cached,
+    );
 
     let env = child_env::assemble(
         req.scope,
@@ -1400,6 +1537,7 @@ fn apply_request_settings(
 }
 
 /// Resolve cache misses while making cached dependency values available to providers.
+#[cfg(test)]
 async fn resolve_with_cache(
     config: &Config,
     profile: &[String],
@@ -1407,12 +1545,28 @@ async fn resolve_with_cache(
     req: &ResolveBatchRequest,
     state: std::sync::Arc<Mutex<DaemonState>>,
 ) -> Result<IndexMap<String, Option<String>>> {
+    Ok(
+        resolve_with_cache_tracking(config, profile, secrets, req, state)
+            .await?
+            .0,
+    )
+}
+
+/// As [`resolve_with_cache`], also returning the names served from the cache.
+async fn resolve_with_cache_tracking(
+    config: &Config,
+    profile: &[String],
+    secrets: IndexMap<String, SecretConfig>,
+    req: &ResolveBatchRequest,
+    state: std::sync::Arc<Mutex<DaemonState>>,
+) -> Result<(IndexMap<String, Option<String>>, HashSet<String>)> {
     let fingerprint = config_fingerprint(config, &req.env)?;
     let providers = config.get_providers(profile)?;
     let default_provider = cache_policy_default_provider(config, profile, &providers);
     let mut results = IndexMap::new();
     let mut misses = IndexMap::new();
     let mut miss_keys = HashMap::new();
+    let mut cached_keys = HashSet::new();
 
     {
         let state = state.lock().await;
@@ -1429,6 +1583,7 @@ async fn resolve_with_cache(
                 );
                 if let Some(Some(value)) = state.cache.get(&cache_key) {
                     results.insert(key.clone(), Some(value.clone()));
+                    cached_keys.insert(key.clone());
                     continue;
                 }
                 miss_keys.insert(key.clone(), cache_key);
@@ -1457,7 +1612,7 @@ async fn resolve_with_cache(
             ordered.insert(key.clone(), value);
         }
     }
-    Ok(ordered)
+    Ok((ordered, cached_keys))
 }
 
 fn cache_policy_default_provider<'a>(
@@ -2324,7 +2479,7 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
 
     fn env_request(scope: EnvScope, keys: Option<&[&str]>) -> ResolveEnvRequest {
         ResolveEnvRequest {
-            protocol: 6,
+            protocol: 7,
             cwd: PathBuf::from("."),
             config: PathBuf::from("fnox.toml"),
             profile: vec!["default".to_string()],
@@ -2653,7 +2808,7 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
 
     #[tokio::test]
     async fn resolve_env_checks_the_protocol_before_anything_else() {
-        for protocol in [5, 7] {
+        for protocol in [6, 8] {
             let mut req = env_request(EnvScope::Exec, None);
             req.protocol = protocol;
             // The request's cwd and config do not exist; the protocol check comes first.
@@ -2666,7 +2821,7 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
             .await
             .unwrap();
             assert!(
-                matches!(response, Response::UnsupportedProtocol { min: 6, max: 6 }),
+                matches!(response, Response::UnsupportedProtocol { min: 7, max: 7 }),
                 "{response:?}"
             );
             let response = process_request(
@@ -2678,7 +2833,7 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
             .unwrap();
             assert!(matches!(
                 response,
-                Response::UnsupportedProtocol { min: 6, max: 6 }
+                Response::UnsupportedProtocol { min: 7, max: 7 }
             ));
         }
     }
@@ -2686,7 +2841,7 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
     #[tokio::test]
     async fn hello_reports_the_protocol_range_and_pid() {
         let response = process_request(
-            Request::Hello { protocol: 6 },
+            Request::Hello { protocol: 7 },
             empty_state(),
             Arc::new(Mutex::new(())),
         )
@@ -2701,7 +2856,7 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
         else {
             panic!("expected hello");
         };
-        assert_eq!((protocol, min_protocol), (6, 6));
+        assert_eq!((protocol, min_protocol), (7, 7));
         assert_eq!(fnox_version, env!("CARGO_PKG_VERSION"));
         assert_eq!(pid, std::process::id());
     }

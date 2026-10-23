@@ -250,6 +250,10 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proxy: Option<ProxyConfig>,
 
+    /// Local access audit log (opt-in)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audit: Option<AuditConfig>,
+
     /// Track which config file each provider came from (not serialized)
     #[serde(skip)]
     pub provider_sources: HashMap<String, PathBuf>,
@@ -451,6 +455,27 @@ pub struct DaemonConfig {
     /// Idle timeout before the daemon exits, such as "8h", "30m", or "300s".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idle_timeout: Option<String>,
+}
+
+/// Local access audit log configuration
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AuditConfig {
+    /// Append one JSON line per secret read (name, command, profile, provider;
+    /// never values). Default: false. Override with `FNOX_AUDIT`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+
+    /// Log file path. Default: `audit.log` in the fnox state directory
+    /// (`~/.local/state/fnox`). Override with `FNOX_AUDIT_PATH`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<PathBuf>,
+}
+
+impl AuditConfig {
+    pub fn enabled(&self) -> bool {
+        self.enabled.unwrap_or(false)
+    }
 }
 
 /// Credential proxy configuration.
@@ -1176,6 +1201,17 @@ impl Config {
             }
         }
 
+        // Merge audit (overlay takes precedence, field-by-field)
+        if let Some(overlay_audit) = overlay.audit {
+            let base_audit = merged.audit.get_or_insert_with(AuditConfig::default);
+            if overlay_audit.enabled.is_some() {
+                base_audit.enabled = overlay_audit.enabled;
+            }
+            if overlay_audit.path.is_some() {
+                base_audit.path = overlay_audit.path;
+            }
+        }
+
         // Replace proxy policy as a unit. Combining rules across config layers
         // can silently broaden an agent's authority.
         if overlay.proxy.is_some() {
@@ -1601,6 +1637,7 @@ impl Config {
             mcp: None,
             daemon: None,
             proxy: None,
+            audit: None,
             provider_sources: HashMap::new(),
             secret_sources: HashMap::new(),
             default_provider_source: None,

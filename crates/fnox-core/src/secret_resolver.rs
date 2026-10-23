@@ -536,6 +536,62 @@ fn resolve_default_fallbacks(
     Ok(resolved)
 }
 
+/// `secrets` plus the other secrets that resolving them must read: `${NAME}` references
+/// in the default of a secret with no provider (so the default is its source), and
+/// secrets that supply the environment variables of a provider that will be called
+/// (such as a vault token). A secret for which `served_without_providers` is true,
+/// for example one the daemon answered from cache, adds nothing. The audit log uses it
+/// so a read names what it actually needed rather than everything it could use.
+pub fn with_read_dependencies(
+    config: &Config,
+    profile: &[String],
+    secrets: &IndexMap<String, SecretConfig>,
+    served_without_providers: &dyn Fn(&str) -> bool,
+) -> IndexMap<String, SecretConfig> {
+    let Ok(all) = config.get_secrets(profile) else {
+        return secrets.clone();
+    };
+    let providers = config.get_providers(profile).unwrap_or_default();
+    let default_provider = config.get_default_provider(profile).ok().flatten();
+    let mut out = secrets.clone();
+    let mut queue: Vec<String> = out.keys().cloned().collect();
+    while let Some(key) = queue.pop() {
+        let Some(secret) = out.get(&key) else {
+            continue;
+        };
+        if served_without_providers(&key) {
+            continue;
+        }
+        let mut deps: Vec<String> = Vec::new();
+        let provider_name = match &secret.sync {
+            Some(sync) => Some(sync.provider.as_str()),
+            None if secret.value().is_some() => secret.provider().or(default_provider.as_deref()),
+            None => None,
+        };
+        match provider_name {
+            Some(name) => {
+                if let Some(provider) = providers.get(name) {
+                    deps.extend(provider.env_dependencies().iter().map(|d| d.to_string()));
+                }
+            }
+            None => {
+                if let Some(default) = &secret.default {
+                    deps.extend(default_references(profile, &key, default));
+                }
+            }
+        }
+        for dep in deps {
+            if !out.contains_key(&dep)
+                && let Some(dep_config) = all.get(&dep)
+            {
+                out.insert(dep.clone(), dep_config.clone());
+                queue.push(dep);
+            }
+        }
+    }
+    out
+}
+
 /// Resolves a secret value using the correct priority order:
 /// 1. Provider (if specified)
 /// 2. Default value (if specified)
