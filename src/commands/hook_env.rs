@@ -113,8 +113,13 @@ impl HookEnvCommand {
         // Calculate changes from previous session using hashes
         let (added, removed) = calculate_changes(&PREV_SESSION.secret_hashes, &loaded_data.secrets);
 
-        // Display summary of changes if enabled
-        if output_mode.should_show_summary() && (!added.is_empty() || !removed.is_empty()) {
+        // Display summary of changes if enabled. PowerShell prints its own
+        // summary from `__fnox_print_changes`, so skip stderr there to avoid
+        // showing every change twice.
+        if output_mode.should_show_summary()
+            && shell.to_string() != "pwsh"
+            && (!added.is_empty() || !removed.is_empty())
+        {
             display_changes(&added, &removed, output_mode);
         }
 

@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.42.1](https://github.com/jdx/fnox/compare/v1.42.0..v1.42.1) - 2026-10-22
+
+### 🐛 Bug Fixes
+
+- **(age)** embed translations in debug builds so CI-built binaries run by [@jdx](https://github.com/jdx) in [#1019](https://github.com/jdx/fnox/pull/1019)
+- **(docs)** escape inline Tera delimiters so the docs build passes by [@jdx](https://github.com/jdx) in [#1018](https://github.com/jdx/fnox/pull/1018)
+- **(env)** keep shell hooks working after a mise upgrade by [@jdx](https://github.com/jdx) in [#1016](https://github.com/jdx/fnox/pull/1016)
+- **(env)** keep pwsh hooks working alongside starship by [@jdx](https://github.com/jdx) in [#1020](https://github.com/jdx/fnox/pull/1020)
+
+### 🛡️ Security
+
+- **(deps)** update communique, hk, mr-boxington in mise.lock by [@jdx](https://github.com/jdx) in [#1006](https://github.com/jdx/fnox/pull/1006)
+- use jdx/workflows retry action by [@jdx](https://github.com/jdx) in [#1012](https://github.com/jdx/fnox/pull/1012)
+
+### 📦️ Dependency Updates
+
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1010](https://github.com/jdx/fnox/pull/1010)
+- update github actions by [@renovate[bot]](https://github.com/renovate[bot]) in [#1008](https://github.com/jdx/fnox/pull/1008)
+- update dependency usage to latest by [@renovate[bot]](https://github.com/renovate[bot]) in [#1009](https://github.com/jdx/fnox/pull/1009)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1011](https://github.com/jdx/fnox/pull/1011)
+- update jdx/workflows action to v1.2.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1013](https://github.com/jdx/fnox/pull/1013)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1014](https://github.com/jdx/fnox/pull/1014)
+- update rust crate usage-rs to v7.1.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1017](https://github.com/jdx/fnox/pull/1017)
+
 ## [1.42.0](https://github.com/jdx/fnox/compare/v1.41.0..v1.42.0) - 2026-10-20
 
 ### 🚀 Features

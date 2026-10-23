@@ -1,7 +1,7 @@
 min_usage_version "1.3"
 name fnox
 bin fnox
-version "1.42.0"
+version "1.42.1"
 about "Load secrets from encrypted files, password managers, and cloud secret stores"
 long_about #"""
 Load secrets from encrypted files, password managers, and cloud secret stores
