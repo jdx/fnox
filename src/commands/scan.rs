@@ -597,8 +597,17 @@ fn is_posix_shell_shebang(script: &str) -> bool {
     let name = |word: &str| word.rsplit('/').next().unwrap_or(word).to_string();
     let interpreter = if name(first) == "env" {
         // `env [-S] [VAR=val ...] shell`: take the first non-option, non-assignment word.
-        match words.find(|w| !w.starts_with('-') && !w.contains('=')) {
-            Some(word) => name(word),
+        let mut found = None;
+        while let Some(word) = words.next() {
+            if matches!(word, "-u" | "--unset" | "-C" | "--chdir") {
+                words.next(); // option argument
+            } else if !word.starts_with('-') && !word.contains('=') {
+                found = Some(name(word));
+                break;
+            }
+        }
+        match found {
+            Some(word) => word,
             None => return false,
         }
     } else {
@@ -658,7 +667,9 @@ fn make_executable(_hook: &Path) -> Result<()> {
     {
         use std::os::unix::fs::PermissionsExt;
         let mode = fs::metadata(_hook)?.permissions().mode();
-        fs::set_permissions(_hook, fs::Permissions::from_mode(mode | 0o755))?;
+        // Add execute only where read is already granted: never widen access.
+        let exec = (mode & 0o444) >> 2;
+        fs::set_permissions(_hook, fs::Permissions::from_mode(mode | exec))?;
     }
     Ok(())
 }
@@ -1182,6 +1193,9 @@ mod tests {
         assert!(is_posix_shell_shebang("#!/usr/bin/env bash\n"));
         assert!(is_posix_shell_shebang("#!/usr/bin/env -S zsh -e\n"));
         assert!(!is_posix_shell_shebang("#!/usr/bin/fish\n"));
+        assert!(is_posix_shell_shebang(
+            "#!/usr/bin/env -S -u BASH_ENV bash\n"
+        ));
         assert!(!is_posix_shell_shebang("#!/bin/csh\n"));
         assert!(!is_posix_shell_shebang("#!/usr/bin/env tcsh\n"));
         assert!(!is_posix_shell_shebang("echo hi\n"));
