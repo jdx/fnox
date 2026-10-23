@@ -356,7 +356,16 @@ impl KeePassProvider {
             hint: "The entry referenced by this KeePass field reference was not found".to_string(),
             url: "https://fnox.jdx.dev/providers/keepass".to_string(),
         })?;
-        let raw = target.get(wanted_field).unwrap_or_default();
+        let raw = target
+            .get(wanted_field)
+            .ok_or_else(|| FnoxError::ProviderInvalidResponse {
+                provider: "KeePass".to_string(),
+                details: format!(
+                    "Field '{wanted_field}' not found in the entry referenced by '{{REF:{body}}}'"
+                ),
+                hint: "Check that the referenced entry has the requested field".to_string(),
+                url: "https://fnox.jdx.dev/providers/keepass".to_string(),
+            })?;
         if depth >= Self::MAX_REF_DEPTH {
             return Err(FnoxError::ProviderInvalidResponse {
                 provider: "KeePass".to_string(),
@@ -673,6 +682,13 @@ mod tests {
             KeePassProvider::resolve_refs(&db, "{REF:bogus}").unwrap(),
             "{REF:bogus}"
         );
+
+        // A referenced entry missing the wanted field is an error, not "".
+        let nf = db.root_mut().add_entry().id();
+        db.entry_mut(nf)
+            .unwrap()
+            .set_unprotected("Title", "nofield");
+        assert!(KeePassProvider::resolve_refs(&db, "{REF:P@T:nofield}").is_err());
 
         // Field searches match case-insensitive substrings.
         assert_eq!(
