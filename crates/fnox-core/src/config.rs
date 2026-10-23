@@ -754,15 +754,8 @@ impl Config {
     /// still layered underneath it — the global config is the base for
     /// every project, and `root = true` doesn't disable it either.
     fn load_explicit(path: &Path) -> Result<Self> {
-        let mut config = Self::load(path)?;
-
-        // Imports are resolved relative to the config file's directory and
-        // are overridden by the file that imports them.
         let dir = path.parent().unwrap_or_else(|| Path::new(""));
-        for import_path in &config.import.clone() {
-            let import_config = Self::load_import(import_path, dir)?;
-            config = Self::merge_configs(import_config, config)?;
-        }
+        let mut config = Self::load(path)?.with_imports(dir)?;
 
         // Nothing to layer under the global config when it *is* the
         // explicitly requested file.
@@ -776,6 +769,18 @@ impl Config {
         }
 
         Ok(config)
+    }
+
+    /// Layer this config's `import`s underneath it.
+    ///
+    /// Imports are resolved relative to `dir` (the directory of the file this
+    /// config came from) and are overridden by this config.
+    pub fn with_imports(mut self, dir: &Path) -> Result<Self> {
+        for import_path in &self.import.clone() {
+            let import_config = Self::load_import(import_path, dir)?;
+            self = Self::merge_configs(import_config, self)?;
+        }
+        Ok(self)
     }
 
     /// Load configuration from a file
@@ -1099,7 +1104,7 @@ impl Config {
     }
 
     /// Merge two configs, with second config taking precedence
-    pub fn merge_configs(base: Config, overlay: Config) -> Result<Config> {
+    fn merge_configs(base: Config, overlay: Config) -> Result<Config> {
         let mut merged = base;
 
         // Merge imports (overlay takes precedence, but keep unique paths)

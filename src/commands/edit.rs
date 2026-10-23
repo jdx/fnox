@@ -185,9 +185,13 @@ impl EditCommand {
         let modified_toml = Self::strip_temp_header(&modified_content);
         let edited_config: Config = toml_edit::de::from_str(&modified_toml)
             .map_err(|e| FnoxError::Config(format!("Invalid configuration after edit: {}", e)))?;
-        // Layer the edited file over the fully loaded config so providers defined in
-        // imported files (or parent/global configs) are still available for encryption
-        let modified_config = Config::merge_configs(config.clone(), edited_config)?;
+        // Resolve the edited file's imports so providers defined there are available
+        // for encryption, without keeping settings the user removed in the editor
+        let config_dir = std::path::absolute(&cli.config)
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+            .unwrap_or_default();
+        let modified_config = edited_config.with_imports(&config_dir)?;
 
         self.reencrypt_secrets(&modified_config, &mut modified_doc, &all_secrets)
             .await?;

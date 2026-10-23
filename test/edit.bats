@@ -637,3 +637,29 @@ EOT
 	assert_success
 	assert_output "line ONE"
 }
+
+@test "edit does not encrypt with a provider removed in the editor" {
+	recipient="$(grep 'public key:' "$AGE_KEY_FILE" | cut -d: -f2- | xargs)"
+	cat >fnox.toml <<EOT
+default_provider = "age"
+
+[providers.age]
+type = "age"
+recipients = ["$recipient"]
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+EOT
+	cat >editor.sh <<'EOT'
+#!/bin/sh
+printf '[providers.plain]\ntype = "plain"\n\n[secrets]\nNEW = { value = "hello" }\n' >"$1"
+EOT
+	chmod +x editor.sh
+	EDITOR=./editor.sh run fnox edit
+	assert_success
+	run fnox get NEW
+	assert_success
+	assert_output "hello"
+}
