@@ -969,7 +969,8 @@ fn serve<L: ProxyAccept>(
                         Ok(None) => continue,
                         Err(error) => {
                             tracing::warn!("proxy accept failed: {error}");
-                            tokio::task::yield_now().await;
+                            // Errors such as EMFILE persist; back off instead of spinning.
+                            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                             continue;
                         }
                     };
