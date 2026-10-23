@@ -1200,7 +1200,10 @@ mod tests {
         let dir = tmp.path();
         git_ok(dir, &["init", "-q"]);
         let name = std::ffi::OsStr::from_bytes(b"caf\xe9.txt");
-        fs::write(dir.join(name), "key=non-utf8-name-secret\n").unwrap();
+        // Some filesystems (APFS) reject non-UTF-8 names; nothing to test there.
+        if fs::write(dir.join(name), "key=non-utf8-name-secret\n").is_err() {
+            return;
+        }
         git_ok(dir, &["add", "-A"]);
 
         let secrets = [secret("K", "non-utf8-name-secret")];
