@@ -536,6 +536,48 @@ fn resolve_default_fallbacks(
     Ok(resolved)
 }
 
+/// `secrets` plus the other secrets that resolving them reads: `${NAME}` references in
+/// defaults, and secrets that supply a provider's environment variables (such as a
+/// vault token). The audit log uses it so a read of one secret also names these.
+pub fn with_read_dependencies(
+    config: &Config,
+    profile: &[String],
+    secrets: &IndexMap<String, SecretConfig>,
+) -> IndexMap<String, SecretConfig> {
+    let Ok(all) = config.get_secrets(profile) else {
+        return secrets.clone();
+    };
+    let providers = config.get_providers(profile).unwrap_or_default();
+    let default_provider = config.get_default_provider(profile).ok().flatten();
+    let mut out = secrets.clone();
+    let mut queue: Vec<String> = out.keys().cloned().collect();
+    while let Some(key) = queue.pop() {
+        let Some(secret) = out.get(&key) else {
+            continue;
+        };
+        let mut deps: Vec<String> = Vec::new();
+        if let Some(default) = &secret.default {
+            deps.extend(default_references(profile, &key, default));
+        }
+        let provider_name = match &secret.sync {
+            Some(sync) => Some(sync.provider.as_str()),
+            None => secret.provider().or(default_provider.as_deref()),
+        };
+        if let Some(provider) = provider_name.and_then(|name| providers.get(name)) {
+            deps.extend(provider.env_dependencies().iter().map(|d| d.to_string()));
+        }
+        for dep in deps {
+            if !out.contains_key(&dep)
+                && let Some(dep_config) = all.get(&dep)
+            {
+                out.insert(dep.clone(), dep_config.clone());
+                queue.push(dep);
+            }
+        }
+    }
+    out
+}
+
 /// Resolves a secret value using the correct priority order:
 /// 1. Provider (if specified)
 /// 2. Default value (if specified)

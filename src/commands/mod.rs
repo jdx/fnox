@@ -337,7 +337,15 @@ impl Commands {
                 .map_err(|e| FnoxError::Config(e.to_string())),
 
             // Commands that need config
-            Commands::Audit(cmd) => cmd.run(cli, self.load_config(cli)?).await,
+            // Reading the log needs only the audit settings, so a missing or
+            // unrelated config must not stop it.
+            Commands::Audit(cmd) => {
+                cmd.run(
+                    cli,
+                    Config::load_smart(&cli.config).unwrap_or_else(|_| Config::new()),
+                )
+                .await
+            }
             Commands::Check(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::CiRedact(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Doctor(cmd) => cmd.run(cli, self.load_config(cli)?).await,

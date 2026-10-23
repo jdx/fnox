@@ -86,10 +86,10 @@ pub fn record_reads(
             ts: ts.clone(),
             command: command.to_string(),
             profile: profile.to_vec(),
-            config: config
-                .secret_sources
-                .get(name)
-                .map(|p| p.as_path())
+            config: secret
+                .source_path
+                .as_deref()
+                .or_else(|| config.secret_sources.get(name).map(|p| p.as_path()))
                 .unwrap_or(config_path)
                 .display()
                 .to_string(),
@@ -132,17 +132,35 @@ pub fn append(path: &Path, entries: &[AuditEntry]) -> std::io::Result<()> {
     options.open(path)?.write_all(buf.as_bytes())
 }
 
-/// Reads entries from `path`, oldest first. Lines that are not entries are skipped.
-pub fn read(path: &Path) -> std::io::Result<Vec<AuditEntry>> {
-    let text = match std::fs::read_to_string(path) {
-        Ok(text) => text,
+/// The last `limit` entries of `path` accepted by `keep`, oldest first.
+///
+/// Streams the file, so memory stays bounded by `limit` however long the log is.
+/// Lines that are not entries are skipped; a missing file is an empty log.
+pub fn tail(
+    path: &Path,
+    limit: usize,
+    keep: impl Fn(&AuditEntry) -> bool,
+) -> std::io::Result<Vec<AuditEntry>> {
+    use std::io::BufRead;
+    let file = match std::fs::File::open(path) {
+        Ok(file) => file,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(e) => return Err(e),
     };
-    Ok(text
-        .lines()
-        .filter_map(|line| serde_json::from_str(line).ok())
-        .collect())
+    let mut recent = std::collections::VecDeque::with_capacity(limit.min(1024));
+    for line in std::io::BufReader::new(file).lines() {
+        let Ok(entry) = serde_json::from_str::<AuditEntry>(&line?) else {
+            continue;
+        };
+        if limit == 0 || !keep(&entry) {
+            continue;
+        }
+        if recent.len() == limit {
+            recent.pop_front();
+        }
+        recent.push_back(entry);
+    }
+    Ok(recent.into())
 }
 
 #[cfg(test)]
@@ -169,7 +187,7 @@ mod tests {
         append(&path, &[entry("C", "mcp")]).unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
         assert_eq!(text.lines().count(), 3);
-        let read = read(&path).unwrap();
+        let read = tail(&path, 100, |_| true).unwrap();
         assert_eq!(
             read.iter().map(|e| e.secret.as_str()).collect::<Vec<_>>(),
             ["A", "B", "C"]
@@ -188,13 +206,26 @@ mod tests {
     }
 
     #[test]
-    fn read_skips_garbage_and_missing_file_is_empty() {
+    fn tail_keeps_the_last_matches_skips_garbage_and_tolerates_a_missing_file() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("audit.log");
-        assert!(read(&path).unwrap().is_empty());
+        assert!(tail(&path, 5, |_| true).unwrap().is_empty());
         std::fs::write(&path, "not json\n").unwrap();
-        append(&path, &[entry("A", "get")]).unwrap();
-        assert_eq!(read(&path).unwrap().len(), 1);
+        append(
+            &path,
+            &[
+                entry("A", "get"),
+                entry("B", "exec"),
+                entry("C", "get"),
+                entry("D", "get"),
+            ],
+        )
+        .unwrap();
+        let last = tail(&path, 2, |e| e.command == "get").unwrap();
+        assert_eq!(
+            last.iter().map(|e| e.secret.as_str()).collect::<Vec<_>>(),
+            ["C", "D"]
+        );
     }
 
     #[test]

@@ -55,23 +55,18 @@ impl AuditCommand {
             println!("{}", path.display());
             return Ok(());
         }
-        let entries = fnox_core::audit::read(&path).map_err(|e| {
-            FnoxError::Config(format!("Failed to read audit log {}: {e}", path.display()))
-        })?;
-        let mut matched: Vec<_> = entries
-            .into_iter()
-            .filter(|e| self.secret.as_ref().is_none_or(|s| &e.secret == s))
-            .filter(|e| self.command.as_ref().is_none_or(|c| &e.command == c))
-            .filter(|e| {
-                self.provider
+        let limit = self.limit.unwrap_or(20);
+        let matched = fnox_core::audit::tail(&path, limit, |e| {
+            self.secret.as_ref().is_none_or(|s| &e.secret == s)
+                && self.command.as_ref().is_none_or(|c| &e.command == c)
+                && self
+                    .provider
                     .as_ref()
                     .is_none_or(|p| e.provider.as_ref() == Some(p))
-            })
-            .collect();
-        let limit = self.limit.unwrap_or(20);
-        if matched.len() > limit {
-            matched.drain(..matched.len() - limit);
-        }
+        })
+        .map_err(|e| {
+            FnoxError::Config(format!("Failed to read audit log {}: {e}", path.display()))
+        })?;
         if matched.is_empty() && !self.json {
             if fnox_core::audit::is_enabled(&config) {
                 eprintln!("No audit entries in {}", path.display());

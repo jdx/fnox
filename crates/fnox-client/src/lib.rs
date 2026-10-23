@@ -65,10 +65,12 @@ pub use path::{CliFlags, RuntimeEnv, SocketKey};
 /// Version 5 adds keyed clears and rejects foreground write-backs for keys cleared
 /// while they were being resolved.
 /// Version 6 adds `hello` and `resolve_env`, and length-prefixes the socket hash fields.
-pub const WIRE_VERSION: u8 = 6;
+/// Version 7 has the daemon write audit log entries for the reads it
+/// serves, so a daemon from before that cannot silently skip them.
+pub const WIRE_VERSION: u8 = 7;
 
 /// The oldest protocol this crate talks to.
-pub const MIN_PROTOCOL: u32 = 6;
+pub const MIN_PROTOCOL: u32 = 7;
 
 /// Whether fnox's daemon runs on this platform: Linux, macOS, FreeBSD, OpenBSD
 /// and Windows.

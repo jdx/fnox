@@ -94,3 +94,33 @@ TOML
 	assert_output --partial '"cached":true'
 	assert_output --partial '"cached":false'
 }
+
+@test "audit log names secrets read through default interpolation" {
+	cat >fnox.toml <<'TOML'
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+TOKEN = { provider = "plain", value = "tok" }
+URL = { default = "https://x/${TOKEN}" }
+TOML
+	export FNOX_AUDIT=on
+
+	run "$FNOX_BIN" get URL
+	assert_success
+	run "$FNOX_BIN" audit --secret TOKEN
+	assert_success
+	assert_output --partial "TOKEN"
+}
+
+@test "fnox audit works outside a project" {
+	export FNOX_AUDIT_PATH="$TEST_TEMP_DIR/elsewhere.log"
+	echo '{"ts":"2026-01-01T00:00:00.000Z","command":"get","profile":["default"],"config":"x","secret":"S","provider":null,"cached":false}' >"$FNOX_AUDIT_PATH"
+	mkdir empty && cd empty
+
+	run "$FNOX_BIN" audit
+	assert_success
+	assert_output --partial " S "
+}
