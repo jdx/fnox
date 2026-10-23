@@ -189,15 +189,23 @@ impl LeaseLedger {
 
     /// Mark a lease as revoked by ID, clearing any cached credentials
     pub fn mark_revoked(&mut self, lease_id: &str) -> bool {
-        for record in &mut self.leases {
-            if record.lease_id == lease_id {
-                record.revoked = true;
-                record.cached_credentials = None;
-                record.encryption_provider = None;
-                return true;
+        match self.leases.iter().position(|r| r.lease_id == lease_id) {
+            Some(index) => {
+                self.mark_revoked_at(index);
+                true
             }
+            None => false,
         }
-        false
+    }
+
+    /// Mark the record at `index` as revoked, clearing any cached credentials.
+    /// Lease IDs are not guaranteed unique (the command backend takes them from
+    /// its script), so bulk revocation addresses records by position.
+    pub fn mark_revoked_at(&mut self, index: usize) {
+        let record = &mut self.leases[index];
+        record.revoked = true;
+        record.cached_credentials = None;
+        record.encryption_provider = None;
     }
 
     /// Get all active (non-revoked, non-expired) leases

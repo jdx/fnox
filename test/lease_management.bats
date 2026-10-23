@@ -234,6 +234,44 @@ alpha-two"
 beta-two"
 }
 
+@test "lease revoke --all revokes every record when lease IDs are duplicated" {
+	create_config
+	# Both backends hand out the same lease ID
+	create_cred_script alpha.sh shared "2099-01-01T00:00:00Z"
+	create_cred_script beta.sh shared "2099-01-01T00:00:00Z"
+	create_lease alpha same
+	create_lease beta same
+
+	run "$FNOX_BIN" lease revoke --all
+	assert_success
+	assert_output --partial "Revoked 2 lease(s)."
+
+	run "$FNOX_BIN" lease list --json --active
+	assert_success
+	assert_output "[]"
+	run cat "$TEST_TEMP_DIR/revoked.log"
+	assert_output "shared-same
+shared-same"
+}
+
+@test "lease revoke by backend name leaves another backend's duplicate ID active" {
+	create_config
+	create_cred_script alpha.sh shared "2099-01-01T00:00:00Z"
+	create_cred_script beta.sh shared "2099-01-01T00:00:00Z"
+	create_lease alpha same
+	create_lease beta same
+
+	run "$FNOX_BIN" lease revoke beta
+	assert_success
+
+	run "$FNOX_BIN" lease list --json
+	assert_success
+	echo "$output" | jq -e '
+		(map(select(.backend == "alpha"))[0].status == "active")
+		and (map(select(.backend == "beta"))[0].status == "revoked")
+	'
+}
+
 @test "lease revoke --all with no active leases is a no-op" {
 	create_config
 

@@ -579,82 +579,103 @@ impl LeaseRevokeCommand {
         let profile = Config::get_profiles(cli.profile.as_slice());
         let leases = config.get_leases(&profile)?;
 
-        let records: Vec<LeaseRecord> = match &self.target {
-            None => ledger.active_leases().into_iter().cloned().collect(),
+        // Records are addressed by ledger position: lease IDs are not
+        // guaranteed unique, so marking by ID could revoke the wrong entry.
+        let selected: Vec<usize> = match &self.target {
+            None => Self::active_indices(&ledger, |_| true),
             Some(target) => {
                 Self::resolve_target(&ledger, target, leases.contains_key(target.as_str()))?
             }
         };
 
-        if records.is_empty() {
+        if selected.is_empty() {
             println!("No active leases to revoke.");
             return Ok(());
         }
 
         let mut revoked = 0;
-        for record in &records {
+        for &index in &selected {
+            let record = ledger.leases[index].clone();
             if record.revoked {
                 println!("Lease '{}' is already revoked.", record.lease_id);
                 continue;
             }
-            Self::revoke_record(&config, &profile, &leases, record).await;
-            ledger.mark_revoked(&record.lease_id);
+            Self::revoke_record(&config, &profile, &leases, &record).await;
+            ledger.mark_revoked_at(index);
             // Save after each lease so a later failure or interrupt doesn't
             // forget that the backend already revoked this one.
             ledger.save(&project_dir)?;
             println!("Lease '{}' revoked.", record.lease_id);
             revoked += 1;
         }
-        if records.len() > 1 {
+        if selected.len() > 1 {
             println!("Revoked {revoked} lease(s).");
         }
 
         Ok(())
     }
 
-    /// Match `target` against the ledger: an exact lease ID, then a backend
+    /// Ledger positions of active (non-revoked, non-expired) records matching `filter`.
+    fn active_indices(ledger: &LeaseLedger, filter: impl Fn(&LeaseRecord) -> bool) -> Vec<usize> {
+        let now = Utc::now();
+        ledger
+            .leases
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| !r.revoked && r.expires_at.is_none_or(|exp| exp > now) && filter(r))
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    /// Match `target` against the ledger and return the positions of the
+    /// records to revoke: every record with that exact lease ID, then a backend
     /// name (active leases only), then a unique ID prefix.
     fn resolve_target(
         ledger: &LeaseLedger,
         target: &str,
         configured_backend: bool,
-    ) -> Result<Vec<LeaseRecord>> {
-        if let Some(record) = ledger.find(target) {
-            return Ok(vec![record.clone()]);
+    ) -> Result<Vec<usize>> {
+        let with_id = |id: &str| -> Vec<usize> {
+            ledger
+                .leases
+                .iter()
+                .enumerate()
+                .filter(|(_, r)| r.lease_id == id)
+                .map(|(i, _)| i)
+                .collect()
+        };
+
+        let exact = with_id(target);
+        if !exact.is_empty() {
+            return Ok(exact);
         }
 
         let known_backend =
             configured_backend || ledger.leases.iter().any(|r| r.backend_name == target);
         if known_backend {
-            return Ok(ledger
-                .active_leases()
-                .into_iter()
-                .filter(|r| r.backend_name == target)
-                .cloned()
-                .collect());
+            return Ok(Self::active_indices(ledger, |r| r.backend_name == target));
         }
 
         // `lease list` shortens IDs with a trailing "...", so accept that form.
         let prefix = target.trim_end_matches("...");
-        let matches: Vec<&LeaseRecord> = if prefix.is_empty() {
-            Vec::new()
-        } else {
-            ledger
-                .leases
-                .iter()
-                .filter(|r| r.lease_id.starts_with(prefix))
-                .collect()
-        };
-        match matches.as_slice() {
+        let mut ids: Vec<&str> = Vec::new();
+        if !prefix.is_empty() {
+            for r in &ledger.leases {
+                if r.lease_id.starts_with(prefix) && !ids.contains(&r.lease_id.as_str()) {
+                    ids.push(&r.lease_id);
+                }
+            }
+        }
+        match ids.as_slice() {
             [] => Err(FnoxError::Config(format!(
                 "Lease '{target}' not found. Use a lease ID or unique prefix from `fnox lease list`, or a backend name."
             ))),
-            [record] => Ok(vec![(*record).clone()]),
+            [id] => Ok(with_id(id)),
             many => Err(FnoxError::Config(format!(
                 "'{target}' matches {} leases; use a longer prefix or the full ID:\n{}",
                 many.len(),
                 many.iter()
-                    .map(|r| format!("  {}", r.lease_id))
+                    .map(|id| format!("  {id}"))
                     .collect::<Vec<_>>()
                     .join("\n")
             ))),
