@@ -100,9 +100,10 @@ struct ProxyPolicy {
     rules: Vec<PreparedRule>,
     allow_domains: Vec<String>,
     destinations: Arc<DestinationPolicy>,
-    /// Password clients must send in `Proxy-Authorization`. Without it, any
-    /// local process, including other users' on a shared host, could have
-    /// credentials injected into its requests.
+    /// Password clients must send in `Proxy-Authorization`. Without it, other
+    /// users' processes on a shared host could have credentials injected into
+    /// their requests. It is not hidden from processes of the same user, which
+    /// can read it from the child's environment.
     token: String,
     redactions: Vec<Redaction>,
     client: reqwest::Client,
@@ -130,7 +131,9 @@ static NON_PUBLIC_NETWORKS: LazyLock<Vec<IpNet>> = LazyLock::new(|| {
         "::/96",
         "64:ff9b:1::/48",
         "100::/64",
+        "2001:2::/48",
         "2001:db8::/32",
+        "3fff::/20",
         "fc00::/7",
         "fe80::/10",
         "fec0::/10",
@@ -2232,6 +2235,8 @@ mod tests {
             "::ffff:169.254.169.254",
             "64:ff9b::a9fe:a9fe",
             "2002:7f00:1::1",
+            "2001:2::1",
+            "3fff::1",
         ] {
             assert!(
                 !is_public(address.parse().unwrap()),

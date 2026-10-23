@@ -14,7 +14,7 @@ Resolves the secrets that `[[proxy.rules]]` names, plus any secrets their provid
 
 - each rule's variable set to a placeholder instead of the real value
 - `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` pointing at the proxy, with
-  a per-session password that other local processes don't have
+  a per-session password that other users' processes don't have
 - CA variables such as `SSL_CERT_FILE` pointing at the proxy's certificate
 - every configured secret and common cloud credential variables removed
 

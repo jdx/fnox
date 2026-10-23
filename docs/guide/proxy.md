@@ -83,7 +83,7 @@ fnox proxy rules
 5. If a response echoes a real secret back, fnox replaces it with the placeholder.
 6. When the command exits, fnox stops the proxy and deletes the CA file. The CA's private key never leaves fnox's memory, and real values go only to the matched service, over TLS, never to the child.
 
-The password stops other local programs, including other users' on a shared machine, from using the proxy to send your credentials. Clients read it from `HTTPS_PROXY` automatically. On Linux, fnox also marks itself non-dumpable, so the command can't read fnox's memory or environment through `/proc`. On macOS, it refuses debugger attachment.
+The password stops other users' programs on a shared machine from using the proxy to send your credentials. Clients read it from `HTTPS_PROXY` automatically. It doesn't stop programs running as you: they can read the password from the command's environment, as they can read your fnox config (see [what it does not protect against](#what-it-does-not-protect-against)). On Linux, fnox also marks itself non-dumpable, so the command can't read fnox's memory or environment through `/proc`. On macOS, it refuses debugger attachment.
 
 ## Egress
 
