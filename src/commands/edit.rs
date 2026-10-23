@@ -192,9 +192,19 @@ impl EditCommand {
             .and_then(|p| p.parent().map(|d| d.to_path_buf()))
             .unwrap_or_default();
         let mut modified_config = edited_config.with_imports(&config_dir)?;
-        // Providers that only the global or parent configs define are still needed to
-        // re-encrypt existing secrets; settings the edited file removed are not restored
-        Self::add_inherited_providers(&mut modified_config, &config, &doc);
+        // Providers that only the global, parent or local override layers define are
+        // still needed to re-encrypt existing secrets. Anything sourced from the
+        // edited file or its original imports is not restored, so removals stick.
+        let mut own_files = vec![std::path::absolute(&cli.config).unwrap_or_default()];
+        if let Some(imports) = doc.get("import").and_then(|i| i.as_array()) {
+            own_files.extend(
+                imports
+                    .iter()
+                    .filter_map(|i| i.as_str())
+                    .map(|i| crate::config_path::resolve_relative_to_dir(i, Some(&config_dir))),
+            );
+        }
+        modified_config.inherit_outer_layers(&config, &own_files);
 
         self.reencrypt_secrets(&modified_config, &mut modified_doc, &all_secrets)
             .await?;
@@ -561,39 +571,6 @@ impl EditCommand {
         }
 
         Ok(())
-    }
-
-    /// Copy providers that come from outside the file being edited (global and
-    /// parent layers) from the fully loaded config. Providers the original file
-    /// defined are skipped, so deleting one in the editor sticks.
-    fn add_inherited_providers(edited: &mut Config, loaded: &Config, original: &DocumentMut) {
-        let defined_in_file = |profile: Option<&str>, name: &str| {
-            let table = match profile {
-                None => original.get("providers"),
-                Some(p) => original
-                    .get("profiles")
-                    .and_then(|i| i.get(p))
-                    .and_then(|i| i.get("providers")),
-            };
-            table.is_some_and(|t| t.get(name).is_some())
-        };
-        for (name, provider) in &loaded.providers {
-            if !edited.providers.contains_key(name) && !defined_in_file(None, name) {
-                edited.providers.insert(name.clone(), provider.clone());
-            }
-        }
-        for (profile_name, loaded_profile) in &loaded.profiles {
-            let edited_profile = edited.profiles.entry(profile_name.clone()).or_default();
-            for (name, provider) in &loaded_profile.providers {
-                if !edited_profile.providers.contains_key(name)
-                    && !defined_in_file(Some(profile_name), name)
-                {
-                    edited_profile
-                        .providers
-                        .insert(name.clone(), provider.clone());
-                }
-            }
-        }
     }
 
     /// Helper to set the value field in a secret (handles both inline table and table formats)

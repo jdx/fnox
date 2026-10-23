@@ -690,3 +690,50 @@ EOT
 	assert_success
 	assert_output "line ONE"
 }
+
+@test "edit does not encrypt with a provider from an import removed in the editor" {
+	recipient="$(grep 'public key:' "$AGE_KEY_FILE" | cut -d: -f2- | xargs)"
+	cat >age.toml <<EOT
+[providers.age]
+type = "age"
+recipients = ["$recipient"]
+EOT
+	printf 'import = ["age.toml"]\n\n[providers.plain]\ntype = "plain"\n\n[secrets]\nV = { provider = "plain", value = "x" }\n' >fnox.toml
+	cat >editor.sh <<'EOT'
+#!/bin/sh
+printf '[providers.plain]\ntype = "plain"\n\n[secrets]\nV = { provider = "age", value = "changed" }\n' >"$1"
+EOT
+	chmod +x editor.sh
+	EDITOR=./editor.sh run fnox edit
+	assert_failure
+	run grep -c 'changed' fnox.toml
+	assert_output "0"
+}
+
+@test "edit uses the default provider inherited from the global config" {
+	recipient="$(grep 'public key:' "$AGE_KEY_FILE" | cut -d: -f2- | xargs)"
+	export FNOX_CONFIG_DIR="$TEST_DIR/global"
+	mkdir -p "$FNOX_CONFIG_DIR"
+	cat >"$FNOX_CONFIG_DIR/config.toml" <<EOT
+default_provider = "age"
+
+[providers.plain]
+type = "plain"
+EOT
+	cat >fnox.toml <<EOT
+[providers.age]
+type = "age"
+recipients = ["$recipient"]
+
+[secrets]
+EOT
+	printf 'line one' | fnox set V --provider age
+	printf '#!/bin/sh\nsed -i.bak "s/one/ONE/" "$1"\n' >editor.sh
+	chmod +x editor.sh
+	EDITOR=./editor.sh run fnox edit
+	assert_success
+	run grep -c 'line ONE' fnox.toml
+	assert_output "0"
+	run fnox get V
+	assert_output "line ONE"
+}

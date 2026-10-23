@@ -783,6 +783,49 @@ impl Config {
         Ok(self)
     }
 
+    /// Copy providers and default providers that come from config files outside
+    /// `own_files` (global, parent and local override layers) out of `loaded`.
+    ///
+    /// Anything sourced from `own_files` is skipped, so a provider, default or
+    /// import the user removed from the edited file stays removed.
+    pub fn inherit_outer_layers(&mut self, loaded: &Config, own_files: &[PathBuf]) {
+        let own: Vec<PathBuf> = own_files
+            .iter()
+            .map(|p| fs::canonicalize(p).unwrap_or_else(|_| p.clone()))
+            .collect();
+        let is_outer = |source: Option<&PathBuf>| {
+            source.is_some_and(|s| {
+                let s = fs::canonicalize(s).unwrap_or_else(|_| s.clone());
+                !own.contains(&s)
+            })
+        };
+
+        for (name, provider) in &loaded.providers {
+            if !self.providers.contains_key(name) && is_outer(loaded.provider_sources.get(name)) {
+                self.providers.insert(name.clone(), provider.clone());
+            }
+        }
+        if self.default_provider.is_none() && is_outer(loaded.default_provider_source.as_ref()) {
+            self.default_provider = loaded.default_provider.clone();
+        }
+
+        for (profile_name, loaded_profile) in &loaded.profiles {
+            let profile = self.profiles.entry(profile_name.clone()).or_default();
+            for (name, provider) in &loaded_profile.providers {
+                if !profile.providers.contains_key(name)
+                    && is_outer(loaded_profile.provider_sources.get(name))
+                {
+                    profile.providers.insert(name.clone(), provider.clone());
+                }
+            }
+            if profile.default_provider.is_none()
+                && is_outer(loaded_profile.default_provider_source.as_ref())
+            {
+                profile.default_provider = loaded_profile.default_provider.clone();
+            }
+        }
+    }
+
     /// Load configuration from a file
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
         use miette::{NamedSource, SourceSpan};
