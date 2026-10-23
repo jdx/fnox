@@ -429,13 +429,21 @@ impl ProxyRunCommand {
             command.env(key, &ca_path);
         }
 
-        let status = if mount_points.is_empty() {
-            command.status().await
+        let outcome = if mount_points.is_empty() {
+            command.status().await.map(Outcome::Exited)
         } else {
-            run_until_interrupted(command, &mount_points).await
+            run_until_interrupted(command).await
         };
         crate::sandbox::remove_mount_points(&mount_points);
         running.shutdown().await;
+        // `process::exit` below skips destructors, so this removes the
+        // sandbox's socket directory.
+        drop(sandbox);
+        let status = match outcome {
+            Ok(Outcome::Interrupted(signal)) => std::process::exit(128 + signal),
+            Ok(Outcome::Exited(status)) => Ok(status),
+            Err(error) => Err(error),
+        };
         let status = status.map_err(|source| FnoxError::CommandExecutionFailed {
             command: self.command.join(" "),
             source,
@@ -455,35 +463,38 @@ impl ProxyRunCommand {
     }
 }
 
-/// Runs `command`, and if fnox is interrupted first, stops it and removes the
-/// sandbox's placeholder files before exiting. The sandbox starts a session of
+/// How a command ended.
+enum Outcome {
+    Exited(std::process::ExitStatus),
+    /// fnox was interrupted by this signal and stopped the command.
+    Interrupted(i32),
+}
+
+/// Runs `command`, and if fnox is interrupted first, stops it so the caller
+/// can remove the sandbox's placeholder files. The sandbox starts a session of
 /// its own, so Ctrl-C reaches fnox and not the command.
-async fn run_until_interrupted(
-    mut command: tokio::process::Command,
-    mount_points: &[std::path::PathBuf],
-) -> std::io::Result<std::process::ExitStatus> {
+async fn run_until_interrupted(mut command: tokio::process::Command) -> std::io::Result<Outcome> {
     #[cfg(unix)]
     {
         use tokio::signal::unix::{SignalKind, signal};
 
-        let mut child = command.spawn()?;
+        // Registered before the spawn, so no signal arrives unobserved.
         let mut interrupt = signal(SignalKind::interrupt())?;
         let mut terminate = signal(SignalKind::terminate())?;
         let mut hangup = signal(SignalKind::hangup())?;
+        let mut child = command.spawn()?;
         let number = tokio::select! {
-            status = child.wait() => return status,
+            status = child.wait() => return status.map(Outcome::Exited),
             _ = interrupt.recv() => libc::SIGINT,
             _ = terminate.recv() => libc::SIGTERM,
             _ = hangup.recv() => libc::SIGHUP,
         };
         let _ = child.kill().await;
-        crate::sandbox::remove_mount_points(mount_points);
-        std::process::exit(128 + number);
+        Ok(Outcome::Interrupted(number))
     }
     #[cfg(not(unix))]
     {
-        let _ = mount_points;
-        command.status().await
+        command.status().await.map(Outcome::Exited)
     }
 }
 

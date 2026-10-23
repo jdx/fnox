@@ -142,6 +142,7 @@ _require_sandbox() {
 		[[ -e fnox.local.toml ]] && break
 		sleep 0.1
 	done
+	assert_file_exists fnox.local.toml
 	kill -INT "$pid"
 	local status=0
 	wait "$pid" || status=$?
