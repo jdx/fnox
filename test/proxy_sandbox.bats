@@ -60,23 +60,48 @@ _require_sandbox() {
 	assert_file_not_exists ../outside
 }
 
+# Probes a TCP port on this machine's loopback, bounded so it cannot hang.
+# macOS has no coreutils `timeout`, so perl's alarm stands in.
+_can_connect() {
+	if command -v timeout >/dev/null 2>&1; then
+		timeout 5 bash -c "exec 3<>/dev/tcp/127.0.0.1/$1" 2>/dev/null
+	else
+		perl -e 'alarm 5; exec @ARGV' -- bash -c "exec 3<>/dev/tcp/127.0.0.1/$1" 2>/dev/null
+	fi
+}
+
 @test "proxy run --sandbox blocks direct network access but reaches the proxy" {
 	_require_sandbox
+	command -v python3 >/dev/null 2>&1 || skip "python3 is needed to open a local port"
+	command -v timeout >/dev/null 2>&1 || command -v perl >/dev/null 2>&1 || skip "timeout or perl is needed to bound the probe"
+
+	# A port that is open on the host, which the sandbox must not reach.
+	python3 -c 'import socket, time
+s = socket.socket()
+s.bind(("127.0.0.1", 0))
+s.listen(8)
+print(s.getsockname()[1], flush=True)
+time.sleep(60)' >listener.port &
+	local listener=$!
+	for _ in $(seq 1 50); do
+		[[ -s listener.port ]] && break
+		sleep 0.1
+	done
+	local port
+	port="$(cat listener.port)"
+	_can_connect "$port" || {
+		kill "$listener"
+		skip "the local listener is not reachable outside the sandbox"
+	}
+
+	export OPEN_PORT="$port"
 	run "$FNOX_BIN" proxy run --sandbox -- bash -c '
-		# macOS has no coreutils `timeout`; perl bounds a connection that hangs.
-		bounded() {
-			if command -v timeout >/dev/null 2>&1; then
-				timeout 5 "$@"
-			elif command -v perl >/dev/null 2>&1; then
-				perl -e "alarm 5; exec @ARGV" -- "$@"
-			else
-				"$@"
-			fi
-		}
-		bounded bash -c "exec 3<>/dev/tcp/1.1.1.1/80" 2>/dev/null
-		# 1 is a refused or unroutable connection; anything else (success, a
-		# timeout) means the connection was not blocked.
-		if [ "$?" -eq 1 ]; then echo direct-blocked; else echo direct-open; fi
+		# The proxy variable names a port that is reachable; the host one is not.
+		if (exec 3<>/dev/tcp/127.0.0.1/"$OPEN_PORT") 2>/dev/null; then
+			echo direct-open
+		else
+			echo direct-blocked
+		fi
 		port="${HTTPS_PROXY##*:}"
 		if (exec 3<>/dev/tcp/127.0.0.1/"$port") 2>/dev/null; then
 			echo proxy-reached
@@ -84,6 +109,7 @@ _require_sandbox() {
 			echo proxy-unreachable
 		fi
 	'
+	kill "$listener" 2>/dev/null || true
 	assert_success
 	assert_line "direct-blocked"
 	assert_line "proxy-reached"
@@ -91,7 +117,7 @@ _require_sandbox() {
 
 @test "proxy run --sandbox passes placeholders and the exit status through" {
 	_require_sandbox
-	run "$FNOX_BIN" proxy run --sandbox -- sh -c 'test "$API_TOKEN" != real-secret && exit 7'
+	run "$FNOX_BIN" proxy run --sandbox -- sh -c 'test -n "$API_TOKEN" && test "$API_TOKEN" != real-secret && exit 7'
 	assert_failure 7
 }
 

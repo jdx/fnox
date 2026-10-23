@@ -134,7 +134,8 @@ impl SandboxPolicy {
             if allowed.iter().any(|allow| path.starts_with(allow)) {
                 // Readable, but a mask also stopped writes, and the command
                 // must not be able to rewrite its own configuration.
-                if metadata.is_some() && writable_path(&path) {
+                // A path that does not exist yet is kept from being created.
+                if writable_path(&path) {
                     read_only.push(path);
                 }
                 continue;
@@ -214,7 +215,7 @@ impl SandboxPolicy {
         fnox_files.extend(imports);
         fnox_files.extend(config.age_key_file.clone());
         fnox_files.extend(cli.age_key_file.clone());
-        fnox_files.extend(provider_key_files(config, &profile, &cwd));
+        fnox_files.extend(provider_key_files(config, &profile, &cwd)?);
         fnox_files.extend(env::var_os("FNOX_AGE_KEY_FILE").map(PathBuf::from));
 
         let environment = ["XDG_RUNTIME_DIR", "SSH_AUTH_SOCK"]
@@ -239,16 +240,31 @@ impl SandboxPolicy {
 }
 
 /// The `key_file` of every provider the profiles use, such as an age identity.
-fn provider_key_files(config: &Config, profile: &[String], cwd: &Path) -> Vec<PathBuf> {
-    let Ok(providers) = config.get_providers(profile) else {
-        return Vec::new();
-    };
-    providers
-        .values()
-        .filter_map(|provider| serde_json::to_value(provider).ok())
-        .filter_map(|value| value.get("key_file")?.as_str().map(str::to_string))
-        .map(|key_file| expand(&key_file, &env::HOME_DIR, cwd))
-        .collect()
+///
+/// A `key_file` that is not a literal path, such as a reference to a secret,
+/// names a file only once it is resolved, and the policy is built before any
+/// secret is. That is an error rather than a file left readable.
+fn provider_key_files(config: &Config, profile: &[String], cwd: &Path) -> Result<Vec<PathBuf>> {
+    let providers = config.get_providers(profile)?;
+    let mut files = Vec::new();
+    for (name, provider) in &providers {
+        let Ok(value) = serde_json::to_value(provider) else {
+            continue;
+        };
+        match value.get("key_file") {
+            None | Some(serde_json::Value::Null) => {}
+            Some(serde_json::Value::String(path)) => {
+                files.push(expand(path, &env::HOME_DIR, cwd));
+            }
+            Some(_) => {
+                return Err(FnoxError::Config(format!(
+                    "provider '{name}' sets key_file to something other than a path, \
+                     so the sandbox cannot tell which file to hide; use a literal path"
+                )));
+            }
+        }
+    }
+    Ok(files)
 }
 
 /// The files `path` imports, if it can be read as a fnox config.
@@ -351,6 +367,33 @@ fn hidden_by_tmpfs(path: &Path, policy: &SandboxPolicy) -> bool {
 }
 
 /// The `bwrap` arguments up to and including the command to run inside.
+/// The `bwrap` flags that every sandbox starts with. The startup check uses
+/// them too, so a machine that would reject one fails before secrets are
+/// resolved.
+const BASE_FLAGS: &[&str] = &[
+    "--die-with-parent",
+    // Without a session of its own the command could push keystrokes into the
+    // terminal that started it.
+    "--new-session",
+    "--unshare-net",
+    "--unshare-pid",
+    "--unshare-ipc",
+    "--unshare-uts",
+    "--cap-drop",
+    "ALL",
+    "--ro-bind",
+    "/",
+    "/",
+    "--dev",
+    "/dev",
+    "--proc",
+    "/proc",
+    "--tmpfs",
+    "/tmp",
+    "--tmpfs",
+    "/run",
+];
+
 pub fn bwrap_args(
     policy: &SandboxPolicy,
     exe: &Path,
@@ -358,33 +401,10 @@ pub fn bwrap_args(
     ca: &Path,
     command: &[String],
 ) -> Vec<OsString> {
-    let mut args: Vec<OsString> = Vec::new();
+    let mut args: Vec<OsString> = BASE_FLAGS.iter().map(OsString::from).collect();
     let mut push = |parts: &[&std::ffi::OsStr]| args.extend(parts.iter().map(|p| p.to_os_string()));
     let s = |text: &'static str| std::ffi::OsStr::new(text);
 
-    push(&[
-        s("--die-with-parent"),
-        // Without a session of its own the command could push keystrokes into
-        // the terminal that started it.
-        s("--new-session"),
-        s("--unshare-net"),
-        s("--unshare-pid"),
-        s("--unshare-ipc"),
-        s("--unshare-uts"),
-        s("--cap-drop"),
-        s("ALL"),
-        s("--ro-bind"),
-        s("/"),
-        s("/"),
-        s("--dev"),
-        s("/dev"),
-        s("--proc"),
-        s("/proc"),
-        s("--tmpfs"),
-        s("/tmp"),
-        s("--tmpfs"),
-        s("/run"),
-    ]);
     for path in &policy.writable {
         push(&[s("--bind"), path.as_os_str(), path.as_os_str()]);
     }
@@ -598,18 +618,8 @@ fn check_bwrap() -> Result<()> {
         FnoxError::Config(format!("failed to locate the fnox executable: {error}"))
     })?;
     let output = std::process::Command::new("bwrap")
-        .args([
-            "--unshare-net",
-            "--unshare-pid",
-            "--ro-bind",
-            "/",
-            "/",
-            "--dev",
-            "/dev",
-            "--proc",
-            "/proc",
-            "--",
-        ])
+        .args(BASE_FLAGS)
+        .arg("--")
         .arg(exe)
         .arg("--version")
         .output();
@@ -834,8 +844,41 @@ key_file = "/keys/private-age.txt"
 "#,
         )
         .unwrap();
-        let files = provider_key_files(&config, &[], Path::new("/work"));
+        let files = provider_key_files(&config, &[], Path::new("/work")).unwrap();
         assert_eq!(files, [PathBuf::from("/keys/private-age.txt")]);
+    }
+
+    #[test]
+    fn a_missing_file_that_is_allowed_to_be_read_cannot_be_created() {
+        let root = tempfile::tempdir().unwrap();
+        let config = ProxyConfig {
+            sandbox_allow_read: vec!["fnox.local.toml".to_string()],
+            ..ProxyConfig::default()
+        };
+        let policy = project(root.path(), &["fnox.local.toml"], &config);
+        assert!(policy.hide.is_empty());
+        assert_eq!(policy.read_only, [policy.cwd.join("fnox.local.toml")]);
+        let local = policy
+            .cwd
+            .join("fnox.local.toml")
+            .to_string_lossy()
+            .to_string();
+        assert!(position(&argv(&policy), &["--ro-bind", "/dev/null", &local]).is_some());
+    }
+
+    #[test]
+    fn a_key_file_that_is_not_a_path_is_an_error() {
+        let config: Config = toml_edit::de::from_str(
+            r#"
+[providers.age]
+type = "age"
+recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
+key_file = { secret = "AGE_KEY_PATH" }
+"#,
+        )
+        .unwrap();
+        let error = provider_key_files(&config, &[], Path::new("/work")).unwrap_err();
+        assert!(error.to_string().contains("key_file"), "{error}");
     }
 
     #[test]

@@ -429,10 +429,10 @@ impl ProxyRunCommand {
             command.env(key, &ca_path);
         }
 
-        let outcome = if mount_points.is_empty() {
-            command.status().await.map(Outcome::Exited)
-        } else {
+        let outcome = if sandbox.is_some() {
             run_until_interrupted(command).await
+        } else {
+            command.status().await.map(Outcome::Exited)
         };
         crate::sandbox::remove_mount_points(&mount_points);
         running.shutdown().await;
