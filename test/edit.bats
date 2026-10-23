@@ -728,6 +728,10 @@ recipients = ["$recipient"]
 [secrets]
 EOT
 	printf 'line one' | fnox set V --provider age
+	# Drop the explicit provider so editing V must fall back to the inherited default
+	sed -i.bak 's/provider = "age", //' fnox.toml
+	run grep -c 'provider = "age"' fnox.toml
+	assert_output "0"
 	printf '#!/bin/sh\nsed -i.bak "s/one/ONE/" "$1"\n' >editor.sh
 	chmod +x editor.sh
 	EDITOR=./editor.sh run fnox edit
