@@ -824,6 +824,21 @@ mod tests {
     }
 
     #[test]
+    fn provider_key_files_are_collected() {
+        let config: Config = toml_edit::de::from_str(
+            r#"
+[providers.age]
+type = "age"
+recipients = ["age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"]
+key_file = "/keys/private-age.txt"
+"#,
+        )
+        .unwrap();
+        let files = provider_key_files(&config, &[], Path::new("/work"));
+        assert_eq!(files, [PathBuf::from("/keys/private-age.txt")]);
+    }
+
+    #[test]
     fn only_empty_mount_points_are_removed() {
         let root = tempfile::tempdir().unwrap();
         let empty = root.path().join("empty");
