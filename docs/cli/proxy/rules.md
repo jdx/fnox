@@ -10,7 +10,7 @@ description: "Print the effective proxy rules. Usage, flags, and examples for fn
 
 Print the effective proxy rules
 
-Validates the `[proxy]` table and prints its egress mode, audit setting, and each rule's secret, domain, methods, paths, header, and placeholder variable. Secrets are not resolved.
+Validates the `[proxy]` table and prints its egress mode, audit setting, and each rule's secret, domain, methods, paths, header or query parameter, and placeholder variable. Secrets are not resolved.
 
 ## Flags
 

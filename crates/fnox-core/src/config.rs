@@ -233,6 +233,11 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_auth: Option<bool>,
 
+    /// Redact secret values from `fnox exec` output when it is piped or
+    /// redirected (default: false). Output to a terminal is never touched.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub redact_exec: Option<bool>,
+
     /// MCP server configuration
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp: Option<McpConfig>,
@@ -494,16 +499,23 @@ pub struct ProxyRule {
     /// Secret name from the active fnox profile.
     pub secret: String,
 
-    /// Exact TLS server name to which the secret may be sent.
+    /// TLS server name to which the secret may be sent. A leading `*.` matches
+    /// exactly one subdomain label, such as `*.example.com`.
     pub domain: String,
 
     /// Environment variable exposed to the child. Defaults to `secret`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub env: Option<String>,
 
-    /// Case-insensitive HTTP header in which placeholder substitution is allowed.
-    #[serde(default = "default_proxy_header")]
-    pub header: String,
+    /// Case-insensitive HTTP header in which placeholder substitution is
+    /// allowed. Defaults to `authorization` unless `query` is set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header: Option<String>,
+
+    /// Query parameter in which placeholder substitution is allowed, instead
+    /// of a header. Mutually exclusive with `header`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
 
     /// Allowed HTTP methods. An empty list allows every method.
     #[serde(default)]
@@ -516,10 +528,6 @@ pub struct ProxyRule {
     /// Placeholder passed to the child. A unique value is generated when omitted.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placeholder: Option<String>,
-}
-
-fn default_proxy_header() -> String {
-    "authorization".to_string()
 }
 
 fn default_true() -> bool {
@@ -1132,6 +1140,11 @@ impl Config {
             merged.prompt_auth = overlay.prompt_auth;
         }
 
+        // Merge redact_exec (overlay takes precedence)
+        if overlay.redact_exec.is_some() {
+            merged.redact_exec = overlay.redact_exec;
+        }
+
         // Merge mcp (overlay takes precedence, field-by-field to avoid
         // silently re-enabling tools when overlay only sets exec_timeout_secs)
         if let Some(overlay_mcp) = overlay.mcp {
@@ -1584,6 +1597,7 @@ impl Config {
             if_missing: None,
             env: None,
             prompt_auth: None,
+            redact_exec: None,
             mcp: None,
             daemon: None,
             proxy: None,
@@ -1802,6 +1816,14 @@ impl Config {
 
         // Only prompt if enabled, not explicitly non-interactive, and we're in a TTY
         enabled && !env::is_non_interactive() && atty::is(atty::Stream::Stdin)
+    }
+
+    /// Whether `fnox exec` redacts piped output by default.
+    /// Priority: env var > config > default (false)
+    pub fn should_redact_exec(&self) -> bool {
+        (*env::FNOX_EXEC_REDACT)
+            .or(self.redact_exec)
+            .unwrap_or(false)
     }
 
     /// Get secrets for the default profile (mutable)
@@ -3381,7 +3403,8 @@ inherits = []
             secret: secret.into(),
             domain: domain.into(),
             env: None,
-            header: default_proxy_header(),
+            header: None,
+            query: None,
             methods: Vec::new(),
             paths: Vec::new(),
             placeholder: None,

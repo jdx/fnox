@@ -90,6 +90,10 @@
       "description": "Whether to prompt for authentication when provider auth fails (default: true in TTY)",
       "type": ["boolean", "null"]
     },
+    "redact_exec": {
+      "description": "Redact secret values from `fnox exec` output when it is piped or\nredirected (default: false). Output to a terminal is never touched.",
+      "type": ["boolean", "null"]
+    },
     "mcp": {
       "description": "MCP server configuration",
       "anyOf": [
@@ -1589,7 +1593,7 @@
           "type": "string"
         },
         "domain": {
-          "description": "Exact TLS server name to which the secret may be sent.",
+          "description": "TLS server name to which the secret may be sent. A leading `*.` matches\nexactly one subdomain label, such as `*.example.com`.",
           "type": "string"
         },
         "env": {
@@ -1597,9 +1601,12 @@
           "type": ["string", "null"]
         },
         "header": {
-          "description": "Case-insensitive HTTP header in which placeholder substitution is allowed.",
-          "type": "string",
-          "default": "authorization"
+          "description": "Case-insensitive HTTP header in which placeholder substitution is\nallowed. Defaults to `authorization` unless `query` is set.",
+          "type": ["string", "null"]
+        },
+        "query": {
+          "description": "Query parameter in which placeholder substitution is allowed, instead\nof a header. Mutually exclusive with `header`.",
+          "type": ["string", "null"]
         },
         "methods": {
           "description": "Allowed HTTP methods. An empty list allows every method.",

@@ -15,6 +15,8 @@ Resolves the active profile's secrets and runs COMMAND with them set as environm
 
 fnox also removes `FNOX_AGE_KEY`, `FNOX_AGE_KEY_FILE`, and the Enpass master password from the inherited environment, forwards Ctrl-C and `SIGTERM` to the command, and exits with the command's exit status. Put fnox options before `--`; everything after it is the command.
 
+With `--redact` (or `redact_exec = true` / `FNOX_EXEC_REDACT=1`), secret values are replaced with `[REDACTED]` in the command's stdout and stderr, but only for a stream that is piped or redirected; a terminal is left untouched so interactive programs keep working. This is not a sandbox: a command can transform a value before printing it.
+
 ## Arguments
 
 - **`[COMMAND]…`** — Command to run, with its arguments
@@ -25,9 +27,14 @@ fnox also removes `FNOX_AGE_KEY`, `FNOX_AGE_KEY_FILE`, and the Enpass master pas
 
   Takes names and globs like `--only` and applies after it. A secret that a selected secret depends on is still resolved, but not passed to the command unless it is selected itself. A lease is skipped when NAME matches a variable it produces.
 
+- **`--no-redact`** — Never redact output, even if the config or `FNOX_EXEC_REDACT` enables it
 - **`--only <NAME>`** — Resolve only these secrets, plus the secrets they depend on; repeatable
 
   Each NAME is a secret name or a glob such as `AWS_*`; comma-separate several. Other secrets are not resolved, so their providers are never called and they cannot fail the run. `if_missing` still applies to the selected secrets. An unknown name, or a glob that matches nothing, is an error. Leases run only when NAME matches a variable they produce; `command` leases are skipped.
+
+- **`--redact`** — Replace secret values with `[REDACTED]` in piped or redirected output
+
+  Applies to each of stdout and stderr only when that stream is not a terminal. Values shorter than 3 characters are not redacted. Overrides `redact_exec` in the config and `FNOX_EXEC_REDACT`. Not allowed with `--replace` (use `--no-redact`).
 
 - **`--refresh <KEY>`** — Re-fetch KEY from its provider instead of the daemon cache; repeatable
 

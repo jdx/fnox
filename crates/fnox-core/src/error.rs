@@ -508,6 +508,15 @@ pub enum FnoxError {
     )]
     ExecReplaceLeases,
 
+    #[error("output redaction cannot be combined with --replace")]
+    #[diagnostic(
+        code(fnox::command::replace_with_redact),
+        help(
+            "fnox cannot filter output after --replace hands the process to the command; pass --no-redact to run it unfiltered"
+        )
+    )]
+    ExecReplaceRedact,
+
     #[error("Failed to configure signal handling for --replace")]
     #[diagnostic(code(fnox::command::replace_signal_setup))]
     ExecReplaceSignalSetup {

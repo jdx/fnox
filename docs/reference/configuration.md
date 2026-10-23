@@ -47,7 +47,7 @@ FNOX_CONFIG_DIR=/nonexistent fnox -c ./ci.toml get MY_SECRET
 | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `providers.<name>`, `secrets.<name>`, `leases.<name>`, `plugins.<name>` | Replaces the earlier entry of that name as a whole. Fields are not merged.                      |
 | `profiles.<name>`                                                       | Merged: its providers, secrets, and leases by name; `inherits` and `default_provider` replaced. |
-| `default_provider`, `if_missing`, `env`, `prompt_auth`                  | Replaced.                                                                                       |
+| `default_provider`, `if_missing`, `env`, `prompt_auth`, `redact_exec`   | Replaced.                                                                                       |
 | `daemon`, `mcp`                                                         | Merged field by field. `mcp.secrets` is replaced as a whole.                                    |
 | `proxy`                                                                 | Replaced as a whole, including every rule.                                                      |
 
@@ -86,6 +86,7 @@ DATABASE_URL = { provider = "aws", value = "database-url" }
 | `import`           | array of paths                  | `[]`     | Config files to merge underneath this one.                                           |
 | `root`             | boolean                         | `false`  | Stop the upward directory search at this file.                                       |
 | `prompt_auth`      | boolean                         | `true`   | Offer to run a provider's auth command when authentication fails.                    |
+| `redact_exec`      | boolean                         | `false`  | Redact secret values from piped `fnox exec` output.                                  |
 | `age_key_file`     | path                            | none     | Accepted for compatibility; has no effect.                                           |
 | `providers`        | table                           | `{}`     | [Provider instances](#provider-configuration), by name.                              |
 | `secrets`          | table                           | `{}`     | [Secrets](#secrets) for the default profile, by name.                                |
@@ -142,6 +143,10 @@ import = ["./shared/base.toml"]
 ### `prompt_auth`
 
 When a provider fails to authenticate in a terminal, fnox offers to run its [`auth_command`](#auth-command). Set `prompt_auth = false` to turn this off. `FNOX_PROMPT_AUTH` overrides this setting, and `--non-interactive` turns off all prompts.
+
+### `redact_exec`
+
+Set `redact_exec = true` to replace secret values with `[REDACTED]` in the stdout and stderr of `fnox exec` when they are piped or redirected. Terminals are never filtered. `FNOX_EXEC_REDACT` overrides this setting, and `--redact` / `--no-redact` override both. See [redact output](/guide/running-commands#redact-output); this is not a sandbox.
 
 ### `age_key_file`
 
@@ -404,19 +409,25 @@ secret = "GITHUB_TOKEN"
 domain = "api.github.com"
 methods = ["GET", "POST"]
 paths = ["/repos/example/**"]
+
+[[proxy.rules]]
+secret = "MAPS_KEY"
+domain = "*.maps.example.com"
+query = "key"
 ```
 
-| Field                 | Type                       | Default           | Description                                                             |
-| --------------------- | -------------------------- | ----------------- | ----------------------------------------------------------------------- |
-| `egress`              | `"strict"`, `"permissive"` | `"strict"`        | Reject destinations without a rule, or tunnel them without credentials. |
-| `audit`               | boolean                    | `true`            | Log request metadata. Headers, bodies, and values are never logged.     |
-| `rules[].secret`      | string                     | required          | Secret to inject, from the active profile.                              |
-| `rules[].domain`      | string                     | required          | Exact TLS server name the secret may be sent to.                        |
-| `rules[].env`         | string                     | `rules[].secret`  | Variable that holds the placeholder in the command's environment.       |
-| `rules[].header`      | string                     | `"authorization"` | Header, case-insensitive, in which the placeholder is replaced.         |
-| `rules[].methods`     | array of strings           | every method      | Allowed HTTP methods.                                                   |
-| `rules[].paths`       | array of globs             | every path        | Allowed URL paths.                                                      |
-| `rules[].placeholder` | string                     | generated         | Placeholder value given to the command.                                 |
+| Field                 | Type                       | Default           | Description                                                                                           |
+| --------------------- | -------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------- |
+| `egress`              | `"strict"`, `"permissive"` | `"strict"`        | Reject destinations without a rule, or tunnel them without credentials.                               |
+| `audit`               | boolean                    | `true`            | Log request metadata. Headers, bodies, and values are never logged.                                   |
+| `rules[].secret`      | string                     | required          | Secret to inject, from the active profile.                                                            |
+| `rules[].domain`      | string                     | required          | TLS server name the secret may be sent to. A leading `*.` matches one subdomain label.                |
+| `rules[].env`         | string                     | `rules[].secret`  | Variable that holds the placeholder in the command's environment.                                     |
+| `rules[].header`      | string                     | `"authorization"` | Header, case-insensitive, in which the placeholder is replaced. Not allowed with `query`.             |
+| `rules[].query`       | string                     | none              | Query parameter in which the placeholder is replaced, instead of a header. Not allowed with `header`. |
+| `rules[].methods`     | array of strings           | every method      | Allowed HTTP methods.                                                                                 |
+| `rules[].paths`       | array of globs             | every path        | Allowed URL paths.                                                                                    |
+| `rules[].placeholder` | string                     | generated         | Placeholder value given to the command.                                                               |
 
 A later config file that sets `[proxy]` replaces the whole table, so it must restate every rule it allows. See [credential proxy](/guide/proxy).
 
