@@ -403,9 +403,10 @@ impl crate::providers::Provider for KeePassProvider {
         let db = self.open_database()?;
 
         let mut entry_id = Self::find_entry_id(&db, &entry_path);
-        if entry_id.is_none() && entry_path.len() > 1 {
-            // No entry has that title, so the last segment may name a custom
-            // field of the entry before it (e.g. "group/entry/customField").
+        let explicit_field = entry_path.len() < value.split('/').count();
+        if entry_id.is_none() && !explicit_field && entry_path.len() > 1 {
+            // No entry has that title and the reference did not end in a standard
+            // field name, so the last segment may name a custom field of the entry before it (e.g. "group/entry/customField").
             let parent = &entry_path[..entry_path.len() - 1];
             if let Some(id) = Self::find_entry_id(&db, parent) {
                 field = entry_path[entry_path.len() - 1];
