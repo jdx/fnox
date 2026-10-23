@@ -350,7 +350,7 @@ role_arn = "arn:aws:iam::123456789012:role/dev-role"
 duration = "1h"
 ```
 
-Define lease backends under `[leases.<name>]` or `[profiles.<profile>.leases.<name>]`. Every backend has a `type` and an optional `duration` (default: `15m`); the service may cap the actual lifetime. Types: [`aws-sts`](/leases/aws-sts), [`azure-token`](/leases/azure-token), [`cloudflare`](/leases/cloudflare), [`command`](/leases/command), [`gcp-iam`](/leases/gcp-iam), [`github-app`](/leases/github-app), [`github-oauth`](/leases/github-oauth), and [`vault`](/leases/vault). See [credential leases](/guide/leases).
+Define lease backends under `[leases.<name>]` or `[profiles.<profile>.leases.<name>]`. Every backend has a `type` and an optional `duration` (default: `15m`); the service may cap the actual lifetime. Types: [`aws-sts`](/leases/aws-sts), [`azure-token`](/leases/azure-token), [`cloudflare`](/leases/cloudflare), [`command`](/leases/command), [`gcp-iam`](/leases/gcp-iam), [`github-app`](/leases/github-app), [`github-oauth`](/leases/github-oauth), [`gitlab`](/leases/gitlab), [`kubernetes`](/leases/kubernetes), [`oauth2-client-credentials`](/leases/oauth2-client-credentials), [`tailscale`](/leases/tailscale), and [`vault`](/leases/vault). See [credential leases](/guide/leases).
 
 ## `plugins`
 

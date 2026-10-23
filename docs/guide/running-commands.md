@@ -35,6 +35,8 @@ Useful options:
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `-P, --profile <name>` | Use a [profile](/guide/profiles). Repeat or comma-separate to stack profiles.                                                                                                                  |
 | `--if-missing error`   | Fail if any secret can't be resolved. See [missing secrets](/guide/missing-secrets).                                                                                                           |
+| `--only <NAME>`        | Resolve only these secrets (names or globs) and what they depend on. See [resolve only some secrets](#filter-secrets).                                                                         |
+| `--except <NAME>`      | Do not resolve these secrets (names or globs). See [resolve only some secrets](#filter-secrets).                                                                                               |
 | `--refresh <KEY>`      | Re-read one secret from its provider instead of the [daemon](/guide/daemon) cache.                                                                                                             |
 | `--replace`            | Replace the fnox process with the command (Unix only). Rejected when the command would receive an `as_file` secret or the profile configures leases, since fnox must clean those up afterward. |
 | `--redact`             | Replace secret values with `[REDACTED]` in the command's piped or redirected output. See [redact output](#redact-output).                                                                      |
@@ -82,6 +84,29 @@ SIGNING_KEY = { provider = "age", value = "YWdl...", env = false }
 ```
 
 An `env = false` secret is still available to `fnox get`, to other secrets and providers that [reference it](/reference/configuration#default), and to [lease backends](/guide/leases) that use it as a bootstrap credential. `fnox exec` resolves it only when something it injects depends on it.
+
+## Resolve only some secrets {#filter-secrets}
+
+By default `fnox exec` resolves every secret in the profile, so one unreachable provider or an expired login can stop a command that never needed that secret. `--only` and `--except` limit the run to the secrets it does need. Secrets outside the filter are not resolved at all: their providers are never called, so there are no auth prompts, network requests, or failures from them.
+
+```sh
+# Only DATABASE_URL and every secret whose name starts with AWS_
+fnox exec --only DATABASE_URL,'AWS_*' -- ./migrate.sh
+
+# Everything except one secret whose provider is down
+fnox exec --except LEGACY_API_KEY -- npm start
+```
+
+- **Patterns** are exact names or globs (`*`, `?`, `[abc]`), matched case-sensitively. Repeat the flag or comma-separate values. When both flags are given, a secret must match `--only` and not match `--except`.
+- **Dependencies are pulled in.** If a selected secret needs another secret to resolve, such as a provider token stored as a secret, fnox resolves that secret too but only passes it to the command if the filter selects it.
+- **`if_missing` still applies** to selected secrets: with `if_missing = "error"`, a selected secret that cannot be resolved fails the run.
+- **Typos are errors.** An unknown name (with close matches suggested) or an `--only` glob that matches nothing fails before anything is resolved, instead of silently running without the secret.
+- **`as_file` secrets** follow the same filter: only selected ones are written to temporary files.
+- **Leases** run only when `--only` names a variable they produce, and are skipped when `--except` names one. Only the variables the filter allows are passed to the command, even if a lease produces more. With only `--except`, other leases still run. A `command` lease can read any secret, so it is skipped whenever `--only` or `--except` is used.
+- **The [daemon](/guide/daemon) cache** is per secret, so a filtered run neither reads nor hides the others: a later unfiltered run still resolves everything.
+- A variable already in your environment under an excluded secret's name is left alone.
+
+For machine-readable output, `fnox env --json --keys NAME,...` offers the same selection of exact names.
 
 ## Secrets as files {#secrets-as-files}
 

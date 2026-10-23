@@ -594,12 +594,38 @@ impl LeaseRevokeCommand {
             return Ok(());
         }
 
+        // Backends authenticate with the same parent credentials that created the
+        // lease, which only live in the process environment while a command
+        // loads them. Load each backend's once, before revoking anything.
+        let mut _temp_env_guard = TempEnvGuard::default();
+        let mut _temp_files = Vec::new();
+        let mut loaded: std::collections::HashSet<String> = std::collections::HashSet::new();
+
         let mut revoked = 0;
         for &index in &selected {
             let record = ledger.leases[index].clone();
             if record.revoked {
                 println!("Lease '{}' is already revoked.", record.lease_id);
                 continue;
+            }
+            if let Some(backend_config) = leases.get(&record.backend_name)
+                && loaded.insert(record.backend_name.clone())
+            {
+                match lease::load_backend_secrets(
+                    backend_config,
+                    &config,
+                    &profile,
+                    &mut _temp_env_guard,
+                )
+                .await
+                {
+                    Ok(files) => _temp_files.extend(files),
+                    Err(e) => tracing::warn!(
+                        "Failed to load secrets for lease backend '{}': {}",
+                        record.backend_name,
+                        e
+                    ),
+                }
             }
             Self::revoke_record(&config, &profile, &leases, &record).await;
             ledger.mark_revoked_at(index);
@@ -810,10 +836,32 @@ impl LeaseCleanupCommand {
         let profile = Config::get_profiles(cli.profile.as_slice());
         let leases = config.get_leases(&profile)?;
         let mut cleaned = 0;
+        let mut _temp_env_guard = TempEnvGuard::default();
+        let mut _temp_files = Vec::new();
+        let mut loaded: std::collections::HashSet<&str> = std::collections::HashSet::new();
 
         for (index, record) in &expired {
             // Try to revoke via the backend if available (best-effort)
             if let Some(backend_config) = leases.get(&record.backend_name) {
+                // Load the backend's parent credentials once; revoking needs
+                // them even though the lease itself has expired.
+                if loaded.insert(record.backend_name.as_str()) {
+                    match lease::load_backend_secrets(
+                        backend_config,
+                        &config,
+                        &profile,
+                        &mut _temp_env_guard,
+                    )
+                    .await
+                    {
+                        Ok(files) => _temp_files.extend(files),
+                        Err(e) => tracing::warn!(
+                            "Failed to load secrets for lease backend '{}': {}",
+                            record.backend_name,
+                            e
+                        ),
+                    }
+                }
                 match backend_config.create_backend() {
                     Ok(backend) => {
                         // Expired leases: pass None for credentials since the

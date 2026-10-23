@@ -12,6 +12,10 @@ pub mod command;
 pub mod gcp_iam;
 pub mod github_app;
 pub mod github_oauth;
+pub mod gitlab;
+pub mod kubernetes;
+pub mod oauth2_client_credentials;
+pub mod tailscale;
 pub mod vault;
 
 /// A credential lease with metadata for tracking and revocation
@@ -47,6 +51,44 @@ pub trait LeaseBackend: Send + Sync {
 
     /// Maximum allowed lease duration
     fn max_lease_duration(&self) -> Duration;
+
+    /// Whether a lease's credentials may be cached and handed to later
+    /// commands. Backends whose credentials are consumed by their first use
+    /// (such as a single-use auth key) return false, so every command gets a
+    /// fresh lease and nothing sensitive is stored in the ledger.
+    fn cacheable(&self) -> bool {
+        true
+    }
+}
+
+/// Read a credential from the environment. An empty value counts as unset, so
+/// `FOO=` cannot shadow a usable alternative or pass for a real credential.
+pub(crate) fn env_credential(name: &str) -> Option<String> {
+    crate::env::var(name).ok().filter(|v| !v.trim().is_empty())
+}
+
+/// Reject a URL that would send credentials in cleartext. Only https is
+/// accepted, except for loopback hosts, which never leave the machine (local
+/// proxies and test servers).
+pub(crate) fn require_secure_url(backend: &str, field: &str, value: &str) -> Result<()> {
+    let url = reqwest::Url::parse(value).map_err(|e| {
+        crate::error::FnoxError::Config(format!(
+            "{backend} backend: invalid {field} '{value}': {e}"
+        ))
+    })?;
+    let host = url.host_str().unwrap_or("").trim_matches(['[', ']']);
+    let is_loopback = host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback());
+    match url.scheme() {
+        "https" => Ok(()),
+        "http" if is_loopback => Ok(()),
+        _ => Err(crate::error::FnoxError::Config(format!(
+            "{backend} backend: {field} must use https (http is allowed only for localhost, \
+             127.0.0.1 or ::1), got '{value}'."
+        ))),
+    }
 }
 
 fn default_gcp_scopes() -> Vec<String> {
@@ -91,6 +133,34 @@ fn default_github_oauth_scope() -> String {
 
 fn default_github_oauth_keyring_service() -> String {
     "fnox-github-oauth".to_string()
+}
+
+fn default_gitlab_scopes() -> Vec<String> {
+    vec!["read_api".to_string()]
+}
+
+fn default_gitlab_access_level() -> String {
+    "developer".to_string()
+}
+
+fn default_gitlab_env_var() -> String {
+    "GITLAB_TOKEN".to_string()
+}
+
+fn default_kubernetes_env_var() -> String {
+    "KUBE_TOKEN".to_string()
+}
+
+fn default_oauth2_env_var() -> String {
+    "OAUTH2_ACCESS_TOKEN".to_string()
+}
+
+fn default_tailscale_tailnet() -> String {
+    "-".to_string()
+}
+
+fn default_tailscale_env_var() -> String {
+    "TS_AUTHKEY".to_string()
 }
 
 fn default_true() -> bool {
@@ -219,6 +289,90 @@ pub enum LeaseBackendConfig {
         #[serde(skip_serializing_if = "Option::is_none")]
         duration: Option<String>,
     },
+    /// GitLab Project or Group Access Token
+    Gitlab {
+        /// GitLab base URL (default: https://gitlab.com)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        url: Option<String>,
+        /// Project ID or full path; set exactly one of `project` or `group`
+        #[serde(skip_serializing_if = "Option::is_none")]
+        project: Option<String>,
+        /// Group ID or full path; set exactly one of `project` or `group`
+        #[serde(skip_serializing_if = "Option::is_none")]
+        group: Option<String>,
+        #[serde(default = "default_gitlab_scopes")]
+        scopes: Vec<String>,
+        /// "guest", "reporter", "developer" (default), "maintainer" or "owner"
+        #[serde(default = "default_gitlab_access_level")]
+        access_level: String,
+        #[serde(default = "default_gitlab_env_var")]
+        env_var: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        duration: Option<String>,
+    },
+    /// Kubernetes ServiceAccount Token (TokenRequest)
+    Kubernetes {
+        service_account: String,
+        /// ServiceAccount namespace (default: the kubeconfig context's namespace)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        namespace: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        audiences: Vec<String>,
+        /// kubeconfig context (default: the current context)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        context: Option<String>,
+        /// Path to a kubeconfig file (default: KUBECONFIG, then ~/.kube/config)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        kubeconfig: Option<String>,
+        #[serde(default = "default_kubernetes_env_var")]
+        env_var: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        duration: Option<String>,
+    },
+    /// OAuth2 Client Credentials Grant
+    Oauth2ClientCredentials {
+        token_url: String,
+        client_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        scope: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        audience: Option<String>,
+        #[serde(default = "default_oauth2_env_var")]
+        env_var: String,
+        /// "basic" (default) sends the credentials in a header, "post" in the form body
+        #[serde(default)]
+        auth_method: oauth2_client_credentials::ClientAuthMethod,
+        /// Extra form parameters sent to the token endpoint
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        params: IndexMap<String, String>,
+        /// RFC 7009 revocation endpoint; tokens expire on their own when unset
+        #[serde(skip_serializing_if = "Option::is_none")]
+        revocation_url: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        duration: Option<String>,
+    },
+    /// Tailscale Auth Key
+    Tailscale {
+        /// Tailnet name (default: "-", the tailnet the credentials belong to)
+        #[serde(default = "default_tailscale_tailnet")]
+        tailnet: String,
+        /// Tailscale API base URL (default: https://api.tailscale.com)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        api_base: Option<String>,
+        /// ACL tags applied to devices that use the key, such as "tag:ci"
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        tags: Vec<String>,
+        #[serde(default)]
+        reusable: bool,
+        #[serde(default = "default_true")]
+        ephemeral: bool,
+        #[serde(default = "default_true")]
+        preauthorized: bool,
+        #[serde(default = "default_tailscale_env_var")]
+        env_var: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        duration: Option<String>,
+    },
     /// Generic Command Backend
     Command {
         create_command: String,
@@ -255,6 +409,12 @@ impl LeaseBackendConfig {
                 private_key_file, ..
             } => github_app::check_prerequisites(private_key_file),
             LeaseBackendConfig::GithubOauth { .. } => github_oauth::check_prerequisites(),
+            LeaseBackendConfig::Gitlab { .. } => gitlab::check_prerequisites(),
+            LeaseBackendConfig::Kubernetes { .. } => kubernetes::check_prerequisites(),
+            LeaseBackendConfig::Oauth2ClientCredentials { .. } => {
+                oauth2_client_credentials::check_prerequisites()
+            }
+            LeaseBackendConfig::Tailscale { .. } => tailscale::check_prerequisites(),
             LeaseBackendConfig::Command { .. } => command::check_prerequisites(),
         }
     }
@@ -278,6 +438,12 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::Cloudflare { .. } => cloudflare::required_env_vars(),
             LeaseBackendConfig::GithubApp { .. } => github_app::required_env_vars(),
             LeaseBackendConfig::GithubOauth { .. } => github_oauth::required_env_vars(),
+            LeaseBackendConfig::Gitlab { .. } => gitlab::required_env_vars(),
+            LeaseBackendConfig::Kubernetes { .. } => kubernetes::required_env_vars(),
+            LeaseBackendConfig::Oauth2ClientCredentials { .. } => {
+                oauth2_client_credentials::required_env_vars()
+            }
+            LeaseBackendConfig::Tailscale { .. } => tailscale::required_env_vars(),
             LeaseBackendConfig::Command { .. } => command::required_env_vars(),
         }
     }
@@ -293,6 +459,10 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::Cloudflare { env_var, .. } => env_var == key,
             LeaseBackendConfig::GithubApp { env_var, .. } => env_var == key,
             LeaseBackendConfig::GithubOauth { env_var, .. } => env_var == key,
+            LeaseBackendConfig::Gitlab { env_var, .. }
+            | LeaseBackendConfig::Kubernetes { env_var, .. }
+            | LeaseBackendConfig::Oauth2ClientCredentials { env_var, .. }
+            | LeaseBackendConfig::Tailscale { env_var, .. } => env_var == key,
         }
     }
 
@@ -305,7 +475,11 @@ impl LeaseBackendConfig {
             | LeaseBackendConfig::AzureToken { env_var, .. }
             | LeaseBackendConfig::Cloudflare { env_var, .. }
             | LeaseBackendConfig::GithubApp { env_var, .. }
-            | LeaseBackendConfig::GithubOauth { env_var, .. } => vec![env_var.as_str()],
+            | LeaseBackendConfig::GithubOauth { env_var, .. }
+            | LeaseBackendConfig::Gitlab { env_var, .. }
+            | LeaseBackendConfig::Kubernetes { env_var, .. }
+            | LeaseBackendConfig::Oauth2ClientCredentials { env_var, .. }
+            | LeaseBackendConfig::Tailscale { env_var, .. } => vec![env_var.as_str()],
             LeaseBackendConfig::Vault { env_map, .. } => {
                 env_map.values().map(String::as_str).collect()
             }
@@ -335,6 +509,12 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::Cloudflare { .. } => cloudflare::CONSUMED_ENV_VARS,
             LeaseBackendConfig::GithubApp { .. } => github_app::CONSUMED_ENV_VARS,
             LeaseBackendConfig::GithubOauth { .. } => github_oauth::CONSUMED_ENV_VARS,
+            LeaseBackendConfig::Gitlab { .. } => gitlab::CONSUMED_ENV_VARS,
+            LeaseBackendConfig::Kubernetes { .. } => kubernetes::CONSUMED_ENV_VARS,
+            LeaseBackendConfig::Oauth2ClientCredentials { .. } => {
+                oauth2_client_credentials::CONSUMED_ENV_VARS
+            }
+            LeaseBackendConfig::Tailscale { .. } => tailscale::CONSUMED_ENV_VARS,
         }
     }
 
@@ -443,6 +623,78 @@ impl LeaseBackendConfig {
                 auth_base.clone(),
                 api_base.clone(),
             ))),
+            LeaseBackendConfig::Gitlab {
+                url,
+                project,
+                group,
+                scopes,
+                access_level,
+                env_var,
+                ..
+            } => Ok(Box::new(gitlab::GitLabBackend::new(
+                url.clone(),
+                project.clone(),
+                group.clone(),
+                scopes.clone(),
+                access_level,
+                env_var.clone(),
+            )?)),
+            LeaseBackendConfig::Kubernetes {
+                service_account,
+                namespace,
+                audiences,
+                context,
+                kubeconfig,
+                env_var,
+                ..
+            } => Ok(Box::new(kubernetes::KubernetesBackend::new(
+                service_account.clone(),
+                namespace.clone(),
+                audiences.clone(),
+                context.clone(),
+                kubeconfig.clone(),
+                env_var.clone(),
+            ))),
+            LeaseBackendConfig::Oauth2ClientCredentials {
+                token_url,
+                client_id,
+                scope,
+                audience,
+                env_var,
+                auth_method,
+                params,
+                revocation_url,
+                ..
+            } => Ok(Box::new(
+                oauth2_client_credentials::Oauth2ClientCredentialsBackend::new(
+                    token_url.clone(),
+                    client_id.clone(),
+                    scope.clone(),
+                    audience.clone(),
+                    env_var.clone(),
+                    *auth_method,
+                    params.clone(),
+                    revocation_url.clone(),
+                )?,
+            )),
+            LeaseBackendConfig::Tailscale {
+                tailnet,
+                api_base,
+                tags,
+                reusable,
+                ephemeral,
+                preauthorized,
+                env_var,
+                ..
+            } => Ok(Box::new(tailscale::TailscaleBackend::new(
+                tailnet.clone(),
+                api_base.clone(),
+                tags.clone(),
+                *reusable,
+                *ephemeral,
+                *preauthorized,
+                env_var.clone(),
+            )?)),
             LeaseBackendConfig::Command {
                 create_command,
                 revoke_command,
@@ -489,6 +741,10 @@ impl LeaseBackendConfig {
             | LeaseBackendConfig::Cloudflare { duration, .. }
             | LeaseBackendConfig::GithubApp { duration, .. }
             | LeaseBackendConfig::GithubOauth { duration, .. }
+            | LeaseBackendConfig::Gitlab { duration, .. }
+            | LeaseBackendConfig::Kubernetes { duration, .. }
+            | LeaseBackendConfig::Oauth2ClientCredentials { duration, .. }
+            | LeaseBackendConfig::Tailscale { duration, .. }
             | LeaseBackendConfig::Command { duration, .. } => duration.as_deref(),
         }
     }
@@ -507,6 +763,10 @@ mod tests {
             "type = \"cloudflare\"\nenv_var = \"CF_TOKEN\"",
             "type = \"github-app\"\napp_id = \"1\"\ninstallation_id = \"2\"\nenv_var = \"GH_APP_TOKEN\"",
             "type = \"github-oauth\"\nclient_id = \"cid\"\nenv_var = \"GH_OAUTH_TOKEN\"",
+            "type = \"gitlab\"\nproject = \"group/app\"\nenv_var = \"GL_TOKEN\"",
+            "type = \"kubernetes\"\nservice_account = \"deployer\"\nenv_var = \"K8S_TOKEN\"",
+            "type = \"oauth2-client-credentials\"\ntoken_url = \"https://idp.example.com/token\"\nclient_id = \"cid\"\nenv_var = \"OAUTH_TOKEN\"",
+            "type = \"tailscale\"\nenv_var = \"TS_KEY\"",
             "type = \"command\"\ncreate_command = \"true\"",
         ]
         .iter()
@@ -530,6 +790,10 @@ mod tests {
             "GH_APP_TOKEN",
             "GH_OAUTH_TOKEN",
             "GITHUB_TOKEN",
+            "GL_TOKEN",
+            "K8S_TOKEN",
+            "OAUTH_TOKEN",
+            "TS_KEY",
             "MY_TOKEN",
             "",
         ];
@@ -545,6 +809,27 @@ mod tests {
             for key in &produced {
                 assert!(lease.produces_env_var(key));
             }
+        }
+    }
+
+    #[test]
+    fn secure_url_requires_https_except_on_loopback() {
+        for ok in [
+            "https://gitlab.example.com",
+            "http://localhost:8080",
+            "http://127.0.0.1:9",
+            "http://[::1]:9/path",
+        ] {
+            assert!(require_secure_url("Test", "url", ok).is_ok(), "{ok}");
+        }
+        for bad in [
+            "http://gitlab.example.com",
+            "http://10.0.0.5",
+            "ftp://localhost",
+            "not a url",
+            "",
+        ] {
+            assert!(require_secure_url("Test", "url", bad).is_err(), "{bad}");
         }
     }
 

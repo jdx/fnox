@@ -12,6 +12,7 @@ use crate::daemon::Purpose;
 use crate::error::{FnoxError, Result};
 use crate::lease::{self, LeaseLedger};
 use crate::lease_backends::LeaseBackendConfig;
+use crate::secret_filter::SecretFilter;
 use crate::suggest::find_similar;
 use indexmap::IndexMap;
 use std::collections::HashSet;
@@ -57,6 +58,10 @@ pub enum Roots<'a> {
     Scope,
     /// Exactly these keys, validated by [`select`].
     Keys(&'a [String]),
+    /// Every in-scope secret that passes the `--only` / `--except` filter,
+    /// plus what they depend on. Leases run when the filter allows what they
+    /// produce.
+    Filter(&'a SecretFilter),
 }
 
 /// The outcome of [`select`].
@@ -131,6 +136,7 @@ pub fn select(
                 leases: all_leases(),
             });
         }
+        Roots::Filter(filter) => return select_filtered(secrets, leases, scope, filter),
         Roots::Keys(keys) => keys,
     };
 
@@ -213,6 +219,72 @@ pub fn select(
             .filter(|name| selected_leases.contains(name.as_str()))
             .cloned()
             .collect(),
+    })
+}
+
+/// [`select`] for [`Roots::Filter`].
+///
+/// A lease whose inputs are not statically known (a `command` lease) may read
+/// any secret, which would make [`resolve_set`] resolve the whole profile, so
+/// it is skipped whenever a filter is active. Other leases run when `--only`
+/// names a variable they produce (or `--only` is absent) and `--except` names
+/// none of them.
+fn select_filtered(
+    secrets: &IndexMap<String, SecretConfig>,
+    leases: &IndexMap<String, LeaseBackendConfig>,
+    scope: EnvScope,
+    filter: &SecretFilter,
+) -> std::result::Result<Selection, KeyRejection> {
+    let lease_vars = |lease: &LeaseBackendConfig| -> Vec<String> {
+        if scope == EnvScope::Exec {
+            lease
+                .produced_env_vars()
+                .into_iter()
+                .map(String::from)
+                .collect()
+        } else {
+            Vec::new()
+        }
+    };
+    let mut known: Vec<&str> = secrets.keys().map(String::as_str).collect();
+    let mut injectable: Vec<&str> = secrets
+        .iter()
+        .filter(|(_, secret)| scope_allows(scope, secret.env_mode()))
+        .map(|(key, _)| key.as_str())
+        .collect();
+    let produced: Vec<String> = leases.values().flat_map(lease_vars).collect();
+    known.extend(produced.iter().map(String::as_str));
+    injectable.extend(produced.iter().map(String::as_str));
+    filter.validate(&known, &injectable, |key| secret_mode(secrets, key))?;
+
+    let roots = secrets
+        .iter()
+        .filter(|(key, secret)| scope_allows(scope, secret.env_mode()) && filter.allows(key))
+        .map(|(key, _)| key.clone())
+        .collect();
+    let leases = leases
+        .iter()
+        .filter(|(_, lease)| {
+            if scope != EnvScope::Exec {
+                return false;
+            }
+            if !lease.has_known_inputs() {
+                return false;
+            }
+            let vars = lease_vars(lease);
+            let matched = if filter.has_only() {
+                vars.iter().any(|var| filter.includes(var))
+            } else {
+                true
+            };
+            matched && !vars.iter().any(|var| filter.excludes(var))
+        })
+        .map(|(name, _)| name.clone())
+        .collect();
+    Ok(Selection {
+        roots,
+        requested: None,
+        leases,
     })
 }
 
@@ -390,6 +462,10 @@ pub async fn plan(
     roots: Roots<'_>,
     lease_label: &str,
 ) -> Result<(ChildEnv, Vec<tempfile::NamedTempFile>)> {
+    let filter = match &roots {
+        Roots::Filter(filter) => Some(*filter),
+        _ => None,
+    };
     let secrets = config.get_secrets(profile)?;
     let leases = config.get_leases(profile)?;
     let sel =
@@ -461,18 +537,30 @@ pub async fn plan(
 
     // The lease-time files stay alive for the caller: a lease credential may
     // be a path to one of them, and `fnox exec` keeps them until the child exits.
-    Ok((
-        assemble(
-            scope,
-            &secrets,
-            &leases,
-            &sel,
-            &resolved,
-            &lease_creds,
-            leases_used,
-        ),
-        _temp_files,
-    ))
+    let mut env = assemble(
+        scope,
+        &secrets,
+        &leases,
+        &sel,
+        &resolved,
+        &lease_creds,
+        leases_used,
+    );
+    // A selected lease may produce more variables than the filter names; the
+    // rest must not reach the command or overwrite inherited values.
+    if let Some(filter) = filter {
+        env.set.retain(|key, _| filter.allows(key));
+        // Re-scrub the ambient secrets a dropped lease value had replaced.
+        for key in ambient_scrub_keys() {
+            if !env.set.contains_key(key)
+                && !env.files.contains_key(key)
+                && !env.remove.iter().any(|existing| existing == key)
+            {
+                env.remove.push(key.to_string());
+            }
+        }
+    }
+    Ok((env, _temp_files))
 }
 
 /// The document `fnox env --json` prints for `env`.
@@ -745,6 +833,98 @@ create_command = "true"
         let sel = select(&secrets, &leases, EnvScope::Exec, Roots::Scope).unwrap();
         assert_eq!(sel.leases, ["gh", "cmd"]);
         assert_eq!(sel.roots, ["SHELL_OK", "EXEC_ONLY", "FILE_SECRET"]);
+    }
+
+    // ---- select with a filter ----
+
+    fn filter(only: &[&str], except: &[&str]) -> SecretFilter {
+        SecretFilter::new(&keys(only), &keys(except)).unwrap()
+    }
+
+    #[test]
+    fn filter_selects_matching_in_scope_secrets_in_config_order() {
+        let (secrets, leases) = fixture(BASE);
+        let f = filter(&["SHELL_*", "FILE_SECRET"], &[]);
+        let sel = select(&secrets, &leases, EnvScope::Exec, Roots::Filter(&f)).unwrap();
+        assert_eq!(sel.roots, ["SHELL_OK", "FILE_SECRET"]);
+        assert_eq!(sel.requested, None);
+    }
+
+    #[test]
+    fn filter_glob_skips_secrets_that_are_not_in_scope() {
+        let (secrets, leases) = fixture(BASE);
+        let f = filter(&["*"], &[]);
+        let sel = select(&secrets, &leases, EnvScope::Exec, Roots::Filter(&f)).unwrap();
+        assert!(!sel.roots.contains(&"HIDDEN".to_string()));
+        assert!(sel.roots.contains(&"EXEC_ONLY".to_string()));
+    }
+
+    #[test]
+    fn filter_except_drops_secrets_and_keeps_the_rest() {
+        let (secrets, leases) = fixture(BASE);
+        let f = filter(&[], &["EXEC_ONLY"]);
+        let sel = select(&secrets, &leases, EnvScope::Exec, Roots::Filter(&f)).unwrap();
+        assert_eq!(sel.roots, ["SHELL_OK", "FILE_SECRET"]);
+        // The `command` lease is skipped: it may read any secret, so running
+        // it would resolve the whole profile, `--except` secrets included.
+        assert_eq!(sel.leases, ["gh"]);
+    }
+
+    #[test]
+    fn filter_only_runs_leases_that_produce_a_named_variable() {
+        let (secrets, leases) = fixture(BASE);
+        let f = filter(&["GH_TOKEN"], &[]);
+        let sel = select(&secrets, &leases, EnvScope::Exec, Roots::Filter(&f)).unwrap();
+        assert!(sel.roots.is_empty());
+        assert_eq!(sel.leases, ["gh"]);
+
+        let f = filter(&["SHELL_OK"], &[]);
+        let sel = select(&secrets, &leases, EnvScope::Exec, Roots::Filter(&f)).unwrap();
+        assert!(sel.leases.is_empty());
+    }
+
+    #[test]
+    fn filter_except_skips_a_lease_that_produces_the_variable() {
+        let (secrets, leases) = fixture(BASE);
+        let f = filter(&[], &["GH_*"]);
+        let sel = select(&secrets, &leases, EnvScope::Exec, Roots::Filter(&f)).unwrap();
+        assert!(sel.leases.is_empty());
+    }
+
+    #[test]
+    fn filter_rejects_unknown_and_non_injectable_names() {
+        let (secrets, leases) = fixture(BASE);
+        let f = filter(&["SHEL_OK", "HIDDEN"], &[]);
+        let rejection = select(&secrets, &leases, EnvScope::Exec, Roots::Filter(&f)).unwrap_err();
+        assert_eq!(rejection.unknown, ["SHEL_OK"]);
+        assert_eq!(rejection.suggestions["SHEL_OK"], ["SHELL_OK"]);
+        assert_eq!(rejection.not_injectable[0].key, "HIDDEN");
+    }
+
+    #[test]
+    fn filtered_resolve_set_pulls_in_provider_dependencies_only() {
+        let config: Config = toml_edit::de::from_str(
+            r#"
+root = true
+[providers.op]
+type = "1password"
+[secrets]
+OP_SERVICE_ACCOUNT_TOKEN = { default = "tok", env = false }
+UNRELATED = { default = "x" }
+BROKEN = { default = "y", if_missing = "error" }
+DB = { provider = "op", value = "item/field" }
+"#,
+        )
+        .unwrap();
+        let profile = vec!["default".to_string()];
+        let secrets = config.get_secrets(&profile).unwrap();
+        let leases = config.get_leases(&profile).unwrap();
+        let f = filter(&["DB"], &[]);
+        let sel = select(&secrets, &leases, EnvScope::Exec, Roots::Filter(&f)).unwrap();
+        assert_eq!(sel.roots, ["DB"]);
+        let set = resolve_set(&config, &profile, &secrets, &leases, &sel).unwrap();
+        let resolved: Vec<_> = set.keys().map(String::as_str).collect();
+        assert_eq!(resolved, ["OP_SERVICE_ACCOUNT_TOKEN", "DB"]);
     }
 
     // ---- assemble ----

@@ -432,8 +432,11 @@ pub async fn create_and_record_lease(
 ) -> Result<crate::lease_backends::Lease> {
     let result = backend.create_lease(duration, label).await?;
 
-    let (cached_credentials, encryption_provider) =
-        cache_credentials(config, profile, &result.credentials, &result.lease_id).await;
+    let (cached_credentials, encryption_provider) = if backend.cacheable() {
+        cache_credentials(config, profile, &result.credentials, &result.lease_id).await
+    } else {
+        (None, None)
+    };
 
     record_lease(
         ledger,
@@ -477,6 +480,53 @@ pub fn set_secrets_as_env(
         }
     }
     Ok(temp_files)
+}
+
+/// Load the secrets a lease backend reads from the environment (its parent
+/// credentials) into the process environment, so revoking a lease can
+/// authenticate the same way creating it did. Only the secrets the backend
+/// consumes, plus the default encryption provider's own dependencies (needed to
+/// decrypt cached credentials) and everything those secrets depend on, are
+/// resolved. A backend with unknown inputs, such
+/// as `command`, gets the whole profile.
+///
+/// Returns the temp files backing `as_file` secrets; keep them alive while the
+/// backend runs.
+pub async fn load_backend_secrets(
+    lease_config: &crate::lease_backends::LeaseBackendConfig,
+    config: &Config,
+    profile: &[String],
+    guard: &mut TempEnvGuard,
+) -> Result<Vec<tempfile::NamedTempFile>> {
+    let all_secrets = config.get_secrets(profile)?;
+    let needed: IndexMap<_, _> = if lease_config.has_known_inputs() {
+        let mut roots: Vec<String> = lease_config
+            .consumed_env_vars()
+            .iter()
+            .map(|k| k.to_string())
+            .collect();
+        if let Ok(Some(default_provider)) = config.get_default_provider(profile)
+            && let Some(provider_config) = config.get_providers(profile)?.get(&default_provider)
+        {
+            roots.extend(
+                provider_config
+                    .env_dependencies()
+                    .iter()
+                    .map(|d| d.to_string()),
+            );
+        }
+        // A parent credential can live behind a provider that needs its own
+        // secret (a 1Password token, an age key), or reference another secret,
+        // so resolve everything those depend on too.
+        crate::secret_resolver::dependency_closure(config, profile, &all_secrets, &roots)?
+    } else {
+        all_secrets
+    };
+    if needed.is_empty() {
+        return Ok(Vec::new());
+    }
+    let resolved = crate::secret_resolver::resolve_secrets_batch(config, profile, &needed).await?;
+    set_secrets_as_env(&resolved, &needed, guard)
 }
 
 /// Encrypt credential values using an encryption provider
@@ -726,8 +776,12 @@ pub async fn resolve_lease(
     );
 
     // Encrypt credentials for caching (async, may call encryption provider).
-    let (cached_credentials, encryption_provider) =
-        cache_credentials(config, profile, &result.credentials, &result.lease_id).await;
+    // Backends whose credentials are spent by first use are never cached.
+    let (cached_credentials, encryption_provider) = if backend.cacheable() {
+        cache_credentials(config, profile, &result.credentials, &result.lease_id).await
+    } else {
+        (None, None)
+    };
 
     // Acquire lock only for the synchronous ledger write.
     {
