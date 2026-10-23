@@ -94,3 +94,21 @@ EOT
 	assert_failure
 	assert_output --partial "--force"
 }
+
+@test "set --generate refuses to replace a secret inherited from a parent config" {
+	mkdir child
+	cat >fnox.toml <<'EOT'
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+INHERITED = { provider = "plain", value = "parent" }
+EOT
+	cd child
+	printf '[secrets]\n' >fnox.toml
+	run "$FNOX_BIN" set INHERITED --generate --provider plain
+	assert_failure
+	assert_output --partial "--force"
+}

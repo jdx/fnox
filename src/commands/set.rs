@@ -244,7 +244,8 @@ impl SetCommand {
 
         if self.generate
             && !self.force
-            && Config::target_has_secret(&self.key, &write_profile, &target_path)?
+            && (effective_secret.is_some()
+                || Config::target_has_secret(&self.key, &write_profile, &target_path)?)
         {
             return Err(FnoxError::Config(format!(
                 "Secret '{}' already exists; pass --force to replace it with a generated value",
@@ -396,6 +397,12 @@ impl SetCommand {
             // If we have a default provider and the secret doesn't already have one,
             // store it explicitly for clarity
             secret_config.set_provider(provider_name_to_use.clone());
+        }
+
+        if self.generate {
+            // A forced replacement must not leave a stale `fnox sync` cache that
+            // would take precedence over the new value.
+            secret_config.sync = None;
         }
 
         if let Some(ref value) = secret_value {
