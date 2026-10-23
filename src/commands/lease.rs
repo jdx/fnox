@@ -100,16 +100,21 @@ pub struct LeaseCreateCommand {
 
 /// List leases recorded for this project
 ///
-/// Prints the ID, backend, expiry, and status (`active`, `expired`, or
-/// `revoked`) of each lease in the project's ledger. Long IDs are shortened. The
-/// ledger tracks leases fnox created; it is not an inventory of credentials at
-/// the provider.
+/// Prints the ID, backend, label, expiry, and status (`active`, `expired`, or
+/// `revoked`) of each lease in the project's ledger. Long IDs are shortened in
+/// the table; `fnox lease revoke` accepts the shortened form as a prefix, and
+/// `--json` prints full IDs. The ledger tracks leases fnox created; it is not an
+/// inventory of credentials at the provider.
 #[derive(Debug, usage_rs::Args)]
 #[usage(
     example("fnox lease list", header = "List every recorded lease"),
     example(
         "fnox lease list --active",
         header = "List leases that are still valid"
+    ),
+    example(
+        "fnox lease list --json",
+        header = "Print full lease IDs and metadata as JSON"
     ),
     after_long_help = "See also:\n- Credential leases: https://fnox.jdx.dev/guide/leases"
 )]
@@ -121,25 +126,45 @@ pub struct LeaseListCommand {
     /// Show only expired leases
     #[usage(long)]
     pub expired: bool,
+
+    /// Print leases as a JSON array with full IDs, labels, and timestamps;
+    /// cached credentials are never included
+    #[usage(long)]
+    pub json: bool,
 }
 
-/// Revoke a lease by ID
+/// Revoke leases by ID, ID prefix, or backend
 ///
-/// Asks the lease backend to revoke LEASE_ID, then marks it revoked in the
-/// project's ledger. If the backend cannot revoke it, for example because its
-/// credentials only expire on their own, fnox warns and revokes only the ledger
-/// entry.
+/// Asks the lease backend to revoke each matching lease, then marks it revoked
+/// in the project's ledger. If the backend cannot revoke a lease, for example
+/// because its credentials only expire on their own, fnox warns and revokes
+/// only the ledger entry.
 ///
-/// LEASE_ID must be the full ID. `fnox lease list` shortens long IDs;
-/// `fnox lease create --format json` prints the full one as `lease_id`.
+/// TARGET is a lease ID, a unique prefix of one (as shown by `fnox lease list`),
+/// or a backend name from `[leases.<name>]`, which revokes every active lease of
+/// that backend. Use `--all` to revoke every active lease in the project.
+/// Expired leases are handled by `fnox lease cleanup`.
 #[derive(Debug, usage_rs::Args)]
 #[usage(
     example("fnox lease revoke LEASE_ID", header = "Revoke a lease"),
+    example(
+        "fnox lease revoke aws-1a2b3c",
+        header = "Revoke a lease by a unique ID prefix"
+    ),
+    example(
+        "fnox lease revoke aws",
+        header = "Revoke every active lease of the aws backend"
+    ),
+    example("fnox lease revoke --all", header = "Revoke every active lease"),
     after_long_help = "See also:\n- Credential leases: https://fnox.jdx.dev/guide/leases"
 )]
 pub struct LeaseRevokeCommand {
-    /// Full ID of the lease to revoke
-    pub lease_id: String,
+    /// Lease ID, unique ID prefix, or backend name
+    pub target: Option<String>,
+
+    /// Revoke every active lease in this project
+    #[usage(short, long)]
+    pub all: bool,
 }
 
 /// Revoke expired leases and mark them revoked in the ledger
@@ -447,6 +472,16 @@ impl LeaseCreateCommand {
     }
 }
 
+fn lease_status(record: &LeaseRecord) -> &'static str {
+    if record.revoked {
+        "revoked"
+    } else if record.expires_at.is_some_and(|exp| exp <= Utc::now()) {
+        "expired"
+    } else {
+        "active"
+    }
+}
+
 impl LeaseListCommand {
     pub async fn run(&self, cli: &Cli, config: &Config) -> Result<()> {
         let project_dir = lease::project_dir_from_config(config, &cli.config);
@@ -460,36 +495,49 @@ impl LeaseListCommand {
             ledger.leases.iter().collect()
         };
 
+        if self.json {
+            let entries: Vec<serde_json::Value> = records
+                .iter()
+                .map(|r| {
+                    serde_json::json!({
+                        "lease_id": r.lease_id,
+                        "backend": r.backend_name,
+                        "label": r.label,
+                        "status": lease_status(r),
+                        "created_at": r.created_at.to_rfc3339(),
+                        "expires_at": r.expires_at.map(|exp| exp.to_rfc3339()),
+                    })
+                })
+                .collect();
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&entries)
+                    .map_err(|e| FnoxError::Json { source: e })?
+            );
+            return Ok(());
+        }
+
         if records.is_empty() {
             println!("No leases found.");
             return Ok(());
         }
 
         println!(
-            "{:<20} {:<15} {:<15} {:<8}",
-            "LEASE ID", "BACKEND", "EXPIRES", "STATUS"
+            "{:<20} {:<15} {:<20} {:<16} {:<8}",
+            "LEASE ID", "BACKEND", "LABEL", "EXPIRES", "STATUS"
         );
         for record in records {
-            let status = if record.revoked {
-                "revoked"
-            } else if record.expires_at.is_some_and(|exp| exp <= Utc::now()) {
-                "expired"
-            } else {
-                "active"
-            };
             let expires = record
                 .expires_at
                 .map(|exp: chrono::DateTime<chrono::Utc>| exp.format("%Y-%m-%d %H:%M").to_string())
                 .unwrap_or_else(|| "never".to_string());
-            let id_short = if record.lease_id.chars().count() > 18 {
-                let truncated: String = record.lease_id.chars().take(15).collect();
-                format!("{truncated}...")
-            } else {
-                record.lease_id.clone()
-            };
             println!(
-                "{:<20} {:<15} {:<15} {:<8}",
-                id_short, record.backend_name, expires, status
+                "{:<20} {:<15} {:<20} {:<16} {:<8}",
+                shorten(&record.lease_id, 18),
+                record.backend_name,
+                shorten(&record.label, 20),
+                expires,
+                lease_status(record)
             );
         }
 
@@ -497,32 +545,136 @@ impl LeaseListCommand {
     }
 }
 
+/// Shorten `value` to at most `max` characters, ending in `...` when cut.
+/// `LeaseRevokeCommand` strips that suffix, so the shortened form works as a prefix.
+fn shorten(value: &str, max: usize) -> String {
+    if value.chars().count() > max {
+        let truncated: String = value.chars().take(max - 3).collect();
+        format!("{truncated}...")
+    } else {
+        value.to_string()
+    }
+}
+
 impl LeaseRevokeCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
+        match (&self.target, self.all) {
+            (Some(_), true) => {
+                return Err(FnoxError::Config(
+                    "--all cannot be used with a lease ID or backend name".to_string(),
+                ));
+            }
+            (None, false) => {
+                return Err(FnoxError::Config(
+                    "Specify a lease ID, ID prefix, or backend name to revoke, or use --all"
+                        .to_string(),
+                ));
+            }
+            _ => {}
+        }
+
         let project_dir = lease::project_dir_from_config(&config, &cli.config);
         let _ledger_lock = LeaseLedger::lock(&project_dir)?;
         let mut ledger = LeaseLedger::load(&project_dir)?;
-
-        let record = ledger
-            .find(&self.lease_id)
-            .ok_or_else(|| FnoxError::Config(format!("Lease '{}' not found", self.lease_id)))?;
-
-        if record.revoked {
-            println!("Lease '{}' is already revoked.", self.lease_id);
-            return Ok(());
-        }
-
-        let backend_name = record.backend_name.clone();
-        let cached_credentials = record.cached_credentials.clone();
-        let encryption_provider_name = record.encryption_provider.clone();
         let profile = Config::get_profiles(cli.profile.as_slice());
         let leases = config.get_leases(&profile)?;
 
+        let records: Vec<LeaseRecord> = match &self.target {
+            None => ledger.active_leases().into_iter().cloned().collect(),
+            Some(target) => {
+                Self::resolve_target(&ledger, target, leases.contains_key(target.as_str()))?
+            }
+        };
+
+        if records.is_empty() {
+            println!("No active leases to revoke.");
+            return Ok(());
+        }
+
+        let mut revoked = 0;
+        for record in &records {
+            if record.revoked {
+                println!("Lease '{}' is already revoked.", record.lease_id);
+                continue;
+            }
+            Self::revoke_record(&config, &profile, &leases, record).await;
+            ledger.mark_revoked(&record.lease_id);
+            // Save after each lease so a later failure or interrupt doesn't
+            // forget that the backend already revoked this one.
+            ledger.save(&project_dir)?;
+            println!("Lease '{}' revoked.", record.lease_id);
+            revoked += 1;
+        }
+        if records.len() > 1 {
+            println!("Revoked {revoked} lease(s).");
+        }
+
+        Ok(())
+    }
+
+    /// Match `target` against the ledger: an exact lease ID, then a backend
+    /// name (active leases only), then a unique ID prefix.
+    fn resolve_target(
+        ledger: &LeaseLedger,
+        target: &str,
+        configured_backend: bool,
+    ) -> Result<Vec<LeaseRecord>> {
+        if let Some(record) = ledger.find(target) {
+            return Ok(vec![record.clone()]);
+        }
+
+        let known_backend =
+            configured_backend || ledger.leases.iter().any(|r| r.backend_name == target);
+        if known_backend {
+            return Ok(ledger
+                .active_leases()
+                .into_iter()
+                .filter(|r| r.backend_name == target)
+                .cloned()
+                .collect());
+        }
+
+        // `lease list` shortens IDs with a trailing "...", so accept that form.
+        let prefix = target.trim_end_matches("...");
+        let matches: Vec<&LeaseRecord> = if prefix.is_empty() {
+            Vec::new()
+        } else {
+            ledger
+                .leases
+                .iter()
+                .filter(|r| r.lease_id.starts_with(prefix))
+                .collect()
+        };
+        match matches.as_slice() {
+            [] => Err(FnoxError::Config(format!(
+                "Lease '{target}' not found. Use a lease ID or unique prefix from `fnox lease list`, or a backend name."
+            ))),
+            [record] => Ok(vec![(*record).clone()]),
+            many => Err(FnoxError::Config(format!(
+                "'{target}' matches {} leases; use a longer prefix or the full ID:\n{}",
+                many.len(),
+                many.iter()
+                    .map(|r| format!("  {}", r.lease_id))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            ))),
+        }
+    }
+
+    /// Ask the backend to revoke `record`. Failures are reported as warnings;
+    /// the caller still marks the ledger entry revoked.
+    async fn revoke_record(
+        config: &Config,
+        profile: &[String],
+        leases: &IndexMap<String, crate::lease_backends::LeaseBackendConfig>,
+        record: &LeaseRecord,
+    ) {
         // Decrypt cached credentials (if encrypted) so backends can use
         // credential values for revocation (e.g. GitHub App needs the token).
-        let decrypted_credentials = match (&cached_credentials, &encryption_provider_name) {
+        let decrypted_credentials = match (&record.cached_credentials, &record.encryption_provider)
+        {
             (Some(creds), Some(enc_name)) => {
-                match lease::find_encryption_provider(&config, &profile).await {
+                match lease::find_encryption_provider(config, profile).await {
                     lease::EncryptionProviderResult::Available(found_name, provider)
                         if found_name == *enc_name =>
                     {
@@ -553,16 +705,22 @@ impl LeaseRevokeCommand {
             _ => None,
         };
 
-        if let Some(backend_config) = leases.get(&backend_name) {
+        let backend_name = &record.backend_name;
+        if let Some(backend_config) = leases.get(backend_name) {
             match backend_config.create_backend() {
                 Ok(backend) => {
                     if let Err(e) = backend
-                        .revoke_lease(&self.lease_id, decrypted_credentials.as_ref())
+                        .revoke_lease(&record.lease_id, decrypted_credentials.as_ref())
                         .await
                     {
-                        tracing::warn!("Backend revocation failed for '{}': {}", self.lease_id, e);
+                        tracing::warn!(
+                            "Backend revocation failed for '{}': {}",
+                            record.lease_id,
+                            e
+                        );
                         eprintln!(
-                            "Warning: backend revocation failed; only the local ledger entry will be revoked."
+                            "Warning: backend revocation failed for '{}'; only the local ledger entry will be revoked.",
+                            record.lease_id
                         );
                     }
                 }
@@ -588,12 +746,6 @@ impl LeaseRevokeCommand {
                 backend_name
             );
         }
-
-        ledger.mark_revoked(&self.lease_id);
-        ledger.save(&project_dir)?;
-        println!("Lease '{}' revoked.", self.lease_id);
-
-        Ok(())
     }
 }
 

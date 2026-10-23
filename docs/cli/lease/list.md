@@ -6,16 +6,17 @@ description: "List leases recorded for this project. Usage, flags, and examples 
 
 # `fnox lease list`
 
-- **Usage:** `fnox lease list [--active] [--expired]`
+- **Usage:** `fnox lease list [FLAGS]`
 
 List leases recorded for this project
 
-Prints the ID, backend, expiry, and status (`active`, `expired`, or `revoked`) of each lease in the project's ledger. Long IDs are shortened. The ledger tracks leases fnox created; it is not an inventory of credentials at the provider.
+Prints the ID, backend, label, expiry, and status (`active`, `expired`, or `revoked`) of each lease in the project's ledger. Long IDs are shortened in the table; `fnox lease revoke` accepts the shortened form as a prefix, and `--json` prints full IDs. The ledger tracks leases fnox created; it is not an inventory of credentials at the provider.
 
 ## Flags
 
 - **`--active`** — Show only leases that have not expired or been revoked
 - **`--expired`** — Show only expired leases
+- **`--json`** — Print leases as a JSON array with full IDs, labels, and timestamps; cached credentials are never included
 - **`-h --help`** — Print help
 
 ## Examples
@@ -30,6 +31,12 @@ fnox lease list
 
 ```sh
 fnox lease list --active
+```
+
+**Print full lease IDs and metadata as JSON**
+
+```sh
+fnox lease list --json
 ```
 
 ## See also
