@@ -1,6 +1,7 @@
 use crate::commands::Cli;
 use crate::config::{self, Config, IfMissing};
 use crate::error::{FnoxError, Result};
+use crate::generate::{self, GenerateKind};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
@@ -72,6 +73,10 @@ fn secret_belongs_to_target(
         header = "Read the value from stdin"
     ),
     example(
+        "fnox set API_TOKEN --generate --length 48",
+        header = "Generate and store a random value"
+    ),
+    example(
         "fnox -P staging set DATABASE_URL",
         header = "Write to the staging profile"
     ),
@@ -116,6 +121,10 @@ pub struct SetCommand {
     #[usage(long)]
     pub default: Option<String>,
 
+    /// Replace an existing secret when generating
+    #[usage(long, requires = "generate")]
+    pub force: bool,
+
     /// Read the value from a UTF-8 file, verbatim
     #[usage(
         long,
@@ -124,9 +133,29 @@ pub struct SetCommand {
     )]
     pub from_file: Option<PathBuf>,
 
+    /// Generate a random value instead of reading one
+    ///
+    /// Uses the OS random number generator. The value is stored through the
+    /// normal provider path and is not printed unless you pass `--show`.
+    /// Refuses to replace an existing secret unless you pass `--force`.
+    #[usage(long, conflicts = "value", conflicts = "from_file")]
+    pub generate: bool,
+
+    /// Kind of value `--generate` creates
+    #[usage(long, value_enum, default_value_t = GenerateKind::Password, default = "password", requires = "generate")]
+    pub generate_type: GenerateKind,
+
     /// What to do when the secret cannot be resolved: `error`, `warn`, or `ignore`
     #[usage(long, value_enum)]
     pub if_missing: Option<IfMissing>,
+
+    /// Length in characters of a generated value (default: 32; ignored for uuid; base64 cannot be 1 more than a multiple of 4)
+    #[usage(long, requires = "generate")]
+    pub length: Option<usize>,
+
+    /// Print the generated value after storing it
+    #[usage(long, requires = "generate")]
+    pub show: bool,
 }
 
 impl SetCommand {
@@ -162,7 +191,15 @@ impl SetCommand {
             self.description.is_some() || self.if_missing.is_some() || self.default.is_some();
 
         // Get the secret value if provided
-        let secret_value = if let Some(ref path) = self.from_file {
+        let mut generated: Option<String> = None;
+        let secret_value = if self.generate {
+            let value = generate::generate(
+                self.generate_type,
+                self.length.unwrap_or(generate::DEFAULT_LENGTH),
+            )?;
+            generated = Some(value.clone());
+            Some(value)
+        } else if let Some(ref path) = self.from_file {
             Some(std::fs::read_to_string(path).map_err(|source| {
                 FnoxError::SecretFileReadFailed {
                     path: path.clone(),
@@ -204,6 +241,17 @@ impl SetCommand {
             .as_ref()
             .filter(|secret| secret_belongs_to_target(secret, &target_path, &write_profile))
             .cloned();
+
+        if self.generate
+            && !self.force
+            && (effective_secret.is_some()
+                || Config::target_has_secret(&self.key, &write_profile, &target_path)?)
+        {
+            return Err(FnoxError::Config(format!(
+                "Secret '{}' already exists; pass --force to replace it with a generated value",
+                self.key
+            )));
+        }
 
         // Determine which provider to use
         let provider_name_to_use = if let Some(ref provider_name) = self.provider {
@@ -351,6 +399,12 @@ impl SetCommand {
             secret_config.set_provider(provider_name_to_use.clone());
         }
 
+        if self.generate {
+            // A forced replacement must not leave a stale `fnox sync` cache that
+            // would take precedence over the new value.
+            secret_config.sync = None;
+        }
+
         if let Some(ref value) = secret_value {
             // Priority order: remote key name, encrypted value, then plaintext
             if let Some(remote_key) = remote_key_name {
@@ -410,7 +464,7 @@ impl SetCommand {
             if let Some(provider) = secret_config.provider() {
                 println!("  provider: {}", console::style(provider).green());
             }
-            if let Some(value) = secret_config.value() {
+            if let Some(value) = secret_config.value().filter(|_| generated.is_none()) {
                 // Use character-aware truncation to avoid panicking on multi-byte UTF-8
                 let display_value = if value.chars().count() > 50 {
                     format!("{}...", value.chars().take(50).collect::<String>())
@@ -419,10 +473,17 @@ impl SetCommand {
                 };
                 println!("  value: {}", console::style(display_value).dim());
             }
+            if let Some(value) = generated.as_ref().filter(|_| self.show) {
+                println!("  generated: {}", console::style(value).dim());
+            }
             if let Some(ref desc) = secret_config.description {
                 println!("  description: {}", console::style(desc).dim());
             }
-            if let Some(ref default) = secret_config.default {
+            if let Some(default) = secret_config
+                .default
+                .as_ref()
+                .filter(|_| generated.is_none())
+            {
                 println!("  default: {}", console::style(default).dim());
             }
             if let Some(if_missing) = secret_config.if_missing {
@@ -449,6 +510,16 @@ impl SetCommand {
                 println!(
                     "{check} Set secret {styled_key} in profile {styled_profile}{global_suffix}"
                 );
+            }
+            if let Some(ref value) = generated {
+                if self.show {
+                    println!("{value}");
+                } else {
+                    println!(
+                        "  generated a random {} value (use --show to print it)",
+                        self.generate_type
+                    );
+                }
             }
         }
 

@@ -2456,6 +2456,7 @@ dependencies = [
  "fnox-client",
  "fnox-core",
  "globset",
+ "hex",
  "ignore",
  "indexmap 2.14.2",
  "ipnet",

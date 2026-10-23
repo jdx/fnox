@@ -154,6 +154,7 @@ crossterm = { workspace = true }
 data-encoding = { workspace = true }
 demand = { workspace = true }
 globset = { workspace = true }
+hex = { workspace = true }
 ignore = { workspace = true }
 indexmap = { workspace = true }
 ipnet = { workspace = true }

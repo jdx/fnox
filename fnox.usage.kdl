@@ -347,7 +347,23 @@ See also:
 - Running commands: https://fnox.jdx.dev/guide/running-commands
 - Profiles: https://fnox.jdx.dev/guide/profiles
 """#
+    flag --except help="Do not resolve these secrets; repeatable" var=#true delimiter=, {
+        long_help #"""
+Do not resolve these secrets; repeatable
+
+Takes names and globs like `--only` and applies after it. A secret that a selected secret depends on is still resolved, but not passed to the command unless it is selected itself. A lease is skipped when NAME matches a variable it produces.
+"""#
+        arg <NAME>
+    }
     flag --no-redact help="Never redact output, even if the config or `FNOX_EXEC_REDACT` enables it"
+    flag --only help="Resolve only these secrets, plus the secrets they depend on; repeatable" var=#true delimiter=, {
+        long_help #"""
+Resolve only these secrets, plus the secrets they depend on; repeatable
+
+Each NAME is a secret name or a glob such as `AWS_*`; comma-separate several. Other secrets are not resolved, so their providers are never called and they cannot fail the run. `if_missing` still applies to the selected secrets. An unknown name, or a glob that matches nothing, is an error. Leases run only when NAME matches a variable they produce; `command` leases are skipped.
+"""#
+        arg <NAME>
+    }
     flag --redact help="Replace secret values with `[REDACTED]` in piped or redirected output" conflicts=--no-redact {
         long_help #"""
 Replace secret values with `[REDACTED]` in piped or redirected output
@@ -377,6 +393,8 @@ The command keeps fnox's process ID and receives signals directly. Not allowed w
     example "fnox exec -P production --if-missing error -- ./deploy.sh" header="Use the production profile and fail on any missing secret"
     example "fnox exec -- sh -c 'test -n \"$DATABASE_URL\"'" header="Expand a secret in a shell expression (single quotes defer expansion)"
     example "fnox exec --refresh API_TOKEN -- ./script.sh" header="Re-fetch one secret instead of using the daemon cache"
+    example "fnox exec --only DATABASE_URL,'AWS_*' -- ./migrate.sh" header="Resolve only some secrets; unrelated secrets are never fetched"
+    example "fnox exec --except LEGACY_API_KEY -- npm start" header="Skip one secret, for example one whose provider is unreachable"
 }
 cmd export help="Print or write resolved secrets as env, shell, JSON, YAML, or TOML" {
     alias ex
@@ -1052,8 +1070,27 @@ See also:
     flag --default help="Fallback value to use when the secret cannot be resolved" {
         arg <DEFAULT>
     }
+    flag --force help="Replace an existing secret when generating" requires=--generate
     flag --from-file help="Read the value from a UTF-8 file, verbatim" conflicts=VALUE {
         arg <FROM_FILE>
+    }
+    flag --generate help="Generate a random value instead of reading one" {
+        long_help #"""
+Generate a random value instead of reading one
+
+Uses the OS random number generator. The value is stored through the normal provider path and is not printed unless you pass `--show`. Refuses to replace an existing secret unless you pass `--force`.
+"""#
+        conflicts VALUE --from-file
+    }
+    flag --generate-type help="Kind of value `--generate` creates" default=password requires=--generate {
+        arg <GENERATE_TYPE> {
+            choices {
+                choice password help="URL-safe characters: letters, digits, `-` and `_`"
+                choice hex help="Lowercase hexadecimal"
+                choice base64 help="URL-safe base64 without padding"
+                choice uuid help="Random (version 4) UUID; ignores `--length`"
+            }
+        }
     }
     flag --if-missing help="What to do when the secret cannot be resolved: `error`, `warn`, or `ignore`" {
         arg <IF_MISSING> {
@@ -1064,6 +1101,10 @@ See also:
             }
         }
     }
+    flag --length help="Length in characters of a generated value (default: 32; ignored for uuid; base64 cannot be 1 more than a multiple of 4)" requires=--generate {
+        arg <LENGTH>
+    }
+    flag --show help="Print the generated value after storing it" requires=--generate
     flag "-h --help" help="Print help" action=help builtin=#true
     arg <KEY> help="Secret name, used as the environment variable name"
     arg "[VALUE]" help="Value to store; omit to read stdin or prompt" {
@@ -1078,6 +1119,7 @@ A value passed as an argument appears in shell history and process listings. Pre
     example "fnox set API_TOKEN --provider op" header="Store a value with a specific provider"
     example "fnox set SSH_KEY --from-file ~/.ssh/id_ed25519" header="Store a file's contents verbatim"
     example "printf '%s' \"$TOKEN\" | fnox set API_TOKEN" header="Read the value from stdin"
+    example "fnox set API_TOKEN --generate --length 48" header="Generate and store a random value"
     example "fnox -P staging set DATABASE_URL" header="Write to the staging profile"
 }
 cmd sponsors help="Show the companies that sponsor fnox" {

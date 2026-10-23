@@ -23,7 +23,15 @@ With `--redact` (or `redact_exec = true` / `FNOX_EXEC_REDACT=1`), secret values 
 
 ## Flags
 
+- **`--except <NAME>`** — Do not resolve these secrets; repeatable
+
+  Takes names and globs like `--only` and applies after it. A secret that a selected secret depends on is still resolved, but not passed to the command unless it is selected itself. A lease is skipped when NAME matches a variable it produces.
+
 - **`--no-redact`** — Never redact output, even if the config or `FNOX_EXEC_REDACT` enables it
+- **`--only <NAME>`** — Resolve only these secrets, plus the secrets they depend on; repeatable
+
+  Each NAME is a secret name or a glob such as `AWS_*`; comma-separate several. Other secrets are not resolved, so their providers are never called and they cannot fail the run. `if_missing` still applies to the selected secrets. An unknown name, or a glob that matches nothing, is an error. Leases run only when NAME matches a variable they produce; `command` leases are skipped.
+
 - **`--redact`** — Replace secret values with `[REDACTED]` in piped or redirected output
 
   Applies to each of stdout and stderr only when that stream is not a terminal. Values shorter than 3 characters are not redacted. Overrides `redact_exec` in the config and `FNOX_EXEC_REDACT`. Not allowed with `--replace` (use `--no-redact`).
@@ -62,6 +70,18 @@ fnox exec -- sh -c 'test -n "$DATABASE_URL"'
 
 ```sh
 fnox exec --refresh API_TOKEN -- ./script.sh
+```
+
+**Resolve only some secrets; unrelated secrets are never fetched**
+
+```sh
+fnox exec --only DATABASE_URL,'AWS_*' -- ./migrate.sh
+```
+
+**Skip one secret, for example one whose provider is unreachable**
+
+```sh
+fnox exec --except LEGACY_API_KEY -- npm start
 ```
 
 ## See also

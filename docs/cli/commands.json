@@ -942,6 +942,26 @@
         ],
         "flags": [
           {
+            "name": "except",
+            "usage": "--except <NAME>",
+            "help": "Do not resolve these secrets; repeatable",
+            "help_long": "Do not resolve these secrets; repeatable\n\nTakes names and globs like `--only` and applies after it. A secret that a selected secret depends on is still resolved, but not passed to the command unless it is selected itself. A lease is skipped when NAME matches a variable it produces.",
+            "help_first_line": "Do not resolve these secrets; repeatable",
+            "short": [],
+            "long": ["except"],
+            "var": true,
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "NAME",
+              "usage": "<NAME>",
+              "required": true,
+              "double_dash": "Optional",
+              "delimiter": ",",
+              "hide": false
+            }
+          },
+          {
             "name": "no-redact",
             "usage": "--no-redact",
             "help": "Never redact output, even if the config or `FNOX_EXEC_REDACT` enables it",
@@ -950,6 +970,26 @@
             "long": ["no-redact"],
             "hide": false,
             "global": false
+          },
+          {
+            "name": "only",
+            "usage": "--only <NAME>",
+            "help": "Resolve only these secrets, plus the secrets they depend on; repeatable",
+            "help_long": "Resolve only these secrets, plus the secrets they depend on; repeatable\n\nEach NAME is a secret name or a glob such as `AWS_*`; comma-separate several. Other secrets are not resolved, so their providers are never called and they cannot fail the run. `if_missing` still applies to the selected secrets. An unknown name, or a glob that matches nothing, is an error. Leases run only when NAME matches a variable they produce; `command` leases are skipped.",
+            "help_first_line": "Resolve only these secrets, plus the secrets they depend on; repeatable",
+            "short": [],
+            "long": ["only"],
+            "var": true,
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "NAME",
+              "usage": "<NAME>",
+              "required": true,
+              "double_dash": "Optional",
+              "delimiter": ",",
+              "hide": false
+            }
           },
           {
             "name": "redact",
@@ -1038,6 +1078,18 @@
           {
             "code": "fnox exec --refresh API_TOKEN -- ./script.sh",
             "header": "Re-fetch one secret instead of using the daemon cache",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox exec --only DATABASE_URL,'AWS_*' -- ./migrate.sh",
+            "header": "Resolve only some secrets; unrelated secrets are never fetched",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox exec --except LEGACY_API_KEY -- npm start",
+            "header": "Skip one secret, for example one whose provider is unreachable",
             "help": null,
             "lang": ""
           }
@@ -3694,6 +3746,17 @@
             }
           },
           {
+            "name": "force",
+            "usage": "--force",
+            "help": "Replace an existing secret when generating",
+            "help_first_line": "Replace an existing secret when generating",
+            "short": [],
+            "long": ["force"],
+            "hide": false,
+            "global": false,
+            "requires": ["--generate"]
+          },
+          {
             "name": "from-file",
             "usage": "--from-file <FROM_FILE>",
             "help": "Read the value from a UTF-8 file, verbatim",
@@ -3710,6 +3773,58 @@
               "hide": false
             },
             "conflicts": ["VALUE"]
+          },
+          {
+            "name": "generate",
+            "usage": "--generate",
+            "help": "Generate a random value instead of reading one",
+            "help_long": "Generate a random value instead of reading one\n\nUses the OS random number generator. The value is stored through the normal provider path and is not printed unless you pass `--show`. Refuses to replace an existing secret unless you pass `--force`.",
+            "help_first_line": "Generate a random value instead of reading one",
+            "short": [],
+            "long": ["generate"],
+            "hide": false,
+            "global": false,
+            "conflicts": ["VALUE", "--from-file"]
+          },
+          {
+            "name": "generate-type",
+            "usage": "--generate-type <GENERATE_TYPE>",
+            "help": "Kind of value `--generate` creates",
+            "help_first_line": "Kind of value `--generate` creates",
+            "short": [],
+            "long": ["generate-type"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "GENERATE_TYPE",
+              "usage": "<GENERATE_TYPE>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false,
+              "choices": {
+                "choices": ["password", "hex", "base64", "uuid"],
+                "details": [
+                  {
+                    "value": "password",
+                    "help": "URL-safe characters: letters, digits, `-` and `_`"
+                  },
+                  {
+                    "value": "hex",
+                    "help": "Lowercase hexadecimal"
+                  },
+                  {
+                    "value": "base64",
+                    "help": "URL-safe base64 without padding"
+                  },
+                  {
+                    "value": "uuid",
+                    "help": "Random (version 4) UUID; ignores `--length`"
+                  }
+                ]
+              }
+            },
+            "default": ["password"],
+            "requires": ["--generate"]
           },
           {
             "name": "if-missing",
@@ -3741,6 +3856,35 @@
                 ]
               }
             }
+          },
+          {
+            "name": "length",
+            "usage": "--length <LENGTH>",
+            "help": "Length in characters of a generated value (default: 32; ignored for uuid; base64 cannot be 1 more than a multiple of 4)",
+            "help_first_line": "Length in characters of a generated value (default: 32; ignored for uuid; base64 cannot be 1 more than a multiple of 4)",
+            "short": [],
+            "long": ["length"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "LENGTH",
+              "usage": "<LENGTH>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            },
+            "requires": ["--generate"]
+          },
+          {
+            "name": "show",
+            "usage": "--show",
+            "help": "Print the generated value after storing it",
+            "help_first_line": "Print the generated value after storing it",
+            "short": [],
+            "long": ["show"],
+            "hide": false,
+            "global": false,
+            "requires": ["--generate"]
           },
           {
             "name": "help",
@@ -3787,6 +3931,12 @@
           {
             "code": "printf '%s' \"$TOKEN\" | fnox set API_TOKEN",
             "header": "Read the value from stdin",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox set API_TOKEN --generate --length 48",
+            "header": "Generate and store a random value",
             "help": null,
             "lang": ""
           },

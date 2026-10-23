@@ -15,10 +15,12 @@ pub use fnox_core::{
 pub mod child_env;
 pub mod commands;
 pub mod daemon;
+pub mod generate;
 pub mod hook_env;
 pub mod mcp_server;
 pub mod proxy;
 pub mod redact;
+pub mod secret_filter;
 pub mod shell;
 pub mod tui;
 
