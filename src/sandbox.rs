@@ -617,10 +617,16 @@ fn check_bwrap() -> Result<()> {
     let exe = env::current_exe().map_err(|error| {
         FnoxError::Config(format!("failed to locate the fnox executable: {error}"))
     })?;
+    let bridge_exe = Path::new(SANDBOX_DIR).join("fnox");
     let output = std::process::Command::new("bwrap")
         .args(BASE_FLAGS)
+        // Bound in as the real launch does, since the tmpfs on /tmp and /run
+        // would hide a binary that lives there.
+        .arg("--ro-bind")
+        .arg(&exe)
+        .arg(&bridge_exe)
         .arg("--")
-        .arg(exe)
+        .arg(&bridge_exe)
         .arg("--version")
         .output();
     match output {
