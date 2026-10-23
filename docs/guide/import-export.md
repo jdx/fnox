@@ -95,8 +95,64 @@ kubectl create secret generic app-secrets --from-env-file=<(fnox export)
 
 A teammate fills in a private copy and runs `fnox import -i secrets.json json --provider age`.
 
+## Catch leaked secrets before you commit
+
+`fnox scan` looks for secret-shaped text, which produces false positives. `fnox scan --values` instead resolves the active profile's secrets (through the same path as `fnox exec`, so `--profile`, the daemon, and `if_missing` all apply) and reports any file that contains one of their actual values:
+
+```sh
+fnox scan --values
+```
+
+```text
+Found 1 resolved secret value(s) in 1 file(s):
+src/app.env:3:6 [resolved-secret] DB_PASSWORD = ****
+```
+
+The output names the secret and never prints any part of its value. The exit code is 1 when anything is found. If a secret cannot be resolved, the scan fails with the provider's error (or warns and lists the unchecked secret names when `if_missing` is `warn` or `ignore`) rather than passing silently. If no secret at all could be resolved, the scan fails even then.
+
+To avoid noise, `--values` skips empty secrets and secrets shorter than 8 characters, binary files, files over 5 MiB, and gitignored files (add `--include-ignored` to scan those). It replaces the pattern heuristics rather than adding to them. Note that plain-provider values and defaults live in `fnox.toml` itself, so use `--ignore fnox.toml` if you keep those there on purpose.
+
+### Scan only what is staged
+
+`--staged` reads file contents from the git index, not the working tree, so it checks exactly what would be committed:
+
+```sh
+fnox scan --values --staged
+```
+
+### Pre-commit hook
+
+```sh
+fnox scan --install-hook
+```
+
+This writes `.git/hooks/pre-commit` (or the `core.hooksPath` directory if you set one) running `fnox scan --values --staged`, and blocks the commit if a secret value is staged. If `fnox` is not on `PATH`, the hook prints a notice and lets the commit through. fnox never overwrites an existing pre-commit hook: it stops and tells you, unless you pass `--append` to add the fnox check to the end of an existing shell-script hook. Installing twice does nothing.
+
+If you manage hooks with [hk](https://hk.jdx.dev) or [pre-commit](https://pre-commit.com), add the command there instead of installing a raw hook:
+
+```pkl
+// hk.pkl
+["fnox-scan"] {
+  check = "fnox scan --values --staged"
+}
+```
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: local
+    hooks:
+      - id: fnox-scan
+        name: fnox scan
+        entry: fnox scan --values --staged
+        language: system
+        pass_filenames: false
+        always_run: true
+```
+
 ## See also
 
 - [Running commands](/guide/running-commands): `exec`, `get`, and file secrets.
 - [`fnox import` reference](/cli/import) and [`fnox export` reference](/cli/export): every flag.
+- [`fnox scan` reference](/cli/scan): every flag.
 - [Local sync cache](/guide/sync): cache a vault without migrating off it.
