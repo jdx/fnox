@@ -8,18 +8,35 @@ fn configured_timeout(value: &str) -> Option<Duration> {
     }
 }
 
-/// Build an HTTP client with the configured timeout from settings.
-pub fn http_client() -> reqwest::Client {
+fn client_builder() -> reqwest::ClientBuilder {
     let settings = crate::settings::Settings::get();
     let user_agent = format!("fnox/{}", env!("CARGO_PKG_VERSION"));
     let mut builder = reqwest::Client::builder().user_agent(user_agent);
     if let Some(timeout) = configured_timeout(&settings.http_timeout) {
         builder = builder.timeout(timeout);
     }
+    builder
+}
+
+fn build_or_default(builder: reqwest::ClientBuilder) -> reqwest::Client {
     builder.build().unwrap_or_else(|e| {
         tracing::warn!("Failed to build HTTP client with timeout: {e}; using default (no timeout)");
         reqwest::Client::new()
     })
+}
+
+/// Build an HTTP client with the configured timeout from settings.
+pub fn http_client() -> reqwest::Client {
+    build_or_default(client_builder())
+}
+
+/// Like [`http_client`], but never follows redirects. Use it for requests that
+/// carry credentials: reqwest strips `Authorization` on a cross-origin redirect
+/// but forwards custom headers (such as GitLab's `PRIVATE-TOKEN`) and re-sends
+/// form bodies on 307/308, so a redirect could deliver a secret to a host the
+/// URL checks never saw.
+pub fn credential_client() -> reqwest::Client {
+    build_or_default(client_builder().redirect(reqwest::redirect::Policy::none()))
 }
 
 #[cfg(test)]

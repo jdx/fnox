@@ -55,37 +55,15 @@ impl KubernetesProvider {
     }
 
     async fn client_and_namespace(&self) -> Result<(Client, String)> {
-        let options = KubeConfigOptions {
-            context: self.selected_context(),
-            ..KubeConfigOptions::default()
-        };
-
-        let config = match &self.kubeconfig {
-            Some(path) => {
-                let kubeconfig = Kubeconfig::read_from(path).map_err(|_| config_error())?;
-                Config::from_custom_kubeconfig(kubeconfig, &options)
-                    .await
-                    .map_err(|_| config_error())?
-            }
-            None if options.context.is_some() => Config::from_kubeconfig(&options)
+        let (client, default_namespace) =
+            connect(self.selected_context(), self.kubeconfig.as_deref())
                 .await
-                .map_err(|_| config_error())?,
-            // An explicit KUBECONFIG must not fall back to an in-cluster identity
-            // when it cannot be loaded. That could select a different cluster.
-            None if has_non_empty_value(env::var("KUBECONFIG").ok().as_deref()) => {
-                Config::from_kubeconfig(&options)
-                    .await
-                    .map_err(|_| config_error())?
-            }
-            None => Config::infer().await.map_err(|_| config_error())?,
-        };
-
+                .ok_or_else(config_error)?;
         let namespace = self
             .namespace
             .clone()
             .filter(|namespace| !namespace.is_empty())
-            .unwrap_or_else(|| config.default_namespace.clone());
-        let client = Client::try_from(config).map_err(|_| config_error())?;
+            .unwrap_or(default_namespace);
 
         Ok((client, namespace))
     }
@@ -199,6 +177,39 @@ impl crate::providers::Provider for KubernetesProvider {
 
 pub fn env_dependencies() -> &'static [&'static str] {
     &["FNOX_K8S_CONTEXT", "KUBECONFIG"]
+}
+
+/// Build a client for the selected kubeconfig and context, returning it with the
+/// kubeconfig's default namespace. Shared with the `kubernetes` lease backend.
+/// `None` means the configuration could not be loaded.
+pub(crate) async fn connect(
+    context: Option<String>,
+    kubeconfig: Option<&str>,
+) -> Option<(Client, String)> {
+    let options = KubeConfigOptions {
+        context,
+        ..KubeConfigOptions::default()
+    };
+
+    let config = match kubeconfig {
+        Some(path) => {
+            let kubeconfig = Kubeconfig::read_from(path).ok()?;
+            Config::from_custom_kubeconfig(kubeconfig, &options)
+                .await
+                .ok()?
+        }
+        None if options.context.is_some() => Config::from_kubeconfig(&options).await.ok()?,
+        // An explicit KUBECONFIG must not fall back to an in-cluster identity
+        // when it cannot be loaded. That could select a different cluster.
+        None if has_non_empty_value(env::var("KUBECONFIG").ok().as_deref()) => {
+            Config::from_kubeconfig(&options).await.ok()?
+        }
+        None => Config::infer().await.ok()?,
+    };
+
+    let namespace = config.default_namespace.clone();
+    let client = Client::try_from(config).ok()?;
+    Some((client, namespace))
 }
 
 fn non_empty(value: Option<String>) -> Option<String> {

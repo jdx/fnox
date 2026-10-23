@@ -65,7 +65,7 @@ Or `cargo install fnox --locked`, `nix profile install github:jdx/fnox`, or a bi
 - **[Profiles](https://fnox.jdx.dev/guide/profiles)** for development, staging, and production, plus [layered config files](https://fnox.jdx.dev/guide/config-files) for monorepos and personal overrides.
 - **[Shell integration](https://fnox.jdx.dev/guide/shell-integration)** loads secrets when you `cd` into a project (Bash, Zsh, Fish, Nushell, PowerShell).
 - **[Offline cache](https://fnox.jdx.dev/guide/sync)** of vault secrets, encrypted to your own key, optionally behind Touch ID or a YubiKey; or an in-memory [daemon](https://fnox.jdx.dev/guide/daemon).
-- **[Short-lived credentials](https://fnox.jdx.dev/guide/leases)** from AWS STS, GCP, Azure, GitHub Apps, Vault, Cloudflare, or your own command.
+- **[Short-lived credentials](https://fnox.jdx.dev/guide/leases)** from AWS STS, GCP, Azure, GitHub, GitLab, Vault, Cloudflare, Tailscale, Kubernetes, any OAuth2 token endpoint, or your own command.
 - **[Safe for AI agents](https://fnox.jdx.dev/guide/proxy)**: a credential proxy injects real keys only into approved requests, and an [MCP server](https://fnox.jdx.dev/guide/mcp) exposes only the secrets you allow.
 - **[CI-ready](https://fnox.jdx.dev/guide/ci)**: one credential for the runner, the same `fnox exec` command, log masking on GitHub Actions.
 
