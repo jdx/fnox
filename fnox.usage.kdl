@@ -1002,8 +1002,27 @@ See also:
     flag --default help="Fallback value to use when the secret cannot be resolved" {
         arg <DEFAULT>
     }
+    flag --force help="Replace an existing secret when generating" requires=--generate
     flag --from-file help="Read the value from a UTF-8 file, verbatim" conflicts=VALUE {
         arg <FROM_FILE>
+    }
+    flag --generate help="Generate a random value instead of reading one" {
+        long_help #"""
+Generate a random value instead of reading one
+
+Uses the OS random number generator. The value is stored through the normal provider path and is not printed unless you pass `--show`. Refuses to replace an existing secret unless you pass `--force`.
+"""#
+        conflicts VALUE --from-file
+    }
+    flag --generate-type help="Kind of value `--generate` creates" default=password requires=--generate {
+        arg <GENERATE_TYPE> {
+            choices {
+                choice password help="URL-safe characters: letters, digits, `-` and `_`"
+                choice hex help="Lowercase hexadecimal"
+                choice base64 help="URL-safe base64 without padding"
+                choice uuid help="Random (version 4) UUID; ignores `--length`"
+            }
+        }
     }
     flag --if-missing help="What to do when the secret cannot be resolved: `error`, `warn`, or `ignore`" {
         arg <IF_MISSING> {
@@ -1014,6 +1033,10 @@ See also:
             }
         }
     }
+    flag --length help="Length in characters of a generated value (default: 32; ignored for uuid)" requires=--generate {
+        arg <LENGTH>
+    }
+    flag --show help="Print the generated value after storing it" requires=--generate
     flag "-h --help" help="Print help" action=help builtin=#true
     arg <KEY> help="Secret name, used as the environment variable name"
     arg "[VALUE]" help="Value to store; omit to read stdin or prompt" {
@@ -1028,6 +1051,7 @@ A value passed as an argument appears in shell history and process listings. Pre
     example "fnox set API_TOKEN --provider op" header="Store a value with a specific provider"
     example "fnox set SSH_KEY --from-file ~/.ssh/id_ed25519" header="Store a file's contents verbatim"
     example "printf '%s' \"$TOKEN\" | fnox set API_TOKEN" header="Read the value from stdin"
+    example "fnox set API_TOKEN --generate --length 48" header="Generate and store a random value"
     example "fnox -P staging set DATABASE_URL" header="Write to the staging profile"
 }
 cmd sponsors help="Show the companies that sponsor fnox" {

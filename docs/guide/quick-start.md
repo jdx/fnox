@@ -61,6 +61,15 @@ Type a value such as `postgresql://localhost/mydb` at the hidden prompt. fnox en
 DATABASE_URL = { provider = "age", value = "YWdl..." } # ciphertext, abbreviated
 ```
 
+To create a new random secret instead of typing one, use `--generate`:
+
+```sh
+fnox set API_TOKEN --generate                 # 32 URL-safe characters
+fnox set SESSION_KEY --generate --generate-type hex --length 64
+```
+
+The value comes from the operating system's random number generator, is stored with the same provider as any other `fnox set`, and is not printed unless you add `--show`. `--generate-type` accepts `password` (default), `hex`, `base64` and `uuid`; `--length` counts output characters (1 to 4096). An existing secret is only replaced with `--force`.
+
 Check that fnox can decrypt everything, without printing any values:
 
 ```sh

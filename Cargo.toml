@@ -152,6 +152,7 @@ crossterm = { workspace = true }
 data-encoding = { workspace = true }
 demand = { workspace = true }
 globset = { workspace = true }
+hex = { workspace = true }
 ignore = { workspace = true }
 indexmap = { workspace = true }
 libc = { workspace = true }
@@ -159,6 +160,7 @@ miette = { workspace = true }
 miniz_oxide = { workspace = true }
 nix = { workspace = true }
 ratatui = { workspace = true }
+rand = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 rcgen = { workspace = true }
