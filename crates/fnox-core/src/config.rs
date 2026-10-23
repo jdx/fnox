@@ -1099,7 +1099,7 @@ impl Config {
     }
 
     /// Merge two configs, with second config taking precedence
-    fn merge_configs(base: Config, overlay: Config) -> Result<Config> {
+    pub fn merge_configs(base: Config, overlay: Config) -> Result<Config> {
         let mut merged = base;
 
         // Merge imports (overlay takes precedence, but keep unique paths)

@@ -183,8 +183,11 @@ impl EditCommand {
         // Parse a fresh config from the modified content to recognize new providers
         // Strip the temp header first as it's not valid TOML
         let modified_toml = Self::strip_temp_header(&modified_content);
-        let modified_config: Config = toml_edit::de::from_str(&modified_toml)
+        let edited_config: Config = toml_edit::de::from_str(&modified_toml)
             .map_err(|e| FnoxError::Config(format!("Invalid configuration after edit: {}", e)))?;
+        // Layer the edited file over the fully loaded config so providers defined in
+        // imported files (or parent/global configs) are still available for encryption
+        let modified_config = Config::merge_configs(config.clone(), edited_config)?;
 
         self.reencrypt_secrets(&modified_config, &mut modified_doc, &all_secrets)
             .await?;

@@ -612,3 +612,28 @@ EDITOR_SCRIPT
 	run grep -q '\[profiles.production.secrets\]' fnox.toml
 	assert_success "Config should contain [profiles.production.secrets] section"
 }
+
+@test "edit re-encrypts secrets when the provider comes from an import" {
+	recipient="$(grep 'public key:' "$AGE_KEY_FILE" | cut -d: -f2- | xargs)"
+	cat >age.toml <<EOT
+[providers.age]
+type = "age"
+recipients = ["$recipient"]
+EOT
+	printf 'import = ["age.toml"]\n\n[secrets]\n' >fnox.toml
+	printf 'line one' | fnox set V --provider age
+	run fnox get V
+	assert_success
+	assert_output "line one"
+
+	printf '#!/bin/sh\nsed -i.bak "s/one/ONE/" "$1"\n' >editor.sh
+	chmod +x editor.sh
+	EDITOR=./editor.sh run fnox edit
+	assert_success
+
+	run grep -c 'line ONE' fnox.toml
+	assert_output "0"
+	run fnox get V
+	assert_success
+	assert_output "line ONE"
+}
