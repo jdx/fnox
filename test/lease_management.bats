@@ -395,6 +395,23 @@ EOF
 	assert_file_not_exist "$TEST_TEMP_DIR/revoked.log"
 }
 
+@test "lease revoke by ID still revokes an expired lease, but --all skips it" {
+	create_config
+	create_cred_script alpha.sh alpha "$(past_timestamp)"
+	create_lease alpha old
+
+	run "$FNOX_BIN" lease revoke --all
+	assert_success
+	assert_output --partial "No active leases to revoke."
+	assert_file_not_exist "$TEST_TEMP_DIR/revoked.log"
+
+	run "$FNOX_BIN" lease revoke alpha-old
+	assert_success
+	assert_output --partial "Lease 'alpha-old' revoked."
+	run cat "$TEST_TEMP_DIR/revoked.log"
+	assert_output "alpha-old"
+}
+
 @test "lease cleanup with nothing expired is a no-op" {
 	create_config
 	create_lease alpha one

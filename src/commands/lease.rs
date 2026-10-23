@@ -143,7 +143,8 @@ pub struct LeaseListCommand {
 /// TARGET is a lease ID, a unique prefix of one (as shown by `fnox lease list`),
 /// or a backend name from `[leases.<name>]`, which revokes every active lease of
 /// that backend. Use `--all` to revoke every active lease in the project.
-/// Expired leases are handled by `fnox lease cleanup`.
+/// `--all` and backend names skip expired leases, which `fnox lease cleanup`
+/// handles; naming an expired lease by ID or prefix still revokes it.
 #[derive(Debug, usage_rs::Args)]
 #[usage(
     example("fnox lease revoke LEASE_ID", header = "Revoke a lease"),

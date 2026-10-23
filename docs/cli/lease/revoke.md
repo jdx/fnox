@@ -12,7 +12,7 @@ Revoke leases by ID, ID prefix, or backend
 
 Asks the lease backend to revoke each matching lease, then marks it revoked in the project's ledger. If the backend cannot revoke a lease, for example because its credentials only expire on their own, fnox warns and revokes only the ledger entry.
 
-TARGET is a lease ID, a unique prefix of one (as shown by `fnox lease list`), or a backend name from `[leases.<name>]`, which revokes every active lease of that backend. Use `--all` to revoke every active lease in the project. Expired leases are handled by `fnox lease cleanup`.
+TARGET is a lease ID, a unique prefix of one (as shown by `fnox lease list`), or a backend name from `[leases.<name>]`, which revokes every active lease of that backend. Use `--all` to revoke every active lease in the project. `--all` and backend names skip expired leases, which `fnox lease cleanup` handles; naming an expired lease by ID or prefix still revokes it.
 
 ## Arguments
 
