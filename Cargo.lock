@@ -2484,6 +2484,7 @@ dependencies = [
  "toml_edit",
  "tracing",
  "tracing-subscriber",
+ "url",
  "usage-rs",
  "which",
 ]

@@ -124,8 +124,8 @@ enum ProxySubcommand {
     /// Print the effective proxy rules
     ///
     /// Validates the `[proxy]` table and prints its egress mode, audit setting,
-    /// and each rule's secret, domain, methods, paths, header, and placeholder
-    /// variable. Secrets are not resolved.
+    /// and each rule's secret, domain, methods, paths, header or query parameter, and
+    /// placeholder variable. Secrets are not resolved.
     #[usage(
         example("fnox proxy rules", header = "Print the rules"),
         example(
@@ -198,12 +198,12 @@ fn show_rules(proxy: &ProxyConfig) -> Result<()> {
             rule.paths.join(",")
         };
         println!(
-            "{} -> https://{} methods={} paths={} header={} env={}",
+            "{} -> https://{} methods={} paths={} {} env={}",
             rule.secret,
             rule.domain,
             methods,
             paths,
-            rule.header,
+            crate::proxy::target_label(rule),
             rule.env.as_deref().unwrap_or(&rule.secret)
         );
     }

@@ -2866,7 +2866,7 @@
             "hide": false,
             "args_override_self": true,
             "help": "Print the effective proxy rules",
-            "help_long": "Print the effective proxy rules\n\nValidates the `[proxy]` table and prints its egress mode, audit setting, and each rule's secret, domain, methods, paths, header, and placeholder variable. Secrets are not resolved.",
+            "help_long": "Print the effective proxy rules\n\nValidates the `[proxy]` table and prints its egress mode, audit setting, and each rule's secret, domain, methods, paths, header or query parameter, and placeholder variable. Secrets are not resolved.",
             "name": "rules",
             "aliases": [],
             "hidden_aliases": [],
