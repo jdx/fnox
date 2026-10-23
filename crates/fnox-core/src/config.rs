@@ -809,18 +809,18 @@ impl Config {
             self.default_provider = loaded.default_provider.clone();
         }
 
+        // Profile settings override top-level ones when read, so they are inherited
+        // independently of whatever the edited file defines at top level.
         for (profile_name, loaded_profile) in &loaded.profiles {
             let profile = self.profiles.entry(profile_name.clone()).or_default();
             for (name, provider) in &loaded_profile.providers {
                 if !profile.providers.contains_key(name)
-                    && !self.providers.contains_key(name)
                     && is_outer(loaded_profile.provider_sources.get(name))
                 {
                     profile.providers.insert(name.clone(), provider.clone());
                 }
             }
             if profile.default_provider.is_none()
-                && self.default_provider.is_none()
                 && is_outer(loaded_profile.default_provider_source.as_ref())
             {
                 profile.default_provider = loaded_profile.default_provider.clone();
