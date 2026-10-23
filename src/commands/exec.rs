@@ -281,7 +281,8 @@ impl ExecCommand {
                 Ok(_) => pending -= 1,
                 Err(_) => {
                     // Keep waiting while any unfinished reader moved data or is mid-write.
-                    let busy = activity.iter().fold(false, |busy, a| a.take_busy() || busy);
+                    // Poll every reader: `take_busy` clears a flag, so `any` must not short-circuit.
+                    let busy = activity.iter().filter(|a| a.take_busy()).count() > 0;
                     if !busy {
                         break;
                     }
