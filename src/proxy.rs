@@ -113,22 +113,32 @@ impl Redaction {
         if !self.lenient {
             return input.starts_with(&self.value).then_some(self.value.len());
         }
-        let mut consumed = 0;
-        for &expected in &self.value {
-            let rest = &input[consumed..];
-            let first = *rest.first()?;
-            if first == expected || (first == b'+' && expected == b' ') {
-                consumed += 1;
-            } else if first == b'%'
-                && rest.len() >= 3
-                && decode_hex_pair(rest[1], rest[2]) == Some(expected)
-            {
-                consumed += 3;
-            } else {
-                return None;
-            }
+        Self::match_lenient(&self.value, input)
+    }
+
+    /// Matches `value` against `input` where each value byte may appear
+    /// literally, as `+` for a space, or as a `%XX` escape. A literal `%` in the
+    /// value can be either itself or the start of `%25`, so a failed branch
+    /// backtracks and tries the other reading.
+    fn match_lenient(value: &[u8], input: &[u8]) -> Option<usize> {
+        let (&expected, rest_value) = match value.split_first() {
+            Some(split) => split,
+            None => return Some(0),
+        };
+        let first = *input.first()?;
+        let escaped = (first == b'%' && input.len() >= 3)
+            .then(|| decode_hex_pair(input[1], input[2]))
+            .flatten()
+            .filter(|decoded| *decoded == expected);
+        if escaped.is_some()
+            && let Some(rest) = Self::match_lenient(rest_value, &input[3..])
+        {
+            return Some(rest + 3);
         }
-        Some(consumed)
+        if first == expected || (first == b'+' && expected == b' ') {
+            return Self::match_lenient(rest_value, &input[1..]).map(|rest| rest + 1);
+        }
+        None
     }
 }
 
@@ -1673,5 +1683,16 @@ mod tests {
                 "{target} must be refused"
             );
         }
+    }
+
+    #[test]
+    fn redacts_query_secret_containing_percent() {
+        let plan = plan_with(vec![query_rule("maps.example.com", "key")], "50%off%41").unwrap();
+        let mut body = b"a=50%25off%2541 b=50%off%41 c=50%25off%41 d=50%25off%2541x".to_vec();
+        redact_values(&mut body, &plan.policy.redactions);
+        assert_eq!(
+            String::from_utf8(body).unwrap(),
+            "a=key_placeholder b=key_placeholder c=key_placeholder d=key_placeholderx"
+        );
     }
 }
