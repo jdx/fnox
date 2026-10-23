@@ -253,6 +253,27 @@ fn parse_network(entry: &str) -> Result<IpNet> {
         })
 }
 
+/// A request target that is safe to log. A client sending plain HTTP through
+/// the proxy uses an absolute URL as its target, which can carry a password
+/// or a secret in the query string, so keep only the scheme, host, port, and
+/// path. Other targets lose any query string and anything before an `@`.
+fn loggable_target(target: &str) -> String {
+    if let Ok(url) = reqwest::Url::parse(target)
+        && let Some(host) = url.host_str()
+    {
+        let port = url
+            .port()
+            .map(|port| format!(":{port}"))
+            .unwrap_or_default();
+        return format!("{}://{host}{port}{}", url.scheme(), url.path());
+    }
+    let target = target.split(['?', '#']).next().unwrap_or_default();
+    target
+        .rsplit_once('@')
+        .map_or(target, |(_, rest)| rest)
+        .to_string()
+}
+
 fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
     left.len() == right.len()
         && left
@@ -367,13 +388,14 @@ impl ProxyPolicy {
     }
 
     /// Logs a request the proxy turned away. Like `proxied request` lines,
-    /// it never includes headers, bodies, or values.
+    /// it never includes headers, bodies, or values, and the destination is
+    /// stripped of user information and query strings.
     fn audit_refused(&self, method: &str, destination: &str, path: Option<&str>, reason: &str) {
         if self.audit {
             tracing::info!(
                 target: "fnox::proxy",
                 method,
-                destination,
+                destination = %loggable_target(destination),
                 path = path.unwrap_or("-"),
                 reason,
                 "refused request"
@@ -964,10 +986,23 @@ fn serve<L: ProxyAccept>(
     })
 }
 
+/// Removes the proxy's socket file when dropped, so a failed start or a
+/// proxy dropped without `shutdown` does not leave it blocking the path.
+#[cfg(unix)]
+struct SocketFile(std::path::PathBuf);
+
+#[cfg(unix)]
+impl Drop for SocketFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
 pub struct RunningProxy {
     address: Option<SocketAddr>,
+    /// Held only so its `Drop` removes the socket file.
     #[cfg(unix)]
-    socket_path: Option<std::path::PathBuf>,
+    _socket_file: Option<SocketFile>,
     token: String,
     ca_file: NamedTempFile,
     shutdown: Option<oneshot::Sender<()>>,
@@ -992,7 +1027,7 @@ impl RunningProxy {
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
         let mut address = None;
         #[cfg(unix)]
-        let mut socket_path = None;
+        let mut socket_file = None;
         let task = match listen {
             ProxyListener::Loopback => {
                 let listener = TcpListener::bind(("127.0.0.1", 0))
@@ -1009,10 +1044,12 @@ impl RunningProxy {
                 let listener = tokio::net::UnixListener::bind(&path).map_err(|error| {
                     proxy_error(format!("failed to bind socket {}: {error}", path.display()))
                 })?;
-                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).map_err(
-                    |error| proxy_error(format!("failed to restrict proxy socket: {error}")),
-                )?;
-                socket_path = Some(path);
+                let guard = SocketFile(path);
+                std::fs::set_permissions(&guard.0, std::fs::Permissions::from_mode(0o600))
+                    .map_err(|error| {
+                        proxy_error(format!("failed to restrict proxy socket: {error}"))
+                    })?;
+                socket_file = Some(guard);
                 serve(listener, policy, authority, shutdown_rx)
             }
         };
@@ -1020,7 +1057,7 @@ impl RunningProxy {
         Ok(Self {
             address,
             #[cfg(unix)]
-            socket_path,
+            _socket_file: socket_file,
             token,
             ca_file,
             shutdown: Some(shutdown_tx),
@@ -1044,10 +1081,6 @@ impl RunningProxy {
             let _ = shutdown.send(());
         }
         let _ = (&mut self.task).await;
-        #[cfg(unix)]
-        if let Some(path) = &self.socket_path {
-            let _ = std::fs::remove_file(path);
-        }
     }
 }
 
@@ -2433,5 +2466,42 @@ mod tests {
 
         running.shutdown().await;
         assert!(!path.exists());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn unix_socket_is_removed_when_proxy_is_dropped() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("proxy.sock");
+        let running = RunningProxy::start(policy(), ProxyListener::Unix(path.clone()))
+            .await
+            .unwrap();
+        assert!(path.exists());
+        drop(running);
+        assert!(!path.exists());
+        RunningProxy::start(policy(), ProxyListener::Unix(path.clone()))
+            .await
+            .expect("the path is free again")
+            .shutdown()
+            .await;
+    }
+
+    #[test]
+    fn loggable_targets_drop_credentials_and_queries() {
+        for (target, logged) in [
+            (
+                "http://user:pass@api.example.com/v1?token=SECRET#frag",
+                "http://api.example.com/v1",
+            ),
+            (
+                "http://api.example.com:8080/x?key=SECRET",
+                "http://api.example.com:8080/x",
+            ),
+            ("api.example.com:443", "api.example.com:443"),
+            ("user:pass@api.example.com:443", "api.example.com:443"),
+            ("/path?token=SECRET", "/path"),
+        ] {
+            assert_eq!(loggable_target(target), logged, "{target}");
+        }
     }
 }
