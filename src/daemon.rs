@@ -159,7 +159,9 @@ fn audit_reads(
         .filter(|(key, _)| resolved.contains_key(*key))
         .map(|(key, secret)| (key.clone(), secret.clone()))
         .collect();
-    let read = crate::secret_resolver::with_read_dependencies(config, profile, &read);
+    let read = crate::secret_resolver::with_read_dependencies(config, profile, &read, &|key| {
+        cached.contains(key)
+    });
     fnox_core::audit::record_reads(config, profile, purpose, config_path, &read, &|key| {
         cached.contains(key)
     });

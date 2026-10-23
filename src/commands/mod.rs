@@ -340,11 +340,11 @@ impl Commands {
             // Reading the log needs only the audit settings, so a missing or
             // unrelated config must not stop it.
             Commands::Audit(cmd) => {
-                cmd.run(
-                    cli,
-                    Config::load_smart(&cli.config).unwrap_or_else(|_| Config::new()),
-                )
-                .await
+                let config = Config::load_smart(&cli.config).unwrap_or_else(|error| {
+                    tracing::warn!("could not load config; using default audit settings: {error}");
+                    Config::new()
+                });
+                cmd.run(cli, config).await
             }
             Commands::Check(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::CiRedact(cmd) => cmd.run(cli, self.load_config(cli)?).await,
