@@ -1,6 +1,7 @@
 use crate::child_env::{self, EnvScope, Roots};
 use crate::error::{FnoxError, Result};
 use crate::redact::Redactor;
+use crate::secret_filter::SecretFilter;
 use crate::temp_file_secrets::create_ephemeral_secret_file;
 use crate::{commands::Cli, config::Config};
 use std::io::IsTerminal;
@@ -43,13 +44,39 @@ use tempfile::NamedTempFile;
         "fnox exec --refresh API_TOKEN -- ./script.sh",
         header = "Re-fetch one secret instead of using the daemon cache"
     ),
+    example(
+        "fnox exec --only DATABASE_URL,'AWS_*' -- ./migrate.sh",
+        header = "Resolve only some secrets; unrelated secrets are never fetched"
+    ),
+    example(
+        "fnox exec --except LEGACY_API_KEY -- npm start",
+        header = "Skip one secret, for example one whose provider is unreachable"
+    ),
     after_long_help = "See also:\n- Running commands: https://fnox.jdx.dev/guide/running-commands\n- Profiles: https://fnox.jdx.dev/guide/profiles"
 )]
 pub struct ExecCommand {
+    /// Do not resolve these secrets; repeatable
+    ///
+    /// Takes names and globs like `--only` and applies after it. A secret that
+    /// a selected secret depends on is still resolved, but not passed to the
+    /// command unless it is selected itself. A lease is skipped when NAME
+    /// matches a variable it produces.
+    #[usage(long, value_name = "NAME", delimiter = ',')]
+    pub except: Vec<String>,
+
     /// Never redact output, even if the config or `FNOX_EXEC_REDACT` enables it
     #[usage(long)]
     pub no_redact: bool,
 
+    /// Resolve only these secrets, plus the secrets they depend on; repeatable
+    ///
+    /// Each NAME is a secret name or a glob such as `AWS_*`; comma-separate
+    /// several. Other secrets are not resolved, so their providers are never
+    /// called and they cannot fail the run. `if_missing` still applies to the
+    /// selected secrets. An unknown name, or a glob that matches nothing, is an
+    /// error. Leases run only when NAME matches a variable they produce; `command` leases are skipped.
+    #[usage(long, value_name = "NAME", delimiter = ',')]
+    pub only: Vec<String>,
     /// Replace secret values with `[REDACTED]` in piped or redirected output
     ///
     /// Applies to each of stdout and stderr only when that stream is not a
@@ -105,6 +132,7 @@ impl ExecCommand {
         // Get the profile secrets
         let profile_secrets = config.get_secrets(&profile)?;
         let leases = config.get_leases(&profile)?;
+        let filter = SecretFilter::new(&self.only, &self.except)?;
 
         let redact_on = self.redact || (!self.no_redact && config.should_redact_exec());
 
@@ -117,7 +145,9 @@ impl ExecCommand {
             }
             let file_secrets = profile_secrets
                 .iter()
-                .filter(|(_, secret)| secret.as_file && secret.env_mode().in_exec())
+                .filter(|(key, secret)| {
+                    secret.as_file && secret.env_mode().in_exec() && filter.allows(key)
+                })
                 .map(|(key, _)| key.as_str())
                 .collect::<Vec<_>>();
             if !file_secrets.is_empty() {
@@ -150,8 +180,13 @@ impl ExecCommand {
         }
         crate::daemon::refresh(cli, &config, &self.refresh).await?;
 
+        let roots = if filter.is_empty() {
+            Roots::Scope
+        } else {
+            Roots::Filter(&filter)
+        };
         let (plan, lease_files) =
-            child_env::plan(cli, &config, &profile, EnvScope::Exec, Roots::Scope, "exec").await?;
+            child_env::plan(cli, &config, &profile, EnvScope::Exec, roots, "exec").await?;
 
         // Apply in order: remove, then set, then files. Explicit secrets and
         // lease credentials win over the ambient scrub because `remove` never

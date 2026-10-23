@@ -347,7 +347,23 @@ See also:
 - Running commands: https://fnox.jdx.dev/guide/running-commands
 - Profiles: https://fnox.jdx.dev/guide/profiles
 """#
+    flag --except help="Do not resolve these secrets; repeatable" var=#true delimiter=, {
+        long_help #"""
+Do not resolve these secrets; repeatable
+
+Takes names and globs like `--only` and applies after it. A secret that a selected secret depends on is still resolved, but not passed to the command unless it is selected itself. A lease is skipped when NAME matches a variable it produces.
+"""#
+        arg <NAME>
+    }
     flag --no-redact help="Never redact output, even if the config or `FNOX_EXEC_REDACT` enables it"
+    flag --only help="Resolve only these secrets, plus the secrets they depend on; repeatable" var=#true delimiter=, {
+        long_help #"""
+Resolve only these secrets, plus the secrets they depend on; repeatable
+
+Each NAME is a secret name or a glob such as `AWS_*`; comma-separate several. Other secrets are not resolved, so their providers are never called and they cannot fail the run. `if_missing` still applies to the selected secrets. An unknown name, or a glob that matches nothing, is an error. Leases run only when NAME matches a variable they produce; `command` leases are skipped.
+"""#
+        arg <NAME>
+    }
     flag --redact help="Replace secret values with `[REDACTED]` in piped or redirected output" conflicts=--no-redact {
         long_help #"""
 Replace secret values with `[REDACTED]` in piped or redirected output
@@ -377,6 +393,8 @@ The command keeps fnox's process ID and receives signals directly. Not allowed w
     example "fnox exec -P production --if-missing error -- ./deploy.sh" header="Use the production profile and fail on any missing secret"
     example "fnox exec -- sh -c 'test -n \"$DATABASE_URL\"'" header="Expand a secret in a shell expression (single quotes defer expansion)"
     example "fnox exec --refresh API_TOKEN -- ./script.sh" header="Re-fetch one secret instead of using the daemon cache"
+    example "fnox exec --only DATABASE_URL,'AWS_*' -- ./migrate.sh" header="Resolve only some secrets; unrelated secrets are never fetched"
+    example "fnox exec --except LEGACY_API_KEY -- npm start" header="Skip one secret, for example one whose provider is unreachable"
 }
 cmd export help="Print or write resolved secrets as env, shell, JSON, YAML, or TOML" {
     alias ex

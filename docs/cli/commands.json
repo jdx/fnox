@@ -942,6 +942,26 @@
         ],
         "flags": [
           {
+            "name": "except",
+            "usage": "--except <NAME>",
+            "help": "Do not resolve these secrets; repeatable",
+            "help_long": "Do not resolve these secrets; repeatable\n\nTakes names and globs like `--only` and applies after it. A secret that a selected secret depends on is still resolved, but not passed to the command unless it is selected itself. A lease is skipped when NAME matches a variable it produces.",
+            "help_first_line": "Do not resolve these secrets; repeatable",
+            "short": [],
+            "long": ["except"],
+            "var": true,
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "NAME",
+              "usage": "<NAME>",
+              "required": true,
+              "double_dash": "Optional",
+              "delimiter": ",",
+              "hide": false
+            }
+          },
+          {
             "name": "no-redact",
             "usage": "--no-redact",
             "help": "Never redact output, even if the config or `FNOX_EXEC_REDACT` enables it",
@@ -950,6 +970,26 @@
             "long": ["no-redact"],
             "hide": false,
             "global": false
+          },
+          {
+            "name": "only",
+            "usage": "--only <NAME>",
+            "help": "Resolve only these secrets, plus the secrets they depend on; repeatable",
+            "help_long": "Resolve only these secrets, plus the secrets they depend on; repeatable\n\nEach NAME is a secret name or a glob such as `AWS_*`; comma-separate several. Other secrets are not resolved, so their providers are never called and they cannot fail the run. `if_missing` still applies to the selected secrets. An unknown name, or a glob that matches nothing, is an error. Leases run only when NAME matches a variable they produce; `command` leases are skipped.",
+            "help_first_line": "Resolve only these secrets, plus the secrets they depend on; repeatable",
+            "short": [],
+            "long": ["only"],
+            "var": true,
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "NAME",
+              "usage": "<NAME>",
+              "required": true,
+              "double_dash": "Optional",
+              "delimiter": ",",
+              "hide": false
+            }
           },
           {
             "name": "redact",
@@ -1038,6 +1078,18 @@
           {
             "code": "fnox exec --refresh API_TOKEN -- ./script.sh",
             "header": "Re-fetch one secret instead of using the daemon cache",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox exec --only DATABASE_URL,'AWS_*' -- ./migrate.sh",
+            "header": "Resolve only some secrets; unrelated secrets are never fetched",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox exec --except LEGACY_API_KEY -- npm start",
+            "header": "Skip one secret, for example one whose provider is unreachable",
             "help": null,
             "lang": ""
           }
