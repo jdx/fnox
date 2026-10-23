@@ -39,7 +39,11 @@ teardown() {
 }
 
 @test "exec redacts when enabled in config" {
-	sed -i '1a redact_exec = true' fnox.toml
+	{
+		echo 'redact_exec = true'
+		cat fnox.toml
+	} >fnox.new
+	mv fnox.new fnox.toml
 	run bash -c "'$FNOX_BIN' exec -- sh -c 'echo \$SECRET' | cat"
 	assert_success
 	assert_output "[REDACTED]"

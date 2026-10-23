@@ -110,6 +110,11 @@ impl ExecCommand {
 
         #[cfg(unix)]
         if self.replace {
+            let would_filter =
+                redact_on && !(std::io::stdout().is_terminal() && std::io::stderr().is_terminal());
+            if self.redact || would_filter {
+                return Err(FnoxError::ExecReplaceRedact);
+            }
             let file_secrets = profile_secrets
                 .iter()
                 .filter(|(_, secret)| secret.as_file && secret.env_mode().in_exec())
@@ -172,11 +177,6 @@ impl ExecCommand {
 
         #[cfg(unix)]
         if self.replace {
-            let would_filter =
-                redact_on && !(std::io::stdout().is_terminal() && std::io::stderr().is_terminal());
-            if self.redact || would_filter {
-                return Err(FnoxError::ExecReplaceRedact);
-            }
             use std::os::unix::process::CommandExt;
 
             let source = cmd.exec();
