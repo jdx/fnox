@@ -129,3 +129,19 @@ _require_sandbox() {
 	assert_file_not_exists fnox.local.toml
 	assert_file_not_exists .git/hooks/pre-commit
 }
+
+@test "interrupting proxy run --sandbox removes the placeholder files" {
+	_require_sandbox
+	"$FNOX_BIN" proxy run --sandbox -- sleep 30 &
+	local pid=$!
+	# On Linux bwrap creates the placeholders as it starts; wait for one.
+	for _ in $(seq 1 50); do
+		[[ -e fnox.local.toml ]] && break
+		sleep 0.1
+	done
+	kill -INT "$pid"
+	local status=0
+	wait "$pid" || status=$?
+	assert_equal "$status" 130
+	assert_file_not_exists fnox.local.toml
+}

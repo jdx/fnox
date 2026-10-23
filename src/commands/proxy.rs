@@ -429,7 +429,11 @@ impl ProxyRunCommand {
             command.env(key, &ca_path);
         }
 
-        let status = command.status().await;
+        let status = if mount_points.is_empty() {
+            command.status().await
+        } else {
+            run_until_interrupted(command, &mount_points).await
+        };
         crate::sandbox::remove_mount_points(&mount_points);
         running.shutdown().await;
         let status = status.map_err(|source| FnoxError::CommandExecutionFailed {
@@ -448,6 +452,38 @@ impl ProxyRunCommand {
             std::process::exit(status.code().unwrap_or(1));
         }
         Ok(())
+    }
+}
+
+/// Runs `command`, and if fnox is interrupted first, stops it and removes the
+/// sandbox's placeholder files before exiting. The sandbox starts a session of
+/// its own, so Ctrl-C reaches fnox and not the command.
+async fn run_until_interrupted(
+    mut command: tokio::process::Command,
+    mount_points: &[std::path::PathBuf],
+) -> std::io::Result<std::process::ExitStatus> {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+
+        let mut child = command.spawn()?;
+        let mut interrupt = signal(SignalKind::interrupt())?;
+        let mut terminate = signal(SignalKind::terminate())?;
+        let mut hangup = signal(SignalKind::hangup())?;
+        let number = tokio::select! {
+            status = child.wait() => return status,
+            _ = interrupt.recv() => libc::SIGINT,
+            _ = terminate.recv() => libc::SIGTERM,
+            _ = hangup.recv() => libc::SIGHUP,
+        };
+        let _ = child.kill().await;
+        crate::sandbox::remove_mount_points(mount_points);
+        std::process::exit(128 + number);
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = mount_points;
+        command.status().await
     }
 }
 
