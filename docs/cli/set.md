@@ -31,11 +31,24 @@ The provider is `--provider`, else the secret's current provider, else `default_
 - **`-p --provider <PROVIDER>`** — Provider to store the value with (default: the secret's current provider, then `default_provider`)
 - **`--base64-encode`** — Base64-encode the value before storing it
 - **`--default <DEFAULT>`** — Fallback value to use when the secret cannot be resolved
+- **`--force`** — Replace an existing secret when generating
 - **`--from-file <FROM_FILE>`** — Read the value from a UTF-8 file, verbatim
+- **`--generate`** — Generate a random value instead of reading one
+
+  Uses the OS random number generator. The value is stored through the normal provider path and is not printed unless you pass `--show`. Refuses to replace an existing secret unless you pass `--force`.
+
+- **`--generate-type <GENERATE_TYPE>`** — Kind of value `--generate` creates
+
+  **Choices:** `password`, `hex`, `base64`, `uuid`
+
+  **Default:** `password`
+
 - **`--if-missing <IF_MISSING>`** — What to do when the secret cannot be resolved: `error`, `warn`, or `ignore`
 
   **Choices:** `error`, `warn`, `ignore`
 
+- **`--length <LENGTH>`** — Length in characters of a generated value (default: 32; ignored for uuid; base64 cannot be 1 more than a multiple of 4)
+- **`--show`** — Print the generated value after storing it
 - **`-h --help`** — Print help
 
 ## Examples
@@ -62,6 +75,12 @@ fnox set SSH_KEY --from-file ~/.ssh/id_ed25519
 
 ```sh
 printf '%s' "$TOKEN" | fnox set API_TOKEN
+```
+
+**Generate and store a random value**
+
+```sh
+fnox set API_TOKEN --generate --length 48
 ```
 
 **Write to the staging profile**

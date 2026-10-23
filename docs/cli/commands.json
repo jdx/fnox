@@ -3746,6 +3746,17 @@
             }
           },
           {
+            "name": "force",
+            "usage": "--force",
+            "help": "Replace an existing secret when generating",
+            "help_first_line": "Replace an existing secret when generating",
+            "short": [],
+            "long": ["force"],
+            "hide": false,
+            "global": false,
+            "requires": ["--generate"]
+          },
+          {
             "name": "from-file",
             "usage": "--from-file <FROM_FILE>",
             "help": "Read the value from a UTF-8 file, verbatim",
@@ -3762,6 +3773,58 @@
               "hide": false
             },
             "conflicts": ["VALUE"]
+          },
+          {
+            "name": "generate",
+            "usage": "--generate",
+            "help": "Generate a random value instead of reading one",
+            "help_long": "Generate a random value instead of reading one\n\nUses the OS random number generator. The value is stored through the normal provider path and is not printed unless you pass `--show`. Refuses to replace an existing secret unless you pass `--force`.",
+            "help_first_line": "Generate a random value instead of reading one",
+            "short": [],
+            "long": ["generate"],
+            "hide": false,
+            "global": false,
+            "conflicts": ["VALUE", "--from-file"]
+          },
+          {
+            "name": "generate-type",
+            "usage": "--generate-type <GENERATE_TYPE>",
+            "help": "Kind of value `--generate` creates",
+            "help_first_line": "Kind of value `--generate` creates",
+            "short": [],
+            "long": ["generate-type"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "GENERATE_TYPE",
+              "usage": "<GENERATE_TYPE>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false,
+              "choices": {
+                "choices": ["password", "hex", "base64", "uuid"],
+                "details": [
+                  {
+                    "value": "password",
+                    "help": "URL-safe characters: letters, digits, `-` and `_`"
+                  },
+                  {
+                    "value": "hex",
+                    "help": "Lowercase hexadecimal"
+                  },
+                  {
+                    "value": "base64",
+                    "help": "URL-safe base64 without padding"
+                  },
+                  {
+                    "value": "uuid",
+                    "help": "Random (version 4) UUID; ignores `--length`"
+                  }
+                ]
+              }
+            },
+            "default": ["password"],
+            "requires": ["--generate"]
           },
           {
             "name": "if-missing",
@@ -3793,6 +3856,35 @@
                 ]
               }
             }
+          },
+          {
+            "name": "length",
+            "usage": "--length <LENGTH>",
+            "help": "Length in characters of a generated value (default: 32; ignored for uuid; base64 cannot be 1 more than a multiple of 4)",
+            "help_first_line": "Length in characters of a generated value (default: 32; ignored for uuid; base64 cannot be 1 more than a multiple of 4)",
+            "short": [],
+            "long": ["length"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "LENGTH",
+              "usage": "<LENGTH>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            },
+            "requires": ["--generate"]
+          },
+          {
+            "name": "show",
+            "usage": "--show",
+            "help": "Print the generated value after storing it",
+            "help_first_line": "Print the generated value after storing it",
+            "short": [],
+            "long": ["show"],
+            "hide": false,
+            "global": false,
+            "requires": ["--generate"]
           },
           {
             "name": "help",
@@ -3839,6 +3931,12 @@
           {
             "code": "printf '%s' \"$TOKEN\" | fnox set API_TOKEN",
             "header": "Read the value from stdin",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox set API_TOKEN --generate --length 48",
+            "header": "Generate and store a random value",
             "help": null,
             "lang": ""
           },
