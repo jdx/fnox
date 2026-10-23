@@ -228,3 +228,15 @@ EOF
 	assert_failure
 	assert_output --partial "must use https"
 }
+
+@test "tailscale: does not follow redirects with the OAuth client secret" {
+	start_mock_server '
+def respond(method, path, body):
+    return 307, None, {"Location": "http://127.0.0.1:1/elsewhere"}
+'
+	write_config 'tags = ["tag:ci"]'
+
+	run fnox lease create ts
+	assert_failure
+	assert_output --partial "307"
+}

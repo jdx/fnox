@@ -142,7 +142,7 @@ impl LeaseBackend for Oauth2ClientCredentialsBackend {
             form.push((key.clone(), value.clone()));
         }
 
-        let client = crate::http::http_client();
+        let client = crate::http::credential_client();
         let request = self.authenticate(client.post(&self.token_url), &mut form, &secret);
         let response = request
             .header("Accept", "application/json")
@@ -247,7 +247,7 @@ impl LeaseBackend for Oauth2ClientCredentialsBackend {
             ("token".to_string(), token.clone()),
             ("token_type_hint".to_string(), "access_token".to_string()),
         ];
-        let client = crate::http::http_client();
+        let client = crate::http::credential_client();
         let request = self.authenticate(client.post(revocation_url), &mut form, &secret);
         let response =
             request

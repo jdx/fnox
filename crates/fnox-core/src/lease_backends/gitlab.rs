@@ -140,7 +140,7 @@ impl LeaseBackend for GitLabBackend {
             "expires_at": expires_date.format("%Y-%m-%d").to_string(),
         });
 
-        let client = crate::http::http_client();
+        let client = crate::http::credential_client();
         let response = client
             .post(self.tokens_url())
             .header("PRIVATE-TOKEN", &parent_token)
@@ -211,7 +211,7 @@ impl LeaseBackend for GitLabBackend {
     ) -> Result<()> {
         let parent_token = Self::get_parent_token()?;
 
-        let client = crate::http::http_client();
+        let client = crate::http::credential_client();
         let response = client
             .delete(format!("{}/{}", self.tokens_url(), lease_id))
             .header("PRIVATE-TOKEN", &parent_token)

@@ -124,7 +124,7 @@ impl TailscaleBackend {
     }
 
     async fn exchange_oauth_client(&self, id: &str, secret: &str) -> Result<String> {
-        let client = crate::http::http_client();
+        let client = crate::http::credential_client();
         let response = client
             .post(format!("{}/api/v2/oauth/token", self.api_base))
             .form(&[
@@ -200,7 +200,7 @@ impl LeaseBackend for TailscaleBackend {
             "description": label.chars().take(MAX_DESCRIPTION_LEN).collect::<String>(),
         });
 
-        let client = crate::http::http_client();
+        let client = crate::http::credential_client();
         let request = self.authorize(client.post(self.keys_url())).await?;
         let response =
             request
@@ -278,7 +278,7 @@ impl LeaseBackend for TailscaleBackend {
         lease_id: &str,
         _credentials: Option<&IndexMap<String, String>>,
     ) -> Result<()> {
-        let client = crate::http::http_client();
+        let client = crate::http::credential_client();
         let request = self
             .authorize(client.delete(format!(
                 "{}/{}",

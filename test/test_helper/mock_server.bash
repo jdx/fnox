@@ -9,7 +9,8 @@
 #   stop_mock_server      # call from teardown
 #
 # `respond(method, path, body)` receives the path without its query string and
-# returns (status, payload): None, a raw string, or JSON-serializable data. Every request
+# returns (status, payload) or (status, payload, headers), where payload is None,
+# a raw string, or JSON-serializable data. Every request
 # is appended to "$TEST_TEMP_DIR/mock_requests.log" as a JSON line with
 # method, path, authorization, private_token and body, so tests can assert on
 # what fnox actually sent.
@@ -37,7 +38,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "private_token": self.headers.get("PRIVATE-TOKEN", ""),
                 "body": body,
             }) + "\n")
-        status, payload = respond(self.command, self.path.split("?")[0], body)
+        result = respond(self.command, self.path.split("?")[0], body)
+        status, payload = result[0], result[1]
+        extra_headers = result[2] if len(result) > 2 else {}
         if payload is None:
             data = b""
         elif isinstance(payload, str):
@@ -47,6 +50,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
+        for name, value in extra_headers.items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(data)
 

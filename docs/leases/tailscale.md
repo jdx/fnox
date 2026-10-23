@@ -56,7 +56,7 @@ Store them as secrets with `env = false`, as in the quick start, or export them.
 | `preauthorized` | No       | `true`                        | Devices join without manual approval.                                                                                             |
 | `reusable`      | No       | `false`                       | Allow more than one device to register with the key. A key that is not reusable is never cached, so every command gets a new one. |
 | `env_var`       | No       | `"TS_AUTHKEY"`                | Variable that receives the key. The Tailscale container image reads `TS_AUTHKEY`.                                                 |
-| `api_base`      | No       | `"https://api.tailscale.com"` | API base URL. Must use https; http is accepted only for localhost.                                                                |
+| `api_base`      | No       | `"https://api.tailscale.com"` | API base URL. Must use https; http is accepted only for localhost. Redirects are not followed.                                    |
 | `duration`      | No       | `"15m"`                       | How long the key can register devices. At most `"90d"`.                                                                           |
 
 A key that is not reusable is spent by the first device that registers with it, so fnox does not cache it: each `fnox exec` creates a new key and leaves the unused ones to expire, or to be removed with `fnox lease cleanup`. Set `reusable = true` to share one key between commands until the lease expires.

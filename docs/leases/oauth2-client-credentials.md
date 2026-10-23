@@ -46,17 +46,17 @@ The name is fixed, so two leases that use different client secrets need separate
 
 ## Configuration
 
-| Field            | Required | Default                 | Description                                                                                                                    |
-| ---------------- | -------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `token_url`      | Yes      | none                    | The token endpoint. Must use https; http is accepted only for localhost.                                                       |
-| `client_id`      | Yes      | none                    | The OAuth2 client ID.                                                                                                          |
-| `scope`          | No       | none                    | Space-separated scopes to request.                                                                                             |
-| `audience`       | No       | none                    | Sent as `audience`, which Auth0 and some others use to pick the API.                                                           |
-| `env_var`        | No       | `"OAUTH2_ACCESS_TOKEN"` | Variable that receives the access token.                                                                                       |
-| `auth_method`    | No       | `"basic"`               | `"basic"` sends the client ID and secret in an `Authorization` header; `"post"` sends them in the request body.                |
-| `params`         | No       | none                    | Extra form parameters for the token request, such as `resource`.                                                               |
-| `revocation_url` | No       | none                    | An [RFC 7009](https://datatracker.ietf.org/doc/html/rfc7009) revocation endpoint. Without it, nothing is sent. Must use https. |
-| `duration`       | No       | `"15m"`                 | Lifetime to assume if the endpoint omits `expires_in`. At most `"24h"`.                                                        |
+| Field            | Required | Default                 | Description                                                                                                                                                |
+| ---------------- | -------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `token_url`      | Yes      | none                    | The token endpoint. Must use https; http is accepted only for localhost. Redirects are not followed.                                                       |
+| `client_id`      | Yes      | none                    | The OAuth2 client ID.                                                                                                                                      |
+| `scope`          | No       | none                    | Space-separated scopes to request.                                                                                                                         |
+| `audience`       | No       | none                    | Sent as `audience`, which Auth0 and some others use to pick the API.                                                                                       |
+| `env_var`        | No       | `"OAUTH2_ACCESS_TOKEN"` | Variable that receives the access token.                                                                                                                   |
+| `auth_method`    | No       | `"basic"`               | `"basic"` sends the client ID and secret in an `Authorization` header; `"post"` sends them in the request body.                                            |
+| `params`         | No       | none                    | Extra form parameters for the token request, such as `resource`.                                                                                           |
+| `revocation_url` | No       | none                    | An [RFC 7009](https://datatracker.ietf.org/doc/html/rfc7009) revocation endpoint. Without it, nothing is sent. Must use https; redirects are not followed. |
+| `duration`       | No       | `"15m"`                 | Lifetime to assume if the endpoint omits `expires_in`. At most `"24h"`.                                                                                    |
 
 fnox records the token's expiry from `expires_in` and reuses the token until it is about to expire, so the endpoint's lifetime wins over `duration`. Set the lifetime on the identity provider, such as the API's token lifetime in Auth0.
 

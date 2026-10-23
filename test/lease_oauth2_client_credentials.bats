@@ -291,3 +291,24 @@ EOF
 	assert_failure
 	assert_output --partial "must use https"
 }
+
+@test "oauth2-client-credentials: does not follow redirects with the client secret" {
+	start_mock_server '
+def respond(method, path, body):
+    return 307, None, {"Location": "http://127.0.0.1:1/elsewhere"}
+'
+
+	cat >"$FNOX_CONFIG_FILE" <<EOF
+root = true
+
+[leases.idp]
+type = "oauth2-client-credentials"
+token_url = "http://127.0.0.1:$MOCK_PORT/token"
+client_id = "cid"
+auth_method = "post"
+EOF
+
+	run fnox lease create idp
+	assert_failure
+	assert_output --partial "307"
+}
