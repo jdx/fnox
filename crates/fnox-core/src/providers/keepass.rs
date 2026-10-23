@@ -391,7 +391,7 @@ impl crate::providers::Provider for KeePassProvider {
     }
 
     async fn get_secret(&self, value: &str) -> Result<String> {
-        let (entry_path, field) = Self::parse_reference(value);
+        let (mut entry_path, mut field) = Self::parse_reference(value);
 
         tracing::debug!(
             "Getting KeePass secret '{}' field '{}' from '{}'",
@@ -402,13 +402,22 @@ impl crate::providers::Provider for KeePassProvider {
 
         let db = self.open_database()?;
 
-        let entry_id = Self::find_entry_id(&db, &entry_path).ok_or_else(|| {
-            FnoxError::ProviderSecretNotFound {
-                provider: "KeePass".to_string(),
-                secret: entry_path.join("/"),
-                hint: "Check that the entry exists in the database".to_string(),
-                url: "https://fnox.jdx.dev/providers/keepass".to_string(),
+        let mut entry_id = Self::find_entry_id(&db, &entry_path);
+        if entry_id.is_none() && entry_path.len() > 1 {
+            // No entry has that title, so the last segment may name a custom
+            // field of the entry before it (e.g. "group/entry/customField").
+            let parent = &entry_path[..entry_path.len() - 1];
+            if let Some(id) = Self::find_entry_id(&db, parent) {
+                field = entry_path[entry_path.len() - 1];
+                entry_path = parent.to_vec();
+                entry_id = Some(id);
             }
+        }
+        let entry_id = entry_id.ok_or_else(|| FnoxError::ProviderSecretNotFound {
+            provider: "KeePass".to_string(),
+            secret: entry_path.join("/"),
+            hint: "Check that the entry exists in the database".to_string(),
+            url: "https://fnox.jdx.dev/providers/keepass".to_string(),
         })?;
         let entry = db.entry(entry_id).expect("entry exists");
 
@@ -422,7 +431,7 @@ impl crate::providers::Provider for KeePassProvider {
                     field,
                     entry_path.join("/")
                 ),
-                hint: "Available fields: password, username, url, notes, title".to_string(),
+                hint: "Available fields: password, username, url, notes, title, or a custom field name".to_string(),
                 url: "https://fnox.jdx.dev/providers/keepass".to_string(),
             })
     }
