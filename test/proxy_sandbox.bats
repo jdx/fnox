@@ -131,6 +131,9 @@ _require_sandbox() {
 }
 
 @test "interrupting proxy run --sandbox removes the placeholder files" {
+	if [[ "$(uname)" != "Linux" ]]; then
+		skip "bwrap placeholders are Linux-only"
+	fi
 	_require_sandbox
 	"$FNOX_BIN" proxy run --sandbox -- sleep 30 &
 	local pid=$!
