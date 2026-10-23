@@ -63,3 +63,18 @@ teardown() {
 	run "$FNOX_BIN" exec --redact --replace -- true
 	assert_failure
 }
+
+@test "exec --replace is rejected when config enables redaction and output is piped" {
+	export FNOX_EXEC_REDACT=1
+	run bash -c "set -o pipefail; '$FNOX_BIN' exec --replace -- echo hi | cat"
+	assert_failure
+	run bash -c "'$FNOX_BIN' exec --replace --no-redact -- echo hi | cat"
+	assert_success
+}
+
+@test "exec --redact does not wait for background processes holding the pipe" {
+	start=$SECONDS
+	run bash -c "'$FNOX_BIN' exec --redact -- sh -c 'sleep 30 & echo \$SECRET' | cat"
+	assert_output --partial "[REDACTED]"
+	[ $((SECONDS - start)) -lt 15 ]
+}

@@ -816,7 +816,7 @@
             "name": "redact",
             "usage": "--redact",
             "help": "Replace secret values with `[REDACTED]` in piped or redirected output",
-            "help_long": "Replace secret values with `[REDACTED]` in piped or redirected output\n\nApplies to each of stdout and stderr only when that stream is not a terminal. Values shorter than 3 characters are not redacted. Overrides `redact_exec` in the config and `FNOX_EXEC_REDACT`. Not allowed with `--replace`.",
+            "help_long": "Replace secret values with `[REDACTED]` in piped or redirected output\n\nApplies to each of stdout and stderr only when that stream is not a terminal. Values shorter than 3 characters are not redacted. Overrides `redact_exec` in the config and `FNOX_EXEC_REDACT`. Not allowed with `--replace` (use `--no-redact`).",
             "help_first_line": "Replace secret values with `[REDACTED]` in piped or redirected output",
             "short": [],
             "long": ["redact"],

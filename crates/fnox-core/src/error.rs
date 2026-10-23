@@ -508,10 +508,12 @@ pub enum FnoxError {
     )]
     ExecReplaceLeases,
 
-    #[error("--redact cannot be combined with --replace")]
+    #[error("output redaction cannot be combined with --replace")]
     #[diagnostic(
         code(fnox::command::replace_with_redact),
-        help("--replace hands the process to the command, so fnox cannot filter its output")
+        help(
+            "fnox cannot filter output after --replace hands the process to the command; pass --no-redact to run it unfiltered"
+        )
     )]
     ExecReplaceRedact,
 

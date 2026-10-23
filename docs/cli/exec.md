@@ -26,7 +26,7 @@ With `--redact` (or `redact_exec = true` / `FNOX_EXEC_REDACT=1`), secret values 
 - **`--no-redact`** — Never redact output, even if the config or `FNOX_EXEC_REDACT` enables it
 - **`--redact`** — Replace secret values with `[REDACTED]` in piped or redirected output
 
-  Applies to each of stdout and stderr only when that stream is not a terminal. Values shorter than 3 characters are not redacted. Overrides `redact_exec` in the config and `FNOX_EXEC_REDACT`. Not allowed with `--replace`.
+  Applies to each of stdout and stderr only when that stream is not a terminal. Values shorter than 3 characters are not redacted. Overrides `redact_exec` in the config and `FNOX_EXEC_REDACT`. Not allowed with `--replace` (use `--no-redact`).
 
 - **`--refresh <KEY>`** — Re-fetch KEY from its provider instead of the daemon cache; repeatable
 

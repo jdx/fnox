@@ -55,7 +55,7 @@ pub struct ExecCommand {
     /// Applies to each of stdout and stderr only when that stream is not a
     /// terminal. Values shorter than 3 characters are not redacted. Overrides
     /// `redact_exec` in the config and `FNOX_EXEC_REDACT`. Not allowed with
-    /// `--replace`.
+    /// `--replace` (use `--no-redact`).
     #[usage(long, conflicts = "--no-redact")]
     pub redact: bool,
 
@@ -105,6 +105,8 @@ impl ExecCommand {
         // Get the profile secrets
         let profile_secrets = config.get_secrets(&profile)?;
         let leases = config.get_leases(&profile)?;
+
+        let redact_on = self.redact || (!self.no_redact && config.should_redact_exec());
 
         #[cfg(unix)]
         if self.replace {
@@ -170,7 +172,9 @@ impl ExecCommand {
 
         #[cfg(unix)]
         if self.replace {
-            if self.redact {
+            let would_filter =
+                redact_on && !(std::io::stdout().is_terminal() && std::io::stderr().is_terminal());
+            if self.redact || would_filter {
                 return Err(FnoxError::ExecReplaceRedact);
             }
             use std::os::unix::process::CommandExt;
@@ -182,7 +186,6 @@ impl ExecCommand {
             });
         }
 
-        let redact_on = self.redact || (!self.no_redact && config.should_redact_exec());
         let redact_out = redact_on && !std::io::stdout().is_terminal();
         let redact_err = redact_on && !std::io::stderr().is_terminal();
         let redactor = if redact_out || redact_err {
@@ -235,17 +238,41 @@ impl ExecCommand {
             }
         }
 
-        // Filter piped output on scoped threads so neither stream can stall the other.
-        let (out_pipe, err_pipe) = (child.stdout.take(), child.stderr.take());
-        let wait_result = std::thread::scope(|scope| {
-            if let (Some(r), Some(pipe)) = (&redactor, out_pipe) {
-                scope.spawn(move || r.copy(pipe, std::io::stdout().lock()));
+        // Filter piped output on helper threads so neither stream can stall the other.
+        // A background process that inherited the pipe can keep it open after the
+        // command exits, so after exit the readers get a short grace period to drain
+        // and are then abandoned rather than holding fnox open.
+        let (done_tx, done_rx) = std::sync::mpsc::channel::<std::io::Result<()>>();
+        let redactor = redactor.map(std::sync::Arc::new);
+        let mut readers = 0;
+        if let (Some(r), Some(mut pipe)) = (redactor.clone(), child.stdout.take()) {
+            let tx = done_tx.clone();
+            readers += 1;
+            std::thread::spawn(move || {
+                let res = r.copy(&mut pipe, std::io::stdout().lock());
+                tx.send(drain_after_error(res, &mut pipe)).ok();
+            });
+        }
+        if let (Some(r), Some(mut pipe)) = (redactor, child.stderr.take()) {
+            let tx = done_tx.clone();
+            readers += 1;
+            std::thread::spawn(move || {
+                let res = r.copy(&mut pipe, std::io::stderr().lock());
+                tx.send(drain_after_error(res, &mut pipe)).ok();
+            });
+        }
+        drop(done_tx);
+        let wait_result = child.wait();
+        let mut copy_error = None;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        for _ in 0..readers {
+            let left = deadline.saturating_duration_since(std::time::Instant::now());
+            match done_rx.recv_timeout(left) {
+                Ok(Err(e)) if e.kind() != std::io::ErrorKind::BrokenPipe => copy_error = Some(e),
+                Ok(_) => {}
+                Err(_) => break,
             }
-            if let (Some(r), Some(pipe)) = (&redactor, err_pipe) {
-                scope.spawn(move || r.copy(pipe, std::io::stderr().lock()));
-            }
-            child.wait()
-        });
+        }
         let status = wait_result.map_err(|e| FnoxError::CommandExecutionFailed {
             command: self.command.join(" "),
             source: e,
@@ -253,6 +280,16 @@ impl ExecCommand {
 
         // Temp files are cleaned up when _temp_files drops here
         drop(_temp_files);
+
+        // Lost output must not look like success.
+        if let Some(source) = copy_error
+            && status.success()
+        {
+            return Err(FnoxError::CommandExecutionFailed {
+                command: self.command.join(" "),
+                source,
+            });
+        }
 
         if !status.success() {
             // Exit silently — the child already printed its own errors.
@@ -269,6 +306,21 @@ impl ExecCommand {
 
         Ok(())
     }
+}
+
+/// After a failed write, keep consuming the child's output so it never blocks on a
+/// full pipe. A closed reader (`BrokenPipe`) is left alone: the child should see
+/// it, as it would with a plain shell pipe.
+fn drain_after_error(
+    res: std::io::Result<()>,
+    pipe: &mut impl std::io::Read,
+) -> std::io::Result<()> {
+    if let Err(e) = &res
+        && e.kind() != std::io::ErrorKind::BrokenPipe
+    {
+        std::io::copy(pipe, &mut std::io::sink()).ok();
+    }
+    res
 }
 
 #[cfg(unix)]
