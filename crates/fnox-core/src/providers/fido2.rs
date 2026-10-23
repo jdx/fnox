@@ -30,6 +30,98 @@ fn decrypt_batch(
         .collect()
 }
 
+/// How the key verifies the user before releasing the hmac-secret.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Verification {
+    /// Built-in user verification, such as a fingerprint sensor.
+    Biometric,
+    /// A PIN is set and must be entered.
+    Pin,
+    /// Neither is configured; touching the key is enough.
+    TouchOnly,
+}
+
+/// Works out the verification the key expects from its CTAP `getInfo` options.
+/// `uv` means built-in verification is set up; `clientPin` means a PIN is set.
+fn verification_for(options: &[(String, bool)]) -> Verification {
+    let flag = |name: &str| options.iter().find(|(key, _)| key == name).map(|(_, v)| *v);
+    if flag("uv") == Some(true) {
+        Verification::Biometric
+    } else if flag("clientPin") == Some(true) {
+        Verification::Pin
+    } else {
+        Verification::TouchOnly
+    }
+}
+
+fn read_pin(prompt: &str) -> Result<String> {
+    demand::Input::new(prompt)
+        .placeholder("")
+        .password(true)
+        .run()
+        .map_err(|e| FnoxError::Provider(format!("Failed to read PIN: {e}")))
+}
+
+/// Runs the assertion with the PIN/fingerprint/touch flow the key calls for.
+///
+/// `assert` performs one assertion with an optional PIN (`None` lets the key use
+/// built-in verification or a plain touch); `ask_pin` prompts for a PIN.
+fn authenticate(
+    provider_name: &str,
+    config_pin: Option<&str>,
+    verification: Option<Verification>,
+    is_tty: bool,
+    mut assert: impl FnMut(Option<&str>) -> Result<Vec<u8>>,
+    mut ask_pin: impl FnMut(&str) -> Result<String>,
+) -> Result<Vec<u8>> {
+    if let Some(pin) = config_pin {
+        eprintln!("Touch your FIDO2 key...");
+        return assert(Some(pin));
+    }
+    match verification {
+        Some(Verification::Biometric) => {
+            eprintln!("Verify with your FIDO2 key's fingerprint sensor...");
+            match assert(None) {
+                Ok(secret) => Ok(secret),
+                // A failed or exhausted fingerprint read can still be
+                // satisfied with the PIN, if the key has one.
+                Err(error) if is_tty => {
+                    eprintln!("Fingerprint verification failed: {error}");
+                    let pin = ask_pin("FIDO2 PIN (leave empty to cancel)")?;
+                    if pin.is_empty() {
+                        return Err(error);
+                    }
+                    assert(Some(&pin))
+                }
+                Err(error) => Err(error),
+            }
+        }
+        Some(Verification::Pin) if is_tty => {
+            let pin = ask_pin("FIDO2 PIN")?;
+            eprintln!("Touch your FIDO2 key...");
+            assert(Some(&pin))
+        }
+        Some(Verification::Pin) => Err(FnoxError::Provider(format!(
+            "FIDO2 provider '{provider_name}' needs the key's PIN but there is no terminal to ask on. \
+             Set `pin = {{ secret = \"NAME\" }}` on the provider to read it from another provider."
+        ))),
+        Some(Verification::TouchOnly) => {
+            eprintln!("Touch your FIDO2 key...");
+            assert(None)
+        }
+        None => {
+            let pin = if is_tty {
+                let input = ask_pin("FIDO2 PIN (leave empty if not required)")?;
+                if input.is_empty() { None } else { Some(input) }
+            } else {
+                None
+            };
+            eprintln!("Touch your FIDO2 key...");
+            assert(pin.as_deref())
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Fido2Provider {
     credential_id: Vec<u8>,
@@ -95,20 +187,38 @@ impl Fido2Provider {
         )
         .map_err(|e| FnoxError::Provider(format!("Failed to find FIDO2 device: {:?}", e)))?;
 
-        // Resolve PIN: use config value, or prompt interactively
-        let pin = if self.pin.is_some() {
-            self.pin.clone()
-        } else if atty::is(atty::Stream::Stderr) {
-            let input = demand::Input::new("FIDO2 PIN (leave empty if not required)")
-                .placeholder("")
-                .password(true)
-                .run()
-                .map_err(|e| FnoxError::Provider(format!("Failed to read PIN: {e}")))?;
-            if input.is_empty() { None } else { Some(input) }
-        } else {
-            None
-        };
+        let is_tty = atty::is(atty::Stream::Stderr);
+        // Older keys may not answer getInfo; fall back to asking for an optional PIN.
+        let verification = device
+            .get_info()
+            .ok()
+            .map(|info| verification_for(&info.options));
 
+        // Keys that don't report verification support keep the previous default.
+        let use_builtin_uv = !matches!(
+            verification,
+            Some(Verification::Pin | Verification::TouchOnly)
+        );
+        let hmac_secret = authenticate(
+            &self.provider_name,
+            self.pin.as_deref(),
+            verification,
+            is_tty,
+            |pin| self.assert_hmac_secret(&device, pin, use_builtin_uv),
+            read_pin,
+        )?;
+
+        guard.insert(self.provider_name.clone(), hmac_secret.clone());
+
+        Ok(hmac_secret)
+    }
+
+    fn assert_hmac_secret(
+        &self,
+        device: &ctap_hid_fido2::FidoKeyHid,
+        pin: Option<&str>,
+        use_builtin_uv: bool,
+    ) -> Result<Vec<u8>> {
         let challenge = ctap_hid_fido2::verifier::create_challenge();
 
         let mut salt32 = [0u8; 32];
@@ -120,8 +230,12 @@ impl Fido2Provider {
             ctap_hid_fido2::fidokey::GetAssertionArgsBuilder::new(&self.rp_id, &challenge)
                 .credential_id(&self.credential_id)
                 .extensions(&[ext]);
-        if let Some(ref pin) = pin {
+        if let Some(pin) = pin {
             builder = builder.pin(pin);
+        } else if !use_builtin_uv {
+            // The builder requests built-in user verification by default, which a
+            // key without it rejects; ask for a plain touch instead.
+            builder = builder.without_pin_and_uv();
         }
         let args = builder.build();
 
@@ -133,7 +247,7 @@ impl Fido2Provider {
             .first()
             .ok_or_else(|| FnoxError::Provider("FIDO2: no assertion returned".to_string()))?;
 
-        let hmac_secret = assertion
+        assertion
             .extensions
             .iter()
             .find_map(|ext| {
@@ -145,11 +259,7 @@ impl Fido2Provider {
             })
             .ok_or_else(|| {
                 FnoxError::Provider("FIDO2: hmac-secret not returned by authenticator".to_string())
-            })?;
-
-        guard.insert(self.provider_name.clone(), hmac_secret.clone());
-
-        Ok(hmac_secret)
+            })
     }
 
     fn hkdf_context(&self) -> Vec<u8> {
@@ -232,6 +342,171 @@ mod tests {
         assert_eq!(results.remove("SECOND").unwrap().unwrap(), "two");
     }
 
+    fn options(pairs: &[(&str, bool)]) -> Vec<(String, bool)> {
+        pairs.iter().map(|(k, v)| (k.to_string(), *v)).collect()
+    }
+
+    #[test]
+    fn fingerprint_key_uses_biometric_even_with_pin_set() {
+        let opts = options(&[("clientPin", true), ("uv", true)]);
+        assert_eq!(verification_for(&opts), Verification::Biometric);
+    }
+
+    #[test]
+    fn pin_only_key_asks_for_pin() {
+        let opts = options(&[("clientPin", true), ("uv", false)]);
+        assert_eq!(verification_for(&opts), Verification::Pin);
+    }
+
+    #[test]
+    fn key_without_pin_or_uv_needs_touch_only() {
+        assert_eq!(verification_for(&options(&[])), Verification::TouchOnly);
+        let opts = options(&[("clientPin", false)]);
+        assert_eq!(verification_for(&opts), Verification::TouchOnly);
+    }
+
+    /// Records each assertion's PIN and answers from a script of outcomes.
+    fn run(
+        config_pin: Option<&str>,
+        verification: Option<Verification>,
+        is_tty: bool,
+        outcomes: Vec<Result<Vec<u8>>>,
+        typed_pin: &str,
+    ) -> (Result<Vec<u8>>, Vec<Option<String>>, Vec<String>) {
+        let mut outcomes = outcomes.into_iter();
+        let mut pins = Vec::new();
+        let mut prompts = Vec::new();
+        let result = authenticate(
+            "test",
+            config_pin,
+            verification,
+            is_tty,
+            |pin| {
+                pins.push(pin.map(str::to_string));
+                outcomes.next().expect("unexpected extra assertion")
+            },
+            |prompt| {
+                prompts.push(prompt.to_string());
+                Ok(typed_pin.to_string())
+            },
+        );
+        (result, pins, prompts)
+    }
+
+    fn fail() -> Result<Vec<u8>> {
+        Err(FnoxError::Provider("no match".to_string()))
+    }
+
+    #[test]
+    fn fingerprint_asserts_without_pin_and_never_prompts() {
+        let (result, pins, prompts) = run(
+            None,
+            Some(Verification::Biometric),
+            true,
+            vec![Ok(vec![1])],
+            "",
+        );
+        assert_eq!(result.unwrap(), vec![1]);
+        assert_eq!(pins, vec![None]);
+        assert!(prompts.is_empty());
+    }
+
+    #[test]
+    fn failed_fingerprint_retries_with_typed_pin() {
+        let (result, pins, prompts) = run(
+            None,
+            Some(Verification::Biometric),
+            true,
+            vec![fail(), Ok(vec![2])],
+            "1234",
+        );
+        assert_eq!(result.unwrap(), vec![2]);
+        assert_eq!(pins, vec![None, Some("1234".to_string())]);
+        assert_eq!(prompts.len(), 1);
+    }
+
+    #[test]
+    fn failed_fingerprint_with_empty_pin_returns_original_error() {
+        let (result, pins, _) = run(None, Some(Verification::Biometric), true, vec![fail()], "");
+        assert_eq!(result.unwrap_err().to_string(), "Provider error: no match");
+        assert_eq!(pins, vec![None]);
+    }
+
+    #[test]
+    fn failed_fingerprint_without_terminal_does_not_prompt() {
+        let (result, pins, prompts) = run(
+            None,
+            Some(Verification::Biometric),
+            false,
+            vec![fail()],
+            "1234",
+        );
+        assert!(result.is_err());
+        assert_eq!(pins, vec![None]);
+        assert!(prompts.is_empty());
+    }
+
+    #[test]
+    fn pin_key_prompts_then_asserts_with_pin() {
+        let (result, pins, prompts) = run(
+            None,
+            Some(Verification::Pin),
+            true,
+            vec![Ok(vec![3])],
+            "4321",
+        );
+        assert_eq!(result.unwrap(), vec![3]);
+        assert_eq!(pins, vec![Some("4321".to_string())]);
+        assert_eq!(prompts, vec!["FIDO2 PIN".to_string()]);
+    }
+
+    #[test]
+    fn pin_key_without_terminal_errors_without_touching_the_key() {
+        let (result, pins, prompts) = run(None, Some(Verification::Pin), false, vec![], "");
+        assert!(result.unwrap_err().to_string().contains("no terminal"));
+        assert!(pins.is_empty());
+        assert!(prompts.is_empty());
+    }
+
+    #[test]
+    fn configured_pin_skips_prompt_for_any_key() {
+        let (result, pins, prompts) = run(
+            Some("9999"),
+            Some(Verification::Biometric),
+            true,
+            vec![Ok(vec![4])],
+            "",
+        );
+        assert_eq!(result.unwrap(), vec![4]);
+        assert_eq!(pins, vec![Some("9999".to_string())]);
+        assert!(prompts.is_empty());
+    }
+
+    #[test]
+    fn touch_only_key_asserts_without_pin() {
+        let (result, pins, prompts) = run(
+            None,
+            Some(Verification::TouchOnly),
+            true,
+            vec![Ok(vec![5])],
+            "",
+        );
+        assert_eq!(result.unwrap(), vec![5]);
+        assert_eq!(pins, vec![None]);
+        assert!(prompts.is_empty());
+    }
+
+    #[test]
+    fn unknown_key_uses_optional_pin_prompt_on_terminal_only() {
+        let (_, pins, prompts) = run(None, None, true, vec![Ok(vec![6])], "55");
+        assert_eq!(pins, vec![Some("55".to_string())]);
+        assert_eq!(prompts.len(), 1);
+
+        let (_, pins, prompts) = run(None, None, false, vec![Ok(vec![6])], "55");
+        assert_eq!(pins, vec![None]);
+        assert!(prompts.is_empty());
+    }
+
     #[test]
     fn returns_batch_error_for_each_secret() {
         let secrets = vec![
@@ -266,12 +541,24 @@ pub mod setup {
         )
         .map_err(|e| FnoxError::Provider(format!("Failed to find FIDO2 device: {:?}", e)))?;
 
-        // Check if PIN is required
-        let pin_input = demand::Input::new("FIDO2 PIN (leave empty if not set)")
-            .placeholder("")
-            .password(true)
-            .run()
-            .map_err(|e| FnoxError::Config(format!("Failed to read PIN: {}", e)))?;
+        // Ask for a PIN only if the key has one; a fingerprint-only or
+        // PIN-less key needs no prompt.
+        let verification = device
+            .get_info()
+            .ok()
+            .map(|info| super::verification_for(&info.options));
+        let pin_input = match verification {
+            Some(super::Verification::Biometric) => {
+                eprintln!("This key verifies with its fingerprint sensor; no PIN is needed.");
+                String::new()
+            }
+            Some(super::Verification::TouchOnly) => String::new(),
+            Some(super::Verification::Pin) => {
+                super::read_pin("FIDO2 PIN").map_err(|e| FnoxError::Config(e.to_string()))?
+            }
+            None => super::read_pin("FIDO2 PIN (leave empty if not set)")
+                .map_err(|e| FnoxError::Config(e.to_string()))?,
+        };
         let pin: Option<&str> = if pin_input.is_empty() {
             None
         } else {
@@ -290,6 +577,8 @@ pub mod setup {
                 .extensions(&[ext]);
         if let Some(p) = pin {
             builder = builder.pin(p);
+        } else if matches!(verification, Some(super::Verification::TouchOnly)) {
+            builder = builder.without_pin_and_uv();
         }
         let make_args = builder.build();
 
@@ -329,6 +618,8 @@ pub mod setup {
                 .extensions(&[assert_ext]);
         if let Some(p) = pin {
             builder2 = builder2.pin(p);
+        } else if matches!(verification, Some(super::Verification::TouchOnly)) {
+            builder2 = builder2.without_pin_and_uv();
         }
         let get_args = builder2.build();
 
