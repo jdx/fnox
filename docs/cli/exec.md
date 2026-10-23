@@ -6,7 +6,7 @@ description: "Run a command with secrets in its environment. Usage, flags, and e
 
 # `fnox exec`
 
-- **Usage:** `fnox exec [--refresh <KEY>] [--replace] [COMMAND]…`
+- **Usage:** `fnox exec [FLAGS] [COMMAND]…`
 - **Aliases:** `x`
 
 Run a command with secrets in its environment
@@ -20,6 +20,14 @@ fnox also removes `FNOX_AGE_KEY`, `FNOX_AGE_KEY_FILE`, and the Enpass master pas
 - **`[COMMAND]…`** — Command to run, with its arguments
 
 ## Flags
+
+- **`--except <NAME>`** — Do not resolve these secrets; repeatable
+
+  Takes names and globs like `--only` and applies after it. A secret that a selected secret depends on is still resolved, but not passed to the command unless it is selected itself. A lease is skipped when NAME matches a variable it produces.
+
+- **`--only <NAME>`** — Resolve only these secrets, plus the secrets they depend on; repeatable
+
+  Each NAME is a secret name or a glob such as `AWS_*`; comma-separate several. Other secrets are not resolved, so their providers are never called and they cannot fail the run. `if_missing` still applies to the selected secrets. An unknown name, or a glob that matches nothing, is an error. Leases run only when NAME matches a variable they produce.
 
 - **`--refresh <KEY>`** — Re-fetch KEY from its provider instead of the daemon cache; repeatable
 
@@ -55,6 +63,18 @@ fnox exec -- sh -c 'test -n "$DATABASE_URL"'
 
 ```sh
 fnox exec --refresh API_TOKEN -- ./script.sh
+```
+
+**Resolve only some secrets; unrelated secrets are never fetched**
+
+```sh
+fnox exec --only DATABASE_URL,'AWS_*' -- ./migrate.sh
+```
+
+**Skip one secret, for example one whose provider is unreachable**
+
+```sh
+fnox exec --except LEGACY_API_KEY -- npm start
 ```
 
 ## See also

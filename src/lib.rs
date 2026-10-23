@@ -18,6 +18,7 @@ pub mod daemon;
 pub mod hook_env;
 pub mod mcp_server;
 pub mod proxy;
+pub mod secret_filter;
 pub mod shell;
 pub mod tui;
 
