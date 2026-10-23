@@ -22,16 +22,20 @@ fnox exec -- aws s3 ls
 
 ## Backends {#supported-backends}
 
-| Backend                              | Type           | Produces                                               | Max duration | Revocation              |
-| ------------------------------------ | -------------- | ------------------------------------------------------ | ------------ | ----------------------- |
-| [AWS STS](/leases/aws-sts)           | `aws-sts`      | AWS session credentials                                | 12 hours     | Expires on its own      |
-| [GCP IAM](/leases/gcp-iam)           | `gcp-iam`      | OAuth2 access token                                    | 1 hour       | Expires on its own      |
-| [Azure Token](/leases/azure-token)   | `azure-token`  | Entra ID access token                                  | ~1 hour      | Expires on its own      |
-| [HashiCorp Vault](/leases/vault)     | `vault`        | Dynamic secrets, such as database or cloud credentials | 24 hours     | Vault lease revocation  |
-| [Cloudflare](/leases/cloudflare)     | `cloudflare`   | Scoped API token                                       | 24 hours     | Token deleted           |
-| [GitHub App](/leases/github-app)     | `github-app`   | Installation token                                     | 1 hour       | Token revoked           |
-| [GitHub OAuth](/leases/github-oauth) | `github-oauth` | User access token                                      | ~8 hours     | Expires on its own      |
-| [Custom command](/leases/command)    | `command`      | Whatever your command prints                           | 24 hours     | Optional revoke command |
+| Backend                                                        | Type                        | Produces                                               | Max duration        | Revocation                   |
+| -------------------------------------------------------------- | --------------------------- | ------------------------------------------------------ | ------------------- | ---------------------------- |
+| [AWS STS](/leases/aws-sts)                                     | `aws-sts`                   | AWS session credentials                                | 12 hours            | Expires on its own           |
+| [GCP IAM](/leases/gcp-iam)                                     | `gcp-iam`                   | OAuth2 access token                                    | 1 hour              | Expires on its own           |
+| [Azure Token](/leases/azure-token)                             | `azure-token`               | Entra ID access token                                  | ~1 hour             | Expires on its own           |
+| [HashiCorp Vault](/leases/vault)                               | `vault`                     | Dynamic secrets, such as database or cloud credentials | 24 hours            | Vault lease revocation       |
+| [Cloudflare](/leases/cloudflare)                               | `cloudflare`                | Scoped API token                                       | 24 hours            | Token deleted                |
+| [GitHub App](/leases/github-app)                               | `github-app`                | Installation token                                     | 1 hour              | Token revoked                |
+| [GitHub OAuth](/leases/github-oauth)                           | `github-oauth`              | User access token                                      | ~8 hours            | Expires on its own           |
+| [GitLab](/leases/gitlab)                                       | `gitlab`                    | Project or group access token                          | 24 hours            | Token deleted                |
+| [Tailscale](/leases/tailscale)                                 | `tailscale`                 | Auth key for joining a tailnet                         | 90 days             | Key deleted                  |
+| [Kubernetes](/leases/kubernetes)                               | `kubernetes`                | ServiceAccount token                                   | 24 hours            | Expires on its own           |
+| [OAuth2 client credentials](/leases/oauth2-client-credentials) | `oauth2-client-credentials` | Access token from any OAuth2 token endpoint            | Set by the endpoint | Optional revocation endpoint |
+| [Custom command](/leases/command)                              | `command`                   | Whatever your command prints                           | 24 hours            | Optional revoke command      |
 
 The service or your account policy can impose a shorter lifetime.
 
