@@ -90,6 +90,10 @@
       "description": "Whether to prompt for authentication when provider auth fails (default: true in TTY)",
       "type": ["boolean", "null"]
     },
+    "redact_exec": {
+      "description": "Redact secret values from `fnox exec` output when it is piped or\nredirected (default: false). Output to a terminal is never touched.",
+      "type": ["boolean", "null"]
+    },
     "mcp": {
       "description": "MCP server configuration",
       "anyOf": [

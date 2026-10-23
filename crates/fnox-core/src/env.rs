@@ -103,6 +103,13 @@ pub static FNOX_PROMPT_AUTH: LazyLock<Option<bool>> = LazyLock::new(|| {
         .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
 });
 
+// Redact secrets from piped `fnox exec` output (unset defers to the config)
+pub static FNOX_EXEC_REDACT: LazyLock<Option<bool>> = LazyLock::new(|| {
+    var("FNOX_EXEC_REDACT")
+        .ok()
+        .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+});
+
 // Helper functions for parsing environment variables
 fn var_path(name: &str) -> Option<PathBuf> {
     var(name)

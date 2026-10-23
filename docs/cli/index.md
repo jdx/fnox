@@ -73,7 +73,7 @@ Put fnox options before the `--` that starts a child command, as in `fnox -P pro
 - [`fnox doctor`](/cli/doctor.md)
 - [`fnox edit`](/cli/edit.md)
 - [`fnox env [FLAGS]`](/cli/env.md)
-- [`fnox exec [--refresh <KEY>] [--replace] [COMMAND]…`](/cli/exec.md)
+- [`fnox exec [FLAGS] [COMMAND]…`](/cli/exec.md)
 - [`fnox export [FLAGS] [KEY]…`](/cli/export.md)
 - [`fnox get [--base64-decode] [--refresh] <KEY>`](/cli/get.md)
 - [`fnox import <FLAGS> [FORMAT]`](/cli/import.md)
