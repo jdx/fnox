@@ -78,3 +78,9 @@ teardown() {
 	assert_output --partial "[REDACTED]"
 	[ $((SECONDS - start)) -lt 15 ]
 }
+
+@test "exec --redact delivers all output to a slow consumer" {
+	run bash -c "'$FNOX_BIN' exec --redact -- sh -c 'echo \$SECRET; echo done' | (sleep 3; cat)"
+	assert_success
+	assert_output "$(printf '[REDACTED]\ndone')"
+}

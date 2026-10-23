@@ -240,37 +240,52 @@ impl ExecCommand {
 
         // Filter piped output on helper threads so neither stream can stall the other.
         // A background process that inherited the pipe can keep it open after the
-        // command exits, so after exit the readers get a short grace period to drain
-        // and are then abandoned rather than holding fnox open.
+        // command exits, so once the command is gone a reader that has been idle
+        // (not reading and not delivering output) for a grace period is abandoned
+        // rather than holding fnox open. A slow downstream consumer is never cut off.
         let (done_tx, done_rx) = std::sync::mpsc::channel::<std::io::Result<()>>();
         let redactor = redactor.map(std::sync::Arc::new);
-        let mut readers = 0;
+        let mut activity = Vec::new();
         if let (Some(r), Some(mut pipe)) = (redactor.clone(), child.stdout.take()) {
-            let tx = done_tx.clone();
-            readers += 1;
+            let (tx, act) = (done_tx.clone(), std::sync::Arc::new(Activity::default()));
+            activity.push(act.clone());
             std::thread::spawn(move || {
-                let res = r.copy(&mut pipe, std::io::stdout().lock());
+                let res = r.copy(
+                    ActivityIo::new(&mut pipe, &act),
+                    ActivityIo::new(std::io::stdout(), &act),
+                );
                 tx.send(drain_after_error(res, &mut pipe)).ok();
             });
         }
         if let (Some(r), Some(mut pipe)) = (redactor, child.stderr.take()) {
-            let tx = done_tx.clone();
-            readers += 1;
+            let (tx, act) = (done_tx.clone(), std::sync::Arc::new(Activity::default()));
+            activity.push(act.clone());
             std::thread::spawn(move || {
-                let res = r.copy(&mut pipe, std::io::stderr().lock());
+                let res = r.copy(
+                    ActivityIo::new(&mut pipe, &act),
+                    ActivityIo::new(std::io::stderr(), &act),
+                );
                 tx.send(drain_after_error(res, &mut pipe)).ok();
             });
         }
         drop(done_tx);
         let wait_result = child.wait();
         let mut copy_error = None;
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-        for _ in 0..readers {
-            let left = deadline.saturating_duration_since(std::time::Instant::now());
-            match done_rx.recv_timeout(left) {
-                Ok(Err(e)) if e.kind() != std::io::ErrorKind::BrokenPipe => copy_error = Some(e),
-                Ok(_) => {}
-                Err(_) => break,
+        let mut pending = activity.len();
+        while pending > 0 {
+            match done_rx.recv_timeout(std::time::Duration::from_secs(2)) {
+                Ok(Err(e)) if e.kind() != std::io::ErrorKind::BrokenPipe => {
+                    copy_error = Some(e);
+                    pending -= 1;
+                }
+                Ok(_) => pending -= 1,
+                Err(_) => {
+                    // Keep waiting while any unfinished reader moved data or is mid-write.
+                    let busy = activity.iter().fold(false, |busy, a| a.take_busy() || busy);
+                    if !busy {
+                        break;
+                    }
+                }
             }
         }
         let status = wait_result.map_err(|e| FnoxError::CommandExecutionFailed {
@@ -305,6 +320,62 @@ impl ExecCommand {
         }
 
         Ok(())
+    }
+}
+
+/// Progress marker for one output reader, shared with the thread that waits on it.
+#[derive(Default)]
+struct Activity {
+    moved: std::sync::atomic::AtomicBool,
+    writing: std::sync::atomic::AtomicBool,
+}
+
+impl Activity {
+    /// Whether data moved or a write is in flight since the last call.
+    fn take_busy(&self) -> bool {
+        use std::sync::atomic::Ordering::SeqCst;
+        self.moved.swap(false, SeqCst) || self.writing.load(SeqCst)
+    }
+}
+
+/// Wraps a reader or writer and records its progress in an [`Activity`].
+struct ActivityIo<'a, T> {
+    inner: T,
+    act: &'a Activity,
+}
+
+impl<'a, T> ActivityIo<'a, T> {
+    fn new(inner: T, act: &'a Activity) -> Self {
+        Self { inner, act }
+    }
+}
+
+impl<T: std::io::Read> std::io::Read for ActivityIo<'_, T> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        self.act
+            .moved
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        Ok(n)
+    }
+}
+
+impl<T: std::io::Write> std::io::Write for ActivityIo<'_, T> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        use std::sync::atomic::Ordering::SeqCst;
+        self.act.writing.store(true, SeqCst);
+        let res = self.inner.write(buf);
+        self.act.writing.store(false, SeqCst);
+        self.act.moved.store(true, SeqCst);
+        res
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        use std::sync::atomic::Ordering::SeqCst;
+        self.act.writing.store(true, SeqCst);
+        let res = self.inner.flush();
+        self.act.writing.store(false, SeqCst);
+        res
     }
 }
 
