@@ -46,9 +46,45 @@ The config is portable: on another machine, plug in the same key and it decrypts
 
 fnox talks to the key directly; there is no CLI or account. Each fnox process asks for one touch per provider and keeps the hmac-secret response in memory until it exits, so `fnox exec` resolves every secret from the provider with a single touch.
 
-When the key requires a PIN and `pin` is not set, fnox prompts for it on a terminal. `fnox provider add` does not store the PIN.
+fnox asks the key how it verifies you and prompts to match:
+
+| Key setup                                       | What fnox asks for                                                                     |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Fingerprint enrolled (for example, YubiKey Bio) | Your fingerprint. No PIN prompt; if the read fails in a terminal, fnox offers the PIN. |
+| PIN set, no fingerprint                         | The PIN, then a touch.                                                                 |
+| No PIN, no fingerprint                          | A touch only.                                                                          |
+
+`fnox provider add` asks for a PIN only when the key has one, and does not store it. With no terminal and a PIN-protected key, set `pin` as described in [Avoid typing the PIN](#avoid-typing-the-pin).
 
 The provider needs interactive approval, so it cannot run in [non-interactive mode](/reference/environment#fnox-non-interactive) or in CI. Use another provider for CI secrets.
+
+## Fewer prompts
+
+- **Turn on the [daemon](/guide/daemon).** After one touch, later reads in your session come from memory instead of asking for another. A cache miss still needs a touch in a terminal.
+- **Use a [lease](#protect-lease-credentials).** The key is touched when a lease is created; cached leases are reused without a touch.
+- **Encrypt most values with [age](/providers/age).** Keep one age identity behind the key (see [Plugin support](/providers/age#plugin-support)) and encrypt the rest of the project with age.
+
+### Avoid typing the PIN
+
+`pin` accepts a secret reference, so the PIN can live in the OS keychain instead of being typed on each run. Keep the PIN provider and secret in your gitignored `fnox.local.toml`:
+
+```toml
+[providers.keychain]
+type = "keychain"
+service = "fnox"
+
+[secrets]
+FIDO2_PIN = { provider = "keychain", env = false }
+
+[providers.secure]
+type = "fido2"
+credential_id = "a1b2c3..."
+salt = "d4e5f6..."
+rp_id = "fnox.secure"
+pin = { secret = "FIDO2_PIN" }
+```
+
+The key is still touched on each use. Never put the PIN itself in a committed `fnox.toml`.
 
 ## Configuration
 
@@ -112,6 +148,10 @@ fnox found no FIDO2 key. Plug the key in, close other applications that hold it 
 ### `requires interactive authentication and cannot be used in non-interactive mode`
 
 The command ran with `--non-interactive` or `FNOX_NON_INTERACTIVE` set, or from shell integration, the MCP server, or the TUI. Run `fnox exec` in a terminal instead.
+
+### `needs the key's PIN but there is no terminal to ask on`
+
+The key has a PIN and fnox cannot prompt. Set `pin = { secret = "NAME" }` as in [Avoid typing the PIN](#avoid-typing-the-pin), or run the command in a terminal.
 
 ## See also
 
