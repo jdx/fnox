@@ -663,3 +663,30 @@ EOT
 	assert_success
 	assert_output "hello"
 }
+
+@test "edit re-encrypts with a provider from the global config" {
+	recipient="$(grep 'public key:' "$AGE_KEY_FILE" | cut -d: -f2- | xargs)"
+	export FNOX_CONFIG_DIR="$TEST_DIR/global"
+	mkdir -p "$FNOX_CONFIG_DIR"
+	cat >"$FNOX_CONFIG_DIR/config.toml" <<EOT
+[providers.age]
+type = "age"
+recipients = ["$recipient"]
+EOT
+	printf '[secrets]\n' >fnox.toml
+	printf 'line one' | fnox set V --provider age
+	run fnox get V
+	assert_success
+	assert_output "line one"
+
+	printf '#!/bin/sh\nsed -i.bak "s/one/ONE/" "$1"\n' >editor.sh
+	chmod +x editor.sh
+	EDITOR=./editor.sh run fnox edit
+	assert_success
+
+	run grep -c 'line ONE' fnox.toml
+	assert_output "0"
+	run fnox get V
+	assert_success
+	assert_output "line ONE"
+}

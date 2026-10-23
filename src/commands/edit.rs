@@ -191,7 +191,10 @@ impl EditCommand {
             .ok()
             .and_then(|p| p.parent().map(|d| d.to_path_buf()))
             .unwrap_or_default();
-        let modified_config = edited_config.with_imports(&config_dir)?;
+        let mut modified_config = edited_config.with_imports(&config_dir)?;
+        // Providers that only the global or parent configs define are still needed to
+        // re-encrypt existing secrets; settings the edited file removed are not restored
+        Self::add_inherited_providers(&mut modified_config, &config, &doc);
 
         self.reencrypt_secrets(&modified_config, &mut modified_doc, &all_secrets)
             .await?;
@@ -511,7 +514,10 @@ impl EditCommand {
                         .await?;
                         provider.put_secret(&key_str, plaintext).await?
                     } else {
-                        plaintext.to_string()
+                        return Err(FnoxError::Config(format!(
+                            "Provider '{}' not found for secret '{}'",
+                            provider_name, key_str
+                        )));
                     }
                 } else {
                     plaintext.to_string()
@@ -555,6 +561,39 @@ impl EditCommand {
         }
 
         Ok(())
+    }
+
+    /// Copy providers that come from outside the file being edited (global and
+    /// parent layers) from the fully loaded config. Providers the original file
+    /// defined are skipped, so deleting one in the editor sticks.
+    fn add_inherited_providers(edited: &mut Config, loaded: &Config, original: &DocumentMut) {
+        let defined_in_file = |profile: Option<&str>, name: &str| {
+            let table = match profile {
+                None => original.get("providers"),
+                Some(p) => original
+                    .get("profiles")
+                    .and_then(|i| i.get(p))
+                    .and_then(|i| i.get("providers")),
+            };
+            table.is_some_and(|t| t.get(name).is_some())
+        };
+        for (name, provider) in &loaded.providers {
+            if !edited.providers.contains_key(name) && !defined_in_file(None, name) {
+                edited.providers.insert(name.clone(), provider.clone());
+            }
+        }
+        for (profile_name, loaded_profile) in &loaded.profiles {
+            let edited_profile = edited.profiles.entry(profile_name.clone()).or_default();
+            for (name, provider) in &loaded_profile.providers {
+                if !edited_profile.providers.contains_key(name)
+                    && !defined_in_file(Some(profile_name), name)
+                {
+                    edited_profile
+                        .providers
+                        .insert(name.clone(), provider.clone());
+                }
+            }
+        }
     }
 
     /// Helper to set the value field in a secret (handles both inline table and table formats)
