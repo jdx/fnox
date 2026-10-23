@@ -213,3 +213,14 @@ TOML
 	assert_output --partial "fnox scan --values --staged"
 	assert_not_exists .git/hooks/pre-commit
 }
+
+@test "fnox scan --install-hook --append keeps a failing earlier hook failing" {
+	printf '#!/bin/sh\nfalse\n' >.git/hooks/pre-commit
+	chmod +x .git/hooks/pre-commit
+
+	run "$FNOX_BIN" scan --install-hook --append
+	assert_success
+
+	run .git/hooks/pre-commit
+	assert_failure
+}

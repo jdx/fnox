@@ -366,7 +366,7 @@ async fn resolve_secret_values(cli: &Cli, config: &Config) -> Result<Vec<Resolve
     Ok(secrets)
 }
 
-fn git(dir: &Path, args: &[&str]) -> Result<Vec<u8>> {
+fn git<S: AsRef<std::ffi::OsStr>>(dir: &Path, args: &[S]) -> Result<Vec<u8>> {
     let output = Command::new("git")
         .arg("-C")
         .arg(dir)
@@ -376,16 +376,46 @@ fn git(dir: &Path, args: &[&str]) -> Result<Vec<u8>> {
     if !output.status.success() {
         return Err(FnoxError::Config(format!(
             "git {} failed: {}",
-            args.join(" "),
+            args.iter()
+                .map(|arg| arg.as_ref().to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(" "),
             String::from_utf8_lossy(&output.stderr).trim()
         )));
     }
     Ok(output.stdout)
 }
 
-/// Read every added/copied/modified/renamed file from the git index, so the
-/// scan sees what would be committed rather than the working tree.
-fn staged_files(dir: &Path) -> Result<Vec<(String, Vec<u8>)>> {
+/// A file staged for commit. `path` keeps the raw bytes git reported so the
+/// blob can be looked up even when the name is not valid UTF-8.
+struct StagedFile {
+    path: Vec<u8>,
+}
+
+impl StagedFile {
+    fn display(&self) -> String {
+        String::from_utf8_lossy(&self.path).into_owned()
+    }
+
+    fn index_spec(&self) -> std::ffi::OsString {
+        let mut spec = b":".to_vec();
+        spec.extend_from_slice(&self.path);
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStringExt;
+            std::ffi::OsString::from_vec(spec)
+        }
+        #[cfg(not(unix))]
+        {
+            std::ffi::OsString::from(String::from_utf8_lossy(&spec).into_owned())
+        }
+    }
+}
+
+/// List every added/copied/modified/renamed file in the git index, returning
+/// the repository root and the files. Contents are read lazily by
+/// [`read_staged_blob`] so skipped files are never loaded.
+fn staged_files(dir: &Path) -> Result<(PathBuf, Vec<StagedFile>)> {
     let top = git(dir, &["rev-parse", "--show-toplevel"])?;
     let top = PathBuf::from(String::from_utf8_lossy(&top).trim_end_matches(['\n', '\r']));
 
@@ -410,11 +440,29 @@ fn staged_files(dir: &Path) -> Result<Vec<(String, Vec<u8>)>> {
         if new_mode == "120000" || new_mode == "160000" {
             continue;
         }
-        let path = String::from_utf8_lossy(path).into_owned();
-        let blob = git(&top, &["show", &format!(":{path}")])?;
-        files.push((path, blob));
+        files.push(StagedFile {
+            path: path.to_vec(),
+        });
     }
-    Ok(files)
+    Ok((top, files))
+}
+
+/// Read a staged blob, or `None` if it is over the size limit.
+fn read_staged_blob(top: &Path, file: &StagedFile) -> Result<Option<Vec<u8>>> {
+    let spec = file.index_spec();
+    let size = git(
+        top,
+        &[
+            std::ffi::OsString::from("cat-file"),
+            "-s".into(),
+            spec.clone(),
+        ],
+    )?;
+    let size: u64 = String::from_utf8_lossy(&size).trim().parse().unwrap_or(0);
+    if size > MAX_FILE_SIZE {
+        return Ok(None);
+    }
+    Ok(Some(git(top, &[std::ffi::OsString::from("show"), spec])?))
 }
 
 fn scan_staged(
@@ -424,13 +472,19 @@ fn scan_staged(
 ) -> Result<ScanReport> {
     let mut findings = Vec::new();
     let mut files_scanned = 0;
+    let (top, files) = staged_files(dir)?;
 
-    for (path, bytes) in staged_files(dir)? {
+    for file in files {
+        let path = file.display();
         if ignored_by_globs(ignore_globs, Path::new(&path), Path::new(&path)) {
             continue;
         }
-        if bytes.len() as u64 > MAX_FILE_SIZE || bytes.contains(&0) {
-            tracing::debug!("Skipping large or binary staged file {path}");
+        let Some(bytes) = read_staged_blob(&top, &file)? else {
+            tracing::debug!("Skipping large staged file {path}");
+            continue;
+        };
+        if bytes.contains(&0) {
+            tracing::debug!("Skipping binary staged file {path}");
             continue;
         }
         files_scanned += 1;
@@ -478,9 +532,17 @@ fn scan_text(path: &str, content: &str, matcher: Matcher<'_>) -> Vec<ScanFinding
 /// name and a fully masked placeholder: no part of the value is ever shown.
 fn scan_values(path: &str, content: &str, secrets: &[ResolvedSecret]) -> Vec<ScanFinding> {
     let mut findings = Vec::new();
+    let mut line_starts: Option<Vec<usize>> = None;
     for secret in secrets {
         for (offset, _) in content.match_indices(secret.value.as_str()) {
-            let (line, column) = line_column(content, offset);
+            let starts = line_starts.get_or_insert_with(|| {
+                std::iter::once(0)
+                    .chain(content.match_indices('\n').map(|(idx, _)| idx + 1))
+                    .collect()
+            });
+            let line_idx = starts.partition_point(|start| *start <= offset) - 1;
+            let line = line_idx + 1;
+            let column = content[starts[line_idx]..offset].chars().count() + 1;
             findings.push(ScanFinding {
                 path: path.to_string(),
                 line,
@@ -509,9 +571,42 @@ fn install_hook(dir: &Path, append: bool) -> Result<String> {
     install_hook_in(&hooks, append)
 }
 
-fn hook_block() -> String {
+fn hook_block(append: bool) -> String {
+    // When appended, keep the exit status of the script above: a failure there
+    // must not be masked by a passing scan.
+    let (prelude, epilogue) = if append {
+        ("fnox_prev_status=$?\n", "exit \"$fnox_prev_status\"\n")
+    } else {
+        ("", "")
+    };
     format!(
-        "{HOOK_MARKER}\nif command -v fnox >/dev/null 2>&1; then\n  fnox scan --values --staged || exit 1\nelse\n  echo \"fnox not found; skipping secret scan\" >&2\nfi\n"
+        "{HOOK_MARKER}\n{prelude}if command -v fnox >/dev/null 2>&1; then\n  fnox scan --values --staged || exit 1\nelse\n  echo \"fnox not found; skipping secret scan\" >&2\nfi\n{epilogue}"
+    )
+}
+
+/// Whether the script's shebang names a POSIX-style shell that can run the
+/// generated block (`sh`, `bash`, `dash`, `ash`, `ksh`, `zsh`).
+fn is_posix_shell_shebang(script: &str) -> bool {
+    let Some(line) = script.lines().next().and_then(|l| l.strip_prefix("#!")) else {
+        return false;
+    };
+    let mut words = line.split_whitespace();
+    let Some(first) = words.next() else {
+        return false;
+    };
+    let name = |word: &str| word.rsplit('/').next().unwrap_or(word).to_string();
+    let interpreter = if name(first) == "env" {
+        // `env [-S] [VAR=val ...] shell`: take the first non-option, non-assignment word.
+        match words.find(|w| !w.starts_with('-') && !w.contains('=')) {
+            Some(word) => name(word),
+            None => return false,
+        }
+    } else {
+        name(first)
+    };
+    matches!(
+        interpreter.as_str(),
+        "sh" | "bash" | "dash" | "ash" | "ksh" | "zsh"
     )
 }
 
@@ -532,11 +627,7 @@ fn install_hook_in(hooks_dir: &Path, append: bool) -> Result<String> {
                 hook.display()
             )));
         }
-        let shebang_ok = existing
-            .lines()
-            .next()
-            .is_some_and(|line| line.starts_with("#!") && line.contains("sh"));
-        if !shebang_ok {
+        if !is_posix_shell_shebang(&existing) {
             return Err(FnoxError::Config(format!(
                 "Cannot append to {}: it is not a shell script. Add `fnox scan --values --staged` to it manually.",
                 hook.display()
@@ -547,21 +638,29 @@ fn install_hook_in(hooks_dir: &Path, append: bool) -> Result<String> {
             updated.push('\n');
         }
         updated.push('\n');
-        updated.push_str(&hook_block());
+        updated.push_str(&hook_block(true));
         fs::write(&hook, updated)?;
+        make_executable(&hook)?;
         return Ok(format!(
             "Appended fnox secret scan to {}. Note: an earlier `exit` in that script would skip it.",
             hook.display()
         ));
     }
 
-    fs::write(&hook, format!("#!/bin/sh\n{}", hook_block()))?;
+    fs::write(&hook, format!("#!/bin/sh\n{}", hook_block(false)))?;
+    make_executable(&hook)?;
+    Ok(format!("Installed pre-commit hook at {}", hook.display()))
+}
+
+/// Ensure git will run the hook: it ignores hooks without the executable bit.
+fn make_executable(_hook: &Path) -> Result<()> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&hook, fs::Permissions::from_mode(0o755))?;
+        let mode = fs::metadata(_hook)?.permissions().mode();
+        fs::set_permissions(_hook, fs::Permissions::from_mode(mode | 0o755))?;
     }
-    Ok(format!("Installed pre-commit hook at {}", hook.display()))
+    Ok(())
 }
 
 fn scan_directory(
@@ -967,10 +1066,13 @@ mod tests {
         // Edit after staging: the working tree no longer holds the staged content.
         fs::write(dir.join("staged.txt"), "clean now\n").unwrap();
 
-        let files = staged_files(dir).unwrap();
-        let staged = files.iter().find(|(p, _)| p == "staged.txt").unwrap();
-        assert_eq!(staged.1, b"token=staged-secret-value\n");
-        assert!(files.iter().all(|(p, _)| p != "unstaged.txt"));
+        let (top, files) = staged_files(dir).unwrap();
+        let staged = files.iter().find(|f| f.path == b"staged.txt").unwrap();
+        assert_eq!(
+            read_staged_blob(&top, staged).unwrap().unwrap(),
+            b"token=staged-secret-value\n"
+        );
+        assert!(files.iter().all(|f| f.path != b"unstaged.txt"));
 
         let secrets = [secret("T", "staged-secret-value")];
         let report = scan_staged(dir, None, Matcher::Values(&secrets)).unwrap();
@@ -1046,6 +1148,57 @@ mod tests {
         assert_eq!(
             fs::read_to_string(&hook).unwrap(),
             "#!/usr/bin/env python3\nprint(1)\n"
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn staged_reader_handles_non_utf8_filenames() {
+        use std::os::unix::ffi::OsStrExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        git_ok(dir, &["init", "-q"]);
+        let name = std::ffi::OsStr::from_bytes(b"caf\xe9.txt");
+        fs::write(dir.join(name), "key=non-utf8-name-secret\n").unwrap();
+        git_ok(dir, &["add", "-A"]);
+
+        let secrets = [secret("K", "non-utf8-name-secret")];
+        let report = scan_staged(dir, None, Matcher::Values(&secrets)).unwrap();
+        assert_eq!(report.summary.findings, 1);
+    }
+
+    #[test]
+    fn value_scan_reports_many_repeated_matches_with_correct_positions() {
+        let secrets = [secret("Z", "00000000")];
+        let content = "00000000\nxx00000000\n".to_string() + &"00000000\n".repeat(1000);
+        let findings = scan_values("z.txt", &content, &secrets);
+        assert_eq!(findings.len(), 1002);
+        assert_eq!((findings[1].line, findings[1].column), (2, 3));
+    }
+
+    #[test]
+    fn append_requires_posix_shell_shebang() {
+        assert!(is_posix_shell_shebang("#!/bin/sh\n"));
+        assert!(is_posix_shell_shebang("#!/usr/bin/env bash\n"));
+        assert!(is_posix_shell_shebang("#!/usr/bin/env -S zsh -e\n"));
+        assert!(!is_posix_shell_shebang("#!/usr/bin/fish\n"));
+        assert!(!is_posix_shell_shebang("#!/bin/csh\n"));
+        assert!(!is_posix_shell_shebang("#!/usr/bin/env tcsh\n"));
+        assert!(!is_posix_shell_shebang("echo hi\n"));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn append_makes_hook_executable() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let hook = tmp.path().join("pre-commit");
+        fs::write(&hook, "#!/bin/sh\ntrue\n").unwrap();
+        fs::set_permissions(&hook, fs::Permissions::from_mode(0o644)).unwrap();
+        install_hook_in(tmp.path(), true).unwrap();
+        assert_eq!(
+            fs::metadata(&hook).unwrap().permissions().mode() & 0o111,
+            0o111
         );
     }
 }
