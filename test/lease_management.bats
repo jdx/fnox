@@ -355,6 +355,46 @@ EOF
 	'
 }
 
+@test "lease cleanup revokes only the expired record when lease IDs are duplicated" {
+	create_config
+	create_cred_script alpha.sh shared "$(past_timestamp)"
+	create_cred_script beta.sh shared "2099-01-01T00:00:00Z"
+	create_lease alpha same
+	create_lease beta same
+
+	run "$FNOX_BIN" lease cleanup
+	assert_success
+	assert_output --partial "Cleaned up 1 expired lease(s)."
+
+	run "$FNOX_BIN" lease list --json
+	assert_success
+	echo "$output" | jq -e '
+		(map(select(.backend == "alpha"))[0].status == "revoked")
+		and (map(select(.backend == "beta"))[0].status == "active")
+	'
+}
+
+@test "lease revoke refuses an ID or prefix shared by several backends" {
+	create_config
+	create_cred_script alpha.sh shared "2099-01-01T00:00:00Z"
+	create_cred_script beta.sh shared "2099-01-01T00:00:00Z"
+	create_lease alpha same
+	create_lease beta same
+
+	run "$FNOX_BIN" lease revoke shared-same
+	assert_failure
+	assert_output --partial "is used by backends"
+
+	run "$FNOX_BIN" lease revoke "shared-"
+	assert_failure
+	assert_output --partial "is used by backends"
+
+	run "$FNOX_BIN" lease list --json --active
+	assert_success
+	echo "$output" | jq -e 'length == 2'
+	assert_file_not_exist "$TEST_TEMP_DIR/revoked.log"
+}
+
 @test "lease cleanup with nothing expired is a no-op" {
 	create_config
 	create_lease alpha one

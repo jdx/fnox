@@ -635,19 +635,34 @@ impl LeaseRevokeCommand {
         target: &str,
         configured_backend: bool,
     ) -> Result<Vec<usize>> {
-        let with_id = |id: &str| -> Vec<usize> {
-            ledger
+        // Lease IDs are not guaranteed unique. Records sharing an ID within one
+        // backend are the same lease; across backends, make the user say which.
+        let with_id = |id: &str| -> Result<Vec<usize>> {
+            let indices: Vec<usize> = ledger
                 .leases
                 .iter()
                 .enumerate()
                 .filter(|(_, r)| r.lease_id == id)
                 .map(|(i, _)| i)
-                .collect()
+                .collect();
+            let mut backends: Vec<&str> = Vec::new();
+            for &i in &indices {
+                let name = ledger.leases[i].backend_name.as_str();
+                if !backends.contains(&name) {
+                    backends.push(name);
+                }
+            }
+            if backends.len() > 1 {
+                return Err(FnoxError::Config(format!(
+                    "Lease ID '{id}' is used by backends {}; revoke by backend name instead.",
+                    backends.join(", ")
+                )));
+            }
+            Ok(indices)
         };
 
-        let exact = with_id(target);
-        if !exact.is_empty() {
-            return Ok(exact);
+        if ledger.leases.iter().any(|r| r.lease_id == target) {
+            return with_id(target);
         }
 
         let known_backend =
@@ -670,7 +685,7 @@ impl LeaseRevokeCommand {
             [] => Err(FnoxError::Config(format!(
                 "Lease '{target}' not found. Use a lease ID or unique prefix from `fnox lease list`, or a backend name."
             ))),
-            [id] => Ok(with_id(id)),
+            [id] => with_id(id),
             many => Err(FnoxError::Config(format!(
                 "'{target}' matches {} leases; use a longer prefix or the full ID:\n{}",
                 many.len(),
@@ -775,10 +790,15 @@ impl LeaseCleanupCommand {
         let project_dir = lease::project_dir_from_config(&config, &cli.config);
         let _ledger_lock = LeaseLedger::lock(&project_dir)?;
         let mut ledger = LeaseLedger::load(&project_dir)?;
-        let expired: Vec<LeaseRecord> = ledger
-            .expired_leases()
+        // Keep each record's ledger position: lease IDs are not guaranteed
+        // unique, so marking by ID could revoke a different record.
+        let now = Utc::now();
+        let expired: Vec<(usize, LeaseRecord)> = ledger
+            .leases
             .iter()
-            .map(|r| (*r).clone())
+            .enumerate()
+            .filter(|(_, r)| !r.revoked && r.expires_at.is_some_and(|exp| exp <= now))
+            .map(|(i, r)| (i, r.clone()))
             .collect();
 
         if expired.is_empty() {
@@ -790,7 +810,7 @@ impl LeaseCleanupCommand {
         let leases = config.get_leases(&profile)?;
         let mut cleaned = 0;
 
-        for record in &expired {
+        for (index, record) in &expired {
             // Try to revoke via the backend if available (best-effort)
             if let Some(backend_config) = leases.get(&record.backend_name) {
                 match backend_config.create_backend() {
@@ -821,7 +841,7 @@ impl LeaseCleanupCommand {
                     record.lease_id
                 );
             }
-            ledger.mark_revoked(&record.lease_id);
+            ledger.mark_revoked_at(*index);
             cleaned += 1;
         }
 
