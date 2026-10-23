@@ -194,12 +194,17 @@ impl Fido2Provider {
             .ok()
             .map(|info| verification_for(&info.options));
 
+        // Keys that don't report verification support keep the previous default.
+        let use_builtin_uv = !matches!(
+            verification,
+            Some(Verification::Pin | Verification::TouchOnly)
+        );
         let hmac_secret = authenticate(
             &self.provider_name,
             self.pin.as_deref(),
             verification,
             is_tty,
-            |pin| self.assert_hmac_secret(&device, pin),
+            |pin| self.assert_hmac_secret(&device, pin, use_builtin_uv),
             read_pin,
         )?;
 
@@ -212,6 +217,7 @@ impl Fido2Provider {
         &self,
         device: &ctap_hid_fido2::FidoKeyHid,
         pin: Option<&str>,
+        use_builtin_uv: bool,
     ) -> Result<Vec<u8>> {
         let challenge = ctap_hid_fido2::verifier::create_challenge();
 
@@ -226,6 +232,10 @@ impl Fido2Provider {
                 .extensions(&[ext]);
         if let Some(pin) = pin {
             builder = builder.pin(pin);
+        } else if !use_builtin_uv {
+            // The builder requests built-in user verification by default, which a
+            // key without it rejects; ask for a plain touch instead.
+            builder = builder.without_pin_and_uv();
         }
         let args = builder.build();
 
@@ -567,6 +577,8 @@ pub mod setup {
                 .extensions(&[ext]);
         if let Some(p) = pin {
             builder = builder.pin(p);
+        } else if matches!(verification, Some(super::Verification::TouchOnly)) {
+            builder = builder.without_pin_and_uv();
         }
         let make_args = builder.build();
 
@@ -606,6 +618,8 @@ pub mod setup {
                 .extensions(&[assert_ext]);
         if let Some(p) = pin {
             builder2 = builder2.pin(p);
+        } else if matches!(verification, Some(super::Verification::TouchOnly)) {
+            builder2 = builder2.without_pin_and_uv();
         }
         let get_args = builder2.build();
 
