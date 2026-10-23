@@ -550,6 +550,15 @@ pub async fn plan(
     // rest must not reach the command or overwrite inherited values.
     if let Some(filter) = filter {
         env.set.retain(|key, _| filter.allows(key));
+        // Re-scrub the ambient secrets a dropped lease value had replaced.
+        for key in ambient_scrub_keys() {
+            if !env.set.contains_key(key)
+                && !env.files.contains_key(key)
+                && !env.remove.iter().any(|existing| existing == key)
+            {
+                env.remove.push(key.to_string());
+            }
+        }
     }
     Ok((env, _temp_files))
 }
