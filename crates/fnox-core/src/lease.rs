@@ -478,7 +478,8 @@ pub fn set_secrets_as_env(
 /// credentials) into the process environment, so revoking a lease can
 /// authenticate the same way creating it did. Only the secrets the backend
 /// consumes, plus the default encryption provider's own dependencies (needed to
-/// decrypt cached credentials), are resolved. A backend with unknown inputs, such
+/// decrypt cached credentials) and everything those secrets depend on, are
+/// resolved. A backend with unknown inputs, such
 /// as `command`, gets the whole profile.
 ///
 /// Returns the temp files backing `as_file` secrets; keep them alive while the
@@ -491,18 +492,25 @@ pub async fn load_backend_secrets(
 ) -> Result<Vec<tempfile::NamedTempFile>> {
     let all_secrets = config.get_secrets(profile)?;
     let needed: IndexMap<_, _> = if lease_config.has_known_inputs() {
-        let mut consumed: std::collections::HashSet<&str> =
-            lease_config.consumed_env_vars().iter().copied().collect();
+        let mut roots: Vec<String> = lease_config
+            .consumed_env_vars()
+            .iter()
+            .map(|k| k.to_string())
+            .collect();
         if let Ok(Some(default_provider)) = config.get_default_provider(profile)
             && let Some(provider_config) = config.get_providers(profile)?.get(&default_provider)
         {
-            consumed.extend(provider_config.env_dependencies());
+            roots.extend(
+                provider_config
+                    .env_dependencies()
+                    .iter()
+                    .map(|d| d.to_string()),
+            );
         }
-        all_secrets
-            .iter()
-            .filter(|(k, _)| consumed.contains(k.as_str()))
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect()
+        // A parent credential can live behind a provider that needs its own
+        // secret (a 1Password token, an age key), or reference another secret,
+        // so resolve everything those depend on too.
+        crate::secret_resolver::dependency_closure(config, profile, &all_secrets, &roots)?
     } else {
         all_secrets
     };

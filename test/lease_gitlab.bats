@@ -254,3 +254,39 @@ EOF
 	assert_failure
 	assert_output --partial "must use https"
 }
+
+@test "gitlab: revoke also loads secrets the parent token depends on" {
+	start_gitlab_server
+	unset GITLAB_TOKEN
+
+	# GITLAB_TOKEN is only defined through GL_PARENT, which the lease never names.
+	cat >"$FNOX_CONFIG_FILE" <<EOF
+root = true
+
+[providers.p]
+type = "plain"
+
+[secrets]
+GL_PARENT = { provider = "p", value = "glpat-via-reference", env = false }
+GITLAB_TOKEN = { default = "\${GL_PARENT}", env = false }
+
+[leases.gl]
+type = "gitlab"
+url = "http://127.0.0.1:$MOCK_PORT"
+project = "group/app"
+EOF
+
+	run fnox lease create gl
+	assert_success
+
+	run fnox lease revoke "$(first_lease_id)"
+	assert_success
+
+	run python3 -c '
+import json, sys
+requests = [json.loads(line) for line in open(sys.argv[1])]
+deletes = [r for r in requests if r["method"] == "DELETE"]
+assert len(deletes) == 1 and deletes[0]["private_token"] == "glpat-via-reference", deletes
+' "$TEST_TEMP_DIR/mock_requests.log"
+	assert_success
+}
