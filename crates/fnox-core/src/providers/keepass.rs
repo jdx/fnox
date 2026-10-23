@@ -263,6 +263,46 @@ impl KeePassProvider {
         }
     }
 
+    /// Resolve a reference to a field value in an open database.
+    fn read_field(db: &Database, value: &str) -> Result<String> {
+        let (mut entry_path, mut field) = Self::parse_reference(value);
+
+        let mut entry_id = Self::find_entry_id(db, &entry_path);
+        let explicit_field = entry_path.len() < value.split('/').count();
+        if entry_id.is_none() && !explicit_field && entry_path.len() > 1 {
+            // No entry has that title and the reference did not end in a standard
+            // field name, so the last segment may name a custom field of the entry
+            // before it (e.g. "group/entry/customField").
+            let parent = &entry_path[..entry_path.len() - 1];
+            if let Some(id) = Self::find_entry_id(db, parent) {
+                field = entry_path[entry_path.len() - 1];
+                entry_path = parent.to_vec();
+                entry_id = Some(id);
+            }
+        }
+        let entry_id = entry_id.ok_or_else(|| FnoxError::ProviderSecretNotFound {
+            provider: "KeePass".to_string(),
+            secret: entry_path.join("/"),
+            hint: "Check that the entry exists in the database".to_string(),
+            url: "https://fnox.jdx.dev/providers/keepass".to_string(),
+        })?;
+        let entry = db.entry(entry_id).expect("entry exists");
+
+        entry
+            .get(field)
+            .map(|s| s.to_string())
+            .ok_or_else(|| FnoxError::ProviderInvalidResponse {
+                provider: "KeePass".to_string(),
+                details: format!(
+                    "Field '{}' not found in entry '{}'",
+                    field,
+                    entry_path.join("/")
+                ),
+                hint: "Available fields: password, username, url, notes, title, or a custom field name".to_string(),
+                url: "https://fnox.jdx.dev/providers/keepass".to_string(),
+            })
+    }
+
     /// Maximum depth of chained field references before giving up (guards cycles).
     const MAX_REF_DEPTH: usize = 10;
 
@@ -530,31 +570,8 @@ impl crate::providers::Provider for KeePassProvider {
         );
 
         let db = self.open_database()?;
-
-        let entry_id = Self::find_entry_id(&db, &entry_path).ok_or_else(|| {
-            FnoxError::ProviderSecretNotFound {
-                provider: "KeePass".to_string(),
-                secret: entry_path.join("/"),
-                hint: "Check that the entry exists in the database".to_string(),
-                url: "https://fnox.jdx.dev/providers/keepass".to_string(),
-            }
-        })?;
-        let entry = db.entry(entry_id).expect("entry exists");
-
-        let raw = entry
-            .get(field)
-            .ok_or_else(|| FnoxError::ProviderInvalidResponse {
-                provider: "KeePass".to_string(),
-                details: format!(
-                    "Field '{}' not found in entry '{}'",
-                    field,
-                    entry_path.join("/")
-                ),
-                hint: "Available fields: password, username, url, notes, title".to_string(),
-                url: "https://fnox.jdx.dev/providers/keepass".to_string(),
-            })?;
-
-        Self::resolve_refs(&db, raw)
+        let raw = Self::read_field(&db, value)?;
+        Self::resolve_refs(&db, &raw)
     }
 
     async fn put_secret(&self, key: &str, value: &str) -> Result<String> {
@@ -773,5 +790,59 @@ mod tests {
         let (path, field) = KeePassProvider::parse_reference("group/subgroup/my-entry/password");
         assert_eq!(path, vec!["group", "subgroup", "my-entry"]);
         assert_eq!(field, "Password");
+    }
+
+    fn custom_field_db() -> Database {
+        let mut db = Database::new();
+        let mut root = db.root_mut();
+        let mut entry = root.add_entry();
+        entry.set_unprotected("Title", "github");
+        entry.set_protected("Password", "pw");
+        entry.set_unprotected("Plain", "plain-value");
+        entry.set_unprotected("Region", "eu-west-1");
+        entry.set_protected("Token", "secret-token");
+        let mut group = root.add_group();
+        group.name = "github".to_string();
+        let mut shadow = group.add_entry();
+        shadow.set_unprotected("Title", "Plain");
+        shadow.set_protected("Password", "entry-wins");
+        db
+    }
+
+    #[test]
+    fn test_read_custom_fields() {
+        let db = custom_field_db();
+        assert_eq!(KeePassProvider::read_field(&db, "github").unwrap(), "pw");
+        // An entry with the full path as its title wins over a custom field.
+        assert_eq!(
+            KeePassProvider::read_field(&db, "github/Plain").unwrap(),
+            "entry-wins"
+        );
+        assert_eq!(
+            KeePassProvider::read_field(&db, "github/Plain/password").unwrap(),
+            "entry-wins"
+        );
+        assert_eq!(
+            KeePassProvider::read_field(&db, "github/Region").unwrap(),
+            "eu-west-1"
+        );
+        assert_eq!(
+            KeePassProvider::read_field(&db, "github/Token").unwrap(),
+            "secret-token"
+        );
+    }
+
+    #[test]
+    fn test_read_custom_field_is_case_sensitive_and_missing_errors() {
+        let db = custom_field_db();
+        assert!(KeePassProvider::read_field(&db, "github/token").is_err());
+        assert!(KeePassProvider::read_field(&db, "github/Missing").is_err());
+    }
+
+    #[test]
+    fn test_explicit_standard_field_skips_custom_fallback() {
+        let db = custom_field_db();
+        // "github/Token" is not an entry, but "/password" is explicit, so no fallback.
+        assert!(KeePassProvider::read_field(&db, "github/Token/password").is_err());
     }
 }

@@ -66,9 +66,9 @@ A reference is a `/`-separated path. If the last segment is a field name, fnox r
 | `work/github`                | Password of the entry `github` under group `work`        |
 | `work/project/api-key/notes` | Notes field of entry `api-key` under `work/project`      |
 
-The field names are `password`, `username`, `url`, `notes`, and `title`, matched case-insensitively. Other custom fields cannot be referenced. Group names and entry titles match exactly.
+The field names are `password`, `username`, `url`, `notes`, and `title`, matched case-insensitively. To read a custom (string) field, add its exact name as the last segment, for example `work/github/ApiToken`. fnox first looks for an entry titled with the full path and falls back to treating the last segment as a custom field, so an entry title takes precedence. Protected custom fields work too. Group names and entry titles match exactly.
 
-`fnox set` writes to the same path, creating groups and the entry as needed. It stores the password field protected inside the database. The `title` field cannot be written, because it identifies the entry:
+`fnox set` writes to the same path, creating groups and the entry as needed. It stores the password field protected inside the database. It cannot write custom fields: setting `work/github/ApiToken` creates an entry titled `ApiToken` under `work/github`, and that entry then takes precedence over a custom field of the same name on later reads. The `title` field cannot be written, because it identifies the entry:
 
 ```sh
 fnox set API_USER --provider keepass --key-name production/api-service/username
