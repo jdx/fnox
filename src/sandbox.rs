@@ -72,11 +72,13 @@ pub const UNSET_ENV: &[&str] = &[
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SandboxPolicy {
     pub cwd: PathBuf,
-    /// Existing paths the command may not read.
+    /// Paths the command may not read. One that does not exist yet is inside
+    /// a writable path, and is kept from being created.
     pub hide: Vec<HiddenPath>,
     /// Paths the command may write.
     pub writable: Vec<PathBuf>,
-    /// Paths inside a writable one that the command may not write.
+    /// Paths inside a writable one that the command may not write, whether
+    /// or not they exist yet.
     pub read_only: Vec<PathBuf>,
 }
 
@@ -111,6 +113,11 @@ impl SandboxPolicy {
         } = inputs;
         let resolve = |entry: &String| expand(entry, &home, &cwd);
 
+        let mut writable = vec![cwd.clone()];
+        writable.extend(config.sandbox_allow_write.iter().map(resolve));
+        writable.retain(|path| path.exists());
+        let writable_path = |path: &Path| writable.iter().any(|bound| path.starts_with(bound));
+
         let mut candidates: Vec<PathBuf> = Vec::new();
         candidates.extend(fnox_dirs);
         candidates.extend(fnox_files);
@@ -119,19 +126,33 @@ impl SandboxPolicy {
         candidates.extend(config.sandbox_deny_read.iter().map(resolve));
 
         let allowed: Vec<PathBuf> = config.sandbox_allow_read.iter().map(resolve).collect();
-        candidates.retain(|path| !allowed.iter().any(|allow| path.starts_with(allow)));
-
-        let mut hide: Vec<HiddenPath> = candidates
-            .into_iter()
-            .filter_map(|path| {
-                let metadata = std::fs::metadata(&path).ok()?;
-                let path = std::fs::canonicalize(&path).unwrap_or(path);
-                Some(HiddenPath {
+        let mut hide: Vec<HiddenPath> = Vec::new();
+        let mut read_only: Vec<PathBuf> = Vec::new();
+        for path in candidates {
+            let path = canonicalize_lossy(&path);
+            let metadata = std::fs::metadata(&path).ok();
+            if allowed.iter().any(|allow| path.starts_with(allow)) {
+                // Readable, but a mask also stopped writes, and the command
+                // must not be able to rewrite its own configuration.
+                if metadata.is_some() && writable_path(&path) {
+                    read_only.push(path);
+                }
+                continue;
+            }
+            match metadata {
+                Some(metadata) => hide.push(HiddenPath {
                     path,
                     is_dir: metadata.is_dir(),
-                })
-            })
-            .collect();
+                }),
+                // The command could create it, and fnox or git would read it
+                // later outside the sandbox. Elsewhere it cannot be created.
+                None if writable_path(&path) => hide.push(HiddenPath {
+                    path,
+                    is_dir: false,
+                }),
+                None => {}
+            }
+        }
         hide.sort_by(|a, b| a.path.cmp(&b.path));
         hide.dedup_by(|b, a| a.path == b.path);
         // Hiding a directory already hides what is inside it, and bwrap cannot
@@ -142,17 +163,14 @@ impl SandboxPolicy {
                 .any(|other| other != &hidden.path && hidden.path.starts_with(other))
         });
 
-        let mut writable = vec![cwd.clone()];
-        writable.extend(config.sandbox_allow_write.iter().map(resolve));
-        writable.retain(|path| path.exists());
-
         // A command that can edit these runs code outside the sandbox the
-        // next time git does.
-        let read_only = [".git/hooks", ".git/config"]
-            .iter()
-            .map(|path| cwd.join(path))
-            .filter(|path| path.exists())
-            .collect();
+        // next time git does. They are protected even when missing, so the
+        // command cannot create them.
+        if cwd.join(".git").is_dir() {
+            read_only.extend([".git/hooks", ".git/config"].map(|path| cwd.join(path)));
+        }
+        read_only.sort();
+        read_only.dedup();
 
         Self {
             cwd,
@@ -169,7 +187,11 @@ impl SandboxPolicy {
             .map_err(|error| {
                 FnoxError::Config(format!("failed to read the working directory: {error}"))
             })?;
-        let profile = Config::get_profiles(&cli.profile);
+        let requested = Config::get_profiles(&cli.profile);
+        // Profiles that the requested ones inherit have files of their own.
+        let profile = config
+            .resolve_profiles(&requested)
+            .unwrap_or_else(|_| requested.clone());
 
         let mut fnox_files = Vec::new();
         if uses_config_discovery(&cli.config) {
@@ -191,6 +213,8 @@ impl SandboxPolicy {
             .collect::<Vec<_>>();
         fnox_files.extend(imports);
         fnox_files.extend(config.age_key_file.clone());
+        fnox_files.extend(cli.age_key_file.clone());
+        fnox_files.extend(provider_key_files(config, &profile, &cwd));
         fnox_files.extend(env::var_os("FNOX_AGE_KEY_FILE").map(PathBuf::from));
 
         let environment = ["XDG_RUNTIME_DIR", "SSH_AUTH_SOCK"]
@@ -214,6 +238,19 @@ impl SandboxPolicy {
     }
 }
 
+/// The `key_file` of every provider the profiles use, such as an age identity.
+fn provider_key_files(config: &Config, profile: &[String], cwd: &Path) -> Vec<PathBuf> {
+    let Ok(providers) = config.get_providers(profile) else {
+        return Vec::new();
+    };
+    providers
+        .values()
+        .filter_map(|provider| serde_json::to_value(provider).ok())
+        .filter_map(|value| value.get("key_file")?.as_str().map(str::to_string))
+        .map(|key_file| expand(&key_file, &env::HOME_DIR, cwd))
+        .collect()
+}
+
 /// The files `path` imports, if it can be read as a fnox config.
 fn imported_files(path: &Path) -> Vec<PathBuf> {
     #[derive(serde::Deserialize)]
@@ -233,6 +270,56 @@ fn imported_files(path: &Path) -> Vec<PathBuf> {
         .iter()
         .map(|import| crate::config_path::resolve_relative_to_dir(import, dir))
         .collect()
+}
+
+/// Resolves symlinks in the part of `path` that exists.
+fn canonicalize_lossy(path: &Path) -> PathBuf {
+    if let Ok(real) = std::fs::canonicalize(path) {
+        return real;
+    }
+    match (path.parent(), path.file_name()) {
+        (Some(parent), Some(name)) => canonicalize_lossy(parent).join(name),
+        _ => path.to_path_buf(),
+    }
+}
+
+/// What to mount over so that `path` cannot be created: the first ancestor
+/// (or `path` itself) that does not exist yet.
+fn mask_target(path: &Path) -> PathBuf {
+    let mut target = path;
+    while let Some(parent) = target.parent() {
+        if parent.exists() {
+            break;
+        }
+        target = parent;
+    }
+    target.to_path_buf()
+}
+
+/// Empty files that `bwrap` left behind as mount points for `policy`'s
+/// missing paths. Call before the command starts.
+pub fn pending_mount_points(policy: &SandboxPolicy) -> Vec<PathBuf> {
+    policy
+        .hide
+        .iter()
+        .map(|hidden| &hidden.path)
+        .chain(&policy.read_only)
+        .filter(|path| !path.exists())
+        .map(|path| mask_target(path))
+        .collect()
+}
+
+/// Removes the mount points from [`pending_mount_points`] once the sandbox is
+/// gone, so a missing `fnox.local.toml` does not appear as an empty file.
+pub fn remove_mount_points(paths: &[PathBuf]) {
+    for path in paths {
+        if let Ok(metadata) = std::fs::symlink_metadata(path)
+            && metadata.is_file()
+            && metadata.len() == 0
+        {
+            let _ = std::fs::remove_file(path);
+        }
+    }
 }
 
 /// Expands `~` and resolves a relative path against `cwd`.
@@ -302,7 +389,15 @@ pub fn bwrap_args(
         push(&[s("--bind"), path.as_os_str(), path.as_os_str()]);
     }
     for path in &policy.read_only {
-        push(&[s("--ro-bind"), path.as_os_str(), path.as_os_str()]);
+        if path.exists() {
+            push(&[s("--ro-bind"), path.as_os_str(), path.as_os_str()]);
+        } else {
+            push(&[
+                s("--ro-bind"),
+                s("/dev/null"),
+                mask_target(path).as_os_str(),
+            ]);
+        }
     }
     let dir = Path::new(SANDBOX_DIR);
     let (bridge_exe, bridge_socket, bridge_ca) =
@@ -314,7 +409,13 @@ pub fn bwrap_args(
         if hidden_by_tmpfs(&hidden.path, policy) {
             continue;
         }
-        if hidden.is_dir {
+        if !hidden.path.exists() {
+            push(&[
+                s("--ro-bind"),
+                s("/dev/null"),
+                mask_target(&hidden.path).as_os_str(),
+            ]);
+        } else if hidden.is_dir {
             push(&[s("--tmpfs"), hidden.path.as_os_str()]);
         } else {
             push(&[s("--ro-bind"), s("/dev/null"), hidden.path.as_os_str()]);
@@ -383,6 +484,9 @@ pub struct Launch {
     pub proxy_url: String,
     /// The proxy's CA bundle as the child sees it.
     pub ca_path: PathBuf,
+    /// Empty files the sandbox may leave behind; pass to
+    /// [`remove_mount_points`] after the command exits.
+    pub mount_points: Vec<PathBuf>,
 }
 
 /// A sandbox that has been checked to work on this machine.
@@ -451,6 +555,7 @@ impl Sandbox {
                 args,
                 proxy_url: running.session_url(bridge),
                 ca_path: Path::new(SANDBOX_DIR).join("ca.pem"),
+                mount_points: pending_mount_points(&self.policy),
             })
         }
         #[cfg(target_os = "macos")]
@@ -470,6 +575,7 @@ impl Sandbox {
                     .proxy_url()
                     .expect("a loopback proxy has a proxy URL"),
                 ca_path: running.ca_path().to_path_buf(),
+                mount_points: Vec::new(),
             })
         }
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -616,6 +722,119 @@ mod tests {
         );
     }
 
+    /// A policy for a project directory inside `root`; `root` also holds the
+    /// home directory, which is therefore outside the writable project.
+    fn project(root: &Path, fnox_files: &[&str], config: &ProxyConfig) -> SandboxPolicy {
+        std::fs::create_dir_all(root.join("project")).unwrap();
+        std::fs::create_dir_all(root.join("home")).unwrap();
+        let cwd = std::fs::canonicalize(root.join("project")).unwrap();
+        SandboxPolicy::build(PolicyInputs {
+            cwd: cwd.clone(),
+            home: std::fs::canonicalize(root.join("home")).unwrap(),
+            fnox_dirs: Vec::new(),
+            fnox_files: fnox_files.iter().map(|file| cwd.join(file)).collect(),
+            environment: Vec::new(),
+            config,
+        })
+    }
+
+    #[test]
+    fn config_files_that_do_not_exist_yet_cannot_be_created() {
+        let root = tempfile::tempdir().unwrap();
+        let policy = project(
+            root.path(),
+            &["fnox.local.toml", ".config/fnox.toml"],
+            &ProxyConfig::default(),
+        );
+        assert_eq!(hidden(&policy), ["fnox.toml", "fnox.local.toml"]);
+        let args = argv(&policy);
+        let local = policy
+            .cwd
+            .join("fnox.local.toml")
+            .to_string_lossy()
+            .to_string();
+        // `.config` is missing too, so it is what gets masked.
+        let config_dir = policy.cwd.join(".config").to_string_lossy().to_string();
+        assert!(position(&args, &["--ro-bind", "/dev/null", &local]).is_some());
+        assert!(position(&args, &["--ro-bind", "/dev/null", &config_dir]).is_some());
+        let pending = pending_mount_points(&policy);
+        assert_eq!(pending.len(), 2);
+        assert!(pending.contains(&policy.cwd.join(".config")));
+    }
+
+    #[test]
+    fn missing_paths_outside_writable_locations_are_skipped() {
+        let root = tempfile::tempdir().unwrap();
+        let cwd = std::fs::canonicalize(root.path()).unwrap();
+        let policy = SandboxPolicy::build(PolicyInputs {
+            cwd: cwd.clone(),
+            home: PathBuf::from("/nonexistent-fnox-test/home"),
+            fnox_dirs: Vec::new(),
+            fnox_files: vec![PathBuf::from("/nonexistent-fnox-test/fnox.toml")],
+            environment: Vec::new(),
+            config: &ProxyConfig::default(),
+        });
+        assert!(policy.hide.is_empty());
+    }
+
+    #[test]
+    fn git_hooks_are_protected_before_they_exist() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("project/.git")).unwrap();
+        let policy = project(root.path(), &[], &ProxyConfig::default());
+        assert_eq!(policy.read_only.len(), 2);
+        let hooks = policy.cwd.join(".git/hooks").to_string_lossy().to_string();
+        assert!(position(&argv(&policy), &["--ro-bind", "/dev/null", &hooks]).is_some());
+        // Without a repository there is nothing to protect.
+        let bare = tempfile::tempdir().unwrap();
+        assert!(
+            project(bare.path(), &[], &ProxyConfig::default())
+                .read_only
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn unhidden_files_in_the_project_stay_read_only() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("project")).unwrap();
+        std::fs::write(root.path().join("project/fnox.toml"), "").unwrap();
+        let config = ProxyConfig {
+            sandbox_allow_read: vec!["fnox.toml".to_string()],
+            ..ProxyConfig::default()
+        };
+        let policy = project(root.path(), &["fnox.toml"], &config);
+        assert!(policy.hide.is_empty());
+        assert_eq!(policy.read_only, [policy.cwd.join("fnox.toml")]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn allow_read_follows_symlinks() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("project")).unwrap();
+        std::fs::write(root.path().join("project/real.toml"), "").unwrap();
+        std::os::unix::fs::symlink("real.toml", root.path().join("project/link.toml")).unwrap();
+        let config = ProxyConfig {
+            sandbox_allow_read: vec!["link.toml".to_string()],
+            ..ProxyConfig::default()
+        };
+        let policy = project(root.path(), &["real.toml"], &config);
+        assert!(policy.hide.is_empty());
+    }
+
+    #[test]
+    fn only_empty_mount_points_are_removed() {
+        let root = tempfile::tempdir().unwrap();
+        let empty = root.path().join("empty");
+        let kept = root.path().join("kept");
+        std::fs::write(&empty, "").unwrap();
+        std::fs::write(&kept, "data").unwrap();
+        remove_mount_points(&[empty.clone(), kept.clone(), root.path().join("gone")]);
+        assert!(!empty.exists());
+        assert!(kept.exists());
+    }
+
     fn argv(policy: &SandboxPolicy) -> Vec<String> {
         bwrap_args(
             policy,
@@ -681,6 +900,10 @@ mod tests {
 
     #[test]
     fn paths_the_sandbox_tmpfs_already_hides_are_not_mounted_over() {
+        let dir = tempfile::tempdir_in("/tmp").unwrap();
+        let project = dir.path().join("project");
+        std::fs::create_dir(&project).unwrap();
+        std::fs::write(project.join("fnox.toml"), "").unwrap();
         let policy = SandboxPolicy {
             cwd: PathBuf::from("/work"),
             hide: vec![
@@ -689,17 +912,18 @@ mod tests {
                     is_dir: true,
                 },
                 HiddenPath {
-                    path: PathBuf::from("/tmp/project/fnox.toml"),
+                    path: project.join("fnox.toml"),
                     is_dir: false,
                 },
             ],
-            writable: vec![PathBuf::from("/tmp/project")],
+            writable: vec![project.clone()],
             read_only: Vec::new(),
         };
         let args = argv(&policy);
         assert!(position(&args, &["--tmpfs", "/run/user/1000"]).is_none());
         // Inside a bound path the mask is still needed.
-        assert!(position(&args, &["--ro-bind", "/dev/null", "/tmp/project/fnox.toml"]).is_some());
+        let config = project.join("fnox.toml").to_string_lossy().to_string();
+        assert!(position(&args, &["--ro-bind", "/dev/null", &config]).is_some());
     }
 
     #[test]

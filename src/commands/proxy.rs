@@ -347,9 +347,11 @@ impl ProxyRunCommand {
             .as_ref()
             .map_or(ProxyListener::Loopback, Sandbox::listener);
         let running = RunningProxy::start(plan, listener).await?;
+        let mut mount_points = Vec::new();
         let (program, args, proxy_url, ca_path) = match &sandbox {
             Some(sandbox) => {
                 let launch = sandbox.launch(&running, &self.command)?;
+                mount_points = launch.mount_points;
                 (
                     launch.program,
                     launch.args,
@@ -428,6 +430,7 @@ impl ProxyRunCommand {
         }
 
         let status = command.status().await;
+        crate::sandbox::remove_mount_points(&mount_points);
         running.shutdown().await;
         let status = status.map_err(|source| FnoxError::CommandExecutionFailed {
             command: self.command.join(" "),

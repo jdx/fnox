@@ -63,11 +63,20 @@ _require_sandbox() {
 @test "proxy run --sandbox blocks direct network access but reaches the proxy" {
 	_require_sandbox
 	run "$FNOX_BIN" proxy run --sandbox -- bash -c '
-		if (timeout 5 bash -c "exec 3<>/dev/tcp/1.1.1.1/80") 2>/dev/null; then
-			echo direct-reached
-		else
-			echo direct-blocked
-		fi
+		# macOS has no coreutils `timeout`; perl bounds a connection that hangs.
+		bounded() {
+			if command -v timeout >/dev/null 2>&1; then
+				timeout 5 "$@"
+			elif command -v perl >/dev/null 2>&1; then
+				perl -e "alarm 5; exec @ARGV" -- "$@"
+			else
+				"$@"
+			fi
+		}
+		bounded bash -c "exec 3<>/dev/tcp/1.1.1.1/80" 2>/dev/null
+		# 1 is a refused or unroutable connection; anything else (success, a
+		# timeout) means the connection was not blocked.
+		if [ "$?" -eq 1 ]; then echo direct-blocked; else echo direct-open; fi
 		port="${HTTPS_PROXY##*:}"
 		if (exec 3<>/dev/tcp/127.0.0.1/"$port") 2>/dev/null; then
 			echo proxy-reached
@@ -97,11 +106,26 @@ _require_sandbox() {
 
 @test "sandbox = true in [proxy] enables it and --no-sandbox turns it off" {
 	_require_sandbox
-	sed -i.bak 's/^\[proxy\]$/[proxy]\nsandbox = true/' fnox.toml
+	awk '{print} /^\[proxy\]$/ {print "sandbox = true"}' fnox.toml >fnox.toml.new && mv fnox.toml.new fnox.toml
 	run "$FNOX_BIN" proxy run -- sh -c '[ -s fnox.toml ] && echo readable || echo hidden'
 	assert_success
 	assert_output "hidden"
 	run "$FNOX_BIN" proxy run --no-sandbox -- sh -c '[ -s fnox.toml ] && echo readable || echo hidden'
 	assert_success
 	assert_line "readable"
+}
+
+@test "proxy run --sandbox keeps the command from creating config or git hooks" {
+	_require_sandbox
+	mkdir -p .git
+	run "$FNOX_BIN" proxy run --sandbox -- sh -c '
+		(echo "[proxy]" >fnox.local.toml) 2>/dev/null && echo local-created || echo local-blocked
+		(mkdir -p .git/hooks && echo "#!/bin/sh" >.git/hooks/pre-commit) 2>/dev/null && echo hook-created || echo hook-blocked
+	'
+	assert_success
+	assert_line "local-blocked"
+	assert_line "hook-blocked"
+	# The empty files bwrap mounts over become nothing once the command exits.
+	assert_file_not_exists fnox.local.toml
+	assert_file_not_exists .git/hooks/pre-commit
 }
