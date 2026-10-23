@@ -30,6 +30,7 @@ pub mod provider;
 pub mod proxy;
 pub mod reencrypt;
 pub mod remove;
+pub mod sandbox_bridge;
 pub mod scan;
 pub mod schema;
 pub mod set;
@@ -192,6 +193,10 @@ pub enum Commands {
 
     Remove(remove::RemoveCommand),
 
+    /// Internal command used by `fnox proxy run --sandbox`
+    #[usage(hide)]
+    SandboxBridge(sandbox_bridge::SandboxBridgeCommand),
+
     Scan(scan::ScanCommand),
 
     /// Generate JSON Schema for fnox configuration
@@ -331,6 +336,7 @@ impl Commands {
                 .run(cli, Config::new())
                 .await
                 .map_err(|e| FnoxError::Config(e.to_string())),
+            Commands::SandboxBridge(cmd) => cmd.run(cli).await,
             Commands::HookEnv(cmd) => cmd
                 .run(cli)
                 .await

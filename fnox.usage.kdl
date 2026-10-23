@@ -909,7 +909,7 @@ cmd proxy help="Inject credentials into a command's HTTPS requests through a loc
     long_help #"""
 Inject credentials into a command's HTTPS requests through a local proxy
 
-`fnox proxy run` starts a local HTTPS proxy and runs a command that sees only placeholder values. When the command sends a request that matches a `[[proxy.rules]]` entry by domain, method, and path, the proxy swaps in the real secret. The proxy controls where credentials are sent; it does not sandbox the command. Both subcommands require a `[proxy]` table.
+`fnox proxy run` starts a local HTTPS proxy and runs a command that sees only placeholder values. When the command sends a request that matches a `[[proxy.rules]]` entry by domain, method, and path, the proxy swaps in the real secret. The proxy controls where credentials are sent; it does not sandbox the command unless you pass `--sandbox` to `run`. Both subcommands require a `[proxy]` table.
 """#
     after_long_help #"""
 See also:
@@ -942,12 +942,22 @@ Resolves the secrets that `[[proxy.rules]]` names, plus any secrets their provid
  - CA variables such as `SSL_CERT_FILE` pointing at the proxy's certificate
  - every configured secret and common cloud credential variables removed
 
+With `--sandbox` (or `sandbox = true`), the command also runs in an OS sandbox: its only network route is the proxy, the filesystem is read-only except for the working directory and temporary files, and fnox's configuration, keys and common credential directories are hidden.
+
 The command's HTTP client must honor those proxy and CA settings. fnox exits with the command's exit status.
 """#
         after_long_help #"""
 See also:
 - Credential proxy: https://fnox.jdx.dev/guide/proxy
 """#
+        flag --no-sandbox help="Run the command without the sandbox, even if `[proxy]` enables it"
+        flag --sandbox help="Run the command in an OS sandbox whose only way out is the proxy" {
+            long_help #"""
+Run the command in an OS sandbox whose only way out is the proxy
+
+Also enabled by `sandbox = true` in `[proxy]`. Needs `bwrap` on Linux or `sandbox-exec` on macOS, and fails instead of running unsandboxed.
+"""#
+        }
         flag "-h --help" help="Print help" action=help builtin=#true
         arg "[COMMAND]..." help="Command to run, with its arguments" double_dash=automatic
         complete command type=command_args
@@ -1002,6 +1012,21 @@ See also:
     example "fnox remove OLD_TOKEN --dry-run" header="Preview the change"
     example "fnox remove OLD_TOKEN" header="Remove a secret"
     example "fnox -P staging remove OLD_TOKEN" header="Remove it from the staging profile"
+}
+cmd sandbox-bridge help="Internal command used by `fnox proxy run --sandbox`" hide=#true {
+    long_help #"""
+Offer the proxy's Unix socket on a local port and run a command (internal)
+
+`fnox proxy run` starts this inside its sandbox, where the only network is an empty loopback interface. Most HTTP clients cannot use a proxy on a Unix socket, so this forwards `127.0.0.1:PORT` to SOCKET for as long as COMMAND runs, then exits with the command's status.
+"""#
+    flag --port help="Port to listen on at 127.0.0.1" required=#true {
+        arg <PORT>
+    }
+    flag --socket help="Unix socket of the proxy" required=#true {
+        arg <PATH>
+    }
+    flag "-h --help" help="Print help" action=help builtin=#true
+    arg "[COMMAND]..." help="Command to run, with its arguments" double_dash=automatic
 }
 cmd scan help="Scan files for secrets committed in plaintext" {
     long_help #"""

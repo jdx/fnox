@@ -6,7 +6,7 @@ description: "Run a command with placeholder credentials behind the proxy. Usage
 
 # `fnox proxy run`
 
-- **Usage:** `fnox proxy run [COMMAND]…`
+- **Usage:** `fnox proxy run [--no-sandbox] [--sandbox] [COMMAND]…`
 
 Run a command with placeholder credentials behind the proxy
 
@@ -18,6 +18,8 @@ Resolves the secrets that `[[proxy.rules]]` names, plus any secrets their provid
 - CA variables such as `SSL_CERT_FILE` pointing at the proxy's certificate
 - every configured secret and common cloud credential variables removed
 
+With `--sandbox` (or `sandbox = true`), the command also runs in an OS sandbox: its only network route is the proxy, the filesystem is read-only except for the working directory and temporary files, and fnox's configuration, keys and common credential directories are hidden.
+
 The command's HTTP client must honor those proxy and CA settings. fnox exits with the command's exit status.
 
 ## Arguments
@@ -25,6 +27,11 @@ The command's HTTP client must honor those proxy and CA settings. fnox exits wit
 - **`[COMMAND]…`** — Command to run, with its arguments
 
 ## Flags
+
+- **`--no-sandbox`** — Run the command without the sandbox, even if `[proxy]` enables it
+- **`--sandbox`** — Run the command in an OS sandbox whose only way out is the proxy
+
+  Also enabled by `sandbox = true` in `[proxy]`. Needs `bwrap` on Linux or `sandbox-exec` on macOS, and fails instead of running unsandboxed.
 
 - **`-h --help`** — Print help
 

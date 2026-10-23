@@ -936,7 +936,6 @@ pub enum ProxyListener {
     /// exist and should be in a directory only the user can enter. This lets
     /// a sandboxed process reach the proxy without sharing the host's network.
     #[cfg(unix)]
-    #[cfg_attr(not(test), allow(dead_code))] // used by the upcoming agent sandbox
     Unix(std::path::PathBuf),
 }
 
@@ -1089,6 +1088,17 @@ impl RunningProxy {
     pub fn proxy_url(&self) -> Option<String> {
         self.address
             .map(|address| format!("http://fnox:{}@{address}", self.token))
+    }
+
+    /// The address of a loopback listener.
+    pub fn local_addr(&self) -> Option<std::net::SocketAddr> {
+        self.address
+    }
+
+    /// The `HTTPS_PROXY` URL for a client that reaches the proxy at `address`
+    /// by some other route, such as a bridge in front of a Unix socket.
+    pub fn session_url(&self, address: std::net::SocketAddr) -> String {
+        format!("http://fnox:{}@{address}", self.token)
     }
 
     pub fn ca_path(&self) -> &std::path::Path {

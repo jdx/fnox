@@ -2,6 +2,7 @@ use crate::commands::Cli;
 use crate::config::{Config, ProxyConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
 use crate::proxy::{ProxyListener, ProxyPlan, RunningProxy};
+use crate::sandbox::{Sandbox, SandboxPolicy};
 use indexmap::IndexMap;
 use std::process::Stdio;
 
@@ -104,7 +105,8 @@ const AMBIENT_CREDENTIAL_ENV_VARS: &[&str] = &[
 /// placeholder values. When the command sends a request that matches a
 /// `[[proxy.rules]]` entry by domain, method, and path, the proxy swaps in the
 /// real secret. The proxy controls where credentials are sent; it does not
-/// sandbox the command. Both subcommands require a `[proxy]` table.
+/// sandbox the command unless you pass `--sandbox` to `run`. Both subcommands
+/// require a `[proxy]` table.
 #[derive(Debug, usage_rs::Args)]
 #[usage(
     example("fnox proxy rules", header = "Check the rules"),
@@ -149,6 +151,11 @@ enum ProxySubcommand {
 ///  - CA variables such as `SSL_CERT_FILE` pointing at the proxy's certificate
 ///  - every configured secret and common cloud credential variables removed
 ///
+/// With `--sandbox` (or `sandbox = true`), the command also runs in an OS
+/// sandbox: its only network route is the proxy, the filesystem is read-only
+/// except for the working directory and temporary files, and fnox's
+/// configuration, keys and common credential directories are hidden.
+///
 /// The command's HTTP client must honor those proxy and CA settings. fnox exits
 /// with the command's exit status.
 #[derive(Debug, usage_rs::Args)]
@@ -160,6 +167,17 @@ enum ProxySubcommand {
     after_long_help = "See also:\n- Credential proxy: https://fnox.jdx.dev/guide/proxy"
 )]
 struct ProxyRunCommand {
+    /// Run the command without the sandbox, even if `[proxy]` enables it
+    #[usage(long)]
+    no_sandbox: bool,
+
+    /// Run the command in an OS sandbox whose only way out is the proxy
+    ///
+    /// Also enabled by `sandbox = true` in `[proxy]`. Needs `bwrap` on Linux or
+    /// `sandbox-exec` on macOS, and fails instead of running unsandboxed.
+    #[usage(long)]
+    sandbox: bool,
+
     /// Command to run, with its arguments
     #[usage(
         arg,
@@ -276,6 +294,10 @@ fn collect_requested_secrets(
 }
 
 impl ProxyRunCommand {
+    fn sandbox_enabled(&self, proxy: &ProxyConfig) -> bool {
+        self.sandbox || (proxy.sandbox && !self.no_sandbox)
+    }
+
     async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
         if self.command.is_empty() {
             return Err(FnoxError::CommandNotSpecified);
@@ -285,6 +307,14 @@ impl ProxyRunCommand {
             .as_ref()
             .ok_or_else(|| FnoxError::Config("No [proxy] configuration found".to_string()))?;
         crate::proxy::validate_config(proxy_config)?;
+        // Checked before any secret is resolved, so a machine that cannot
+        // sandbox fails without having fetched anything.
+        let sandbox = if self.sandbox_enabled(proxy_config) {
+            let policy = SandboxPolicy::from_environment(cli, &config, proxy_config)?;
+            Some(Sandbox::prepare(policy)?)
+        } else {
+            None
+        };
         // Before any secret is resolved into this process's memory.
         crate::proxy::deny_inspection();
         let profile = Config::get_profiles(&cli.profile);
@@ -313,19 +343,38 @@ impl ProxyRunCommand {
 
         let plan = ProxyPlan::new(proxy_config, &values)?;
         let child_env = plan.child_env.clone();
-        let running = RunningProxy::start(plan, ProxyListener::Loopback).await?;
-        let proxy_url = running
-            .proxy_url()
-            .expect("a loopback proxy has a proxy URL");
-        let ca_path = running.ca_path().to_string_lossy().to_string();
+        let listener = sandbox
+            .as_ref()
+            .map_or(ProxyListener::Loopback, Sandbox::listener);
+        let running = RunningProxy::start(plan, listener).await?;
+        let (program, args, proxy_url, ca_path) = match &sandbox {
+            Some(sandbox) => {
+                let launch = sandbox.launch(&running, &self.command)?;
+                (
+                    launch.program,
+                    launch.args,
+                    launch.proxy_url,
+                    launch.ca_path.to_string_lossy().to_string(),
+                )
+            }
+            None => {
+                tracing::warn!(
+                    "fnox proxy is not sandboxing the command; same-user code may bypass the proxy (see --sandbox)"
+                );
+                (
+                    self.command[0].clone().into(),
+                    self.command[1..].iter().map(Into::into).collect(),
+                    running
+                        .proxy_url()
+                        .expect("a loopback proxy has a proxy URL"),
+                    running.ca_path().to_string_lossy().to_string(),
+                )
+            }
+        };
 
-        tracing::warn!(
-            "fnox proxy does not sandbox the child process yet; same-user code may bypass the proxy"
-        );
-
-        let mut command = tokio::process::Command::new(&self.command[0]);
+        let mut command = tokio::process::Command::new(program);
         command
-            .args(&self.command[1..])
+            .args(args)
             .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
@@ -341,6 +390,11 @@ impl ProxyRunCommand {
         for provider in config.get_providers(&profile)?.values() {
             for dependency in provider.env_dependencies() {
                 command.env_remove(dependency);
+            }
+        }
+        if sandbox.is_some() {
+            for key in crate::sandbox::UNSET_ENV {
+                command.env_remove(key);
             }
         }
         command.env("FNOX_DAEMON", "off");
