@@ -51,6 +51,44 @@ pub trait LeaseBackend: Send + Sync {
 
     /// Maximum allowed lease duration
     fn max_lease_duration(&self) -> Duration;
+
+    /// Whether a lease's credentials may be cached and handed to later
+    /// commands. Backends whose credentials are consumed by their first use
+    /// (such as a single-use auth key) return false, so every command gets a
+    /// fresh lease and nothing sensitive is stored in the ledger.
+    fn cacheable(&self) -> bool {
+        true
+    }
+}
+
+/// Read a credential from the environment. An empty value counts as unset, so
+/// `FOO=` cannot shadow a usable alternative or pass for a real credential.
+pub(crate) fn env_credential(name: &str) -> Option<String> {
+    crate::env::var(name).ok().filter(|v| !v.trim().is_empty())
+}
+
+/// Reject a URL that would send credentials in cleartext. Only https is
+/// accepted, except for loopback hosts, which never leave the machine (local
+/// proxies and test servers).
+pub(crate) fn require_secure_url(backend: &str, field: &str, value: &str) -> Result<()> {
+    let url = reqwest::Url::parse(value).map_err(|e| {
+        crate::error::FnoxError::Config(format!(
+            "{backend} backend: invalid {field} '{value}': {e}"
+        ))
+    })?;
+    let host = url.host_str().unwrap_or("").trim_matches(['[', ']']);
+    let is_loopback = host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback());
+    match url.scheme() {
+        "https" => Ok(()),
+        "http" if is_loopback => Ok(()),
+        _ => Err(crate::error::FnoxError::Config(format!(
+            "{backend} backend: {field} must use https (http is allowed only for localhost, \
+             127.0.0.1 or ::1), got '{value}'."
+        ))),
+    }
 }
 
 fn default_gcp_scopes() -> Vec<String> {
@@ -637,7 +675,7 @@ impl LeaseBackendConfig {
                     *auth_method,
                     params.clone(),
                     revocation_url.clone(),
-                ),
+                )?,
             )),
             LeaseBackendConfig::Tailscale {
                 tailnet,
@@ -656,7 +694,7 @@ impl LeaseBackendConfig {
                 *ephemeral,
                 *preauthorized,
                 env_var.clone(),
-            ))),
+            )?)),
             LeaseBackendConfig::Command {
                 create_command,
                 revoke_command,
@@ -771,6 +809,27 @@ mod tests {
             for key in &produced {
                 assert!(lease.produces_env_var(key));
             }
+        }
+    }
+
+    #[test]
+    fn secure_url_requires_https_except_on_loopback() {
+        for ok in [
+            "https://gitlab.example.com",
+            "http://localhost:8080",
+            "http://127.0.0.1:9",
+            "http://[::1]:9/path",
+        ] {
+            assert!(require_secure_url("Test", "url", ok).is_ok(), "{ok}");
+        }
+        for bad in [
+            "http://gitlab.example.com",
+            "http://10.0.0.5",
+            "ftp://localhost",
+            "not a url",
+            "",
+        ] {
+            assert!(require_secure_url("Test", "url", bad).is_err(), "{bad}");
         }
     }
 

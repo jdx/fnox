@@ -1,5 +1,5 @@
 use crate::error::{FnoxError, Result};
-use crate::lease_backends::{Lease, LeaseBackend};
+use crate::lease_backends::{Lease, LeaseBackend, env_credential, require_secure_url};
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use std::time::Duration;
@@ -50,11 +50,11 @@ enum Credentials {
 
 impl Credentials {
     fn from_env() -> Option<Self> {
-        if let Ok(key) = std::env::var("TAILSCALE_API_KEY") {
+        if let Some(key) = env_credential("TAILSCALE_API_KEY") {
             return Some(Self::ApiKey(key));
         }
-        let id = std::env::var("TAILSCALE_OAUTH_CLIENT_ID").ok()?;
-        let secret = std::env::var("TAILSCALE_OAUTH_CLIENT_SECRET").ok()?;
+        let id = env_credential("TAILSCALE_OAUTH_CLIENT_ID")?;
+        let secret = env_credential("TAILSCALE_OAUTH_CLIENT_SECRET")?;
         Some(Self::OauthClient { id, secret })
     }
 }
@@ -78,12 +78,14 @@ impl TailscaleBackend {
         ephemeral: bool,
         preauthorized: bool,
         env_var: String,
-    ) -> Self {
+    ) -> Result<Self> {
         let api_base = api_base
             .unwrap_or_else(|| API_BASE.to_string())
             .trim_end_matches('/')
             .to_string();
-        Self {
+        // Credentials are sent to this URL.
+        require_secure_url(PROVIDER, "api_base", &api_base)?;
+        Ok(Self {
             tailnet,
             api_base,
             tags,
@@ -91,7 +93,7 @@ impl TailscaleBackend {
             ephemeral,
             preauthorized,
             env_var,
-        }
+        })
     }
 
     fn keys_url(&self) -> String {
@@ -321,6 +323,12 @@ impl LeaseBackend for TailscaleBackend {
     fn max_lease_duration(&self) -> Duration {
         Duration::from_secs(MAX_DURATION_SECS)
     }
+
+    /// A single-use key is spent by the first device that registers with it, so
+    /// handing the cached key to a later command would give it a dead key.
+    fn cacheable(&self) -> bool {
+        self.reusable
+    }
 }
 
 #[cfg(test)]
@@ -337,6 +345,43 @@ mod tests {
             true,
             "TS_AUTHKEY".to_string(),
         )
+        .unwrap()
+    }
+
+    #[test]
+    fn only_reusable_keys_are_cacheable() {
+        let build = |reusable| {
+            TailscaleBackend::new(
+                "-".to_string(),
+                None,
+                vec![],
+                reusable,
+                true,
+                true,
+                "TS_AUTHKEY".to_string(),
+            )
+            .unwrap()
+        };
+        assert!(!build(false).cacheable());
+        assert!(build(true).cacheable());
+    }
+
+    #[test]
+    fn rejects_cleartext_api_base_except_on_loopback() {
+        let build = |base: &str| {
+            TailscaleBackend::new(
+                "-".to_string(),
+                Some(base.to_string()),
+                vec![],
+                false,
+                true,
+                true,
+                "TS_AUTHKEY".to_string(),
+            )
+        };
+        assert!(build("http://api.example.com").is_err());
+        assert!(build("https://api.example.com").is_ok());
+        assert!(build("http://127.0.0.1:9").is_ok());
     }
 
     #[test]

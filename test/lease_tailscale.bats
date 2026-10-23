@@ -163,3 +163,68 @@ def respond(method, path, body):
 	assert_failure
 	assert_output --partial "requested tags are invalid"
 }
+
+count_key_creations() {
+	python3 -c '
+import json, sys
+requests = [json.loads(line) for line in open(sys.argv[1])]
+print(sum(1 for r in requests if r["method"] == "POST" and r["path"].endswith("/keys")))
+' "$TEST_TEMP_DIR/mock_requests.log"
+}
+
+@test "tailscale: a single-use key is never reused from the cache" {
+	start_tailscale_server
+	write_config 'tags = ["tag:ci"]'
+
+	run fnox exec -- printenv TS_AUTHKEY
+	assert_success
+	run fnox exec -- printenv TS_AUTHKEY
+	assert_success
+
+	run count_key_creations
+	assert_output "2"
+
+	# Nothing secret is stored for a key that is never reused.
+	run grep -r "tskey-auth-mock" "$HOME/.local/state/fnox"
+	assert_failure
+}
+
+@test "tailscale: a reusable key is shared between commands" {
+	start_tailscale_server
+	write_config 'tags = ["tag:ci"]
+reusable = true'
+
+	run fnox exec -- printenv TS_AUTHKEY
+	assert_success
+	run fnox exec -- printenv TS_AUTHKEY
+	assert_success
+
+	run count_key_creations
+	assert_output "1"
+}
+
+@test "tailscale: an empty API key falls back to the OAuth client" {
+	start_tailscale_server
+	export TAILSCALE_API_KEY=""
+	write_config 'tags = ["tag:ci"]'
+
+	run fnox lease create ts
+	assert_success
+
+	run mock_requests
+	assert_output --partial "\"authorization\": \"Bearer ts-oauth-token\""
+}
+
+@test "tailscale: rejects a cleartext api_base" {
+	cat >"$FNOX_CONFIG_FILE" <<EOF
+root = true
+
+[leases.ts]
+type = "tailscale"
+api_base = "http://api.example.com"
+EOF
+
+	run fnox lease create ts
+	assert_failure
+	assert_output --partial "must use https"
+}

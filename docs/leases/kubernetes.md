@@ -4,7 +4,7 @@ description: "Request short-lived, audience-bound Kubernetes ServiceAccount toke
 
 # Kubernetes
 
-The `kubernetes` lease backend asks the API server for a short-lived [ServiceAccount token](https://kubernetes.io/docs/reference/kubernetes-api/authentication-resources/token-request-v1/) with the TokenRequest API and injects it into `fnox exec`. It talks to the cluster directly, so `kubectl` is not required.
+The `kubernetes` lease backend asks the API server for a short-lived [ServiceAccount token](https://kubernetes.io/docs/reference/access-authn-authz/service-accounts-admin/) with the TokenRequest API and injects it into `fnox exec`. It talks to the cluster directly, so `kubectl` is not required.
 
 |              |                                                                                     |
 | ------------ | ----------------------------------------------------------------------------------- |

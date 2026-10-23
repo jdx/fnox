@@ -237,3 +237,57 @@ EOF
 	run mock_requests
 	refute_output --partial "/revoke"
 }
+
+@test "oauth2-client-credentials: a non-JSON error response reports the HTTP status" {
+	start_mock_server '
+def respond(method, path, body):
+    return 502, "<html>Bad Gateway</html>"
+'
+
+	cat >"$FNOX_CONFIG_FILE" <<EOF
+root = true
+
+[leases.idp]
+type = "oauth2-client-credentials"
+token_url = "http://127.0.0.1:$MOCK_PORT/token"
+client_id = "cid"
+EOF
+
+	run fnox lease create idp
+	assert_failure
+	assert_output --partial "502"
+}
+
+@test "oauth2-client-credentials: an absurd expires_in does not crash" {
+	start_mock_server '
+def respond(method, path, body):
+    return 200, {"access_token": "tok-abc123", "expires_in": 99999999999999999}
+'
+
+	cat >"$FNOX_CONFIG_FILE" <<EOF
+root = true
+
+[leases.idp]
+type = "oauth2-client-credentials"
+token_url = "http://127.0.0.1:$MOCK_PORT/token"
+client_id = "cid"
+EOF
+
+	run fnox lease create idp
+	assert_success
+}
+
+@test "oauth2-client-credentials: rejects a cleartext token_url" {
+	cat >"$FNOX_CONFIG_FILE" <<EOF
+root = true
+
+[leases.idp]
+type = "oauth2-client-credentials"
+token_url = "http://idp.example.com/token"
+client_id = "cid"
+EOF
+
+	run fnox lease create idp
+	assert_failure
+	assert_output --partial "must use https"
+}

@@ -51,7 +51,7 @@ Set exactly one of `project` or `group`.
 | -------------- | ---------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `project`      | One of two | none                   | Project ID or full path, such as `platform/api`. Creates a project access token.                                        |
 | `group`        | One of two | none                   | Group ID or full path. Creates a group access token.                                                                    |
-| `url`          | No         | `"https://gitlab.com"` | Base URL of a self-hosted GitLab.                                                                                       |
+| `url`          | No         | `"https://gitlab.com"` | Base URL of a self-hosted GitLab. Must use https; http is accepted only for localhost.                                  |
 | `scopes`       | No         | `["read_api"]`         | [Token scopes](https://docs.gitlab.com/user/project/settings/project_access_tokens/#scopes-for-a-project-access-token). |
 | `access_level` | No         | `"developer"`          | Role of the token: `"guest"`, `"reporter"`, `"developer"`, `"maintainer"` or `"owner"`.                                 |
 | `env_var`      | No         | `"GITLAB_TOKEN"`       | Variable that receives the child token.                                                                                 |
@@ -81,6 +81,10 @@ The parent token is invalid, lacks the `api` scope, or its role on the project o
 ### Set exactly one of 'project' or 'group'
 
 The lease has both, or neither. Remove one.
+
+### url must use https
+
+The parent token is sent to `url`, so fnox refuses `http://` except for `localhost`, `127.0.0.1` and `::1`.
 
 ### HTTP 404
 

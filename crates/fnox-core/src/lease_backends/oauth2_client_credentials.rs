@@ -1,5 +1,5 @@
 use crate::error::{FnoxError, Result};
-use crate::lease_backends::{Lease, LeaseBackend};
+use crate::lease_backends::{Lease, LeaseBackend, env_credential, require_secure_url};
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -12,13 +12,17 @@ const PROVIDER: &str = "OAuth2";
 /// which is used when the endpoint omits `expires_in`.
 const MAX_DURATION_SECS: u64 = 24 * 3600;
 
+/// Upper bound for a server-supplied `expires_in` (ten years), so a bogus value
+/// cannot overflow date arithmetic.
+const MAX_TTL_SECS: u64 = 10 * 365 * 24 * 3600;
+
 const CLIENT_SECRET_ENV: &str = "OAUTH2_CLIENT_SECRET";
 
 /// All env var names the OAuth2 client credentials backend may consume at runtime.
 pub const CONSUMED_ENV_VARS: &[&str] = &[CLIENT_SECRET_ENV];
 
 pub fn check_prerequisites() -> Option<String> {
-    if std::env::var(CLIENT_SECRET_ENV).is_ok() {
+    if env_credential(CLIENT_SECRET_ENV).is_some() {
         None
     } else {
         Some(format!(
@@ -64,8 +68,13 @@ impl Oauth2ClientCredentialsBackend {
         auth_method: ClientAuthMethod,
         params: IndexMap<String, String>,
         revocation_url: Option<String>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        // The client secret is sent to these URLs.
+        require_secure_url(PROVIDER, "token_url", &token_url)?;
+        if let Some(url) = &revocation_url {
+            require_secure_url(PROVIDER, "revocation_url", url)?;
+        }
+        Ok(Self {
             token_url,
             client_id,
             scope,
@@ -74,11 +83,11 @@ impl Oauth2ClientCredentialsBackend {
             auth_method,
             params,
             revocation_url,
-        }
+        })
     }
 
     fn client_secret() -> Result<String> {
-        std::env::var(CLIENT_SECRET_ENV).map_err(|_| FnoxError::ProviderAuthFailed {
+        env_credential(CLIENT_SECRET_ENV).ok_or_else(|| FnoxError::ProviderAuthFailed {
             provider: PROVIDER.to_string(),
             details: "No client secret found".to_string(),
             hint: format!("Set {CLIENT_SECRET_ENV} to the OAuth2 client's secret"),
@@ -147,19 +156,13 @@ impl LeaseBackend for Oauth2ClientCredentialsBackend {
                 url: URL.to_string(),
             })?;
 
+        // Check the status before decoding: a proxy's 502 page is not JSON, and
+        // the status is the useful part of that failure.
         let status = response.status();
-        let body: serde_json::Value =
-            response
-                .json()
-                .await
-                .map_err(|e| FnoxError::ProviderInvalidResponse {
-                    provider: PROVIDER.to_string(),
-                    details: e.to_string(),
-                    hint: "The token endpoint did not return JSON".to_string(),
-                    url: URL.to_string(),
-                })?;
+        let text = response.text().await.unwrap_or_default();
 
         if !status.is_success() {
+            let body: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
             let details = error_text(status, &body);
             return Err(if matches!(status.as_u16(), 400 | 401 | 403) {
                 FnoxError::ProviderAuthFailed {
@@ -178,6 +181,13 @@ impl LeaseBackend for Oauth2ClientCredentialsBackend {
             });
         }
 
+        let body: serde_json::Value =
+            serde_json::from_str(&text).map_err(|e| FnoxError::ProviderInvalidResponse {
+                provider: PROVIDER.to_string(),
+                details: e.to_string(),
+                hint: "The token endpoint did not return JSON".to_string(),
+                url: URL.to_string(),
+            })?;
         let token =
             body["access_token"]
                 .as_str()
@@ -194,8 +204,8 @@ impl LeaseBackend for Oauth2ClientCredentialsBackend {
             .or_else(|| body["expires_in"].as_str().and_then(|s| s.parse().ok()))
             .map(Duration::from_secs)
             .unwrap_or(duration);
-        let expires_at = chrono::Utc::now()
-            + chrono::Duration::seconds(ttl.as_secs().min(i64::MAX as u64) as i64);
+        let expires_at =
+            chrono::Utc::now() + chrono::Duration::seconds(ttl.as_secs().min(MAX_TTL_SECS) as i64);
 
         let mut credentials = IndexMap::new();
         credentials.insert(self.env_var.clone(), token.to_string());
@@ -220,9 +230,16 @@ impl LeaseBackend for Oauth2ClientCredentialsBackend {
         let Some(revocation_url) = &self.revocation_url else {
             return Ok(());
         };
-        // No cached token means it was never stored or is already gone.
+        // Revocation was requested, so a missing token must not look like success:
+        // the caller would mark the lease revoked while the token stays valid.
         let Some(token) = credentials.and_then(|creds| creds.get(&self.env_var)) else {
-            return Ok(());
+            return Err(FnoxError::ProviderApiError {
+                provider: PROVIDER.to_string(),
+                details: "The access token is not cached, so it cannot be revoked".to_string(),
+                hint: "The token was never cached, or the encryption provider that holds it is unavailable. It expires on its own."
+                    .to_string(),
+                url: URL.to_string(),
+            });
         };
 
         let secret = Self::client_secret()?;
@@ -279,6 +296,56 @@ mod tests {
             error_text(status, &serde_json::Value::Null),
             "HTTP 401 Unauthorized"
         );
+    }
+
+    fn backend(
+        token_url: &str,
+        revocation_url: Option<&str>,
+    ) -> Result<Oauth2ClientCredentialsBackend> {
+        Oauth2ClientCredentialsBackend::new(
+            token_url.to_string(),
+            "cid".to_string(),
+            None,
+            None,
+            "OAUTH2_ACCESS_TOKEN".to_string(),
+            ClientAuthMethod::Basic,
+            IndexMap::new(),
+            revocation_url.map(str::to_string),
+        )
+    }
+
+    #[test]
+    fn rejects_cleartext_endpoints_except_on_loopback() {
+        assert!(backend("http://idp.example.com/token", None).is_err());
+        assert!(
+            backend(
+                "https://idp.example.com/token",
+                Some("http://idp.example.com/revoke")
+            )
+            .is_err()
+        );
+        assert!(
+            backend(
+                "https://idp.example.com/token",
+                Some("https://idp.example.com/revoke")
+            )
+            .is_ok()
+        );
+        assert!(backend("http://127.0.0.1:8080/token", None).is_ok());
+    }
+
+    #[tokio::test]
+    async fn revoke_fails_when_the_token_is_not_cached() {
+        let with_endpoint = backend(
+            "https://idp.example.com/token",
+            Some("https://idp.example.com/revoke"),
+        )
+        .unwrap();
+        assert!(with_endpoint.revoke_lease("id", None).await.is_err());
+
+        // Without a revocation endpoint there is nothing to do remotely.
+        let without = backend("https://idp.example.com/token", None).unwrap();
+        assert!(without.revoke_lease("id", None).await.is_ok());
     }
 
     #[test]

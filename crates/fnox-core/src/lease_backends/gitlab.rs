@@ -1,5 +1,5 @@
 use crate::error::{FnoxError, Result};
-use crate::lease_backends::{Lease, LeaseBackend};
+use crate::lease_backends::{Lease, LeaseBackend, env_credential, require_secure_url};
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use std::time::Duration;
@@ -16,7 +16,7 @@ const MAX_DURATION_SECS: u64 = 24 * 3600;
 pub const CONSUMED_ENV_VARS: &[&str] = &["GITLAB_TOKEN"];
 
 pub fn check_prerequisites() -> Option<String> {
-    if std::env::var("GITLAB_TOKEN").is_ok() {
+    if env_credential("GITLAB_TOKEN").is_some() {
         None
     } else {
         Some("GitLab token not found. Set GITLAB_TOKEN to a token with the 'api' scope and the Maintainer role on the project or group.".to_string())
@@ -81,6 +81,8 @@ impl GitLabBackend {
             .unwrap_or_else(|| DEFAULT_BASE_URL.to_string())
             .trim_end_matches('/')
             .to_string();
+        // The parent token is sent to this URL on every call.
+        require_secure_url(PROVIDER, "url", &base_url)?;
         Ok(Self {
             base_url,
             owner_path,
@@ -91,7 +93,7 @@ impl GitLabBackend {
     }
 
     fn get_parent_token() -> Result<String> {
-        std::env::var("GITLAB_TOKEN").map_err(|_| FnoxError::ProviderAuthFailed {
+        env_credential("GITLAB_TOKEN").ok_or_else(|| FnoxError::ProviderAuthFailed {
             provider: PROVIDER.to_string(),
             details: "No parent token found".to_string(),
             hint: "Set GITLAB_TOKEN to a token with the 'api' scope and the Maintainer role"
@@ -299,6 +301,25 @@ mod tests {
             b.tokens_url(),
             "https://git.example.com/api/v4/groups/42/access_tokens"
         );
+    }
+
+    #[test]
+    fn rejects_cleartext_urls_except_on_loopback() {
+        let with_url = |url: &str| {
+            GitLabBackend::new(
+                Some(url.to_string()),
+                Some("a/b".to_string()),
+                None,
+                vec!["read_api".to_string()],
+                "developer",
+                "GITLAB_TOKEN".to_string(),
+            )
+        };
+        assert!(with_url("http://gitlab.example.com").is_err());
+        assert!(with_url("not a url").is_err());
+        assert!(with_url("https://gitlab.example.com").is_ok());
+        assert!(with_url("http://localhost:8080").is_ok());
+        assert!(with_url("http://127.0.0.1:8080").is_ok());
     }
 
     #[test]
