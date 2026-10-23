@@ -183,8 +183,28 @@ impl EditCommand {
         // Parse a fresh config from the modified content to recognize new providers
         // Strip the temp header first as it's not valid TOML
         let modified_toml = Self::strip_temp_header(&modified_content);
-        let modified_config: Config = toml_edit::de::from_str(&modified_toml)
+        let edited_config: Config = toml_edit::de::from_str(&modified_toml)
             .map_err(|e| FnoxError::Config(format!("Invalid configuration after edit: {}", e)))?;
+        // Resolve the edited file's imports so providers defined there are available
+        // for encryption, without keeping settings the user removed in the editor
+        let config_dir = std::path::absolute(&cli.config)
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+            .unwrap_or_default();
+        let mut modified_config = edited_config.with_imports(&config_dir)?;
+        // Providers that only the global, parent or local override layers define are
+        // still needed to re-encrypt existing secrets. Anything sourced from the
+        // edited file or its original imports is not restored, so removals stick.
+        let mut own_files = vec![std::path::absolute(&cli.config).unwrap_or_default()];
+        if let Some(imports) = doc.get("import").and_then(|i| i.as_array()) {
+            own_files.extend(
+                imports
+                    .iter()
+                    .filter_map(|i| i.as_str())
+                    .map(|i| crate::config_path::resolve_relative_to_dir(i, Some(&config_dir))),
+            );
+        }
+        modified_config.inherit_outer_layers(&config, &own_files);
 
         self.reencrypt_secrets(&modified_config, &mut modified_doc, &all_secrets)
             .await?;
@@ -504,7 +524,10 @@ impl EditCommand {
                         .await?;
                         provider.put_secret(&key_str, plaintext).await?
                     } else {
-                        plaintext.to_string()
+                        return Err(FnoxError::Config(format!(
+                            "Provider '{}' not found for secret '{}'",
+                            provider_name, key_str
+                        )));
                     }
                 } else {
                     plaintext.to_string()
