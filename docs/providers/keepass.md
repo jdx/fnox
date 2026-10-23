@@ -76,7 +76,7 @@ fnox set API_USER --provider keepass --key-name production/api-service/username
 
 ## Field references
 
-KeePass field references such as `{REF:P@I:<entry-uuid>}` or `{REF:P@T:other-entry}` are resolved when fnox reads a field, including nested references (up to 10 levels), so entries that share a credential return the final value.
+KeePass field references such as `{REF:P@I:<entry-uuid>}` or `{REF:P@T:other-entry}` are resolved when fnox reads a field, including nested references (up to 10 levels, 256 references per secret), so entries that share a credential return the final value. As in KeePass, a search by title, username, password, URL or notes matches the first entry whose field contains the text (case-insensitive); a search by UUID (`I`) is exact.
 
 ## Shared databases
 

@@ -266,6 +266,16 @@ impl KeePassProvider {
     /// Maximum depth of chained field references before giving up (guards cycles).
     const MAX_REF_DEPTH: usize = 10;
 
+    /// Maximum number of references resolved for a single secret, bounding total
+    /// work and output when references repeat (e.g. one field naming the next ten times).
+    const MAX_REF_LOOKUPS: usize = 256;
+
+    /// Resolve all field references in `value`.
+    fn resolve_refs(db: &Database, value: &str) -> Result<String> {
+        let mut lookups = 0;
+        Self::resolve_field_refs(db, value, 0, &mut lookups)
+    }
+
     /// Map a KeePass field-reference letter to its field name.
     /// See <https://keepass.info/help/base/fieldrefs.html>.
     fn ref_field_name(code: char) -> Option<&'static str> {
@@ -281,7 +291,12 @@ impl KeePassProvider {
 
     /// Resolve KeePass field references (`{REF:<Wanted>@<SearchIn>:<Text>}`) in a
     /// field value, following nested references up to `MAX_REF_DEPTH` levels.
-    fn resolve_field_refs(db: &Database, value: &str, depth: usize) -> Result<String> {
+    fn resolve_field_refs(
+        db: &Database,
+        value: &str,
+        depth: usize,
+        lookups: &mut usize,
+    ) -> Result<String> {
         const START: &str = "{REF:";
         let mut out = String::with_capacity(value.len());
         let mut rest = value;
@@ -290,7 +305,7 @@ impl KeePassProvider {
             let Some(end) = after.find('}') else { break };
             let body = &after[..end];
             out.push_str(&rest[..start]);
-            match Self::resolve_one_ref(db, body, depth)? {
+            match Self::resolve_one_ref(db, body, depth, lookups)? {
                 Some(resolved) => out.push_str(&resolved),
                 // Not a well-formed reference; keep it verbatim.
                 None => out.push_str(&rest[start..start + START.len() + end + 1]),
@@ -302,7 +317,12 @@ impl KeePassProvider {
     }
 
     /// Resolve the body of one reference (`P@I:<uuid>`). `Ok(None)` if malformed.
-    fn resolve_one_ref(db: &Database, body: &str, depth: usize) -> Result<Option<String>> {
+    fn resolve_one_ref(
+        db: &Database,
+        body: &str,
+        depth: usize,
+        lookups: &mut usize,
+    ) -> Result<Option<String>> {
         let mut chars = body.chars();
         let (Some(wanted), Some('@'), Some(search_in), Some(':')) =
             (chars.next(), chars.next(), chars.next(), chars.next())
@@ -320,7 +340,10 @@ impl KeePassProvider {
         }
 
         let target = db.iter_all_entries().find(|e| match search_field {
-            Some(f) => e.get(f).is_some_and(|v| v.eq_ignore_ascii_case(text)),
+            // Like KeePass, match the first entry whose field contains the text.
+            Some(f) => e
+                .get(f)
+                .is_some_and(|v| v.to_lowercase().contains(&text.to_lowercase())),
             None => e
                 .id()
                 .to_string()
@@ -345,7 +368,19 @@ impl KeePassProvider {
                 url: "https://fnox.jdx.dev/providers/keepass".to_string(),
             });
         }
-        Self::resolve_field_refs(db, raw, depth + 1).map(Some)
+        *lookups += 1;
+        if *lookups > Self::MAX_REF_LOOKUPS {
+            return Err(FnoxError::ProviderInvalidResponse {
+                provider: "KeePass".to_string(),
+                details: format!(
+                    "KeePass field references expanded more than {} times",
+                    Self::MAX_REF_LOOKUPS
+                ),
+                hint: "Check for repeated or circular field references".to_string(),
+                url: "https://fnox.jdx.dev/providers/keepass".to_string(),
+            });
+        }
+        Self::resolve_field_refs(db, raw, depth + 1, lookups).map(Some)
     }
 
     /// Find an entry id by path in the database.
@@ -510,7 +545,7 @@ impl crate::providers::Provider for KeePassProvider {
                 url: "https://fnox.jdx.dev/providers/keepass".to_string(),
             })?;
 
-        Self::resolve_field_refs(&db, raw, 0)
+        Self::resolve_refs(&db, raw)
     }
 
     async fn put_secret(&self, key: &str, value: &str) -> Result<String> {
@@ -622,22 +657,42 @@ mod tests {
         let hex = src.to_string().replace('-', "").to_uppercase();
         let by_id = format!("{{REF:P@I:{hex}}}");
         assert_eq!(
-            KeePassProvider::resolve_field_refs(&db, &by_id, 0).unwrap(),
+            KeePassProvider::resolve_refs(&db, &by_id).unwrap(),
             "s3cret"
         );
         let by_title = "pre-{REF:P@T:source}-post";
         assert_eq!(
-            KeePassProvider::resolve_field_refs(&db, by_title, 0).unwrap(),
+            KeePassProvider::resolve_refs(&db, by_title).unwrap(),
             "pre-s3cret-post"
         );
         assert_eq!(
-            KeePassProvider::resolve_field_refs(&db, "plain", 0).unwrap(),
+            KeePassProvider::resolve_refs(&db, "plain").unwrap(),
             "plain"
         );
         assert_eq!(
-            KeePassProvider::resolve_field_refs(&db, "{REF:bogus}", 0).unwrap(),
+            KeePassProvider::resolve_refs(&db, "{REF:bogus}").unwrap(),
             "{REF:bogus}"
         );
+
+        // Field searches match case-insensitive substrings.
+        assert_eq!(
+            KeePassProvider::resolve_refs(&db, "{REF:P@T:SOURC}").unwrap(),
+            "s3cret"
+        );
+
+        // Repeated references are bounded.
+        let rep = db.root_mut().add_entry().id();
+        let rep_hex = rep.to_string().replace('-', "");
+        {
+            let mut e = db.entry_mut(rep).unwrap();
+            e.set_unprotected("Title", "rep");
+            e.set_unprotected("UserName", "x");
+            e.set_unprotected(
+                "Password",
+                format!("{{REF:U@I:{rep_hex}}}").repeat(KeePassProvider::MAX_REF_LOOKUPS + 1),
+            );
+        }
+        assert!(KeePassProvider::resolve_refs(&db, &format!("{{REF:P@I:{rep_hex}}}")).is_err());
 
         // Nested and circular references.
         let b = db.root_mut().add_entry().id();
@@ -646,14 +701,14 @@ mod tests {
             .unwrap()
             .set_unprotected("Password", "{REF:P@T:source}");
         assert_eq!(
-            KeePassProvider::resolve_field_refs(&db, "{REF:P@T:b}", 0).unwrap(),
+            KeePassProvider::resolve_refs(&db, "{REF:P@T:b}").unwrap(),
             "s3cret"
         );
         db.entry_mut(src)
             .unwrap()
             .set_unprotected("Password", "{REF:P@T:b}");
-        assert!(KeePassProvider::resolve_field_refs(&db, "{REF:P@T:b}", 0).is_err());
-        assert!(KeePassProvider::resolve_field_refs(&db, "{REF:P@T:missing}", 0).is_err());
+        assert!(KeePassProvider::resolve_refs(&db, "{REF:P@T:b}").is_err());
+        assert!(KeePassProvider::resolve_refs(&db, "{REF:P@T:missing}").is_err());
     }
 
     #[test]
