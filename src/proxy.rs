@@ -245,12 +245,27 @@ fn parse_network(entry: &str) -> Result<IpNet> {
     entry
         .parse::<IpNet>()
         .or_else(|_| entry.parse::<IpAddr>().map(IpNet::from))
-        .map(|network| network.trunc())
+        .map(|network| canonical_network(network.trunc()))
         .map_err(|_| {
             proxy_error(format!(
                 "allow_private entry '{entry}' is not an IP address or CIDR block"
             ))
         })
+}
+
+/// Rewrites an IPv4-mapped IPv6 network (`::ffff:a.b.c.d/96+n`) as the IPv4
+/// network it covers, since destinations are canonicalized the same way
+/// before they are checked against the allow list.
+fn canonical_network(network: IpNet) -> IpNet {
+    if let IpNet::V6(v6) = network
+        && v6.prefix_len() >= 96
+        && let Some(v4) = v6.addr().to_ipv4_mapped()
+    {
+        return IpNet::V4(
+            ipnet::Ipv4Net::new(v4, v6.prefix_len() - 96).expect("a prefix of 32 or less is valid"),
+        );
+    }
+    network
 }
 
 /// A request target that is safe to log. A client sending plain HTTP through
@@ -2249,6 +2264,22 @@ mod tests {
         assert!(!destinations.permits("127.0.0.2".parse().unwrap()));
         assert!(!destinations.permits("169.254.169.254".parse().unwrap()));
         assert!(destinations.permits("8.8.8.8".parse().unwrap()));
+
+        // Entries written in IPv4-mapped form match like their IPv4 form.
+        let mapped = DestinationPolicy {
+            allowed: vec![
+                parse_network("::ffff:127.0.0.1").unwrap(),
+                parse_network("::ffff:10.0.0.0/104").unwrap(),
+            ],
+        };
+        assert!(mapped.permits("127.0.0.1".parse().unwrap()));
+        assert!(mapped.permits("::ffff:127.0.0.1".parse().unwrap()));
+        assert!(mapped.permits("10.200.0.1".parse().unwrap()));
+        assert!(!mapped.permits("127.0.0.2".parse().unwrap()));
+        assert_eq!(
+            parse_network("::ffff:10.0.0.0/104").unwrap(),
+            parse_network("10.0.0.0/8").unwrap()
+        );
     }
 
     #[test]
