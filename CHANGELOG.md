@@ -1,6 +1,33 @@
 # Changelog
 
-## [1.42.1](https://github.com/jdx/fnox/compare/v1.42.0..v1.42.1) - 2026-10-22
+## [1.43.0](https://github.com/jdx/fnox/compare/v1.42.1..v1.43.0) - 2026-10-24
+
+### 🚀 Features
+
+- **(audit)** add opt-in local access audit log by [@jdx](https://github.com/jdx) in [#1031](https://github.com/jdx/fnox/pull/1031)
+- **(config)** add OAuth2, GitLab, Tailscale and Kubernetes lease backends by [@jdx](https://github.com/jdx) in [#1037](https://github.com/jdx/fnox/pull/1037)
+- **(exec)** redact secret values from piped command output by [@jdx](https://github.com/jdx) in [#1028](https://github.com/jdx/fnox/pull/1028)
+- **(exec)** add --only and --except to resolve a subset of secrets by [@jdx](https://github.com/jdx) in [#1030](https://github.com/jdx/fnox/pull/1030)
+- **(fido2)** match prompts to the key's fingerprint, PIN or touch setup by [@jdx](https://github.com/jdx) in [#1027](https://github.com/jdx/fnox/pull/1027)
+- **(keepass)** resolve KeePass field references by [@jdx](https://github.com/jdx) in [#1022](https://github.com/jdx/fnox/pull/1022)
+- **(keepass)** read custom entry fields from references by [@jdx](https://github.com/jdx) in [#1025](https://github.com/jdx/fnox/pull/1025)
+- **(lease)** revoke by ID prefix, backend or --all and list leases as JSON by [@jdx](https://github.com/jdx) in [#1036](https://github.com/jdx/fnox/pull/1036)
+- **(proxy)** inject secrets into query parameters and match wildcard domains by [@jdx](https://github.com/jdx) in [#1026](https://github.com/jdx/fnox/pull/1026)
+- **(proxy)** require a session password and refuse private destinations by [@jdx](https://github.com/jdx) in [#1038](https://github.com/jdx/fnox/pull/1038)
+- **(proxy)** add --sandbox so the command can only reach the proxy by [@jdx](https://github.com/jdx) in [#1039](https://github.com/jdx/fnox/pull/1039)
+- **(scan)** find resolved secret values, scan staged content, install pre-commit hook by [@jdx](https://github.com/jdx) in [#1029](https://github.com/jdx/fnox/pull/1029)
+- **(set)** generate random secret values with --generate by [@jdx](https://github.com/jdx) in [#1032](https://github.com/jdx/fnox/pull/1032)
+
+### 🐛 Bug Fixes
+
+- **(edit)** re-encrypt edited secrets with providers from imported configs by [@jdx](https://github.com/jdx) in [#1034](https://github.com/jdx/fnox/pull/1034)
+- **(exec)** satisfy clippy unnecessary_fold without short-circuiting by [@jdx](https://github.com/jdx) in [#1035](https://github.com/jdx/fnox/pull/1035)
+
+### 📦️ Dependency Updates
+
+- update rust crate usage-rs to v7.1.2 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1040](https://github.com/jdx/fnox/pull/1040)
+
+## [1.42.1](https://github.com/jdx/fnox/compare/v1.42.0..v1.42.1) - 2026-10-23
 
 ### 🐛 Bug Fixes
 
