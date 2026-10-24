@@ -1780,6 +1780,32 @@
             "type": "string"
           },
           "default": []
+        },
+        "sandbox": {
+          "description": "Run the command under `fnox proxy run` in an OS sandbox that leaves the\nproxy as its only way out and hides fnox's own credentials. Needs\n`bwrap` on Linux or `sandbox-exec` on macOS; `fnox proxy run` refuses\nto start without them rather than run unsandboxed.",
+          "type": "boolean",
+          "default": false
+        },
+        "sandbox_allow_write": {
+          "description": "Extra paths the sandboxed command may write, besides the working\ndirectory and temporary files. `~` and relative paths are allowed.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sandbox_deny_read": {
+          "description": "Extra paths the sandboxed command may not read, on top of fnox's\nconfiguration and common credential directories.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sandbox_allow_read": {
+          "description": "Paths the sandbox would hide by default but the command may read, such\nas the project's `fnox.toml`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "additionalProperties": false

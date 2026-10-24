@@ -146,11 +146,58 @@ Uninspected tunnels (`allow_domains` and permissive egress) aren't logged. A mis
 
 ## What it does not protect against
 
-The proxy keeps real values out of the child's environment and network traffic. It is not a sandbox: a process running as your user can ignore the proxy variables, read your fnox config and provider state, or run `fnox get` itself. For untrusted agents, run them inside a container or VM that blocks direct network access and access to your credential stores, with the proxy as their only way out.
+The proxy keeps real values out of the child's environment and network traffic. Without a sandbox, a process running as your user can ignore the proxy variables, read your fnox config and provider state, or run `fnox get` itself. For untrusted agents, use [`--sandbox`](#sandbox) or run them inside a container or VM that blocks direct network access and access to your credential stores, with the proxy as their only way out.
 
-### Isolating an agent
+## Sandbox
 
-An isolated environment has to do three things:
+`fnox proxy run --sandbox` runs the command in an OS sandbox, so the proxy really is its only way out:
+
+```sh
+fnox proxy run --sandbox -- node agent.js
+```
+
+Set `sandbox = true` under `[proxy]` to make it the default for a project, and pass `--no-sandbox` to turn it off for one run.
+
+Inside the sandbox the command:
+
+- **Can reach only the proxy.** Every other connection fails, including ones from clients that ignore `HTTPS_PROXY`. Local sockets are unreachable too: on Linux the sandbox has no `/run`, which takes the fnox daemon, D-Bus, gpg-agent, and the Docker socket with it, and `SSH_AUTH_SOCK` and `XDG_RUNTIME_DIR` are unset.
+- **Cannot read fnox's files or common credential directories.** Hidden: your fnox config directory, state and data directories, every `fnox.toml` (and `fnox.local.toml`, profile files, and imports) that applies to the working directory, age key files, and `~/.ssh`, `~/.aws`, `~/.azure`, `~/.kube`, `~/.gnupg`, `~/.password-store`, `~/.config/gcloud`, `~/.config/gh`, `~/.config/op`, `~/.docker/config.json`, `~/.netrc`, `~/.npmrc`, and a few similar paths. Config files that apply but don't exist yet, such as `fnox.local.toml`, can't be created by the command either, because fnox or git would read them later outside the sandbox. On Linux that makes bwrap leave an empty placeholder file, which fnox removes when the command exits.
+- **Can write only the working directory and temporary files.** Everything else is read-only. `.git/hooks` and `.git/config` in the working directory are read-only as well, so the command can't plant code that git runs outside the sandbox. They are protected even if they don't exist yet; a repository that the command creates itself with `git init` is not.
+- **Hides the files of inherited profiles and each provider's `key_file`,** such as an age identity, along with the other config files above. A `key_file` that isn't a literal path, such as a secret reference, is an error because the sandbox can't tell which file to hide. `sandbox_allow_read` leaves a path readable but still read-only.
+- **Can read everything else.** The rest of the filesystem, including your home directory, is readable. The hidden list is not exhaustive: a credential in a location it doesn't name is readable unless you add it.
+
+Adjust the defaults under `[proxy]`. Relative paths are resolved from the working directory and `~` is your home directory:
+
+```toml
+[proxy]
+sandbox = true
+sandbox_allow_write = ["~/.cache", "~/.npm"]
+sandbox_deny_read = ["~/.config/some-tool"]
+sandbox_allow_read = ["fnox.toml"]
+```
+
+`sandbox_allow_read` takes a path the sandbox hides by default, or a directory containing one.
+
+### Requirements
+
+| Platform | Needs                                                                   | How it works                                                                                                                                             |
+| -------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Linux    | [`bwrap`](https://github.com/containers/bubblewrap) and user namespaces | The command runs in new network, PID, and IPC namespaces. A small forwarder, `fnox sandbox-bridge`, exposes the proxy on `127.0.0.1` inside the sandbox. |
+| macOS    | `/usr/bin/sandbox-exec`                                                 | A generated seatbelt profile allows network access only to the proxy's loopback port.                                                                    |
+| Windows  | not supported                                                           | `--sandbox` is an error.                                                                                                                                 |
+
+fnox never falls back to running unsandboxed: if the tool is missing or the machine forbids user namespaces, `fnox proxy run` exits before it resolves any secret. Some distributions restrict unprivileged user namespaces (Ubuntu 24.04 does by default through AppArmor); allow `bwrap` there or relax the restriction.
+
+### Limits
+
+- The sandbox starts a new session on Linux so the command can't inject keystrokes into your terminal. Interactive programs still read and write the terminal, but Ctrl-C reaches fnox rather than the command, and fnox stops it.
+- On macOS the sandbox cannot hide other processes or Mach services. `sandbox-exec` is deprecated by Apple but still works, and the Keychain stays reachable through its system service. fnox keeps `deny_inspection` on its own memory.
+- The command can still do whatever your rules allow: the sandbox limits where credentials can go, not what an allowed request says.
+- A kernel or sandbox vulnerability is out of scope, as is a command that tricks you into running something outside the sandbox later, such as editing a project file you then execute.
+
+### Isolating an agent without the sandbox
+
+If you can't use `--sandbox`, an isolated environment has to do three things:
 
 1. **Keep your credentials out of reach.** Don't mount `~/.config/fnox`, your age keys, or provider credentials such as `~/.aws`, `~/.config/op`, or the keychain. Don't install the `fnox` binary inside it, so the agent can't run `fnox get`.
 2. **Block direct network access.** Without this, a client that ignores the proxy variables can connect straight to the internet.

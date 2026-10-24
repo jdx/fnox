@@ -505,6 +505,28 @@ pub struct ProxyConfig {
     /// private, and other non-public addresses are refused unless listed.
     #[serde(default)]
     pub allow_private: Vec<String>,
+
+    /// Run the command under `fnox proxy run` in an OS sandbox that leaves the
+    /// proxy as its only way out and hides fnox's own credentials. Needs
+    /// `bwrap` on Linux or `sandbox-exec` on macOS; `fnox proxy run` refuses
+    /// to start without them rather than run unsandboxed.
+    #[serde(default)]
+    pub sandbox: bool,
+
+    /// Extra paths the sandboxed command may write, besides the working
+    /// directory and temporary files. `~` and relative paths are allowed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sandbox_allow_write: Vec<String>,
+
+    /// Extra paths the sandboxed command may not read, on top of fnox's
+    /// configuration and common credential directories.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sandbox_deny_read: Vec<String>,
+
+    /// Paths the sandbox would hide by default but the command may read, such
+    /// as the project's `fnox.toml`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sandbox_allow_read: Vec<String>,
 }
 
 impl Default for ProxyConfig {
@@ -515,6 +537,10 @@ impl Default for ProxyConfig {
             rules: Vec::new(),
             allow_domains: Vec::new(),
             allow_private: Vec::new(),
+            sandbox: false,
+            sandbox_allow_write: Vec::new(),
+            sandbox_deny_read: Vec::new(),
+            sandbox_allow_read: Vec::new(),
         }
     }
 }

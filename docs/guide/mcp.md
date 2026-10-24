@@ -54,7 +54,7 @@ secrets = ["GITHUB_TOKEN", "NPM_TOKEN"]  # default: every secret in the profile
 
 Shell integration is a separate channel. If your interactive shell already has secrets loaded, an agent started from it can read them regardless of `[mcp]`. Set `env = "exec"` to keep secrets out of the shell (see [running commands](/guide/running-commands#choose-which-secrets-reach-a-command)).
 
-For stronger isolation, give the agent API access through the [credential proxy](/guide/proxy) instead, and run it in a sandbox.
+For stronger isolation, give the agent API access through the [credential proxy](/guide/proxy) instead, and run it with [`fnox proxy run --sandbox`](/guide/proxy#sandbox).
 
 ## See also
 

@@ -100,7 +100,7 @@ Put fnox options before the `--` that starts a child command, as in `fnox -P pro
 - [`fnox provider test [-a --all] [PROVIDER]`](/cli/provider/test.md)
 - [`fnox proxy <SUBCOMMAND>`](/cli/proxy.md)
 - [`fnox proxy rules`](/cli/proxy/rules.md)
-- [`fnox proxy run [COMMAND]…`](/cli/proxy/run.md)
+- [`fnox proxy run [--no-sandbox] [--sandbox] [COMMAND]…`](/cli/proxy/run.md)
 - [`fnox reencrypt [FLAGS] [KEYS]…`](/cli/reencrypt.md)
 - [`fnox remove [-g --global] [-n --dry-run] <KEY>`](/cli/remove.md)
 - [`fnox scan [FLAGS] [DIR]`](/cli/scan.md)
