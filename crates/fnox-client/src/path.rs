@@ -547,7 +547,7 @@ mod tests {
         );
         // A relative value resolves against the caller's directory.
         let cwd = std::env::current_dir().unwrap();
-        assert_eq!(runtime_dir(&env("rel/sock")), cwd.join("rel/sock"));
+        assert_eq!(env("rel/sock").socket_dir, Some(cwd.join("rel/sock")));
         // Empty counts as unset.
         assert_eq!(env("").socket_dir, None);
         assert_eq!(runtime_dir(&env("")), PathBuf::from("/run/user/7/fnox"));
