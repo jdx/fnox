@@ -1776,8 +1776,6 @@ fn prepare_socket_path(path: &Path) -> Result<()> {
     let Some(parent) = path.parent() else {
         return Err(FnoxError::Config("Invalid daemon socket path".to_string()));
     };
-    std::fs::create_dir_all(parent)
-        .map_err(|e| FnoxError::Config(format!("Failed to create daemon runtime dir: {e}")))?;
     // The default fallback lives under the temp dir; the hashed fallback for
     // an overlong path always lives under `/tmp`, which is not the temp dir on macOS.
     let uid = current_uid();
@@ -1787,16 +1785,53 @@ fn prepare_socket_path(path: &Path) -> Result<()> {
             .join(format!("fnox-{uid}")),
         PathBuf::from("/tmp").join(format!("fnox-{uid}")),
     ];
+    let create_error =
+        |e: std::io::Error| FnoxError::Config(format!("Failed to create daemon runtime dir: {e}"));
     if let Some(temp_user_dir) = user_dirs.iter().find(|dir| parent.starts_with(dir)) {
+        // /tmp is world-writable: make and vet the per-user directory itself
+        // (not a symlink, ours, 0700) before creating anything beneath it.
+        use std::os::unix::fs::DirBuilderExt;
+        if let Some(root) = temp_user_dir.parent() {
+            std::fs::create_dir_all(root).map_err(create_error)?;
+        }
+        match std::fs::DirBuilder::new().mode(0o700).create(temp_user_dir) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(create_error(e)),
+        }
+        reject_symlink(temp_user_dir)?;
         secure_runtime_component(temp_user_dir)?;
+        std::fs::create_dir_all(parent).map_err(create_error)?;
         if let Some(hash_dir) = parent.parent()
             && hash_dir != temp_user_dir
             && hash_dir.starts_with(temp_user_dir)
         {
+            reject_symlink(hash_dir)?;
             secure_runtime_component(hash_dir)?;
         }
+    } else {
+        std::fs::create_dir_all(parent).map_err(create_error)?;
     }
     secure_runtime_component(parent)
+}
+
+/// Refuse a symlink where a directory we own should be: `metadata` and
+/// `set_permissions` would follow it to somewhere else.
+#[cfg(unix)]
+fn reject_symlink(path: &Path) -> Result<()> {
+    let metadata = std::fs::symlink_metadata(path).map_err(|e| {
+        FnoxError::Config(format!(
+            "Failed to inspect daemon runtime dir {}: {e}",
+            path.display()
+        ))
+    })?;
+    if metadata.file_type().is_symlink() {
+        return Err(FnoxError::Config(format!(
+            "Daemon runtime dir {} is a symlink",
+            path.display()
+        )));
+    }
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -1980,6 +2015,18 @@ pub fn parse_duration(value: &str) -> Result<Duration> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    #[test]
+    fn reject_symlink_refuses_links_but_not_directories() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("real");
+        std::fs::create_dir(&dir).unwrap();
+        let link = tmp.path().join("link");
+        std::os::unix::fs::symlink(&dir, &link).unwrap();
+        assert!(super::reject_symlink(&dir).is_ok());
+        assert!(super::reject_symlink(&link).is_err());
+    }
+
     use super::{
         CacheKey, DaemonState, Purpose, Request, ResolveBatchRequest, ResolveContext,
         ResolveEnvRequest, Response, cache_key, config_fingerprint,
