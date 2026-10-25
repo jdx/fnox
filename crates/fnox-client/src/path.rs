@@ -181,44 +181,51 @@ fn expand_tilde(path: &str, get: &dyn Fn(&str) -> Option<String>) -> PathBuf {
 pub struct RuntimeEnv {
     /// `XDG_RUNTIME_DIR`; empty counts as unset.
     pub xdg_runtime_dir: Option<PathBuf>,
-    /// The temporary directory: `TMPDIR`, else what std uses when it is
-    /// absent (on Apple, the per-user directory from `confstr`).
+    /// `FNOX_DAEMON_SOCKET_DIR`: the directory the sockets live in, instead of
+    /// the default. Empty and relative values count as unset: a relative path
+    /// would name a different socket from every working directory.
+    pub socket_dir: Option<PathBuf>,
+    /// The per-user temporary directory the fallback lives under. Never read
+    /// from `TMPDIR`, which tools rewrite per invocation: on Apple, the
+    /// per-user directory from `confstr`; elsewhere `/tmp`.
     pub tmpdir: PathBuf,
     /// The effective user id.
     pub euid: u32,
 }
 
 impl RuntimeEnv {
-    /// From this process: its environment and `std::env::temp_dir()`.
+    /// From this process's environment.
     pub fn from_process() -> Self {
         Self {
             xdg_runtime_dir: std::env::var_os("XDG_RUNTIME_DIR")
                 .filter(|dir| !dir.is_empty())
                 .map(PathBuf::from),
-            tmpdir: std::env::temp_dir(),
+            socket_dir: std::env::var_os("FNOX_DAEMON_SOCKET_DIR")
+                .map(PathBuf::from)
+                .filter(|dir| dir.is_absolute()),
+            tmpdir: default_tmpdir(),
             euid: process_euid(),
         }
     }
 
     /// From the environment `get` reads, which a daemon started under that
-    /// environment would have seen. `TMPDIR` falls back to what std uses when
-    /// it is absent.
+    /// environment would have seen. `TMPDIR` is ignored.
     pub fn from_env(get: &dyn Fn(&str) -> Option<String>) -> Self {
         Self {
             xdg_runtime_dir: get("XDG_RUNTIME_DIR")
                 .filter(|dir| !dir.is_empty())
                 .map(PathBuf::from),
-            tmpdir: get("TMPDIR")
-                .filter(|dir| !dir.is_empty())
+            socket_dir: get("FNOX_DAEMON_SOCKET_DIR")
                 .map(PathBuf::from)
-                .unwrap_or_else(default_tmpdir),
+                .filter(|dir| dir.is_absolute()),
+            tmpdir: default_tmpdir(),
             euid: process_euid(),
         }
     }
 }
 
-/// What std uses when `TMPDIR` is absent: on Apple, the per-user directory
-/// from `confstr`; elsewhere `/tmp` (`/data/local/tmp` on Android).
+/// The temp dir that does not depend on `TMPDIR`: on Apple, the per-user
+/// directory from `confstr`; elsewhere `/tmp` (`/data/local/tmp` on Android).
 #[cfg(target_vendor = "apple")]
 fn default_tmpdir() -> PathBuf {
     darwin_user_temp_dir().unwrap_or_else(|| PathBuf::from("/tmp"))
@@ -275,15 +282,20 @@ fn process_euid() -> u32 {
     }
 }
 
-/// The directory daemon sockets live in: `$XDG_RUNTIME_DIR/fnox`, else
-/// `<tmpdir>/fnox-<euid>/fnox`. A base that would make the socket path too
-/// long for `sun_path` moves to `/tmp/fnox-<euid>/<hash of base>/fnox`.
+/// The directory daemon sockets live in: `$FNOX_DAEMON_SOCKET_DIR`, else
+/// `$XDG_RUNTIME_DIR/fnox`, else `<tmpdir>/fnox-<euid>/fnox`, where `tmpdir`
+/// ignores `TMPDIR`. A base that would make the socket path too long for
+/// `sun_path` moves to `/tmp/fnox-<euid>/<hash of base>/fnox`.
 pub fn runtime_dir(rt: &RuntimeEnv) -> PathBuf {
-    let base = rt
-        .xdg_runtime_dir
-        .clone()
-        .unwrap_or_else(|| rt.tmpdir.join(format!("fnox-{}", rt.euid)));
-    let dir = base.join("fnox");
+    let (base, dir) = match (&rt.socket_dir, &rt.xdg_runtime_dir) {
+        (Some(dir), _) => (dir.clone(), dir.clone()),
+        (None, Some(xdg)) => (xdg.clone(), xdg.join("fnox")),
+        (None, None) => {
+            let base = rt.tmpdir.join(format!("fnox-{}", rt.euid));
+            let dir = base.join("fnox");
+            (base, dir)
+        }
+    };
     if socket_path_fits(&dir) {
         return dir;
     }
@@ -389,6 +401,7 @@ mod tests {
     fn rt() -> RuntimeEnv {
         RuntimeEnv {
             xdg_runtime_dir: Some(PathBuf::from("/run/user/1000")),
+            socket_dir: None,
             tmpdir: PathBuf::from("/tmp"),
             euid: 1000,
         }
@@ -471,8 +484,12 @@ mod tests {
         let empty = env("");
         assert_eq!(empty.xdg_runtime_dir, None);
         assert_eq!(
-            runtime_dir(&RuntimeEnv { euid: 7, ..empty }),
-            PathBuf::from("/var/tmp/fnox-7/fnox")
+            runtime_dir(&RuntimeEnv {
+                euid: 7,
+                tmpdir: PathBuf::from("/tmp"),
+                ..empty
+            }),
+            PathBuf::from("/tmp/fnox-7/fnox")
         );
         assert_eq!(
             runtime_dir(&RuntimeEnv {
@@ -484,9 +501,11 @@ mod tests {
     }
 
     #[test]
-    fn tmpdir_defaults_like_std_when_absent() {
-        let rt = RuntimeEnv::from_env(&|_| None);
-        assert_eq!(rt.xdg_runtime_dir, None);
+    fn tmpdir_ignores_the_environment() {
+        let with = RuntimeEnv::from_env(&|k| (k == "TMPDIR").then(|| "/var/tmp/nix-1".to_string()));
+        let without = RuntimeEnv::from_env(&|_| None);
+        assert_eq!(with.tmpdir, without.tmpdir);
+        assert_eq!(without.xdg_runtime_dir, None);
         #[cfg(target_vendor = "apple")]
         {
             let out = std::process::Command::new("/usr/bin/getconf")
@@ -494,14 +513,43 @@ mod tests {
                 .output()
                 .unwrap();
             let want = String::from_utf8(out.stdout).unwrap();
-            assert_eq!(rt.tmpdir, PathBuf::from(want.trim()));
-            assert_ne!(rt.tmpdir, PathBuf::from("/tmp"));
+            assert_eq!(without.tmpdir, PathBuf::from(want.trim()));
+            assert_ne!(without.tmpdir, PathBuf::from("/tmp"));
         }
         #[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "android")))]
-        assert_eq!(rt.tmpdir, PathBuf::from("/tmp"));
-        if std::env::var_os("TMPDIR").is_none() && !cfg!(windows) {
-            assert_eq!(rt.tmpdir, std::env::temp_dir());
-        }
+        assert_eq!(without.tmpdir, PathBuf::from("/tmp"));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn socket_dir_overrides_xdg_and_tmpdir() {
+        let env = |socket_dir: &'static str| {
+            RuntimeEnv::from_env(&move |k| match k {
+                "XDG_RUNTIME_DIR" => Some("/run/user/7".to_string()),
+                "FNOX_DAEMON_SOCKET_DIR" => Some(socket_dir.to_string()),
+                _ => None,
+            })
+        };
+        assert_eq!(
+            runtime_dir(&env("/home/u/.cache/fnox-sock")),
+            PathBuf::from("/home/u/.cache/fnox-sock")
+        );
+        // A relative value would differ per working directory: ignored.
+        assert_eq!(env("rel/sock").socket_dir, None);
+        assert_eq!(
+            runtime_dir(&env("rel/sock")),
+            PathBuf::from("/run/user/7/fnox")
+        );
+        // Empty counts as unset.
+        assert_eq!(env("").socket_dir, None);
+        assert_eq!(runtime_dir(&env("")), PathBuf::from("/run/user/7/fnox"));
+        // Too long for sun_path: the hashed fallback still applies.
+        let long = format!("/{}", "x".repeat(120));
+        let rt = RuntimeEnv {
+            socket_dir: Some(PathBuf::from(&long)),
+            ..rt()
+        };
+        assert!(socket_path_fits(&runtime_dir(&rt)));
     }
 
     #[cfg(not(windows))]
@@ -510,6 +558,7 @@ mod tests {
         let long = format!("/{}", "x".repeat(120));
         let rt = RuntimeEnv {
             xdg_runtime_dir: Some(PathBuf::from(&long)),
+            socket_dir: None,
             tmpdir: PathBuf::from("/tmp"),
             euid: 1000,
         };
@@ -709,6 +758,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let rt = RuntimeEnv {
             xdg_runtime_dir: Some(tmp.path().to_path_buf()),
+            socket_dir: None,
             tmpdir: PathBuf::from("/tmp"),
             euid: 1,
         };

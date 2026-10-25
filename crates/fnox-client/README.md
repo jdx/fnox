@@ -101,8 +101,9 @@ every request miss, and does so silently.
 
 The same environment decides which daemon you talk to: `SocketKey::from_cli_env`
 and `RuntimeEnv::from_env` read `FNOX_PROFILE`, `FNOX_NO_DEFAULTS`,
-`FNOX_IF_MISSING`, `FNOX_AGE_KEY_FILE`, `XDG_RUNTIME_DIR` and `TMPDIR` from it. Without `TMPDIR` the temp dir is what the
-std library uses: `/tmp`, or on macOS the per-user `confstr` directory.
+`FNOX_IF_MISSING`, `FNOX_AGE_KEY_FILE`, `FNOX_DAEMON_SOCKET_DIR` and `XDG_RUNTIME_DIR` from it. `TMPDIR` is
+not read: without `XDG_RUNTIME_DIR` the sockets live under `/tmp`, or on macOS the
+per-user `confstr` directory, so tools that rewrite `TMPDIR` share one daemon.
 
 The daemon reads fnox's global config file (`~/.config/fnox/config.toml`) on
 every request, but locates it once, from its own environment. A request whose

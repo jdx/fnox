@@ -38,6 +38,20 @@ The cache is also dropped automatically when:
 - the daemon stops, or exits after `idle_timeout` with no requests;
 - a config file, the selected profile, a provider setting, or a relevant `FNOX_*` or provider credential variable (such as `AWS_*`) changes.
 
+## Where the socket lives
+
+The daemon's socket goes in `$XDG_RUNTIME_DIR/fnox` when that is set. Otherwise it goes in `/tmp/fnox-<uid>/fnox`, or on macOS in the per-user directory from `confstr(_CS_DARWIN_USER_TEMP_DIR)`. `TMPDIR` is ignored, so tools that set their own `TMPDIR` (nix-shell, CI runners, sandboxed agents) share one daemon instead of each starting their own.
+
+To pin the directory, set `FNOX_DAEMON_SOCKET_DIR`:
+
+```bash
+export FNOX_DAEMON_SOCKET_DIR="$HOME/.cache/fnox-daemon"
+```
+
+Use a dedicated directory: fnox creates it if missing and sets its mode to `0700`, even if it already exists, which revokes access for other users. fnox refuses a directory owned by another user. It must be an absolute path; a relative value is ignored, because it would name a different socket from every working directory.
+
+Unix socket paths are limited to about 100 characters. If the socket path under the chosen directory would be longer, fnox uses a short hashed directory, `/tmp/fnox-<uid>/<hash>/fnox`, instead.
+
 ## What uses it
 
 Read commands: `exec`, `get`, `export`, `list --values`, `env --json`, shell integration, `tui`, `mcp`, and `proxy run`. `check --all` connects to the daemon but always re-reads from providers, so it reports the current state.

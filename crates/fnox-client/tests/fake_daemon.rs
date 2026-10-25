@@ -28,6 +28,7 @@ fn fixture() -> Fixture {
     let dir = tempfile::tempdir().unwrap();
     let rt = RuntimeEnv {
         xdg_runtime_dir: Some(dir.path().to_path_buf()),
+        socket_dir: None,
         tmpdir: dir.path().to_path_buf(),
         euid: fnox_client::peer::current_euid(),
     };
@@ -238,6 +239,7 @@ fn no_socket_is_absent_and_creates_nothing() {
     let runtime = dir.path().join("run");
     let rt = RuntimeEnv {
         xdg_runtime_dir: Some(runtime.clone()),
+        socket_dir: None,
         tmpdir: dir.path().to_path_buf(),
         euid: fnox_client::peer::current_euid(),
     };
@@ -355,6 +357,7 @@ fn hello_without_a_daemon_says_the_socket_is_missing() {
     let dir = tempfile::tempdir().unwrap();
     let rt = RuntimeEnv {
         xdg_runtime_dir: Some(dir.path().to_path_buf()),
+        socket_dir: None,
         tmpdir: dir.path().to_path_buf(),
         euid: fnox_client::peer::current_euid(),
     };
