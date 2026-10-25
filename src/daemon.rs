@@ -590,10 +590,6 @@ async fn start_background_for_context(
         cmd.arg("--age-key-file").arg(age_key_file);
     }
     cmd.arg("daemon").arg("serve");
-    // The daemon runs from `/`, so hand it the directory already resolved.
-    if let Some(socket_dir) = RuntimeEnv::from_process().socket_dir {
-        cmd.env("FNOX_DAEMON_SOCKET_DIR", socket_dir);
-    }
     if let Some(config) = config
         && let Some(daemon) = &config.daemon
     {

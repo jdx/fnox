@@ -182,7 +182,8 @@ pub struct RuntimeEnv {
     /// `XDG_RUNTIME_DIR`; empty counts as unset.
     pub xdg_runtime_dir: Option<PathBuf>,
     /// `FNOX_DAEMON_SOCKET_DIR`: the directory the sockets live in, instead of
-    /// the default. Empty counts as unset.
+    /// the default. Empty and relative values count as unset: a relative path
+    /// would name a different socket from every working directory.
     pub socket_dir: Option<PathBuf>,
     /// The per-user temporary directory the fallback lives under. Never read
     /// from `TMPDIR`, which tools rewrite per invocation: on Apple, the
@@ -200,8 +201,8 @@ impl RuntimeEnv {
                 .filter(|dir| !dir.is_empty())
                 .map(PathBuf::from),
             socket_dir: std::env::var_os("FNOX_DAEMON_SOCKET_DIR")
-                .filter(|dir| !dir.is_empty())
-                .map(|dir| absolutize(PathBuf::from(dir))),
+                .map(PathBuf::from)
+                .filter(|dir| dir.is_absolute()),
             tmpdir: default_tmpdir(),
             euid: process_euid(),
         }
@@ -215,23 +216,11 @@ impl RuntimeEnv {
                 .filter(|dir| !dir.is_empty())
                 .map(PathBuf::from),
             socket_dir: get("FNOX_DAEMON_SOCKET_DIR")
-                .filter(|dir| !dir.is_empty())
-                .map(|dir| absolutize(PathBuf::from(dir))),
+                .map(PathBuf::from)
+                .filter(|dir| dir.is_absolute()),
             tmpdir: default_tmpdir(),
             euid: process_euid(),
         }
-    }
-}
-
-/// A relative `FNOX_DAEMON_SOCKET_DIR` is relative to the caller's directory;
-/// the daemon runs from `/`, so it must be resolved before anyone uses it.
-fn absolutize(dir: PathBuf) -> PathBuf {
-    if dir.is_absolute() {
-        return dir;
-    }
-    match std::env::current_dir() {
-        Ok(cwd) => cwd.join(dir),
-        Err(_) => dir,
     }
 }
 
@@ -545,9 +534,12 @@ mod tests {
             runtime_dir(&env("/home/u/.cache/fnox-sock")),
             PathBuf::from("/home/u/.cache/fnox-sock")
         );
-        // A relative value resolves against the caller's directory.
-        let cwd = std::env::current_dir().unwrap();
-        assert_eq!(env("rel/sock").socket_dir, Some(cwd.join("rel/sock")));
+        // A relative value would differ per working directory: ignored.
+        assert_eq!(env("rel/sock").socket_dir, None);
+        assert_eq!(
+            runtime_dir(&env("rel/sock")),
+            PathBuf::from("/run/user/7/fnox")
+        );
         // Empty counts as unset.
         assert_eq!(env("").socket_dir, None);
         assert_eq!(runtime_dir(&env("")), PathBuf::from("/run/user/7/fnox"));
