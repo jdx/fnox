@@ -1791,6 +1791,7 @@ fn prepare_socket_path(path: &Path) -> Result<()> {
         secure_runtime_component(temp_user_dir)?;
         if let Some(hash_dir) = parent.parent()
             && hash_dir != temp_user_dir
+            && hash_dir.starts_with(temp_user_dir)
         {
             secure_runtime_component(hash_dir)?;
         }
