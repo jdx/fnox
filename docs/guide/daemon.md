@@ -48,7 +48,7 @@ To pin the directory, set `FNOX_DAEMON_SOCKET_DIR`:
 export FNOX_DAEMON_SOCKET_DIR="$HOME/.cache/fnox-daemon"
 ```
 
-fnox creates it with mode `0700` if it is missing and refuses a directory owned by another user.
+Use a dedicated directory: fnox creates it if missing and sets its mode to `0700`, even if it already exists, which removes access for other users. fnox refuses a directory owned by another user. A relative path is resolved against the current directory.
 
 ## What uses it
 

@@ -201,7 +201,7 @@ impl RuntimeEnv {
                 .map(PathBuf::from),
             socket_dir: std::env::var_os("FNOX_DAEMON_SOCKET_DIR")
                 .filter(|dir| !dir.is_empty())
-                .map(PathBuf::from),
+                .map(|dir| absolutize(PathBuf::from(dir))),
             tmpdir: default_tmpdir(),
             euid: process_euid(),
         }
@@ -216,10 +216,22 @@ impl RuntimeEnv {
                 .map(PathBuf::from),
             socket_dir: get("FNOX_DAEMON_SOCKET_DIR")
                 .filter(|dir| !dir.is_empty())
-                .map(PathBuf::from),
+                .map(|dir| absolutize(PathBuf::from(dir))),
             tmpdir: default_tmpdir(),
             euid: process_euid(),
         }
+    }
+}
+
+/// A relative `FNOX_DAEMON_SOCKET_DIR` is relative to the caller's directory;
+/// the daemon runs from `/`, so it must be resolved before anyone uses it.
+fn absolutize(dir: PathBuf) -> PathBuf {
+    if dir.is_absolute() {
+        return dir;
+    }
+    match std::env::current_dir() {
+        Ok(cwd) => cwd.join(dir),
+        Err(_) => dir,
     }
 }
 
@@ -533,6 +545,9 @@ mod tests {
             runtime_dir(&env("/home/u/.cache/fnox-sock")),
             PathBuf::from("/home/u/.cache/fnox-sock")
         );
+        // A relative value resolves against the caller's directory.
+        let cwd = std::env::current_dir().unwrap();
+        assert_eq!(runtime_dir(&env("rel/sock")), cwd.join("rel/sock"));
         // Empty counts as unset.
         assert_eq!(env("").socket_dir, None);
         assert_eq!(runtime_dir(&env("")), PathBuf::from("/run/user/7/fnox"));
