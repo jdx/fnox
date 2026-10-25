@@ -2937,6 +2937,7 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
             // SocketKey's component-wise equality hides byte differences the hash sees.
             let rt = RuntimeEnv {
                 xdg_runtime_dir: Some(PathBuf::from("/run/user/1000")),
+                socket_dir: None,
                 tmpdir: PathBuf::from("/tmp"),
                 euid: 1000,
             };
