@@ -1778,12 +1778,20 @@ fn prepare_socket_path(path: &Path) -> Result<()> {
     };
     std::fs::create_dir_all(parent)
         .map_err(|e| FnoxError::Config(format!("Failed to create daemon runtime dir: {e}")))?;
-    let temp_user_dir = RuntimeEnv::from_process()
-        .tmpdir
-        .join(format!("fnox-{}", current_uid()));
-    if parent.starts_with(&temp_user_dir) {
-        secure_runtime_component(&temp_user_dir)?;
-        if let Some(hash_dir) = parent.parent() {
+    // The default fallback lives under the temp dir; the hashed fallback for
+    // an overlong path always lives under `/tmp`, which is not the temp dir on macOS.
+    let uid = current_uid();
+    let user_dirs = [
+        RuntimeEnv::from_process()
+            .tmpdir
+            .join(format!("fnox-{uid}")),
+        PathBuf::from("/tmp").join(format!("fnox-{uid}")),
+    ];
+    if let Some(temp_user_dir) = user_dirs.iter().find(|dir| parent.starts_with(dir)) {
+        secure_runtime_component(temp_user_dir)?;
+        if let Some(hash_dir) = parent.parent()
+            && hash_dir != temp_user_dir
+        {
             secure_runtime_component(hash_dir)?;
         }
     }
