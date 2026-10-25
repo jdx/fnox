@@ -48,7 +48,9 @@ To pin the directory, set `FNOX_DAEMON_SOCKET_DIR`:
 export FNOX_DAEMON_SOCKET_DIR="$HOME/.cache/fnox-daemon"
 ```
 
-Use a dedicated directory: fnox creates it if missing and sets its mode to `0700`, even if it already exists, which removes access for other users. fnox refuses a directory owned by another user. It must be an absolute path; a relative value is ignored, because it would name a different socket from every working directory.
+Use a dedicated directory: fnox creates it if missing and sets its mode to `0700`, even if it already exists, which revokes access for other users. fnox refuses a directory owned by another user. It must be an absolute path; a relative value is ignored, because it would name a different socket from every working directory.
+
+Unix socket paths are limited to about 100 characters. If the socket path under the chosen directory would be longer, fnox uses a short hashed directory, `/tmp/fnox-<uid>/<hash>/fnox`, instead.
 
 ## What uses it
 
