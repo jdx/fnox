@@ -315,7 +315,9 @@ impl EditCommand {
             global: false,
             key_name: None,
             dry_run: false,
-            provider: None,
+            // Store with the provider the value was read from, even when
+            // `--write-profile` points at a profile with another default
+            provider: provider_name,
             base64_encode: false,
             default: None,
             force: false,
@@ -382,12 +384,11 @@ impl EditCommand {
                 source: e,
             })?;
 
-        if !status.success()
-            && let Some(code) = status.code()
-        {
+        if !status.success() {
+            // No exit code means the editor was killed by a signal
             return Err(FnoxError::EditorExitFailed {
                 editor,
-                status: code,
+                status: status.code().unwrap_or(-1),
             });
         }
         Ok(())
