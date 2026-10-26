@@ -8,24 +8,31 @@ backend = "vfox:mise-plugins/vfox-1password"
 specifiers = ["latest"]
 
 [tools.1password."platforms.linux-arm64"]
+checksum = "sha256:bc4ac99201909f96f67e7a89601dbf5388f991aca53120db6fc3f1666dff706b"
 url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.41.0/op_linux_arm64_v2.41.0.zip"
 
 [tools.1password."platforms.linux-arm64-musl"]
+checksum = "sha256:bc4ac99201909f96f67e7a89601dbf5388f991aca53120db6fc3f1666dff706b"
 url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.41.0/op_linux_arm64_v2.41.0.zip"
 
 [tools.1password."platforms.linux-x64"]
+checksum = "sha256:498bbaa154f0d90749325a14e04488fcd84930a426ae92ebf421d2a7d793a80a"
 url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.41.0/op_linux_amd64_v2.41.0.zip"
 
 [tools.1password."platforms.linux-x64-musl"]
+checksum = "sha256:498bbaa154f0d90749325a14e04488fcd84930a426ae92ebf421d2a7d793a80a"
 url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.41.0/op_linux_amd64_v2.41.0.zip"
 
 [tools.1password."platforms.macos-arm64"]
+checksum = "sha256:83da93b6d90726ac5111ce4f6993a9504ee420b7a299b9d145041886cd13c6ca"
 url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.41.0/op_darwin_arm64_v2.41.0.zip"
 
 [tools.1password."platforms.macos-x64"]
+checksum = "sha256:cf5f3a78e2d3a09e9a003e0cd855e8fff0a4b38ceda6f9921cd0b29005d3e6f1"
 url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.41.0/op_darwin_amd64_v2.41.0.zip"
 
 [tools.1password."platforms.windows-x64"]
+checksum = "sha256:1338a6799ef9f66d1b7d526fcf195a37675e80171c557ded01afebb159e3490b"
 url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.41.0/op_windows_amd64_v2.41.0.zip"
 
 [[tools.age]]
