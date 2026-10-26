@@ -809,3 +809,59 @@ EDITOR_SCRIPT
 	run fnox edit NOPE
 	assert_failure
 }
+
+@test "edit KEY edits the full value of a secret with json_path" {
+	cat >fnox.toml <<EOF2
+[providers.plain]
+type = "plain"
+
+[secrets]
+CREDS = { provider = "plain", value = '{"user":"admin"}', json_path = "user" }
+EOF2
+	printf '#!/bin/sh\n[ "$(cat "$1")" = %s ] || exit 3\nprintf %s >"$1"\n' "'{\"user\":\"admin\"}'" "'{\"user\":\"alice\"}'" >"$TEST_DIR/json-editor.sh"
+	chmod +x "$TEST_DIR/json-editor.sh"
+
+	export EDITOR="$TEST_DIR/json-editor.sh"
+	run fnox edit CREDS
+	assert_success
+	run fnox get CREDS
+	assert_output "alice"
+}
+
+@test "edit KEY resolves secrets referenced by its default" {
+	cat >fnox.toml <<EOF2
+[providers.plain]
+type = "plain"
+
+[secrets]
+BASE = { provider = "plain", value = "base-value" }
+DERIVED = { default = "\${BASE}/x" }
+EOF2
+	printf '#!/bin/sh\n[ "$(cat "$1")" = "base-value/x" ] || exit 3\n' >"$TEST_DIR/ref-editor.sh"
+	chmod +x "$TEST_DIR/ref-editor.sh"
+
+	export EDITOR="$TEST_DIR/ref-editor.sh"
+	run fnox edit DERIVED
+	assert_success
+}
+
+@test "edit KEY in a profile keeps settings of an inherited secret" {
+	cat >fnox.toml <<EOF2
+[providers.plain]
+type = "plain"
+
+[secrets]
+KEY = { provider = "plain", value = "old", description = "keep me", as_file = true }
+
+[profiles.work]
+EOF2
+	printf '#!/bin/sh\nprintf new >"$1"\n' >"$TEST_DIR/new-editor.sh"
+	chmod +x "$TEST_DIR/new-editor.sh"
+
+	export EDITOR="$TEST_DIR/new-editor.sh"
+	run fnox -P work edit KEY
+	assert_success
+	run grep -A4 'profiles.work' fnox.toml
+	assert_output --partial 'keep me'
+	assert_output --partial 'as_file = true'
+}

@@ -366,11 +366,12 @@ impl SetCommand {
         // full stack, so the secret lands in the correct TOML section.
         let profile_secrets = config.get_secrets_mut(&write_profile_stack);
 
-        // A metadata-only update to an inherited secret creates a local
-        // override. Seed it from the effective secret so the override retains
-        // the inherited value/provider instead of shadowing it with an empty
-        // entry.
-        let inherited_secret = (secret_value.is_none() && existing_secret.is_none())
+        // Updating an inherited secret creates a local override. Seed it from
+        // the effective secret so the override retains the inherited settings
+        // (and the value/provider, for a metadata-only update) instead of
+        // shadowing it with an empty entry.
+        let inherited_secret = existing_secret
+            .is_none()
             .then(|| effective_secret.clone())
             .flatten();
         let secret_config = profile_secrets
@@ -399,9 +400,9 @@ impl SetCommand {
             secret_config.set_provider(provider_name_to_use.clone());
         }
 
-        if self.generate {
-            // A forced replacement must not leave a stale `fnox sync` cache that
-            // would take precedence over the new value.
+        if secret_value.is_some() {
+            // A new value must not leave a stale `fnox sync` cache that would
+            // take precedence over it.
             secret_config.sync = None;
         }
 

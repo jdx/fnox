@@ -260,11 +260,19 @@ impl EditCommand {
             }
         }
 
-        // Like `fnox edit`, surface the real error instead of applying if_missing
+        // Edit the full stored value, not a `json_path`/`line` selection of it or a
+        // `fnox sync` cache of it, and like `fnox edit` surface the real error
+        // instead of applying if_missing. Resolve what the secret interpolates or
+        // needs for provider auth too, but nothing unrelated.
         let mut edit_config = secret_config.clone();
         edit_config.if_missing = Some(crate::config::IfMissing::Error);
-        let mut batch = IndexMap::new();
-        batch.insert(key.to_string(), edit_config);
+        edit_config.json_path = None;
+        edit_config.line = None;
+        edit_config.sync = None;
+        let mut all = profile_secrets.clone();
+        all.insert(key.to_string(), edit_config);
+        let batch =
+            secret_resolver::dependency_closure(&config, &profile, &all, &[key.to_string()])?;
         let original = secret_resolver::resolve_secrets_batch(&config, &profile, &batch)
             .await?
             .swap_remove(key)
