@@ -9,10 +9,13 @@ use tempfile::NamedTempFile;
 use toml_edit::{DocumentMut, Table, Value};
 
 use crate::commands::Cli;
+use crate::commands::set::SetCommand;
 use crate::config::{Config, SecretConfig};
 use crate::error::{FnoxError, Result};
+use crate::generate::GenerateKind;
 use crate::providers::{ProviderCapability, get_provider_resolved};
 use crate::secret_resolver;
+use crate::suggest::{find_similar, format_suggestions};
 
 /// Header added to temporary edit file for user reference
 const TEMP_FILE_HEADER: &str = "\
@@ -24,23 +27,75 @@ const TEMP_FILE_HEADER: &str = "\
 
 ";
 
-/// Edit the config file with secret values decrypted
+/// Edit the config file, or one secret, with values decrypted
 ///
-/// Decrypts or fetches every secret in the config file, across all profiles,
-/// into a private temporary copy and opens it in `$EDITOR` (then `$VISUAL`, then
-/// `vi`, or `notepad` on Windows). When the editor exits, fnox stores each new or
-/// changed value with its provider and writes the file back, keeping your
-/// comments and formatting. Unchanged values keep their existing ciphertext.
+/// Without KEY, decrypts or fetches every secret in the config file, across all
+/// profiles, into a private temporary copy and opens it in `$EDITOR` (then
+/// `$VISUAL`, then `vi`, or `notepad` on Windows). When the editor exits, fnox
+/// stores each new or changed value with its provider and writes the file back,
+/// keeping your comments and formatting. Unchanged values keep their existing
+/// ciphertext.
 ///
+/// With KEY, only that secret's resolved value is written, raw and without TOML,
+/// to a private temporary file for the active profile. If you change it, fnox
+/// stores the new value with the secret's provider as `fnox set --from-file`
+/// does, keeping its other settings. The other secrets are not decrypted.
+///
+/// The editor command may include arguments, such as `EDITOR="code --wait"`.
 /// Secrets from read-only providers are shown but cannot be changed. fnox edits
 /// the file named by `-c` (default: `fnox.toml` in the current directory).
 #[derive(Debug, usage_rs::Args)]
 #[usage(
     example("fnox edit", header = "Edit fnox.toml in your editor"),
     example("EDITOR=nano fnox edit", header = "Use a specific editor"),
+    example(
+        "EDITOR=\"code --wait\" fnox edit",
+        header = "Use an editor command with arguments"
+    ),
+    example(
+        "fnox -P work edit KUBECONFIG",
+        header = "Edit one secret from the work profile"
+    ),
     after_long_help = "See also:\n- Configuration reference: https://fnox.jdx.dev/reference/configuration"
 )]
-pub struct EditCommand;
+pub struct EditCommand {
+    /// Secret to edit on its own; omit to edit the whole config file
+    pub key: Option<String>,
+}
+
+/// Split a Windows editor command on whitespace, where double quotes group words
+/// and backslashes stay literal so paths like `C:\Tools\Vim\vim.exe -n` survive.
+fn split_windows_words(command: &str) -> Option<Vec<String>> {
+    let mut words = Vec::new();
+    let mut current = String::new();
+    let mut in_word = false;
+    let mut in_quotes = false;
+    for c in command.chars() {
+        match c {
+            '"' => {
+                in_quotes = !in_quotes;
+                in_word = true;
+            }
+            c if c.is_whitespace() && !in_quotes => {
+                if in_word {
+                    words.push(std::mem::take(&mut current));
+                    in_word = false;
+                }
+            }
+            c => {
+                current.push(c);
+                in_word = true;
+            }
+        }
+    }
+    if in_quotes {
+        return None;
+    }
+    if in_word {
+        words.push(current);
+    }
+    Some(words)
+}
 
 /// Represents a secret with its metadata for tracking during editing
 #[derive(Debug, Clone)]
@@ -61,6 +116,9 @@ struct SecretEntry {
 
 impl EditCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
+        if let Some(key) = &self.key {
+            return self.edit_one(cli, config, key).await;
+        }
         let profile = Config::get_profiles(cli.profile.as_slice());
         tracing::debug!(
             "Starting enhanced edit with profile: {}",
@@ -136,37 +194,7 @@ impl EditCommand {
 
         // Step 5: Open editor on temp file
         tracing::debug!("Opening editor on temporary file");
-        let editor = env::var("EDITOR")
-            .or_else(|_| env::var("VISUAL"))
-            .unwrap_or_else(|_| {
-                if cfg!(target_os = "windows") {
-                    "notepad".to_string()
-                } else {
-                    "vi".to_string()
-                }
-            });
-
-        #[cfg(windows)]
-        let editor_path = which::which(&editor).unwrap_or_else(|_| editor.clone().into());
-        #[cfg(not(windows))]
-        let editor_path = &editor;
-
-        let status = Command::new(editor_path)
-            .arg(&temp_path)
-            .status()
-            .map_err(|e| FnoxError::EditorLaunchFailed {
-                editor: editor.clone(),
-                source: e,
-            })?;
-
-        if !status.success()
-            && let Some(code) = status.code()
-        {
-            return Err(FnoxError::EditorExitFailed {
-                editor: editor.clone(),
-                status: code,
-            });
-        }
+        Self::open_editor(&temp_path)?;
 
         // Step 6: Read and parse modified temp file
         tracing::debug!("Reading modified temporary file");
@@ -221,6 +249,186 @@ impl EditCommand {
         let styled_config = console::style(cli.config.display()).cyan();
         println!("{check} Configuration file {styled_config} updated with re-encrypted secrets");
 
+        Ok(())
+    }
+
+    /// Edit a single secret's raw value in the editor
+    async fn edit_one(&self, cli: &Cli, config: Config, key: &str) -> Result<()> {
+        let profile = Config::get_profiles(cli.profile.as_slice());
+        tracing::debug!(
+            "Editing secret '{}' with profile: {}",
+            key,
+            Config::display_profiles(&profile)
+        );
+
+        let profile_secrets = config.get_secrets(&profile)?;
+        let secret_config = profile_secrets.get(key).ok_or_else(|| {
+            let similar = find_similar(key, profile_secrets.keys().map(|s| s.as_str()));
+            FnoxError::SecretNotFound {
+                key: key.to_string(),
+                profile: Config::display_profiles(&profile),
+                config_path: config.secret_sources.get(key).cloned(),
+                suggestion: format_suggestions(&similar),
+            }
+        })?;
+
+        let provider_name = match secret_config.provider() {
+            Some(name) => Some(name.to_string()),
+            None => config.get_default_provider(&profile)?,
+        };
+        if let Some(provider_name) = &provider_name {
+            let providers = config.get_providers(&profile)?;
+            if let Some(provider_config) = providers.get(provider_name) {
+                let provider =
+                    get_provider_resolved(&config, &profile, provider_name, provider_config)
+                        .await?;
+                let caps = provider.capabilities();
+                if caps.contains(&ProviderCapability::RemoteRead)
+                    && !caps.contains(&ProviderCapability::Encryption)
+                    && !caps.contains(&ProviderCapability::RemoteStorage)
+                {
+                    return Err(FnoxError::Config(format!(
+                        "Cannot modify read-only secret '{key}' from provider '{provider_name}'"
+                    )));
+                }
+            }
+        }
+
+        // Edit the full stored value, not a `json_path`/`line` selection of it or a
+        // `fnox sync` cache of it, and like `fnox edit` surface the real error
+        // instead of applying if_missing. Resolve what the secret interpolates or
+        // needs for provider auth too, but nothing unrelated.
+        let mut edit_config = secret_config.clone();
+        edit_config.if_missing = Some(crate::config::IfMissing::Error);
+        edit_config.json_path = None;
+        edit_config.line = None;
+        edit_config.sync = None;
+        let mut all = profile_secrets.clone();
+        all.insert(key.to_string(), edit_config);
+        let batch =
+            secret_resolver::dependency_closure(&config, &profile, &all, &[key.to_string()])?;
+        let original = secret_resolver::resolve_secrets_batch(&config, &profile, &batch)
+            .await?
+            .swap_remove(key)
+            .flatten()
+            .ok_or_else(|| FnoxError::Config(format!("Secret '{key}' has no value to edit")))?;
+
+        let mut temp_file = tempfile::Builder::new()
+            .prefix("fnox-edit-")
+            .tempfile()
+            .map_err(|e| FnoxError::Config(format!("Failed to create temporary file: {}", e)))?;
+        // tempfile creates the file with mode 0600 on Unix
+        temp_file
+            .write_all(original.as_bytes())
+            .and_then(|_| temp_file.flush())
+            .map_err(|e| FnoxError::Config(format!("Failed to write to temporary file: {}", e)))?;
+        let temp_path = temp_file.path().to_path_buf();
+
+        Self::open_editor(&temp_path)?;
+
+        let mut edited = fs::read_to_string(&temp_path)
+            .map_err(|e| FnoxError::Config(format!("Failed to read temporary file: {}", e)))?;
+        // Editors often append a final newline the value did not have
+        if !original.ends_with('\n')
+            && let Some(stripped) = edited.strip_suffix('\n')
+        {
+            edited = stripped.strip_suffix('\r').unwrap_or(stripped).to_string();
+        }
+
+        if edited == original {
+            println!("Secret {} unchanged", console::style(key).cyan());
+            return Ok(());
+        }
+        fs::write(&temp_path, &edited)
+            .map_err(|e| FnoxError::Config(format!("Failed to write temporary file: {}", e)))?;
+
+        let set = SetCommand {
+            key: key.to_string(),
+            value: None,
+            description: None,
+            global: false,
+            key_name: None,
+            dry_run: false,
+            // Store with the provider the value was read from, even when
+            // `--write-profile` points at a profile with another default
+            provider: provider_name,
+            base64_encode: false,
+            default: None,
+            force: false,
+            from_file: Some(temp_path),
+            generate: false,
+            generate_type: GenerateKind::Password,
+            if_missing: None,
+            length: None,
+            show: false,
+        };
+        set.run(cli, config).await
+    }
+
+    /// Pick the editor command: `$EDITOR`, then `$VISUAL` (each ignored when empty
+    /// or blank), then `vi` (`notepad` on Windows).
+    fn editor_command() -> String {
+        ["EDITOR", "VISUAL"]
+            .iter()
+            .filter_map(|name| env::var(name).ok())
+            .find(|v| !v.trim().is_empty())
+            .unwrap_or_else(|| {
+                if cfg!(target_os = "windows") {
+                    "notepad".to_string()
+                } else {
+                    "vi".to_string()
+                }
+            })
+    }
+
+    /// Split an editor command such as `code --wait` into the program and its
+    /// arguments, using shell quoting rules.
+    fn split_editor_command(editor: &str) -> Result<(String, Vec<String>)> {
+        // A path to an editor, such as `C:\Program Files\Editor\edit.exe`, is a
+        // program on its own, not words to split
+        if std::path::Path::new(editor).is_file() {
+            return Ok((editor.to_string(), Vec::new()));
+        }
+        let mut words = if cfg!(windows) {
+            split_windows_words(editor)
+        } else {
+            shlex::split(editor)
+        }
+        .filter(|w| !w.is_empty())
+        .ok_or_else(|| {
+            FnoxError::Config(format!("Invalid editor command (check quoting): {editor}"))
+        })?;
+        let program = words.remove(0);
+        Ok((program, words))
+    }
+
+    /// Open `path` in the user's editor and wait for it to exit
+    fn open_editor(path: &std::path::Path) -> Result<()> {
+        let editor = Self::editor_command();
+        let (program, args) = Self::split_editor_command(&editor)?;
+
+        #[cfg(windows)]
+        let program_path: std::path::PathBuf =
+            which::which(&program).unwrap_or_else(|_| program.clone().into());
+        #[cfg(not(windows))]
+        let program_path = &program;
+
+        let status = Command::new(program_path)
+            .args(&args)
+            .arg(path)
+            .status()
+            .map_err(|e| FnoxError::EditorLaunchFailed {
+                editor: editor.clone(),
+                source: e,
+            })?;
+
+        if !status.success() {
+            // No exit code means the editor was killed by a signal
+            return Err(FnoxError::EditorExitFailed {
+                editor,
+                status: status.code().unwrap_or(-1),
+            });
+        }
         Ok(())
     }
 
@@ -590,5 +798,48 @@ impl EditCommand {
             .strip_prefix(TEMP_FILE_HEADER)
             .unwrap_or(content)
             .to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn splits_editor_command_into_program_and_args() {
+        let (program, args) = EditCommand::split_editor_command("code --wait").unwrap();
+        assert_eq!(program, "code");
+        assert_eq!(args, ["--wait"]);
+
+        let quoted = if cfg!(windows) {
+            r#"vim -n -c "set ft=toml""#
+        } else {
+            "vim -n -c 'set ft=toml'"
+        };
+        let (program, args) = EditCommand::split_editor_command(quoted).unwrap();
+        assert_eq!(program, "vim");
+        assert_eq!(args, ["-n", "-c", "set ft=toml"]);
+    }
+
+    #[test]
+    fn windows_split_keeps_backslashes_and_honors_quotes() {
+        assert_eq!(
+            split_windows_words(r#"C:\Tools\Vim\vim.exe -n"#).unwrap(),
+            [r"C:\Tools\Vim\vim.exe", "-n"]
+        );
+        assert_eq!(
+            split_windows_words(r#""C:\Program Files\Code\code.exe" --wait"#).unwrap(),
+            [r"C:\Program Files\Code\code.exe", "--wait"]
+        );
+    }
+
+    #[test]
+    fn rejects_unbalanced_quotes_in_editor_command() {
+        let unbalanced = if cfg!(windows) {
+            r#"vim "oops"#
+        } else {
+            "vim 'oops"
+        };
+        assert!(EditCommand::split_editor_command(unbalanced).is_err());
     }
 }

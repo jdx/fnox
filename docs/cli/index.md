@@ -72,7 +72,7 @@ Put fnox options before the `--` that starts a child command, as in `fnox -P pro
 - [`fnox daemon stop`](/cli/daemon/stop.md)
 - [`fnox deactivate`](/cli/deactivate.md)
 - [`fnox doctor`](/cli/doctor.md)
-- [`fnox edit`](/cli/edit.md)
+- [`fnox edit [KEY]`](/cli/edit.md)
 - [`fnox env [FLAGS]`](/cli/env.md)
 - [`fnox exec [FLAGS] [COMMAND]…`](/cli/exec.md)
 - [`fnox export [FLAGS] [KEY]…`](/cli/export.md)
