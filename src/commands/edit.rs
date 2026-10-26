@@ -63,6 +63,37 @@ pub struct EditCommand {
     pub key: Option<String>,
 }
 
+/// Split a Windows editor command on whitespace, where double quotes group words
+/// and backslashes stay literal so paths like `C:\Tools\Vim\vim.exe -n` survive.
+fn split_windows_words(command: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut current = String::new();
+    let mut in_word = false;
+    let mut in_quotes = false;
+    for c in command.chars() {
+        match c {
+            '"' => {
+                in_quotes = !in_quotes;
+                in_word = true;
+            }
+            c if c.is_whitespace() && !in_quotes => {
+                if in_word {
+                    words.push(std::mem::take(&mut current));
+                    in_word = false;
+                }
+            }
+            c => {
+                current.push(c);
+                in_word = true;
+            }
+        }
+    }
+    if in_word {
+        words.push(current);
+    }
+    words
+}
+
 /// Represents a secret with its metadata for tracking during editing
 #[derive(Debug, Clone)]
 struct SecretEntry {
@@ -355,11 +386,15 @@ impl EditCommand {
         if std::path::Path::new(editor).is_file() {
             return Ok((editor.to_string(), Vec::new()));
         }
-        let mut words = shlex::split(editor)
-            .filter(|w| !w.is_empty())
-            .ok_or_else(|| {
-                FnoxError::Config(format!("Invalid editor command (check quoting): {editor}"))
-            })?;
+        let mut words = if cfg!(windows) {
+            Some(split_windows_words(editor))
+        } else {
+            shlex::split(editor)
+        }
+        .filter(|w| !w.is_empty())
+        .ok_or_else(|| {
+            FnoxError::Config(format!("Invalid editor command (check quoting): {editor}"))
+        })?;
         let program = words.remove(0);
         Ok((program, words))
     }
@@ -776,6 +811,18 @@ mod tests {
         let (program, args) = EditCommand::split_editor_command("vim -n -c 'set ft=toml'").unwrap();
         assert_eq!(program, "vim");
         assert_eq!(args, ["-n", "-c", "set ft=toml"]);
+    }
+
+    #[test]
+    fn windows_split_keeps_backslashes_and_honors_quotes() {
+        assert_eq!(
+            split_windows_words(r#"C:\Tools\Vim\vim.exe -n"#),
+            [r"C:\Tools\Vim\vim.exe", "-n"]
+        );
+        assert_eq!(
+            split_windows_words(r#""C:\Program Files\Code\code.exe" --wait"#),
+            [r"C:\Program Files\Code\code.exe", "--wait"]
+        );
     }
 
     #[test]
