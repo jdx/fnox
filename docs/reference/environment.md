@@ -56,11 +56,11 @@ Directory for installed [Lua plugins](/providers/lua), one subdirectory per plug
 
 ## Editor and logging
 
-| Variable   | Effect                                                                                             |
-| ---------- | -------------------------------------------------------------------------------------------------- |
-| `EDITOR`   | Editor for `fnox edit`. Default: `vi`, or `notepad` on Windows.                                    |
-| `VISUAL`   | Used by `fnox edit` when `EDITOR` is unset.                                                        |
-| `RUST_LOG` | Log filter for stderr, such as `fnox=debug`. Takes precedence over the default set by `--verbose`. |
+| Variable   | Effect                                                                                                         |
+| ---------- | -------------------------------------------------------------------------------------------------------------- |
+| `EDITOR`   | Editor for `fnox edit`, with optional arguments such as `code --wait`. Default: `vi`, or `notepad` on Windows. |
+| `VISUAL`   | Used by `fnox edit` when `EDITOR` is unset or empty.                                                           |
+| `RUST_LOG` | Log filter for stderr, such as `fnox=debug`. Takes precedence over the default set by `--verbose`.             |
 
 ## Provider and lease credentials
 

@@ -741,3 +741,71 @@ EOT
 	run fnox get V
 	assert_output "line ONE"
 }
+
+@test "edit command accepts an editor command with arguments" {
+	cat >"$TEST_DIR/args-editor.sh" <<'EDITOR_SCRIPT'
+#!/bin/sh
+[ "$1" = "--wait" ] || exit 3
+printf '%s\n' '# edited with args' >>"$2"
+EDITOR_SCRIPT
+	chmod +x "$TEST_DIR/args-editor.sh"
+
+	export EDITOR="$TEST_DIR/args-editor.sh --wait"
+	run fnox edit
+	assert_success
+	run grep -q 'edited with args' fnox.toml
+	assert_success
+}
+
+@test "edit command skips an empty EDITOR and uses VISUAL" {
+	printf '#!/bin/sh\nexit 0\n' >"$TEST_DIR/noop-editor.sh"
+	chmod +x "$TEST_DIR/noop-editor.sh"
+
+	export EDITOR=""
+	export VISUAL="$TEST_DIR/noop-editor.sh"
+	run fnox edit
+	assert_success
+}
+
+@test "edit KEY opens only that secret's raw value" {
+	cat >"$TEST_DIR/key-editor.sh" <<'EDITOR_SCRIPT'
+#!/bin/sh
+[ "$(cat "$1")" = "secret123" ] || exit 3
+printf 'line one\nline two\n' >"$1"
+EDITOR_SCRIPT
+	chmod +x "$TEST_DIR/key-editor.sh"
+
+	export EDITOR="$TEST_DIR/key-editor.sh"
+	run fnox edit TEST_SECRET
+	assert_success
+
+	run fnox get TEST_SECRET
+	assert_success
+	assert_output $'line one\nline two'
+	# The other secret is untouched
+	run fnox get TEST_PASSWORD
+	assert_output "password456"
+	# Stays encrypted with its provider
+	run grep -q 'line one' fnox.toml
+	assert_failure
+	run grep -q 'TEST_SECRET.*provider = "age"' fnox.toml
+	assert_success
+}
+
+@test "edit KEY ignores an editor-added trailing newline" {
+	printf '#!/bin/sh\nprintf "\\n" >>"$1"\n' >"$TEST_DIR/newline-editor.sh"
+	chmod +x "$TEST_DIR/newline-editor.sh"
+
+	before="$(cat fnox.toml)"
+	export EDITOR="$TEST_DIR/newline-editor.sh"
+	run fnox edit TEST_SECRET
+	assert_success
+	assert_output --partial "unchanged"
+	assert_equal "$(cat fnox.toml)" "$before"
+}
+
+@test "edit KEY fails for an unknown secret" {
+	export EDITOR=true
+	run fnox edit NOPE
+	assert_failure
+}

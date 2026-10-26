@@ -754,9 +754,19 @@
       },
       "edit": {
         "full_cmd": ["edit"],
-        "usage": "edit",
+        "usage": "edit [KEY]",
         "subcommands": {},
-        "args": [],
+        "args": [
+          {
+            "name": "KEY",
+            "usage": "[KEY]",
+            "help": "Secret to edit on its own; omit to edit the whole config file",
+            "help_first_line": "Secret to edit on its own; omit to edit the whole config file",
+            "required": false,
+            "double_dash": "Optional",
+            "hide": false
+          }
+        ],
         "flags": [
           {
             "name": "help",
@@ -775,8 +785,8 @@
         "unknown_flags": null,
         "hide": false,
         "args_override_self": true,
-        "help": "Edit the config file with secret values decrypted",
-        "help_long": "Edit the config file with secret values decrypted\n\nDecrypts or fetches every secret in the config file, across all profiles, into a private temporary copy and opens it in `$EDITOR` (then `$VISUAL`, then `vi`, or `notepad` on Windows). When the editor exits, fnox stores each new or changed value with its provider and writes the file back, keeping your comments and formatting. Unchanged values keep their existing ciphertext.\n\nSecrets from read-only providers are shown but cannot be changed. fnox edits the file named by `-c` (default: `fnox.toml` in the current directory).",
+        "help": "Edit the config file, or one secret, with values decrypted",
+        "help_long": "Edit the config file, or one secret, with values decrypted\n\nWithout KEY, decrypts or fetches every secret in the config file, across all profiles, into a private temporary copy and opens it in `$EDITOR` (then `$VISUAL`, then `vi`, or `notepad` on Windows). When the editor exits, fnox stores each new or changed value with its provider and writes the file back, keeping your comments and formatting. Unchanged values keep their existing ciphertext.\n\nWith KEY, only that secret's resolved value is written, raw and without TOML, to a private temporary file for the active profile. If you change it, fnox stores the new value with the secret's provider as `fnox set --from-file` does, keeping its other settings. The other secrets are not decrypted.\n\nThe editor command may include arguments, such as `EDITOR=\"code --wait\"`. Secrets from read-only providers are shown but cannot be changed. fnox edits the file named by `-c` (default: `fnox.toml` in the current directory).",
         "name": "edit",
         "aliases": [],
         "hidden_aliases": [],
@@ -791,6 +801,18 @@
           {
             "code": "EDITOR=nano fnox edit",
             "header": "Use a specific editor",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "EDITOR=\"code --wait\" fnox edit",
+            "header": "Use an editor command with arguments",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox -P work edit KUBECONFIG",
+            "header": "Edit one secret from the work profile",
             "help": null,
             "lang": ""
           }
