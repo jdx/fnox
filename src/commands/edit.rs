@@ -65,7 +65,7 @@ pub struct EditCommand {
 
 /// Split a Windows editor command on whitespace, where double quotes group words
 /// and backslashes stay literal so paths like `C:\Tools\Vim\vim.exe -n` survive.
-fn split_windows_words(command: &str) -> Vec<String> {
+fn split_windows_words(command: &str) -> Option<Vec<String>> {
     let mut words = Vec::new();
     let mut current = String::new();
     let mut in_word = false;
@@ -88,10 +88,13 @@ fn split_windows_words(command: &str) -> Vec<String> {
             }
         }
     }
+    if in_quotes {
+        return None;
+    }
     if in_word {
         words.push(current);
     }
-    words
+    Some(words)
 }
 
 /// Represents a secret with its metadata for tracking during editing
@@ -387,7 +390,7 @@ impl EditCommand {
             return Ok((editor.to_string(), Vec::new()));
         }
         let mut words = if cfg!(windows) {
-            Some(split_windows_words(editor))
+            split_windows_words(editor)
         } else {
             shlex::split(editor)
         }
@@ -808,7 +811,12 @@ mod tests {
         assert_eq!(program, "code");
         assert_eq!(args, ["--wait"]);
 
-        let (program, args) = EditCommand::split_editor_command("vim -n -c 'set ft=toml'").unwrap();
+        let quoted = if cfg!(windows) {
+            r#"vim -n -c "set ft=toml""#
+        } else {
+            "vim -n -c 'set ft=toml'"
+        };
+        let (program, args) = EditCommand::split_editor_command(quoted).unwrap();
         assert_eq!(program, "vim");
         assert_eq!(args, ["-n", "-c", "set ft=toml"]);
     }
@@ -816,17 +824,22 @@ mod tests {
     #[test]
     fn windows_split_keeps_backslashes_and_honors_quotes() {
         assert_eq!(
-            split_windows_words(r#"C:\Tools\Vim\vim.exe -n"#),
+            split_windows_words(r#"C:\Tools\Vim\vim.exe -n"#).unwrap(),
             [r"C:\Tools\Vim\vim.exe", "-n"]
         );
         assert_eq!(
-            split_windows_words(r#""C:\Program Files\Code\code.exe" --wait"#),
+            split_windows_words(r#""C:\Program Files\Code\code.exe" --wait"#).unwrap(),
             [r"C:\Program Files\Code\code.exe", "--wait"]
         );
     }
 
     #[test]
     fn rejects_unbalanced_quotes_in_editor_command() {
-        assert!(EditCommand::split_editor_command("vim 'oops").is_err());
+        let unbalanced = if cfg!(windows) {
+            r#"vim "oops"#
+        } else {
+            "vim 'oops"
+        };
+        assert!(EditCommand::split_editor_command(unbalanced).is_err());
     }
 }
