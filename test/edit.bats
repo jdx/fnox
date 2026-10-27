@@ -983,3 +983,21 @@ EOT
 	run grep -A3 'profiles.dev.secrets' fnox.toml
 	assert_output --partial '"a":"2"'
 }
+
+@test "edit KEY keeps providers from a parent config for a secret in a subdirectory" {
+	mkdir app
+	cd app || exit 1
+	printf '[secrets]\n' >fnox.toml
+	printf 'old value' | fnox set NESTED --provider age
+	printf '#!/bin/sh\nprintf "new value" >"$1"\n' >"$TEST_DIR/new-editor.sh"
+	chmod +x "$TEST_DIR/new-editor.sh"
+
+	EDITOR="$TEST_DIR/new-editor.sh" run fnox edit NESTED
+	assert_success
+
+	run fnox get NESTED
+	assert_success
+	assert_output "new value"
+	run grep -c 'providers' fnox.toml
+	assert_output "0"
+}
