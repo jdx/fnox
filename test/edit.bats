@@ -892,3 +892,38 @@ EOT
 	assert_success
 	assert_output "new value"
 }
+
+@test "edit KEY encrypts with the providers of the file that defines the secret" {
+	recipient="$(grep 'public key:' "$AGE_KEY_FILE" | cut -d: -f2- | xargs)"
+	other_key="$TEST_DIR/other-key.txt"
+	age-keygen -o "$other_key" 2>/dev/null
+	other_recipient="$(grep 'public key:' "$other_key" | cut -d: -f2- | xargs)"
+	export FNOX_CONFIG_DIR="$TEST_DIR/global"
+	mkdir -p "$FNOX_CONFIG_DIR"
+	cat >"$FNOX_CONFIG_DIR/config.toml" <<EOT
+[providers.age]
+type = "age"
+recipients = ["$recipient"]
+
+[secrets]
+EOT
+	printf 'old value' | fnox set SHARED --provider age --global
+	mkdir project
+	cd project || exit 1
+	# The project overrides the provider with recipients that cannot be read elsewhere
+	cat >fnox.toml <<EOT
+[providers.age]
+type = "age"
+recipients = ["$other_recipient"]
+EOT
+
+	printf '#!/bin/sh\nprintf "new value" >"$1"\n' >"$TEST_DIR/new-editor.sh"
+	chmod +x "$TEST_DIR/new-editor.sh"
+	EDITOR="$TEST_DIR/new-editor.sh" run fnox edit SHARED
+	assert_success
+
+	cd "$TEST_DIR" || exit 1
+	run fnox get SHARED
+	assert_success
+	assert_output "new value"
+}

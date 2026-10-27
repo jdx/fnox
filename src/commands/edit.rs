@@ -366,7 +366,13 @@ impl EditCommand {
         // Write the new value back to the file that defines the secret, not the
         // file `fnox set` would pick for the current directory
         match source_path {
-            Some(path) => set.run_at(cli, config, path).await,
+            Some(path) => {
+                // Encrypt with the providers as that file sees them. A closer config
+                // can override a provider, say with other age recipients, and the
+                // value would then be unreadable wherever the file is used alone.
+                let target_config = Config::load_smart(&path)?;
+                set.run_at(cli, target_config, path).await
+            }
             None => set.run(cli, config).await,
         }
     }
