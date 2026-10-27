@@ -927,3 +927,59 @@ EOT
 	assert_success
 	assert_output "new value"
 }
+
+@test "edit KEY updates the shared definition of a locally synced secret" {
+	recipient="$(grep 'public key:' "$AGE_KEY_FILE" | cut -d: -f2- | xargs)"
+	cat >fnox.toml <<EOT
+root = true
+
+[providers.age]
+type = "age"
+recipients = ["$recipient"]
+
+[providers.source-age]
+type = "age"
+recipients = ["$recipient"]
+
+[secrets]
+EOT
+	printf 'old value' | fnox set SYNCED --provider source-age
+	run fnox sync -p age --local-file --force
+	assert_success
+
+	printf '#!/bin/sh\nprintf "new value" >"$1"\n' >"$TEST_DIR/new-editor.sh"
+	chmod +x "$TEST_DIR/new-editor.sh"
+	EDITOR="$TEST_DIR/new-editor.sh" run fnox edit SYNCED
+	assert_success
+
+	rm fnox.local.toml
+	run fnox get SYNCED
+	assert_success
+	assert_output "new value"
+}
+
+@test "edit KEY with --write-profile leaves the profile file that defines the secret" {
+	cat >fnox.toml <<'EOT'
+[providers.plain]
+type = "plain"
+
+[profiles.dev.secrets]
+OTHER = { provider = "plain", value = "x" }
+EOT
+	cat >fnox.prod.toml <<'EOT'
+[secrets]
+KEY = { provider = "plain", value = '{"a":"1"}', json_path = "a", description = "keep" }
+EOT
+	printf '#!/bin/sh\nprintf "{\\"a\\":\\"2\\"}" >"$1"\n' >"$TEST_DIR/json-editor.sh"
+	chmod +x "$TEST_DIR/json-editor.sh"
+
+	EDITOR="$TEST_DIR/json-editor.sh" run fnox -P prod -P dev --write-profile dev edit KEY
+	assert_success
+
+	run grep -F 'json_path = "a"' fnox.prod.toml
+	assert_success
+	run grep -F '"a":"1"' fnox.prod.toml
+	assert_success
+	run grep -A3 'profiles.dev.secrets' fnox.toml
+	assert_output --partial '"a":"2"'
+}

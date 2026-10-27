@@ -342,7 +342,16 @@ impl EditCommand {
         fs::write(&temp_path, &edited)
             .map_err(|e| FnoxError::Config(format!("Failed to write temporary file: {}", e)))?;
 
-        let source_path = secret_config.source_path.clone();
+        // A `fnox sync --local-file` cache copy lives in the personal override file;
+        // the value belongs to the shared definition it caches
+        let source_path = match &secret_config.sync {
+            Some(sync) if !sync.local_source => Config::load_smart_without_local_sync(&cli.config)?
+                .get_secret(&profile, key)
+                .ok()
+                .flatten()
+                .and_then(|s| s.source_path.clone()),
+            _ => secret_config.source_path.clone(),
+        };
         let set = SetCommand {
             key: key.to_string(),
             value: None,
@@ -366,14 +375,22 @@ impl EditCommand {
         // Write the new value back to the file that defines the secret, not the
         // file `fnox set` would pick for the current directory
         match source_path {
-            Some(path) => {
-                // Encrypt with the providers as that file sees them. A closer config
-                // can override a provider, say with other age recipients, and the
-                // value would then be unreadable wherever the file is used alone.
-                let target_config = Config::load_smart(&path)?;
-                set.run_at(cli, target_config, path).await
+            // A profile file such as `fnox.prod.toml` holds its profile's secrets at the
+            // top level, so `fnox set` picks the one matching the write profile itself
+            Some(path) if !crate::config::is_profile_file(&path) => {
+                // The global config is the base of every project. Encrypt with its own
+                // providers, not ones the current directory overrides (say, with other
+                // age recipients), or the value is unreadable wherever the global
+                // config is used alone. Project files are overlays, so they keep the
+                // merged config.
+                let config = if path == Config::global_config_path() {
+                    Config::load_smart(&path)?
+                } else {
+                    config
+                };
+                set.run_at(cli, config, path).await
             }
-            None => set.run(cli, config).await,
+            _ => set.run(cli, config).await,
         }
     }
 
