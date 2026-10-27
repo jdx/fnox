@@ -342,6 +342,7 @@ impl EditCommand {
         fs::write(&temp_path, &edited)
             .map_err(|e| FnoxError::Config(format!("Failed to write temporary file: {}", e)))?;
 
+        let source_path = secret_config.source_path.clone();
         let set = SetCommand {
             key: key.to_string(),
             value: None,
@@ -362,7 +363,12 @@ impl EditCommand {
             length: None,
             show: false,
         };
-        set.run(cli, config).await
+        // Write the new value back to the file that defines the secret, not the
+        // file `fnox set` would pick for the current directory
+        match source_path {
+            Some(path) => set.run_at(cli, config, path).await,
+            None => set.run(cli, config).await,
+        }
     }
 
     /// Pick the editor command: `$EDITOR`, then `$VISUAL` (each ignored when empty

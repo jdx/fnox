@@ -865,3 +865,30 @@ EOF2
 	assert_output --partial 'keep me'
 	assert_output --partial 'as_file = true'
 }
+
+@test "edit KEY writes to the global config that defines the secret" {
+	recipient="$(grep 'public key:' "$AGE_KEY_FILE" | cut -d: -f2- | xargs)"
+	export FNOX_CONFIG_DIR="$TEST_DIR/global"
+	mkdir -p "$FNOX_CONFIG_DIR"
+	cat >"$FNOX_CONFIG_DIR/config.toml" <<EOT
+[providers.age]
+type = "age"
+recipients = ["$recipient"]
+
+[profiles.work.secrets]
+EOT
+	printf 'old value' | fnox -P work set WORKRC --provider age --global
+	mkdir project
+	cd project || exit 1
+
+	printf '#!/bin/sh\nprintf "new value" >"$1"\n' >"$TEST_DIR/new-editor.sh"
+	chmod +x "$TEST_DIR/new-editor.sh"
+	EDITOR="$TEST_DIR/new-editor.sh" run fnox -P work edit WORKRC
+	assert_success
+
+	[ ! -e fnox.toml ]
+	cd "$TEST_DIR" || exit 1
+	run fnox -P work get WORKRC
+	assert_success
+	assert_output "new value"
+}
