@@ -6,7 +6,7 @@ description: "Store a secret and add it to the config. Usage, flags, and example
 
 # `fnox set`
 
-- **Usage:** `fnox set [FLAGS] <KEY> [VALUE]`
+- **Usage:** `fnox set [FLAGS] [KEY] [VALUE]`
 - **Aliases:** `s`
 
 Store a secret and add it to the config
@@ -17,7 +17,7 @@ The provider is `--provider`, else the secret's current provider, else `default_
 
 ## Arguments
 
-- **`<KEY>`** — Secret name, used as the environment variable name
+- **`[KEY]`** — Secret name, used as the environment variable name
 - **`[VALUE]`** — Value to store; omit to read stdin or prompt
 
   A value passed as an argument appears in shell history and process listings. Prefer stdin or the prompt for sensitive values.
@@ -31,6 +31,10 @@ The provider is `--provider`, else the secret's current provider, else `default_
 - **`-p --provider <PROVIDER>`** — Provider to store the value with (default: the secret's current provider, then `default_provider`)
 - **`--base64-encode`** — Base64-encode the value before storing it
 - **`--default <DEFAULT>`** — Fallback value to use when the secret cannot be resolved
+- **`--file <FILE>`** — Store a file under the path it belongs at, instead of a secret
+
+  Reads the current content of PATH (or `--from-file`) and records it under `[files]` in the global config, keyed by PATH. A file is never an environment variable; `fnox files write` puts it back at PATH.
+
 - **`--force`** — Replace an existing secret when generating
 - **`--from-file <FROM_FILE>`** — Read the value from a UTF-8 file, verbatim
 - **`--generate`** — Generate a random value instead of reading one
@@ -49,6 +53,7 @@ The provider is `--provider`, else the secret's current provider, else `default_
 
 - **`--length <LENGTH>`** — Length in characters of a generated value (default: 32; ignored for uuid; base64 cannot be 1 more than a multiple of 4)
 - **`--show`** — Print the generated value after storing it
+- **`--source <SOURCE>`** — With `--file`, keep the stored content in this file, relative to the global config directory, instead of in the config
 - **`-h --help`** — Print help
 
 ## Examples

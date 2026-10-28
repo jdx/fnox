@@ -17,6 +17,9 @@ use std::path::PathBuf;
 /// a provider's recipients or key, with an identity that can still decrypt the
 /// existing values.
 ///
+/// The files of the active profiles (see `fnox files`) are re-encrypted too,
+/// unless you name secrets with KEYS.
+///
 /// fnox asks for confirmation unless you pass `--force`. Only the active
 /// profile's secrets are processed, so repeat with `-P` for other profiles.
 /// `fnox sync` caches on re-encrypted secrets are cleared; run `fnox sync` again
@@ -35,7 +38,7 @@ use std::path::PathBuf;
     after_long_help = "See also:\n- Teams: https://fnox.jdx.dev/guide/teams\n- Age: https://fnox.jdx.dev/providers/age"
 )]
 pub struct ReencryptCommand {
-    /// Re-encrypt only these keys
+    /// Re-encrypt only these secrets; without them, files are re-encrypted too
     keys: Vec<String>,
 
     /// Write without asking for confirmation
@@ -57,6 +60,156 @@ pub struct ReencryptCommand {
 
 impl ReencryptCommand {
     pub async fn run(&self, cli: &Cli, merged_config: Config) -> Result<()> {
+        // KEYS name secrets, so they leave the files out
+        let files = if self.keys.is_empty() {
+            self.reencrypt_files(cli, &merged_config).await?
+        } else {
+            0
+        };
+        self.reencrypt_secrets(cli, merged_config, files > 0).await
+    }
+
+    /// Re-encrypt the files of the active profiles; returns how many were selected
+    async fn reencrypt_files(&self, cli: &Cli, config: &Config) -> Result<usize> {
+        let profile = Config::get_profiles(cli.profile.as_slice());
+        let providers = config.get_providers(&profile)?;
+        let default_provider = config.get_default_provider(&profile)?;
+        let filter_regex = self
+            .filter
+            .as_ref()
+            .map(|filter| {
+                Regex::new(filter).map_err(|e| FnoxError::InvalidRegexFilter {
+                    pattern: filter.clone(),
+                    details: e.to_string(),
+                })
+            })
+            .transpose()?;
+
+        let mut selected = Vec::new();
+        for entry in config.get_files(&profile)? {
+            let Some(provider_name) = entry.config.provider.clone().or(default_provider.clone())
+            else {
+                continue;
+            };
+            if self.provider.as_ref().is_some_and(|p| *p != provider_name)
+                || filter_regex
+                    .as_ref()
+                    .is_some_and(|r| !r.is_match(&entry.key))
+                || (entry.config.value.is_none() && entry.config.source.is_none())
+            {
+                continue;
+            }
+            let Some(provider_config) = providers.get(provider_name.as_str()) else {
+                tracing::warn!(
+                    "Skipping '{}': provider '{provider_name}' not found in current config",
+                    entry.key
+                );
+                continue;
+            };
+            let provider = crate::providers::get_provider_resolved(
+                config,
+                &profile,
+                &provider_name,
+                provider_config,
+            )
+            .await?;
+            if provider
+                .capabilities()
+                .contains(&crate::providers::ProviderCapability::Encryption)
+            {
+                selected.push((entry, provider_name, provider));
+            }
+        }
+        if selected.is_empty() {
+            return Ok(0);
+        }
+
+        let profile_display = Config::display_profiles(&profile);
+        if self.dry_run {
+            let label = console::style("[dry-run]").yellow().bold();
+            println!(
+                "{label} Would re-encrypt {} files in profile {}:",
+                selected.len(),
+                console::style(&profile_display).magenta()
+            );
+            for (entry, provider_name, _) in &selected {
+                println!(
+                    "  {} ({})",
+                    console::style(&entry.key).cyan(),
+                    console::style(provider_name).green()
+                );
+            }
+            return Ok(selected.len());
+        }
+        if !self.force {
+            println!(
+                "\nReady to re-encrypt {} files in profile '{}':",
+                selected.len(),
+                profile_display
+            );
+            for (entry, provider_name, _) in &selected {
+                println!("  {} ({})", entry.key, provider_name);
+            }
+            println!("\nContinue? [y/N]");
+            let mut response = String::new();
+            io::stdin()
+                .read_line(&mut response)
+                .map_err(|e| FnoxError::StdinReadFailed { source: e })?;
+            if !response.trim().to_lowercase().starts_with('y') {
+                println!("Re-encryption cancelled");
+                return Ok(selected.len());
+            }
+        }
+
+        // Encrypt every file before writing any of them
+        let mut updated = Vec::with_capacity(selected.len());
+        for (entry, provider_name, provider) in &selected {
+            let plaintext = crate::files::resolve_file(config, &profile, entry)
+                .await
+                .map_err(|e| FnoxError::ReencryptDecryptFailed {
+                    key: entry.key.clone(),
+                    details: e.to_string(),
+                })?;
+            let encrypted = provider.encrypt(&plaintext).await.map_err(|e| {
+                FnoxError::ReencryptEncryptionFailed {
+                    key: entry.key.clone(),
+                    provider: provider_name.clone(),
+                    details: e.to_string(),
+                }
+            })?;
+            updated.push((entry, encrypted));
+        }
+        for (entry, encrypted) in &updated {
+            let declared_in = entry
+                .config
+                .source_path
+                .clone()
+                .unwrap_or_else(Config::global_config_path);
+            let mut file = entry.config.clone();
+            match &entry.config.source {
+                Some(source) => {
+                    let path = declared_in
+                        .parent()
+                        .map(|dir| dir.join(source))
+                        .unwrap_or_else(|| PathBuf::from(source));
+                    std::fs::write(&path, encrypted).map_err(|e| {
+                        FnoxError::Config(format!("Failed to write '{}': {e}", path.display()))
+                    })?;
+                }
+                None => file.value = Some(encrypted.clone()),
+            }
+            crate::files::save_entry(&declared_in, &entry.profile, &entry.key, &file)?;
+        }
+        println!("Re-encrypted {} files", updated.len());
+        Ok(selected.len())
+    }
+
+    async fn reencrypt_secrets(
+        &self,
+        cli: &Cli,
+        merged_config: Config,
+        has_files: bool,
+    ) -> Result<()> {
         let profile = Config::get_profiles(cli.profile.as_slice());
         tracing::debug!(
             "Re-encrypting secrets for profiles '{}'",
@@ -183,7 +336,9 @@ impl ReencryptCommand {
         }
 
         if secrets_to_reencrypt.is_empty() {
-            println!("No secrets to re-encrypt");
+            if !has_files {
+                println!("No secrets to re-encrypt");
+            }
             return Ok(());
         }
 

@@ -6,7 +6,7 @@ description: "Print the resolved value of one secret. Usage, flags, and examples
 
 # `fnox get`
 
-- **Usage:** `fnox get [--base64-decode] [--refresh] <KEY>`
+- **Usage:** `fnox get [FLAGS] [KEY]`
 
 Print the resolved value of one secret
 
@@ -16,11 +16,15 @@ When the secret cannot be resolved, `if_missing` decides the outcome: with `warn
 
 ## Arguments
 
-- **`<KEY>`** — Secret to print
+- **`[KEY]`** — Secret to print
 
 ## Flags
 
 - **`--base64-decode`** — Decode a base64-encoded value before printing it
+- **`--file <FILE>`** — Print the file stored for this path, verbatim, instead of a secret
+
+  Looks PATH up in the files of the active profiles (see `fnox files`).
+
 - **`--refresh`** — Re-fetch the value from its provider instead of the daemon cache, and cache it
 - **`-h --help`** — Print help
 

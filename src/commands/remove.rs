@@ -22,7 +22,14 @@ use crate::error::{FnoxError, Result};
 )]
 pub struct RemoveCommand {
     /// Secret to remove
-    pub key: String,
+    pub key: Option<String>,
+
+    /// Remove the file stored for this path instead of a secret
+    ///
+    /// Deletes its entry from `[files]` in the global config. The file at PATH
+    /// and any stored content file or remote value are left in place.
+    #[usage(long, conflicts = "key", value_hint = usage_rs::ValueHint::FilePath)]
+    pub file: Option<std::path::PathBuf>,
 
     /// Remove from the global config file (`~/.config/fnox/config.toml`)
     #[usage(short = 'g', long)]
@@ -34,12 +41,26 @@ pub struct RemoveCommand {
 }
 
 impl RemoveCommand {
+    /// The secret name; `run` checks that it is set before anything reads it
+    fn key(&self) -> &str {
+        self.key.as_deref().unwrap_or_default()
+    }
+
     pub async fn run(&self, cli: &Cli) -> Result<()> {
+        if let Some(path) = &self.file {
+            let config = crate::commands::load_read_config(cli)?;
+            return crate::commands::files::remove_file(cli, &config, path, self.dry_run);
+        }
+        if self.key.is_none() {
+            return Err(FnoxError::Config(
+                "Provide a secret name, or --file PATH to remove a file".into(),
+            ));
+        }
         let profile = Config::get_profiles(cli.profile.as_slice());
         let write_profile = Config::resolve_write_profile(&profile, cli.write_profile.as_deref())?;
         tracing::debug!(
             "Removing secret '{}' from profile '{}'",
-            self.key,
+            self.key(),
             write_profile
         );
 
@@ -74,14 +95,14 @@ impl RemoveCommand {
             config
                 .profiles
                 .get(&write_profile)
-                .is_some_and(|p| p.secrets.contains_key(&self.key))
+                .is_some_and(|p| p.secrets.contains_key(self.key()))
         } else {
-            config.secrets.contains_key(&self.key)
+            config.secrets.contains_key(self.key())
         };
 
         if !found {
             return Err(FnoxError::SecretNotFound {
-                key: self.key.clone(),
+                key: self.key().to_string(),
                 profile: write_profile.clone(),
                 config_path: Some(target_path),
                 suggestion: None,
@@ -90,7 +111,7 @@ impl RemoveCommand {
 
         if self.dry_run {
             let dry_run_label = console::style("[dry-run]").yellow().bold();
-            let styled_key = console::style(&self.key).cyan();
+            let styled_key = console::style(self.key()).cyan();
             let styled_profile = console::style(&write_profile).magenta();
             let styled_path = console::style(target_path.display()).dim();
             let global_suffix = if self.global { " (global)" } else { "" };
@@ -106,17 +127,17 @@ impl RemoveCommand {
         } else {
             // Remove secret directly from the TOML document, preserving comments
             let removed =
-                Config::remove_secret_from_source(&self.key, &write_profile, &target_path)?;
+                Config::remove_secret_from_source(self.key(), &write_profile, &target_path)?;
             if !removed {
                 return Err(FnoxError::SecretNotFound {
-                    key: self.key.clone(),
+                    key: self.key().to_string(),
                     profile: Config::display_profiles(&profile),
                     config_path: Some(target_path),
                     suggestion: None,
                 });
             }
             let check = console::style("✓").green();
-            let styled_key = console::style(&self.key).cyan();
+            let styled_key = console::style(self.key()).cyan();
             let styled_profile = console::style(&write_profile).magenta();
             let global_suffix = if self.global { " (global)" } else { "" };
             if write_profile == "default" {

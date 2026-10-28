@@ -754,7 +754,7 @@
       },
       "edit": {
         "full_cmd": ["edit"],
-        "usage": "edit [KEY]",
+        "usage": "edit [--file <FILE>] [KEY]",
         "subcommands": {},
         "args": [
           {
@@ -768,6 +768,25 @@
           }
         ],
         "flags": [
+          {
+            "name": "file",
+            "usage": "--file <FILE>",
+            "help": "Edit the file stored for this path",
+            "help_long": "Edit the file stored for this path\n\nOpens its content in the editor and stores the change with the file's provider, in the profile that declares it.",
+            "help_first_line": "Edit the file stored for this path",
+            "short": [],
+            "long": ["file"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "FILE",
+              "usage": "<FILE>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            },
+            "conflicts": ["KEY"]
+          },
           {
             "name": "help",
             "usage": "-h --help",
@@ -817,7 +836,13 @@
             "lang": ""
           }
         ],
-        "headings": []
+        "headings": [],
+        "complete": {
+          "file": {
+            "name": "file",
+            "type_": "path"
+          }
+        }
       },
       "env": {
         "full_cmd": ["env"],
@@ -1289,17 +1314,177 @@
         ],
         "headings": []
       },
+      "files": {
+        "full_cmd": ["files"],
+        "usage": "files [SUBCOMMAND]",
+        "subcommands": {
+          "list": {
+            "full_cmd": ["files", "list"],
+            "usage": "files list",
+            "subcommands": {},
+            "args": [],
+            "flags": [
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
+              }
+            ],
+            "mounts": [],
+            "unknown_flags": null,
+            "hide": false,
+            "args_override_self": true,
+            "help": "List the files of the active profiles",
+            "help_long": "List the files of the active profiles\n\nPrints each path, the profile that declares it, and the provider that stores it. It does not read or decrypt the files.",
+            "name": "list",
+            "aliases": ["ls"],
+            "hidden_aliases": [],
+            "examples": [],
+            "headings": []
+          },
+          "write": {
+            "full_cmd": ["files", "write"],
+            "usage": "files write [-n --dry-run] [PATHS]…",
+            "subcommands": {},
+            "args": [
+              {
+                "name": "PATHS",
+                "usage": "[PATHS]…",
+                "help": "Files to write; omit to write all of them",
+                "help_first_line": "Files to write; omit to write all of them",
+                "required": false,
+                "double_dash": "Optional",
+                "var": true,
+                "hide": false
+              }
+            ],
+            "flags": [
+              {
+                "name": "dry-run",
+                "usage": "-n --dry-run",
+                "help": "List the files that would be written without resolving or writing them",
+                "help_first_line": "List the files that would be written without resolving or writing them",
+                "short": ["n"],
+                "long": ["dry-run"],
+                "hide": false,
+                "global": false
+              },
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
+              }
+            ],
+            "mounts": [],
+            "unknown_flags": null,
+            "hide": false,
+            "args_override_self": true,
+            "help": "Write the files to their paths",
+            "help_long": "Write the files to their paths\n\nDecrypts or fetches each file of the active profiles and writes it to the path that keys it, with mode `0600`, replacing whatever is there. A file whose content already matches is left alone. The content is written to a temporary file and renamed into place, so a symlink at the path is replaced, not followed. Every file is resolved before any is written.\n\nWith PATH arguments, only those files are written.",
+            "name": "write",
+            "aliases": [],
+            "hidden_aliases": [],
+            "examples": [
+              {
+                "code": "fnox files write",
+                "header": "Write every file of the profile",
+                "help": null,
+                "lang": ""
+              },
+              {
+                "code": "fnox -P work files write ~/.kube/config",
+                "header": "Write one file from the work profile",
+                "help": null,
+                "lang": ""
+              },
+              {
+                "code": "fnox files write --dry-run",
+                "header": "Show what would be written",
+                "help": null,
+                "lang": ""
+              }
+            ],
+            "headings": [],
+            "complete": {
+              "paths": {
+                "name": "paths",
+                "type_": "path"
+              }
+            }
+          }
+        },
+        "args": [],
+        "flags": [
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
+        "mounts": [],
+        "unknown_flags": null,
+        "hide": false,
+        "args_override_self": true,
+        "help": "Deploy files stored as secrets",
+        "help_long": "Deploy files stored as secrets\n\nA file is declared under `[files]` in the global config, keyed by the path it belongs at, and stored with the same providers as a secret. It is never an environment variable. Without a subcommand, `fnox files` lists them.\n\nStore a file with `fnox set --file PATH`, change it with `fnox edit --file PATH`, print it with `fnox get --file PATH`, and write every file of the active profiles to its path with `fnox files write`.",
+        "name": "files",
+        "aliases": [],
+        "hidden_aliases": [],
+        "after_help_long": "See also:\n- Secret files: https://fnox.jdx.dev/guide/files",
+        "examples": [
+          {
+            "code": "fnox files",
+            "header": "List the files of the active profiles",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox set --file ~/.kube/config",
+            "header": "Store a file under its path",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox files write",
+            "header": "Write the files to their paths",
+            "help": null,
+            "lang": ""
+          }
+        ],
+        "headings": []
+      },
       "get": {
         "full_cmd": ["get"],
-        "usage": "get [--base64-decode] [--refresh] <KEY>",
+        "usage": "get [FLAGS] [KEY]",
         "subcommands": {},
         "args": [
           {
             "name": "KEY",
-            "usage": "<KEY>",
+            "usage": "[KEY]",
             "help": "Secret to print",
             "help_first_line": "Secret to print",
-            "required": true,
+            "required": false,
             "double_dash": "Optional",
             "hide": false
           }
@@ -1314,6 +1499,25 @@
             "long": ["base64-decode"],
             "hide": false,
             "global": false
+          },
+          {
+            "name": "file",
+            "usage": "--file <FILE>",
+            "help": "Print the file stored for this path, verbatim, instead of a secret",
+            "help_long": "Print the file stored for this path, verbatim, instead of a secret\n\nLooks PATH up in the files of the active profiles (see `fnox files`).",
+            "help_first_line": "Print the file stored for this path, verbatim, instead of a secret",
+            "short": [],
+            "long": ["file"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "FILE",
+              "usage": "<FILE>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            },
+            "conflicts": ["KEY"]
           },
           {
             "name": "refresh",
@@ -1368,7 +1572,13 @@
             "lang": ""
           }
         ],
-        "headings": []
+        "headings": [],
+        "complete": {
+          "file": {
+            "name": "file",
+            "type_": "path"
+          }
+        }
       },
       "hook-env": {
         "full_cmd": ["hook-env"],
@@ -3294,8 +3504,8 @@
           {
             "name": "KEYS",
             "usage": "[KEYS]…",
-            "help": "Re-encrypt only these keys",
-            "help_first_line": "Re-encrypt only these keys",
+            "help": "Re-encrypt only these secrets; without them, files are re-encrypted too",
+            "help_first_line": "Re-encrypt only these secrets; without them, files are re-encrypted too",
             "required": false,
             "double_dash": "Optional",
             "var": true,
@@ -3375,7 +3585,7 @@
         "hide": false,
         "args_override_self": true,
         "help": "Re-encrypt stored secrets with the current provider settings",
-        "help_long": "Re-encrypt stored secrets with the current provider settings\n\nDecrypts each matching secret stored with an encryption provider, such as age or a KMS, encrypts it again with that provider's current configuration, and writes the new ciphertext to the file that defines it. Run it after changing a provider's recipients or key, with an identity that can still decrypt the existing values.\n\nfnox asks for confirmation unless you pass `--force`. Only the active profile's secrets are processed, so repeat with `-P` for other profiles. `fnox sync` caches on re-encrypted secrets are cleared; run `fnox sync` again to rebuild them.",
+        "help_long": "Re-encrypt stored secrets with the current provider settings\n\nDecrypts each matching secret stored with an encryption provider, such as age or a KMS, encrypts it again with that provider's current configuration, and writes the new ciphertext to the file that defines it. Run it after changing a provider's recipients or key, with an identity that can still decrypt the existing values.\n\nThe files of the active profiles (see `fnox files`) are re-encrypted too, unless you name secrets with KEYS.\n\nfnox asks for confirmation unless you pass `--force`. Only the active profile's secrets are processed, so repeat with `-P` for other profiles. `fnox sync` caches on re-encrypted secrets are cleared; run `fnox sync` again to rebuild them.",
         "name": "reencrypt",
         "aliases": [],
         "hidden_aliases": [],
@@ -3404,20 +3614,39 @@
       },
       "remove": {
         "full_cmd": ["remove"],
-        "usage": "remove [-g --global] [-n --dry-run] <KEY>",
+        "usage": "remove [FLAGS] [KEY]",
         "subcommands": {},
         "args": [
           {
             "name": "KEY",
-            "usage": "<KEY>",
+            "usage": "[KEY]",
             "help": "Secret to remove",
             "help_first_line": "Secret to remove",
-            "required": true,
+            "required": false,
             "double_dash": "Optional",
             "hide": false
           }
         ],
         "flags": [
+          {
+            "name": "file",
+            "usage": "--file <FILE>",
+            "help": "Remove the file stored for this path instead of a secret",
+            "help_long": "Remove the file stored for this path instead of a secret\n\nDeletes its entry from `[files]` in the global config. The file at PATH and any stored content file or remote value are left in place.",
+            "help_first_line": "Remove the file stored for this path instead of a secret",
+            "short": [],
+            "long": ["file"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "FILE",
+              "usage": "<FILE>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            },
+            "conflicts": ["KEY"]
+          },
           {
             "name": "global",
             "usage": "-g --global",
@@ -3481,7 +3710,13 @@
             "lang": ""
           }
         ],
-        "headings": []
+        "headings": [],
+        "complete": {
+          "file": {
+            "name": "file",
+            "type_": "path"
+          }
+        }
       },
       "sandbox-bridge": {
         "full_cmd": ["sandbox-bridge"],
@@ -3788,15 +4023,15 @@
       },
       "set": {
         "full_cmd": ["set"],
-        "usage": "set [FLAGS] <KEY> [VALUE]",
+        "usage": "set [FLAGS] [KEY] [VALUE]",
         "subcommands": {},
         "args": [
           {
             "name": "KEY",
-            "usage": "<KEY>",
+            "usage": "[KEY]",
             "help": "Secret name, used as the environment variable name",
             "help_first_line": "Secret name, used as the environment variable name",
-            "required": true,
+            "required": false,
             "double_dash": "Optional",
             "hide": false
           },
@@ -3909,6 +4144,25 @@
               "double_dash": "Optional",
               "hide": false
             }
+          },
+          {
+            "name": "file",
+            "usage": "--file <FILE>",
+            "help": "Store a file under the path it belongs at, instead of a secret",
+            "help_long": "Store a file under the path it belongs at, instead of a secret\n\nReads the current content of PATH (or `--from-file`) and records it under `[files]` in the global config, keyed by PATH. A file is never an environment variable; `fnox files write` puts it back at PATH.",
+            "help_first_line": "Store a file under the path it belongs at, instead of a secret",
+            "short": [],
+            "long": ["file"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "FILE",
+              "usage": "<FILE>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            },
+            "conflicts": ["KEY"]
           },
           {
             "name": "force",
@@ -4052,6 +4306,24 @@
             "requires": ["--generate"]
           },
           {
+            "name": "source",
+            "usage": "--source <SOURCE>",
+            "help": "With `--file`, keep the stored content in this file, relative to the global config directory, instead of in the config",
+            "help_first_line": "With `--file`, keep the stored content in this file, relative to the global config directory, instead of in the config",
+            "short": [],
+            "long": ["source"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "SOURCE",
+              "usage": "<SOURCE>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            },
+            "requires": ["--file"]
+          },
+          {
             "name": "help",
             "usage": "-h --help",
             "help": "Print help",
@@ -4114,6 +4386,10 @@
         ],
         "headings": [],
         "complete": {
+          "file": {
+            "name": "file",
+            "type_": "path"
+          },
           "from_file": {
             "name": "from_file",
             "type_": "path"
@@ -4880,7 +5156,7 @@
     }
   },
   "about": "Load secrets from encrypted files, password managers, and cloud secret stores",
-  "about_long": "Load secrets from encrypted files, password managers, and cloud secret stores\n\nfnox reads `fnox.toml` from the current directory and its parents, resolves each secret through the provider it names, and hands the values to your shell or to the command you run.\n\nCommands by task:\n\n - Read and run: get, list, exec, env, export, check\n - Store and migrate: set, remove, import, sync, reencrypt, edit\n - Configure: init, provider, plugin, profiles, config-files\n - Shell and tools: activate, deactivate, completion, tui, mcp\n - Diagnose: doctor, scan\n - Cache and broker: daemon, lease, proxy\n\nPut fnox options before the `--` that starts a child command, as in `fnox -P prod exec -- npm start`. Everything after `--` belongs to the child command.",
+  "about_long": "Load secrets from encrypted files, password managers, and cloud secret stores\n\nfnox reads `fnox.toml` from the current directory and its parents, resolves each secret through the provider it names, and hands the values to your shell or to the command you run.\n\nCommands by task:\n\n - Read and run: get, list, exec, env, export, check\n - Store and migrate: set, remove, import, sync, reencrypt, edit, files\n - Configure: init, provider, plugin, profiles, config-files\n - Shell and tools: activate, deactivate, completion, tui, mcp\n - Diagnose: doctor, scan\n - Cache and broker: daemon, lease, proxy\n\nPut fnox options before the `--` that starts a child command, as in `fnox -P prod exec -- npm start`. Everything after `--` belongs to the child command.",
   "after_help_long": "See also:\n- Quick start: https://fnox.jdx.dev/guide/quick-start\n- Configuration reference: https://fnox.jdx.dev/reference/configuration",
   "min_usage_version": "1.3",
   "examples": [

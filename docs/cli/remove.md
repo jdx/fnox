@@ -6,7 +6,7 @@ description: "Remove a secret from a config file. Usage, flags, and examples for
 
 # `fnox remove`
 
-- **Usage:** `fnox remove [-g --global] [-n --dry-run] <KEY>`
+- **Usage:** `fnox remove [FLAGS] [KEY]`
 - **Aliases:** `rm`, `delete`
 
 Remove a secret from a config file
@@ -15,9 +15,13 @@ Deletes KEY from the config file in the current directory, or the global config 
 
 ## Arguments
 
-- **`<KEY>`** — Secret to remove
+- **`[KEY]`** — Secret to remove
 
 ## Flags
+
+- **`--file <FILE>`** — Remove the file stored for this path instead of a secret
+
+  Deletes its entry from `[files]` in the global config. The file at PATH and any stored content file or remote value are left in place.
 
 - **`-g --global`** — Remove from the global config file (`~/.config/fnox/config.toml`)
 - **`-n --dry-run`** — Show what would be removed without changing the file

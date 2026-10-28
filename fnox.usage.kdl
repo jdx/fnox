@@ -11,7 +11,7 @@ fnox reads `fnox.toml` from the current directory and its parents, resolves each
 Commands by task:
 
  - Read and run: get, list, exec, env, export, check
- - Store and migrate: set, remove, import, sync, reencrypt, edit
+ - Store and migrate: set, remove, import, sync, reencrypt, edit, files
  - Configure: init, provider, plugin, profiles, config-files
  - Shell and tools: activate, deactivate, completion, tui, mcp
  - Diagnose: doctor, scan
@@ -296,8 +296,17 @@ The editor command may include arguments, such as `EDITOR="code --wait"`. Secret
 See also:
 - Configuration reference: https://fnox.jdx.dev/reference/configuration
 """#
+    flag --file help="Edit the file stored for this path" conflicts=KEY {
+        long_help #"""
+Edit the file stored for this path
+
+Opens its content in the editor and stores the change with the file's provider, in the profile that declares it.
+"""#
+        arg <FILE>
+    }
     flag "-h --help" help="Print help" action=help builtin=#true
     arg "[KEY]" help="Secret to edit on its own; omit to edit the whole config file"
+    complete file type=path
     example "fnox edit" header="Edit fnox.toml in your editor"
     example "EDITOR=nano fnox edit" header="Use a specific editor"
     example "EDITOR=\"code --wait\" fnox edit" header="Use an editor command with arguments"
@@ -447,6 +456,48 @@ Has no effect on output to stdout, which still contains the values.
     example "eval \"$(fnox export --format shell)\"" header="Load secrets into the current shell"
     example "(umask 077 && fnox export -o .env)" header="Write a private .env file"
 }
+cmd files help="Deploy files stored as secrets" {
+    long_help #"""
+Deploy files stored as secrets
+
+A file is declared under `[files]` in the global config, keyed by the path it belongs at, and stored with the same providers as a secret. It is never an environment variable. Without a subcommand, `fnox files` lists them.
+
+Store a file with `fnox set --file PATH`, change it with `fnox edit --file PATH`, print it with `fnox get --file PATH`, and write every file of the active profiles to its path with `fnox files write`.
+"""#
+    after_long_help #"""
+See also:
+- Secret files: https://fnox.jdx.dev/guide/files
+"""#
+    flag "-h --help" help="Print help" action=help builtin=#true
+    cmd list help="List the files of the active profiles" {
+        alias ls
+        long_help #"""
+List the files of the active profiles
+
+Prints each path, the profile that declares it, and the provider that stores it. It does not read or decrypt the files.
+"""#
+        flag "-h --help" help="Print help" action=help builtin=#true
+    }
+    cmd write help="Write the files to their paths" {
+        long_help #"""
+Write the files to their paths
+
+Decrypts or fetches each file of the active profiles and writes it to the path that keys it, with mode `0600`, replacing whatever is there. A file whose content already matches is left alone. The content is written to a temporary file and renamed into place, so a symlink at the path is replaced, not followed. Every file is resolved before any is written.
+
+With PATH arguments, only those files are written.
+"""#
+        flag "-n --dry-run" help="List the files that would be written without resolving or writing them"
+        flag "-h --help" help="Print help" action=help builtin=#true
+        arg "[PATHS]..." help="Files to write; omit to write all of them"
+        complete paths type=path
+        example "fnox files write" header="Write every file of the profile"
+        example "fnox -P work files write ~/.kube/config" header="Write one file from the work profile"
+        example "fnox files write --dry-run" header="Show what would be written"
+    }
+    example "fnox files" header="List the files of the active profiles"
+    example "fnox set --file ~/.kube/config" header="Store a file under its path"
+    example "fnox files write" header="Write the files to their paths"
+}
 cmd get help="Print the resolved value of one secret" {
     long_help #"""
 Print the resolved value of one secret
@@ -461,9 +512,18 @@ See also:
 - Missing secrets: https://fnox.jdx.dev/guide/missing-secrets
 """#
     flag --base64-decode help="Decode a base64-encoded value before printing it"
+    flag --file help="Print the file stored for this path, verbatim, instead of a secret" conflicts=KEY {
+        long_help #"""
+Print the file stored for this path, verbatim, instead of a secret
+
+Looks PATH up in the files of the active profiles (see `fnox files`).
+"""#
+        arg <FILE>
+    }
     flag --refresh help="Re-fetch the value from its provider instead of the daemon cache, and cache it"
     flag "-h --help" help="Print help" action=help builtin=#true
-    arg <KEY> help="Secret to print"
+    arg "[KEY]" help="Secret to print"
+    complete file type=path
     example "fnox get DATABASE_URL" header="Print a secret"
     example "fnox -P staging get DATABASE_URL" header="Read from another profile"
     example "fnox get TLS_CERT --base64-decode > cert.pem" header="Decode a base64 value into a file"
@@ -977,6 +1037,8 @@ Re-encrypt stored secrets with the current provider settings
 
 Decrypts each matching secret stored with an encryption provider, such as age or a KMS, encrypts it again with that provider's current configuration, and writes the new ciphertext to the file that defines it. Run it after changing a provider's recipients or key, with an identity that can still decrypt the existing values.
 
+The files of the active profiles (see `fnox files`) are re-encrypted too, unless you name secrets with KEYS.
+
 fnox asks for confirmation unless you pass `--force`. Only the active profile's secrets are processed, so repeat with `-P` for other profiles. `fnox sync` caches on re-encrypted secrets are cleared; run `fnox sync` again to rebuild them.
 """#
     after_long_help #"""
@@ -993,7 +1055,7 @@ See also:
         arg <FILTER>
     }
     flag "-h --help" help="Print help" action=help builtin=#true
-    arg "[KEYS]..." help="Re-encrypt only these keys"
+    arg "[KEYS]..." help="Re-encrypt only these secrets; without them, files are re-encrypted too"
     example "fnox reencrypt -p age --dry-run" header="Preview which secrets change"
     example "fnox reencrypt -p age" header="Re-encrypt every age secret"
     example "fnox -P staging reencrypt -p age --force" header="Re-encrypt another profile without a prompt"
@@ -1010,10 +1072,19 @@ Deletes KEY from the config file in the current directory, or the global config 
 See also:
 - Config files: https://fnox.jdx.dev/guide/config-files
 """#
+    flag --file help="Remove the file stored for this path instead of a secret" conflicts=KEY {
+        long_help #"""
+Remove the file stored for this path instead of a secret
+
+Deletes its entry from `[files]` in the global config. The file at PATH and any stored content file or remote value are left in place.
+"""#
+        arg <FILE>
+    }
     flag "-g --global" help="Remove from the global config file (`~/.config/fnox/config.toml`)"
     flag "-n --dry-run" help="Show what would be removed without changing the file"
     flag "-h --help" help="Print help" action=help builtin=#true
-    arg <KEY> help="Secret to remove"
+    arg "[KEY]" help="Secret to remove"
+    complete file type=path
     example "fnox remove OLD_TOKEN --dry-run" header="Preview the change"
     example "fnox remove OLD_TOKEN" header="Remove a secret"
     example "fnox -P staging remove OLD_TOKEN" header="Remove it from the staging profile"
@@ -1106,6 +1177,14 @@ See also:
     flag --default help="Fallback value to use when the secret cannot be resolved" {
         arg <DEFAULT>
     }
+    flag --file help="Store a file under the path it belongs at, instead of a secret" conflicts=KEY {
+        long_help #"""
+Store a file under the path it belongs at, instead of a secret
+
+Reads the current content of PATH (or `--from-file`) and records it under `[files]` in the global config, keyed by PATH. A file is never an environment variable; `fnox files write` puts it back at PATH.
+"""#
+        arg <FILE>
+    }
     flag --force help="Replace an existing secret when generating" requires=--generate
     flag --from-file help="Read the value from a UTF-8 file, verbatim" conflicts=VALUE {
         arg <FROM_FILE>
@@ -1141,8 +1220,11 @@ Uses the OS random number generator. The value is stored through the normal prov
         arg <LENGTH>
     }
     flag --show help="Print the generated value after storing it" requires=--generate
+    flag --source help="With `--file`, keep the stored content in this file, relative to the global config directory, instead of in the config" requires=--file {
+        arg <SOURCE>
+    }
     flag "-h --help" help="Print help" action=help builtin=#true
-    arg <KEY> help="Secret name, used as the environment variable name"
+    arg "[KEY]" help="Secret name, used as the environment variable name"
     arg "[VALUE]" help="Value to store; omit to read stdin or prompt" {
         long_help #"""
 Value to store; omit to read stdin or prompt
@@ -1150,6 +1232,7 @@ Value to store; omit to read stdin or prompt
 A value passed as an argument appears in shell history and process listings. Prefer stdin or the prompt for sensitive values.
 """#
     }
+    complete file type=path
     complete from_file type=path
     example "fnox set DATABASE_URL" header="Prompt for a value with hidden input"
     example "fnox set API_TOKEN --provider op" header="Store a value with a specific provider"

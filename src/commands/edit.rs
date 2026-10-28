@@ -62,6 +62,13 @@ const TEMP_FILE_HEADER: &str = "\
 pub struct EditCommand {
     /// Secret to edit on its own; omit to edit the whole config file
     pub key: Option<String>,
+
+    /// Edit the file stored for this path
+    ///
+    /// Opens its content in the editor and stores the change with the file's
+    /// provider, in the profile that declares it.
+    #[usage(long, conflicts = "key", value_hint = usage_rs::ValueHint::FilePath)]
+    pub file: Option<std::path::PathBuf>,
 }
 
 /// Split a Windows editor command on whitespace, where double quotes group words
@@ -117,6 +124,9 @@ struct SecretEntry {
 
 impl EditCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
+        if let Some(path) = &self.file {
+            return crate::commands::files::edit_file(cli, &config, path).await;
+        }
         if let Some(key) = &self.key {
             return self.edit_one(cli, config, key).await;
         }
@@ -361,7 +371,9 @@ impl EditCommand {
         };
         let write_profile = Config::resolve_write_profile(&profile, cli.write_profile.as_deref())?;
         let set = SetCommand {
-            key: key.to_string(),
+            key: Some(key.to_string()),
+            file: None,
+            source: None,
             value: None,
             description: None,
             global: false,
@@ -508,7 +520,7 @@ impl EditCommand {
     }
 
     /// Open `path` in the user's editor and wait for it to exit
-    fn open_editor(path: &std::path::Path) -> Result<()> {
+    pub(crate) fn open_editor(path: &std::path::Path) -> Result<()> {
         let editor = Self::editor_command();
         let (program, args) = Self::split_editor_command(&editor)?;
 

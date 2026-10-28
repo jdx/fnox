@@ -15,6 +15,7 @@ pub mod config_path;
 pub(crate) mod credential_command;
 pub mod env;
 pub mod error;
+pub mod files;
 pub mod http;
 pub(crate) mod keyring_store;
 pub mod lease;
