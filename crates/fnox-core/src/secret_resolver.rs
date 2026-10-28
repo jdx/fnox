@@ -628,6 +628,19 @@ fn rendered_default<'a>(
     crate::template::render(default, profile, &format!("default of secret '{key}'"))
 }
 
+/// The secrets whose values a secret's `default` interpolates.
+pub fn interpolated_references(
+    profile: &[String],
+    key: &str,
+    secret: &SecretConfig,
+) -> Vec<String> {
+    secret
+        .default
+        .as_deref()
+        .map(|default| default_references(profile, key, default))
+        .unwrap_or_default()
+}
+
 /// The `${NAME}` references in a secret's rendered default.
 ///
 /// A template that fails to render yields no references here. The error surfaces
