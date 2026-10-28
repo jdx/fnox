@@ -280,7 +280,7 @@ jobs:
       # lets an installer check a download against jdx/fnox's identity
       # rather than against a key this project would have to hold. See
       # https://packslip.dev.
-      - uses: jdx/packslip@7b32cd29a9240927882ee18b3db1dcfd8e0328b4 # v1.7.0
+      - uses: jdx/packslip@693d02c49f6e1c8a0cc797472dc3fa53f0a6c955 # v1.9.1
         env:
           # Override the workflow's PAT; Packslip only needs this job's token.
           GITHUB_TOKEN: ${{ github.token }}
@@ -308,7 +308,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+      - uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
         with:
           experimental: true
           cache: false
