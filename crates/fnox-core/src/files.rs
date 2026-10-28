@@ -439,10 +439,15 @@ fn existing_table<'a>(
 }
 
 /// The tables of `target` that can hold the files of `profile`. A profile file
-/// such as `fnox.work.toml` loads its top-level `[files]` as the profile's, so
-/// they come first there.
+/// such as `fnox.work.toml` loads its top-level `[files]` as the profile's, and
+/// a local file such as `fnox.local.toml` as the write profile's, so they come
+/// first there.
 fn candidate_profiles<'a>(target: &Path, profile: &'a str) -> Vec<&'a str> {
-    if crate::config::profile_name_from_file(target).as_deref() == Some(profile) {
+    let is_local = matches!(
+        target.file_name().and_then(|name| name.to_str()),
+        Some("fnox.local.toml" | ".fnox.local.toml")
+    );
+    if is_local || crate::config::profile_name_from_file(target).as_deref() == Some(profile) {
         vec!["default", profile]
     } else {
         vec![profile]
@@ -487,9 +492,11 @@ pub fn remove_entry(target: &Path, profile: &str, key: &str) -> Result<bool> {
         return Ok(false);
     }
     let mut doc = read_document(target)?;
+    // Every table, so an entry that sits in two of them is gone from both
     let removed = candidate_profiles(target, profile)
         .into_iter()
-        .any(|p| existing_table(&mut doc, p).is_some_and(|table| table.remove(key).is_some()));
+        .map(|p| existing_table(&mut doc, p).is_some_and(|table| table.remove(key).is_some()))
+        .fold(false, |any, removed| any || removed);
     if removed {
         write_document(target, &doc)?;
     }
@@ -687,5 +694,19 @@ mod tests {
         assert_eq!(text.matches("~/.a").count(), 1, "{text}");
         assert!(remove_entry(&target, "work", "~/.a").unwrap());
         assert!(remove_entry(&target, "work", "~/.b").unwrap());
+
+        // An entry declared in both tables is removed from both
+        fs::write(
+            &target,
+            "[files.\"~/.c\"]\nvalue = \"x\"\n[profiles.work.files.\"~/.c\"]\nvalue = \"y\"\n",
+        )
+        .unwrap();
+        assert!(remove_entry(&target, "work", "~/.c").unwrap());
+        assert!(!remove_entry(&target, "work", "~/.c").unwrap());
+
+        // A local file's top-level table holds the write profile's entries
+        let local = dir.path().join("fnox.local.toml");
+        fs::write(&local, "[files.\"~/.d\"]\nvalue = \"x\"\n").unwrap();
+        assert!(remove_entry(&local, "work", "~/.d").unwrap());
     }
 }
