@@ -952,7 +952,13 @@ EOT
 	EDITOR="$TEST_DIR/new-editor.sh" run fnox edit SYNCED
 	assert_success
 
-	rm fnox.local.toml
+	# The old cache must not keep shadowing the shared value
+	run fnox get SYNCED
+	assert_success
+	assert_output "new value"
+	run grep -c SYNCED fnox.local.toml
+	assert_output "0"
+	mv fnox.local.toml fnox.local.toml.off
 	run fnox get SYNCED
 	assert_success
 	assert_output "new value"
@@ -1000,4 +1006,54 @@ EOT
 	assert_output "new value"
 	run grep -c 'providers' fnox.toml
 	assert_output "0"
+}
+
+@test "edit KEY encrypts a parent project's secret with the parent's providers" {
+	recipient="$(grep 'public key:' "$AGE_KEY_FILE" | cut -d: -f2- | xargs)"
+	other_key="$TEST_DIR/other-key.txt"
+	age-keygen -o "$other_key" 2>/dev/null
+	other_recipient="$(grep 'public key:' "$other_key" | cut -d: -f2- | xargs)"
+	printf 'old value' | fnox set SHARED --provider age
+	mkdir app
+	cat >app/fnox.toml <<EOT
+[providers.age]
+type = "age"
+recipients = ["$other_recipient"]
+EOT
+	cd app || exit 1
+
+	printf '#!/bin/sh\nprintf "new value" >"$1"\n' >"$TEST_DIR/new-editor.sh"
+	chmod +x "$TEST_DIR/new-editor.sh"
+	EDITOR="$TEST_DIR/new-editor.sh" run fnox edit SHARED
+	assert_success
+
+	cd "$TEST_DIR" || exit 1
+	run grep -c "$other_recipient" fnox.toml
+	assert_output "0"
+	run fnox get SHARED
+	assert_success
+	assert_output "new value"
+}
+
+@test "edit KEY writes to a parent project's profile file for its profile" {
+	cat >fnox.toml <<'EOT'
+[providers.plain]
+type = "plain"
+EOT
+	cat >fnox.prod.toml <<'EOT'
+[secrets]
+KEY = { provider = "plain", value = "old" }
+EOT
+	mkdir app
+	printf '[secrets]\n' >app/fnox.toml
+	cd app || exit 1
+
+	printf '#!/bin/sh\nprintf new >"$1"\n' >"$TEST_DIR/new-editor.sh"
+	chmod +x "$TEST_DIR/new-editor.sh"
+	EDITOR="$TEST_DIR/new-editor.sh" run fnox -P prod edit KEY
+	assert_success
+
+	[ ! -e fnox.prod.toml ]
+	run grep -F 'value = "new"' ../fnox.prod.toml
+	assert_success
 }

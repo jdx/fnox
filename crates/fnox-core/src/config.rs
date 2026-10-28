@@ -167,7 +167,7 @@ pub fn is_profile_file(path: &Path) -> bool {
 /// Extract the profile declared by a profile-specific config filename.
 /// `default` is excluded because `fnox.default.toml` is not a supported
 /// profile overlay.
-fn profile_name_from_file(path: &Path) -> Option<String> {
+pub fn profile_name_from_file(path: &Path) -> Option<String> {
     let name = path.file_name()?.to_str()?;
     let name = name.strip_prefix('.').unwrap_or(name);
     let profile = name.strip_prefix("fnox.")?.strip_suffix(".toml")?;
@@ -1013,11 +1013,16 @@ impl Config {
         // Start from current working directory and search upwards
         let current_dir = env::current_dir()
             .map_err(|e| FnoxError::Config(format!("Failed to get current directory: {}", e)))?;
+        Self::load_discovered_from(&current_dir, include_local_sync)
+    }
 
+    /// Load the configuration found from `current_dir` upwards, as `fnox` would
+    /// see it when run there.
+    pub fn load_discovered_from(current_dir: &Path, include_local_sync: bool) -> Result<Self> {
         let requested_profiles = Self::get_profiles(&[]);
         let mut profiles = requested_profiles.clone();
         let (mut config, mut found) =
-            Self::load_recursive(&current_dir, false, &profiles, include_local_sync)?;
+            Self::load_recursive(current_dir, false, &profiles, include_local_sync)?;
 
         // Profile inheritance can select additional profile-specific files. Keep
         // loading until discovering those files no longer expands the stack.
@@ -1028,7 +1033,7 @@ impl Config {
             }
             profiles = expanded;
             (config, found) =
-                Self::load_recursive(&current_dir, false, &profiles, include_local_sync)?;
+                Self::load_recursive(current_dir, false, &profiles, include_local_sync)?;
         }
 
         if !found {
@@ -1048,7 +1053,7 @@ impl Config {
 
         // Find the nearest directory to cwd that contains a config file.
         // This is the project root used for scoping the lease ledger.
-        config.project_dir = Self::find_project_dir(&current_dir, &profiles);
+        config.project_dir = Self::find_project_dir(current_dir, &profiles);
         Ok(config)
     }
 
