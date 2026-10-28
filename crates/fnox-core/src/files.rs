@@ -439,15 +439,10 @@ fn existing_table<'a>(
 }
 
 /// The tables of `target` that can hold the files of `profile`. A profile file
-/// such as `fnox.work.toml` loads its top-level `[files]` as the profile's, and
-/// a local file such as `fnox.local.toml` as the write profile's, so they come
-/// first there.
+/// such as `fnox.work.toml` loads its top-level `[files]` as the profile's, so
+/// they come first there. Other files keep the default and each profile apart.
 fn candidate_profiles<'a>(target: &Path, profile: &'a str) -> Vec<&'a str> {
-    let is_local = matches!(
-        target.file_name().and_then(|name| name.to_str()),
-        Some("fnox.local.toml" | ".fnox.local.toml")
-    );
-    if is_local || crate::config::profile_name_from_file(target).as_deref() == Some(profile) {
+    if crate::config::profile_name_from_file(target).as_deref() == Some(profile) {
         vec!["default", profile]
     } else {
         vec![profile]
@@ -705,10 +700,5 @@ mod tests {
         .unwrap();
         assert!(remove_entry(&target, "work", "~/.c").unwrap());
         assert!(!remove_entry(&target, "work", "~/.c").unwrap());
-
-        // A local file's top-level table holds the write profile's entries
-        let local = dir.path().join("fnox.local.toml");
-        fs::write(&local, "[files.\"~/.d\"]\nvalue = \"x\"\n").unwrap();
-        assert!(remove_entry(&local, "work", "~/.d").unwrap());
     }
 }
