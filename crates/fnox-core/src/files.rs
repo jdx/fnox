@@ -540,6 +540,21 @@ pub fn write_file(path: &Path, content: &str) -> Result<WriteOutcome> {
     Ok(outcome)
 }
 
+/// The path to write the `source` file of an entry to. A symlink there, as a
+/// dotfiles manager makes it, is written through so the link keeps pointing at
+/// the new content; one that cannot be resolved is an error rather than replaced.
+pub fn resolve_source(path: &Path) -> Result<PathBuf> {
+    if !is_symlink(path) {
+        return Ok(path.to_path_buf());
+    }
+    fs::canonicalize(path).map_err(|e| {
+        FnoxError::Config(format!(
+            "Source '{}' is a symlink that cannot be resolved: {e}",
+            path.display()
+        ))
+    })
+}
+
 fn is_symlink(path: &Path) -> bool {
     path.symlink_metadata()
         .is_ok_and(|meta| meta.file_type().is_symlink())

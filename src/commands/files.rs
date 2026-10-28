@@ -335,6 +335,9 @@ pub async fn put_file(
         }
     }
 
+    // Write through a linked source, and refuse a dangling link before storing
+    let source_file = source_file.map(|f| files::resolve_source(&f)).transpose()?;
+
     if opts.dry_run {
         let label = console::style("[dry-run]").yellow().bold();
         println!(
@@ -349,10 +352,7 @@ pub async fn put_file(
     let stored = files::store_content(&write_stack, &provider_name, &remote_key, content).await?;
     match &source_file {
         Some(source_file) => {
-            // Write through a symlink, as a dotfiles manager makes it, so the
-            // link keeps pointing at the updated content
-            let resolved = std::fs::canonicalize(source_file).unwrap_or(source_file.clone());
-            files::write_file(&resolved, &stored)?;
+            files::write_file(source_file, &stored)?;
         }
         None => file.value = Some(stored),
     }

@@ -212,6 +212,39 @@ teardown() {
 	assert_output "token: def"
 }
 
+@test "files: reencrypt writes through a linked source" {
+	age-keygen -o "$HOME/key2.txt" 2>/dev/null
+	new_public="$(grep 'public key:' "$HOME/key2.txt" | cut -d: -f2- | xargs)"
+	new_secret="$(grep 'AGE-SECRET-KEY' "$HOME/key2.txt")"
+
+	printf 'token: abc\n' >"$HOME/source"
+	fnox set --file ~/.kube/config --from-file "$HOME/source" --source files/kube.age
+	mkdir -p "$HOME/dotfiles"
+	mv "$FNOX_CONFIG_DIR/files/kube.age" "$HOME/dotfiles/kube.age"
+	ln -s "$HOME/dotfiles/kube.age" "$FNOX_CONFIG_DIR/files/kube.age"
+
+	sed -i.bak "s|recipients = .*|recipients = [\"$new_public\"]|" "$FNOX_CONFIG_DIR/config.toml"
+	run fnox reencrypt --force
+	assert_success
+
+	[ -L "$FNOX_CONFIG_DIR/files/kube.age" ]
+	FNOX_AGE_KEY="$new_secret" run fnox get --file ~/.kube/config
+	assert_success
+	assert_output "token: abc"
+}
+
+@test "files: set refuses a linked source whose target is missing" {
+	printf 'token: abc\n' >"$HOME/source"
+	fnox set --file ~/.kube/config --from-file "$HOME/source" --source files/kube.age
+	rm "$FNOX_CONFIG_DIR/files/kube.age"
+	ln -s "$HOME/dotfiles/missing.age" "$FNOX_CONFIG_DIR/files/kube.age"
+
+	run fnox set --file ~/.kube/config --from-file "$HOME/source"
+	assert_failure
+	assert_output --partial "cannot be resolved"
+	[ -L "$FNOX_CONFIG_DIR/files/kube.age" ]
+}
+
 @test "files: a project config linked to the config directory cannot declare files" {
 	cat >"$FNOX_CONFIG_DIR/project.toml" <<'TOML'
 root = true

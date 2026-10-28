@@ -227,7 +227,7 @@ impl ReencryptCommand {
                         .parent()
                         .map(|dir| dir.join(source))
                         .unwrap_or_else(|| PathBuf::from(source));
-                    crate::files::write_file(&path, encrypted)?;
+                    crate::files::write_file(&crate::files::resolve_source(&path)?, encrypted)?;
                 }
                 None => file.value = Some(encrypted.clone()),
             }
