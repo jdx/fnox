@@ -15,13 +15,14 @@ use crate::lease_backends::LeaseBackendConfig;
 use crate::secret_filter::SecretFilter;
 use crate::suggest::find_similar;
 use indexmap::IndexMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 // The documents `fnox env --json` prints live in fnox-client, so that other
 // programs can read them without depending on fnox-core.
 pub use fnox_client::document::{
     DescribeDocument, ENV_SCHEMA, EnvDocument, EnvScope, ErrorBody, ErrorDocument, ErrorKind,
-    Injectable, KeyInfo, KeyKind, KeyRejection, NotInjectable, SecretValue,
+    Injectable, KeyInfo, KeyKind, KeyRejection, KeySource, NotInjectable, SecretValue,
 };
 
 /// Whether a secret with this `env` mode is injected for `scope`.
@@ -584,12 +585,40 @@ pub fn env_document(scope: EnvScope, profile: Vec<String>, env: ChildEnv) -> Env
     )
 }
 
+/// The files that define each key, for [`describe`].
+#[derive(Default)]
+pub struct DefinitionFiles {
+    /// The config file of each lease backend, by backend name.
+    leases: HashMap<String, PathBuf>,
+    /// [`Config::global_config_files`]
+    global: HashSet<PathBuf>,
+}
+
+impl DefinitionFiles {
+    pub fn new(config: &Config, profile: &[String]) -> Result<Self> {
+        Ok(Self {
+            leases: config.get_lease_sources(profile)?,
+            global: Config::global_config_files(),
+        })
+    }
+
+    fn source(&self, path: Option<&Path>) -> Option<KeySource> {
+        let path = path?;
+        let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+        Some(KeySource::new(
+            path.to_path_buf(),
+            self.global.contains(&canonical),
+        ))
+    }
+}
+
 /// Describes the keys a plan could provide, without resolving anything.
 ///
 /// With `requested` (already validated by [`select`]) only those keys are listed.
 pub fn describe(
     secrets: &IndexMap<String, SecretConfig>,
     leases: &IndexMap<String, LeaseBackendConfig>,
+    files: &DefinitionFiles,
     requested: Option<&[String]>,
 ) -> Vec<KeyInfo> {
     // The last lease that produces a key wins, as in `fnox exec`.
@@ -620,6 +649,11 @@ pub fn describe(
                 shell: env.is_some_and(EnvMode::in_shell),
             },
         )
+        // A lease key is set by the lease, whatever secret shares its name.
+        .with_source(match lease {
+            Some(lease) => files.source(files.leases.get(lease).map(PathBuf::as_path)),
+            None => files.source(secret.and_then(|secret| secret.source_path.as_deref())),
+        })
     };
 
     match requested {
@@ -1277,7 +1311,7 @@ create_command = "true"
     #[test]
     fn describe_lists_every_key_with_where_it_may_be_injected() {
         let (secrets, leases) = fixture(BASE);
-        let infos = describe(&secrets, &leases, None);
+        let infos = describe(&secrets, &leases, &DefinitionFiles::default(), None);
         let summary: Vec<_> = infos
             .iter()
             .map(|i| {

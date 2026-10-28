@@ -129,9 +129,11 @@ impl EnvCommand {
         };
 
         if self.describe {
+            let files = child_env::DefinitionFiles::new(&config, &profile)
+                .map_err(|e| failure(ErrorKind::Config, e))?;
             let doc = DescribeDocument::new(
                 profile,
-                child_env::describe(&secrets, &leases, sel.requested.as_deref()),
+                child_env::describe(&secrets, &leases, &files, sel.requested.as_deref()),
                 child_env::dynamic_leases(&leases),
                 crate::daemon::config_enables_daemon(&config),
             );

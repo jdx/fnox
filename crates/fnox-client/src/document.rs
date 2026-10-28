@@ -9,6 +9,7 @@
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::path::PathBuf;
 
 /// Schema version of the documents below. Any breaking change increments it.
 pub const ENV_SCHEMA: u32 = 1;
@@ -174,6 +175,25 @@ pub struct Injectable {
     pub shell: bool,
 }
 
+/// The config file that defines a key, in a [`KeyInfo`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct KeySource {
+    /// The file whose definition wins: the secret's, or for a lease key the
+    /// lease backend's.
+    pub path: PathBuf,
+    /// Whether that file is fnox's global config or a file it imports. Every
+    /// project inherits those keys, so a tool that grants keys per project can
+    /// tell the user's own keys from the project's.
+    pub global: bool,
+}
+
+impl KeySource {
+    pub fn new(path: PathBuf, global: bool) -> Self {
+        Self { path, global }
+    }
+}
+
 /// One key in a [`DescribeDocument`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -189,6 +209,10 @@ pub struct KeyInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub injectable: Injectable,
+    /// Absent in documents from fnox versions that predate this field, and for
+    /// a key fnox cannot attribute to a file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<KeySource>,
 }
 
 impl KeyInfo {
@@ -209,7 +233,13 @@ impl KeyInfo {
             as_file,
             description,
             injectable,
+            source: None,
         }
+    }
+
+    pub fn with_source(mut self, source: Option<KeySource>) -> Self {
+        self.source = source;
+        self
     }
 }
 
@@ -375,6 +405,7 @@ mod tests {
                         exec: true,
                         shell: true,
                     },
+                    source: Some(KeySource::new("/app/fnox.toml".into(), false)),
                 },
                 KeyInfo {
                     key: "STRIPE_KEY".to_string(),
@@ -387,6 +418,7 @@ mod tests {
                         exec: true,
                         shell: false,
                     },
+                    source: None,
                 },
                 KeyInfo {
                     key: "SIGNING_KEY".to_string(),
@@ -399,6 +431,7 @@ mod tests {
                         exec: false,
                         shell: false,
                     },
+                    source: None,
                 },
                 KeyInfo {
                     key: "AWS_ACCESS_KEY_ID".to_string(),
@@ -411,6 +444,10 @@ mod tests {
                         exec: true,
                         shell: false,
                     },
+                    source: Some(KeySource::new(
+                        "/home/me/.config/fnox/config.toml".into(),
+                        true,
+                    )),
                 },
             ],
             dynamic_leases: keys(&["build_token"]),
@@ -418,15 +455,13 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&doc).unwrap(),
-            r#"{"schema":1,"fnox_version":"1.38.0","profile":["default"],"keys":[{"key":"DATABASE_URL","kind":"secret","env":true,"as_file":false,"description":"Main DB","injectable":{"exec":true,"shell":true}},{"key":"STRIPE_KEY","kind":"secret","env":"exec","as_file":false,"injectable":{"exec":true,"shell":false}},{"key":"SIGNING_KEY","kind":"secret","env":false,"as_file":false,"injectable":{"exec":false,"shell":false}},{"key":"AWS_ACCESS_KEY_ID","kind":"lease","lease":"aws","injectable":{"exec":true,"shell":false}}],"dynamic_leases":["build_token"],"daemon_enabled":false}"#
+            r#"{"schema":1,"fnox_version":"1.38.0","profile":["default"],"keys":[{"key":"DATABASE_URL","kind":"secret","env":true,"as_file":false,"description":"Main DB","injectable":{"exec":true,"shell":true},"source":{"path":"/app/fnox.toml","global":false}},{"key":"STRIPE_KEY","kind":"secret","env":"exec","as_file":false,"injectable":{"exec":true,"shell":false}},{"key":"SIGNING_KEY","kind":"secret","env":false,"as_file":false,"injectable":{"exec":false,"shell":false}},{"key":"AWS_ACCESS_KEY_ID","kind":"lease","lease":"aws","injectable":{"exec":true,"shell":false},"source":{"path":"/home/me/.config/fnox/config.toml","global":true}}],"dynamic_leases":["build_token"],"daemon_enabled":false}"#
         );
-        // A document from a fnox that predates the field has none.
-        let old = r#"{"schema":1,"fnox_version":"1.39.0","profile":["default"],"keys":[],"dynamic_leases":[]}"#;
-        assert!(
-            !serde_json::from_str::<DescribeDocument>(old)
-                .unwrap()
-                .daemon_enabled
-        );
+        // A document from a fnox that predates the fields has none.
+        let old = r#"{"schema":1,"fnox_version":"1.39.0","profile":["default"],"keys":[{"key":"A","kind":"secret","injectable":{"exec":true,"shell":true}}],"dynamic_leases":[]}"#;
+        let old = serde_json::from_str::<DescribeDocument>(old).unwrap();
+        assert!(!old.daemon_enabled);
+        assert_eq!(old.keys[0].source, None);
     }
 
     #[test]
