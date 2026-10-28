@@ -423,11 +423,43 @@ fn table_for<'a>(doc: &'a mut toml_edit::DocumentMut, profile: &str) -> &'a mut 
     }
 }
 
+/// The table of `doc` holding the files of `profile`, if there is one
+fn existing_table<'a>(
+    doc: &'a mut toml_edit::DocumentMut,
+    profile: &str,
+) -> Option<&'a mut dyn toml_edit::TableLike> {
+    let table = if profile == "default" {
+        doc.get_mut("files")
+    } else {
+        doc.get_mut("profiles")
+            .and_then(|p| p.get_mut(profile))
+            .and_then(|p| p.get_mut("files"))
+    };
+    table.and_then(|t| t.as_table_like_mut())
+}
+
+/// The tables of `target` that can hold the files of `profile`. A profile file
+/// such as `fnox.work.toml` loads its top-level `[files]` as the profile's, so
+/// they come first there.
+fn candidate_profiles<'a>(target: &Path, profile: &'a str) -> Vec<&'a str> {
+    if crate::config::profile_name_from_file(target).as_deref() == Some(profile) {
+        vec!["default", profile]
+    } else {
+        vec![profile]
+    }
+}
+
 /// Record `file` under `key` in the `files` table of `profile` in `target`
 pub fn save_entry(target: &Path, profile: &str, key: &str, file: &FileConfig) -> Result<()> {
     use toml_edit::{InlineTable, Item, Value};
     let mut doc = read_document(target)?;
-    let table = table_for(&mut doc, profile);
+    let candidates = candidate_profiles(target, profile);
+    let holder = candidates
+        .iter()
+        .copied()
+        .find(|p| existing_table(&mut doc, p).is_some_and(|t| t.contains_key(key)))
+        .unwrap_or(candidates[0]);
+    let table = table_for(&mut doc, holder);
 
     let mut inline = InlineTable::new();
     let fields = [
@@ -455,16 +487,9 @@ pub fn remove_entry(target: &Path, profile: &str, key: &str) -> Result<bool> {
         return Ok(false);
     }
     let mut doc = read_document(target)?;
-    let table = if profile == "default" {
-        doc.get_mut("files")
-    } else {
-        doc.get_mut("profiles")
-            .and_then(|p| p.get_mut(profile))
-            .and_then(|p| p.get_mut("files"))
-    };
-    let removed = table
-        .and_then(|t| t.as_table_like_mut())
-        .is_some_and(|t| t.remove(key).is_some());
+    let removed = candidate_profiles(target, profile)
+        .into_iter()
+        .any(|p| existing_table(&mut doc, p).is_some_and(|table| table.remove(key).is_some()));
     if removed {
         write_document(target, &doc)?;
     }
@@ -639,5 +664,28 @@ mod tests {
         assert!(parsed.profiles["work"].files.contains_key("~/.kube/config"));
         assert!(remove_entry(&target, "work", "~/.kube/config").unwrap());
         assert!(!remove_entry(&target, "work", "~/.kube/config").unwrap());
+    }
+
+    #[test]
+    fn profile_files_keep_their_entries_in_the_top_level_table() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("fnox.work.toml");
+        fs::write(
+            &target,
+            "[files.\"~/.a\"]\nprovider = \"age\"\nvalue = \"old\"\n",
+        )
+        .unwrap();
+        let file = FileConfig {
+            provider: Some("age".into()),
+            value: Some("new".into()),
+            ..Default::default()
+        };
+        save_entry(&target, "work", "~/.a", &file).unwrap();
+        save_entry(&target, "work", "~/.b", &file).unwrap();
+        let text = fs::read_to_string(&target).unwrap();
+        assert!(!text.contains("profiles"), "{text}");
+        assert_eq!(text.matches("~/.a").count(), 1, "{text}");
+        assert!(remove_entry(&target, "work", "~/.a").unwrap());
+        assert!(remove_entry(&target, "work", "~/.b").unwrap());
     }
 }
