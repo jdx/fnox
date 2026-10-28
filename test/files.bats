@@ -442,3 +442,23 @@ TOML
 	run grep -F '.localfile' "$FNOX_CONFIG_DIR/fnox.local.toml"
 	assert_failure
 }
+
+@test "files: declining the file prompt cancels reencrypt as a whole" {
+	age-keygen -o "$HOME/key2.txt" 2>/dev/null
+	new_public="$(grep 'public key:' "$HOME/key2.txt" | cut -d: -f2- | xargs)"
+
+	printf 'token: abc\n' >"$HOME/source"
+	fnox set --file ~/.kube/config --from-file "$HOME/source"
+	fnox set SECRET_ONE secret-value
+
+	sed -i.bak "s|recipients = .*|recipients = [\"$new_public\"]|" "$FNOX_CONFIG_DIR/config.toml"
+	cp "$FNOX_CONFIG_DIR/config.toml" "$HOME/config.recipients"
+	# Only one answer is given: a second prompt would read end of input and cancel too,
+	# so the output must hold a single prompt
+	run bash -c "printf 'n\n' | fnox reencrypt"
+	assert_success
+	assert_output --partial "cancelled"
+	[ "$(grep -c 'Continue?' <<<"$output")" -eq 1 ]
+	run diff "$FNOX_CONFIG_DIR/config.toml" "$HOME/config.recipients"
+	assert_success
+}

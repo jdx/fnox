@@ -58,23 +58,52 @@ pub struct ReencryptCommand {
     filter: Option<String>,
 }
 
+/// What re-encrypting the files did
+#[derive(Debug, Default)]
+struct FilesOutcome {
+    /// How many files were selected
+    selected: usize,
+    /// The user answered no, which cancels the whole command
+    cancelled: bool,
+}
+
+impl FilesOutcome {
+    fn selected(selected: usize) -> Self {
+        Self {
+            selected,
+            cancelled: false,
+        }
+    }
+
+    fn cancelled(selected: usize) -> Self {
+        Self {
+            selected,
+            cancelled: true,
+        }
+    }
+}
+
 impl ReencryptCommand {
     pub async fn run(&self, cli: &Cli, merged_config: Config) -> Result<()> {
         // KEYS name secrets, so they leave the files out
         let files = if self.keys.is_empty() {
             self.reencrypt_files(cli, &merged_config).await?
         } else {
-            0
+            FilesOutcome::default()
         };
-        self.reencrypt_secrets(cli, merged_config, files > 0).await
+        if files.cancelled {
+            return Ok(());
+        }
+        self.reencrypt_secrets(cli, merged_config, files.selected > 0)
+            .await
     }
 
-    /// Re-encrypt the files of the active profiles; returns how many were selected
-    async fn reencrypt_files(&self, cli: &Cli, config: &Config) -> Result<usize> {
+    /// Re-encrypt the files of the active profiles
+    async fn reencrypt_files(&self, cli: &Cli, config: &Config) -> Result<FilesOutcome> {
         let profile = Config::get_profiles(cli.profile.as_slice());
         let entries = config.get_files(&profile)?;
         if entries.is_empty() {
-            return Ok(0);
+            return Ok(FilesOutcome::default());
         }
         // Files are encrypted with the providers of the global config only
         let trusted = Config::load_global_only()?;
@@ -127,7 +156,7 @@ impl ReencryptCommand {
             }
         }
         if selected.is_empty() {
-            return Ok(0);
+            return Ok(FilesOutcome::default());
         }
 
         let profile_display = Config::display_profiles(&profile);
@@ -145,7 +174,7 @@ impl ReencryptCommand {
                     console::style(provider_name).green()
                 );
             }
-            return Ok(selected.len());
+            return Ok(FilesOutcome::selected(selected.len()));
         }
         if !self.force {
             println!(
@@ -163,7 +192,7 @@ impl ReencryptCommand {
                 .map_err(|e| FnoxError::StdinReadFailed { source: e })?;
             if !response.trim().to_lowercase().starts_with('y') {
                 println!("Re-encryption cancelled");
-                return Ok(selected.len());
+                return Ok(FilesOutcome::cancelled(selected.len()));
             }
         }
 
@@ -205,7 +234,7 @@ impl ReencryptCommand {
             crate::files::save_entry(&declared_in, &entry.profile, &entry.key, &file)?;
         }
         println!("Re-encrypted {} files", updated.len());
-        Ok(selected.len())
+        Ok(FilesOutcome::selected(selected.len()))
     }
 
     async fn reencrypt_secrets(
