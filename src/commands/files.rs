@@ -183,11 +183,19 @@ fn require_entry(config: &Config, profiles: &[String], path: &Path) -> Result<Fi
     Err(file_not_found(config, profiles, path, &entries))
 }
 
+/// Settings that only change how fnox authenticates to a store, not which
+/// store or item a key names
+fn is_access_setting(name: &str) -> bool {
+    matches!(name, "auth_command" | "daemon_cache")
+        || ["token", "password", "secret"]
+            .iter()
+            .any(|word| name.contains(word))
+}
+
 fn strip_access_settings(value: &mut serde_json::Value) {
     match value {
         serde_json::Value::Object(map) => {
-            map.remove("auth_command");
-            map.remove("daemon_cache");
+            map.retain(|name, _| !is_access_setting(name));
             map.values_mut().for_each(strip_access_settings);
         }
         serde_json::Value::Array(items) => items.iter_mut().for_each(strip_access_settings),
