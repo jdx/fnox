@@ -1,6 +1,27 @@
 # Changelog
 
-## [1.43.0](https://github.com/jdx/fnox/compare/v1.42.1..v1.43.0) - 2026-10-25
+## [1.44.0](https://github.com/jdx/fnox/compare/v1.43.0..v1.44.0) - 2026-10-28
+
+### 🚀 Features
+
+- **(edit)** edit one secret and accept editor arguments by [@jdx](https://github.com/jdx) in [#1045](https://github.com/jdx/fnox/pull/1045)
+- **(files)** store whole files by path and write them with fnox files write by [@jdx](https://github.com/jdx) in [#1056](https://github.com/jdx/fnox/pull/1056)
+
+### 🐛 Bug Fixes
+
+- **(edit)** write the edited secret to the file that defines it by [@jdx](https://github.com/jdx) in [#1048](https://github.com/jdx/fnox/pull/1048)
+
+### 📦️ Dependency Updates
+
+- update rust crate usage-rs to v7.1.3 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1046](https://github.com/jdx/fnox/pull/1046)
+- update rust crates by [@renovate[bot]](https://github.com/renovate[bot]) in [#1053](https://github.com/jdx/fnox/pull/1053)
+- update github actions by [@renovate[bot]](https://github.com/renovate[bot]) in [#1051](https://github.com/jdx/fnox/pull/1051)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1054](https://github.com/jdx/fnox/pull/1054)
+- update jdx/mise-action action to v5.2.2 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1055](https://github.com/jdx/fnox/pull/1055)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1058](https://github.com/jdx/fnox/pull/1058)
+- update github actions by [@renovate[bot]](https://github.com/renovate[bot]) in [#1057](https://github.com/jdx/fnox/pull/1057)
+
+## [1.43.0](https://github.com/jdx/fnox/compare/v1.42.1..v1.43.0) - 2026-10-26
 
 ### 🚀 Features
 
@@ -336,7 +357,7 @@
 
 - **(azure-sm)** accept missing connection probe by [@any-victor](https://github.com/any-victor) in [#829](https://github.com/jdx/fnox/pull/829)
 - **(config)** clarify ci matrix job names by [@jdx](https://github.com/jdx) in [#845](https://github.com/jdx/fnox/pull/845)
-- **(config)** expand imports when loading the global config by [@JoacoEsteban](https://github.com/JoacoEsteban) in [#818](https://github.com/jdx/fnox/pull/818)
+- **(config)** expand imports when loading the global config by [@joacoesteban](https://github.com/joacoesteban) in [#818](https://github.com/jdx/fnox/pull/818)
 - **(env)** preserve dependencies across daemon cache hits by [@jdx](https://github.com/jdx) in [#838](https://github.com/jdx/fnox/pull/838)
 - **(env)** retry incomplete shell secret loads by [@jdx](https://github.com/jdx) in [#839](https://github.com/jdx/fnox/pull/839)
 
@@ -377,7 +398,7 @@
 ### New Contributors
 
 - @any-victor made their first contribution in [#829](https://github.com/jdx/fnox/pull/829)
-- @JoacoEsteban made their first contribution in [#818](https://github.com/jdx/fnox/pull/818)
+- @joacoesteban made their first contribution in [#818](https://github.com/jdx/fnox/pull/818)
 
 ## [1.35.1](https://github.com/jdx/fnox/compare/v1.35.0..v1.35.1) - 2026-09-05
 
