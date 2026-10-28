@@ -6,8 +6,8 @@
 // consumers and for our own modules.
 
 pub use fnox_core::{
-    auth_prompt, config, config_path, env, error, http, lease, lease_backends, library, plugins,
-    providers, secret_file, secret_resolver, settings, source_registry, spanned, suggest,
+    auth_prompt, config, config_path, env, error, files, http, lease, lease_backends, library,
+    plugins, providers, secret_file, secret_resolver, settings, source_registry, spanned, suggest,
     temp_file_secrets,
 };
 

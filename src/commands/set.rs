@@ -84,7 +84,7 @@ fn secret_belongs_to_target(
 )]
 pub struct SetCommand {
     /// Secret name, used as the environment variable name
-    pub key: String,
+    pub key: Option<String>,
 
     /// Value to store; omit to read stdin or prompt
     ///
@@ -121,6 +121,14 @@ pub struct SetCommand {
     #[usage(long)]
     pub default: Option<String>,
 
+    /// Store a file under the path it belongs at, instead of a secret
+    ///
+    /// Reads the current content of PATH (or `--from-file`) and records it under
+    /// `[files]` in the global config, keyed by PATH. A file is never an
+    /// environment variable; `fnox files write` puts it back at PATH.
+    #[usage(long, conflicts = "key", value_hint = usage_rs::ValueHint::FilePath)]
+    pub file: Option<PathBuf>,
+
     /// Replace an existing secret when generating
     #[usage(long, requires = "generate")]
     pub force: bool,
@@ -156,10 +164,53 @@ pub struct SetCommand {
     /// Print the generated value after storing it
     #[usage(long, requires = "generate")]
     pub show: bool,
+
+    /// With `--file`, keep the stored content in this file, relative to the
+    /// global config directory, instead of in the config
+    #[usage(long, requires = "file")]
+    pub source: Option<String>,
 }
 
 impl SetCommand {
+    /// The secret name; `run_at` checks that it is set before anything reads it
+    fn key(&self) -> &str {
+        self.key.as_deref().unwrap_or_default()
+    }
+
+    /// `fnox set --file PATH`
+    async fn run_file(&self, cli: &Cli, config: &Config, path: &Path) -> Result<()> {
+        let unsupported = [
+            ("VALUE", self.value.is_some()),
+            ("--generate", self.generate),
+            ("--base64-encode", self.base64_encode),
+            ("--default", self.default.is_some()),
+            ("--if-missing", self.if_missing.is_some()),
+        ];
+        if let Some((flag, _)) = unsupported.iter().find(|(_, set)| *set) {
+            return Err(FnoxError::Config(format!(
+                "{flag} does not apply to --file; a file is stored as it is"
+            )));
+        }
+        crate::commands::files::set_file(
+            cli,
+            config,
+            path,
+            self.from_file.as_deref(),
+            crate::commands::files::PutOptions {
+                provider: self.provider.clone(),
+                source: self.source.clone(),
+                key_name: self.key_name.clone(),
+                description: self.description.clone(),
+                dry_run: self.dry_run,
+            },
+        )
+        .await
+    }
+
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
+        if let Some(path) = &self.file {
+            return self.run_file(cli, &config, path).await;
+        }
         let target_path = if self.global {
             Config::global_config_path()
         } else {
@@ -182,13 +233,18 @@ impl SetCommand {
 
     /// Store the secret in `target_path` instead of the file `run` would pick
     pub async fn run_at(&self, cli: &Cli, mut config: Config, target_path: PathBuf) -> Result<()> {
-        config::validate_secret_name(&self.key)?;
+        if self.key.is_none() {
+            return Err(FnoxError::Config(
+                "Provide a secret name, or --file PATH to store a file".into(),
+            ));
+        }
+        config::validate_secret_name(self.key())?;
 
         let profile = Config::get_profiles(cli.profile.as_slice());
         let write_profile = Config::resolve_write_profile(&profile, cli.write_profile.as_deref())?;
         tracing::debug!(
             "Setting secret '{}' in profile '{}'",
-            self.key,
+            self.key(),
             write_profile
         );
 
@@ -244,7 +300,9 @@ impl SetCommand {
             Some(value)
         };
 
-        let effective_secret = config.get_secret(&write_profile_stack, &self.key)?.cloned();
+        let effective_secret = config
+            .get_secret(&write_profile_stack, self.key())?
+            .cloned();
         let existing_secret = effective_secret
             .as_ref()
             .filter(|secret| secret_belongs_to_target(secret, &target_path, &write_profile))
@@ -253,11 +311,11 @@ impl SetCommand {
         if self.generate
             && !self.force
             && (effective_secret.is_some()
-                || Config::target_has_secret(&self.key, &write_profile, &target_path)?)
+                || Config::target_has_secret(self.key(), &write_profile, &target_path)?)
         {
             return Err(FnoxError::Config(format!(
                 "Secret '{}' already exists; pass --force to replace it with a generated value",
-                self.key
+                self.key()
             )));
         }
 
@@ -331,12 +389,12 @@ impl SetCommand {
                     } else if is_remote_storage_provider {
                         tracing::debug!(
                             "Storing secret '{}' in remote provider '{}'",
-                            self.key,
+                            self.key(),
                             provider_name
                         );
 
                         let key_name = resolve_remote_key_name(
-                            &self.key,
+                            self.key(),
                             self.key_name.as_deref(),
                             existing_secret.as_ref(),
                             provider_name,
@@ -383,7 +441,7 @@ impl SetCommand {
             .then(|| effective_secret.clone())
             .flatten();
         let secret_config = profile_secrets
-            .entry(self.key.clone())
+            .entry(self.key().to_string())
             .or_insert_with(|| inherited_secret.unwrap_or_default());
 
         // Update metadata
@@ -432,7 +490,7 @@ impl SetCommand {
             }
         }
 
-        let secret_config = profile_secrets.get(&self.key).unwrap().clone();
+        let secret_config = profile_secrets.get(self.key()).unwrap().clone();
         let _ = profile_secrets; // Release the mutable borrow
 
         // Save the secret to the appropriate config file
@@ -454,7 +512,7 @@ impl SetCommand {
         if self.dry_run {
             // Show what would be done
             let dry_run_label = console::style("[dry-run]").yellow().bold();
-            let styled_key = console::style(&self.key).cyan();
+            let styled_key = console::style(self.key()).cyan();
             let styled_profile = console::style(&write_profile).magenta();
             let styled_path = console::style(target_path.display()).dim();
             let global_suffix = if self.global { " (global)" } else { "" };
@@ -503,14 +561,14 @@ impl SetCommand {
             }
         } else {
             config.save_secret_to_source(
-                &self.key,
+                self.key(),
                 &secret_config,
                 &write_profile,
                 &target_path,
             )?;
 
             let check = console::style("✓").green();
-            let styled_key = console::style(&self.key).cyan();
+            let styled_key = console::style(self.key()).cyan();
             let styled_profile = console::style(&write_profile).magenta();
             let global_suffix = if self.global { " (global)" } else { "" };
             if write_profile == "default" {

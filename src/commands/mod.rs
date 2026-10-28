@@ -17,6 +17,7 @@ pub mod edit;
 pub mod env;
 pub mod exec;
 pub mod export;
+pub mod files;
 pub mod get;
 pub mod hook_env;
 pub mod import;
@@ -49,7 +50,7 @@ pub mod version;
 /// Commands by task:
 ///
 ///  - Read and run: get, list, exec, env, export, check
-///  - Store and migrate: set, remove, import, sync, reencrypt, edit
+///  - Store and migrate: set, remove, import, sync, reencrypt, edit, files
 ///  - Configure: init, provider, plugin, profiles, config-files
 ///  - Shell and tools: activate, deactivate, completion, tui, mcp
 ///  - Diagnose: doctor, scan
@@ -164,6 +165,8 @@ pub enum Commands {
     Exec(exec::ExecCommand),
 
     Export(export::ExportCommand),
+
+    Files(files::FilesCommand),
 
     Get(get::GetCommand),
 
@@ -357,6 +360,7 @@ impl Commands {
             Commands::Doctor(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Edit(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Export(cmd) => cmd.run(cli, self.load_config(cli)?).await,
+            Commands::Files(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Get(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Import(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Lease(cmd) => cmd.run(cli, self.load_config(cli)?).await,

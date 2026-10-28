@@ -6,7 +6,7 @@ description: "Edit the config file, or one secret, with values decrypted. Usage,
 
 # `fnox edit`
 
-- **Usage:** `fnox edit [KEY]`
+- **Usage:** `fnox edit [--file <FILE>] [KEY]`
 
 Edit the config file, or one secret, with values decrypted
 
@@ -21,6 +21,10 @@ The editor command may include arguments, such as `EDITOR="code --wait"`. Secret
 - **`[KEY]`** — Secret to edit on its own; omit to edit the whole config file
 
 ## Flags
+
+- **`--file <FILE>`** — Edit the file stored for this path
+
+  Opens its content in the editor and stores the change with the file's provider, in the profile that declares it.
 
 - **`-h --help`** — Print help
 

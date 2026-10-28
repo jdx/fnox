@@ -210,6 +210,11 @@ pub struct Config {
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub secrets: IndexMap<String, SecretConfig>,
 
+    /// Files for the default profile, keyed by the path they are deployed to.
+    /// Only the global config may declare them.
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub files: IndexMap<String, crate::files::FileConfig>,
+
     /// Named profiles
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub profiles: IndexMap<String, ProfileConfig>,
@@ -384,6 +389,10 @@ pub struct ProfileConfig {
     /// Secrets for this profile
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub secrets: IndexMap<String, SecretConfig>,
+
+    /// Files for this profile, keyed by the path they are deployed to
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub files: IndexMap<String, crate::files::FileConfig>,
 
     /// Track which config file each provider came from (not serialized)
     #[serde(skip)]
@@ -930,6 +939,9 @@ impl Config {
             }
         })?;
 
+        config.check_files_location(path)?;
+        config.validate_files()?;
+
         if let Some(profile) = profile_name_from_file(path) {
             config.scope_to_profile(profile);
         }
@@ -960,6 +972,7 @@ impl Config {
             .provider_sources
             .extend(std::mem::take(&mut self.provider_sources));
         profile.secrets.extend(std::mem::take(&mut self.secrets));
+        profile.files.extend(std::mem::take(&mut self.files));
         profile
             .secret_sources
             .extend(std::mem::take(&mut self.secret_sources));
@@ -977,10 +990,13 @@ impl Config {
         include_secrets: bool,
     ) {
         let overlay = self.profiles.shift_remove(&profile_name);
+        // Files stay where the file declares them, so they can be saved back
+        let root_files = std::mem::take(&mut self.files);
         let root_secrets = (!include_secrets).then(|| std::mem::take(&mut self.secrets));
         let root_secret_sources =
             (!include_secrets).then(|| std::mem::take(&mut self.secret_sources));
         self.scope_root_entries_to_profile(profile_name.clone());
+        self.files = root_files;
         if let Some(root_secrets) = root_secrets {
             self.secrets = root_secrets;
         }
@@ -997,6 +1013,7 @@ impl Config {
             profile.providers.extend(overlay.providers);
             profile.provider_sources.extend(overlay.provider_sources);
             profile.secrets.extend(overlay.secrets);
+            profile.files.extend(overlay.files);
             profile.secret_sources.extend(overlay.secret_sources);
             if overlay.default_provider.is_some() {
                 profile.default_provider = overlay.default_provider;
@@ -1207,6 +1224,14 @@ impl Config {
         }
     }
 
+    /// The global config and its imports alone, without any project config.
+    ///
+    /// Files are stored and read with the providers declared here, so a project
+    /// config cannot redirect where a global file's content comes from.
+    pub fn load_global_only() -> Result<Self> {
+        Self::load_global().map(|(config, _)| config)
+    }
+
     /// Load an imported config file.
     ///
     /// Public so `fnox config-files` can report the same errors loading
@@ -1348,6 +1373,11 @@ impl Config {
             merged.secret_sources.insert(name, source);
         }
 
+        // Merge files (overlay takes precedence)
+        for (path, file) in overlay.files {
+            merged.files.insert(path, file);
+        }
+
         merged
             .loaded_file_profiles
             .extend(overlay.loaded_file_profiles);
@@ -1372,6 +1402,9 @@ impl Config {
                 }
                 for (secret_name, secret) in profile.secrets {
                     existing_profile.secrets.insert(secret_name, secret);
+                }
+                for (path, file) in profile.files {
+                    existing_profile.files.insert(path, file);
                 }
                 for (secret_name, source) in &profile.secret_sources {
                     existing_profile
@@ -1753,6 +1786,7 @@ impl Config {
             plugins: IndexMap::new(),
             default_provider: None,
             secrets: IndexMap::new(),
+            files: IndexMap::new(),
             profiles: IndexMap::new(),
             age_key_file: None,
             if_missing: None,
@@ -2253,6 +2287,10 @@ impl Config {
             self.secret_sources.insert(key.clone(), path.to_path_buf());
         }
 
+        for file in self.files.values_mut() {
+            file.source_path = Some(path.to_path_buf());
+        }
+
         // Set source paths for default profile providers
         for (provider_name, _) in self.providers.iter() {
             self.provider_sources
@@ -2273,6 +2311,10 @@ impl Config {
                 profile
                     .secret_sources
                     .insert(key.clone(), path.to_path_buf());
+            }
+
+            for file in profile.files.values_mut() {
+                file.source_path = Some(path.to_path_buf());
             }
 
             for (provider_name, _) in profile.providers.iter() {
@@ -2715,6 +2757,7 @@ impl ProfileConfig {
             providers: IndexMap::new(),
             default_provider: None,
             secrets: IndexMap::new(),
+            files: IndexMap::new(),
             provider_sources: HashMap::new(),
             secret_sources: HashMap::new(),
             default_provider_source: None,
@@ -2727,6 +2770,7 @@ impl ProfileConfig {
             && self.leases.is_empty()
             && self.providers.is_empty()
             && self.secrets.is_empty()
+            && self.files.is_empty()
             && self.default_provider().is_none()
     }
 

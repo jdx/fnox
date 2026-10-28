@@ -53,6 +53,13 @@
         "$ref": "#/$defs/SecretConfig"
       }
     },
+    "files": {
+      "description": "Files for the default profile, keyed by the path they are deployed to.\nOnly the global config may declare them.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/FileConfig"
+      }
+    },
     "profiles": {
       "description": "Named profiles",
       "type": "object",
@@ -1646,6 +1653,29 @@
       },
       "required": ["provider", "value"]
     },
+    "FileConfig": {
+      "description": "A file stored as a secret and deployed to the path that keys it",
+      "type": "object",
+      "properties": {
+        "description": {
+          "description": "Description of the file",
+          "type": ["string", "null"]
+        },
+        "provider": {
+          "description": "Provider that stores the file (age, aws-kms, 1password, etc.)",
+          "type": ["string", "null"]
+        },
+        "value": {
+          "description": "Stored content for the provider: ciphertext for an encryption provider,\nor the key at a remote provider. Use `source` instead to keep it in\na separate file.",
+          "type": ["string", "null"]
+        },
+        "source": {
+          "description": "File holding the stored content that `value` would hold, relative to the\ndirectory of the config file. Keeps large ciphertext out of the config.",
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
+    },
     "ProfileConfig": {
       "description": "Configuration for a profile",
       "type": "object",
@@ -1687,6 +1717,13 @@
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/SecretConfig"
+          }
+        },
+        "files": {
+          "description": "Files for this profile, keyed by the path they are deployed to",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/FileConfig"
           }
         }
       },

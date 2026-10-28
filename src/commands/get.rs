@@ -31,11 +31,17 @@ use indexmap::IndexMap;
 )]
 pub struct GetCommand {
     /// Secret to print
-    pub key: String,
+    pub key: Option<String>,
 
     /// Decode a base64-encoded value before printing it
     #[usage(long)]
     pub base64_decode: bool,
+
+    /// Print the file stored for this path, verbatim, instead of a secret
+    ///
+    /// Looks PATH up in the files of the active profiles (see `fnox files`).
+    #[usage(long, conflicts = "key", value_hint = usage_rs::ValueHint::FilePath)]
+    pub file: Option<std::path::PathBuf>,
 
     /// Re-fetch the value from its provider instead of the daemon cache, and
     /// cache it
@@ -44,11 +50,29 @@ pub struct GetCommand {
 }
 
 impl GetCommand {
+    /// The secret name; `run` checks that it is set before anything reads it
+    fn key(&self) -> &str {
+        self.key.as_deref().unwrap_or_default()
+    }
+
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
+        if let Some(path) = &self.file {
+            if self.base64_decode || self.refresh {
+                return Err(FnoxError::Config(
+                    "--base64-decode and --refresh do not apply to --file".into(),
+                ));
+            }
+            return crate::commands::files::get_file(cli, &config, path).await;
+        }
+        if self.key.is_none() {
+            return Err(FnoxError::Config(
+                "Provide a secret name, or --file PATH to print a file".into(),
+            ));
+        }
         let profile = Config::get_profiles(cli.profile.as_slice());
         tracing::debug!(
             "Getting secret '{}' from profiles '{}'",
-            self.key,
+            self.key(),
             Config::display_profiles(&profile)
         );
 
@@ -61,10 +85,10 @@ impl GetCommand {
         {
             let value = self.maybe_base64_decode(value)?;
             // Respect as_file from the profile secret config when present
-            if let Some(sc) = profile_secrets.get(&self.key)
+            if let Some(sc) = profile_secrets.get(self.key())
                 && sc.as_file
             {
-                let file_path = create_persistent_secret_file("fnox-", &self.key, &value)?;
+                let file_path = create_persistent_secret_file("fnox-", self.key(), &value)?;
                 println!("{}", file_path);
                 return Ok(());
             }
@@ -76,22 +100,23 @@ impl GetCommand {
         let profile_secrets = config.get_secrets(&profile)?;
 
         // Get the secret config
-        let secret_config = profile_secrets.get(&self.key).ok_or_else(|| {
+        let secret_config = profile_secrets.get(self.key()).ok_or_else(|| {
             // Find similar secret names for suggestion
             let available_keys: Vec<_> = profile_secrets.keys().map(|s| s.as_str()).collect();
-            let similar = find_similar(&self.key, available_keys);
+            let similar = find_similar(self.key(), available_keys);
             let suggestion = format_suggestions(&similar);
 
             FnoxError::SecretNotFound {
-                key: self.key.clone(),
+                key: self.key().to_string(),
                 profile: Config::display_profiles(&profile),
-                config_path: config.secret_sources.get(&self.key).cloned(),
+                config_path: config.secret_sources.get(self.key()).cloned(),
                 suggestion,
             }
         })?;
 
         if self.refresh {
-            crate::daemon::refresh(cli, &config, std::slice::from_ref(&self.key)).await?;
+            crate::daemon::refresh(cli, &config, std::slice::from_ref(&self.key().to_string()))
+                .await?;
         }
 
         // Resolve the secret using centralized resolver
@@ -99,7 +124,7 @@ impl GetCommand {
             cli,
             &config,
             &profile,
-            &self.key,
+            self.key(),
             secret_config,
             crate::daemon::Purpose::Get,
         )
@@ -110,7 +135,7 @@ impl GetCommand {
 
                 // Check if this secret should be written to a file
                 if secret_config.as_file {
-                    let file_path = create_persistent_secret_file("fnox-", &self.key, &value)?;
+                    let file_path = create_persistent_secret_file("fnox-", self.key(), &value)?;
                     println!("{}", file_path);
                 } else {
                     println!("{}", value);
@@ -159,7 +184,7 @@ impl GetCommand {
         // produce the same key.
         let matching_lease = leases
             .iter()
-            .rfind(|(_, lease_config)| lease_config.produces_env_var(&self.key));
+            .rfind(|(_, lease_config)| lease_config.produces_env_var(self.key()));
 
         let Some((name, lease_config)) = matching_lease else {
             return Ok(None);
@@ -276,11 +301,11 @@ impl GetCommand {
         creds: IndexMap<String, String>,
         all_secrets: IndexMap<String, SecretConfig>,
     ) -> Result<Option<(String, IndexMap<String, SecretConfig>)>> {
-        match creds.get(&self.key) {
+        match creds.get(self.key()) {
             Some(value) => Ok(Some((value.clone(), all_secrets))),
             None => Err(FnoxError::LeaseContractViolation {
                 lease: name.to_string(),
-                key: self.key.clone(),
+                key: self.key().to_string(),
             }),
         }
     }

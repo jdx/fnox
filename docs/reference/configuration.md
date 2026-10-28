@@ -285,6 +285,30 @@ USERNAME = { provider = "pass", value = "master", line = 2 }
 
 `fnox sync` writes `sync = { provider = "...", value = "..." }`, where `value` is the secret encrypted with `provider`. Resolution uses it instead of the original provider until `fnox sync` replaces it or `fnox reencrypt` clears it. Let `fnox sync` maintain this field. See [sync](/guide/sync).
 
+## Files {#files}
+
+```toml
+# ~/.config/fnox/config.toml
+[files]
+"~/.kube/config" = { provider = "age", value = "YWdl..." } # ciphertext, abbreviated
+
+[profiles.work.files]
+"~/.aws/credentials" = { provider = "age", source = "files/aws-credentials.age" }
+```
+
+A file is a secret whose value is a whole file, keyed by the path it belongs at. It uses the same providers as a secret and is never an environment variable. The key is an absolute path or starts with `~/`; `~/.kube/config` and `/home/me/.kube/config` name the same file.
+
+Files can only be declared in the global config (`~/.config/fnox/config.toml`, or `FNOX_CONFIG_DIR`). A project `fnox.toml` that declares them is an error, because it would let a cloned repository choose which paths fnox writes.
+
+| Field         | Type   | Default            | Description                                                                                                              |
+| ------------- | ------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `provider`    | string | `default_provider` | Provider that encrypts or stores the file. It must be able to encrypt or store, so `plain` is refused.                   |
+| `value`       | string | none               | Ciphertext for encryption providers, or the item reference for remote providers.                                         |
+| `source`      | path   | none               | File holding what `value` would hold, relative to the config directory and inside it. Use `source` or `value`, not both. |
+| `description` | string | none               | Note about the file.                                                                                                     |
+
+See [secret files](/guide/files).
+
 ## Templates {#templates}
 
 A secret `default` and any literal string in a provider field that also accepts `{ secret = "NAME" }` is rendered as a [Tera](https://keats.github.io/tera/docs/) template when it contains <code v-pre>{{</code>, <code v-pre>{%</code> or <code v-pre>{#</code>. Strings without those delimiters are used as written.

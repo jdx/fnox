@@ -47,6 +47,7 @@ const guide = [
   {
     text: "Caching and credentials",
     items: [
+      page("Secret files", "/guide/files"),
       page("Local sync cache", "/guide/sync"),
       page("Memory cache (daemon)", "/guide/daemon"),
       page("Credential leases", "/guide/leases"),
@@ -158,6 +159,7 @@ export function sidebar(commands) {
         "sync",
         "reencrypt",
         "edit",
+        "files",
         "provider",
         "plugin",
         "profiles",

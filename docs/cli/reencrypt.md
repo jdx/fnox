@@ -12,11 +12,13 @@ Re-encrypt stored secrets with the current provider settings
 
 Decrypts each matching secret stored with an encryption provider, such as age or a KMS, encrypts it again with that provider's current configuration, and writes the new ciphertext to the file that defines it. Run it after changing a provider's recipients or key, with an identity that can still decrypt the existing values.
 
+The files of the active profiles (see `fnox files`) are re-encrypted too, unless you name secrets with KEYS.
+
 fnox asks for confirmation unless you pass `--force`. Only the active profile's secrets are processed, so repeat with `-P` for other profiles. `fnox sync` caches on re-encrypted secrets are cleared; run `fnox sync` again to rebuild them.
 
 ## Arguments
 
-- **`[KEYS]…`** — Re-encrypt only these keys
+- **`[KEYS]…`** — Re-encrypt only these secrets; without them, files are re-encrypted too
 
 ## Flags
 
