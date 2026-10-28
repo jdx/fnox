@@ -190,9 +190,22 @@ impl FileConfig {
                     .unwrap_or_default()
             });
         let path = dir.join(source);
-        fs::read_to_string(&path)
+        let read_error = |path: &Path| {
+            let path = path.to_path_buf();
+            move |source| FnoxError::SecretFileReadFailed { path, source }
+        };
+        // A symlink inside the config directory must not lead out of it
+        let resolved = fs::canonicalize(&path).map_err(read_error(&path))?;
+        let inside = fs::canonicalize(&dir).map_err(read_error(&dir))?;
+        if !resolved.starts_with(&inside) {
+            return Err(FnoxError::Config(format!(
+                "File source '{}' leads outside the config directory",
+                path.display()
+            )));
+        }
+        fs::read_to_string(&resolved)
             .map(Some)
-            .map_err(|source| FnoxError::SecretFileReadFailed { path, source })
+            .map_err(read_error(&resolved))
     }
 }
 
@@ -268,6 +281,29 @@ impl Config {
         Ok(entries.into_values().collect())
     }
 
+    /// Every file entry of every table, whichever profiles are active
+    pub fn declared_files(&self) -> Vec<FileEntry> {
+        let tables = std::iter::once(("default", &self.files)).chain(
+            self.profiles
+                .iter()
+                .map(|(name, profile)| (name.as_str(), &profile.files)),
+        );
+        let mut entries = Vec::new();
+        for (profile, table) in tables {
+            for (key, config) in table {
+                if let Ok(path) = normalize_path(key, None) {
+                    entries.push(FileEntry {
+                        path,
+                        key: key.clone(),
+                        profile: profile.to_string(),
+                        config: config.clone(),
+                    });
+                }
+            }
+        }
+        entries
+    }
+
     /// The entry deployed to `path`, given as written on the command line
     pub fn find_file(&self, profiles: &[String], path: &Path) -> Result<Option<FileEntry>> {
         let wanted = cli_path(path)?;
@@ -286,30 +322,31 @@ pub fn cli_path(path: &Path) -> Result<PathBuf> {
 }
 
 /// The plaintext content of a file entry
-pub async fn resolve_file(
-    config: &Config,
-    profiles: &[String],
-    entry: &FileEntry,
-) -> Result<String> {
+///
+/// Resolved with the providers of the global config only, as `entry` is.
+pub async fn resolve_file(profiles: &[String], entry: &FileEntry) -> Result<String> {
+    let config = Config::load_global_only()?;
     let mut secret = SecretConfig::new();
     secret.set_provider(entry.config.provider.clone());
     secret.set_value(entry.config.stored_value()?);
     secret.env = Some(EnvMode::Never);
     secret.if_missing = Some(IfMissing::Error);
-    secret_resolver::resolve_secret(config, profiles, &entry.key, &secret)
+    secret_resolver::resolve_secret(&config, profiles, &entry.key, &secret)
         .await?
         .ok_or_else(|| FnoxError::Config(format!("File '{}' has no content", entry.key)))
 }
 
 /// Store `content` with the provider and return what the config records for it:
 /// ciphertext for an encryption provider, or the key at a remote provider.
+///
+/// Stored with the providers of the global config only.
 pub async fn store_content(
-    config: &Config,
     profiles: &[String],
     provider_name: &str,
     remote_key: &str,
     content: &str,
 ) -> Result<String> {
+    let config = Config::load_global_only()?;
     let providers = config.get_providers(profiles)?;
     let provider_config = providers.get(provider_name).ok_or_else(|| {
         FnoxError::Config(format!(
@@ -324,7 +361,7 @@ pub async fn store_content(
              use an encryption provider such as age, or a storage provider such as 1password"
         )));
     }
-    let provider = get_provider_resolved(config, profiles, provider_name, provider_config).await?;
+    let provider = get_provider_resolved(&config, profiles, provider_name, provider_config).await?;
     let capabilities = provider.capabilities();
     if capabilities.contains(&ProviderCapability::Encryption) {
         provider.encrypt(content).await
@@ -369,8 +406,10 @@ fn write_document(target: &Path, doc: &toml_edit::DocumentMut) -> Result<()> {
 fn table_for<'a>(doc: &'a mut toml_edit::DocumentMut, profile: &str) -> &'a mut toml_edit::Table {
     use toml_edit::{Item, Table};
     fn child<'a>(parent: &'a mut Table, name: &str) -> &'a mut Table {
-        if parent.get(name).is_none_or(|item| !item.is_table()) {
-            parent.insert(name, Item::Table(Table::new()));
+        if !parent.get(name).is_some_and(Item::is_table) {
+            // An inline table, as in `files = { … }`, becomes a regular one with its entries
+            let current = parent.remove(name).unwrap_or_default();
+            parent.insert(name, Item::Table(current.into_table().unwrap_or_default()));
         }
         parent[name]
             .as_table_mut()

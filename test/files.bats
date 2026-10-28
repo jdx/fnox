@@ -228,7 +228,7 @@ TOML
 
 	run fnox files list
 	assert_failure
-	assert_output --partial "only allowed in the global config"
+	assert_output --partial "only allowed"
 }
 
 @test "files: a project profile cannot declare files either" {
@@ -241,7 +241,7 @@ TOML
 
 	run fnox -P evil files write
 	assert_failure
-	assert_output --partial "only allowed in the global config"
+	assert_output --partial "only allowed"
 	[ ! -e "$HOME/.bashrc" ]
 }
 
@@ -319,4 +319,107 @@ TOML
 	FNOX_AGE_KEY="$new_secret" run fnox get --file ~/.npmrc
 	assert_success
 	assert_output "inline"
+}
+
+@test "files: a project cannot replace the provider that reads a global file" {
+	printf 'secret-token' >"$HOME/source"
+	fnox set --file ~/.token --from-file "$HOME/source"
+
+	# A project provider of the same name must not supply the file's content
+	cat >fnox.toml <<'TOML'
+root = true
+
+[providers.age]
+type = "plain"
+TOML
+	run fnox get --file ~/.token
+	assert_success
+	[ "$output" = "secret-token" ]
+}
+
+@test "files: a profile override keeps its own storage" {
+	printf 'base' >"$HOME/base"
+	printf 'work' >"$HOME/work"
+	fnox set --file ~/.token --from-file "$HOME/base" --source files/token.age
+
+	# The base's stored file is not the override's to overwrite
+	run fnox -P work set --file ~/.token --from-file "$HOME/work" --source files/token.age
+	assert_failure
+	assert_output --partial "already exists"
+
+	run fnox -P work set --file ~/.token --from-file "$HOME/work"
+	assert_success
+	run fnox get --file ~/.token
+	assert_output "base"
+	run fnox -P work get --file ~/.token
+	assert_output "work"
+}
+
+@test "files: a source cannot overwrite a config or another file's content" {
+	printf 'x' >"$HOME/source"
+	cp "$FNOX_CONFIG_DIR/config.toml" "$HOME/config.before"
+
+	run fnox set --file ~/.token --from-file "$HOME/source" --source config.toml
+	assert_failure
+	assert_output --partial "already exists"
+	run diff "$FNOX_CONFIG_DIR/config.toml" "$HOME/config.before"
+	assert_success
+}
+
+@test "files: set keeps entries when the files table is inline" {
+	{
+		echo 'files = { "~/.first" = { provider = "age", value = "ciphertext" } }'
+		cat "$FNOX_CONFIG_DIR/config.toml"
+	} >"$HOME/merged.toml"
+	cp "$HOME/merged.toml" "$FNOX_CONFIG_DIR/config.toml"
+	printf 'x' >"$HOME/source"
+	run fnox set --file ~/.second --from-file "$HOME/source"
+	assert_success
+	run fnox files list
+	assert_output --partial ".first"
+	assert_output --partial ".second"
+}
+
+@test "files: remove deletes an entry declared in an import" {
+	cat >"$FNOX_CONFIG_DIR/extra.toml" <<'TOML'
+[files."~/.imported"]
+provider = "age"
+value = "ciphertext"
+TOML
+	echo 'import = ["extra.toml"]' | cat - "$FNOX_CONFIG_DIR/config.toml" >"$HOME/merged.toml"
+	cp "$HOME/merged.toml" "$FNOX_CONFIG_DIR/config.toml"
+
+	run fnox files list
+	assert_output --partial ".imported"
+	run fnox remove --file ~/.imported
+	assert_success
+	run fnox files list
+	refute_output --partial ".imported"
+}
+
+@test "files: files of a fnox.<profile>.toml import belong to that profile" {
+	cat >"$FNOX_CONFIG_DIR/fnox.work.toml" <<'TOML'
+[files."~/.worky"]
+provider = "age"
+value = "ciphertext"
+TOML
+	echo 'import = ["fnox.work.toml"]' | cat - "$FNOX_CONFIG_DIR/config.toml" >"$HOME/merged.toml"
+	cp "$HOME/merged.toml" "$FNOX_CONFIG_DIR/config.toml"
+
+	run fnox files list
+	refute_output --partial ".worky"
+	run fnox -P work files list
+	assert_output --partial ".worky"
+}
+
+@test "files: edit keeps a final newline the editor adds" {
+	printf 'abc' >"$HOME/source"
+	fnox set --file ~/.token --from-file "$HOME/source"
+
+	printf '#!/bin/sh\nprintf "\\n" >>"$1"\n' >"$HOME/append-newline"
+	chmod +x "$HOME/append-newline"
+
+	EDITOR="$HOME/append-newline" run fnox edit --file ~/.token
+	assert_success
+	[ "$(fnox get --file ~/.token | wc -c)" -eq 4 ]
 }

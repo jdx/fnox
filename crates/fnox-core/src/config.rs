@@ -972,6 +972,7 @@ impl Config {
             .provider_sources
             .extend(std::mem::take(&mut self.provider_sources));
         profile.secrets.extend(std::mem::take(&mut self.secrets));
+        profile.files.extend(std::mem::take(&mut self.files));
         profile
             .secret_sources
             .extend(std::mem::take(&mut self.secret_sources));
@@ -1009,6 +1010,7 @@ impl Config {
             profile.providers.extend(overlay.providers);
             profile.provider_sources.extend(overlay.provider_sources);
             profile.secrets.extend(overlay.secrets);
+            profile.files.extend(overlay.files);
             profile.secret_sources.extend(overlay.secret_sources);
             if overlay.default_provider.is_some() {
                 profile.default_provider = overlay.default_provider;
@@ -1217,6 +1219,14 @@ impl Config {
         } else {
             Ok((Self::new(), false))
         }
+    }
+
+    /// The global config and its imports alone, without any project config.
+    ///
+    /// Files are stored and read with the providers declared here, so a project
+    /// config cannot redirect where a global file's content comes from.
+    pub fn load_global_only() -> Result<Self> {
+        Self::load_global().map(|(config, _)| config)
     }
 
     /// Load an imported config file.

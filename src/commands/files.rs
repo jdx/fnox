@@ -143,7 +143,7 @@ impl FilesWriteCommand {
         // Resolve everything first so one failure does not leave the rest half-written
         let mut resolved = Vec::with_capacity(entries.len());
         for entry in &entries {
-            let content = files::resolve_file(&config, &profiles, entry).await?;
+            let content = files::resolve_file(&profiles, entry).await?;
             resolved.push((entry, content));
         }
         for (entry, content) in resolved {
@@ -196,7 +196,8 @@ pub struct PutOptions {
     pub dry_run: bool,
 }
 
-/// Store `content` as the file at `path` in the global config, under `write_profile`
+/// Store `content` as the file at `path`, under `write_profile` of the config
+/// that declares it, or of the global config for a new file
 pub async fn put_file(
     config: &Config,
     profiles: &[String],
@@ -205,55 +206,93 @@ pub async fn put_file(
     content: &str,
     opts: PutOptions,
 ) -> Result<()> {
-    let target = Config::global_config_path();
     let path = files::cli_path(path)?;
-    let existing = config.find_file(profiles, &path)?;
+    let inherited = config.find_file(profiles, &path)?;
+    // Only an entry of the table being written owns a stored file or remote item;
+    // an entry of another profile keeps its own when this one overrides it
+    let own = inherited.as_ref().filter(|e| e.profile == write_profile);
+    let target = own
+        .and_then(|e| e.config.source_path.clone())
+        .unwrap_or_else(Config::global_config_path);
     let write_stack = vec![write_profile.to_string()];
 
     let provider_name = match opts
         .provider
         .clone()
-        .or_else(|| existing.as_ref().and_then(|e| e.config.provider.clone()))
+        .or_else(|| inherited.as_ref().and_then(|e| e.config.provider.clone()))
     {
         Some(name) => name,
-        None => config.get_default_provider(&write_stack)?.ok_or_else(|| {
-            FnoxError::Config(
-                "No provider for the file; pass --provider or set `default_provider`".into(),
-            )
-        })?,
+        None => Config::load_global_only()?
+            .get_default_provider(&write_stack)?
+            .ok_or_else(|| {
+                FnoxError::Config(
+                    "No provider for the file; pass --provider or set `default_provider`".into(),
+                )
+            })?,
     };
     let source = opts
         .source
         .clone()
-        .or_else(|| existing.as_ref().and_then(|e| e.config.source.clone()));
+        .or_else(|| own.and_then(|e| e.config.source.clone()));
     let remote_key = opts
         .key_name
         .clone()
         .or_else(|| {
-            existing
-                .as_ref()
-                .filter(|e| e.config.provider.as_deref() == Some(provider_name.as_str()))
-                .and_then(|e| e.config.value.clone())
+            own.filter(|e| e.config.provider.as_deref() == Some(provider_name.as_str()))
+                .and_then(|e| e.config.stored_value().ok().flatten())
         })
         .unwrap_or_else(|| files::default_remote_key(&path));
     // Reuse the spelling the entry has in the table being written
-    let key = existing
-        .as_ref()
-        .filter(|e| e.profile == write_profile)
+    let key = own
         .map(|e| e.key.clone())
         .unwrap_or_else(|| files::display_key(&path));
 
     let mut file = FileConfig {
-        description: opts
-            .description
-            .clone()
-            .or_else(|| existing.as_ref().and_then(|e| e.config.description.clone())),
+        description: opts.description.clone().or_else(|| {
+            inherited
+                .as_ref()
+                .and_then(|e| e.config.description.clone())
+        }),
         provider: Some(provider_name.clone()),
         value: None,
         source: source.clone(),
         source_path: None,
     };
     file.validate(&key)?;
+
+    // Another file must not share this one's remote item or stored file
+    let declared = config.declared_files();
+    let others = || {
+        declared
+            .iter()
+            .filter(|e| !(e.path == path && e.profile == write_profile))
+    };
+    if let Some(other) = others().find(|e| {
+        e.config.provider.as_deref() == Some(provider_name.as_str())
+            && e.config.stored_value().ok().flatten().as_deref() == Some(remote_key.as_str())
+    }) {
+        return Err(FnoxError::Config(format!(
+            "'{remote_key}' at provider '{provider_name}' already stores {}; pass --key-name to name another item",
+            other.key
+        )));
+    }
+    let source_file = source.as_ref().map(|source| {
+        target
+            .parent()
+            .map(|dir| dir.join(source))
+            .unwrap_or_else(|| PathBuf::from(source))
+    });
+    if let (Some(source), Some(source_file)) = (&source, &source_file) {
+        // Writing over a file that is not this entry's own stored content could
+        // destroy a config, an identity, or another file's ciphertext
+        let owned = own.is_some_and(|e| e.config.source.as_deref() == Some(source.as_str()));
+        if !owned && source_file.symlink_metadata().is_ok() {
+            return Err(FnoxError::Config(format!(
+                "Source '{}' already exists and is not this file's stored content; choose another name",
+                source_file.display()
+            )));
+        }
+    }
 
     if opts.dry_run {
         let label = console::style("[dry-run]").yellow().bold();
@@ -266,22 +305,10 @@ pub async fn put_file(
         return Ok(());
     }
 
-    let stored =
-        files::store_content(config, &write_stack, &provider_name, &remote_key, content).await?;
-    match &source {
-        Some(source) => {
-            let source_file = target
-                .parent()
-                .map(|dir| dir.join(source))
-                .unwrap_or_else(|| PathBuf::from(source));
-            if let Some(dir) = source_file.parent() {
-                std::fs::create_dir_all(dir).map_err(|e| {
-                    FnoxError::Config(format!("Failed to create '{}': {e}", dir.display()))
-                })?;
-            }
-            std::fs::write(&source_file, &stored).map_err(|e| {
-                FnoxError::Config(format!("Failed to write '{}': {e}", source_file.display()))
-            })?;
+    let stored = files::store_content(&write_stack, &provider_name, &remote_key, content).await?;
+    match &source_file {
+        Some(source_file) => {
+            files::write_file(source_file, &stored)?;
         }
         None => file.value = Some(stored),
     }
@@ -322,7 +349,7 @@ pub async fn set_file(
 pub async fn get_file(cli: &Cli, config: &Config, path: &Path) -> Result<()> {
     let profiles = Config::get_profiles(cli.profile.as_slice());
     let entry = require_entry(config, &profiles, path)?;
-    let content = files::resolve_file(config, &profiles, &entry).await?;
+    let content = files::resolve_file(&profiles, &entry).await?;
     let mut stdout = std::io::stdout().lock();
     stdout
         .write_all(content.as_bytes())
@@ -334,7 +361,7 @@ pub async fn get_file(cli: &Cli, config: &Config, path: &Path) -> Result<()> {
 pub async fn edit_file(cli: &Cli, config: &Config, path: &Path) -> Result<()> {
     let profiles = Config::get_profiles(cli.profile.as_slice());
     let entry = require_entry(config, &profiles, path)?;
-    let original = files::resolve_file(config, &profiles, &entry).await?;
+    let original = files::resolve_file(&profiles, &entry).await?;
 
     let mut temp = tempfile::Builder::new()
         .prefix("fnox-edit-")
@@ -346,14 +373,8 @@ pub async fn edit_file(cli: &Cli, config: &Config, path: &Path) -> Result<()> {
         .map_err(|e| FnoxError::Config(format!("Failed to write to temporary file: {e}")))?;
     crate::commands::edit::EditCommand::open_editor(temp.path())?;
 
-    let mut edited = std::fs::read_to_string(temp.path())
+    let edited = std::fs::read_to_string(temp.path())
         .map_err(|e| FnoxError::Config(format!("Failed to read temporary file: {e}")))?;
-    // Editors often append a final newline the file did not have
-    if !original.ends_with('\n')
-        && let Some(stripped) = edited.strip_suffix('\n')
-    {
-        edited = stripped.strip_suffix('\r').unwrap_or(stripped).to_string();
-    }
     if edited == original {
         println!("File {} unchanged", console::style(&entry.key).cyan());
         return Ok(());
@@ -383,7 +404,12 @@ pub fn remove_file(cli: &Cli, config: &Config, path: &Path, dry_run: bool) -> Re
             let all = config.get_files(&profiles).unwrap_or_default();
             file_not_found(config, &profiles, path, &all)
         })?;
-    let target = Config::global_config_path();
+    // Remove it from the config file that declares it, which may be an import
+    let target = entry
+        .config
+        .source_path
+        .clone()
+        .unwrap_or_else(Config::global_config_path);
     if dry_run {
         let label = console::style("[dry-run]").yellow().bold();
         println!(

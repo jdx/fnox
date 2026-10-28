@@ -72,8 +72,14 @@ impl ReencryptCommand {
     /// Re-encrypt the files of the active profiles; returns how many were selected
     async fn reencrypt_files(&self, cli: &Cli, config: &Config) -> Result<usize> {
         let profile = Config::get_profiles(cli.profile.as_slice());
-        let providers = config.get_providers(&profile)?;
-        let default_provider = config.get_default_provider(&profile)?;
+        let entries = config.get_files(&profile)?;
+        if entries.is_empty() {
+            return Ok(0);
+        }
+        // Files are encrypted with the providers of the global config only
+        let trusted = Config::load_global_only()?;
+        let providers = trusted.get_providers(&profile)?;
+        let default_provider = trusted.get_default_provider(&profile)?;
         let filter_regex = self
             .filter
             .as_ref()
@@ -86,7 +92,7 @@ impl ReencryptCommand {
             .transpose()?;
 
         let mut selected = Vec::new();
-        for entry in config.get_files(&profile)? {
+        for entry in entries {
             let Some(provider_name) = entry.config.provider.clone().or(default_provider.clone())
             else {
                 continue;
@@ -107,7 +113,7 @@ impl ReencryptCommand {
                 continue;
             };
             let provider = crate::providers::get_provider_resolved(
-                config,
+                &trusted,
                 &profile,
                 &provider_name,
                 provider_config,
@@ -164,7 +170,7 @@ impl ReencryptCommand {
         // Encrypt every file before writing any of them
         let mut updated = Vec::with_capacity(selected.len());
         for (entry, provider_name, provider) in &selected {
-            let plaintext = crate::files::resolve_file(config, &profile, entry)
+            let plaintext = crate::files::resolve_file(&profile, entry)
                 .await
                 .map_err(|e| FnoxError::ReencryptDecryptFailed {
                     key: entry.key.clone(),
@@ -192,9 +198,7 @@ impl ReencryptCommand {
                         .parent()
                         .map(|dir| dir.join(source))
                         .unwrap_or_else(|| PathBuf::from(source));
-                    std::fs::write(&path, encrypted).map_err(|e| {
-                        FnoxError::Config(format!("Failed to write '{}': {e}", path.display()))
-                    })?;
+                    crate::files::write_file(&path, encrypted)?;
                 }
                 None => file.value = Some(encrypted.clone()),
             }
