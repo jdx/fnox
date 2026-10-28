@@ -390,7 +390,7 @@ impl EditCommand {
                     || crate::config::profile_name_from_file(&path).as_deref()
                         == Some(write_profile.as_str()) =>
             {
-                let config = Self::config_for_file(config, &path)?;
+                let config = Self::config_for_file(cli, config, &path)?;
                 set.run_at(cli, config, path).await?;
             }
             _ => set.run(cli, config).await?,
@@ -408,15 +408,16 @@ impl EditCommand {
     /// The config to encrypt a value with when it is stored in `path`: the providers
     /// that file sees, not ones the current directory overrides (say, with other age
     /// recipients), or the value is unreadable wherever that file is used alone.
-    fn config_for_file(config: Config, path: &Path) -> Result<Config> {
+    fn config_for_file(cli: &Cli, config: Config, path: &Path) -> Result<Config> {
         // The global config is the base of every project
         if path == Config::global_config_path() {
             return Config::load_smart(path);
         }
         // A project's own config, found from a directory above the current one. Other
         // files, such as profile files and imports, are overlays that need the
-        // merged config.
-        if crate::config::local_override_filename(path).is_some()
+        // merged config, and so does an explicit `-c` file, which skips discovery.
+        if crate::config::uses_config_discovery(&cli.config)
+            && crate::config::local_override_filename(path).is_some()
             && let Some(dir) = path.parent().map(|dir| {
                 if dir.file_name().is_some_and(|name| name == ".config") {
                     dir.parent().unwrap_or(dir)

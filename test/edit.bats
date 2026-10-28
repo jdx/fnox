@@ -1057,3 +1057,30 @@ EOT
 	run grep -F 'value = "new"' ../fnox.prod.toml
 	assert_success
 }
+
+@test "edit KEY with an explicit config keeps that file's loading rules" {
+	recipient="$(grep 'public key:' "$AGE_KEY_FILE" | cut -d: -f2- | xargs)"
+	other_key="$TEST_DIR/other-key.txt"
+	age-keygen -o "$other_key" 2>/dev/null
+	other_recipient="$(grep 'public key:' "$other_key" | cut -d: -f2- | xargs)"
+	printf 'old value' | fnox set SHARED --provider age
+	# A local override in the project that an explicit -c read does not load
+	cat >fnox.local.toml <<EOT
+[providers.age]
+type = "age"
+recipients = ["$other_recipient"]
+EOT
+	mkdir app
+	cd app || exit 1
+
+	printf '#!/bin/sh\nprintf "new value" >"$1"\n' >"$TEST_DIR/new-editor.sh"
+	chmod +x "$TEST_DIR/new-editor.sh"
+	EDITOR="$TEST_DIR/new-editor.sh" run fnox -c "$TEST_DIR/fnox.toml" edit SHARED
+	assert_success
+
+	run grep -c "$other_recipient" ../fnox.toml
+	assert_output "0"
+	run fnox -c "$TEST_DIR/fnox.toml" get SHARED
+	assert_success
+	assert_output "new value"
+}
