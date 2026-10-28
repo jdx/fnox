@@ -60,7 +60,7 @@ indexmap = { version = "2", features = ["serde"] }
 ipnet = "2"
 jsonwebtoken = { version = "11", features = ["aws_lc_rs"] }
 k8s-openapi = { version = "0.28", features = ["v1_32"] }
-keepass = { version = "0.15", features = ["save_kdbx4"] }
+keepass = { version = "0.17", features = ["save_kdbx4"] }
 keeper-secrets-manager-core = { version = "17", default-features = false, features = ["blocking"] }
 keyring-core = "1"
 kube = { version = "4", default-features = false, features = ["client", "rustls-tls", "aws-lc-rs"] }
@@ -75,7 +75,7 @@ miette = { version = "7", features = ["fancy"] }
 miniz_oxide = "0.9"
 nix = { version = "0.31", features = ["signal", "process"] }
 openssl-sys = { version = "0.9", features = ["vendored"] }
-pluralizer = "0.5"
+pluralizer = "0.6"
 proc-macro2 = "1"
 quote = "1"
 rand = "0.10"
