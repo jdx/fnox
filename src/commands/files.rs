@@ -192,14 +192,18 @@ fn is_access_setting(name: &str) -> bool {
             .any(|word| name.contains(word))
 }
 
+/// Drop the provider's own access settings. Nested values such as
+/// `prefix = { secret = "NAME" }` choose where content is stored, so they stay.
 fn strip_access_settings(value: &mut serde_json::Value) {
-    match value {
-        serde_json::Value::Object(map) => {
-            map.retain(|name, _| !is_access_setting(name));
-            map.values_mut().for_each(strip_access_settings);
-        }
-        serde_json::Value::Array(items) => items.iter_mut().for_each(strip_access_settings),
-        _ => {}
+    let serde_json::Value::Object(map) = value else {
+        return;
+    };
+    map.retain(|name, _| !is_access_setting(name));
+    // A provider tagged by variant name keeps its settings one level down
+    if map.len() == 1
+        && let Some(inner) = map.values_mut().next()
+    {
+        strip_access_settings(inner);
     }
 }
 
@@ -465,4 +469,29 @@ pub fn remove_file(cli: &Cli, config: &Config, path: &Path, dry_run: bool) -> Re
         console::style(&entry.key).cyan()
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn access_settings_are_dropped_but_store_settings_stay() {
+        let mut provider = json!({
+            "type": "aws-ps",
+            "token": "t",
+            "daemon_cache": true,
+            "prefix": { "secret": "PERSONAL_PREFIX" },
+        });
+        strip_access_settings(&mut provider);
+        assert_eq!(
+            provider,
+            json!({ "type": "aws-ps", "prefix": { "secret": "PERSONAL_PREFIX" } })
+        );
+
+        let mut tagged = json!({ "vault": { "address": "a", "token": "t" } });
+        strip_access_settings(&mut tagged);
+        assert_eq!(tagged, json!({ "vault": { "address": "a" } }));
+    }
 }
