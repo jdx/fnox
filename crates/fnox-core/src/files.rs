@@ -493,10 +493,12 @@ pub fn remove_entry(target: &Path, profile: &str, key: &str) -> Result<bool> {
     }
     let mut doc = read_document(target)?;
     // Every table, so an entry that sits in two of them is gone from both
-    let removed = candidate_profiles(target, profile)
-        .into_iter()
-        .map(|p| existing_table(&mut doc, p).is_some_and(|table| table.remove(key).is_some()))
-        .fold(false, |any, removed| any || removed);
+    let mut removed = false;
+    for p in candidate_profiles(target, profile) {
+        if let Some(table) = existing_table(&mut doc, p) {
+            removed |= table.remove(key).is_some();
+        }
+    }
     if removed {
         write_document(target, &doc)?;
     }
