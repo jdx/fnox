@@ -267,9 +267,21 @@ pub async fn put_file(
             .iter()
             .filter(|e| !(e.path == path && e.profile == write_profile))
     };
+    // Profiles can configure one provider name differently, such as another prefix
+    let trusted = Config::load_global_only()?;
+    let settings_in = |profile: &str| {
+        let stack = vec![profile.to_string()];
+        trusted
+            .get_providers(&stack)
+            .ok()
+            .and_then(|providers| providers.get(provider_name.as_str()).cloned())
+            .and_then(|provider| serde_json::to_string(&provider).ok())
+    };
+    let own_settings = settings_in(write_profile);
     if let Some(other) = others().find(|e| {
         e.config.provider.as_deref() == Some(provider_name.as_str())
             && e.config.stored_value().ok().flatten().as_deref() == Some(remote_key.as_str())
+            && settings_in(&e.profile) == own_settings
     }) {
         return Err(FnoxError::Config(format!(
             "'{remote_key}' at provider '{provider_name}' already stores {}; pass --key-name to name another item",
