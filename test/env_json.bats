@@ -428,6 +428,7 @@ import = ["more.toml"]
 [secrets]
 PERSONAL = { default = "p" }
 SHADOWED = { default = "global" }
+LEASED = { default = "g" }
 
 [leases.gh]
 type = "github-app"
@@ -451,6 +452,12 @@ import = ["shared/team.toml"]
 [secrets]
 PROJECT = { default = "x" }
 SHADOWED = { default = "project" }
+
+[leases.proj]
+type = "github-app"
+app_id = "1"
+installation_id = "2"
+env_var = "LEASED"
 TOML
 
 	run_env env --json --describe
@@ -463,6 +470,8 @@ TOML
 	assert_equal "$(source_of TEAM)" '{"global":false,"file":"team.toml"}'
 	# the project's definition wins, so the key is the project's
 	assert_equal "$(source_of SHADOWED)" '{"global":false,"file":"fnox.toml"}'
+	# a shell gets the global secret, not the project's lease, so the key is the user's
+	assert_equal "$(source_of LEASED)" '{"global":true,"file":"config.toml"}'
 
 	# a project that imports the global config gets global keys, not its own
 	printf 'root = true\nimport = ["%s"]\n' "$HOME/.config/fnox/config.toml" >fnox.toml

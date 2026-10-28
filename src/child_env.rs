@@ -605,8 +605,10 @@ impl DefinitionFiles {
     fn source(&self, path: Option<&Path>) -> Option<KeySource> {
         let path = path?;
         let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+        // JSON cannot carry a non-UTF-8 path. A lossy path still reports `global`, which
+        // is what a caller decides by.
         Some(KeySource::new(
-            path.to_path_buf(),
+            PathBuf::from(path.to_string_lossy().into_owned()),
             self.global.contains(&canonical),
         ))
     }
@@ -649,10 +651,26 @@ pub fn describe(
                 shell: env.is_some_and(EnvMode::in_shell),
             },
         )
-        // A lease key is set by the lease, whatever secret shares its name.
-        .with_source(match lease {
-            Some(lease) => files.source(files.leases.get(lease).map(PathBuf::as_path)),
-            None => files.source(secret.and_then(|secret| secret.source_path.as_deref())),
+        .with_source({
+            let secret_source =
+                files.source(secret.and_then(|secret| secret.source_path.as_deref()));
+            match lease {
+                None => secret_source,
+                // A secret that shares a lease's name supplies the value when the lease
+                // does not run: for a shell, or when the lease is skipped. Either may
+                // supply it, so a global source wins.
+                Some(lease) => {
+                    match (
+                        files.source(files.leases.get(lease).map(PathBuf::as_path)),
+                        secret_source,
+                    ) {
+                        (Some(lease), Some(secret)) if secret.global && !lease.global => {
+                            Some(secret)
+                        }
+                        (lease, _) => lease,
+                    }
+                }
+            }
         })
     };
 
