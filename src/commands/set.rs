@@ -159,7 +159,29 @@ pub struct SetCommand {
 }
 
 impl SetCommand {
-    pub async fn run(&self, cli: &Cli, mut config: Config) -> Result<()> {
+    pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
+        let target_path = if self.global {
+            Config::global_config_path()
+        } else {
+            let current_dir = std::env::current_dir().map_err(|e| {
+                FnoxError::Config(format!("Failed to get current directory: {}", e))
+            })?;
+            // Only use auto-detection when --config is the clap default ("fnox.toml").
+            // Any other value means the user explicitly chose a config file.
+            if cli.config == std::path::Path::new(config::DEFAULT_CONFIG_FILENAME) {
+                let profile = Config::get_profiles(cli.profile.as_slice());
+                let write_profile =
+                    Config::resolve_write_profile(&profile, cli.write_profile.as_deref())?;
+                config::find_local_config(&current_dir, std::slice::from_ref(&write_profile))
+            } else {
+                current_dir.join(&cli.config)
+            }
+        };
+        self.run_at(cli, config, target_path).await
+    }
+
+    /// Store the secret in `target_path` instead of the file `run` would pick
+    pub async fn run_at(&self, cli: &Cli, mut config: Config, target_path: PathBuf) -> Result<()> {
         config::validate_secret_name(&self.key)?;
 
         let profile = Config::get_profiles(cli.profile.as_slice());
@@ -170,20 +192,6 @@ impl SetCommand {
             write_profile
         );
 
-        let target_path = if self.global {
-            Config::global_config_path()
-        } else {
-            let current_dir = std::env::current_dir().map_err(|e| {
-                FnoxError::Config(format!("Failed to get current directory: {}", e))
-            })?;
-            // Only use auto-detection when --config is the clap default ("fnox.toml").
-            // Any other value means the user explicitly chose a config file.
-            if cli.config == std::path::Path::new(config::DEFAULT_CONFIG_FILENAME) {
-                config::find_local_config(&current_dir, std::slice::from_ref(&write_profile))
-            } else {
-                current_dir.join(&cli.config)
-            }
-        };
         let write_profile_stack = vec![write_profile.clone()];
 
         // Check if we're only setting metadata (no actual secret value)

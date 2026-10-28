@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::io::Write as _;
+use std::path::Path;
 use std::process::Command;
 
 use indexmap::IndexMap;
@@ -342,6 +343,23 @@ impl EditCommand {
         fs::write(&temp_path, &edited)
             .map_err(|e| FnoxError::Config(format!("Failed to write temporary file: {}", e)))?;
 
+        // A `fnox sync --local-file` cache copy lives in the personal override file;
+        // the value belongs to the shared definition it caches
+        let cache = secret_config
+            .sync
+            .as_ref()
+            .is_some_and(|sync| !sync.local_source)
+            .then(|| secret_config.clone());
+        let source_path = if cache.is_some() {
+            Config::load_smart_without_local_sync(&cli.config)?
+                .get_secret(&profile, key)
+                .ok()
+                .flatten()
+                .and_then(|s| s.source_path.clone())
+        } else {
+            secret_config.source_path.clone()
+        };
+        let write_profile = Config::resolve_write_profile(&profile, cli.write_profile.as_deref())?;
         let set = SetCommand {
             key: key.to_string(),
             value: None,
@@ -362,7 +380,94 @@ impl EditCommand {
             length: None,
             show: false,
         };
-        set.run(cli, config).await
+        // Write the new value back to the file that defines the secret, not the
+        // file `fnox set` would pick for the current directory. A profile file such
+        // as `fnox.prod.toml` holds its profile's secrets at the top level, so unless
+        // it is the write profile's own file `fnox set` picks the file itself.
+        match source_path {
+            Some(path)
+                if !crate::config::is_profile_file(&path)
+                    || crate::config::profile_name_from_file(&path).as_deref()
+                        == Some(write_profile.as_str()) =>
+            {
+                let config = Self::config_for_file(cli, config, &path)?;
+                set.run_at(cli, config, path).await?;
+            }
+            _ => set.run(cli, config).await?,
+        }
+
+        // The old cache would keep shadowing the new value, including in profiles
+        // that inherit the cached secret. It is only a cache: dropping it is safe,
+        // and `fnox sync` restores it.
+        if let Some(cache) = cache
+            && let Some(cache_path) = &cache.source_path
+        {
+            Self::drop_sync_cache(cache_path, key, &cache)?;
+        }
+        Ok(())
+    }
+
+    /// The config to encrypt a value with when it is stored in `path`: the providers
+    /// that file sees, not ones the current directory overrides (say, with other age
+    /// recipients), or the value is unreadable wherever that file is used alone.
+    fn config_for_file(cli: &Cli, config: Config, path: &Path) -> Result<Config> {
+        // The global config is the base of every project
+        if path == Config::global_config_path() {
+            return Config::load_smart(path);
+        }
+        // A project's own config or profile file, found from a directory above the
+        // current one. Imports are overlays that need the merged config, and so does
+        // an explicit `-c` file, which skips discovery.
+        if crate::config::uses_config_discovery(&cli.config)
+            && (crate::config::local_override_filename(path).is_some()
+                || crate::config::is_profile_file(path))
+            && let Some(dir) = path.parent().map(|dir| {
+                if dir.file_name().is_some_and(|name| name == ".config") {
+                    dir.parent().unwrap_or(dir)
+                } else {
+                    dir
+                }
+            })
+            && let Ok(cwd) = env::current_dir()
+            && cwd != dir
+            && cwd.starts_with(dir)
+        {
+            return Config::load_discovered_from(dir, true);
+        }
+        Ok(config)
+    }
+
+    /// Remove the `fnox sync --local-file` cache entry of `key` from `path`
+    fn drop_sync_cache(path: &Path, key: &str, cache: &SecretConfig) -> Result<()> {
+        let content = fs::read_to_string(path).map_err(|source| FnoxError::ConfigReadFailed {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        let mut doc = content
+            .parse::<DocumentMut>()
+            .map_err(|e| FnoxError::Config(format!("Failed to parse TOML: {}", e)))?;
+        let secrets = match &cache.source_profile {
+            Some(profile) if cache.source_is_profile => doc
+                .get_mut("profiles")
+                .and_then(|p| p.get_mut(profile))
+                .and_then(|p| p.get_mut("secrets")),
+            _ => doc.get_mut("secrets"),
+        };
+        let Some(secrets) = secrets.and_then(|s| s.as_table_like_mut()) else {
+            return Ok(());
+        };
+        let is_cache = secrets
+            .get(key)
+            .and_then(|entry| entry.get("sync"))
+            .is_some_and(|sync| sync.get("local_source").and_then(|v| v.as_bool()) != Some(true));
+        if is_cache {
+            secrets.remove(key);
+            fs::write(path, doc.to_string()).map_err(|source| FnoxError::ConfigWriteFailed {
+                path: path.to_path_buf(),
+                source,
+            })?;
+        }
+        Ok(())
     }
 
     /// Pick the editor command: `$EDITOR`, then `$VISUAL` (each ignored when empty
