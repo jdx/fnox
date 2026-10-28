@@ -183,6 +183,18 @@ fn require_entry(config: &Config, profiles: &[String], path: &Path) -> Result<Fi
     Err(file_not_found(config, profiles, path, &entries))
 }
 
+fn strip_access_settings(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            map.remove("auth_command");
+            map.remove("daemon_cache");
+            map.values_mut().for_each(strip_access_settings);
+        }
+        serde_json::Value::Array(items) => items.iter_mut().for_each(strip_access_settings),
+        _ => {}
+    }
+}
+
 /// How `put_file` stores a file's content
 #[derive(Debug, Default)]
 pub struct PutOptions {
@@ -275,7 +287,12 @@ pub async fn put_file(
             .get_providers(&stack)
             .ok()
             .and_then(|providers| providers.get(provider_name.as_str()).cloned())
-            .and_then(|provider| serde_json::to_string(&provider).ok())
+            .and_then(|provider| serde_json::to_value(&provider).ok())
+            .map(|mut value| {
+                // How fnox reaches the store does not change which item a key names
+                strip_access_settings(&mut value);
+                value.to_string()
+            })
     };
     let own_settings = settings_in(write_profile);
     if let Some(other) = others().find(|e| {
