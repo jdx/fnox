@@ -267,6 +267,10 @@ pub struct Config {
     #[serde(skip)]
     pub secret_sources: HashMap<String, PathBuf>,
 
+    /// Track which config file each lease backend came from (not serialized)
+    #[serde(skip)]
+    pub lease_sources: HashMap<String, PathBuf>,
+
     /// Track which config file the default_provider came from (not serialized)
     #[serde(skip)]
     pub default_provider_source: Option<PathBuf>,
@@ -401,6 +405,10 @@ pub struct ProfileConfig {
     /// Track which config file each secret came from (not serialized)
     #[serde(skip)]
     pub secret_sources: HashMap<String, PathBuf>,
+
+    /// Track which config file each lease backend came from (not serialized)
+    #[serde(skip)]
+    pub lease_sources: HashMap<String, PathBuf>,
 
     /// Track which config file the default_provider came from (not serialized)
     #[serde(skip)]
@@ -966,6 +974,9 @@ impl Config {
         let profile = self.profiles.entry(profile_name).or_default();
         profile.leases.extend(std::mem::take(&mut self.leases));
         profile
+            .lease_sources
+            .extend(std::mem::take(&mut self.lease_sources));
+        profile
             .providers
             .extend(std::mem::take(&mut self.providers));
         profile
@@ -1010,6 +1021,7 @@ impl Config {
                 profile.inherits = overlay.inherits;
             }
             profile.leases.extend(overlay.leases);
+            profile.lease_sources.extend(overlay.lease_sources);
             profile.providers.extend(overlay.providers);
             profile.provider_sources.extend(overlay.provider_sources);
             profile.secrets.extend(overlay.secrets);
@@ -1343,9 +1355,12 @@ impl Config {
             merged.default_provider_source = overlay.default_provider_source;
         }
 
-        // Merge lease backends (overlay takes precedence)
+        // Merge lease backends and their sources (overlay takes precedence)
         for (name, lease) in overlay.leases {
             merged.leases.insert(name, lease);
+        }
+        for (name, source) in overlay.lease_sources {
+            merged.lease_sources.insert(name, source);
         }
 
         // Merge providers (overlay takes precedence)
@@ -1391,6 +1406,11 @@ impl Config {
                 }
                 for (lease_name, lease) in profile.leases {
                     existing_profile.leases.insert(lease_name, lease);
+                }
+                for (lease_name, source) in &profile.lease_sources {
+                    existing_profile
+                        .lease_sources
+                        .insert(lease_name.clone(), source.clone());
                 }
                 for (provider_name, provider) in profile.providers {
                     existing_profile.providers.insert(provider_name, provider);
@@ -1799,6 +1819,7 @@ impl Config {
             audit: None,
             provider_sources: HashMap::new(),
             secret_sources: HashMap::new(),
+            lease_sources: HashMap::new(),
             default_provider_source: None,
             loaded_file_profiles: HashSet::new(),
             project_dir: None,
@@ -2156,6 +2177,47 @@ impl Config {
         Ok(leases)
     }
 
+    /// The config file of each lease backend in [`Self::get_leases`], with the
+    /// same precedence.
+    pub fn get_lease_sources(&self, profiles: &[String]) -> Result<HashMap<String, PathBuf>> {
+        let profiles = self.resolve_profiles(profiles)?;
+        let mut sources = self.lease_sources.clone();
+
+        for profile in profiles.iter().filter(|p| *p != "default") {
+            if let Some(profile_config) = self.profiles.get(profile) {
+                sources.extend(profile_config.lease_sources.clone());
+            }
+        }
+
+        Ok(sources)
+    }
+
+    /// fnox's global config and the files it imports, canonicalized: the
+    /// files whose definitions every project inherits. Empty when there is no
+    /// global config.
+    pub fn global_config_files() -> HashSet<PathBuf> {
+        let global = Self::global_config_path();
+        if !global.exists() {
+            return HashSet::new();
+        }
+        let mut files = vec![global.clone()];
+        // A global config that fails to load has already failed the command
+        // that loaded it, so a read error here only drops its imports.
+        if let Ok(config) = Self::load(&global) {
+            let dir = global.parent().unwrap_or_else(|| Path::new(""));
+            files.extend(
+                config
+                    .import
+                    .iter()
+                    .map(|import| crate::config_path::resolve_relative_to_dir(import, Some(dir))),
+            );
+        }
+        files
+            .into_iter()
+            .map(|path| fs::canonicalize(&path).unwrap_or(path))
+            .collect()
+    }
+
     /// Get effective providers for the active profile stack.
     ///
     /// Top-level providers form the base. Profile-specific providers are overlaid
@@ -2297,6 +2359,11 @@ impl Config {
                 .insert(provider_name.clone(), path.to_path_buf());
         }
 
+        for lease_name in self.leases.keys() {
+            self.lease_sources
+                .insert(lease_name.clone(), path.to_path_buf());
+        }
+
         // Set source path for default_provider if set
         if self.default_provider().is_some() {
             self.default_provider_source = Some(path.to_path_buf());
@@ -2321,6 +2388,12 @@ impl Config {
                 profile
                     .provider_sources
                     .insert(provider_name.clone(), path.to_path_buf());
+            }
+
+            for lease_name in profile.leases.keys() {
+                profile
+                    .lease_sources
+                    .insert(lease_name.clone(), path.to_path_buf());
             }
 
             // Set source path for profile's default_provider if set
@@ -2760,6 +2833,7 @@ impl ProfileConfig {
             files: IndexMap::new(),
             provider_sources: HashMap::new(),
             secret_sources: HashMap::new(),
+            lease_sources: HashMap::new(),
             default_provider_source: None,
         }
     }
@@ -3128,6 +3202,26 @@ root = true
             config.profiles["staging"].provider_sources["imported"],
             imported
         );
+    }
+
+    #[test]
+    fn lease_sources_follow_the_winning_definition() {
+        let dir = tempfile::tempdir().unwrap();
+        let lease = |app_id: u32| {
+            format!(
+                "[leases.gh]\ntype = \"github-app\"\napp_id = \"{app_id}\"\ninstallation_id = \"2\"\nenv_var = \"GH_TOKEN\"\n"
+            )
+        };
+        let base = dir.path().join("fnox.toml");
+        let staging = dir.path().join("fnox.staging.toml");
+        std::fs::write(&base, format!("root = true\n{}", lease(1))).unwrap();
+        std::fs::write(&staging, lease(2)).unwrap();
+
+        let profiles = ["staging".to_string()];
+        let (config, _) = Config::load_recursive(dir.path(), false, &profiles, true).unwrap();
+
+        assert_eq!(config.get_lease_sources(&[]).unwrap()["gh"], base);
+        assert_eq!(config.get_lease_sources(&profiles).unwrap()["gh"], staging);
     }
 
     #[test]

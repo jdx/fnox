@@ -419,3 +419,73 @@ TOML
 	assert_equal "$(jq -r '.set | has("LEASE_INPUT")' out)" false
 	assert_equal "$(jq -r '.remove | index("LEASE_INPUT") != null' out)" true
 }
+
+@test "env --json --describe reports the file that defines each key" {
+	mkdir -p "$HOME/.config/fnox"
+	cat >"$HOME/.config/fnox/config.toml" <<'TOML'
+import = ["more.toml"]
+
+[secrets]
+PERSONAL = { default = "p" }
+SHADOWED = { default = "global" }
+LEASED = { default = "g" }
+
+[leases.gh]
+type = "github-app"
+app_id = "1"
+installation_id = "2"
+env_var = "GH_TOKEN"
+TOML
+	cat >"$HOME/.config/fnox/more.toml" <<'TOML'
+[secrets]
+IMPORTED_BY_GLOBAL = { default = "i" }
+TOML
+	mkdir -p shared
+	cat >shared/team.toml <<'TOML'
+[secrets]
+TEAM = { default = "t" }
+TOML
+	cat >fnox.toml <<'TOML'
+root = true
+import = ["shared/team.toml"]
+
+[secrets]
+PROJECT = { default = "x" }
+SHADOWED = { default = "project" }
+LEAK = { default = "x-${PERSONAL}" }
+
+[leases.proj_gh]
+type = "github-app"
+app_id = "3"
+installation_id = "4"
+env_var = "GH_TOKEN"
+
+[leases.proj]
+type = "github-app"
+app_id = "1"
+installation_id = "2"
+env_var = "LEASED"
+TOML
+
+	run_env env --json --describe
+	assert_equal "$status" 0
+	source_of() { jq -c --arg k "$1" '.keys[] | select(.key == $k) | .source | {global, file: (.path | split("/") | last)}' out; }
+	assert_equal "$(source_of PERSONAL)" '{"global":true,"file":"config.toml"}'
+	assert_equal "$(source_of IMPORTED_BY_GLOBAL)" '{"global":true,"file":"more.toml"}'
+	# the project's lease wins, but exec skips a lease without its inputs, and the global one remains
+	assert_equal "$(source_of GH_TOKEN)" '{"global":true,"file":"config.toml"}'
+	assert_equal "$(source_of PROJECT)" '{"global":false,"file":"fnox.toml"}'
+	assert_equal "$(source_of TEAM)" '{"global":false,"file":"team.toml"}'
+	# the project's definition wins, so the key is the project's
+	assert_equal "$(source_of SHADOWED)" '{"global":false,"file":"fnox.toml"}'
+	# a shell gets the global secret, not the project's lease, so the key is the user's
+	assert_equal "$(source_of LEASED)" '{"global":true,"file":"config.toml"}'
+	# a project secret whose value interpolates a global one carries the user's value
+	assert_equal "$(source_of LEAK)" '{"global":true,"file":"config.toml"}'
+
+	# a project that imports the global config gets global keys, not its own
+	printf 'root = true\nimport = ["%s"]\n' "$HOME/.config/fnox/config.toml" >fnox.toml
+	run_env env --json --describe --keys PERSONAL
+	assert_equal "$status" 0
+	assert_equal "$(source_of PERSONAL)" '{"global":true,"file":"config.toml"}'
+}

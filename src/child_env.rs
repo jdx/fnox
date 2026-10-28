@@ -15,13 +15,14 @@ use crate::lease_backends::LeaseBackendConfig;
 use crate::secret_filter::SecretFilter;
 use crate::suggest::find_similar;
 use indexmap::IndexMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 // The documents `fnox env --json` prints live in fnox-client, so that other
 // programs can read them without depending on fnox-core.
 pub use fnox_client::document::{
     DescribeDocument, ENV_SCHEMA, EnvDocument, EnvScope, ErrorBody, ErrorDocument, ErrorKind,
-    Injectable, KeyInfo, KeyKind, KeyRejection, NotInjectable, SecretValue,
+    Injectable, KeyInfo, KeyKind, KeyRejection, KeySource, NotInjectable, SecretValue,
 };
 
 /// Whether a secret with this `env` mode is injected for `scope`.
@@ -584,19 +585,101 @@ pub fn env_document(scope: EnvScope, profile: Vec<String>, env: ChildEnv) -> Env
     )
 }
 
+/// The files that define each key, for [`describe`].
+#[derive(Default)]
+pub struct DefinitionFiles {
+    profile: Vec<String>,
+    /// The config file of each lease backend, by backend name.
+    leases: HashMap<String, PathBuf>,
+    /// [`Config::global_config_files`]
+    global: HashSet<PathBuf>,
+}
+
+impl DefinitionFiles {
+    pub fn new(config: &Config, profile: &[String]) -> Result<Self> {
+        Ok(Self {
+            profile: profile.to_vec(),
+            leases: config.get_lease_sources(profile)?,
+            global: Config::global_config_files(),
+        })
+    }
+
+    /// The file whose definition of `key` wins, unless something that can supply all or part
+    /// of its value is global: then the first such file, marked global. That covers every
+    /// lease that produces the key (exec skips a lease that lacks its inputs, and a shell
+    /// runs none), a secret of the same name, and the secrets its `default` interpolates.
+    fn key_source(
+        &self,
+        key: &str,
+        secrets: &IndexMap<String, SecretConfig>,
+        producers: &[&str],
+    ) -> Option<KeySource> {
+        let lease_file = |lease: &str| self.leases.get(lease).map(PathBuf::as_path);
+        let secret_file = |key: &str| {
+            secrets
+                .get(key)
+                .and_then(|secret| secret.source_path.as_deref())
+        };
+        let winner = match producers.last() {
+            Some(lease) => self.source(lease_file(lease)),
+            None => self.source(secret_file(key)),
+        };
+        let mut candidates: Vec<Option<&Path>> =
+            producers.iter().map(|lease| lease_file(lease)).collect();
+        // the same-name secret and, transitively, what its default interpolates
+        let mut seen: HashSet<&str> = HashSet::new();
+        let mut queue = vec![key];
+        while let Some(name) = queue.pop() {
+            let Some((name, secret)) = secrets.get_key_value(name) else {
+                continue;
+            };
+            if !seen.insert(name.as_str()) {
+                continue;
+            }
+            candidates.push(secret.source_path.as_deref());
+            for dep in
+                fnox_core::secret_resolver::interpolated_references(&self.profile, name, secret)
+            {
+                if let Some((dep, _)) = secrets.get_key_value(dep.as_str()) {
+                    queue.push(dep.as_str());
+                }
+            }
+        }
+        candidates
+            .into_iter()
+            .filter_map(|path| self.source(path))
+            .find(|source| source.global)
+            .or(winner)
+    }
+
+    fn source(&self, path: Option<&Path>) -> Option<KeySource> {
+        let path = path?;
+        let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+        // JSON cannot carry a non-UTF-8 path. A lossy path still reports `global`, which
+        // is what a caller decides by.
+        Some(KeySource::new(
+            PathBuf::from(path.to_string_lossy().into_owned()),
+            self.global.contains(&canonical),
+        ))
+    }
+}
+
 /// Describes the keys a plan could provide, without resolving anything.
 ///
 /// With `requested` (already validated by [`select`]) only those keys are listed.
 pub fn describe(
     secrets: &IndexMap<String, SecretConfig>,
     leases: &IndexMap<String, LeaseBackendConfig>,
+    files: &DefinitionFiles,
     requested: Option<&[String]>,
 ) -> Vec<KeyInfo> {
     // The last lease that produces a key wins, as in `fnox exec`.
     let mut lease_for: IndexMap<&str, &str> = IndexMap::new();
+    let mut producers_of: HashMap<&str, Vec<&str>> = HashMap::new();
     for (name, lease) in leases {
         for key in lease.produced_env_vars() {
             lease_for.insert(key, name);
+            producers_of.entry(key).or_default().push(name);
         }
     }
 
@@ -620,6 +703,11 @@ pub fn describe(
                 shell: env.is_some_and(EnvMode::in_shell),
             },
         )
+        .with_source(files.key_source(
+            key,
+            secrets,
+            producers_of.get(key).map(Vec::as_slice).unwrap_or_default(),
+        ))
     };
 
     match requested {
@@ -1277,7 +1365,7 @@ create_command = "true"
     #[test]
     fn describe_lists_every_key_with_where_it_may_be_injected() {
         let (secrets, leases) = fixture(BASE);
-        let infos = describe(&secrets, &leases, None);
+        let infos = describe(&secrets, &leases, &DefinitionFiles::default(), None);
         let summary: Vec<_> = infos
             .iter()
             .map(|i| {

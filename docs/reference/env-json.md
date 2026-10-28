@@ -117,7 +117,8 @@ Every document is one line of compact JSON followed by a newline. stdout carries
       "env": true,
       "as_file": false,
       "description": "Main DB",
-      "injectable": { "exec": true, "shell": true }
+      "injectable": { "exec": true, "shell": true },
+      "source": { "path": "/home/me/src/app/fnox.toml", "global": false }
     },
     {
       "key": "STRIPE_KEY",
@@ -137,7 +138,8 @@ Every document is one line of compact JSON followed by a newline. stdout carries
       "key": "AWS_ACCESS_KEY_ID",
       "kind": "lease",
       "lease": "aws",
-      "injectable": { "exec": true, "shell": false }
+      "injectable": { "exec": true, "shell": false },
+      "source": { "path": "/home/me/.config/fnox/config.toml", "global": true }
     }
   ],
   "dynamic_leases": ["build_token"],
@@ -146,6 +148,8 @@ Every document is one line of compact JSON followed by a newline. stdout carries
 ```
 
 (The real output is a single line.) `env` and `as_file` are present only when a secret of that name exists, `description` only when set, and `kind` is `"lease"` when a lease produces the key. `dynamic_leases` names `command` leases, whose keys are only known after they run. `daemon_enabled` says whether fnox would use its daemon for this project (the platform supports it, and `[daemon] enabled` or `FNOX_DAEMON` says so; `--no-daemon` is not considered). fnox versions from before this field do not send it; read a missing field as `false`. A program that reads the daemon directly should only do so when it is `true`.
+
+`source` names the config file whose definition of the key wins: the secret's file, or for a lease key the lease backend's. `global` is `true` when that file is fnox's global config (`~/.config/fnox/config.toml`) or a file it imports, including when a project imports the global config itself. It is also `true` when anything else that can supply all or part of the value is global: another lease that produces the key (exec skips a lease that lacks its inputs), a secret of the same name (a shell runs no leases), or a secret the key's `default` interpolates. `path` then names that global file. Every project inherits those keys, so a program that grants keys per project can use `global` to keep a user's own keys away from a project's commands. `source` is absent for a key fnox cannot attribute to a file, and in output from fnox versions before this field.
 
 ### Error
 
