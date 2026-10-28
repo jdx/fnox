@@ -396,7 +396,9 @@ impl EditCommand {
             _ => set.run(cli, config).await?,
         }
 
-        // The old cache would keep shadowing the shared value it was copied from
+        // The old cache would keep shadowing the new value, including in profiles
+        // that inherit the cached secret. It is only a cache: dropping it is safe,
+        // and `fnox sync` restores it.
         if let Some(cache) = cache
             && let Some(cache_path) = &cache.source_path
         {
@@ -413,11 +415,12 @@ impl EditCommand {
         if path == Config::global_config_path() {
             return Config::load_smart(path);
         }
-        // A project's own config, found from a directory above the current one. Other
-        // files, such as profile files and imports, are overlays that need the
-        // merged config, and so does an explicit `-c` file, which skips discovery.
+        // A project's own config or profile file, found from a directory above the
+        // current one. Imports are overlays that need the merged config, and so does
+        // an explicit `-c` file, which skips discovery.
         if crate::config::uses_config_discovery(&cli.config)
-            && crate::config::local_override_filename(path).is_some()
+            && (crate::config::local_override_filename(path).is_some()
+                || crate::config::is_profile_file(path))
             && let Some(dir) = path.parent().map(|dir| {
                 if dir.file_name().is_some_and(|name| name == ".config") {
                     dir.parent().unwrap_or(dir)

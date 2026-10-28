@@ -1084,3 +1084,62 @@ EOT
 	assert_success
 	assert_output "new value"
 }
+
+@test "edit KEY in a profile drops the inherited sync cache that would shadow its value" {
+	recipient="$(grep 'public key:' "$AGE_KEY_FILE" | cut -d: -f2- | xargs)"
+	cat >fnox.toml <<EOT
+root = true
+
+[providers.age]
+type = "age"
+recipients = ["$recipient"]
+
+[providers.source-age]
+type = "age"
+recipients = ["$recipient"]
+
+[secrets]
+
+[profiles.work]
+EOT
+	printf 'old value' | fnox set SYNCED --provider source-age
+	run fnox sync -p age --local-file --force
+	assert_success
+
+	printf '#!/bin/sh\nprintf "new value" >"$1"\n' >"$TEST_DIR/new-editor.sh"
+	chmod +x "$TEST_DIR/new-editor.sh"
+	EDITOR="$TEST_DIR/new-editor.sh" run fnox -P work edit SYNCED
+	assert_success
+
+	# The default profile's cache would still shadow the work profile's value
+	run fnox -P work get SYNCED
+	assert_output "new value"
+	# The default profile's shared value is unchanged and still resolves
+	run fnox get SYNCED
+	assert_output "old value"
+}
+
+@test "edit KEY encrypts a parent profile file's secret with the parent's providers" {
+	other_key="$TEST_DIR/other-key.txt"
+	age-keygen -o "$other_key" 2>/dev/null
+	other_recipient="$(grep 'public key:' "$other_key" | cut -d: -f2- | xargs)"
+	printf '[secrets]\n' >fnox.prod.toml
+	printf 'old value' | fnox -P prod set SHARED --provider age
+	mkdir app
+	cat >app/fnox.toml <<EOT
+[providers.age]
+type = "age"
+recipients = ["$other_recipient"]
+EOT
+	cd app || exit 1
+
+	printf '#!/bin/sh\nprintf "new value" >"$1"\n' >"$TEST_DIR/new-editor.sh"
+	chmod +x "$TEST_DIR/new-editor.sh"
+	EDITOR="$TEST_DIR/new-editor.sh" run fnox -P prod edit SHARED
+	assert_success
+
+	cd "$TEST_DIR" || exit 1
+	run fnox -P prod get SHARED
+	assert_success
+	assert_output "new value"
+}
