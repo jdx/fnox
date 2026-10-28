@@ -990,10 +990,13 @@ impl Config {
         include_secrets: bool,
     ) {
         let overlay = self.profiles.shift_remove(&profile_name);
+        // Files stay where the file declares them, so they can be saved back
+        let root_files = std::mem::take(&mut self.files);
         let root_secrets = (!include_secrets).then(|| std::mem::take(&mut self.secrets));
         let root_secret_sources =
             (!include_secrets).then(|| std::mem::take(&mut self.secret_sources));
         self.scope_root_entries_to_profile(profile_name.clone());
+        self.files = root_files;
         if let Some(root_secrets) = root_secrets {
             self.secrets = root_secrets;
         }

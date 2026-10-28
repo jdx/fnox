@@ -423,3 +423,22 @@ TOML
 	assert_success
 	[ "$(fnox get --file ~/.token | wc -c)" -eq 4 ]
 }
+
+@test "files: a local file in the config directory keeps its files in the default profile" {
+	cat >"$FNOX_CONFIG_DIR/fnox.local.toml" <<'TOML'
+[files."~/.localfile"]
+provider = "age"
+value = "ciphertext"
+TOML
+	cd "$FNOX_CONFIG_DIR" || exit 1
+
+	run fnox -P work files list
+	assert_success
+	assert_output --partial ".localfile"
+	assert_output --partial "default"
+
+	run fnox remove --file ~/.localfile
+	assert_success
+	run grep -F '.localfile' "$FNOX_CONFIG_DIR/fnox.local.toml"
+	assert_failure
+}
