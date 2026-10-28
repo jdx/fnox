@@ -175,6 +175,58 @@ teardown() {
 	assert_failure
 }
 
+@test "files: a global config that is a symlink can declare files" {
+	mkdir -p "$HOME/dotfiles"
+	mv "$FNOX_CONFIG_DIR/config.toml" "$HOME/dotfiles/config.toml"
+	ln -s "$HOME/dotfiles/config.toml" "$FNOX_CONFIG_DIR/config.toml"
+	printf 'token\n' >"$HOME/source"
+
+	run fnox set --file ~/.npmrc --from-file "$HOME/source"
+	assert_success
+	run fnox get --file ~/.npmrc
+	assert_success
+	assert_output "token"
+
+	# The entry went into the linked file and the link is kept
+	[ -L "$FNOX_CONFIG_DIR/config.toml" ]
+	run grep -F '"~/.npmrc"' "$HOME/dotfiles/config.toml"
+	assert_success
+}
+
+@test "files: a source that is a symlink is read and written through" {
+	printf 'token: abc\n' >"$HOME/source"
+	fnox set --file ~/.kube/config --from-file "$HOME/source" --source files/kube.age
+	mkdir -p "$HOME/dotfiles"
+	mv "$FNOX_CONFIG_DIR/files/kube.age" "$HOME/dotfiles/kube.age"
+	ln -s "$HOME/dotfiles/kube.age" "$FNOX_CONFIG_DIR/files/kube.age"
+
+	run fnox get --file ~/.kube/config
+	assert_success
+	assert_output "token: abc"
+
+	printf 'token: def\n' >"$HOME/source"
+	run fnox set --file ~/.kube/config --from-file "$HOME/source"
+	assert_success
+	[ -L "$FNOX_CONFIG_DIR/files/kube.age" ]
+	run fnox get --file ~/.kube/config
+	assert_output "token: def"
+}
+
+@test "files: a project config linked to the config directory cannot declare files" {
+	cat >"$FNOX_CONFIG_DIR/project.toml" <<'TOML'
+root = true
+
+[files]
+"~/.bashrc" = { provider = "age", value = "x" }
+TOML
+	rm fnox.toml
+	ln -s "$FNOX_CONFIG_DIR/project.toml" fnox.toml
+
+	run fnox files list
+	assert_failure
+	assert_output --partial "allowed"
+}
+
 @test "files: a source outside the config directory is rejected" {
 	printf 'x\n' >"$HOME/source"
 	run fnox set --file ~/.npmrc --from-file "$HOME/source" --source ../escape.age

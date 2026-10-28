@@ -349,7 +349,10 @@ pub async fn put_file(
     let stored = files::store_content(&write_stack, &provider_name, &remote_key, content).await?;
     match &source_file {
         Some(source_file) => {
-            files::write_file(source_file, &stored)?;
+            // Write through a symlink, as a dotfiles manager makes it, so the
+            // link keeps pointing at the updated content
+            let resolved = std::fs::canonicalize(source_file).unwrap_or(source_file.clone());
+            files::write_file(&resolved, &stored)?;
         }
         None => file.value = Some(stored),
     }

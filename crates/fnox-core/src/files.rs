@@ -189,24 +189,31 @@ impl FileConfig {
                     .map(Path::to_path_buf)
                     .unwrap_or_default()
             });
+        // `validate` keeps `source` inside the directory. A symlink there, as a
+        // dotfiles manager makes it, is the user's own and is followed.
         let path = dir.join(source);
-        let read_error = |path: &Path| {
-            let path = path.to_path_buf();
-            move |source| FnoxError::SecretFileReadFailed { path, source }
-        };
-        // A symlink inside the config directory must not lead out of it
-        let resolved = fs::canonicalize(&path).map_err(read_error(&path))?;
-        let inside = fs::canonicalize(&dir).map_err(read_error(&dir))?;
-        if !resolved.starts_with(&inside) {
-            return Err(FnoxError::Config(format!(
-                "File source '{}' leads outside the config directory",
-                path.display()
-            )));
-        }
-        fs::read_to_string(&resolved)
+        fs::read_to_string(&path)
             .map(Some)
-            .map_err(read_error(&resolved))
+            .map_err(|source| FnoxError::SecretFileReadFailed { path, source })
     }
+}
+
+/// Whether the config file at `path` sits in the fnox config directory.
+///
+/// Only the directories are resolved: a config file there that is a symlink,
+/// as a dotfiles manager makes it, is still the user's own. A project config
+/// cannot put a file or a symlink in the config directory.
+fn in_config_dir(path: &Path) -> bool {
+    let canonical = |p: &Path| fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let dir = match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    };
+    let resolved = match path.file_name() {
+        Some(name) => canonical(dir).join(name),
+        None => canonical(path),
+    };
+    resolved.starts_with(canonical(&crate::env::FNOX_CONFIG_DIR))
 }
 
 impl Config {
@@ -218,9 +225,7 @@ impl Config {
         if !declares {
             return Ok(());
         }
-        let config_dir = crate::env::FNOX_CONFIG_DIR.as_path();
-        let canonical = |p: &Path| fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
-        if canonical(path).starts_with(canonical(config_dir)) {
+        if in_config_dir(path) {
             return Ok(());
         }
         Err(FnoxError::Config(format!(
