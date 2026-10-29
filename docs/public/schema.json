@@ -1863,19 +1863,27 @@
       ]
     },
     "ProxyRule": {
-      "description": "Substitute one configured secret into requests for an approved destination.",
+      "description": "Substitute one configured secret, or a credential the proxy leases, into\nrequests for an approved destination.",
       "type": "object",
       "properties": {
         "secret": {
-          "description": "Secret name from the active fnox profile.",
-          "type": "string"
+          "description": "Secret name from the active fnox profile. Exactly one of `secret` and\n`lease` is set.",
+          "type": ["string", "null"]
+        },
+        "lease": {
+          "description": "Lease backend from `[leases]` whose short-lived credential the proxy\nmints when a request first needs it, renews before it expires, and\nrevokes when the session ends. Exactly one of `secret` and `lease` is\nset.",
+          "type": ["string", "null"]
+        },
+        "credential": {
+          "description": "The variable to inject, for a lease that produces several. Defaults to\nthe only variable the lease produces.",
+          "type": ["string", "null"]
         },
         "domain": {
           "description": "TLS server name to which the secret may be sent. A leading `*.` matches\nexactly one subdomain label, such as `*.example.com`.",
           "type": "string"
         },
         "env": {
-          "description": "Environment variable exposed to the child. Defaults to `secret`.",
+          "description": "Environment variable exposed to the child. Defaults to `secret`, or to\nthe lease's credential variable.",
           "type": ["string", "null"]
         },
         "header": {
@@ -1908,7 +1916,7 @@
         }
       },
       "additionalProperties": false,
-      "required": ["secret", "domain"]
+      "required": ["domain"]
     },
     "AuditConfig": {
       "description": "Local access audit log configuration",

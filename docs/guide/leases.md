@@ -139,4 +139,4 @@ Define `[profiles.<name>.leases.<lease>]` to use a different role or account per
 
 - [Lease backends](/leases/aws-sts): setup for each backend.
 - [`fnox lease` reference](/cli/lease): every subcommand.
-- [Credential proxy](/guide/proxy): keep credentials out of the child process entirely.
+- [Credential proxy](/guide/proxy#short-lived-credentials-from-a-lease): name a lease in a proxy rule to keep the credential out of the child process entirely.

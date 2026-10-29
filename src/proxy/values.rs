@@ -1,4 +1,5 @@
-//! The real values of rule secrets. A secret that isn't set when the proxy
+//! The real values rules inject: secrets, and credentials of leases the
+//! proxy mints (see `leases.rs`). A secret that isn't set when the proxy
 //! starts is pending: its placeholder is handed out, requests that need it are
 //! refused, and the proxy resolves it again when a request needs it, so a
 //! value set during the run starts working without a restart.
@@ -15,10 +16,10 @@ const PENDING_RETRY: Duration = Duration::from_secs(3);
 /// refused as not set
 const PENDING_LOAD_TIMEOUT: Duration = Duration::from_secs(15);
 
-/// What a rule needs to redact its secret from responses
+/// What a rule needs to redact its value from responses
 #[derive(Debug, Clone)]
 pub(super) struct RuleRedaction {
-    pub(super) secret: String,
+    pub(super) source: Source,
     pub(super) placeholder: String,
     pub(super) lenient: bool,
 }
@@ -33,10 +34,10 @@ struct Attempts {
 
 #[derive(Debug, Default)]
 struct State {
-    values: HashMap<String, String>,
+    values: HashMap<Source, String>,
     /// Values replaced during the run, still redacted from responses: a
     /// request sent with one may finish after the replacement
-    retired: Vec<(String, String)>,
+    retired: Vec<(Source, String)>,
     redactions: Arc<Vec<Redaction>>,
 }
 
@@ -53,7 +54,7 @@ pub(super) struct SecretValues {
 impl SecretValues {
     /// `values` holds the secrets that resolved at startup; every rule secret
     /// missing from it is pending
-    pub(super) fn new(rules: Vec<RuleRedaction>, values: HashMap<String, String>) -> Self {
+    pub(super) fn new(rules: Vec<RuleRedaction>, values: HashMap<Source, String>) -> Self {
         let state = State {
             redactions: Arc::new(build_redactions(&rules, &values, &[])),
             values,
@@ -71,12 +72,12 @@ impl SecretValues {
         let _ = self.session.set(session);
     }
 
-    pub(super) fn value(&self, secret: &str) -> Option<String> {
+    pub(super) fn value(&self, source: &Source) -> Option<String> {
         self.state
             .read()
             .unwrap_or_else(|e| e.into_inner())
             .values
-            .get(secret)
+            .get(source)
             .cloned()
     }
 
@@ -93,8 +94,11 @@ impl SecretValues {
         let state = self.state.read().unwrap_or_else(|e| e.into_inner());
         let mut pending: Vec<String> = Vec::new();
         for rule in &self.rules {
-            if !state.values.contains_key(&rule.secret) && !pending.contains(&rule.secret) {
-                pending.push(rule.secret.clone());
+            if let Source::Secret(secret) = &rule.source
+                && !state.values.contains_key(&rule.source)
+                && !pending.contains(secret)
+            {
+                pending.push(secret.clone());
             }
         }
         pending
@@ -104,51 +108,54 @@ impl SecretValues {
     /// refresh never replaces a value: that would drop the old value's
     /// redaction while a response that echoes it may still be in flight.
     pub(super) fn fill(&self, secret: &str, value: String) -> Result<bool> {
-        if self.value(secret).is_some() {
+        let source = Source::secret(secret);
+        if self.value(&source).is_some() {
             return Ok(false);
         }
-        self.set_checked(secret, value, true)
+        self.set_checked(&source, value, true)
     }
 
-    /// Use `value` for `secret` from now on, replacing any value it has. The
+    /// Use `value` for `source` from now on, replacing any value it has. The
     /// replaced value stays redacted from responses for the rest of the run.
-    pub(super) fn replace(&self, secret: &str, value: String) -> Result<()> {
-        self.set_checked(secret, value, false).map(|_| ())
+    pub(super) fn replace(&self, source: &Source, value: String) -> Result<()> {
+        self.set_checked(source, value, false).map(|_| ())
     }
 
-    /// Make `secret` pending again, so the next request that needs it
-    /// resolves it from the config as it is on disk. The value it had stays
-    /// redacted from responses for the rest of the run.
-    pub(super) fn forget(&self, secret: &str) {
+    /// Drop the value of `source`. A secret becomes pending again, so the
+    /// next request that needs it resolves it from the config as it is on
+    /// disk. The value it had stays redacted from responses for the rest of
+    /// the run.
+    pub(super) fn forget(&self, source: &Source) {
         {
             let mut state = self.state.write().unwrap_or_else(|e| e.into_inner());
-            let Some(old) = state.values.remove(secret) else {
+            let Some(old) = state.values.remove(source) else {
                 return;
             };
-            state.retired.push((secret.to_string(), old));
+            state.retired.push((source.clone(), old));
             state.redactions =
                 Arc::new(build_redactions(&self.rules, &state.values, &state.retired));
         }
         // Due at once, not after PENDING_RETRY
-        self.attempts
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .last
-            .remove(secret);
+        if let Source::Secret(secret) = source {
+            self.attempts
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .last
+                .remove(secret);
+        }
     }
 
     /// The checks a value gets before the proxy uses it, the same as at
     /// startup
-    pub(super) fn validate(&self, secret: &str, value: &str) -> Result<()> {
+    pub(super) fn validate(&self, source: &Source, value: &str) -> Result<()> {
         if value.is_empty() {
-            return Err(proxy_error(format!(
-                "secret '{secret}' resolved to an empty value"
-            )));
+            return Err(proxy_error(format!("{source} resolved to an empty value")));
         }
         for rule in &self.rules {
-            if rule.secret == secret && rule.placeholder == value {
+            if rule.source == *source && rule.placeholder == value {
                 return Err(proxy_error(format!(
-                    "placeholder for '{secret}' must differ from the real value"
+                    "placeholder for '{}' must differ from the real value",
+                    source.name()
                 )));
             }
             if value.contains(rule.placeholder.as_str()) {
@@ -160,18 +167,18 @@ impl SecretValues {
         Ok(())
     }
 
-    /// Use `value` for `secret` after the checks startup values get, unless
+    /// Use `value` for `source` after the checks startup values get, unless
     /// `only_if_pending` and it already has a value
-    fn set_checked(&self, secret: &str, value: String, only_if_pending: bool) -> Result<bool> {
-        self.validate(secret, &value)?;
+    fn set_checked(&self, source: &Source, value: String, only_if_pending: bool) -> Result<bool> {
+        self.validate(source, &value)?;
         let mut state = self.state.write().unwrap_or_else(|e| e.into_inner());
-        if only_if_pending && state.values.contains_key(secret) {
+        if only_if_pending && state.values.contains_key(source) {
             return Ok(false);
         }
-        if let Some(old) = state.values.insert(secret.to_string(), value)
-            && state.values.get(secret) != Some(&old)
+        if let Some(old) = state.values.insert(source.clone(), value)
+            && state.values.get(source) != Some(&old)
         {
-            state.retired.push((secret.to_string(), old));
+            state.retired.push((source.clone(), old));
         }
         state.redactions = Arc::new(build_redactions(&self.rules, &state.values, &state.retired));
         Ok(true)
@@ -194,7 +201,7 @@ impl SecretValues {
             let now = Instant::now();
             let mut due: Vec<String> = Vec::new();
             for secret in secrets {
-                if state.values.contains_key(*secret)
+                if state.values.contains_key(&Source::secret(secret))
                     || due.iter().any(|picked| picked == secret)
                     || attempts.in_flight.contains(*secret)
                     || attempts
@@ -302,18 +309,18 @@ impl Drop for InFlight {
 /// another is replaced whole
 fn build_redactions(
     rules: &[RuleRedaction],
-    values: &HashMap<String, String>,
-    retired: &[(String, String)],
+    values: &HashMap<Source, String>,
+    retired: &[(Source, String)],
 ) -> Vec<Redaction> {
     let mut redactions: Vec<Redaction> = Vec::new();
     let current = values
         .iter()
-        .map(|(secret, value)| (secret.as_str(), value.as_str()));
+        .map(|(source, value)| (source, value.as_str()));
     let retired = retired
         .iter()
-        .map(|(secret, value)| (secret.as_str(), value.as_str()));
-    for (secret, value) in current.chain(retired) {
-        for rule in rules.iter().filter(|rule| rule.secret == secret) {
+        .map(|(source, value)| (source, value.as_str()));
+    for (source, value) in current.chain(retired) {
+        for rule in rules.iter().filter(|rule| rule.source == *source) {
             match redactions
                 .iter_mut()
                 .find(|redaction| redaction.value == value.as_bytes())

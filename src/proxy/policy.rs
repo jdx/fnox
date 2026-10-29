@@ -3,6 +3,45 @@
 
 use super::*;
 
+/// What a rule injects: a secret, or one credential of a lease the proxy
+/// mints
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(super) enum Source {
+    Secret(String),
+    Lease { lease: String, credential: String },
+}
+
+impl Source {
+    pub(super) fn secret(name: &str) -> Self {
+        Self::Secret(name.to_string())
+    }
+
+    /// The secret or lease name
+    pub(super) fn name(&self) -> &str {
+        match self {
+            Self::Secret(secret) => secret,
+            Self::Lease { lease, .. } => lease,
+        }
+    }
+
+    /// How a `proxied request` audit line names it
+    pub(super) fn label(&self) -> String {
+        match self {
+            Self::Secret(secret) => secret.clone(),
+            Self::Lease { lease, .. } => format!("lease:{lease}"),
+        }
+    }
+}
+
+impl std::fmt::Display for Source {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Secret(secret) => write!(f, "secret '{secret}'"),
+            Self::Lease { lease, .. } => write!(f, "lease '{lease}'"),
+        }
+    }
+}
+
 /// Where in a request a rule allows its placeholder to be replaced.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Target {
@@ -48,7 +87,7 @@ pub(super) fn domain_matches(pattern: &str, domain: &str) -> bool {
 
 #[derive(Debug)]
 pub(super) struct PreparedRule {
-    pub(super) secret: String,
+    pub(super) source: Source,
     pub(super) domain: String,
     pub(super) target: Target,
     pub(super) methods: HashSet<String>,
@@ -79,6 +118,8 @@ pub(super) struct ProxyPolicy {
     /// can read it from the child's environment.
     pub(super) token: String,
     pub(super) values: Arc<SecretValues>,
+    /// The leases rules name, minted when a request first needs them
+    pub(super) leases: ProxyLeases,
     /// Serves MCP to `fnox mcp` relays that CONNECT to [`MCP_HOST`]
     pub(super) mcp: std::sync::OnceLock<McpSlot>,
     pub(super) client: reqwest::Client,
@@ -180,7 +221,8 @@ impl ProxyPolicy {
         self.values.redactions()
     }
 
-    /// Resolve again the pending secrets this request needs
+    /// Resolve again the pending secrets this request needs, and mint or
+    /// renew the leases it needs
     pub(super) async fn refresh_pending(
         &self,
         domain: &str,
@@ -188,22 +230,32 @@ impl ProxyPolicy {
         url: &reqwest::Url,
         headers: &[(String, String)],
     ) {
-        let secrets = self.secrets_needed(domain, method, url, headers);
+        let mut secrets = Vec::new();
+        let mut leases = Vec::new();
+        for source in self.sources_needed(domain, method, url, headers) {
+            match source {
+                Source::Secret(secret) => secrets.push(secret.as_str()),
+                Source::Lease { lease, .. } => leases.push(lease.as_str()),
+            }
+        }
         if !secrets.is_empty() {
             self.values.refresh(&secrets).await;
         }
+        if !leases.is_empty() {
+            self.leases.ensure(&leases, &self.values).await;
+        }
     }
 
-    /// The secrets of rules whose domain and route match a request and whose
+    /// The sources of rules whose domain and route match a request and whose
     /// placeholder it carries in the rule's own header or query parameter,
     /// read the way [`Self::authorize`] reads them (query values decoded)
-    pub(super) fn secrets_needed(
+    pub(super) fn sources_needed(
         &self,
         domain: &str,
         method: &str,
         url: &reqwest::Url,
         headers: &[(String, String)],
-    ) -> Vec<&str> {
+    ) -> Vec<&Source> {
         let path = url.path();
         let query = QuerySegments::parse(url.query());
         self.rules
@@ -222,7 +274,7 @@ impl ProxyPolicy {
                             .is_some_and(|param| param == *name),
                     }
             })
-            .map(|rule| rule.secret.as_str())
+            .map(|rule| &rule.source)
             .collect()
     }
 
@@ -329,14 +381,14 @@ impl ProxyPolicy {
             if occurrences > 1 {
                 return Err(proxy_error(format!(
                     "placeholder for '{}' appeared more than once",
-                    rule.secret
+                    rule.source.name()
                 )));
             }
 
             let outside = || {
                 proxy_error(format!(
                     "placeholder for '{}' appeared outside its allowed route or target",
-                    rule.secret
+                    rule.source.name()
                 ))
             };
             let allows = |target: &dyn Fn(&Target) -> bool| {
@@ -350,12 +402,14 @@ impl ProxyPolicy {
             // Checked after the placeholder's place, so a misplaced one is
             // reported as misplaced rather than as a secret to set
             let value = || {
-                self.values.value(&rule.secret).ok_or_else(|| {
-                    proxy_error(format!(
-                        "secret '{}' is not set yet; set it, for example with `fnox set {}`, and retry",
-                        rule.secret, rule.secret
-                    ))
-                })
+                self.values
+                    .value(&rule.source)
+                    .ok_or_else(|| match &rule.source {
+                        Source::Secret(secret) => proxy_error(format!(
+                            "secret '{secret}' is not set yet; set it, for example with `fnox set {secret}`, and retry"
+                        )),
+                        Source::Lease { lease, .. } => self.leases.unavailable(lease),
+                    })
             };
 
             if in_path > 0 {
@@ -381,7 +435,7 @@ impl ProxyPolicy {
                 }
                 url.set_query(Some(&query.replaced(&rule.placeholder, &value()?)));
             }
-            injected.push(rule.secret.clone());
+            injected.push(rule.source.label());
         }
         Ok(injected)
     }

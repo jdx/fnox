@@ -381,10 +381,10 @@ pub async fn find_encryption_provider(
 }
 
 /// Record a lease result in the ledger (add + save). No lock management —
-/// the caller must hold the ledger lock. Shared by `create_and_record_lease`
-/// and `resolve_lease` to avoid duplicating the add+save+warn pattern.
+/// the caller must hold the ledger lock. Shared by `create_and_record_lease`,
+/// `resolve_lease` and the proxy to avoid duplicating the add+save+warn pattern.
 #[allow(clippy::too_many_arguments)]
-fn record_lease(
+pub fn record_lease(
     ledger: &mut LeaseLedger,
     result: &crate::lease_backends::Lease,
     backend_name: &str,

@@ -68,6 +68,36 @@ domain = "*.s3.example.com"
 
 This matches `bucket.s3.example.com`. It does not match `s3.example.com` itself or `a.b.s3.example.com`. `*` is allowed only as the first label, and the rest must have at least two labels, so `*.com` and `api.*` are rejected. The real value is sent to any host the pattern matches, so use a wildcard only for domains you control or fully trust.
 
+### Short-lived credentials from a lease
+
+A rule can name a [lease](/guide/leases) instead of a secret. fnox then mints the short-lived credential itself, and neither it nor the parent credential it is minted from reaches the command. Each rule sets exactly one of `secret` and `lease`.
+
+```toml
+[secrets]
+GITLAB_TOKEN = { provider = "op", value = "Forge/parent token", env = false }
+
+[leases.forge]
+type = "gitlab"
+url = "https://forge.example.com"
+project = "team/app"
+scopes = ["api"]
+duration = "1h"
+
+[[proxy.rules]]
+lease = "forge"
+domain = "forge.example.com"
+header = "private-token"
+methods = ["POST"]
+paths = ["/api/v4/projects/42/merge_requests/*/notes"]
+```
+
+The command gets a placeholder in `GITLAB_TOKEN`, the variable the lease produces; set `env` to use another name. fnox sends the minted token only in the `PRIVATE-TOKEN` header of `POST` requests to that path, with the same checks as a secret rule, and redacts it from responses.
+
+- **Minting.** fnox resolves the lease's parent credential at startup and refuses to start if it is missing. It mints the lease the first time a matching request carries the placeholder, so a session that never uses it creates nothing. Concurrent requests share one lease. fnox mints a replacement 5 minutes before the lease expires, or after three quarters of its lifetime for a shorter lease; the old value stays redacted from responses.
+- **Failures.** If minting fails, the request is refused with the reason, and a request at least 10 seconds later tries again.
+- **Revocation.** When the command exits, fnox revokes every lease it minted, for backends that support revocation. Minted leases are recorded in the [lease ledger](/guide/leases#how-caching-works) without their credentials: `fnox lease list` shows them, and `fnox lease revoke` can retry one that fnox couldn't revoke, for example because fnox was killed. `fnox exec` never reuses them, and the proxy never reuses a lease that `fnox exec` cached, because that value has been in a command's environment.
+- **Choosing a credential.** A lease that produces several variables, such as a Vault lease with an `env_map`, needs `credential = "NAME"` on the rule to pick one. So does a `command` lease, whose variables aren't known until it runs. `aws-sts` leases can't be used: their credentials sign requests instead of being sent in a header or query parameter.
+
 ### Secrets that aren't set yet
 
 A rule can name a secret that has no value yet, as long as the secret is declared:
@@ -93,12 +123,12 @@ fnox proxy rules
 
 ## What happens
 
-1. fnox blocks other processes from reading its memory, then resolves the secrets named in rules, plus anything their providers need. A secret without a value stays [pending](#secrets-that-aren-t-set-yet).
+1. fnox blocks other processes from reading its memory, then resolves the secrets named in rules, the parent credentials of the leases named in rules, and anything their providers need. A secret without a value stays [pending](#secrets-that-aren-t-set-yet). A lease is minted when a request first needs it.
 2. It starts a proxy on `127.0.0.1` with a temporary certificate authority and a random password for this session.
 3. It starts the command with placeholders, `HTTPS_PROXY` (with the password in the URL), and the CA file in the standard environment variables.
 4. For each request, fnox checks the proxy password, verifies the real server's TLS certificate, and substitutes the placeholder only if domain, method, path, and the header or query parameter all match a rule.
 5. If a response echoes a real secret back, fnox replaces it with the placeholder.
-6. When the command exits, fnox stops the proxy and deletes the CA file. The CA's private key never leaves fnox's memory, and real values go only to the matched service, over TLS, never to the child.
+6. When the command exits, fnox stops the proxy, revokes the leases it minted, and deletes the CA file. The CA's private key never leaves fnox's memory, and real values go only to the matched service, over TLS, never to the child.
 
 The password stops other users' programs on a shared machine from using the proxy to send your credentials. Clients read it from `HTTPS_PROXY` automatically. It doesn't stop programs running as you: they can read the password from the command's environment, as they can read your fnox config (see [what it does not protect against](#what-it-does-not-protect-against)). On Linux, fnox also marks itself non-dumpable, so the command can't read fnox's memory or environment through `/proc`. On macOS, it refuses debugger attachment.
 
@@ -222,7 +252,7 @@ If you can't use `--sandbox`, an isolated environment has to do three things:
 
 The environment variables set by `fnox proxy run` have to cross the boundary too. With Docker, for example, forward them by name (`-e HTTPS_PROXY -e SSL_CERT_FILE`) and mount the CA file read-only at the same path. fnox doesn't ship an isolation wrapper, so verify your setup with the audit-line check above, and confirm that a request made without the proxy fails.
 
-With `audit = true` (the default), fnox logs each request's method, domain, path, and which secret was injected, and each refused request with its reason. It never logs headers, bodies, or values.
+With `audit = true` (the default), fnox logs each request's method, domain, path, and which secret or lease was injected (a lease as `lease:<name>`), and each refused request with its reason. It never logs headers, bodies, or values.
 
 ## See also
 

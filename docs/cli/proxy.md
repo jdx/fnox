@@ -10,7 +10,7 @@ description: "Inject credentials into a command's HTTPS requests through a local
 
 Inject credentials into a command's HTTPS requests through a local proxy
 
-`fnox proxy run` starts a local HTTPS proxy and runs a command that sees only placeholder values. When the command sends a request that matches a `[[proxy.rules]]` entry by domain, method, and path, the proxy swaps in the real secret. The proxy controls where credentials are sent; it does not sandbox the command unless you pass `--sandbox` to `run`. Both subcommands require a `[proxy]` table.
+`fnox proxy run` starts a local HTTPS proxy and runs a command that sees only placeholder values. When the command sends a request that matches a `[[proxy.rules]]` entry by domain, method, and path, the proxy swaps in the real secret, or a short-lived credential it leases. The proxy controls where credentials are sent; it does not sandbox the command unless you pass `--sandbox` to `run`. Both subcommands require a `[proxy]` table.
 
 ## Flags
 

@@ -100,6 +100,8 @@ pub struct RunningProxy {
     pub(super) ca_file: NamedTempFile,
     pub(super) shutdown: Option<oneshot::Sender<()>>,
     pub(super) task: tokio::task::JoinHandle<()>,
+    /// Revokes the leases the proxy minted at shutdown
+    pub(super) policy: Arc<ProxyPolicy>,
 }
 
 impl RunningProxy {
@@ -117,6 +119,7 @@ impl RunningProxy {
 
         let policy = plan.policy;
         let token = policy.token.clone();
+        let leases = policy.clone();
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
         let mut address = None;
         #[cfg(unix)]
@@ -155,6 +158,7 @@ impl RunningProxy {
             ca_file,
             shutdown: Some(shutdown_tx),
             task,
+            policy: leases,
         })
     }
 
@@ -180,11 +184,13 @@ impl RunningProxy {
         self.ca_file.path()
     }
 
+    /// Stop accepting clients and revoke the leases the proxy minted
     pub async fn shutdown(mut self) {
         if let Some(shutdown) = self.shutdown.take() {
             let _ = shutdown.send(());
         }
         let _ = (&mut self.task).await;
+        self.policy.leases.revoke_all(&self.policy.values).await;
     }
 }
 
