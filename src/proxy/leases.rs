@@ -22,6 +22,9 @@ use std::time::{Duration, Instant};
 /// lease's own timeout is longer
 const LEASE_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// How long encrypting a minted lease's credentials for the ledger may take
+const ENCRYPT_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// How long after a failed mint a request may try again
 const MINT_RETRY: Duration = Duration::from_secs(10);
 
@@ -466,15 +469,26 @@ impl LeaseSlot {
         setup: &LeaseSetup,
         project_dir: &std::path::Path,
     ) {
+        // Optional, so bounded: a provider that waits for a PIN or a key
+        // touch must not hold up requests, or revocation at shutdown, which
+        // waits for this lease's lock
         let (revoke_credentials, encryption_provider) = match &setup.encryption {
             Some((provider_name, provider)) => {
-                match lease::encrypt_credentials(provider.as_ref(), &lease.credentials).await {
+                let encrypt = lease::encrypt_credentials(provider.as_ref(), &lease.credentials);
+                let encrypted = match tokio::time::timeout(ENCRYPT_TIMEOUT, encrypt).await {
+                    Ok(Ok(encrypted)) => Ok(encrypted),
+                    Ok(Err(error)) => Err(setup.scrub(&error.to_string())),
+                    Err(_) => Err(format!(
+                        "encrypting its credentials took longer than {}s",
+                        ENCRYPT_TIMEOUT.as_secs()
+                    )),
+                };
+                match encrypted {
                     Ok(encrypted) => (Some(encrypted), Some(provider_name.clone())),
-                    Err(error) => {
+                    Err(reason) => {
                         tracing::warn!(
-                            "fnox proxy: lease '{}' of '{name}' can't be revoked after this session if fnox can't revoke it now: {}",
-                            lease.lease_id,
-                            setup.scrub(&error.to_string())
+                            "fnox proxy: lease '{}' of '{name}' can't be revoked after this session if fnox can't revoke it now: {reason}",
+                            lease.lease_id
                         );
                         (None, None)
                     }

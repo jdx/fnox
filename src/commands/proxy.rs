@@ -593,9 +593,10 @@ impl ProxyRunCommand {
 }
 
 /// Runs `command` without letting a signal end fnox first, so fnox can still
-/// stop the proxy and revoke its leases when the command exits. Ctrl-C reaches
-/// the command directly through the terminal, so fnox leaves it to the
-/// command; `SIGTERM` and `SIGHUP` sent to fnox are passed on.
+/// stop the proxy and revoke its leases when the command exits. `SIGTERM`,
+/// `SIGHUP`, and a `SIGINT` sent to fnox alone are passed on. Ctrl-C at the
+/// terminal already reaches the command, so passing it on would deliver it
+/// twice.
 async fn run_forwarding_signals(mut command: tokio::process::Command) -> std::io::Result<Outcome> {
     #[cfg(unix)]
     {
@@ -609,8 +610,12 @@ async fn run_forwarding_signals(mut command: tokio::process::Command) -> std::io
         loop {
             let number = tokio::select! {
                 status = child.wait() => return status.map(Outcome::Exited),
-                // The terminal sent it to the command too
-                _ = interrupt.recv() => continue,
+                _ = interrupt.recv() => {
+                    if terminal_interrupts_us() {
+                        continue;
+                    }
+                    libc::SIGINT
+                }
                 _ = terminate.recv() => libc::SIGTERM,
                 _ = hangup.recv() => libc::SIGHUP,
             };
@@ -623,6 +628,19 @@ async fn run_forwarding_signals(mut command: tokio::process::Command) -> std::io
     #[cfg(not(unix))]
     {
         command.status().await.map(Outcome::Exited)
+    }
+}
+
+/// Whether fnox runs in the terminal's foreground process group, which the
+/// command shares: then Ctrl-C at the terminal reaches both of them. A
+/// `SIGINT` without that terminal, such as from a supervisor, reaches only
+/// fnox.
+#[cfg(unix)]
+fn terminal_interrupts_us() -> bool {
+    // SAFETY: both take and return only integers.
+    unsafe {
+        let foreground = libc::tcgetpgrp(libc::STDIN_FILENO);
+        foreground != -1 && foreground == libc::getpgrp()
     }
 }
 

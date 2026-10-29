@@ -112,3 +112,17 @@ teardown() {
 	'
 	assert_equal "$(cat revoked.log)" "proxy-lease-1"
 }
+
+@test "proxy run passes on an interrupt sent to fnox alone and revokes its leases" {
+	# No terminal here, so a SIGINT can only have been sent to fnox itself
+	run "$FNOX_BIN" proxy run -- sh -c '
+		curl --noproxy "" -sS -o /dev/null --data "" \
+			-H "private-token: $FORGE_TOKEN" https://127.0.0.1/notes
+		trap "echo interrupted; exit 0" INT
+		kill -INT "$PPID"
+		sleep 5 &
+		wait
+	' </dev/null
+	assert_line "interrupted"
+	assert_equal "$(cat revoked.log)" "proxy-lease-1"
+}
