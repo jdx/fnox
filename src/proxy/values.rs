@@ -11,6 +11,10 @@ use crate::secret_session::SecretSession;
 /// How often a pending secret may be resolved again
 const PENDING_RETRY: Duration = Duration::from_secs(3);
 
+/// How long a request waits for a pending secret to resolve before it is
+/// refused as not set
+const PENDING_LOAD_TIMEOUT: Duration = Duration::from_secs(15);
+
 /// What a rule needs to redact its secret from responses
 #[derive(Debug, Clone)]
 pub(super) struct RuleRedaction {
@@ -166,22 +170,29 @@ impl SecretValues {
         if due.is_empty() {
             return;
         }
-        let done = || {
-            let mut attempts = self.attempts.lock().unwrap_or_else(|e| e.into_inner());
-            for secret in &due {
-                attempts.in_flight.remove(secret);
-            }
+        // Clears the in-flight marks however this ends, including when the
+        // request is dropped mid-load
+        let _in_flight = InFlight {
+            values: self,
+            secrets: &due,
         };
         let config = match session.load_config() {
             Ok(config) => config,
             Err(error) => {
                 tracing::warn!("fnox proxy: could not reload the config: {error}");
-                done();
                 return;
             }
         };
         for secret in &due {
-            match session.load(&config, secret).await {
+            let loaded = tokio::time::timeout(PENDING_LOAD_TIMEOUT, session.load(&config, secret));
+            let Ok(loaded) = loaded.await else {
+                tracing::warn!(
+                    "fnox proxy: resolving '{secret}' took longer than {}s; it stays pending",
+                    PENDING_LOAD_TIMEOUT.as_secs()
+                );
+                continue;
+            };
+            match loaded {
                 Ok(true) => {
                     let Some(Some(value)) = session.cached(secret).await else {
                         continue;
@@ -202,7 +213,25 @@ impl SecretValues {
                 }
             }
         }
-        done();
+    }
+}
+
+/// Removes the in-flight marks of a refresh when it ends
+struct InFlight<'a> {
+    values: &'a SecretValues,
+    secrets: &'a [String],
+}
+
+impl Drop for InFlight<'_> {
+    fn drop(&mut self) {
+        let mut attempts = self
+            .values
+            .attempts
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        for secret in self.secrets {
+            attempts.in_flight.remove(secret);
+        }
     }
 }
 

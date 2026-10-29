@@ -193,7 +193,8 @@ impl ProxyPolicy {
     }
 
     /// The secrets of rules whose domain and route match a request and whose
-    /// placeholder it carries
+    /// placeholder it carries in the rule's own header or query parameter,
+    /// read the way [`Self::authorize`] reads them (query values decoded)
     pub(super) fn secrets_needed(
         &self,
         domain: &str,
@@ -202,16 +203,20 @@ impl ProxyPolicy {
         headers: &[(String, String)],
     ) -> Vec<&str> {
         let path = url.path();
-        let target = url.as_str();
+        let query = QuerySegments::parse(url.query());
         self.rules
             .iter()
             .filter(|rule| {
                 domain_matches(&rule.domain, domain)
                     && rule.route_matches(method, path)
-                    && (target.contains(&rule.placeholder)
-                        || headers
-                            .iter()
-                            .any(|(_, value)| value.contains(&rule.placeholder)))
+                    && match &rule.target {
+                        Target::Header(name) => headers.iter().any(|(header, value)| {
+                            header.eq_ignore_ascii_case(name) && value.contains(&rule.placeholder)
+                        }),
+                        Target::Query(name) => query
+                            .param_containing(&rule.placeholder)
+                            .is_some_and(|param| param == *name),
+                    }
             })
             .map(|rule| rule.secret.as_str())
             .collect()

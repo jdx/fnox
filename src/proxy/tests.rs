@@ -979,3 +979,24 @@ fn a_request_refreshes_only_the_pending_secrets_it_carries() {
     assert!(needed("GET", "/user", "Bearer ghp_placeholder").is_empty());
     assert!(needed("POST", "/repos/example/fnox", "Bearer ghp_placeholder").is_empty());
 }
+
+#[test]
+fn a_pending_query_secret_is_found_in_its_decoded_parameter_only() {
+    let mut config = config();
+    config.rules[0].header = None;
+    config.rules[0].query = Some("key".to_string());
+    config.rules[0].placeholder = Some("<TOKEN>".to_string());
+    let plan = ProxyPlan::new(&config, &IndexMap::new()).unwrap();
+    let needed = |target: &str, headers: &[(String, String)]| {
+        let url = reqwest::Url::parse(&format!("https://api.github.com{target}")).unwrap();
+        plan.policy
+            .secrets_needed("api.github.com", "GET", &url, headers)
+            .len()
+    };
+    // Percent-encoded in its own parameter: authorize decodes it, so this does too
+    assert_eq!(needed("/repos/example/fnox?key=%3CTOKEN%3E", &[]), 1);
+    // In another parameter or a header, the rule would refuse it anyway
+    assert_eq!(needed("/repos/example/fnox?other=%3CTOKEN%3E", &[]), 0);
+    let header = [("authorization".to_string(), "<TOKEN>".to_string())];
+    assert_eq!(needed("/repos/example/fnox", &header), 0);
+}
