@@ -112,7 +112,15 @@ struct LeaseSlot {
     state: tokio::sync::Mutex<SlotState>,
     /// Why the last mint failed, for the requests it refuses
     failure: std::sync::Mutex<Option<String>>,
+    /// The leases revoked at shutdown, by lease ID and record creation time.
+    /// A ledger write that was still waiting for the ledger's lock records
+    /// them as revoked, whichever of it and the shutdown's marking runs
+    /// first.
+    revoked: Arc<std::sync::Mutex<HashSet<RecordKey>>>,
 }
+
+/// A ledger record of this session: its lease ID and creation time
+type RecordKey = (String, DateTime<Utc>);
 
 #[derive(Default)]
 struct SlotState {
@@ -123,8 +131,6 @@ struct SlotState {
     last_failure: Option<Instant>,
     /// Every lease minted this session, to revoke when it ends
     minted: Vec<Minted>,
-    /// Ledger writes still waiting for the ledger's lock
-    recording: Vec<tokio::task::JoinHandle<()>>,
 }
 
 struct Minted {
@@ -180,6 +186,7 @@ impl ProxyLeases {
                     credentials: credentials.clone(),
                     state: tokio::sync::Mutex::new(SlotState::default()),
                     failure: std::sync::Mutex::new(None),
+                    revoked: Arc::default(),
                 },
             );
         }
@@ -236,18 +243,7 @@ impl ProxyLeases {
         let mut revoked: Vec<(String, String, DateTime<Utc>)> = Vec::new();
         for (name, slot) in &self.slots {
             // Waits for a mint in flight, so its lease is revoked too
-            let mut state = slot.state.lock().await;
-            // A record written after the marking below would stay active
-            for recording in state.recording.drain(..) {
-                if tokio::time::timeout(LEDGER_TIMEOUT, recording)
-                    .await
-                    .is_err()
-                {
-                    tracing::warn!(
-                        "fnox proxy: a lease of '{name}' may show as active in the ledger after it is revoked: the ledger stayed locked"
-                    );
-                }
-            }
+            let state = slot.state.lock().await;
             for credential in &slot.credentials {
                 values.forget(&source(name, credential));
             }
@@ -260,12 +256,10 @@ impl ProxyLeases {
                 match tokio::time::timeout(slot.timeout, revoke).await {
                     Ok(Ok(())) => {
                         tracing::debug!("fnox proxy: revoked lease '{}'", lease.lease_id);
-                        revoked.push((name.clone(), lease.lease_id.clone(), minted.recorded_at));
+                        slot.mark_revoked(name, minted, &mut revoked);
                     }
                     // It is no longer valid anyway
-                    _ if expired => {
-                        revoked.push((name.clone(), lease.lease_id.clone(), minted.recorded_at))
-                    }
+                    _ if expired => slot.mark_revoked(name, minted, &mut revoked),
                     Ok(Err(error)) => tracing::warn!(
                         "fnox proxy: could not revoke lease '{}' of '{name}': {}; run `fnox lease revoke {}` to retry, or revoke it in the service",
                         lease.lease_id,
@@ -359,6 +353,21 @@ fn source(name: &str, credential: &str) -> Source {
 }
 
 impl LeaseSlot {
+    /// Note that `minted` is revoked, for the ledger
+    fn mark_revoked(
+        &self,
+        name: &str,
+        minted: &Minted,
+        revoked: &mut Vec<(String, String, DateTime<Utc>)>,
+    ) {
+        let lease_id = minted.lease.lease_id.clone();
+        self.revoked
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert((lease_id.clone(), minted.recorded_at));
+        revoked.push((name.to_string(), lease_id, minted.recorded_at));
+    }
+
     async fn ensure(
         &self,
         name: &str,
@@ -431,8 +440,7 @@ impl LeaseSlot {
         })?
         .map_err(MintError::Backend)?;
         let recorded_at = Utc::now();
-        self.record(name, &label, &lease, recorded_at, setup, state)
-            .await;
+        self.record(name, &label, &lease, recorded_at, setup).await;
         state.minted.push(Minted {
             lease: lease.clone(),
             recorded_at,
@@ -491,7 +499,6 @@ impl LeaseSlot {
         lease: &Lease,
         recorded_at: DateTime<Utc>,
         setup: &LeaseSetup,
-        state: &mut SlotState,
     ) {
         let Some(project_dir) = setup.ledger.clone() else {
             return;
@@ -540,10 +547,21 @@ impl LeaseSlot {
         // async workers, and leave a slow write to finish on its own
         let lease_id = lease.lease_id.clone();
         let backend = name.to_string();
+        let revoked = self.revoked.clone();
         let mut write = tokio::task::spawn_blocking(move || {
             let recorded = LeaseLedger::lock(&project_dir).and_then(|_lock| {
                 let mut ledger = LeaseLedger::load(&project_dir)?;
+                // Checked under the ledger's lock: the shutdown's marking
+                // takes it too, so it either finds this record or ran first
+                let key = (record.lease_id.clone(), record.created_at);
+                let already_revoked = revoked
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .contains(&key);
                 ledger.add(record);
+                if already_revoked {
+                    ledger.mark_revoked_at(ledger.leases.len() - 1);
+                }
                 ledger.save(&project_dir)
             });
             if let Err(error) = recorded {
@@ -556,7 +574,10 @@ impl LeaseSlot {
             .await
             .is_err()
         {
-            state.recording.push(write);
+            tracing::debug!(
+                "fnox proxy: the ledger is locked; lease '{}' is recorded once it isn't",
+                lease.lease_id
+            );
         }
     }
 }
