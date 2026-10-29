@@ -68,6 +68,21 @@ domain = "*.s3.example.com"
 
 This matches `bucket.s3.example.com`. It does not match `s3.example.com` itself or `a.b.s3.example.com`. `*` is allowed only as the first label, and the rest must have at least two labels, so `*.com` and `api.*` are rejected. The real value is sent to any host the pattern matches, so use a wildcard only for domains you control or fully trust.
 
+### Secrets that aren't set yet
+
+A rule can name a secret that has no value yet, as long as the secret is declared:
+
+```toml
+[secrets]
+STRIPE_KEY = { description = "Stripe test key" }
+
+[[proxy.rules]]
+secret = "STRIPE_KEY"
+domain = "api.stripe.com"
+```
+
+`fnox proxy run` starts anyway and warns that `STRIPE_KEY` isn't set. The command still gets its placeholder. A request that needs the secret is refused with `secret 'STRIPE_KEY' is not set yet`. Before refusing, fnox reads the config again and resolves the secret, at most once every few seconds. Once you set it, for example with `fnox set STRIPE_KEY` in another terminal, a matching request gets the real value without a restart. A request within 3 seconds of the last attempt is still refused, so retry after a moment. A lookup that takes longer than 15 seconds is abandoned and the request is refused; the next one tries again. A rule for a secret that isn't declared at all is still an error, so a typo in a rule doesn't go unnoticed.
+
 Check the effective rules without resolving any secrets:
 
 ```sh
@@ -76,7 +91,7 @@ fnox proxy rules
 
 ## What happens
 
-1. fnox blocks other processes from reading its memory, then resolves the secrets named in rules, plus anything their providers need.
+1. fnox blocks other processes from reading its memory, then resolves the secrets named in rules, plus anything their providers need. A secret without a value stays [pending](#secrets-that-aren-t-set-yet).
 2. It starts a proxy on `127.0.0.1` with a temporary certificate authority and a random password for this session.
 3. It starts the command with placeholders, `HTTPS_PROXY` (with the password in the URL), and the CA file in the standard environment variables.
 4. For each request, fnox checks the proxy password, verifies the real server's TLS certificate, and substitutes the placeholder only if domain, method, path, and the header or query parameter all match a rule.

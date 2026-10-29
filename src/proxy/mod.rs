@@ -38,10 +38,12 @@ mod policy;
 mod server;
 #[cfg(test)]
 mod tests;
+mod values;
 
 use ca::*;
 use destination::*;
 use policy::*;
+use values::*;
 
 pub use plan::{ProxyPlan, deny_inspection, validate_config};
 pub use policy::target_label;

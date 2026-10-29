@@ -242,10 +242,7 @@ fn collect_requested_secrets(
     proxy: &ProxyConfig,
     all_secrets: &IndexMap<String, SecretConfig>,
 ) -> Result<IndexMap<String, SecretConfig>> {
-    let providers = config.get_providers(profile)?;
-    let default_provider = config.get_default_provider(profile)?;
     let mut requested = IndexMap::new();
-
     for rule in &proxy.rules {
         let secret = all_secrets.get(&rule.secret).ok_or_else(|| {
             FnoxError::Config(format!(
@@ -256,42 +253,7 @@ fn collect_requested_secrets(
         requested.insert(rule.secret.clone(), secret.clone());
     }
 
-    loop {
-        let mut added = false;
-        let keys: Vec<_> = requested.keys().cloned().collect();
-        for key in keys {
-            let secret = &requested[&key];
-            let provider_name = secret
-                .sync
-                .as_ref()
-                .map(|sync| sync.provider.as_str())
-                .or_else(|| secret.provider())
-                .or_else(|| {
-                    secret
-                        .value()
-                        .is_some()
-                        .then_some(default_provider.as_deref())
-                        .flatten()
-                });
-            let Some(provider) = provider_name.and_then(|name| providers.get(name)) else {
-                continue;
-            };
-            for dependency in provider.env_dependencies() {
-                if requested.contains_key(*dependency) {
-                    continue;
-                }
-                if let Some(secret) = all_secrets.get(*dependency) {
-                    requested.insert((*dependency).to_string(), secret.clone());
-                    added = true;
-                }
-            }
-        }
-        if !added {
-            break;
-        }
-    }
-
-    Ok(requested)
+    crate::secret_session::with_provider_dependencies(config, profile, all_secrets, requested)
 }
 
 impl ProxyRunCommand {
@@ -330,19 +292,24 @@ impl ProxyRunCommand {
         )
         .with_write_target(cli.config.clone(), cli.write_profile.clone());
         let resolved = session.resolve_now(&requested).await?;
-        let mut values = IndexMap::new();
-        for rule in &proxy_config.rules {
-            let value = resolved
-                .get(&rule.secret)
-                .cloned()
-                .flatten()
-                .ok_or_else(|| {
-                    FnoxError::Config(format!("Proxy secret '{}' did not resolve", rule.secret))
-                })?;
-            values.insert(rule.secret.clone(), value);
-        }
+        // A rule secret without a value is pending: the child still gets its
+        // placeholder, and the proxy resolves it again when a request needs it
+        let values: IndexMap<String, String> = proxy_config
+            .rules
+            .iter()
+            .filter_map(|rule| {
+                let value = resolved.get(&rule.secret).cloned().flatten()?;
+                Some((rule.secret.clone(), value))
+            })
+            .collect();
 
         let plan = ProxyPlan::new(proxy_config, &values)?;
+        plan.set_session(std::sync::Arc::new(session));
+        for secret in plan.pending() {
+            tracing::warn!(
+                "fnox proxy: '{secret}' is not set; requests that need it are refused until it is (for example, run `fnox set {secret}`)"
+            );
+        }
         let child_env = plan.child_env.clone();
         let listener = sandbox
             .as_ref()

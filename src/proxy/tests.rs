@@ -140,7 +140,7 @@ fn rejects_placeholder_in_another_header() {
 #[test]
 fn redacts_reflected_values() {
     let mut body = b"token=real-token".to_vec();
-    redact_values(&mut body, &policy().policy.redactions);
+    redact_values(&mut body, &policy().policy.redactions());
     assert_eq!(body, b"token=ghp_placeholder");
 }
 
@@ -167,7 +167,7 @@ fn redacts_overlapping_values_without_scanning_placeholders() {
     let plan = ProxyPlan::new(&config, &values).unwrap();
     let mut body = b"real-token token".to_vec();
 
-    redact_values(&mut body, &plan.policy.redactions);
+    redact_values(&mut body, &plan.policy.redactions());
 
     assert_eq!(
         body, b"placeholder-with-token short-placeholder",
@@ -419,7 +419,7 @@ fn query_rule_without_placeholder_leaves_url_untouched() {
 fn redacts_percent_encoded_query_secret() {
     let plan = plan_with(vec![query_rule("maps.example.com", "key")], "a b&c").unwrap();
     let mut body = b"Location: /?key=a+b%26c and a b&c".to_vec();
-    redact_values(&mut body, &plan.policy.redactions);
+    redact_values(&mut body, &plan.policy.redactions());
     assert_eq!(body, b"Location: /?key=key_placeholder and key_placeholder");
 }
 
@@ -508,7 +508,7 @@ fn labels_rule_targets() {
 fn redacts_any_percent_encoding_of_query_secret() {
     let plan = plan_with(vec![query_rule("maps.example.com", "key")], "a b&c/d").unwrap();
     let mut body = b"/?k=a%20b%26c%2Fd /?k=a%20b%26c/d /?k=a+b%26c%2fd /?k=%61%20b&c/d".to_vec();
-    redact_values(&mut body, &plan.policy.redactions);
+    redact_values(&mut body, &plan.policy.redactions());
     assert_eq!(
         String::from_utf8(body).unwrap(),
         "/?k=key_placeholder /?k=key_placeholder /?k=key_placeholder /?k=key_placeholder"
@@ -518,7 +518,7 @@ fn redacts_any_percent_encoding_of_query_secret() {
 #[test]
 fn header_secret_redaction_stays_exact() {
     let mut body = b"token=real%2Dtoken real-token".to_vec();
-    redact_values(&mut body, &policy().policy.redactions);
+    redact_values(&mut body, &policy().policy.redactions());
     assert_eq!(body, b"token=real%2Dtoken ghp_placeholder");
 }
 
@@ -540,7 +540,7 @@ fn rejects_percent_encoded_placeholder_in_path() {
 fn redacts_query_secret_containing_percent() {
     let plan = plan_with(vec![query_rule("maps.example.com", "key")], "50%off%41").unwrap();
     let mut body = b"a=50%25off%2541 b=50%off%41 c=50%25off%41 d=50%25off%2541x".to_vec();
-    redact_values(&mut body, &plan.policy.redactions);
+    redact_values(&mut body, &plan.policy.redactions());
     assert_eq!(
         String::from_utf8(body).unwrap(),
         "a=key_placeholder b=key_placeholder c=key_placeholder d=key_placeholderx"
@@ -872,4 +872,159 @@ fn loggable_targets_drop_credentials_and_queries() {
     ] {
         assert_eq!(loggable_target(target), logged, "{target}");
     }
+}
+
+fn pending_plan() -> ProxyPlan {
+    ProxyPlan::new(&config(), &IndexMap::new()).unwrap()
+}
+
+#[test]
+fn a_rule_without_a_value_is_pending_and_refused() {
+    let plan = pending_plan();
+    assert_eq!(plan.pending(), vec!["GITHUB_TOKEN".to_string()]);
+    assert_eq!(plan.child_env["GITHUB_TOKEN"], "ghp_placeholder");
+
+    let mut headers = vec![(
+        "authorization".to_string(),
+        "Bearer ghp_placeholder".to_string(),
+    )];
+    let error = authorize(
+        &plan,
+        "api.github.com",
+        "GET",
+        "/repos/example/fnox",
+        &mut headers,
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("'GITHUB_TOKEN' is not set yet"), "{error}");
+    assert_eq!(headers[0].1, "Bearer ghp_placeholder");
+}
+
+#[test]
+fn a_pending_secret_is_injected_and_redacted_once_set() {
+    let plan = pending_plan();
+    assert!(plan.policy.redactions().is_empty());
+    assert!(
+        plan.policy
+            .values
+            .fill("GITHUB_TOKEN", "real-token".to_string())
+            .unwrap()
+    );
+    // A refresh never replaces a value that is set
+    assert!(
+        !plan
+            .policy
+            .values
+            .fill("GITHUB_TOKEN", "other-token".to_string())
+            .unwrap()
+    );
+    assert!(plan.pending().is_empty());
+
+    let mut headers = vec![(
+        "authorization".to_string(),
+        "Bearer ghp_placeholder".to_string(),
+    )];
+    let (injected, _) = authorize(
+        &plan,
+        "api.github.com",
+        "GET",
+        "/repos/example/fnox",
+        &mut headers,
+    )
+    .unwrap();
+    assert_eq!(injected, vec!["GITHUB_TOKEN".to_string()]);
+    assert_eq!(headers[0].1, "Bearer real-token");
+
+    let mut body = b"echo real-token".to_vec();
+    redact_values(&mut body, &plan.policy.redactions());
+    assert_eq!(body, b"echo ghp_placeholder");
+}
+
+#[test]
+fn a_pending_secret_gets_the_startup_checks_when_set() {
+    let values = &pending_plan().policy.values;
+    assert!(values.fill("GITHUB_TOKEN", String::new()).is_err());
+    assert!(
+        values
+            .fill("GITHUB_TOKEN", "ghp_placeholder".to_string())
+            .is_err()
+    );
+    assert!(
+        values
+            .fill("GITHUB_TOKEN", "x-ghp_placeholder-x".to_string())
+            .is_err()
+    );
+    assert_eq!(values.pending(), vec!["GITHUB_TOKEN".to_string()]);
+}
+
+#[test]
+fn a_request_refreshes_only_the_pending_secrets_it_carries() {
+    let plan = pending_plan();
+    let needed = |method: &str, target: &str, header: &str| {
+        let url = reqwest::Url::parse(&format!("https://api.github.com{target}")).unwrap();
+        let headers = vec![("authorization".to_string(), header.to_string())];
+        plan.policy
+            .secrets_needed("api.github.com", method, &url, &headers)
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        needed("GET", "/repos/example/fnox", "Bearer ghp_placeholder"),
+        vec!["GITHUB_TOKEN".to_string()]
+    );
+    // No placeholder, another route, or another method: nothing to resolve
+    assert!(needed("GET", "/repos/example/fnox", "Bearer other").is_empty());
+    assert!(needed("GET", "/user", "Bearer ghp_placeholder").is_empty());
+    assert!(needed("POST", "/repos/example/fnox", "Bearer ghp_placeholder").is_empty());
+    // authorize refuses a placeholder that appears twice, so no lookup either
+    assert!(
+        needed(
+            "GET",
+            "/repos/example/fnox",
+            "ghp_placeholder ghp_placeholder"
+        )
+        .is_empty()
+    );
+}
+
+#[test]
+fn a_misplaced_placeholder_is_reported_before_a_missing_secret() {
+    let plan = pending_plan();
+    let mut headers = vec![("x-other".to_string(), "ghp_placeholder".to_string())];
+    let error = authorize(
+        &plan,
+        "api.github.com",
+        "GET",
+        "/repos/example/fnox",
+        &mut headers,
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(
+        error.contains("outside its allowed route or target"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_pending_query_secret_is_found_in_its_decoded_parameter_only() {
+    let mut config = config();
+    config.rules[0].header = None;
+    config.rules[0].query = Some("key".to_string());
+    config.rules[0].placeholder = Some("<TOKEN>".to_string());
+    let plan = ProxyPlan::new(&config, &IndexMap::new()).unwrap();
+    let needed = |target: &str, headers: &[(String, String)]| {
+        let url = reqwest::Url::parse(&format!("https://api.github.com{target}")).unwrap();
+        plan.policy
+            .secrets_needed("api.github.com", "GET", &url, headers)
+            .len()
+    };
+    // Percent-encoded in its own parameter: authorize decodes it, so this does too
+    assert_eq!(needed("/repos/example/fnox?key=%3CTOKEN%3E", &[]), 1);
+    // In another parameter or a header, the rule would refuse it anyway
+    assert_eq!(needed("/repos/example/fnox?other=%3CTOKEN%3E", &[]), 0);
+    let header = [("authorization".to_string(), "<TOKEN>".to_string())];
+    assert_eq!(needed("/repos/example/fnox", &header), 0);
 }

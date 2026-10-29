@@ -50,6 +50,15 @@ pub struct SecretSession {
     store_lock: tokio::sync::Mutex<()>,
 }
 
+impl std::fmt::Debug for SecretSession {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SecretSession")
+            .field("config_path", &self.config_path)
+            .field("profile", &self.profile)
+            .finish_non_exhaustive()
+    }
+}
+
 impl SecretSession {
     pub fn new(
         config: Config,
@@ -229,21 +238,27 @@ impl SecretSession {
     /// the resolver applies the top-level `env` default and settings such as
     /// `json_path`.
     pub async fn load(&self, config: &Config, name: &str) -> Result<bool> {
-        let Some(secret) = config.get_secrets(&self.profile)?.shift_remove(name) else {
+        let all_secrets = config.get_secrets(&self.profile)?;
+        let Some(secret) = all_secrets.get(name).cloned() else {
             return Ok(false);
         };
-        let single: IndexMap<String, SecretConfig> =
-            [(name.to_string(), secret.clone())].into_iter().collect();
-        let resolved = crate::daemon::resolve_batch_with_context(
+        // Include what the provider needs to authenticate, as startup does
+        let batch = with_provider_dependencies(
+            config,
+            &self.profile,
+            &all_secrets,
+            [(name.to_string(), secret.clone())].into_iter().collect(),
+        )?;
+        let mut resolved = crate::daemon::resolve_batch_with_context(
             &self.context,
             config,
             &self.profile,
-            &single,
+            &batch,
             self.purpose,
             true,
         )
         .await?;
-        match resolved.into_iter().next().and_then(|(_, value)| value) {
+        match resolved.shift_remove(name).flatten() {
             Some(value) => {
                 self.add(name, secret, value).await;
                 Ok(true)
@@ -410,4 +425,52 @@ impl SecretSession {
         }
         Ok(())
     }
+}
+
+/// `requested` plus the secrets their providers need to authenticate (such
+/// as a `BWS_ACCESS_TOKEN` secret for `bitwarden-sm`), found in
+/// `all_secrets`, transitively
+pub fn with_provider_dependencies(
+    config: &Config,
+    profile: &[String],
+    all_secrets: &IndexMap<String, SecretConfig>,
+    mut requested: IndexMap<String, SecretConfig>,
+) -> Result<IndexMap<String, SecretConfig>> {
+    let providers = config.get_providers(profile)?;
+    let default_provider = config.get_default_provider(profile)?;
+    loop {
+        let mut added = false;
+        let keys: Vec<_> = requested.keys().cloned().collect();
+        for key in keys {
+            let secret = &requested[&key];
+            let provider_name = secret
+                .sync
+                .as_ref()
+                .map(|sync| sync.provider.as_str())
+                .or_else(|| secret.provider())
+                .or_else(|| {
+                    secret
+                        .value()
+                        .is_some()
+                        .then_some(default_provider.as_deref())
+                        .flatten()
+                });
+            let Some(provider) = provider_name.and_then(|name| providers.get(name)) else {
+                continue;
+            };
+            for dependency in provider.env_dependencies() {
+                if requested.contains_key(*dependency) {
+                    continue;
+                }
+                if let Some(secret) = all_secrets.get(*dependency) {
+                    requested.insert((*dependency).to_string(), secret.clone());
+                    added = true;
+                }
+            }
+        }
+        if !added {
+            break;
+        }
+    }
+    Ok(requested)
 }
