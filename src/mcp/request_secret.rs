@@ -4,7 +4,7 @@ use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::*;
 use rmcp::schemars;
 use rmcp::service::{ElicitationError, ElicitationMode};
-use rmcp::{ErrorData as McpError, Peer, RoleServer, tool, tool_router};
+use rmcp::{ErrorData as McpError, Peer, RoleServer, ServiceError, tool, tool_router};
 
 use super::page::{PageDetails, SecretPage, Submission};
 use super::server::FnoxMcpServer;
@@ -126,15 +126,20 @@ impl FnoxMcpServer {
             .await
         {
             Ok(ElicitationAction::Accept) => {}
-            Ok(_) => {
-                return Ok(CallToolResult::error(vec![ContentBlock::text(format!(
-                    "The user declined to open the page for '{name}'. Don't ask for the value in the chat."
-                ))]));
+            Ok(action) => {
+                return Ok(CallToolResult::error(vec![ContentBlock::text(
+                    page_open_outcome(&name, &action),
+                )]));
             }
             Err(ElicitationError::CapabilityNotSupported) => {
                 return Ok(CallToolResult::error(vec![ContentBlock::text(
                     self.terminal_fallback(&name),
                 )]));
+            }
+            Err(ElicitationError::Service(ServiceError::Timeout { .. })) => {
+                return Ok(CallToolResult::error(vec![ContentBlock::text(format!(
+                    "Timed out waiting for the MCP client to answer the page-opening request for '{name}'. fnox stored no value through this request. This is not a user decline. Don't reopen the page automatically or ask for the value in the chat."
+                ))]));
             }
             Err(e) => {
                 return Err(McpError::internal_error(
@@ -382,8 +387,26 @@ impl FnoxMcpServer {
     }
 }
 
+/// A client can return `decline` without showing the prompt at all. The wire
+/// response identifies the client action, not who made the decision.
+fn page_open_outcome(name: &str, action: &ElicitationAction) -> String {
+    let outcome = match action {
+        ElicitationAction::Decline => format!(
+            "The MCP client returned 'decline' for the page-opening request for '{name}'. fnox cannot tell whether the user declined or the client rejected the URL or blocked the prompt. If no prompt was shown, check the client's approval policy and support for the page's URL."
+        ),
+        ElicitationAction::Cancel => format!(
+            "The MCP client canceled the page-opening request for '{name}'. fnox stored no value through this request. This is not a user decline."
+        ),
+        _ => format!(
+            "The MCP client did not accept the page-opening request for '{name}'. fnox stored no value through this request."
+        ),
+    };
+    format!("{outcome} Don't reopen the page automatically or ask for the value in the chat.")
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::mcp::server::test_server;
 
     #[test]
@@ -395,5 +418,23 @@ mod tests {
             text.contains("fnox -P 'my profile' --write-profile 'my profile' set API_TOKEN"),
             "{text}"
         );
+    }
+
+    #[test]
+    fn a_client_decline_is_not_attributed_to_the_user() {
+        let text = page_open_outcome("API_TOKEN", &ElicitationAction::Decline);
+        assert!(text.contains("MCP client returned 'decline'"));
+        assert!(text.contains("fnox cannot tell whether the user declined"));
+        assert!(text.contains("approval policy"));
+        assert!(text.contains("Don't reopen the page automatically"));
+        assert!(!text.contains("The user declined"));
+    }
+
+    #[test]
+    fn a_canceled_opening_request_is_reported_separately() {
+        let text = page_open_outcome("API_TOKEN", &ElicitationAction::Cancel);
+        assert!(text.contains("MCP client canceled"));
+        assert!(text.contains("fnox stored no value"));
+        assert!(!text.contains("The user declined"));
     }
 }

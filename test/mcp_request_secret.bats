@@ -37,6 +37,40 @@ mcp_client() {
 	run --separate-stderr "${PYTHON3:-python3}" "$BATS_TEST_DIRNAME/mcp_client.py" "$FNOX_BIN" "$@"
 }
 
+@test "request_secret does not attribute an unseen client decline to the user" {
+	export MCP_CLIENT_ELICIT_ACTION=decline
+	mcp_client url none '[["request_secret", {"name": "API_TOKEN"}]]'
+	assert_success
+	assert_line --index 0 --partial "MCP client returned 'decline'"
+	assert_line --index 0 --partial "fnox cannot tell whether the user declined"
+	assert_line --index 0 --partial "approval policy"
+	refute_output --partial "The user declined"
+	assert_line --index 1 '{"page": null}'
+	run "$FNOX_BIN" list
+	refute_output --partial API_TOKEN
+}
+
+@test "request_secret reports a canceled opening request separately from a decline" {
+	export MCP_CLIENT_ELICIT_ACTION=cancel
+	mcp_client url none '[["request_secret", {"name": "API_TOKEN"}]]'
+	assert_success
+	assert_line --index 0 --partial "MCP client canceled"
+	refute_output --partial "The user declined"
+	assert_line --index 1 '{"page": null}'
+	run "$FNOX_BIN" list
+	refute_output --partial API_TOKEN
+}
+
+@test "request_secret reports a client transport error without claiming a decline" {
+	export MCP_CLIENT_ELICIT_ACTION=error
+	mcp_client url none '[["request_secret", {"name": "API_TOKEN"}]]'
+	assert_success
+	assert_line --index 0 --partial "Failed to show the secret page link"
+	assert_line --index 0 --partial "client transport failed"
+	refute_output --partial "The user declined"
+	assert_line --index 1 '{"page": null}'
+}
+
 @test "request_secret is not offered unless enabled" {
 	sed -i.bak 's/^tools = .*/tools = ["exec"]/' fnox.toml
 	mcp_client url none list
