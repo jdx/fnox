@@ -526,6 +526,19 @@ mod tests {
         assert!(text.contains("This is not a user decline"));
         assert!(text.contains("Don't reopen the page automatically"));
         assert!(text.contains("or ask for the value in the chat"));
+        line.clear();
+        let deadline = tokio::time::Instant::now() + Duration::from_millis(100);
+        while let Ok(read) = tokio::time::timeout_at(deadline, client.read_line(&mut line)).await {
+            if read.unwrap() == 0 {
+                break;
+            }
+            let message: serde_json::Value = serde_json::from_str(&line).unwrap();
+            assert_ne!(
+                message["method"], "elicitation/create",
+                "unexpected retry: {line}"
+            );
+            line.clear();
+        }
         service.cancel().await.unwrap();
     }
 }
