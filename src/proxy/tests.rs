@@ -9,7 +9,9 @@ fn config() -> ProxyConfig {
         egress: ProxyEgress::Strict,
         audit: false,
         rules: vec![ProxyRule {
-            secret: "GITHUB_TOKEN".to_string(),
+            secret: Some("GITHUB_TOKEN".to_string()),
+            lease: None,
+            credential: None,
             domain: "api.github.com".to_string(),
             env: None,
             header: Some("authorization".to_string()),
@@ -149,7 +151,9 @@ fn redacts_overlapping_values_without_scanning_placeholders() {
     let mut config = config();
     config.rules[0].placeholder = Some("placeholder-with-token".to_string());
     config.rules.push(ProxyRule {
-        secret: "SHORT_TOKEN".to_string(),
+        secret: Some("SHORT_TOKEN".to_string()),
+        lease: None,
+        credential: None,
         domain: "api.github.com".to_string(),
         env: None,
         header: Some("x-api-key".to_string()),
@@ -194,7 +198,9 @@ fn sibling_rules_allow_any_matching_route() {
     let mut config = config();
     config.rules[0].paths = vec!["/repos/example/issues/**".to_string()];
     config.rules.push(ProxyRule {
-        secret: "GITHUB_TOKEN".to_string(),
+        secret: Some("GITHUB_TOKEN".to_string()),
+        lease: None,
+        credential: None,
         domain: "api.github.com".to_string(),
         env: None,
         header: Some("authorization".to_string()),
@@ -271,7 +277,9 @@ async fn explicit_empty_request_body_is_allowed() {
 fn rejects_overlapping_placeholders() {
     let mut config = config();
     config.rules.push(ProxyRule {
-        secret: "OTHER_TOKEN".to_string(),
+        secret: Some("OTHER_TOKEN".to_string()),
+        lease: None,
+        credential: None,
         domain: "api.github.com".to_string(),
         env: None,
         header: Some("x-api-key".to_string()),
@@ -306,7 +314,9 @@ fn plan_with(rules: Vec<ProxyRule>, value: &str) -> Result<ProxyPlan> {
 
 fn query_rule(domain: &str, query: &str) -> ProxyRule {
     ProxyRule {
-        secret: "API_KEY".to_string(),
+        secret: Some("API_KEY".to_string()),
+        lease: None,
+        credential: None,
         domain: domain.to_string(),
         env: None,
         header: None,
@@ -965,9 +975,9 @@ fn a_request_refreshes_only_the_pending_secrets_it_carries() {
         let url = reqwest::Url::parse(&format!("https://api.github.com{target}")).unwrap();
         let headers = vec![("authorization".to_string(), header.to_string())];
         plan.policy
-            .secrets_needed("api.github.com", method, &url, &headers)
+            .sources_needed("api.github.com", method, &url, &headers)
             .into_iter()
-            .map(str::to_string)
+            .map(|source| source.name().to_string())
             .collect::<Vec<_>>()
     };
     assert_eq!(
@@ -1018,7 +1028,7 @@ fn a_pending_query_secret_is_found_in_its_decoded_parameter_only() {
     let needed = |target: &str, headers: &[(String, String)]| {
         let url = reqwest::Url::parse(&format!("https://api.github.com{target}")).unwrap();
         plan.policy
-            .secrets_needed("api.github.com", "GET", &url, headers)
+            .sources_needed("api.github.com", "GET", &url, headers)
             .len()
     };
     // Percent-encoded in its own parameter: authorize decodes it, so this does too
@@ -1034,7 +1044,7 @@ fn a_replaced_value_stays_redacted() {
     let plan = policy();
     plan.policy
         .values
-        .replace("GITHUB_TOKEN", "new-token".to_string())
+        .replace(&Source::secret("GITHUB_TOKEN"), "new-token".to_string())
         .unwrap();
     // A response to a request sent with the old value may still echo it
     let mut body = b"old real-token, new new-token".to_vec();
@@ -1045,8 +1055,11 @@ fn a_replaced_value_stays_redacted() {
 #[test]
 fn a_forgotten_value_is_pending_and_stays_redacted() {
     let plan = policy();
-    plan.policy.values.forget("GITHUB_TOKEN");
-    assert_eq!(plan.policy.values.value("GITHUB_TOKEN"), None);
+    plan.policy.values.forget(&Source::secret("GITHUB_TOKEN"));
+    assert_eq!(
+        plan.policy.values.value(&Source::secret("GITHUB_TOKEN")),
+        None
+    );
     assert_eq!(
         plan.policy.values.pending(),
         vec!["GITHUB_TOKEN".to_string()]
@@ -1054,4 +1067,355 @@ fn a_forgotten_value_is_pending_and_stays_redacted() {
     let mut body = b"old real-token".to_vec();
     redact_values(&mut body, &plan.policy.redactions());
     assert_eq!(body, b"old ghp_placeholder");
+}
+
+fn lease_rule(lease: &str, credential: Option<&str>) -> ProxyRule {
+    ProxyRule {
+        secret: None,
+        lease: Some(lease.to_string()),
+        credential: credential.map(str::to_string),
+        domain: "forge.example.com".to_string(),
+        env: None,
+        header: Some("private-token".to_string()),
+        query: None,
+        methods: vec!["POST".to_string()],
+        paths: vec!["/api/v4/projects/42/merge_requests/*/notes".to_string()],
+        placeholder: Some("forge_placeholder".to_string()),
+    }
+}
+
+fn leases(toml: &str) -> IndexMap<String, crate::lease_backends::LeaseBackendConfig> {
+    toml_edit::de::from_str(toml).unwrap()
+}
+
+/// A lease backend in this process, so the tests spawn no commands: on some
+/// platforms a child spawned while another test opens a socket can inherit
+/// it. It mints `minted-<n>` with lease ID `lease-<n>`.
+struct FakeBackend {
+    mints: std::sync::atomic::AtomicUsize,
+    /// The expiry of the `n`th lease, from when it is minted
+    expiry: fn(usize) -> Option<chrono::Duration>,
+    fail: bool,
+    revoked: std::sync::Mutex<Vec<String>>,
+}
+
+impl FakeBackend {
+    fn new(expiry: fn(usize) -> Option<chrono::Duration>) -> Arc<Self> {
+        Self::with(expiry, false)
+    }
+
+    /// One whose every mint fails
+    fn failing() -> Arc<Self> {
+        Self::with(|_| None, true)
+    }
+
+    fn with(expiry: fn(usize) -> Option<chrono::Duration>, fail: bool) -> Arc<Self> {
+        Arc::new(Self {
+            mints: Default::default(),
+            expiry,
+            fail,
+            revoked: Default::default(),
+        })
+    }
+
+    fn mints(&self) -> usize {
+        self.mints.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// The lease IDs revoked, sorted: leases are revoked concurrently
+    fn revoked(&self) -> Vec<String> {
+        let mut revoked = self.revoked.lock().unwrap().clone();
+        revoked.sort_unstable();
+        revoked
+    }
+}
+
+#[async_trait::async_trait]
+impl crate::lease_backends::LeaseBackend for FakeBackend {
+    async fn create_lease(
+        &self,
+        _duration: std::time::Duration,
+        _label: &str,
+    ) -> Result<crate::lease_backends::Lease> {
+        let n = self.mints.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        if self.fail {
+            return Err(FnoxError::Config("parent token rejected".to_string()));
+        }
+        Ok(crate::lease_backends::Lease {
+            credentials: [("TOKEN".to_string(), format!("minted-{n}"))]
+                .into_iter()
+                .collect(),
+            expires_at: (self.expiry)(n).map(|after| chrono::Utc::now() + after),
+            lease_id: format!("lease-{n}"),
+        })
+    }
+
+    async fn revoke_lease(
+        &self,
+        lease_id: &str,
+        _credentials: Option<&IndexMap<String, String>>,
+    ) -> Result<()> {
+        self.revoked.lock().unwrap().push(lease_id.to_string());
+        Ok(())
+    }
+
+    fn max_lease_duration(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(24 * 3600)
+    }
+}
+
+/// A plan whose rule injects `credential` of lease `forge`, minted by `backend`
+fn lease_plan_with(credential: &str, backend: Arc<FakeBackend>) -> ProxyPlan {
+    let config = ProxyConfig {
+        audit: false,
+        rules: vec![lease_rule("forge", Some(credential))],
+        ..ProxyConfig::default()
+    };
+    // A stand-in config: the backend is replaced before anything is minted
+    let stand_in = leases("[forge]\ntype = \"command\"\ncreate_command = \"false\"\n");
+    let mut plan =
+        ProxyPlan::with_leases(&config, &IndexMap::new(), &stand_in, LeaseSetup::default())
+            .unwrap();
+    Arc::get_mut(&mut plan.policy)
+        .expect("nothing else holds a new plan's policy")
+        .leases
+        .set_backend("forge", backend);
+    plan
+}
+
+fn lease_plan(backend: Arc<FakeBackend>) -> ProxyPlan {
+    lease_plan_with("TOKEN", backend)
+}
+
+fn note_request() -> (reqwest::Url, Vec<(String, String)>) {
+    (
+        reqwest::Url::parse("https://forge.example.com/api/v4/projects/42/merge_requests/7/notes")
+            .unwrap(),
+        vec![("private-token".to_string(), "forge_placeholder".to_string())],
+    )
+}
+
+/// Mint what a note request needs, then authorize it
+async fn send_note(plan: &ProxyPlan) -> Result<(Vec<String>, String)> {
+    let (url, mut headers) = note_request();
+    plan.policy
+        .refresh_pending("forge.example.com", "POST", &url, &headers)
+        .await;
+    let injected =
+        plan.policy
+            .authorize("forge.example.com", "POST", &mut url.clone(), &mut headers)?;
+    Ok((injected, headers[0].1.clone()))
+}
+
+/// A first lease that lasts one second, then long ones. The first is due for
+/// renewal after three quarters of a second.
+fn short_then_long(n: usize) -> Option<chrono::Duration> {
+    Some(if n == 1 {
+        chrono::Duration::seconds(1)
+    } else {
+        chrono::Duration::hours(1)
+    })
+}
+
+/// Past the first lease's renewal time
+const PAST_RENEWAL: std::time::Duration = std::time::Duration::from_millis(850);
+
+#[tokio::test]
+async fn a_lease_is_minted_once_when_a_request_first_needs_it() {
+    let backend = FakeBackend::new(|_| Some(chrono::Duration::hours(1)));
+    let plan = lease_plan(backend.clone());
+    assert_eq!(plan.child_env["TOKEN"], "forge_placeholder");
+    assert!(
+        plan.pending().is_empty(),
+        "a lease is never a pending secret"
+    );
+    // Nothing is minted until a request carries the placeholder
+    assert_eq!(backend.mints(), 0);
+
+    // Concurrent requests share one lease
+    let (first, second) = tokio::join!(send_note(&plan), send_note(&plan));
+    let (injected, header) = first.unwrap();
+    assert_eq!(injected, vec!["lease:forge".to_string()]);
+    assert_eq!(header, "minted-1");
+    assert_eq!(second.unwrap().1, "minted-1");
+    assert_eq!(send_note(&plan).await.unwrap().1, "minted-1");
+    assert_eq!(backend.mints(), 1);
+
+    let mut body = b"token minted-1".to_vec();
+    redact_values(&mut body, &plan.policy.redactions());
+    assert_eq!(body, b"token forge_placeholder");
+
+    // A request on another route neither mints nor injects
+    let mut headers = vec![("private-token".to_string(), "forge_placeholder".to_string())];
+    assert!(
+        authorize(
+            &plan,
+            "forge.example.com",
+            "GET",
+            "/api/v4/user",
+            &mut headers
+        )
+        .is_err()
+    );
+}
+
+#[tokio::test]
+async fn an_expiring_lease_is_replaced_and_its_old_value_stays_redacted() {
+    let backend = FakeBackend::new(short_then_long);
+    let plan = lease_plan(backend.clone());
+    assert_eq!(send_note(&plan).await.unwrap().1, "minted-1");
+    assert_eq!(send_note(&plan).await.unwrap().1, "minted-1");
+    tokio::time::sleep(PAST_RENEWAL).await;
+    assert_eq!(send_note(&plan).await.unwrap().1, "minted-2");
+    assert_eq!(backend.mints(), 2);
+
+    let mut body = b"old minted-1, new minted-2".to_vec();
+    redact_values(&mut body, &plan.policy.redactions());
+    assert_eq!(body, b"old forge_placeholder, new forge_placeholder");
+}
+
+#[tokio::test]
+async fn ending_the_session_revokes_every_minted_lease_and_stops_minting() {
+    let backend = FakeBackend::new(short_then_long);
+    let plan = lease_plan(backend.clone());
+    send_note(&plan).await.unwrap();
+    tokio::time::sleep(PAST_RENEWAL).await;
+    send_note(&plan).await.unwrap();
+
+    plan.policy.leases.revoke_all(&plan.policy.values).await;
+    assert_eq!(backend.revoked(), ["lease-1", "lease-2"]);
+
+    let error = send_note(&plan).await.unwrap_err().to_string();
+    assert!(error.contains("session is ending"), "{error}");
+    assert_eq!(backend.mints(), 2);
+}
+
+#[tokio::test]
+async fn a_lease_that_has_already_expired_is_never_injected() {
+    let backend = FakeBackend::new(|_| Some(chrono::Duration::seconds(-1)));
+    let plan = lease_plan(backend.clone());
+    let error = send_note(&plan).await.unwrap_err().to_string();
+    assert!(error.contains("could not be minted"), "{error}");
+    assert_eq!(
+        plan.policy.values.value(&Source::Lease {
+            lease: "forge".to_string(),
+            credential: "TOKEN".to_string(),
+        }),
+        None
+    );
+    // It was minted, so it is revoked at the end
+    plan.policy.leases.revoke_all(&plan.policy.values).await;
+    assert_eq!(backend.revoked(), ["lease-1"]);
+}
+
+#[tokio::test]
+async fn a_failed_mint_refuses_the_request_with_the_reason_and_waits_to_retry() {
+    let backend = FakeBackend::failing();
+    let plan = lease_plan(backend.clone());
+    let error = send_note(&plan).await.unwrap_err().to_string();
+    assert!(
+        error.contains("lease 'forge' could not be minted"),
+        "{error}"
+    );
+    // The backend's own error can quote a parent credential, so it stays in
+    // fnox's log
+    assert!(!error.contains("parent token rejected"), "{error}");
+    // The next request right away gets the same answer without another try
+    let again = send_note(&plan).await.unwrap_err().to_string();
+    assert_eq!(again, error);
+    assert_eq!(backend.mints(), 1);
+}
+
+#[tokio::test]
+async fn a_lease_without_the_rule_credential_is_refused() {
+    let backend = FakeBackend::new(|_| None);
+    let plan = lease_plan_with("OTHER", backend.clone());
+    let error = send_note(&plan).await.unwrap_err().to_string();
+    assert!(error.contains("the lease has no 'OTHER'"), "{error}");
+    // It was minted, so it is revoked at the end
+    plan.policy.leases.revoke_all(&plan.policy.values).await;
+    assert_eq!(backend.revoked(), ["lease-1"]);
+}
+
+#[test]
+fn a_lease_rule_defaults_its_variable_to_the_lease_credential() {
+    let config = ProxyConfig {
+        rules: vec![lease_rule("forge", None)],
+        ..ProxyConfig::default()
+    };
+    let gitlab = leases(
+        r#"
+[forge]
+type = "gitlab"
+url = "https://forge.example.com"
+project = "team/app"
+"#,
+    );
+    let plan =
+        ProxyPlan::with_leases(&config, &IndexMap::new(), &gitlab, LeaseSetup::default()).unwrap();
+    assert_eq!(plan.child_env["GITLAB_TOKEN"], "forge_placeholder");
+
+    let mut config = config;
+    config.rules[0].env = Some("FORGE_TOKEN".to_string());
+    let plan =
+        ProxyPlan::with_leases(&config, &IndexMap::new(), &gitlab, LeaseSetup::default()).unwrap();
+    assert_eq!(plan.child_env.keys().collect::<Vec<_>>(), ["FORGE_TOKEN"]);
+}
+
+#[test]
+fn rejects_lease_rules_that_cannot_work() {
+    let plan = |rule: ProxyRule, toml: &str| {
+        let config = ProxyConfig {
+            rules: vec![rule],
+            ..ProxyConfig::default()
+        };
+        ProxyPlan::with_leases(
+            &config,
+            &IndexMap::new(),
+            &leases(toml),
+            LeaseSetup::default(),
+        )
+        .err()
+        .map(|error| error.to_string())
+        .unwrap_or_default()
+    };
+    let vault = r#"
+[forge]
+type = "vault"
+address = "https://vault.example.com"
+secret_path = "database/creds/app"
+env_map = { username = "DB_USER", password = "DB_PASSWORD" }
+"#;
+    assert!(plan(lease_rule("forge", None), vault).contains("set `credential`"));
+    assert!(plan(lease_rule("forge", Some("OTHER")), vault).contains("doesn't produce 'OTHER'"));
+    // Picking one gets past the rule checks to the backend's own
+    let picked = plan(lease_rule("forge", Some("DB_PASSWORD")), vault);
+    assert!(
+        !picked.contains("credential") && !picked.contains("produce"),
+        "{picked}"
+    );
+
+    let command = "[forge]\ntype = \"command\"\ncreate_command = \"true\"\n";
+    assert!(plan(lease_rule("forge", None), command).contains("needs `credential`"));
+
+    let sts = r#"
+[forge]
+type = "aws-sts"
+region = "us-east-1"
+role_arn = "arn:aws:iam::123456789012:role/app"
+"#;
+    assert!(plan(lease_rule("forge", Some("AWS_SESSION_TOKEN")), sts).contains("sign requests"));
+    assert!(plan(lease_rule("missing", None), command).contains("unknown lease 'missing'"));
+
+    let mut both = lease_rule("forge", None);
+    both.secret = Some("TOKEN".to_string());
+    assert!(plan(both, command).contains("sets both secret and lease"));
+    let mut neither = lease_rule("forge", None);
+    neither.lease = None;
+    assert!(plan(neither, command).contains("needs a secret or a lease"));
+    assert!(plan(lease_rule("forge", Some(" ")), command).contains("empty credential"));
+    let mut secret_credential = lease_rule("forge", Some("TOKEN"));
+    secret_credential.lease = None;
+    secret_credential.secret = Some("TOKEN".to_string());
+    assert!(plan(secret_credential, command).contains("only a lease rule"));
 }

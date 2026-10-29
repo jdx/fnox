@@ -38,7 +38,10 @@ impl std::fmt::Debug for McpSlot {
 /// A rule as the MCP tools describe it
 #[derive(Debug, Clone)]
 pub struct RuleInfo {
-    pub secret: String,
+    /// The secret the rule injects, or `None` for a lease rule
+    pub secret: Option<String>,
+    /// The lease the rule injects a credential of
+    pub lease: Option<String>,
     /// The child's environment variable that holds the placeholder
     pub env: String,
     pub domain: String,
@@ -56,7 +59,7 @@ impl ProxyHandle {
     pub fn rules_for(&self, secret: &str) -> Vec<RuleInfo> {
         self.rules
             .iter()
-            .filter(|rule| rule.secret == secret)
+            .filter(|rule| rule.secret.as_deref() == Some(secret))
             .cloned()
             .collect()
     }
@@ -67,25 +70,25 @@ impl ProxyHandle {
 
     /// Whether `secret` has no value yet
     pub fn is_pending(&self, secret: &str) -> bool {
-        self.policy.values.value(secret).is_none()
+        self.policy.values.value(&Source::secret(secret)).is_none()
     }
 
     /// Whether the proxy could use `value` for `secret`: the checks a value
     /// gets at startup
     pub fn check_value(&self, secret: &str, value: &str) -> Result<()> {
-        self.policy.values.validate(secret, value)
+        self.policy.values.validate(&Source::secret(secret), value)
     }
 
     /// Inject `value` for `secret` from now on. A value it replaces stays
     /// redacted from responses for the rest of the run.
     pub fn set_value(&self, secret: &str, value: String) -> Result<()> {
-        self.policy.values.replace(secret, value)
+        self.policy.values.replace(&Source::secret(secret), value)
     }
 
     /// Stop injecting the value the proxy has for `secret`, and resolve it
     /// from the config again when a request next needs it. The old value
     /// stays redacted from responses.
     pub fn forget_value(&self, secret: &str) {
-        self.policy.values.forget(secret)
+        self.policy.values.forget(&Source::secret(secret))
     }
 }

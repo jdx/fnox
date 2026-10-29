@@ -1,6 +1,7 @@
 use crate::commands::Cli;
 use crate::config::{Config, ProxyConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
+use crate::lease_backends::LeaseBackendConfig;
 use crate::proxy::{ProxyListener, ProxyPlan, RunningProxy};
 use crate::sandbox::{Sandbox, SandboxPolicy};
 use crate::secret_session::SecretSession;
@@ -105,7 +106,7 @@ const AMBIENT_CREDENTIAL_ENV_VARS: &[&str] = &[
 /// `fnox proxy run` starts a local HTTPS proxy and runs a command that sees only
 /// placeholder values. When the command sends a request that matches a
 /// `[[proxy.rules]]` entry by domain, method, and path, the proxy swaps in the
-/// real secret. The proxy controls where credentials are sent; it does not
+/// real secret, or a short-lived credential it leases. The proxy controls where credentials are sent; it does not
 /// sandbox the command unless you pass `--sandbox` to `run`. Both subcommands
 /// require a `[proxy]` table.
 #[derive(Debug, usage_rs::Args)]
@@ -127,8 +128,9 @@ enum ProxySubcommand {
     /// Print the effective proxy rules
     ///
     /// Validates the `[proxy]` table and prints its egress mode, audit setting,
-    /// and each rule's secret, domain, methods, paths, header or query parameter, and
-    /// placeholder variable. Secrets are not resolved.
+    /// and each rule's secret or lease, domain, methods, paths, header or query
+    /// parameter, and placeholder variable. Secrets are not resolved and no
+    /// lease is minted.
     #[usage(
         example("fnox proxy rules", header = "Print the rules"),
         example(
@@ -143,8 +145,9 @@ enum ProxySubcommand {
 
 /// Run a command with placeholder credentials behind the proxy
 ///
-/// Resolves the secrets that `[[proxy.rules]]` names, plus any secrets their
-/// providers need, starts the proxy on a local port, and runs COMMAND with:
+/// Resolves the secrets that `[[proxy.rules]]` names, the parent credentials of
+/// the leases they name, and any secrets their providers need, starts the
+/// proxy on a local port, and runs COMMAND with:
 ///
 ///  - each rule's variable set to a placeholder instead of the real value
 ///  - `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` pointing at the proxy, with
@@ -156,6 +159,9 @@ enum ProxySubcommand {
 /// sandbox: its only network route is the proxy, the filesystem is read-only
 /// except for the working directory and temporary files, and fnox's
 /// configuration, keys and common credential directories are hidden.
+///
+/// A lease is minted when a request first needs it and renewed before it
+/// expires; when the command exits, fnox revokes every lease it minted.
 ///
 /// The command's HTTP client must honor those proxy and CA settings. fnox exits
 /// with the command's exit status.
@@ -196,13 +202,16 @@ impl ProxyCommand {
             )
         })?;
         match &self.command {
-            ProxySubcommand::Rules => show_rules(proxy),
+            ProxySubcommand::Rules => {
+                let leases = config.get_leases(&Config::get_profiles(&cli.profile))?;
+                show_rules(proxy, &leases)
+            }
             ProxySubcommand::Run(command) => command.run(cli, config).await,
         }
     }
 }
 
-fn show_rules(proxy: &ProxyConfig) -> Result<()> {
+fn show_rules(proxy: &ProxyConfig, leases: &IndexMap<String, LeaseBackendConfig>) -> Result<()> {
     crate::proxy::validate_config(proxy)?;
     println!("egress: {:?}", proxy.egress);
     println!("audit: {}", proxy.audit);
@@ -223,14 +232,27 @@ fn show_rules(proxy: &ProxyConfig) -> Result<()> {
         } else {
             rule.paths.join(",")
         };
+        let (name, credential) = match (&rule.secret, &rule.lease) {
+            (Some(secret), _) => (secret.clone(), None),
+            (None, Some(lease)) => {
+                let config = leases.get(lease).ok_or_else(|| unknown_lease(lease))?;
+                let credential = crate::proxy::lease_credential(rule, lease, config)?;
+                (format!("lease:{lease}"), Some(credential))
+            }
+            (None, None) => unreachable!("validate_config requires a secret or a lease"),
+        };
+        let env = rule
+            .env
+            .clone()
+            .or_else(|| credential.clone())
+            .unwrap_or_else(|| name.clone());
         println!(
-            "{} -> https://{} methods={} paths={} {} env={}",
-            rule.secret,
+            "{name} -> https://{} methods={methods} paths={paths} {} env={env}{}",
             rule.domain,
-            methods,
-            paths,
             crate::proxy::target_label(rule),
-            rule.env.as_deref().unwrap_or(&rule.secret)
+            credential
+                .map(|credential| format!(" credential={credential}"))
+                .unwrap_or_default()
         );
     }
     Ok(())
@@ -257,24 +279,76 @@ fn mcp_service(
     })
 }
 
+fn unknown_lease(lease: &str) -> FnoxError {
+    FnoxError::Config(format!("Proxy rule references unknown lease '{lease}'"))
+}
+
+/// The leases the rules name, each once
+fn rule_leases<'a>(
+    proxy: &ProxyConfig,
+    leases: &'a IndexMap<String, LeaseBackendConfig>,
+) -> Result<IndexMap<&'a str, &'a LeaseBackendConfig>> {
+    let mut used = IndexMap::new();
+    for lease in proxy.rules.iter().filter_map(|rule| rule.lease.as_deref()) {
+        let (name, config) = leases
+            .get_key_value(lease)
+            .ok_or_else(|| unknown_lease(lease))?;
+        used.insert(name.as_str(), config);
+    }
+    Ok(used)
+}
+
+/// The secrets to resolve: the rules' secrets, the parent credentials of the
+/// rules' leases, and whatever their providers need. Also returns the
+/// secrets the leases read, which they look for in fnox's environment.
 fn collect_requested_secrets(
     config: &Config,
     profile: &[String],
     proxy: &ProxyConfig,
     all_secrets: &IndexMap<String, SecretConfig>,
-) -> Result<IndexMap<String, SecretConfig>> {
+    leases: &IndexMap<String, LeaseBackendConfig>,
+) -> Result<(
+    IndexMap<String, SecretConfig>,
+    IndexMap<String, SecretConfig>,
+)> {
     let mut requested = IndexMap::new();
-    for rule in &proxy.rules {
-        let secret = all_secrets.get(&rule.secret).ok_or_else(|| {
-            FnoxError::Config(format!(
-                "Proxy rule references unknown secret '{}'",
-                rule.secret
-            ))
+    for name in proxy.rules.iter().filter_map(|rule| rule.secret.as_ref()) {
+        let secret = all_secrets.get(name).ok_or_else(|| {
+            FnoxError::Config(format!("Proxy rule references unknown secret '{name}'"))
         })?;
-        requested.insert(rule.secret.clone(), secret.clone());
+        requested.insert(name.clone(), secret.clone());
     }
 
-    crate::secret_session::with_provider_dependencies(config, profile, all_secrets, requested)
+    let rule_leases = rule_leases(proxy, leases)?;
+    let lease_inputs = if rule_leases.values().any(|lease| !lease.has_known_inputs()) {
+        // A lease that doesn't declare its inputs (a `command` lease) may read
+        // any secret, as it can under `fnox exec`
+        all_secrets.clone()
+    } else {
+        let roots: Vec<String> = rule_leases
+            .values()
+            .flat_map(|lease| lease.consumed_env_vars().iter().map(|key| key.to_string()))
+            .collect();
+        if roots.is_empty() {
+            IndexMap::new()
+        } else {
+            crate::secret_resolver::dependency_closure(config, profile, all_secrets, &roots)?
+        }
+    };
+    for (name, secret) in &lease_inputs {
+        requested
+            .entry(name.clone())
+            .or_insert_with(|| secret.clone());
+    }
+
+    // Nothing to resolve, so no provider either: a config with only lease
+    // rules may have none
+    if requested.is_empty() {
+        return Ok((requested, lease_inputs));
+    }
+    let requested =
+        crate::secret_session::with_provider_dependencies(config, profile, all_secrets, requested)?;
+    Ok((requested, lease_inputs))
 }
 
 impl ProxyRunCommand {
@@ -303,7 +377,9 @@ impl ProxyRunCommand {
         crate::proxy::deny_inspection();
         let profile = Config::get_profiles(&cli.profile);
         let all_secrets = config.get_secrets(&profile)?;
-        let requested = collect_requested_secrets(&config, &profile, proxy_config, &all_secrets)?;
+        let leases = config.get_leases(&profile)?;
+        let (requested, lease_inputs) =
+            collect_requested_secrets(&config, &profile, proxy_config, &all_secrets, &leases)?;
         let session = SecretSession::new(
             config.clone(),
             profile.clone(),
@@ -319,12 +395,70 @@ impl ProxyRunCommand {
             .rules
             .iter()
             .filter_map(|rule| {
-                let value = resolved.get(&rule.secret).cloned().flatten()?;
-                Some((rule.secret.clone(), value))
+                let secret = rule.secret.as_ref()?;
+                let value = resolved.get(secret).cloned().flatten()?;
+                Some((secret.clone(), value))
             })
             .collect();
 
-        let plan = ProxyPlan::new(proxy_config, &values)?;
+        // Lease backends read their parent credentials from this process's
+        // environment, to mint leases during the run and revoke them at its
+        // end. The child never sees them: every secret is removed from its
+        // environment below.
+        let mut _lease_env = crate::lease::TempEnvGuard::default();
+        let lease_values: IndexMap<String, Option<String>> = lease_inputs
+            .keys()
+            .filter_map(|name| Some((name.clone(), resolved.get(name)?.clone())))
+            .collect();
+        let _lease_files =
+            crate::lease::set_secrets_as_env(&lease_values, &lease_inputs, &mut _lease_env)?;
+        let rule_leases = rule_leases(proxy_config, &leases)?;
+        for (name, lease) in &rule_leases {
+            if let Some(missing) = lease.check_prerequisites() {
+                return Err(FnoxError::Config(format!(
+                    "Proxy rule's lease '{name}' can't be minted: {missing}"
+                )));
+            }
+        }
+
+        // The ledger keeps a minted lease's credentials, encrypted, so it can
+        // still be revoked if this session can't revoke it
+        let encryption = if rule_leases.is_empty() {
+            None
+        } else {
+            match crate::lease::find_encryption_provider(&config, &profile).await {
+                crate::lease::EncryptionProviderResult::Available(name, provider) => {
+                    Some((name, std::sync::Arc::from(provider)))
+                }
+                crate::lease::EncryptionProviderResult::Unavailable(name, error) => {
+                    tracing::debug!("encryption provider '{name}' is unavailable: {error}");
+                    None
+                }
+                crate::lease::EncryptionProviderResult::NotConfigured => None,
+            }
+        };
+        let plan = ProxyPlan::with_leases(
+            proxy_config,
+            &values,
+            &leases,
+            crate::proxy::LeaseSetup {
+                ledger: Some(crate::lease::project_dir_from_config(&config, &cli.config)),
+                encryption,
+                // The parent credentials fnox resolved, and the ones a lease
+                // backend reads from fnox's own environment instead
+                hidden: lease_values
+                    .values()
+                    .flatten()
+                    .cloned()
+                    .chain(rule_leases.values().flat_map(|lease| {
+                        lease
+                            .consumed_env_vars()
+                            .iter()
+                            .filter_map(|key| crate::env::var(key).ok())
+                    }))
+                    .collect(),
+            },
+        )?;
         let session = std::sync::Arc::new(session);
         plan.set_session(session.clone());
         // Resolving later (a pending secret, or an MCP tool) must not prompt:
@@ -392,6 +526,12 @@ impl ProxyRunCommand {
                 command.env_remove(dependency);
             }
         }
+        // A lease's parent credential may come from fnox's own environment
+        for lease in rule_leases.values() {
+            for key in lease.consumed_env_vars() {
+                command.env_remove(key);
+            }
+        }
         if sandbox.is_some() {
             for key in crate::sandbox::UNSET_ENV {
                 command.env_remove(key);
@@ -433,7 +573,7 @@ impl ProxyRunCommand {
         let outcome = if sandbox.is_some() {
             run_until_interrupted(command).await
         } else {
-            command.status().await.map(Outcome::Exited)
+            run_forwarding_signals(command).await
         };
         crate::sandbox::remove_mount_points(&mount_points);
         running.shutdown().await;
@@ -461,6 +601,64 @@ impl ProxyRunCommand {
             std::process::exit(status.code().unwrap_or(1));
         }
         Ok(())
+    }
+}
+
+/// Runs `command` without letting a signal end fnox first, so fnox can still
+/// stop the proxy and revoke its leases when the command exits. `SIGTERM` and
+/// `SIGHUP` are passed on. So is `SIGINT`, unless fnox is in its terminal's
+/// foreground process group: Ctrl-C at the terminal has then reached the
+/// command too, and passing it on would deliver it twice. A `kill -INT` sent
+/// to fnox alone there can't be told apart from Ctrl-C, so it isn't passed
+/// on; `SIGTERM` stops the command instead.
+async fn run_forwarding_signals(mut command: tokio::process::Command) -> std::io::Result<Outcome> {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+
+        // Registered before the spawn, so no signal arrives unobserved.
+        let mut interrupt = signal(SignalKind::interrupt())?;
+        let mut terminate = signal(SignalKind::terminate())?;
+        let mut hangup = signal(SignalKind::hangup())?;
+        let mut child = command.spawn()?;
+        loop {
+            let number = tokio::select! {
+                status = child.wait() => return status.map(Outcome::Exited),
+                _ = interrupt.recv() => {
+                    if terminal_interrupts_us() {
+                        continue;
+                    }
+                    libc::SIGINT
+                }
+                _ = terminate.recv() => libc::SIGTERM,
+                _ = hangup.recv() => libc::SIGHUP,
+            };
+            if let Some(pid) = child.id() {
+                // SAFETY: kill takes only integer arguments.
+                unsafe { libc::kill(pid as libc::pid_t, number) };
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        command.status().await.map(Outcome::Exited)
+    }
+}
+
+/// Whether fnox runs in its controlling terminal's foreground process group,
+/// which the command shares: then Ctrl-C at the terminal reaches both of
+/// them, even with stdin redirected from a file. A `SIGINT` without that
+/// terminal, such as from a supervisor, reaches only fnox.
+#[cfg(unix)]
+fn terminal_interrupts_us() -> bool {
+    let Ok(tty) = std::fs::File::open("/dev/tty") else {
+        return false;
+    };
+    use std::os::fd::AsRawFd;
+    // SAFETY: both take and return only integers, and `tty` stays open.
+    unsafe {
+        let foreground = libc::tcgetpgrp(tty.as_raw_fd());
+        foreground != -1 && foreground == libc::getpgrp()
     }
 }
 
@@ -527,11 +725,12 @@ domain = "api.example.com"
         let profile = vec!["default".to_string()];
         let all_secrets = config.get_secrets(&profile).unwrap();
 
-        let requested = collect_requested_secrets(
+        let (requested, _) = collect_requested_secrets(
             &config,
             &profile,
             config.proxy.as_ref().unwrap(),
             &all_secrets,
+            &IndexMap::new(),
         )
         .unwrap();
 
