@@ -2,6 +2,7 @@ use crate::commands::Cli;
 use crate::config::{self, Config, IfMissing};
 use crate::error::{FnoxError, Result};
 use crate::generate::{self, GenerateKind};
+use crate::providers::ProviderCapability;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
@@ -19,6 +20,63 @@ fn resolve_remote_key_name<'a>(
                 .and_then(config::SecretConfig::value)
         })
         .unwrap_or(key)
+}
+
+/// What `SetCommand::store_at` wrote
+pub(crate) struct Stored {
+    pub write_profile: String,
+    pub secret: config::SecretConfig,
+    pub generated: Option<String>,
+}
+
+/// The project config file `fnox set` writes to without `--global`.
+///
+/// `config_arg` is the `--config` value: the default name searches the current
+/// directory for the write profile's file, and any other value is that file.
+pub(crate) fn local_target_path(
+    config_arg: &Path,
+    profile: &[String],
+    write_profile: Option<&str>,
+) -> Result<PathBuf> {
+    let current_dir = std::env::current_dir()
+        .map_err(|e| FnoxError::Config(format!("Failed to get current directory: {}", e)))?;
+    // Only use auto-detection when --config is the clap default ("fnox.toml").
+    // Any other value means the user explicitly chose a config file.
+    if config_arg == Path::new(config::DEFAULT_CONFIG_FILENAME) {
+        let write_profile = Config::resolve_write_profile(profile, write_profile)?;
+        Ok(config::find_local_config(
+            &current_dir,
+            std::slice::from_ref(&write_profile),
+        ))
+    } else {
+        Ok(current_dir.join(config_arg))
+    }
+}
+
+/// The provider `fnox set` stores a value with: `explicit`, else the secret's
+/// current provider, else `default_provider`. `None` means plain text.
+pub(crate) fn storage_provider(
+    config: &Config,
+    write_profile: &str,
+    explicit: Option<&str>,
+    effective_secret: Option<&config::SecretConfig>,
+) -> Result<Option<String>> {
+    if let Some(provider) = explicit.or_else(|| effective_secret.and_then(|s| s.provider())) {
+        return Ok(Some(provider.to_string()));
+    }
+    config.get_default_provider(&[write_profile.to_string()])
+}
+
+/// Whether a provider keeps a new value out of the config in plain text, by
+/// encrypting it or storing it remotely
+pub(crate) fn stores_securely(
+    provider_config: &config::ProviderConfig,
+    capabilities: &[ProviderCapability],
+) -> bool {
+    // The plain provider reports Encryption but stores values as they are
+    !matches!(provider_config, config::ProviderConfig::Plain { .. })
+        && (capabilities.contains(&ProviderCapability::Encryption)
+            || capabilities.contains(&ProviderCapability::RemoteStorage))
 }
 
 /// Return whether a loaded secret came from the table this command will update.
@@ -214,25 +272,42 @@ impl SetCommand {
         let target_path = if self.global {
             Config::global_config_path()
         } else {
-            let current_dir = std::env::current_dir().map_err(|e| {
-                FnoxError::Config(format!("Failed to get current directory: {}", e))
-            })?;
-            // Only use auto-detection when --config is the clap default ("fnox.toml").
-            // Any other value means the user explicitly chose a config file.
-            if cli.config == std::path::Path::new(config::DEFAULT_CONFIG_FILENAME) {
-                let profile = Config::get_profiles(cli.profile.as_slice());
-                let write_profile =
-                    Config::resolve_write_profile(&profile, cli.write_profile.as_deref())?;
-                config::find_local_config(&current_dir, std::slice::from_ref(&write_profile))
-            } else {
-                current_dir.join(&cli.config)
-            }
+            let profile = Config::get_profiles(cli.profile.as_slice());
+            local_target_path(&cli.config, &profile, cli.write_profile.as_deref())?
         };
         self.run_at(cli, config, target_path).await
     }
 
     /// Store the secret in `target_path` instead of the file `run` would pick
-    pub async fn run_at(&self, cli: &Cli, mut config: Config, target_path: PathBuf) -> Result<()> {
+    pub async fn run_at(&self, cli: &Cli, config: Config, target_path: PathBuf) -> Result<()> {
+        let profile = Config::get_profiles(cli.profile.as_slice());
+        let stored = self
+            .store_at(
+                config,
+                &profile,
+                cli.write_profile.as_deref(),
+                &target_path,
+                false,
+            )
+            .await?;
+        self.report(&stored, &target_path);
+        Ok(())
+    }
+
+    /// Store the secret in `target_path` without printing anything.
+    ///
+    /// `profile` is the active profile list, as `Config::get_profiles` returns
+    /// it. With `require_provider`, a value that would be stored in plain text
+    /// (no provider, or one that neither encrypts nor stores remotely) is
+    /// refused instead.
+    pub(crate) async fn store_at(
+        &self,
+        mut config: Config,
+        profile: &[String],
+        write_profile: Option<&str>,
+        target_path: &Path,
+        require_provider: bool,
+    ) -> Result<Stored> {
         if self.key.is_none() {
             return Err(FnoxError::Config(
                 "Provide a secret name, or --file PATH to store a file".into(),
@@ -240,8 +315,7 @@ impl SetCommand {
         }
         config::validate_secret_name(self.key())?;
 
-        let profile = Config::get_profiles(cli.profile.as_slice());
-        let write_profile = Config::resolve_write_profile(&profile, cli.write_profile.as_deref())?;
+        let write_profile = Config::resolve_write_profile(profile, write_profile)?;
         tracing::debug!(
             "Setting secret '{}' in profile '{}'",
             self.key(),
@@ -305,13 +379,13 @@ impl SetCommand {
             .cloned();
         let existing_secret = effective_secret
             .as_ref()
-            .filter(|secret| secret_belongs_to_target(secret, &target_path, &write_profile))
+            .filter(|secret| secret_belongs_to_target(secret, target_path, &write_profile))
             .cloned();
 
         if self.generate
             && !self.force
             && (effective_secret.is_some()
-                || Config::target_has_secret(self.key(), &write_profile, &target_path)?)
+                || Config::target_has_secret(self.key(), &write_profile, target_path)?)
         {
             return Err(FnoxError::Config(format!(
                 "Secret '{}' already exists; pass --force to replace it with a generated value",
@@ -319,19 +393,18 @@ impl SetCommand {
             )));
         }
 
-        // Determine which provider to use
-        let provider_name_to_use = if let Some(ref provider_name) = self.provider {
-            Some(provider_name.clone())
-        } else if let Some(existing) = effective_secret
-            .as_ref()
-            .and_then(|s| s.provider().map(str::to_string))
-        {
-            Some(existing)
-        } else {
-            // Try to use default provider if available, but it's OK if there isn't one
-            // (will store as plaintext)
-            config.get_default_provider(&write_profile_stack)?
-        };
+        let provider_name_to_use = storage_provider(
+            &config,
+            &write_profile,
+            self.provider.as_deref(),
+            effective_secret.as_ref(),
+        )?;
+        if require_provider && provider_name_to_use.is_none() {
+            return Err(FnoxError::Config(format!(
+                "Secret '{}' has no provider and no default_provider is set; refusing to store it in plain text",
+                self.key()
+            )));
+        }
 
         // Check if secret should be base64 encoded
         let secret_value = if self.base64_encode {
@@ -363,6 +436,13 @@ impl SetCommand {
                         return Err(FnoxError::Config(format!(
                             "Provider '{}' has no capabilities defined",
                             provider_name
+                        )));
+                    }
+
+                    if require_provider && !stores_securely(provider_config, &capabilities) {
+                        return Err(FnoxError::Config(format!(
+                            "Provider '{provider_name}' would leave '{}' in plain text in the config; refusing to store it",
+                            self.key()
                         )));
                     }
 
@@ -496,24 +576,45 @@ impl SetCommand {
         // Save the secret to the appropriate config file
         // Configs selected explicitly may live under `.config/`. Create the
         // target's parent before writing, including for project configs.
-        if let Some(parent) = target_path.parent()
-            && !parent.as_os_str().is_empty()
-            && !self.dry_run
-        {
-            std::fs::create_dir_all(parent).map_err(|e| {
-                FnoxError::Config(format!(
-                    "Failed to create config directory '{}': {}",
-                    parent.display(),
-                    e
-                ))
-            })?;
+        if !self.dry_run {
+            if let Some(parent) = target_path.parent()
+                && !parent.as_os_str().is_empty()
+            {
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    FnoxError::Config(format!(
+                        "Failed to create config directory '{}': {}",
+                        parent.display(),
+                        e
+                    ))
+                })?;
+            }
+            config.save_secret_to_source(
+                self.key(),
+                &secret_config,
+                &write_profile,
+                target_path,
+            )?;
         }
 
+        Ok(Stored {
+            write_profile,
+            secret: secret_config,
+            generated,
+        })
+    }
+
+    /// Print what `store_at` did, or would do with `--dry-run`
+    fn report(&self, stored: &Stored, target_path: &Path) {
+        let Stored {
+            write_profile,
+            secret: secret_config,
+            generated,
+        } = stored;
         if self.dry_run {
             // Show what would be done
             let dry_run_label = console::style("[dry-run]").yellow().bold();
             let styled_key = console::style(self.key()).cyan();
-            let styled_profile = console::style(&write_profile).magenta();
+            let styled_profile = console::style(write_profile).magenta();
             let styled_path = console::style(target_path.display()).dim();
             let global_suffix = if self.global { " (global)" } else { "" };
 
@@ -560,16 +661,9 @@ impl SetCommand {
                 );
             }
         } else {
-            config.save_secret_to_source(
-                self.key(),
-                &secret_config,
-                &write_profile,
-                &target_path,
-            )?;
-
             let check = console::style("✓").green();
             let styled_key = console::style(self.key()).cyan();
-            let styled_profile = console::style(&write_profile).magenta();
+            let styled_profile = console::style(write_profile).magenta();
             let global_suffix = if self.global { " (global)" } else { "" };
             if write_profile == "default" {
                 println!("{check} Set secret {styled_key}{global_suffix}");
@@ -578,7 +672,7 @@ impl SetCommand {
                     "{check} Set secret {styled_key} in profile {styled_profile}{global_suffix}"
                 );
             }
-            if let Some(ref value) = generated {
+            if let Some(value) = generated {
                 if self.show {
                     println!("{value}");
                 } else {
@@ -589,8 +683,6 @@ impl SetCommand {
                 }
             }
         }
-
-        Ok(())
     }
 }
 

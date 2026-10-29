@@ -17,6 +17,7 @@ pub mod commands;
 pub mod daemon;
 pub mod generate;
 pub mod hook_env;
+pub mod mcp_secret_page;
 pub mod mcp_server;
 pub mod proxy;
 pub mod redact;

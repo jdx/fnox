@@ -292,7 +292,7 @@ fn loggable_target(target: &str) -> String {
         .to_string()
 }
 
-fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+pub(crate) fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
     left.len() == right.len()
         && left
             .iter()
@@ -1324,11 +1324,11 @@ fn parse_connect_target(target: &str) -> Result<(String, u16)> {
     Ok((domain, port))
 }
 
-struct HttpRequest {
-    method: String,
-    target: String,
-    headers: Vec<(String, String)>,
-    body: Vec<u8>,
+pub(crate) struct HttpRequest {
+    pub(crate) method: String,
+    pub(crate) target: String,
+    pub(crate) headers: Vec<(String, String)>,
+    pub(crate) body: Vec<u8>,
 }
 
 async fn proxy_http_request<S>(stream: &mut S, domain: &str, policy: &ProxyPolicy) -> Result<()>
@@ -1495,7 +1495,7 @@ fn has_ambiguous_path_encoding(target: &str) -> bool {
             .any(|segment| segment == "." || segment == "..")
 }
 
-async fn read_http_request<S>(stream: &mut S) -> Result<HttpRequest>
+pub(crate) async fn read_http_request<S>(stream: &mut S) -> Result<HttpRequest>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {

@@ -1,5 +1,5 @@
 use crate::commands::Cli;
-use crate::config::Config;
+use crate::config::{Config, McpTool};
 use crate::error::Result;
 use crate::mcp_server::FnoxMcpServer;
 use crate::{env, error::FnoxError};
@@ -11,8 +11,9 @@ use rmcp::{RoleServer, ServiceExt};
 /// Starts an MCP server on stdin and stdout for an agent client to launch. It
 /// offers the `get_secret` and `exec` tools, limited by the `[mcp]` table:
 /// `tools` chooses which tools are offered and `secrets` restricts which secrets
-/// they can reach. The server never prompts, so authenticate to your providers
-/// before starting the client.
+/// they can reach. Add `request_secret` to `tools` to let the agent ask you to
+/// enter a missing secret on a local page. The server never prompts in the
+/// terminal, so authenticate to your providers before starting the client.
 #[derive(Debug, usage_rs::Args)]
 #[usage(
     example("fnox mcp", header = "Start the server for the current project"),
@@ -41,8 +42,13 @@ impl McpCommand {
             let allowed_set: std::collections::HashSet<&str> =
                 allowlist.iter().map(|s| s.as_str()).collect();
             let providers = config.get_providers(&profile)?;
+            let can_request = mcp_config.tools().contains(&McpTool::RequestSecret);
             for name in allowlist {
                 if !all_secrets.contains_key(name) {
+                    // request_secret may add it during the session
+                    if can_request {
+                        continue;
+                    }
                     tracing::warn!(
                         "mcp.secrets allowlist contains '{name}' which is not a configured secret"
                     );
@@ -78,7 +84,8 @@ impl McpCommand {
 
         let daemon_context = crate::daemon::ResolveContext::from_cli(cli);
         let server =
-            FnoxMcpServer::new(config, profile, mcp_config, daemon_context, profile_secrets);
+            FnoxMcpServer::new(config, profile, mcp_config, daemon_context, profile_secrets)
+                .with_write_target(cli.config.clone(), cli.write_profile.clone());
 
         let service: RunningService<RoleServer, FnoxMcpServer> = server
             .serve(rmcp::transport::io::stdio())

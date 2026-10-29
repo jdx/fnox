@@ -427,12 +427,12 @@ tools = ["exec"]
 secrets = ["DATABASE_URL"]
 ```
 
-| Field               | Type               | Default                  | Description                                                        |
-| ------------------- | ------------------ | ------------------------ | ------------------------------------------------------------------ |
-| `tools`             | array of strings   | `["get_secret", "exec"]` | Tools that `fnox mcp` offers.                                      |
-| `secrets`           | array of strings   | every secret             | Allowlist of secrets the tools can reach.                          |
-| `exec_timeout_secs` | integer, 1 or more | `300`                    | Time limit, in seconds, for a command run by the `exec` tool.      |
-| `redact_output`     | boolean            | `true`                   | Replace resolved secret values in `exec` output with `[REDACTED]`. |
+| Field               | Type               | Default                  | Description                                                                      |
+| ------------------- | ------------------ | ------------------------ | -------------------------------------------------------------------------------- |
+| `tools`             | array of strings   | `["get_secret", "exec"]` | Tools that `fnox mcp` offers: `get_secret`, `exec`, `request_secret`.            |
+| `secrets`           | array of strings   | every secret             | Allowlist of secrets the tools can reach, and that `request_secret` can ask for. |
+| `exec_timeout_secs` | integer, 1 or more | `300`                    | Time limit, in seconds, for a command run by the `exec` tool.                    |
+| `redact_output`     | boolean            | `true`                   | Replace resolved secret values in `exec` output with `[REDACTED]`.               |
 
 Redaction is not a sandbox: a command can transform a value before printing it. See [MCP server](/guide/mcp).
 

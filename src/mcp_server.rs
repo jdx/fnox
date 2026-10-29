@@ -1,18 +1,23 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use indexmap::IndexMap;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::*;
 use rmcp::schemars;
-use rmcp::service::RequestContext;
-use rmcp::{ErrorData as McpError, RoleServer, ServerHandler};
+use rmcp::service::{ElicitationError, ElicitationMode, RequestContext};
+use rmcp::{ErrorData as McpError, Peer, RoleServer, ServerHandler};
 use rmcp::{tool, tool_router};
 use tokio::sync::{OnceCell, RwLock};
 
-use crate::config::{Config, McpConfig, McpTool, SecretConfig};
+use crate::commands::set::{SetCommand, local_target_path, storage_provider, stores_securely};
+use crate::config::{self, Config, McpConfig, McpTool, SecretConfig};
 use crate::daemon::{Purpose, ResolveContext};
+use crate::generate::GenerateKind;
+use crate::mcp_secret_page::{PageDetails, SecretPage, Submission};
 use crate::temp_file_secrets::create_ephemeral_secret_file;
 
 /// Maximum output size (1 MiB) to prevent unbounded memory usage
@@ -24,6 +29,12 @@ const PER_STREAM_LIMIT: usize = (MAX_OUTPUT_BYTES / 2) + 1;
 
 /// Default execution timeout (5 minutes)
 const DEFAULT_EXEC_TIMEOUT_SECS: u64 = 300;
+
+/// How long request_secret waits for the user to enter a value
+const REQUEST_SECRET_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+
+/// Longest agent-written reason the secret page shows
+const MAX_REASON_CHARS: usize = 500;
 
 fn scrub_age_identity(cmd: &mut tokio::process::Command) {
     for key in crate::child_env::ambient_scrub_keys() {
@@ -48,6 +59,19 @@ pub struct ExecParams {
     pub command: Vec<String>,
 }
 
+/// MCP tool parameter: ask the user to enter a secret
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct RequestSecretParams {
+    /// The secret's name, which is also its environment variable name, such as TAILSCALE_AUTHKEY
+    pub name: String,
+    /// Why the secret is needed and where the user can create it. Shown to the user next to the input box.
+    #[serde(default)]
+    pub reason: Option<String>,
+    /// Ask for a new value even if the secret already has one
+    #[serde(default)]
+    pub replace: bool,
+}
+
 /// The fnox MCP server — acts as a session-scoped secret broker.
 ///
 /// Secrets are resolved on first access (may require yubikey/SSO) and cached
@@ -59,7 +83,12 @@ pub struct FnoxMcpServer {
     profile: Arc<Vec<String>>,
     mcp_config: Arc<McpConfig>,
     daemon_context: Arc<ResolveContext>,
-    profile_secrets: Arc<IndexMap<String, SecretConfig>>,
+    /// Replaced, not mutated, when request_secret stores a new secret
+    profile_secrets: Arc<std::sync::RwLock<Arc<IndexMap<String, SecretConfig>>>>,
+    /// `--config` value, for finding the file request_secret writes to
+    config_path: Arc<PathBuf>,
+    /// `--write-profile` value, for request_secret
+    write_profile: Arc<Option<String>>,
     /// Resolved secret values (raw). None means "resolved but absent".
     /// as_file conversion happens at exec time.
     cache: Arc<RwLock<HashMap<String, Option<String>>>>,
@@ -83,11 +112,50 @@ impl FnoxMcpServer {
             profile: Arc::new(profile),
             mcp_config: Arc::new(mcp_config),
             daemon_context: Arc::new(daemon_context),
-            profile_secrets: Arc::new(profile_secrets),
+            profile_secrets: Arc::new(std::sync::RwLock::new(Arc::new(profile_secrets))),
+            config_path: Arc::new(PathBuf::from(config::DEFAULT_CONFIG_FILENAME)),
+            write_profile: Arc::new(None),
             cache: Arc::new(RwLock::new(HashMap::new())),
             resolved: Arc::new(OnceCell::new()),
             tool_router: Self::tool_router(),
         }
+    }
+
+    /// Set the `--config` and `--write-profile` values that decide where
+    /// request_secret stores a value, as `fnox set` would
+    pub fn with_write_target(
+        mut self,
+        config_path: PathBuf,
+        write_profile: Option<String>,
+    ) -> Self {
+        self.config_path = Arc::new(config_path);
+        self.write_profile = Arc::new(write_profile);
+        self
+    }
+
+    /// The secrets this session can reach
+    fn secrets(&self) -> Arc<IndexMap<String, SecretConfig>> {
+        self.profile_secrets
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Make a secret stored during this session available to the tools
+    async fn add_secret(&self, name: &str, secret: SecretConfig, value: String) {
+        {
+            let mut secrets = self
+                .profile_secrets
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
+            let mut updated = (**secrets).clone();
+            updated.insert(name.to_string(), secret);
+            *secrets = Arc::new(updated);
+        }
+        self.cache
+            .write()
+            .await
+            .insert(name.to_string(), Some(value));
     }
 
     fn list_tools_result(&self) -> ListToolsResult {
@@ -114,18 +182,23 @@ impl FnoxMcpServer {
     async fn ensure_resolved(&self) -> Result<(), McpError> {
         let config = self.config.clone();
         let profile = self.profile.clone();
-        let profile_secrets = self.profile_secrets.clone();
+        let profile_secrets = self.secrets();
         let daemon_context = self.daemon_context.clone();
         let cache = self.cache.clone();
 
         self.resolved
             .get_or_try_init(|| async {
-                // Only batch-resolve env-injectable secrets; env=false are deferred
-                let env_secrets: IndexMap<String, SecretConfig> = profile_secrets
-                    .iter()
-                    .filter(|(_, sc)| sc.env_mode().in_exec())
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect();
+                // Only batch-resolve env-injectable secrets; env=false are deferred.
+                // Skip any that request_secret already cached: their config
+                // may name a provider this session's config predates.
+                let env_secrets: IndexMap<String, SecretConfig> = {
+                    let cached = cache.read().await;
+                    profile_secrets
+                        .iter()
+                        .filter(|(k, sc)| sc.env_mode().in_exec() && !cached.contains_key(*k))
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect()
+                };
 
                 // include_all_modes=true: the map above is already filtered,
                 // and env="exec" secrets would otherwise be dropped by the
@@ -167,7 +240,8 @@ impl FnoxMcpServer {
             }
         }
 
-        let secret_config = match self.profile_secrets.get(name) {
+        let profile_secrets = self.secrets();
+        let secret_config = match profile_secrets.get(name) {
             Some(sc) => sc,
             None => return Ok(None),
         };
@@ -238,9 +312,11 @@ impl FnoxMcpServer {
             ));
         }
 
+        let profile_secrets = self.secrets();
+
         // as_file secrets are meant to be consumed as file paths via exec, not
         // retrieved as raw content. Reject them to avoid leaking key material.
-        if let Some(sc) = self.profile_secrets.get(&params.name)
+        if let Some(sc) = profile_secrets.get(&params.name)
             && sc.as_file
         {
             return Err(McpError::invalid_request(
@@ -277,7 +353,7 @@ impl FnoxMcpServer {
         }
 
         // Not in cache — check if it's a configured secret
-        if let Some(secret_config) = self.profile_secrets.get(&params.name) {
+        if let Some(secret_config) = profile_secrets.get(&params.name) {
             // env=false secrets are deferred; try on-demand resolution
             if !secret_config.env_mode().in_exec() {
                 return match self.resolve_single(&params.name).await? {
@@ -328,6 +404,7 @@ impl FnoxMcpServer {
         }
 
         self.ensure_resolved().await?;
+        let profile_secrets = self.secrets();
 
         // Snapshot env vars from cache, filtering out env=false and absent
         // secrets (env="exec" is injected: exec subprocesses are its intended
@@ -338,7 +415,7 @@ impl FnoxMcpServer {
             cache
                 .iter()
                 .filter(|(key, _)| {
-                    self.profile_secrets
+                    profile_secrets
                         .get(key.as_str())
                         .is_some_and(|sc| sc.env_mode().in_exec())
                 })
@@ -369,7 +446,7 @@ impl FnoxMcpServer {
 
         // Inject filtered secrets as env vars, converting as_file to temp paths
         for (key, value) in &env_vars {
-            if let Some(sc) = self.profile_secrets.get(key.as_str())
+            if let Some(sc) = profile_secrets.get(key.as_str())
                 && sc.as_file
             {
                 let path = Self::create_secret_file(key, value, &mut _exec_temp_files)?;
@@ -381,7 +458,7 @@ impl FnoxMcpServer {
 
         // Strip env=false secrets that resolve_secrets_batch may have set
         // as process env vars (side effect of dependency resolution).
-        for (key, secret_config) in self.profile_secrets.iter() {
+        for (key, secret_config) in profile_secrets.iter() {
             if !secret_config.env_mode().in_exec() {
                 cmd.env_remove(key);
             }
@@ -525,6 +602,302 @@ impl FnoxMcpServer {
             Ok(CallToolResult::error(vec![ContentBlock::text(text)]))
         }
     }
+
+    /// Ask the user to enter a secret on a one-time local page.
+    ///
+    /// The page's URL reaches the user through URL-mode elicitation, so the
+    /// value never passes through the client. fnox stores it the way `fnox set`
+    /// would, and the agent learns only that it was stored.
+    #[tool(
+        description = "Ask the user to enter a secret that isn't set yet, such as an API key or auth token. fnox shows the user a local page to type it into, stores it, and makes it available to the exec tool as an environment variable. The value is never returned to you. Use this instead of asking the user to paste a secret into the chat."
+    )]
+    async fn request_secret(
+        &self,
+        Parameters(params): Parameters<RequestSecretParams>,
+        peer: Peer<RoleServer>,
+    ) -> Result<CallToolResult, McpError> {
+        if !self.mcp_config.tools().contains(&McpTool::RequestSecret) {
+            return Err(McpError::invalid_request(
+                "Tool 'request_secret' is not enabled in this configuration",
+                None,
+            ));
+        }
+        let name = params.name;
+        config::validate_secret_name(&name)
+            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
+        if let Some(allowlist) = &self.mcp_config.secrets
+            && !allowlist.contains(&name)
+        {
+            return Err(McpError::invalid_request(
+                format!("Secret '{name}' is not in mcp.secrets, so it can't be requested"),
+                None,
+            ));
+        }
+
+        let config = Config::load_smart(self.config_path.as_path())
+            .map_err(|e| McpError::internal_error(format!("Failed to load config: {e}"), None))?;
+        if !params.replace && self.has_value(&config, &name).await? {
+            return Ok(CallToolResult::success(vec![ContentBlock::text(format!(
+                "Secret '{name}' already has a value. Use exec to run commands with it, or call request_secret with replace=true to ask the user for a new value."
+            ))]));
+        }
+
+        if !peer
+            .supported_elicitation_modes()
+            .contains(&ElicitationMode::Url)
+        {
+            return Ok(CallToolResult::error(vec![ContentBlock::text(
+                self.terminal_fallback(&name),
+            )]));
+        }
+
+        let internal = |e: crate::error::FnoxError| McpError::internal_error(e.to_string(), None);
+        let write_profile =
+            Config::resolve_write_profile(&self.profile, self.write_profile.as_deref())
+                .map_err(internal)?;
+        let target = local_target_path(
+            &self.config_path,
+            &self.profile,
+            self.write_profile.as_deref(),
+        )
+        .map_err(internal)?;
+        let effective = config
+            .get_secret(std::slice::from_ref(&write_profile), &name)
+            .map_err(internal)?
+            .cloned();
+        let Some(provider) = storage_provider(&config, &write_profile, None, effective.as_ref())
+            .map_err(internal)?
+        else {
+            return Err(McpError::invalid_request(
+                format!(
+                    "Secret '{name}' has no provider and the config sets no default_provider, so fnox would store it in plain text. Ask the user to set default_provider."
+                ),
+                None,
+            ));
+        };
+        // Check before the user types anything that the provider can take a
+        // new value without leaving it in plain text in the config
+        let write_stack = std::slice::from_ref(&write_profile);
+        let providers = config.get_providers(write_stack).map_err(internal)?;
+        let Some(provider_config) = providers.get(&provider) else {
+            return Err(McpError::invalid_request(
+                format!("Provider '{provider}' not found in configuration"),
+                None,
+            ));
+        };
+        let capabilities = crate::providers::get_provider_resolved(
+            &config,
+            write_stack,
+            &provider,
+            provider_config,
+        )
+        .await
+        .map_err(internal)?
+        .capabilities();
+        if !stores_securely(provider_config, &capabilities) {
+            return Err(McpError::invalid_request(
+                format!(
+                    "Provider '{provider}' would leave '{name}' in plain text in the config. Ask the user to set default_provider to a provider that encrypts values or stores them remotely."
+                ),
+                None,
+            ));
+        }
+
+        let reason = params
+            .reason
+            .map(|reason| reason.chars().take(MAX_REASON_CHARS).collect());
+        let mut page = SecretPage::start(PageDetails {
+            name: name.clone(),
+            reason,
+            provider: provider.clone(),
+            target: target.clone(),
+            profile: write_profile,
+        })
+        .await
+        .map_err(internal)?;
+
+        let elicitation_id = data_encoding::HEXLOWER.encode(&rand::random::<[u8; 16]>());
+        let message = format!(
+            "fnox needs a value for {name}. Open this local page to enter it. fnox stores it with provider '{provider}' and does not show it to the agent."
+        );
+        match peer
+            .elicit_url_with_timeout(
+                message,
+                page.url().clone(),
+                elicitation_id,
+                Some(REQUEST_SECRET_TIMEOUT),
+            )
+            .await
+        {
+            Ok(ElicitationAction::Accept) => {}
+            Ok(_) => {
+                return Ok(CallToolResult::error(vec![ContentBlock::text(format!(
+                    "The user declined to open the page for '{name}'. Don't ask for the value in the chat."
+                ))]));
+            }
+            Err(ElicitationError::CapabilityNotSupported) => {
+                return Ok(CallToolResult::error(vec![ContentBlock::text(
+                    self.terminal_fallback(&name),
+                )]));
+            }
+            Err(e) => {
+                return Err(McpError::internal_error(
+                    format!("Failed to show the secret page link: {e}"),
+                    None,
+                ));
+            }
+        }
+
+        // Accepting the elicitation only means the user opened the link; the
+        // value arrives when they submit the page.
+        let submission = tokio::time::timeout(REQUEST_SECRET_TIMEOUT, page.next())
+            .await
+            .ok()
+            .flatten();
+        match submission {
+            None => Ok(CallToolResult::error(vec![ContentBlock::text(format!(
+                "Timed out waiting for the user to enter '{name}'."
+            ))])),
+            Some(Submission::Declined) => {
+                Ok(CallToolResult::error(vec![ContentBlock::text(format!(
+                    "The user declined to enter '{name}'. Don't ask for the value in the chat."
+                ))]))
+            }
+            Some(Submission::Value { value, reply }) => {
+                match self.store(&name, value, config, &target).await {
+                    Ok(()) => {
+                        let _ = reply.send(Ok(format!(
+                            "fnox stored {name}. You can close this tab and go back to the agent."
+                        )));
+                        Ok(CallToolResult::success(vec![ContentBlock::text(format!(
+                            "The user entered '{name}'. fnox stored it with provider '{provider}' in {}. The exec tool now sets it as ${name}.",
+                            target.display()
+                        ))]))
+                    }
+                    Err(e) => {
+                        let _ = reply.send(Err(e.to_string()));
+                        Err(McpError::internal_error(
+                            format!("Failed to store '{name}': {e}"),
+                            None,
+                        ))
+                    }
+                }
+            }
+        }
+    }
+
+    /// Whether `name` resolves to a value, checking `config` (freshly loaded)
+    /// for a secret set outside this session, such as with `fnox set`
+    async fn has_value(&self, config: &Config, name: &str) -> Result<bool, McpError> {
+        if matches!(self.cache.read().await.get(name), Some(Some(_))) {
+            return Ok(true);
+        }
+        let Some(secret) = config
+            .get_secrets(&self.profile)
+            .map_err(|e| McpError::internal_error(format!("Failed to load secrets: {e}"), None))?
+            .shift_remove(name)
+        else {
+            return Ok(false);
+        };
+        let single: IndexMap<String, SecretConfig> =
+            [(name.to_string(), secret.clone())].into_iter().collect();
+        let resolved = crate::daemon::resolve_batch_with_context(
+            &self.daemon_context,
+            config,
+            &self.profile,
+            &single,
+            Purpose::Mcp,
+            true,
+        )
+        .await
+        .map_err(|e| {
+            McpError::internal_error(
+                format!(
+                    "Secret '{name}' is configured but failed to resolve: {e}. Call request_secret with replace=true to ask the user for a new value."
+                ),
+                None,
+            )
+        })?;
+        match resolved.into_iter().next().and_then(|(_, value)| value) {
+            Some(value) => {
+                self.add_secret(name, secret, value).await;
+                Ok(true)
+            }
+            None => Ok(false),
+        }
+    }
+
+    /// Store a value the user entered, as `fnox set` would
+    async fn store(
+        &self,
+        name: &str,
+        value: String,
+        config: Config,
+        target: &std::path::Path,
+    ) -> crate::error::Result<()> {
+        let set = SetCommand {
+            key: Some(name.to_string()),
+            value: Some(value.clone()),
+            description: None,
+            global: false,
+            key_name: None,
+            dry_run: false,
+            provider: None,
+            base64_encode: false,
+            default: None,
+            file: None,
+            force: false,
+            from_file: None,
+            generate: false,
+            generate_type: GenerateKind::Password,
+            if_missing: None,
+            length: None,
+            show: false,
+            source: None,
+        };
+        let stored = set
+            .store_at(
+                config,
+                &self.profile,
+                self.write_profile.as_deref(),
+                target,
+                true,
+            )
+            .await?;
+        self.add_secret(name, stored.secret, value).await;
+        Ok(())
+    }
+
+    /// What to tell the agent when the client can't show a URL
+    fn terminal_fallback(&self, name: &str) -> String {
+        let mut command = vec!["fnox".to_string()];
+        if self.config_path.as_path() != std::path::Path::new(config::DEFAULT_CONFIG_FILENAME) {
+            command.push("-c".into());
+            command
+                .push(crate::shell::posix_quote(&self.config_path.to_string_lossy()).into_owned());
+        }
+        if self.profile.as_slice() != ["default"] {
+            command.push("-P".into());
+            command.push(self.profile.join(","));
+        }
+        if let Some(write_profile) = self.write_profile.as_deref() {
+            command.push("--write-profile".into());
+            command.push(write_profile.to_string());
+        }
+        command.push("set".into());
+        command.push(name.to_string());
+        let command = command.join(" ");
+        let command = match std::env::current_dir() {
+            Ok(dir) => format!(
+                "cd {} && {command}",
+                crate::shell::posix_quote(&dir.to_string_lossy())
+            ),
+            Err(_) => command,
+        };
+        format!(
+            "This MCP client can't open fnox's secure input page (it doesn't support URL-mode elicitation). Don't ask the user to paste '{name}' into the chat. Ask them to run this in their own terminal, where fnox prompts for the value with hidden input:\n\n    {command}\n\nThen call request_secret again with the same name and without replace. fnox will load the stored value without showing it to you."
+        )
+    }
 }
 
 use crate::redact::redactable;
@@ -572,7 +945,8 @@ impl ServerHandler for FnoxMcpServer {
         let tools = self.mcp_config.tools();
         let has_get_secret = tools.contains(&McpTool::GetSecret);
         let has_exec = tools.contains(&McpTool::Exec);
-        let instructions = if has_get_secret && has_exec {
+        let has_request_secret = tools.contains(&McpTool::RequestSecret);
+        let mut instructions = if has_get_secret && has_exec {
             "fnox MCP server — a session-scoped secret broker. \
              Use get_secret to retrieve individual secrets, \
              or exec to run commands with secrets injected as environment variables."
@@ -582,14 +956,24 @@ impl ServerHandler for FnoxMcpServer {
         } else if has_exec {
             "fnox MCP server — a session-scoped secret broker. \
              Use exec to run commands with secrets injected as environment variables."
+        } else if has_request_secret {
+            "fnox MCP server — a session-scoped secret broker."
         } else {
             "fnox MCP server — no tools are currently enabled."
-        };
+        }
+        .to_string();
+        if has_request_secret {
+            instructions.push_str(
+                " When a task needs a secret that isn't set, call request_secret: \
+                 the user enters it on a local fnox page and you never see the value. \
+                 Never ask the user to paste a secret into the chat.",
+            );
+        }
 
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(Implementation::new("fnox-mcp", env!("CARGO_PKG_VERSION")))
             .with_protocol_version(ProtocolVersion::V_2024_11_05)
-            .with_instructions(instructions.to_string())
+            .with_instructions(instructions)
     }
 
     async fn list_tools(
