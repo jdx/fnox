@@ -881,12 +881,13 @@ impl FnoxMcpServer {
     /// for a secret set outside this session, such as with `fnox set`
     async fn has_value(&self, config: &Config, name: &str) -> Result<bool, McpError> {
         // After the terminal fallback, the user may have replaced a value this
-        // session (and the daemon) still caches
+        // session (and the daemon) still caches. Keep the mark until the
+        // reload succeeds, so a retry after a failure still reloads.
         let sent_to_terminal = self
             .sent_to_terminal
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .remove(name);
+            .contains(name);
         if sent_to_terminal {
             crate::daemon::refresh_with_context(
                 &self.daemon_context,
@@ -898,14 +899,25 @@ impl FnoxMcpServer {
         } else if matches!(self.cache.read().await.get(name), Some(Some(_))) {
             return Ok(true);
         }
-        self.load(config, name).await.map_err(|e| {
+        let loaded = self.load(config, name).await.map_err(|e| {
             McpError::internal_error(
                 format!(
                     "Secret '{name}' is configured but failed to resolve: {e}. Call request_secret with replace=true to ask the user for a new value."
                 ),
                 None,
             )
-        })
+        })?;
+        if sent_to_terminal {
+            if !loaded {
+                // Don't keep serving a value the config no longer has
+                self.cache.write().await.remove(name);
+            }
+            self.sent_to_terminal
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(name);
+        }
+        Ok(loaded)
     }
 
     /// Resolve `name` from `config` the way a new session would, and make it

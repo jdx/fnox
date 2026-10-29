@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 
 load 'test_helper/common_setup'
+bats_require_minimum_version 1.5.0
 
 setup() {
 	_common_setup
@@ -32,7 +33,8 @@ teardown() {
 
 # mcp_client ELICIT PAGE CALLS: see test/mcp_client.py
 mcp_client() {
-	run "${PYTHON3:-python3}" "$BATS_TEST_DIRNAME/mcp_client.py" "$FNOX_BIN" "$@"
+	# fnox logs to stderr; keep it out of the per-call result lines
+	run --separate-stderr "${PYTHON3:-python3}" "$BATS_TEST_DIRNAME/mcp_client.py" "$FNOX_BIN" "$@"
 }
 
 @test "request_secret is not offered unless enabled" {
@@ -220,4 +222,50 @@ EOF
 	assert_line --index 0 --partial old
 	assert_line --index 1 --partial "fnox stored it"
 	assert_line --index 2 --partial matched
+}
+
+@test "request_secret retries the reload after the terminal fallback if it fails" {
+	mkdir -p "$TEST_TEMP_DIR/bin" "$TEST_TEMP_DIR/store"
+	# A password-store stand-in that fails while $FAKE_PASS_FAIL exists
+	cat >"$TEST_TEMP_DIR/bin/pass" <<'EOF'
+#!/bin/sh
+[ -e "$FAKE_PASS_FAIL" ] && exit 1
+case "$1" in
+show) cat "$FAKE_PASS_STORE/$2" ;;
+insert) cat >"$FAKE_PASS_STORE/$4" ;;
+esac
+EOF
+	chmod +x "$TEST_TEMP_DIR/bin/pass"
+	export PATH="$TEST_TEMP_DIR/bin:$PATH"
+	export FAKE_PASS_STORE="$TEST_TEMP_DIR/store"
+	export FAKE_PASS_FAIL="$TEST_TEMP_DIR/fail"
+	cat >fnox.toml <<'EOF'
+root = true
+default_provider = "pass"
+
+[providers.pass]
+type = "password-store"
+
+[mcp]
+tools = ["exec", "request_secret"]
+
+[secrets]
+EOF
+	echo old-value | "$FNOX_BIN" set API_TOKEN --if-missing error
+
+	mcp_client none none '[
+		["exec", {"command": ["sh", "-c", "test \"$API_TOKEN\" = old-value && echo old"]}],
+		["request_secret", {"name": "API_TOKEN", "replace": true}],
+		["$", ["sh", "-c", "echo new-value >\"$FAKE_PASS_STORE/API_TOKEN\" && touch \"$FAKE_PASS_FAIL\""]],
+		["request_secret", {"name": "API_TOKEN"}],
+		["$", ["sh", "-c", "rm -f \"$FAKE_PASS_FAIL\""]],
+		["request_secret", {"name": "API_TOKEN"}],
+		["exec", {"command": ["sh", "-c", "test \"$API_TOKEN\" = new-value && echo matched"]}]
+	]'
+	assert_success
+	assert_line --index 0 --partial old
+	assert_line --index 1 --partial "fnox set API_TOKEN"
+	assert_line --index 3 --partial "failed to resolve"
+	assert_line --index 5 --partial "already has a value"
+	assert_line --index 6 --partial matched
 }
