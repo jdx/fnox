@@ -197,6 +197,11 @@ pub struct Config {
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub providers: IndexMap<String, ProviderConfig>,
 
+    /// Push targets (for default profile): write-only stores that
+    /// `fnox push` copies secret values into
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub targets: IndexMap<String, crate::push_targets::PushTargetConfig>,
+
     /// Lua provider plugins to install, as `name = "<git url>[#ref]"`.
     /// `owner/repo` is shorthand for a GitHub repository.
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
@@ -351,6 +356,10 @@ pub struct SecretConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sync: Option<SyncConfig>,
 
+    /// Push targets that `fnox push` copies this secret's value into
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub push: Vec<String>,
+
     /// Path to the config file where this secret was defined (not serialized)
     #[serde(skip)]
     pub source_path: Option<PathBuf>,
@@ -385,6 +394,10 @@ pub struct ProfileConfig {
     /// Provider configurations for this profile
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub providers: IndexMap<String, ProviderConfig>,
+
+    /// Push targets for this profile
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub targets: IndexMap<String, crate::push_targets::PushTargetConfig>,
 
     /// Default provider name for this profile
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -983,6 +996,7 @@ impl Config {
         profile
             .providers
             .extend(std::mem::take(&mut self.providers));
+        profile.targets.extend(std::mem::take(&mut self.targets));
         profile
             .provider_sources
             .extend(std::mem::take(&mut self.provider_sources));
@@ -1028,6 +1042,7 @@ impl Config {
             profile.lease_sources.extend(overlay.lease_sources);
             profile.providers.extend(overlay.providers);
             profile.provider_sources.extend(overlay.provider_sources);
+            profile.targets.extend(overlay.targets);
             profile.secrets.extend(overlay.secrets);
             profile.files.extend(overlay.files);
             profile.secret_sources.extend(overlay.secret_sources);
@@ -1372,6 +1387,11 @@ impl Config {
             merged.providers.insert(name, provider);
         }
 
+        // Merge push targets (overlay takes precedence)
+        for (name, target) in overlay.targets {
+            merged.targets.insert(name, target);
+        }
+
         // Merge plugin sources (overlay takes precedence)
         for (name, source) in overlay.plugins {
             merged.plugins.insert(name, source);
@@ -1418,6 +1438,9 @@ impl Config {
                 }
                 for (provider_name, provider) in profile.providers {
                     existing_profile.providers.insert(provider_name, provider);
+                }
+                for (target_name, target) in profile.targets {
+                    existing_profile.targets.insert(target_name, target);
                 }
                 for (provider_name, source) in &profile.provider_sources {
                     existing_profile
@@ -1807,6 +1830,7 @@ impl Config {
             root: false,
             leases: IndexMap::new(),
             providers: IndexMap::new(),
+            targets: IndexMap::new(),
             plugins: IndexMap::new(),
             default_provider: None,
             secrets: IndexMap::new(),
@@ -2179,6 +2203,24 @@ impl Config {
         }
 
         Ok(leases)
+    }
+
+    /// Get effective push targets for the active profile stack, with the same
+    /// precedence as [`Self::get_leases`].
+    pub fn get_targets(
+        &self,
+        profiles: &[String],
+    ) -> Result<IndexMap<String, crate::push_targets::PushTargetConfig>> {
+        let profiles = self.resolve_profiles(profiles)?;
+        let mut targets = self.targets.clone();
+
+        for profile in profiles.iter().filter(|p| *p != "default") {
+            if let Some(profile_config) = self.profiles.get(profile) {
+                targets.extend(profile_config.targets.clone());
+            }
+        }
+
+        Ok(targets)
     }
 
     /// The config file of each lease backend in [`Self::get_leases`], with the
@@ -2632,6 +2674,7 @@ impl SecretConfig {
             json_path: None,
             line: None,
             sync: None,
+            push: Vec::new(),
             source_path: None,
             source_is_profile: false,
             source_profile: None,
@@ -2706,6 +2749,9 @@ impl SecretConfig {
             sync_table.fmt();
             inline.insert("sync", toml_edit::Value::InlineTable(sync_table));
         }
+        if !self.push.is_empty() {
+            inline.insert("push", push_array(&self.push));
+        }
         if let Some(daemon_cache) = self.daemon_cache {
             inline.insert("daemon_cache", toml_edit::Value::from(daemon_cache));
         }
@@ -2772,6 +2818,11 @@ impl SecretConfig {
                 Value::InlineTable(sync_table)
             }),
         );
+        set_or_remove(
+            table,
+            "push",
+            (!self.push.is_empty()).then(|| push_array(&self.push)),
+        );
         set_or_remove(table, "daemon_cache", self.daemon_cache.map(Value::from));
     }
 
@@ -2832,6 +2883,7 @@ impl ProfileConfig {
             inherits: None,
             leases: IndexMap::new(),
             providers: IndexMap::new(),
+            targets: IndexMap::new(),
             default_provider: None,
             secrets: IndexMap::new(),
             files: IndexMap::new(),
@@ -2847,6 +2899,7 @@ impl ProfileConfig {
         self.inherits.is_none()
             && self.leases.is_empty()
             && self.providers.is_empty()
+            && self.targets.is_empty()
             && self.secrets.is_empty()
             && self.files.is_empty()
             && self.default_provider().is_none()
@@ -2871,6 +2924,10 @@ impl ProfileConfig {
             .as_ref()
             .and_then(|s: &SpannedValue<String>| s.span())
     }
+}
+
+fn push_array(targets: &[String]) -> toml_edit::Value {
+    toml_edit::Value::Array(targets.iter().map(String::as_str).collect())
 }
 
 impl Default for SecretConfig {

@@ -17,7 +17,7 @@ fnox reads `fnox.toml` from the current directory and its parents, resolves each
 Commands by task:
 
 - Read and run: [get](/cli/get), [list](/cli/list), [exec](/cli/exec), [env](/cli/env), [export](/cli/export), [check](/cli/check)
-- Store and migrate: [set](/cli/set), [remove](/cli/remove), [import](/cli/import), [sync](/cli/sync), [reencrypt](/cli/reencrypt), [edit](/cli/edit), [files](/cli/files)
+- Store and migrate: [set](/cli/set), [remove](/cli/remove), [import](/cli/import), [sync](/cli/sync), [push](/cli/push), [reencrypt](/cli/reencrypt), [edit](/cli/edit), [files](/cli/files)
 - Configure: [init](/cli/init), [provider](/cli/provider), [plugin](/cli/plugin), [profiles](/cli/profiles), [config-files](/cli/config-files)
 - Shell and tools: [activate](/cli/activate), [deactivate](/cli/deactivate), [completion](/cli/completion), [tui](/cli/tui), [mcp](/cli/mcp)
 - Diagnose: [doctor](/cli/doctor), [scan](/cli/scan)
@@ -104,6 +104,7 @@ Put fnox options before the `--` that starts a child command, as in `fnox -P pro
 - [`fnox proxy <SUBCOMMAND>`](/cli/proxy.md)
 - [`fnox proxy rules`](/cli/proxy/rules.md)
 - [`fnox proxy run [--no-sandbox] [--sandbox] [COMMAND]…`](/cli/proxy/run.md)
+- [`fnox push [FLAGS] [KEYS]…`](/cli/push.md)
 - [`fnox reencrypt [FLAGS] [KEYS]…`](/cli/reencrypt.md)
 - [`fnox remove [FLAGS] [KEY]`](/cli/remove.md)
 - [`fnox scan [FLAGS] [DIR]`](/cli/scan.md)

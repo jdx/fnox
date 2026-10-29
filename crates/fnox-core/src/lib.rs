@@ -23,6 +23,7 @@ pub mod lease_backends;
 pub mod library;
 pub mod plugins;
 pub mod providers;
+pub mod push_targets;
 pub mod secret_file;
 pub mod secret_resolver;
 pub mod settings;

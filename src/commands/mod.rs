@@ -29,6 +29,7 @@ pub mod plugin;
 pub mod profiles;
 pub mod provider;
 pub mod proxy;
+pub mod push;
 pub mod reencrypt;
 pub mod remove;
 pub mod sandbox_bridge;
@@ -50,7 +51,7 @@ pub mod version;
 /// Commands by task:
 ///
 ///  - Read and run: get, list, exec, env, export, check
-///  - Store and migrate: set, remove, import, sync, reencrypt, edit, files
+///  - Store and migrate: set, remove, import, sync, push, reencrypt, edit, files
 ///  - Configure: init, provider, plugin, profiles, config-files
 ///  - Shell and tools: activate, deactivate, completion, tui, mcp
 ///  - Diagnose: doctor, scan
@@ -191,6 +192,8 @@ pub enum Commands {
     Provider(provider::ProviderCommand),
 
     Proxy(proxy::ProxyCommand),
+
+    Push(push::PushCommand),
 
     Reencrypt(reencrypt::ReencryptCommand),
 
@@ -385,6 +388,7 @@ impl Commands {
             }
             Commands::Provider(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Proxy(cmd) => cmd.run(cli, self.load_config(cli)?).await,
+            Commands::Push(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Reencrypt(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Env(cmd) => cmd.run(cli).await,
             Commands::Remove(cmd) => cmd.run(cli).await,

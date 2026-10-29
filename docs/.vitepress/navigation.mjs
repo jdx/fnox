@@ -49,6 +49,7 @@ const guide = [
     items: [
       page("Secret files", "/guide/files"),
       page("Local sync cache", "/guide/sync"),
+      page("Push targets", "/guide/push"),
       page("Memory cache (daemon)", "/guide/daemon"),
       page("Credential leases", "/guide/leases"),
       page("Credential proxy", "/guide/proxy"),
@@ -146,6 +147,29 @@ const leases = [
   reference,
 ];
 
+const targets = [
+  {
+    text: "Push targets",
+    items: [
+      page("Pushing secrets", "/guide/push"),
+      page("Target catalog", "/targets/"),
+    ],
+  },
+  {
+    text: "Targets",
+    items: [
+      ["GitHub Actions", "github-actions"],
+      ["GitLab CI/CD", "gitlab-ci"],
+      ["Vercel", "vercel"],
+      ["Cloudflare Workers", "cloudflare-workers"],
+      ["Fly.io", "fly"],
+      ["Forgejo and Gitea", "forgejo-actions"],
+      ["HCP Terraform", "hcp-terraform"],
+    ].map(([name, slug]) => page(name, `/targets/${slug}`)),
+  },
+  reference,
+];
+
 export function sidebar(commands) {
   const commandGroups = [
     ["Read and run", ["get", "list", "exec", "env", "check", "export", "tui"]],
@@ -157,6 +181,7 @@ export function sidebar(commands) {
         "remove",
         "import",
         "sync",
+        "push",
         "reencrypt",
         "edit",
         "files",
@@ -213,6 +238,7 @@ export function sidebar(commands) {
     "/guide/": guide,
     "/providers/": providers,
     "/leases/": leases,
+    "/targets/": targets,
     "/cli/": cli,
     "/reference/": [reference, start],
     "/": guide,
