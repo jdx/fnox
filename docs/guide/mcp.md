@@ -59,7 +59,7 @@ tools = ["exec", "request_secret"]
 3. You enter the value and choose **Save to fnox**, or choose **Decline**.
 4. fnox stores the value as `fnox set` would and tells the agent only that it was stored. From then on, `exec` sets it as an environment variable.
 
-The value never passes through the agent's client or its model. The link works once and expires after 10 minutes.
+The value never passes through the agent's client or its model. The link accepts one submission and expires after 10 minutes. After submission, the result stays readable for 60 seconds, including after a page reload. A successful save shows **Saved**; reloading or resubmitting the page does not store another value.
 
 fnox refuses to store the value in plain text. The secret's provider, or `default_provider` for a new secret, must encrypt values (such as `age`) or store them remotely (such as `1password`); the `plain` provider is refused. If the secret already has a value, the agent is told so and nothing is asked; it can pass `replace: true` to ask you for a new one. If the secret gets a value or a different provider while the page is open, fnox stores nothing and says so on the page.
 

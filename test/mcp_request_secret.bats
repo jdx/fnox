@@ -68,6 +68,19 @@ mcp_client() {
 	assert_line --index 1 '{"page": null}'
 }
 
+@test "request_secret keeps Saved readable after the tool returns and the browser reloads" {
+	export MCP_CLIENT_PAGE_RELOADS=2
+	mcp_client url save:dummy-value '[["request_secret", {"name": "API_TOKEN"}]]'
+	assert_success
+	assert_line --index 0 --partial "fnox stored it with provider 'age'"
+	assert_line --index 1 '{"page": 200}'
+	assert_line --index 2 '{"reloads": [200, 200]}'
+	refute_output --partial dummy-value
+	run "$FNOX_BIN" get API_TOKEN
+	assert_success
+	assert_output dummy-value
+}
+
 @test "request_secret falls back to fnox set when the client lacks URL elicitation" {
 	mcp_client none none '[["request_secret", {"name": "API_TOKEN"}]]'
 	assert_success

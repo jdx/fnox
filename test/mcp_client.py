@@ -38,6 +38,8 @@ watchdog.start()
 next_id = 0
 page_status = []
 page_threads = []
+page_reloads = []
+tool_returned = threading.Event()
 
 
 def send(message):
@@ -70,6 +72,13 @@ def fill_page(url):
     try:
         with opener.open(req, timeout=60) as response:
             page_status.append(response.status)
+            if os.environ.get("MCP_CLIENT_PAGE_RELOADS"):
+                assert "<h1>Saved</h1>" in response.read().decode()
+                assert tool_returned.wait(timeout=60), "tools/call did not return"
+                for _ in range(int(os.environ["MCP_CLIENT_PAGE_RELOADS"])):
+                    with opener.open(url, timeout=30) as reloaded:
+                        assert "<h1>Saved</h1>" in reloaded.read().decode()
+                        page_reloads.append(reloaded.status)
     except urllib.error.HTTPError as error:
         page_status.append(error.code)
 
@@ -112,10 +121,13 @@ else:
             print(json.dumps({"ran": ran.returncode}))
             continue
         response = wait_for(request("tools/call", {"name": name, "arguments": arguments}))
+        tool_returned.set()
         print(json.dumps(response.get("result") or response.get("error")))
 
 for thread in page_threads:
     thread.join()
 print(json.dumps({"page": page_status[0] if page_status else None}))
+if os.environ.get("MCP_CLIENT_PAGE_RELOADS"):
+    print(json.dumps({"reloads": page_reloads}))
 proc.stdin.close()
 proc.wait(timeout=10)
