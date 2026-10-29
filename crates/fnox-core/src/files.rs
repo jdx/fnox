@@ -546,19 +546,54 @@ pub fn write_file(path: &Path, content: &str) -> Result<WriteOutcome> {
     Ok(outcome)
 }
 
-/// The path to write the `source` file of an entry to. A symlink there, as a
-/// dotfiles manager makes it, is written through so the link keeps pointing at
-/// the new content; one that cannot be resolved is an error rather than replaced.
-pub fn resolve_source(path: &Path) -> Result<PathBuf> {
-    if !is_symlink(path) {
-        return Ok(path.to_path_buf());
+/// The path to write the `source` file of `file` to, or `None` if it has none.
+///
+/// A symlink there, as a dotfiles manager makes it, is written through so the
+/// link keeps pointing at the new content. A link that cannot be resolved, or
+/// that leads to the config declaring `file` or to the stored file of an entry
+/// in `others`, is refused rather than overwritten.
+pub fn source_target<'a>(
+    file: &FileConfig,
+    others: impl IntoIterator<Item = &'a FileEntry>,
+) -> Result<Option<PathBuf>> {
+    let Some(path) = file.source_file() else {
+        return Ok(None);
+    };
+    let resolved = if is_symlink(&path) {
+        fs::canonicalize(&path).map_err(|e| {
+            FnoxError::Config(format!(
+                "Source '{}' is a symlink that cannot be resolved: {e}",
+                path.display()
+            ))
+        })?
+    } else {
+        path.clone()
+    };
+    let canonical = |p: &Path| fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let real = canonical(&resolved);
+    let config = file
+        .source_path
+        .clone()
+        .unwrap_or_else(Config::global_config_path);
+    if real == canonical(&config) {
+        return Err(FnoxError::Config(format!(
+            "Source '{}' is the config file {}; choose another name",
+            path.display(),
+            config.display()
+        )));
     }
-    fs::canonicalize(path).map_err(|e| {
-        FnoxError::Config(format!(
-            "Source '{}' is a symlink that cannot be resolved: {e}",
-            path.display()
-        ))
-    })
+    if let Some(other) = others.into_iter().find(|e| {
+        e.config
+            .source_file()
+            .is_some_and(|other| canonical(&other) == real)
+    }) {
+        return Err(FnoxError::Config(format!(
+            "Source '{}' already stores {}; choose another name",
+            path.display(),
+            other.key
+        )));
+    }
+    Ok(Some(resolved))
 }
 
 fn is_symlink(path: &Path) -> bool {

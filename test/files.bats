@@ -271,6 +271,19 @@ teardown() {
 	assert_output "kube"
 }
 
+@test "files: reencrypt refuses linked sources that store one file twice" {
+	printf 'kube\n' >"$HOME/kube"
+	fnox set --file ~/.kube/config --from-file "$HOME/kube" --source files/kube.age
+	fnox set --file ~/.npmrc --from-file "$HOME/kube" --source files/npmrc.age
+	ln -sf "$FNOX_CONFIG_DIR/files/kube.age" "$FNOX_CONFIG_DIR/files/npmrc.age"
+	cp "$FNOX_CONFIG_DIR/files/kube.age" "$HOME/kube.before"
+
+	run fnox reencrypt --force
+	assert_failure
+	assert_output --partial "already stores"
+	cmp "$FNOX_CONFIG_DIR/files/kube.age" "$HOME/kube.before"
+}
+
 @test "files: a project config linked to the config directory cannot declare files" {
 	cat >"$FNOX_CONFIG_DIR/project.toml" <<'TOML'
 root = true
