@@ -31,6 +31,18 @@ teardown() {
 	_common_teardown
 }
 
+# Errors are wrapped to the terminal width, which can split a message across
+# lines, so match it with the lines joined
+assert_error() {
+	local flat
+	flat="$(printf '%s' "$output" | tr -s ' \n│' ' ')"
+	[[ $flat == *"$1"* ]] || {
+		echo "error does not contain '$1':"
+		echo "$output"
+		return 1
+	}
+}
+
 @test "files: set stores a file under its path and get prints it verbatim" {
 	printf 'apiVersion: v1\ntoken: abc123' >"$HOME/source"
 
@@ -241,7 +253,7 @@ teardown() {
 
 	run fnox set --file ~/.kube/config --from-file "$HOME/source"
 	assert_failure
-	assert_output --partial "cannot be resolved"
+	assert_error "cannot be resolved"
 	[ -L "$FNOX_CONFIG_DIR/files/kube.age" ]
 }
 
@@ -253,7 +265,7 @@ teardown() {
 
 	run fnox set --file ~/.kube/config --from-file "$HOME/source"
 	assert_failure
-	assert_output --partial "is the config file"
+	assert_error "is the config file"
 	cmp "$FNOX_CONFIG_DIR/config.toml" "$HOME/config.before"
 }
 
@@ -266,7 +278,7 @@ teardown() {
 
 	run fnox set --file ~/.npmrc --from-file "$HOME/npm"
 	assert_failure
-	assert_output --partial "already stores ~/.kube/config"
+	assert_error "already stores ~/.kube/config"
 	run fnox get --file ~/.kube/config
 	assert_output "kube"
 }
@@ -280,7 +292,7 @@ teardown() {
 
 	run fnox reencrypt --force
 	assert_failure
-	assert_output --partial "already stores"
+	assert_error "already stores"
 	cmp "$FNOX_CONFIG_DIR/files/kube.age" "$HOME/kube.before"
 }
 
