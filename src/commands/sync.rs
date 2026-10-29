@@ -581,15 +581,27 @@ impl SyncCommand {
             }
         }
 
-        // Resolve and encrypt every file before writing anything
-        let mut synced_files = Vec::with_capacity(files_to_sync.len());
+        // Resolve and encrypt every file before writing anything. Encrypting
+        // them as one batch lets the provider set up once for all of them.
+        let mut file_plaintexts = Vec::with_capacity(files_to_sync.len());
         for entry in &files_to_sync {
             let plaintext = files::resolve_file_source(&profile, entry).await?;
-            let encrypted = file_target
-                .as_ref()
-                .expect("a target is built when there are files to sync")
-                .encrypt(&plaintext)
-                .await
+            file_plaintexts.push((entry.key.clone(), plaintext));
+        }
+        let mut encrypted_files = match &file_target {
+            Some(target) => target.encrypt_secrets_batch(&file_plaintexts).await,
+            None => Default::default(),
+        };
+        let mut synced_files = Vec::with_capacity(files_to_sync.len());
+        for entry in &files_to_sync {
+            let encrypted = encrypted_files
+                .remove(&entry.key)
+                .unwrap_or_else(|| {
+                    Err(FnoxError::Provider(format!(
+                        "provider did not return an encrypted value for '{}'",
+                        entry.key
+                    )))
+                })
                 .map_err(|e| FnoxError::SyncEncryptionFailed {
                     key: entry.key.clone(),
                     provider: target_provider_name.clone(),
