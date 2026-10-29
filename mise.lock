@@ -562,6 +562,53 @@ checksum_source = "mise-versions"
 url = "https://github.com/apple/pkl/releases/download/0.32.2/pkl-windows-amd64.exe"
 url_api = "https://api.github.com/repos/apple/pkl/releases/assets/663854370"
 
+[[tools.rush]]
+version = "0.11.0"
+backend = "aqua:shenwei356/rush"
+specifiers = ["latest"]
+
+[tools.rush."platforms.linux-arm64"]
+checksum = "sha256:466931db70732296b98bfe1a1aec4a6a79c226e4aa5bc690283bb39560e708de"
+checksum_source = "mise-versions"
+url = "https://github.com/shenwei356/rush/releases/download/v0.11.0/rush_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/shenwei356/rush/releases/assets/579426242"
+
+[tools.rush."platforms.linux-arm64-musl"]
+checksum = "sha256:466931db70732296b98bfe1a1aec4a6a79c226e4aa5bc690283bb39560e708de"
+checksum_source = "mise-versions"
+url = "https://github.com/shenwei356/rush/releases/download/v0.11.0/rush_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/shenwei356/rush/releases/assets/579426242"
+
+[tools.rush."platforms.linux-x64"]
+checksum = "sha256:7a22bbc7122acd5bd23e2dfde49f84bb856944a1860057bc89921b3dce45d056"
+checksum_source = "mise-versions"
+url = "https://github.com/shenwei356/rush/releases/download/v0.11.0/rush_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/shenwei356/rush/releases/assets/579426098"
+
+[tools.rush."platforms.linux-x64-musl"]
+checksum = "sha256:7a22bbc7122acd5bd23e2dfde49f84bb856944a1860057bc89921b3dce45d056"
+checksum_source = "mise-versions"
+url = "https://github.com/shenwei356/rush/releases/download/v0.11.0/rush_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/shenwei356/rush/releases/assets/579426098"
+
+[tools.rush."platforms.macos-arm64"]
+checksum = "sha256:87f811032b727806158111856b77be076d2c923cc013de20d744405eb4dfe455"
+checksum_source = "mise-versions"
+url = "https://github.com/shenwei356/rush/releases/download/v0.11.0/rush_darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/shenwei356/rush/releases/assets/579424349"
+
+[tools.rush."platforms.macos-x64"]
+checksum = "sha256:3d5c24ea9947c84b19ef1f0992470e255e296efbbda5fad0ccf5cc870d088433"
+checksum_source = "mise-versions"
+url = "https://github.com/shenwei356/rush/releases/download/v0.11.0/rush_darwin_amd64.tar.gz"
+url_api = "https://api.github.com/repos/shenwei356/rush/releases/assets/579420523"
+
+[tools.rush."platforms.windows-x64"]
+checksum = "sha256:47dd38a1d527c8e00714623351379dfa2f617cf9f8f399586233c5ca29482a45"
+checksum_source = "mise-versions"
+url = "https://github.com/shenwei356/rush/releases/download/v0.11.0/rush_windows_amd64.exe.tar.gz"
+url_api = "https://api.github.com/repos/shenwei356/rush/releases/assets/579426784"
+
 [[tools.shellcheck]]
 version = "0.11.0"
 backend = "aqua:koalaman/shellcheck"

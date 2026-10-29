@@ -2,6 +2,8 @@ min_version = "2026.9.7"
 
 [env]
 _.path = ["target/debug", "test/bats/bin"]
+# bats --jobs runs tests through rush instead of GNU parallel
+BATS_PARALLEL_BINARY_NAME = "rush"
 
 [tools]
 mr-boxington = { version = "latest", minimum_release_age = "0s" }
@@ -24,6 +26,7 @@ bitwarden-secrets-manager = "latest"
 vault = "latest"
 infisical = "latest"
 node = "24"
+rush = "latest"
 
 [wrappers.cargo]
 command = "mbx"
