@@ -73,11 +73,11 @@ When the agent runs under the [credential proxy](/guide/proxy), for example with
 
 The tools then work with the proxy's placeholders:
 
-| Tool             | Inside `fnox proxy run`                                                                                                                                                    |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `get_secret`     | Returns the secret's placeholder, the environment variable that holds it, and the domains the proxy injects it into. Never the real value. Only secrets with a proxy rule. |
-| `exec`           | Not offered. It would run commands outside the sandbox; the agent runs commands inside it instead.                                                                         |
-| `request_secret` | Stores the value as above, then hands it to the proxy, so requests that carry the placeholder get the real value. The agent gets the placeholder.                          |
+| Tool             | Inside `fnox proxy run`                                                                                                                                                                                              |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `get_secret`     | Returns the secret's placeholder, the environment variable that holds it, and the domains the proxy injects it into. Never the real value. Only secrets with a proxy rule.                                           |
+| `exec`           | Not offered. It would run commands outside the sandbox; the agent runs commands inside it instead.                                                                                                                   |
+| `request_secret` | Stores the value as above. With a proxy rule, hands it to the proxy, so requests that carry the placeholder get the real value, and gives the agent the placeholder. Without one, nothing in the run can use it yet. |
 
 `request_secret` pairs with [pending rules](/guide/proxy#secrets-that-aren-t-set-yet): declare the secret and write its rule, and the agent can ask you for the value when it first needs it. The page is served by the proxy process on `127.0.0.1`, where your browser can reach it. With the default strict egress the sandboxed agent can't, so it can't fill in the form itself. If `allow_private` lists loopback and `egress` is permissive, the agent can reach the page through the proxy; keep those off when you rely on this.
 

@@ -1041,3 +1041,17 @@ fn a_replaced_value_stays_redacted() {
     redact_values(&mut body, &plan.policy.redactions());
     assert_eq!(body, b"old ghp_placeholder, new ghp_placeholder");
 }
+
+#[test]
+fn a_forgotten_value_is_pending_and_stays_redacted() {
+    let plan = policy();
+    plan.policy.values.forget("GITHUB_TOKEN");
+    assert_eq!(plan.policy.values.value("GITHUB_TOKEN"), None);
+    assert_eq!(
+        plan.policy.values.pending(),
+        vec!["GITHUB_TOKEN".to_string()]
+    );
+    let mut body = b"old real-token".to_vec();
+    redact_values(&mut body, &plan.policy.redactions());
+    assert_eq!(body, b"old ghp_placeholder");
+}

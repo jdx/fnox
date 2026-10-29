@@ -102,6 +102,7 @@ mcp_client_under_proxy() {
 }
 
 @test "fnox mcp relay reports a missing proxy" {
+	unset HTTPS_PROXY https_proxy
 	FNOX_PROXY_MCP=1 run "$FNOX_BIN" mcp </dev/null
 	assert_failure
 	assert_output --partial "HTTPS_PROXY is not"
@@ -156,7 +157,7 @@ PY
 	assert_output --partial "'FNOX_PROXY_MCP', which fnox reserves"
 }
 
-@test "fnox mcp under proxy run refuses another profile, config or write profile" {
+@test "fnox mcp under proxy run refuses flags that would change what the proxy serves" {
 	run "$FNOX_BIN" proxy run -- "$FNOX_BIN" -P staging mcp </dev/null
 	assert_failure
 	assert_output --partial "'default', not 'staging'"
@@ -166,6 +167,9 @@ PY
 	run "$FNOX_BIN" proxy run -- "$FNOX_BIN" --write-profile staging mcp </dev/null
 	assert_failure
 	assert_output --partial "pass --write-profile to fnox proxy run"
+	run "$FNOX_BIN" proxy run -- "$FNOX_BIN" --no-defaults mcp </dev/null
+	assert_failure
+	assert_output --partial "pass --no-defaults to fnox proxy run"
 }
 
 @test "request_secret under proxy run refuses a value the proxy can't use" {

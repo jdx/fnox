@@ -116,8 +116,27 @@ impl SecretValues {
         self.set_checked(secret, value, false).map(|_| ())
     }
 
-    /// Use `value` for `secret` after the checks startup values get, unless
-    /// `only_if_pending` and it already has a value
+    /// Make `secret` pending again, so the next request that needs it
+    /// resolves it from the config as it is on disk. The value it had stays
+    /// redacted from responses for the rest of the run.
+    pub(super) fn forget(&self, secret: &str) {
+        {
+            let mut state = self.state.write().unwrap_or_else(|e| e.into_inner());
+            let Some(old) = state.values.remove(secret) else {
+                return;
+            };
+            state.retired.push((secret.to_string(), old));
+            state.redactions =
+                Arc::new(build_redactions(&self.rules, &state.values, &state.retired));
+        }
+        // Due at once, not after PENDING_RETRY
+        self.attempts
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .last
+            .remove(secret);
+    }
+
     /// The checks a value gets before the proxy uses it, the same as at
     /// startup
     pub(super) fn validate(&self, secret: &str, value: &str) -> Result<()> {
@@ -141,6 +160,8 @@ impl SecretValues {
         Ok(())
     }
 
+    /// Use `value` for `secret` after the checks startup values get, unless
+    /// `only_if_pending` and it already has a value
     fn set_checked(&self, secret: &str, value: String, only_if_pending: bool) -> Result<bool> {
         self.validate(secret, &value)?;
         let mut state = self.state.write().unwrap_or_else(|e| e.into_inner());

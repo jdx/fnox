@@ -372,6 +372,7 @@ impl Commands {
                     &cli.config,
                     &cli.profile,
                     cli.write_profile.as_deref(),
+                    cli.no_defaults,
                 )?;
                 crate::mcp::relay::run().await
             }

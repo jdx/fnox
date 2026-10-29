@@ -11,6 +11,9 @@ use crate::proxy::{MCP_HOST, MCP_RELAY_ENV as RELAY_ENV, MCP_RELAY_PROFILE_ENV};
 /// Longest proxy response head the relay reads
 const MAX_RESPONSE_HEAD: usize = 8 * 1024;
 
+/// How long the relay waits for the proxy to answer its CONNECT
+const CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// Whether `fnox mcp` should relay to the proxy it runs under
 pub fn requested() -> bool {
     crate::env::var(RELAY_ENV).is_ok_and(|value| value == "1")
@@ -22,6 +25,7 @@ pub fn check_flags(
     config_arg: &std::path::Path,
     profile_flag: &[String],
     write_profile_flag: Option<&str>,
+    no_defaults_flag: bool,
 ) -> Result<()> {
     if config_arg != std::path::Path::new(crate::config::DEFAULT_CONFIG_FILENAME) {
         return Err(FnoxError::Config(
@@ -32,6 +36,12 @@ pub fn check_flags(
     if write_profile_flag.is_some() {
         return Err(FnoxError::Config(
             "fnox mcp under fnox proxy run stores values in the proxy's write profile; pass --write-profile to fnox proxy run instead"
+                .into(),
+        ));
+    }
+    if no_defaults_flag {
+        return Err(FnoxError::Config(
+            "fnox mcp under fnox proxy run serves the proxy's secrets; pass --no-defaults to fnox proxy run instead"
                 .into(),
         ));
     }
@@ -99,17 +109,29 @@ pub async fn run() -> Result<()> {
     );
     stream.write_all(request.as_bytes()).await.map_err(failed)?;
 
-    // Read the response head byte by byte so nothing after it is consumed
+    // Read the response head byte by byte so nothing after it is consumed.
+    // The proxy answers at once; a listener that never does is not one.
     let mut head = Vec::new();
-    while !head.ends_with(b"\r\n\r\n") {
-        if head.len() >= MAX_RESPONSE_HEAD {
-            return Err(FnoxError::Config(
-                "fnox proxy sent an oversized response".into(),
-            ));
+    let read_head = async {
+        while !head.ends_with(b"\r\n\r\n") {
+            if head.len() >= MAX_RESPONSE_HEAD {
+                return Err(FnoxError::Config(
+                    "fnox proxy sent an oversized response".into(),
+                ));
+            }
+            let byte = stream.read_u8().await.map_err(failed)?;
+            head.push(byte);
         }
-        let byte = stream.read_u8().await.map_err(failed)?;
-        head.push(byte);
-    }
+        Ok(())
+    };
+    tokio::time::timeout(CONNECT_TIMEOUT, read_head)
+        .await
+        .map_err(|_| {
+            FnoxError::Config(format!(
+                "fnox proxy run didn't answer the MCP connection within {}s",
+                CONNECT_TIMEOUT.as_secs()
+            ))
+        })??;
     let status = String::from_utf8_lossy(&head);
     let status = status.lines().next().unwrap_or_default();
     if status.split_whitespace().nth(1) != Some("200") {

@@ -200,11 +200,20 @@ impl FnoxMcpServer {
                     // The session may still hold the old value; reload until a
                     // later check reads the new one
                     self.session.mark_for_reload(&name);
+                    // Nor may the proxy keep injecting the value this one
+                    // replaced; it reads the new one from the config instead
+                    let proxy_note = match &self.proxy {
+                        Some(proxy) if !proxy.rules_for(&name).is_empty() => {
+                            proxy.forget_value(&name);
+                            " The proxy reads it from the config on the next request that needs it."
+                        }
+                        _ => "",
+                    };
                     let _ = reply.send(Ok(format!(
                         "fnox stored {name}, but couldn't read it back: {e}"
                     )));
                     return Ok(CallToolResult::error(vec![ContentBlock::text(format!(
-                        "The user entered '{name}' and {stored}, but reading it back failed: {e}. The value is saved; don't ask for it again."
+                        "The user entered '{name}' and {stored}, but reading it back failed: {e}. The value is saved; don't ask for it again.{proxy_note}"
                     ))]));
                 }
                 let _ = reply.send(Ok(format!(

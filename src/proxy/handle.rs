@@ -81,4 +81,11 @@ impl ProxyHandle {
     pub fn set_value(&self, secret: &str, value: String) -> Result<()> {
         self.policy.values.replace(secret, value)
     }
+
+    /// Stop injecting the value the proxy has for `secret`, and resolve it
+    /// from the config again when a request next needs it. The old value
+    /// stays redacted from responses.
+    pub fn forget_value(&self, secret: &str) {
+        self.policy.values.forget(secret)
+    }
 }
