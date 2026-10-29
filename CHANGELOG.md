@@ -1,5 +1,42 @@
 # Changelog
 
+## [1.45.0](https://github.com/jdx/fnox/compare/v1.44.0..v1.45.0) - 2026-10-29
+
+### 🚀 Features
+
+- **(env)** report the file that defines each key in env --describe by [@jdx](https://github.com/jdx) in [#1059](https://github.com/jdx/fnox/pull/1059)
+- **(proxy)** start with rules whose secret isn't set and pick it up later by [@jdx](https://github.com/jdx) in [#1071](https://github.com/jdx/fnox/pull/1071)
+- **(proxy)** serve the MCP tools from fnox proxy run with placeholders by [@jdx](https://github.com/jdx) in [#1072](https://github.com/jdx/fnox/pull/1072)
+
+### 🐛 Bug Fixes
+
+- **(files)** accept a global config or source file that is a symlink by [@jdx](https://github.com/jdx) in [#1063](https://github.com/jdx/fnox/pull/1063)
+- **(mcp)** preserve secret-entry results after submission by [@jdx](https://github.com/jdx) in [#1074](https://github.com/jdx/fnox/pull/1074)
+- **(mcp)** distinguish client rejection from a user decline by [@jdx](https://github.com/jdx) in [#1075](https://github.com/jdx/fnox/pull/1075)
+
+### 🚜 Refactor
+
+- **(mcp)** split the MCP server into an mcp module by [@jdx](https://github.com/jdx) in [#1067](https://github.com/jdx/fnox/pull/1067)
+- **(proxy)** split the proxy into modules and share HTTP parsing by [@jdx](https://github.com/jdx) in [#1068](https://github.com/jdx/fnox/pull/1068)
+- share a secret session between the MCP server and the proxy by [@jdx](https://github.com/jdx) in [#1069](https://github.com/jdx/fnox/pull/1069)
+
+### 🧪 Testing
+
+- run bats in parallel with rush from mise.toml by [@jdx](https://github.com/jdx) in [#1073](https://github.com/jdx/fnox/pull/1073)
+
+### 🛡️ Security
+
+- **(mcp)** let agents ask you to enter a missing secret on a local page by [@jdx](https://github.com/jdx) in [#1065](https://github.com/jdx/fnox/pull/1065)
+
+### 🔍 Other Changes
+
+- fix perf jobs failing to install mise on the self-hosted runner by [@jdx](https://github.com/jdx) in [#1066](https://github.com/jdx/fnox/pull/1066)
+
+### 📦️ Dependency Updates
+
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1060](https://github.com/jdx/fnox/pull/1060)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1064](https://github.com/jdx/fnox/pull/1064)
+
 ## [1.44.0](https://github.com/jdx/fnox/compare/v1.43.0..v1.44.0) - 2026-10-28
 
 ### 🚀 Features
