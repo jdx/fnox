@@ -3,6 +3,7 @@ use crate::config::{Config, ProxyConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
 use crate::proxy::{ProxyListener, ProxyPlan, RunningProxy};
 use crate::sandbox::{Sandbox, SandboxPolicy};
+use crate::secret_session::SecretSession;
 use indexmap::IndexMap;
 use std::process::Stdio;
 
@@ -320,15 +321,15 @@ impl ProxyRunCommand {
         let profile = Config::get_profiles(&cli.profile);
         let all_secrets = config.get_secrets(&profile)?;
         let requested = collect_requested_secrets(&config, &profile, proxy_config, &all_secrets)?;
-        let resolved = crate::daemon::resolve_batch(
-            cli,
-            &config,
-            &profile,
-            &requested,
+        let session = SecretSession::new(
+            config.clone(),
+            profile.clone(),
+            crate::daemon::ResolveContext::from_cli(cli),
             crate::daemon::Purpose::Proxy,
-            true,
+            all_secrets.clone(),
         )
-        .await?;
+        .with_write_target(cli.config.clone(), cli.write_profile.clone());
+        let resolved = session.resolve_now(&requested).await?;
         let mut values = IndexMap::new();
         for rule in &proxy_config.rules {
             let value = resolved

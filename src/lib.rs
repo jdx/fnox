@@ -23,6 +23,7 @@ pub mod proxy;
 pub mod redact;
 pub mod sandbox;
 pub mod secret_filter;
+pub mod secret_session;
 pub mod shell;
 pub mod tui;
 
