@@ -7,7 +7,7 @@
 
 use crate::config::{Config, EnvMode, IfMissing, SecretConfig, SyncConfig};
 use crate::error::{FnoxError, Result};
-use crate::providers::{ProviderCapability, ProviderConfig, get_provider_resolved};
+use crate::providers::{Provider, ProviderCapability, ProviderConfig, get_provider_resolved};
 use crate::secret_resolver;
 use crate::settings::Settings;
 use indexmap::IndexMap;
@@ -355,9 +355,10 @@ async fn resolve_content(profiles: &[String], entry: &FileEntry, cached: bool) -
     let config = Config::load_global_only()?;
     let mut secret = SecretConfig::new();
     secret.set_provider(entry.config.provider.clone());
-    secret.set_value(entry.config.stored_value()?);
-    if cached {
-        secret.sync = entry.config.sync.clone();
+    match &entry.config.sync {
+        // The cache stands in for the stored content, so a missing `source` file does not matter
+        Some(sync) if cached => secret.sync = Some(sync.clone()),
+        _ => secret.set_value(entry.config.stored_value()?),
     }
     secret.env = Some(EnvMode::Never);
     secret.if_missing = Some(IfMissing::Error);
@@ -366,13 +367,11 @@ async fn resolve_content(profiles: &[String], entry: &FileEntry, cached: bool) -
         .ok_or_else(|| FnoxError::Config(format!("File '{}' has no content", entry.key)))
 }
 
-/// Encrypt `content` with the encryption provider `provider_name` of the
-/// global config, for the `sync` cache of a file.
-pub async fn encrypt_for_sync(
+/// The encryption provider `provider_name` of the global config, to cache files with
+async fn sync_target(
     profiles: &[String],
     provider_name: &str,
-    content: &str,
-) -> Result<String> {
+) -> Result<(Config, Box<dyn Provider>)> {
     let config = Config::load_global_only()?;
     let providers = config.get_providers(profiles)?;
     let provider_config = providers.get(provider_name).ok_or_else(|| {
@@ -381,6 +380,14 @@ pub async fn encrypt_for_sync(
              files are cached with the providers of the global config only"
         ))
     })?;
+    // `plain` reports Encryption but hands content back as it is, which would
+    // leave a private file readable in the config
+    if matches!(provider_config, ProviderConfig::Plain { .. }) {
+        return Err(FnoxError::Config(format!(
+            "Provider '{provider_name}' cannot cache files, since it does not encrypt them; \
+             use an encryption provider such as age"
+        )));
+    }
     let provider = get_provider_resolved(&config, profiles, provider_name, provider_config).await?;
     if !provider
         .capabilities()
@@ -390,6 +397,22 @@ pub async fn encrypt_for_sync(
             provider: provider_name.to_string(),
         });
     }
+    Ok((config, provider))
+}
+
+/// Check that `provider_name` can cache files, before any work is done for it
+pub async fn check_sync_target(profiles: &[String], provider_name: &str) -> Result<()> {
+    sync_target(profiles, provider_name).await.map(|_| ())
+}
+
+/// Encrypt `content` with the encryption provider `provider_name` of the
+/// global config, for the `sync` cache of a file.
+pub async fn encrypt_for_sync(
+    profiles: &[String],
+    provider_name: &str,
+    content: &str,
+) -> Result<String> {
+    let (_, provider) = sync_target(profiles, provider_name).await?;
     provider.encrypt(content).await
 }
 

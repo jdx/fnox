@@ -93,7 +93,7 @@ fnox sync -p sync-age
 
 `fnox get --file`, `fnox files write`, and `fnox edit --file` then decrypt the copy instead of calling 1Password. The original reference stays in place, so run `fnox sync` again after the file changes at its source. `fnox set --file`, `fnox edit --file`, and `fnox reencrypt` store new content and drop the old cache.
 
-The cache is written to the config that declares the entry, always the global config. The target provider must be an encryption provider of the global config. `--source`, `--filter`, and path arguments such as `fnox sync ~/.kube/config` narrow which files are cached; see [local sync cache](/guide/sync).
+The cache is written to the config that declares the entry, always the global config. The target provider must be an encryption provider of the global config; `plain` is refused, since it would leave the file readable. A cached file is read without its `source` file. If you later point an entry at the target provider itself, `fnox sync` removes its now-stale cache. `--source`, `--filter`, and path arguments such as `fnox sync ~/.kube/config` narrow which files are cached; see [local sync cache](/guide/sync).
 
 ## Rotate encryption
 

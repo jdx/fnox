@@ -82,37 +82,44 @@ pub struct SyncCommand {
 
 impl SyncCommand {
     /// The file entries to cache: those stored by another provider than the
-    /// target that pass the `--source`, KEYS and `--filter` options
+    /// target that pass the `--source`, KEYS and `--filter` options. Also the
+    /// entries now stored by the target itself that still carry an old cache,
+    /// which would otherwise be read in place of the target.
     fn select_files(
         &self,
         config: &Config,
         profile: &[String],
         target_provider: &str,
         filter: Option<&Regex>,
-    ) -> Result<Vec<FileEntry>> {
+    ) -> Result<(Vec<FileEntry>, Vec<FileEntry>)> {
         let wanted_paths: Vec<_> = self
             .keys
             .iter()
             .filter_map(|key| files::normalize_path(key, None).ok())
             .collect();
-        Ok(config
-            .get_files(profile)?
-            .into_iter()
-            .filter(|entry| {
-                let Some(provider) = entry.config.provider.as_deref() else {
-                    return false;
-                };
-                provider != target_provider
-                    && self
-                        .source
-                        .as_deref()
-                        .is_none_or(|source| provider == source)
-                    && (self.keys.is_empty()
-                        || self.keys.contains(&entry.key)
-                        || wanted_paths.contains(&entry.path))
-                    && filter.is_none_or(|regex| regex.is_match(&entry.key))
-            })
-            .collect())
+        let (mut to_sync, mut stale) = (Vec::new(), Vec::new());
+        for entry in config.get_files(profile)? {
+            let Some(provider) = entry.config.provider.as_deref() else {
+                continue;
+            };
+            let selected = self
+                .source
+                .as_deref()
+                .is_none_or(|source| provider == source)
+                && (self.keys.is_empty()
+                    || self.keys.contains(&entry.key)
+                    || wanted_paths.contains(&entry.path))
+                && filter.is_none_or(|regex| regex.is_match(&entry.key));
+            if !selected {
+                continue;
+            }
+            if provider != target_provider {
+                to_sync.push(entry);
+            } else if entry.config.sync.is_some() {
+                stale.push(entry);
+            }
+        }
+        Ok((to_sync, stale))
     }
 
     pub async fn run(&self, cli: &Cli, merged_config: Config) -> Result<()> {
@@ -246,12 +253,17 @@ impl SyncCommand {
 
         // File entries are cached in the config that declares them, whichever
         // destination the secrets are written to
-        let files_to_sync = self.select_files(
+        let (files_to_sync, stale_files) = self.select_files(
             resolution_config,
             &profile,
             &target_provider_name,
             filter_regex.as_ref(),
         )?;
+        // Files are cached with the global config's providers, so fail now
+        // rather than after the secrets are fetched
+        if !files_to_sync.is_empty() {
+            files::check_sync_target(&profile, &target_provider_name).await?;
+        }
 
         // Determine target config file path
         let (target_path, ensure_parent_dir, local_cache_paths) = if self.local_file {
@@ -392,6 +404,7 @@ impl SyncCommand {
 
         if secrets_to_sync.is_empty()
             && files_to_sync.is_empty()
+            && stale_files.is_empty()
             && stale_local_secrets.is_empty()
             && unsynced_local_entries.is_empty()
         {
@@ -433,6 +446,12 @@ impl SyncCommand {
                     console::style(source).dim()
                 );
             }
+            for entry in &stale_files {
+                println!(
+                    "  {} (file, remove stale cache)",
+                    console::style(&entry.key).cyan()
+                );
+            }
             for key in &stale_local_secrets {
                 println!(
                     "  {} (remove stale local cache)",
@@ -462,6 +481,9 @@ impl SyncCommand {
             for entry in &files_to_sync {
                 let source = entry.config.provider.as_deref().unwrap_or("unknown");
                 println!("  {} (file, from {})", entry.key, source);
+            }
+            for entry in &stale_files {
+                println!("  {} (file, remove stale cache)", entry.key);
             }
             for key in &stale_local_secrets {
                 println!("  {} (remove stale local cache)", key);
@@ -579,6 +601,7 @@ impl SyncCommand {
 
         if synced_secrets.is_empty()
             && synced_files.is_empty()
+            && stale_files.is_empty()
             && stale_local_secrets.is_empty()
             && unsynced_local_entries.is_empty()
         {
@@ -627,12 +650,25 @@ impl SyncCommand {
             files::save_entry(&declared_in, &entry.profile, &entry.key, file)?;
             synced_count += 1;
         }
+        for entry in &stale_files {
+            let declared_in = entry
+                .config
+                .source_path
+                .clone()
+                .unwrap_or_else(Config::global_config_path);
+            let mut file = entry.config.clone();
+            file.sync = None;
+            files::save_entry(&declared_in, &entry.profile, &entry.key, &file)?;
+        }
 
         if synced_count > 0 {
             println!(
                 "Synced {} secrets to provider '{}'{}",
                 synced_count, target_provider_name, destination_suffix
             );
+        }
+        if !stale_files.is_empty() {
+            println!("Removed {} stale file caches", stale_files.len());
         }
         if !stale_local_secrets.is_empty() {
             println!(
