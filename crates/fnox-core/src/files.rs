@@ -173,11 +173,12 @@ impl FileConfig {
         Ok(())
     }
 
-    /// The content the provider is given: `value`, or the contents of `source`
-    pub fn stored_value(&self) -> Result<Option<String>> {
-        let Some(source) = &self.source else {
-            return Ok(self.value.clone());
-        };
+    /// The path of `source`, in the directory of the config that declares it.
+    ///
+    /// `validate` keeps `source` inside the directory. A symlink there, as a
+    /// dotfiles manager makes it, is the user's own and is followed.
+    pub fn source_file(&self) -> Option<PathBuf> {
+        let source = self.source.as_ref()?;
         let dir = self
             .source_path
             .as_deref()
@@ -189,24 +190,36 @@ impl FileConfig {
                     .map(Path::to_path_buf)
                     .unwrap_or_default()
             });
-        let path = dir.join(source);
-        let read_error = |path: &Path| {
-            let path = path.to_path_buf();
-            move |source| FnoxError::SecretFileReadFailed { path, source }
-        };
-        // A symlink inside the config directory must not lead out of it
-        let resolved = fs::canonicalize(&path).map_err(read_error(&path))?;
-        let inside = fs::canonicalize(&dir).map_err(read_error(&dir))?;
-        if !resolved.starts_with(&inside) {
-            return Err(FnoxError::Config(format!(
-                "File source '{}' leads outside the config directory",
-                path.display()
-            )));
-        }
-        fs::read_to_string(&resolved)
-            .map(Some)
-            .map_err(read_error(&resolved))
+        Some(dir.join(source))
     }
+
+    /// The content the provider is given: `value`, or the contents of `source`
+    pub fn stored_value(&self) -> Result<Option<String>> {
+        let Some(path) = self.source_file() else {
+            return Ok(self.value.clone());
+        };
+        fs::read_to_string(&path)
+            .map(Some)
+            .map_err(|source| FnoxError::SecretFileReadFailed { path, source })
+    }
+}
+
+/// Whether the config file at `path` sits in the fnox config directory.
+///
+/// Only the directories are resolved: a config file there that is a symlink,
+/// as a dotfiles manager makes it, is still the user's own. A project config
+/// cannot put a file or a symlink in the config directory.
+fn in_config_dir(path: &Path) -> bool {
+    let canonical = |p: &Path| fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let dir = match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    };
+    let resolved = match path.file_name() {
+        Some(name) => canonical(dir).join(name),
+        None => canonical(path),
+    };
+    resolved.starts_with(canonical(&crate::env::FNOX_CONFIG_DIR))
 }
 
 impl Config {
@@ -218,9 +231,7 @@ impl Config {
         if !declares {
             return Ok(());
         }
-        let config_dir = crate::env::FNOX_CONFIG_DIR.as_path();
-        let canonical = |p: &Path| fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
-        if canonical(path).starts_with(canonical(config_dir)) {
+        if in_config_dir(path) {
             return Ok(());
         }
         Err(FnoxError::Config(format!(
@@ -535,6 +546,57 @@ pub fn write_file(path: &Path, content: &str) -> Result<WriteOutcome> {
     Ok(outcome)
 }
 
+/// The path to write the `source` file of `file` to, or `None` if it has none.
+///
+/// A symlink there, as a dotfiles manager makes it, is written through so the
+/// link keeps pointing at the new content. A link that cannot be resolved, or
+/// that leads to the config declaring `file` or to the stored file of an entry
+/// in `others`, is refused rather than overwritten.
+pub fn source_target<'a>(
+    file: &FileConfig,
+    others: impl IntoIterator<Item = &'a FileEntry>,
+) -> Result<Option<PathBuf>> {
+    let Some(path) = file.source_file() else {
+        return Ok(None);
+    };
+    let resolved = if is_symlink(&path) {
+        fs::canonicalize(&path).map_err(|e| {
+            FnoxError::Config(format!(
+                "Source '{}' is a symlink that cannot be resolved: {e}",
+                path.display()
+            ))
+        })?
+    } else {
+        path.clone()
+    };
+    // A path that does not exist yet is compared by its cleaned spelling
+    let canonical = |p: &Path| fs::canonicalize(p).unwrap_or_else(|_| clean(p));
+    let real = canonical(&resolved);
+    let config = file
+        .source_path
+        .clone()
+        .unwrap_or_else(Config::global_config_path);
+    if real == canonical(&config) {
+        return Err(FnoxError::Config(format!(
+            "Source '{}' is the config file {}; choose another name",
+            path.display(),
+            config.display()
+        )));
+    }
+    if let Some(other) = others.into_iter().find(|e| {
+        e.config
+            .source_file()
+            .is_some_and(|other| canonical(&other) == real)
+    }) {
+        return Err(FnoxError::Config(format!(
+            "Source '{}' already stores {}; choose another name",
+            path.display(),
+            other.key
+        )));
+    }
+    Ok(Some(resolved))
+}
+
 fn is_symlink(path: &Path) -> bool {
     path.symlink_metadata()
         .is_ok_and(|meta| meta.file_type().is_symlink())
@@ -612,6 +674,24 @@ mod tests {
             ..Default::default()
         };
         assert!(both.validate("k").is_err());
+    }
+
+    #[test]
+    fn source_target_matches_spellings_of_a_missing_source() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = |source: &str| FileConfig {
+            source: Some(source.into()),
+            source_path: Some(dir.path().join("config.toml")),
+            ..Default::default()
+        };
+        let other = FileEntry {
+            path: PathBuf::from("/a"),
+            key: "/a".into(),
+            profile: "default".into(),
+            config: file("files/a"),
+        };
+        assert!(source_target(&file("files/./a"), [&other]).is_err());
+        assert!(source_target(&file("files/b"), [&other]).is_ok());
     }
 
     #[cfg(unix)]

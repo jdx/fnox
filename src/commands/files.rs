@@ -280,7 +280,7 @@ pub async fn put_file(
         provider: Some(provider_name.clone()),
         value: None,
         source: source.clone(),
-        source_path: None,
+        source_path: Some(target.clone()),
     };
     file.validate(&key)?;
 
@@ -317,12 +317,7 @@ pub async fn put_file(
             other.key
         )));
     }
-    let source_file = source.as_ref().map(|source| {
-        target
-            .parent()
-            .map(|dir| dir.join(source))
-            .unwrap_or_else(|| PathBuf::from(source))
-    });
+    let source_file = file.source_file();
     if let (Some(source), Some(source_file)) = (&source, &source_file) {
         // Writing over a file that is not this entry's own stored content could
         // destroy a config, an identity, or another file's ciphertext
@@ -334,6 +329,9 @@ pub async fn put_file(
             )));
         }
     }
+    // Write through a linked source, and refuse one that the write would destroy
+    // before storing anything
+    let source_file = files::source_target(&file, others())?;
 
     if opts.dry_run {
         let label = console::style("[dry-run]").yellow().bold();

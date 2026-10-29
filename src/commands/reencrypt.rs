@@ -197,6 +197,7 @@ impl ReencryptCommand {
         }
 
         // Encrypt every file before writing any of them
+        let declared = config.declared_files();
         let mut updated = Vec::with_capacity(selected.len());
         for (entry, provider_name, provider) in &selected {
             let plaintext = crate::files::resolve_file(&profile, entry)
@@ -212,22 +213,23 @@ impl ReencryptCommand {
                     details: e.to_string(),
                 }
             })?;
-            updated.push((entry, encrypted));
+            // Refuse a linked source that the write would destroy before writing any
+            let others = declared
+                .iter()
+                .filter(|e| !(e.path == entry.path && e.profile == entry.profile));
+            let source_file = crate::files::source_target(&entry.config, others)?;
+            updated.push((entry, encrypted, source_file));
         }
-        for (entry, encrypted) in &updated {
+        for (entry, encrypted, source_file) in &updated {
             let declared_in = entry
                 .config
                 .source_path
                 .clone()
                 .unwrap_or_else(Config::global_config_path);
             let mut file = entry.config.clone();
-            match &entry.config.source {
-                Some(source) => {
-                    let path = declared_in
-                        .parent()
-                        .map(|dir| dir.join(source))
-                        .unwrap_or_else(|| PathBuf::from(source));
-                    crate::files::write_file(&path, encrypted)?;
+            match source_file {
+                Some(source_file) => {
+                    crate::files::write_file(source_file, encrypted)?;
                 }
                 None => file.value = Some(encrypted.clone()),
             }

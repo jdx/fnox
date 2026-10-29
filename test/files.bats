@@ -31,6 +31,18 @@ teardown() {
 	_common_teardown
 }
 
+# Errors are wrapped to the terminal width, which can split a message across
+# lines, so match it with the lines joined
+assert_error() {
+	local flat
+	flat="$(printf '%s' "$output" | tr -s ' \n│' ' ')"
+	[[ $flat == *"$1"* ]] || {
+		echo "error does not contain '$1':"
+		echo "$output"
+		return 1
+	}
+}
+
 @test "files: set stores a file under its path and get prints it verbatim" {
 	printf 'apiVersion: v1\ntoken: abc123' >"$HOME/source"
 
@@ -173,6 +185,130 @@ teardown() {
 	assert_output "token: def"
 	run grep -F 'value' "$FNOX_CONFIG_DIR/config.toml"
 	assert_failure
+}
+
+@test "files: a global config that is a symlink can declare files" {
+	mkdir -p "$HOME/dotfiles"
+	mv "$FNOX_CONFIG_DIR/config.toml" "$HOME/dotfiles/config.toml"
+	ln -s "$HOME/dotfiles/config.toml" "$FNOX_CONFIG_DIR/config.toml"
+	printf 'token\n' >"$HOME/source"
+
+	run fnox set --file ~/.npmrc --from-file "$HOME/source"
+	assert_success
+	run fnox get --file ~/.npmrc
+	assert_success
+	assert_output "token"
+
+	# The entry went into the linked file and the link is kept
+	[ -L "$FNOX_CONFIG_DIR/config.toml" ]
+	run grep -F '"~/.npmrc"' "$HOME/dotfiles/config.toml"
+	assert_success
+}
+
+@test "files: a source that is a symlink is read and written through" {
+	printf 'token: abc\n' >"$HOME/source"
+	fnox set --file ~/.kube/config --from-file "$HOME/source" --source files/kube.age
+	mkdir -p "$HOME/dotfiles"
+	mv "$FNOX_CONFIG_DIR/files/kube.age" "$HOME/dotfiles/kube.age"
+	ln -s "$HOME/dotfiles/kube.age" "$FNOX_CONFIG_DIR/files/kube.age"
+
+	run fnox get --file ~/.kube/config
+	assert_success
+	assert_output "token: abc"
+
+	printf 'token: def\n' >"$HOME/source"
+	run fnox set --file ~/.kube/config --from-file "$HOME/source"
+	assert_success
+	[ -L "$FNOX_CONFIG_DIR/files/kube.age" ]
+	run fnox get --file ~/.kube/config
+	assert_output "token: def"
+}
+
+@test "files: reencrypt writes through a linked source" {
+	age-keygen -o "$HOME/key2.txt" 2>/dev/null
+	new_public="$(grep 'public key:' "$HOME/key2.txt" | cut -d: -f2- | xargs)"
+	new_secret="$(grep 'AGE-SECRET-KEY' "$HOME/key2.txt")"
+
+	printf 'token: abc\n' >"$HOME/source"
+	fnox set --file ~/.kube/config --from-file "$HOME/source" --source files/kube.age
+	mkdir -p "$HOME/dotfiles"
+	mv "$FNOX_CONFIG_DIR/files/kube.age" "$HOME/dotfiles/kube.age"
+	ln -s "$HOME/dotfiles/kube.age" "$FNOX_CONFIG_DIR/files/kube.age"
+
+	sed -i.bak "s|recipients = .*|recipients = [\"$new_public\"]|" "$FNOX_CONFIG_DIR/config.toml"
+	run fnox reencrypt --force
+	assert_success
+
+	[ -L "$FNOX_CONFIG_DIR/files/kube.age" ]
+	FNOX_AGE_KEY="$new_secret" run fnox get --file ~/.kube/config
+	assert_success
+	assert_output "token: abc"
+}
+
+@test "files: set refuses a linked source whose target is missing" {
+	printf 'token: abc\n' >"$HOME/source"
+	fnox set --file ~/.kube/config --from-file "$HOME/source" --source files/kube.age
+	rm "$FNOX_CONFIG_DIR/files/kube.age"
+	ln -s "$HOME/dotfiles/missing.age" "$FNOX_CONFIG_DIR/files/kube.age"
+
+	run fnox set --file ~/.kube/config --from-file "$HOME/source"
+	assert_failure
+	assert_error "cannot be resolved"
+	[ -L "$FNOX_CONFIG_DIR/files/kube.age" ]
+}
+
+@test "files: set refuses a linked source that is the config file" {
+	printf 'token: abc\n' >"$HOME/source"
+	fnox set --file ~/.kube/config --from-file "$HOME/source" --source files/kube.age
+	ln -sf "$FNOX_CONFIG_DIR/config.toml" "$FNOX_CONFIG_DIR/files/kube.age"
+	cp "$FNOX_CONFIG_DIR/config.toml" "$HOME/config.before"
+
+	run fnox set --file ~/.kube/config --from-file "$HOME/source"
+	assert_failure
+	assert_error "is the config file"
+	cmp "$FNOX_CONFIG_DIR/config.toml" "$HOME/config.before"
+}
+
+@test "files: set refuses a linked source that stores another file" {
+	printf 'kube\n' >"$HOME/kube"
+	printf 'npm\n' >"$HOME/npm"
+	fnox set --file ~/.kube/config --from-file "$HOME/kube" --source files/kube.age
+	fnox set --file ~/.npmrc --from-file "$HOME/npm" --source files/npmrc.age
+	ln -sf "$FNOX_CONFIG_DIR/files/kube.age" "$FNOX_CONFIG_DIR/files/npmrc.age"
+
+	run fnox set --file ~/.npmrc --from-file "$HOME/npm"
+	assert_failure
+	assert_error "already stores ~/.kube/config"
+	run fnox get --file ~/.kube/config
+	assert_output "kube"
+}
+
+@test "files: reencrypt refuses linked sources that store one file twice" {
+	printf 'kube\n' >"$HOME/kube"
+	fnox set --file ~/.kube/config --from-file "$HOME/kube" --source files/kube.age
+	fnox set --file ~/.npmrc --from-file "$HOME/kube" --source files/npmrc.age
+	ln -sf "$FNOX_CONFIG_DIR/files/kube.age" "$FNOX_CONFIG_DIR/files/npmrc.age"
+	cp "$FNOX_CONFIG_DIR/files/kube.age" "$HOME/kube.before"
+
+	run fnox reencrypt --force
+	assert_failure
+	assert_error "already stores"
+	cmp "$FNOX_CONFIG_DIR/files/kube.age" "$HOME/kube.before"
+}
+
+@test "files: a project config linked to the config directory cannot declare files" {
+	cat >"$FNOX_CONFIG_DIR/project.toml" <<'TOML'
+root = true
+
+[files]
+"~/.bashrc" = { provider = "age", value = "x" }
+TOML
+	rm fnox.toml
+	ln -s "$FNOX_CONFIG_DIR/project.toml" fnox.toml
+
+	run fnox files list
+	assert_failure
+	assert_output --partial "allowed"
 }
 
 @test "files: a source outside the config directory is rejected" {
