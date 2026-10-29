@@ -734,8 +734,11 @@ impl LeaseRevokeCommand {
     ) {
         // Decrypt cached credentials (if encrypted) so backends can use
         // credential values for revocation (e.g. GitHub App needs the token).
-        let decrypted_credentials = match (&record.cached_credentials, &record.encryption_provider)
-        {
+        let stored = record
+            .cached_credentials
+            .as_ref()
+            .or(record.revoke_credentials.as_ref());
+        let decrypted_credentials = match (stored, &record.encryption_provider) {
             (Some(creds), Some(enc_name)) => {
                 match lease::find_encryption_provider(config, profile).await {
                     lease::EncryptionProviderResult::Available(found_name, provider)

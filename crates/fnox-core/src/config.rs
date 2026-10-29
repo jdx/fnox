@@ -581,6 +581,7 @@ pub enum ProxyEgress {
 /// requests for an approved destination.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[schemars(extend("oneOf" = [{ "required": ["secret"] }, { "required": ["lease"] }]))]
 pub struct ProxyRule {
     /// Secret name from the active fnox profile. Exactly one of `secret` and
     /// `lease` is set.

@@ -102,3 +102,13 @@ teardown() {
 	assert_failure
 	assert_output --partial "unknown lease 'missing'"
 }
+
+@test "proxy run revokes its leases when it is terminated" {
+	run "$FNOX_BIN" proxy run -- sh -c '
+		curl --noproxy "" -sS -o /dev/null --data "" \
+			-H "private-token: $FORGE_TOKEN" https://127.0.0.1/notes
+		kill -TERM "$PPID"
+		sleep 5
+	'
+	assert_equal "$(cat revoked.log)" "proxy-lease-1"
+}

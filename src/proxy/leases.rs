@@ -3,21 +3,23 @@
 //! requests while it is valid, mints a new one shortly before it expires,
 //! and revokes every lease it minted when the session ends.
 //!
-//! Minted leases are recorded in the project's lease ledger without their
-//! credentials, so `fnox lease list` and `fnox lease revoke` see them, but
-//! `fnox exec` never reuses a credential meant only for the proxy. The proxy
-//! never reuses a lease another command cached either: that value has been in
-//! a child's environment.
+//! Minted leases are recorded in the project's lease ledger, so `fnox lease
+//! list` and `fnox lease revoke` see them. The ledger keeps their credentials,
+//! encrypted, only for revoking them: `fnox exec` never reuses a credential
+//! meant only for the proxy. The proxy never reuses a lease another command
+//! cached either: that value has been in a child's environment.
 
 use super::*;
-use crate::lease::{self, LeaseLedger};
+use crate::lease::{self, LeaseLedger, LeaseRecord};
 use crate::lease_backends::{Lease, LeaseBackend, LeaseBackendConfig};
+use crate::providers::Provider;
 use chrono::{DateTime, Utc};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-/// How long minting or revoking one lease may take
+/// How long minting or revoking one lease may take, unless a `command`
+/// lease's own timeout is longer
 const LEASE_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// How long after a failed mint a request may try again
@@ -63,12 +65,25 @@ pub fn lease_credential(
     }
 }
 
+/// What the proxy needs to record the leases it mints and keep their
+/// parent credentials out of its messages
+#[derive(Default)]
+pub struct LeaseSetup {
+    /// The project directory whose lease ledger records minted leases
+    pub ledger: Option<PathBuf>,
+    /// The encryption provider, by name, that encrypts the credentials the
+    /// ledger keeps to revoke a lease later. Without one none are kept.
+    pub encryption: Option<(String, Arc<dyn Provider>)>,
+    /// Values, such as the leases' parent credentials, removed from errors
+    /// before they are logged
+    pub hidden: Vec<String>,
+}
+
 /// The leases a proxy's rules name
 #[derive(Default)]
 pub(super) struct ProxyLeases {
     slots: HashMap<String, LeaseSlot>,
-    /// The project directory whose lease ledger records minted leases
-    ledger: Option<PathBuf>,
+    setup: LeaseSetup,
     /// Set when the session ends: nothing is minted after that
     closed: AtomicBool,
 }
@@ -84,6 +99,8 @@ impl std::fmt::Debug for ProxyLeases {
 struct LeaseSlot {
     backend: Arc<dyn LeaseBackend>,
     duration: Duration,
+    /// How long minting or revoking one lease may take
+    timeout: Duration,
     config_hash: String,
     /// The variables rules inject
     credentials: Vec<String>,
@@ -101,7 +118,14 @@ struct SlotState {
     renew_at: Option<RenewAt>,
     last_failure: Option<Instant>,
     /// Every lease minted this session, to revoke when it ends
-    minted: Vec<Lease>,
+    minted: Vec<Minted>,
+}
+
+struct Minted {
+    lease: Lease,
+    /// Its ledger record's `created_at`, which tells it apart from another
+    /// record with the same lease ID
+    recorded_at: DateTime<Utc>,
 }
 
 #[derive(Clone, Copy)]
@@ -116,7 +140,7 @@ impl ProxyLeases {
     pub(super) fn new(
         leases: &IndexMap<String, LeaseBackendConfig>,
         credentials: &IndexMap<String, Vec<String>>,
-        ledger: Option<PathBuf>,
+        setup: LeaseSetup,
     ) -> Result<Self> {
         let mut slots = HashMap::new();
         for (name, credentials) in credentials {
@@ -132,34 +156,32 @@ impl ProxyLeases {
                     backend.max_lease_duration()
                 )));
             }
+            // A `command` lease's own timeout reports a slow command better,
+            // so leave it room to fire first
+            let timeout = match config {
+                LeaseBackendConfig::Command { timeout, .. } => {
+                    LEASE_TIMEOUT.max(lease::parse_duration(timeout)? + Duration::from_secs(5))
+                }
+                _ => LEASE_TIMEOUT,
+            };
             slots.insert(
                 name.clone(),
-                LeaseSlot::new(backend, duration, config.config_hash(), credentials.clone()),
+                LeaseSlot {
+                    backend,
+                    duration,
+                    timeout,
+                    config_hash: config.config_hash(),
+                    credentials: credentials.clone(),
+                    state: tokio::sync::Mutex::new(SlotState::default()),
+                    failure: std::sync::Mutex::new(None),
+                },
             );
         }
         Ok(Self {
             slots,
-            ledger,
+            setup,
             closed: AtomicBool::new(false),
         })
-    }
-
-    #[cfg(test)]
-    pub(super) fn insert(
-        &mut self,
-        name: &str,
-        backend: Arc<dyn LeaseBackend>,
-        credentials: &[&str],
-    ) {
-        self.slots.insert(
-            name.to_string(),
-            LeaseSlot::new(
-                backend,
-                Duration::from_secs(3600),
-                String::new(),
-                credentials.iter().map(|c| c.to_string()).collect(),
-            ),
-        );
     }
 
     /// Mint the leases among `names` that have no usable credential, or that
@@ -171,8 +193,7 @@ impl ProxyLeases {
                 continue;
             }
             if let Some(slot) = self.slots.get(*name) {
-                slot.ensure(name, values, &self.closed, self.ledger.as_deref())
-                    .await;
+                slot.ensure(name, values, &self.closed, &self.setup).await;
             }
         }
     }
@@ -185,14 +206,16 @@ impl ProxyLeases {
                 .unwrap_or_else(|e| e.into_inner())
                 .clone()
         });
-        match failure {
-            Some(reason) => proxy_error(format!(
+        if let Some(reason) = failure {
+            proxy_error(format!(
                 "lease '{name}' could not be minted: {reason}; a later request tries again"
-            )),
-            None if self.closed.load(Ordering::SeqCst) => proxy_error(format!(
+            ))
+        } else if self.closed.load(Ordering::SeqCst) {
+            proxy_error(format!(
                 "lease '{name}' is not available because the session is ending"
-            )),
-            None => proxy_error(format!("lease '{name}' has no credential yet; retry")),
+            ))
+        } else {
+            proxy_error(format!("lease '{name}' has no credential yet; retry"))
         }
     }
 
@@ -202,35 +225,39 @@ impl ProxyLeases {
     /// `fnox lease cleanup`.
     pub(super) async fn revoke_all(&self, values: &SecretValues) {
         self.closed.store(true, Ordering::SeqCst);
-        let mut revoked = Vec::new();
+        let mut revoked: Vec<(&str, String, DateTime<Utc>)> = Vec::new();
         for (name, slot) in &self.slots {
             // Waits for a mint in flight, so its lease is revoked too
             let state = slot.state.lock().await;
             for credential in &slot.credentials {
-                values.forget(&LeaseSlot::source(name, credential));
+                values.forget(&source(name, credential));
             }
             for minted in &state.minted {
-                let expired = minted.expires_at.is_some_and(|at| at <= Utc::now());
+                let lease = &minted.lease;
+                let expired = lease.expires_at.is_some_and(|at| at <= Utc::now());
                 let revoke = slot
                     .backend
-                    .revoke_lease(&minted.lease_id, Some(&minted.credentials));
-                match tokio::time::timeout(LEASE_TIMEOUT, revoke).await {
+                    .revoke_lease(&lease.lease_id, Some(&lease.credentials));
+                match tokio::time::timeout(slot.timeout, revoke).await {
                     Ok(Ok(())) => {
-                        tracing::debug!("fnox proxy: revoked lease '{}'", minted.lease_id);
-                        revoked.push(minted.lease_id.clone());
+                        tracing::debug!("fnox proxy: revoked lease '{}'", lease.lease_id);
+                        revoked.push((name, lease.lease_id.clone(), minted.recorded_at));
                     }
                     // It is no longer valid anyway
-                    _ if expired => revoked.push(minted.lease_id.clone()),
+                    _ if expired => {
+                        revoked.push((name, lease.lease_id.clone(), minted.recorded_at))
+                    }
                     Ok(Err(error)) => tracing::warn!(
-                        "fnox proxy: could not revoke lease '{}' of '{name}': {error}; run `fnox lease revoke {}` to retry",
-                        minted.lease_id,
-                        minted.lease_id
+                        "fnox proxy: could not revoke lease '{}' of '{name}': {}; run `fnox lease revoke {}` to retry",
+                        lease.lease_id,
+                        self.setup.scrub(&error.to_string()),
+                        lease.lease_id
                     ),
                     Err(_) => tracing::warn!(
                         "fnox proxy: revoking lease '{}' of '{name}' took longer than {}s; run `fnox lease revoke {}` to retry",
-                        minted.lease_id,
-                        LEASE_TIMEOUT.as_secs(),
-                        minted.lease_id
+                        lease.lease_id,
+                        slot.timeout.as_secs(),
+                        lease.lease_id
                     ),
                 }
             }
@@ -238,12 +265,21 @@ impl ProxyLeases {
         if revoked.is_empty() {
             return;
         }
-        if let Some(project_dir) = &self.ledger {
+        if let Some(project_dir) = &self.setup.ledger {
             let marked = (|| -> Result<()> {
                 let _lock = LeaseLedger::lock(project_dir)?;
                 let mut ledger = LeaseLedger::load(project_dir)?;
-                for lease_id in &revoked {
-                    ledger.mark_revoked(lease_id);
+                // By backend, ID and creation time: lease IDs need not be
+                // unique, even within one backend
+                for (name, lease_id, recorded_at) in &revoked {
+                    if let Some(index) = ledger.leases.iter().position(|record| {
+                        !record.revoked
+                            && record.backend_name == *name
+                            && record.lease_id == *lease_id
+                            && record.created_at == *recorded_at
+                    }) {
+                        ledger.mark_revoked_at(index);
+                    }
                 }
                 ledger.save(project_dir)
             })();
@@ -254,36 +290,52 @@ impl ProxyLeases {
     }
 }
 
+/// Why minting a lease failed
+enum MintError {
+    /// The backend failed. Its error can quote a parent credential, such as a
+    /// `command` lease's stderr, so it goes only to fnox's log, scrubbed.
+    Backend(FnoxError),
+    /// fnox can't use the lease it got, for this reason
+    Unusable(String),
+}
+
+impl MintError {
+    /// One of fnox's own checks refused the lease
+    fn unusable(error: FnoxError) -> Self {
+        Self::Unusable(match error {
+            FnoxError::Config(message) => message.trim_start_matches("proxy: ").to_string(),
+            other => other.to_string(),
+        })
+    }
+}
+
+impl LeaseSetup {
+    /// `message` without the hidden values
+    fn scrub(&self, message: &str) -> String {
+        let mut message = message.to_string();
+        for value in &self.hidden {
+            if let Some(value) = crate::redact::redactable(value) {
+                message = message.replace(value, crate::redact::MARKER);
+            }
+        }
+        message
+    }
+}
+
+fn source(name: &str, credential: &str) -> Source {
+    Source::Lease {
+        lease: name.to_string(),
+        credential: credential.to_string(),
+    }
+}
+
 impl LeaseSlot {
-    fn new(
-        backend: Arc<dyn LeaseBackend>,
-        duration: Duration,
-        config_hash: String,
-        credentials: Vec<String>,
-    ) -> Self {
-        Self {
-            backend,
-            duration,
-            config_hash,
-            credentials,
-            state: tokio::sync::Mutex::new(SlotState::default()),
-            failure: std::sync::Mutex::new(None),
-        }
-    }
-
-    fn source(name: &str, credential: &str) -> Source {
-        Source::Lease {
-            lease: name.to_string(),
-            credential: credential.to_string(),
-        }
-    }
-
     async fn ensure(
         &self,
         name: &str,
         values: &SecretValues,
         closed: &AtomicBool,
-        ledger: Option<&std::path::Path>,
+        setup: &LeaseSetup,
     ) {
         if closed.load(Ordering::SeqCst) {
             return;
@@ -299,30 +351,35 @@ impl LeaseSlot {
             Some(RenewAt::At(at)) if now < at => return,
             _ => {}
         }
-        // An expired credential is never injected, even if renewing fails
-        if state.expires_at.is_some_and(|at| at <= now) {
+        let due = state
+            .last_failure
+            .is_none_or(|at| at.elapsed() >= MINT_RETRY);
+        if due {
+            let failure = match self.mint(name, values, &mut state, setup).await {
+                Ok(()) => None,
+                Err(MintError::Backend(error)) => {
+                    tracing::warn!(
+                        "fnox proxy: could not mint lease '{name}': {}",
+                        setup.scrub(&error.to_string())
+                    );
+                    Some("the lease backend failed, and fnox's log has its error".to_string())
+                }
+                Err(MintError::Unusable(reason)) => {
+                    tracing::warn!("fnox proxy: could not mint lease '{name}': {reason}");
+                    Some(reason)
+                }
+            };
+            state.last_failure = failure.is_some().then(Instant::now);
+            *self.failure.lock().unwrap_or_else(|e| e.into_inner()) = failure;
+        }
+        // An expired credential is never injected, including one whose
+        // renewal just failed
+        if state.expires_at.is_some_and(|at| at <= Utc::now()) {
             for credential in &self.credentials {
-                values.forget(&Self::source(name, credential));
+                values.forget(&source(name, credential));
             }
             state.expires_at = None;
             state.renew_at = None;
-        }
-        if state
-            .last_failure
-            .is_some_and(|at| at.elapsed() < MINT_RETRY)
-        {
-            return;
-        }
-        match self.mint(name, values, &mut state, ledger).await {
-            Ok(()) => {
-                state.last_failure = None;
-                *self.failure.lock().unwrap_or_else(|e| e.into_inner()) = None;
-            }
-            Err(error) => {
-                tracing::warn!("fnox proxy: could not mint lease '{name}': {error}");
-                state.last_failure = Some(Instant::now());
-                *self.failure.lock().unwrap_or_else(|e| e.into_inner()) = Some(error.to_string());
-            }
         }
     }
 
@@ -331,28 +388,41 @@ impl LeaseSlot {
         name: &str,
         values: &SecretValues,
         state: &mut SlotState,
-        ledger: Option<&std::path::Path>,
-    ) -> Result<()> {
+        setup: &LeaseSetup,
+    ) -> std::result::Result<(), MintError> {
         let label = format!("fnox-proxy-{name}");
         let minted_at = Utc::now();
         let lease = tokio::time::timeout(
-            LEASE_TIMEOUT,
+            self.timeout,
             self.backend.create_lease(self.duration, &label),
         )
         .await
-        .map_err(|_| proxy_error(format!("took longer than {}s", LEASE_TIMEOUT.as_secs())))??;
-        if let Some(project_dir) = ledger {
-            self.record(name, &label, &lease, project_dir);
+        .map_err(|_| {
+            MintError::Unusable(format!("it took longer than {}s", self.timeout.as_secs()))
+        })?
+        .map_err(MintError::Backend)?;
+        let recorded_at = Utc::now();
+        if let Some(project_dir) = &setup.ledger {
+            self.record(name, &label, &lease, recorded_at, setup, project_dir)
+                .await;
         }
-        state.minted.push(lease.clone());
+        state.minted.push(Minted {
+            lease: lease.clone(),
+            recorded_at,
+        });
 
+        if lease.expires_at.is_some_and(|at| at <= Utc::now()) {
+            return Err(MintError::Unusable(
+                "the lease had already expired when it was minted".to_string(),
+            ));
+        }
         // Every credential is checked before any is used, so requests never
         // mix credentials of two leases
         let mut found = Vec::new();
         for credential in &self.credentials {
-            let source = Self::source(name, credential);
+            let source = source(name, credential);
             let value = lease.credentials.get(credential).ok_or_else(|| {
-                proxy_error(format!(
+                MintError::Unusable(format!(
                     "the lease has no '{credential}'; it produced {}",
                     lease
                         .credentials
@@ -362,11 +432,15 @@ impl LeaseSlot {
                         .join(", ")
                 ))
             })?;
-            values.validate(&source, value)?;
+            values
+                .validate(&source, value)
+                .map_err(MintError::unusable)?;
             found.push((source, value.clone()));
         }
         for (source, value) in found {
-            values.replace(&source, value)?;
+            values
+                .replace(&source, value)
+                .map_err(MintError::unusable)?;
         }
         state.expires_at = lease.expires_at;
         state.renew_at = Some(renew_at(minted_at, lease.expires_at));
@@ -380,21 +454,49 @@ impl LeaseSlot {
         Ok(())
     }
 
-    /// Record a minted lease in the ledger, without its credentials
-    fn record(&self, name: &str, label: &str, lease: &Lease, project_dir: &std::path::Path) {
+    /// Record a minted lease in the ledger. Its credentials are kept, if an
+    /// encryption provider can encrypt them, only to revoke it later: the
+    /// record never offers them to a command.
+    async fn record(
+        &self,
+        name: &str,
+        label: &str,
+        lease: &Lease,
+        recorded_at: DateTime<Utc>,
+        setup: &LeaseSetup,
+        project_dir: &std::path::Path,
+    ) {
+        let (revoke_credentials, encryption_provider) = match &setup.encryption {
+            Some((provider_name, provider)) => {
+                match lease::encrypt_credentials(provider.as_ref(), &lease.credentials).await {
+                    Ok(encrypted) => (Some(encrypted), Some(provider_name.clone())),
+                    Err(error) => {
+                        tracing::warn!(
+                            "fnox proxy: lease '{}' of '{name}' can't be revoked after this session if fnox can't revoke it now: {}",
+                            lease.lease_id,
+                            setup.scrub(&error.to_string())
+                        );
+                        (None, None)
+                    }
+                }
+            }
+            None => (None, None),
+        };
         let recorded = LeaseLedger::lock(project_dir).and_then(|_lock| {
             let mut ledger = LeaseLedger::load(project_dir)?;
-            lease::record_lease(
-                &mut ledger,
-                lease,
-                name,
-                label,
-                self.config_hash.clone(),
-                None,
-                None,
-                project_dir,
-            );
-            Ok(())
+            ledger.add(LeaseRecord {
+                lease_id: lease.lease_id.clone(),
+                backend_name: name.to_string(),
+                label: label.to_string(),
+                created_at: recorded_at,
+                expires_at: lease.expires_at,
+                revoked: false,
+                cached_credentials: None,
+                encryption_provider,
+                revoke_credentials,
+                config_hash: Some(self.config_hash.clone()),
+            });
+            ledger.save(project_dir)
         });
         if let Err(error) = recorded {
             tracing::warn!(
@@ -419,6 +521,26 @@ fn renew_at(minted_at: DateTime<Utc>, expires_at: Option<DateTime<Utc>>) -> Rene
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_command_lease_keeps_its_own_longer_timeout() {
+        let timeout = |toml: &str| {
+            let leases: IndexMap<String, LeaseBackendConfig> =
+                toml_edit::de::from_str(toml).unwrap();
+            let credentials = [("forge".to_string(), vec!["TOKEN".to_string()])].into();
+            let leases = ProxyLeases::new(&leases, &credentials, LeaseSetup::default()).unwrap();
+            leases.slots["forge"].timeout
+        };
+        let command = "[forge]\ntype = \"command\"\ncreate_command = \"true\"\n";
+        // Its default of 30s, plus room for it to fire first
+        assert_eq!(timeout(command), Duration::from_secs(35));
+        let gitlab = "[forge]\ntype = \"gitlab\"\nproject = \"team/app\"\n";
+        assert_eq!(timeout(gitlab), LEASE_TIMEOUT);
+        assert_eq!(
+            timeout(&format!("{command}timeout = \"2m\"\n")),
+            Duration::from_secs(125)
+        );
+    }
 
     #[test]
     fn renews_before_expiry() {

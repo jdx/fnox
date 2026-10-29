@@ -27,6 +27,12 @@ pub struct LeaseRecord {
     pub cached_credentials: Option<IndexMap<String, String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub encryption_provider: Option<String>,
+    /// Credentials kept only so the lease can be revoked later, never handed
+    /// to a command, encrypted with `encryption_provider`. The proxy records
+    /// its leases this way: a backend such as GitHub App revokes a token by
+    /// authenticating with it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revoke_credentials: Option<IndexMap<String, String>>,
     /// Hash of the backend config at lease creation time, used to invalidate
     /// cached credentials when the config changes (e.g., role ARN rotation).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -205,6 +211,7 @@ impl LeaseLedger {
         let record = &mut self.leases[index];
         record.revoked = true;
         record.cached_credentials = None;
+        record.revoke_credentials = None;
         record.encryption_provider = None;
     }
 
@@ -381,10 +388,10 @@ pub async fn find_encryption_provider(
 }
 
 /// Record a lease result in the ledger (add + save). No lock management —
-/// the caller must hold the ledger lock. Shared by `create_and_record_lease`,
-/// `resolve_lease` and the proxy to avoid duplicating the add+save+warn pattern.
+/// the caller must hold the ledger lock. Shared by `create_and_record_lease`
+/// and `resolve_lease` to avoid duplicating the add+save+warn pattern.
 #[allow(clippy::too_many_arguments)]
-pub fn record_lease(
+fn record_lease(
     ledger: &mut LeaseLedger,
     result: &crate::lease_backends::Lease,
     backend_name: &str,
@@ -403,6 +410,7 @@ pub fn record_lease(
         revoked: false,
         cached_credentials,
         encryption_provider,
+        revoke_credentials: None,
         config_hash: Some(config_hash),
     });
     if let Err(save_err) = ledger.save(project_dir) {

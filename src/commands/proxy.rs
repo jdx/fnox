@@ -341,6 +341,11 @@ fn collect_requested_secrets(
             .or_insert_with(|| secret.clone());
     }
 
+    // Nothing to resolve, so no provider either: a config with only lease
+    // rules may have none
+    if requested.is_empty() {
+        return Ok((requested, lease_inputs));
+    }
     let requested =
         crate::secret_session::with_provider_dependencies(config, profile, all_secrets, requested)?;
     Ok((requested, lease_inputs))
@@ -416,11 +421,31 @@ impl ProxyRunCommand {
             }
         }
 
+        // The ledger keeps a minted lease's credentials, encrypted, so it can
+        // still be revoked if this session can't revoke it
+        let encryption = if rule_leases.is_empty() {
+            None
+        } else {
+            match crate::lease::find_encryption_provider(&config, &profile).await {
+                crate::lease::EncryptionProviderResult::Available(name, provider) => {
+                    Some((name, std::sync::Arc::from(provider)))
+                }
+                crate::lease::EncryptionProviderResult::Unavailable(name, error) => {
+                    tracing::debug!("encryption provider '{name}' is unavailable: {error}");
+                    None
+                }
+                crate::lease::EncryptionProviderResult::NotConfigured => None,
+            }
+        };
         let plan = ProxyPlan::with_leases(
             proxy_config,
             &values,
             &leases,
-            Some(crate::lease::project_dir_from_config(&config, &cli.config)),
+            crate::proxy::LeaseSetup {
+                ledger: Some(crate::lease::project_dir_from_config(&config, &cli.config)),
+                encryption,
+                hidden: lease_values.values().flatten().cloned().collect(),
+            },
         )?;
         let session = std::sync::Arc::new(session);
         plan.set_session(session.clone());
@@ -536,7 +561,7 @@ impl ProxyRunCommand {
         let outcome = if sandbox.is_some() {
             run_until_interrupted(command).await
         } else {
-            command.status().await.map(Outcome::Exited)
+            run_forwarding_signals(command).await
         };
         crate::sandbox::remove_mount_points(&mount_points);
         running.shutdown().await;
@@ -564,6 +589,40 @@ impl ProxyRunCommand {
             std::process::exit(status.code().unwrap_or(1));
         }
         Ok(())
+    }
+}
+
+/// Runs `command` without letting a signal end fnox first, so fnox can still
+/// stop the proxy and revoke its leases when the command exits. Ctrl-C reaches
+/// the command directly through the terminal, so fnox leaves it to the
+/// command; `SIGTERM` and `SIGHUP` sent to fnox are passed on.
+async fn run_forwarding_signals(mut command: tokio::process::Command) -> std::io::Result<Outcome> {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+
+        // Registered before the spawn, so no signal arrives unobserved.
+        let mut interrupt = signal(SignalKind::interrupt())?;
+        let mut terminate = signal(SignalKind::terminate())?;
+        let mut hangup = signal(SignalKind::hangup())?;
+        let mut child = command.spawn()?;
+        loop {
+            let number = tokio::select! {
+                status = child.wait() => return status.map(Outcome::Exited),
+                // The terminal sent it to the command too
+                _ = interrupt.recv() => continue,
+                _ = terminate.recv() => libc::SIGTERM,
+                _ = hangup.recv() => libc::SIGHUP,
+            };
+            if let Some(pid) = child.id() {
+                // SAFETY: kill takes only integer arguments.
+                unsafe { libc::kill(pid as libc::pid_t, number) };
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        command.status().await.map(Outcome::Exited)
     }
 }
 

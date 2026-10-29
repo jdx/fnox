@@ -1916,7 +1916,15 @@
         }
       },
       "additionalProperties": false,
-      "required": ["domain"]
+      "required": ["domain"],
+      "oneOf": [
+        {
+          "required": ["secret"]
+        },
+        {
+          "required": ["lease"]
+        }
+      ]
     },
     "AuditConfig": {
       "description": "Local access audit log configuration",

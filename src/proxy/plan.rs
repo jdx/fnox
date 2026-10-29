@@ -2,7 +2,6 @@
 
 use super::*;
 use crate::lease_backends::LeaseBackendConfig;
-use std::path::PathBuf;
 
 pub struct ProxyPlan {
     pub(super) policy: Arc<ProxyPolicy>,
@@ -82,17 +81,16 @@ impl ProxyPlan {
 
     /// A plan for rules that name only secrets
     pub fn new(config: &ProxyConfig, values: &IndexMap<String, String>) -> Result<Self> {
-        Self::with_leases(config, values, &IndexMap::new(), None)
+        Self::with_leases(config, values, &IndexMap::new(), LeaseSetup::default())
     }
 
     /// `values` holds the rule secrets that resolved; `leases` is the
-    /// profile's lease backends, which lease rules name, and `ledger` the
-    /// project directory whose lease ledger records the leases the proxy mints
+    /// profile's lease backends, which lease rules name
     pub fn with_leases(
         config: &ProxyConfig,
         values: &IndexMap<String, String>,
         leases: &IndexMap<String, LeaseBackendConfig>,
-        ledger: Option<PathBuf>,
+        setup: LeaseSetup,
     ) -> Result<Self> {
         validate_config(config)?;
 
@@ -237,7 +235,7 @@ impl ProxyPlan {
             .map(|(secret, value)| (Source::secret(secret), value.clone()))
             .filter(|(source, _)| prepared.iter().any(|rule| rule.source == *source))
             .collect();
-        let leases = ProxyLeases::new(leases, &lease_credentials, ledger)?;
+        let leases = ProxyLeases::new(leases, &lease_credentials, setup)?;
 
         let destinations = Arc::new(DestinationPolicy {
             allowed: config
@@ -331,6 +329,16 @@ pub(super) fn validate_rule(rule: &ProxyRule) -> Result<()> {
         (Some(secret), None) if rule.credential.is_some() => {
             return Err(proxy_error(format!(
                 "rule for '{secret}' sets credential, which only a lease rule can use"
+            )));
+        }
+        (None, Some(lease))
+            if rule
+                .credential
+                .as_deref()
+                .is_some_and(|c| c.trim().is_empty()) =>
+        {
+            return Err(proxy_error(format!(
+                "rule for lease '{lease}' has an empty credential"
             )));
         }
         _ => {}

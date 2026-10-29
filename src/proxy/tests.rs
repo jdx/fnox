@@ -1089,9 +1089,16 @@ fn leases(toml: &str) -> IndexMap<String, crate::lease_backends::LeaseBackendCon
 }
 
 /// A `command` lease whose create command counts its runs in `dir` and
-/// mints `minted-<run>`, and whose revoke command logs the lease ID
-fn counting_lease(dir: &std::path::Path, extra: &str) -> String {
+/// mints `minted-<run>`, and whose revoke command logs the lease ID.
+/// `expires` is a shell word for its `expires_at`, which can read the run
+/// number from `$n`, or empty for a lease that doesn't expire.
+fn counting_lease(dir: &std::path::Path, expires: &str) -> String {
     let dir = dir.display();
+    let extra = if expires.is_empty() {
+        ""
+    } else {
+        r#","expires_at":"%s""#
+    };
     format!(
         r#"
 [forge]
@@ -1099,7 +1106,7 @@ type = "command"
 create_command = '''
 n=$(( $(cat {dir}/count 2>/dev/null || echo 0) + 1 ))
 echo $n > {dir}/count
-printf '{{"credentials":{{"TOKEN":"minted-%s"}},"lease_id":"lease-%s"{extra}}}' $n $n
+printf '{{"credentials":{{"TOKEN":"minted-%s"}},"lease_id":"lease-%s"{extra}}}' $n $n {expires}
 '''
 revoke_command = 'echo "$FNOX_LEASE_ID" >> {dir}/revoked'
 "#
@@ -1112,7 +1119,13 @@ fn lease_plan(leases_toml: &str) -> ProxyPlan {
         rules: vec![lease_rule("forge", Some("TOKEN"))],
         ..ProxyConfig::default()
     };
-    ProxyPlan::with_leases(&config, &IndexMap::new(), &leases(leases_toml), None).unwrap()
+    ProxyPlan::with_leases(
+        &config,
+        &IndexMap::new(),
+        &leases(leases_toml),
+        LeaseSetup::default(),
+    )
+    .unwrap()
 }
 
 fn note_request() -> (reqwest::Url, Vec<(String, String)>) {
@@ -1145,10 +1158,7 @@ fn mints(dir: &std::path::Path) -> usize {
 #[tokio::test]
 async fn a_lease_is_minted_once_when_a_request_first_needs_it() {
     let dir = tempfile::tempdir().unwrap();
-    let plan = lease_plan(&counting_lease(
-        dir.path(),
-        r#","expires_at":"2099-01-01T00:00:00Z""#,
-    ));
+    let plan = lease_plan(&counting_lease(dir.path(), "2099-01-01T00:00:00Z"));
     assert_eq!(plan.child_env["TOKEN"], "forge_placeholder");
     assert!(
         plan.pending().is_empty(),
@@ -1188,12 +1198,11 @@ async fn a_lease_is_minted_once_when_a_request_first_needs_it() {
 #[tokio::test]
 async fn an_expiring_lease_is_replaced_and_its_old_value_stays_redacted() {
     let dir = tempfile::tempdir().unwrap();
-    // Already past its renewal time when minted
-    let plan = lease_plan(&counting_lease(
-        dir.path(),
-        r#","expires_at":"2000-01-01T00:00:00Z""#,
-    ));
+    let plan = lease_plan(&counting_lease(dir.path(), &short_then_long()));
     assert_eq!(send_note(&plan).await.unwrap().1, "minted-1");
+    assert_eq!(send_note(&plan).await.unwrap().1, "minted-1");
+    // Past three quarters of the first lease's two seconds
+    tokio::time::sleep(std::time::Duration::from_millis(1600)).await;
     assert_eq!(send_note(&plan).await.unwrap().1, "minted-2");
     assert_eq!(mints(dir.path()), 2);
 
@@ -1206,11 +1215,9 @@ async fn an_expiring_lease_is_replaced_and_its_old_value_stays_redacted() {
 #[tokio::test]
 async fn ending_the_session_revokes_every_minted_lease_and_stops_minting() {
     let dir = tempfile::tempdir().unwrap();
-    let plan = lease_plan(&counting_lease(
-        dir.path(),
-        r#","expires_at":"2000-01-01T00:00:00Z""#,
-    ));
+    let plan = lease_plan(&counting_lease(dir.path(), &short_then_long()));
     send_note(&plan).await.unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(1600)).await;
     send_note(&plan).await.unwrap();
 
     plan.policy.leases.revoke_all(&plan.policy.values).await;
@@ -1220,6 +1227,31 @@ async fn ending_the_session_revokes_every_minted_lease_and_stops_minting() {
     let error = send_note(&plan).await.unwrap_err().to_string();
     assert!(error.contains("session is ending"), "{error}");
     assert_eq!(mints(dir.path()), 2);
+}
+
+/// An expiry two seconds from now for the first run, and far off after it
+fn short_then_long() -> String {
+    let soon = (chrono::Utc::now() + chrono::Duration::seconds(2)).to_rfc3339();
+    format!(r#""$(if [ $n = 1 ]; then echo {soon}; else echo 2099-01-01T00:00:00Z; fi)""#)
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_lease_that_has_already_expired_is_never_injected() {
+    let dir = tempfile::tempdir().unwrap();
+    let plan = lease_plan(&counting_lease(dir.path(), "2000-01-01T00:00:00Z"));
+    let error = send_note(&plan).await.unwrap_err().to_string();
+    assert!(error.contains("could not be minted"), "{error}");
+    assert_eq!(
+        plan.policy.values.value(&Source::Lease {
+            lease: "forge".to_string(),
+            credential: "TOKEN".to_string(),
+        }),
+        None
+    );
+    // It was minted, so it is revoked at the end
+    plan.policy.leases.revoke_all(&plan.policy.values).await;
+    assert!(dir.path().join("revoked").exists());
 }
 
 #[cfg(unix)]
@@ -1239,7 +1271,9 @@ create_command = "echo x >> {}/count-attempts; echo 'parent token rejected' >&2;
         error.contains("lease 'forge' could not be minted"),
         "{error}"
     );
-    assert!(error.contains("parent token rejected"), "{error}");
+    // The backend's own error can quote a parent credential, so it stays in
+    // fnox's log
+    assert!(!error.contains("parent token rejected"), "{error}");
     // The next request right away gets the same answer without another try
     let again = send_note(&plan).await.unwrap_err().to_string();
     assert_eq!(again, error);
@@ -1260,7 +1294,7 @@ async fn a_lease_without_the_rule_credential_is_refused() {
         &config,
         &IndexMap::new(),
         &leases(&counting_lease(dir.path(), "")),
-        None,
+        LeaseSetup::default(),
     )
     .unwrap();
     let error = send_note(&plan).await.unwrap_err().to_string();
@@ -1284,12 +1318,14 @@ url = "https://forge.example.com"
 project = "team/app"
 "#,
     );
-    let plan = ProxyPlan::with_leases(&config, &IndexMap::new(), &gitlab, None).unwrap();
+    let plan =
+        ProxyPlan::with_leases(&config, &IndexMap::new(), &gitlab, LeaseSetup::default()).unwrap();
     assert_eq!(plan.child_env["GITLAB_TOKEN"], "forge_placeholder");
 
     let mut config = config;
     config.rules[0].env = Some("FORGE_TOKEN".to_string());
-    let plan = ProxyPlan::with_leases(&config, &IndexMap::new(), &gitlab, None).unwrap();
+    let plan =
+        ProxyPlan::with_leases(&config, &IndexMap::new(), &gitlab, LeaseSetup::default()).unwrap();
     assert_eq!(plan.child_env.keys().collect::<Vec<_>>(), ["FORGE_TOKEN"]);
 }
 
@@ -1300,10 +1336,15 @@ fn rejects_lease_rules_that_cannot_work() {
             rules: vec![rule],
             ..ProxyConfig::default()
         };
-        ProxyPlan::with_leases(&config, &IndexMap::new(), &leases(toml), None)
-            .err()
-            .map(|error| error.to_string())
-            .unwrap_or_default()
+        ProxyPlan::with_leases(
+            &config,
+            &IndexMap::new(),
+            &leases(toml),
+            LeaseSetup::default(),
+        )
+        .err()
+        .map(|error| error.to_string())
+        .unwrap_or_default()
     };
     let vault = r#"
 [forge]
@@ -1339,6 +1380,7 @@ role_arn = "arn:aws:iam::123456789012:role/app"
     let mut neither = lease_rule("forge", None);
     neither.lease = None;
     assert!(plan(neither, command).contains("needs a secret or a lease"));
+    assert!(plan(lease_rule("forge", Some(" ")), command).contains("empty credential"));
     let mut secret_credential = lease_rule("forge", Some("TOKEN"));
     secret_credential.lease = None;
     secret_credential.secret = Some("TOKEN".to_string());
