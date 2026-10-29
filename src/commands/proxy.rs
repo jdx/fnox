@@ -236,6 +236,27 @@ fn show_rules(proxy: &ProxyConfig) -> Result<()> {
     Ok(())
 }
 
+/// Serves the MCP tools to each `fnox mcp` relay in the child, sharing this
+/// run's secrets and handing values the user enters to the proxy
+fn mcp_service(
+    session: std::sync::Arc<SecretSession>,
+    mcp_config: crate::config::McpConfig,
+    proxy: crate::proxy::ProxyHandle,
+) -> crate::proxy::McpService {
+    std::sync::Arc::new(move |stream| {
+        let server = crate::mcp::FnoxMcpServer::new(session.clone(), mcp_config.clone())
+            .under_proxy(proxy.clone());
+        Box::pin(async move {
+            match rmcp::ServiceExt::serve(server, stream).await {
+                Ok(running) => {
+                    let _ = running.waiting().await;
+                }
+                Err(error) => tracing::debug!("MCP session over the proxy failed: {error}"),
+            }
+        })
+    })
+}
+
 fn collect_requested_secrets(
     config: &Config,
     profile: &[String],
@@ -304,7 +325,16 @@ impl ProxyRunCommand {
             .collect();
 
         let plan = ProxyPlan::new(proxy_config, &values)?;
-        plan.set_session(std::sync::Arc::new(session));
+        let session = std::sync::Arc::new(session);
+        plan.set_session(session.clone());
+        // Resolving later (a pending secret, or an MCP tool) must not prompt:
+        // the child owns the terminal now
+        crate::env::set_non_interactive(true);
+        plan.set_mcp_service(mcp_service(
+            session,
+            config.mcp.clone().unwrap_or_default(),
+            plan.handle(),
+        ));
         for secret in plan.pending() {
             tracing::warn!(
                 "fnox proxy: '{secret}' is not set; requests that need it are refused until it is (for example, run `fnox set {secret}`)"
@@ -369,6 +399,8 @@ impl ProxyRunCommand {
         }
         command.env("FNOX_DAEMON", "off");
         command.env("FNOX_NON_INTERACTIVE", "1");
+        // `fnox mcp` in the child relays to the tools this process serves
+        command.env(crate::mcp::relay::RELAY_ENV, "1");
         for (key, placeholder) in child_env {
             command.env(key, placeholder);
         }

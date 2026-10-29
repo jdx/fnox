@@ -34,6 +34,9 @@ struct Attempts {
 #[derive(Debug, Default)]
 struct State {
     values: HashMap<String, String>,
+    /// Values replaced during the run, still redacted from responses: a
+    /// request sent with one may finish after the replacement
+    retired: Vec<(String, String)>,
     redactions: Arc<Vec<Redaction>>,
 }
 
@@ -51,8 +54,9 @@ impl SecretValues {
     /// missing from it is pending
     pub(super) fn new(rules: Vec<RuleRedaction>, values: HashMap<String, String>) -> Self {
         let state = State {
-            redactions: Arc::new(build_redactions(&rules, &values)),
+            redactions: Arc::new(build_redactions(&rules, &values, &[])),
             values,
+            retired: Vec::new(),
         };
         Self {
             rules,
@@ -105,6 +109,12 @@ impl SecretValues {
         self.set_checked(secret, value, true)
     }
 
+    /// Use `value` for `secret` from now on, replacing any value it has. The
+    /// replaced value stays redacted from responses for the rest of the run.
+    pub(super) fn replace(&self, secret: &str, value: String) -> Result<()> {
+        self.set_checked(secret, value, false).map(|_| ())
+    }
+
     /// Use `value` for `secret` after the checks startup values get, unless
     /// `only_if_pending` and it already has a value
     fn set_checked(&self, secret: &str, value: String, only_if_pending: bool) -> Result<bool> {
@@ -129,8 +139,12 @@ impl SecretValues {
         if only_if_pending && state.values.contains_key(secret) {
             return Ok(false);
         }
-        state.values.insert(secret.to_string(), value);
-        state.redactions = Arc::new(build_redactions(&self.rules, &state.values));
+        if let Some(old) = state.values.insert(secret.to_string(), value)
+            && state.values.get(secret) != Some(&old)
+        {
+            state.retired.push((secret.to_string(), old));
+        }
+        state.redactions = Arc::new(build_redactions(&self.rules, &state.values, &state.retired));
         Ok(true)
     }
 
@@ -254,22 +268,31 @@ impl Drop for InFlight<'_> {
 
 /// One redaction per distinct value, longest first, so a value that contains
 /// another is replaced whole
-fn build_redactions(rules: &[RuleRedaction], values: &HashMap<String, String>) -> Vec<Redaction> {
+fn build_redactions(
+    rules: &[RuleRedaction],
+    values: &HashMap<String, String>,
+    retired: &[(String, String)],
+) -> Vec<Redaction> {
     let mut redactions: Vec<Redaction> = Vec::new();
-    for rule in rules {
-        let Some(value) = values.get(&rule.secret) else {
-            continue;
-        };
-        match redactions
-            .iter_mut()
-            .find(|redaction| redaction.value == value.as_bytes())
-        {
-            Some(existing) => existing.lenient |= rule.lenient,
-            None => redactions.push(Redaction {
-                value: value.as_bytes().to_vec(),
-                placeholder: rule.placeholder.as_bytes().to_vec(),
-                lenient: rule.lenient,
-            }),
+    let current = values
+        .iter()
+        .map(|(secret, value)| (secret.as_str(), value.as_str()));
+    let retired = retired
+        .iter()
+        .map(|(secret, value)| (secret.as_str(), value.as_str()));
+    for (secret, value) in current.chain(retired) {
+        for rule in rules.iter().filter(|rule| rule.secret == secret) {
+            match redactions
+                .iter_mut()
+                .find(|redaction| redaction.value == value.as_bytes())
+            {
+                Some(existing) => existing.lenient |= rule.lenient,
+                None => redactions.push(Redaction {
+                    value: value.as_bytes().to_vec(),
+                    placeholder: rule.placeholder.as_bytes().to_vec(),
+                    lenient: rule.lenient,
+                }),
+            }
         }
     }
     redactions.sort_by_key(|redaction| std::cmp::Reverse(redaction.value.len()));

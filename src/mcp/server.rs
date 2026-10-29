@@ -8,6 +8,7 @@ use rmcp::service::RequestContext;
 use rmcp::{ErrorData as McpError, RoleServer, ServerHandler};
 
 use crate::config::{McpConfig, McpTool, SecretConfig};
+use crate::proxy::ProxyHandle;
 use crate::secret_session::SecretSession;
 
 /// The fnox MCP server — acts as a session-scoped secret broker.
@@ -26,18 +27,39 @@ pub struct FnoxMcpServer {
     /// value is read back, so one can't drop a value the other just loaded.
     /// Taken after the session's store lock when both are held.
     pub(super) reload_lock: Arc<tokio::sync::Mutex<()>>,
+    /// Set when the server runs inside `fnox proxy run`: the tools then hand
+    /// out placeholders and the proxy injects real values
+    pub(super) proxy: Option<ProxyHandle>,
     pub(super) tool_router: ToolRouter<FnoxMcpServer>,
 }
 
 impl FnoxMcpServer {
-    pub fn new(session: SecretSession, mcp_config: McpConfig) -> Self {
+    pub fn new(session: Arc<SecretSession>, mcp_config: McpConfig) -> Self {
         Self {
-            session: Arc::new(session),
+            session,
             mcp_config: Arc::new(mcp_config),
             sent_to_terminal: Arc::new(std::sync::Mutex::new(HashSet::new())),
             reload_lock: Arc::new(tokio::sync::Mutex::new(())),
+            proxy: None,
             tool_router: Self::secret_tools() + Self::request_secret_tools(),
         }
+    }
+
+    /// Serve the tools from inside `fnox proxy run`. `get_secret` returns
+    /// placeholders, `exec` isn't offered (the proxy runs outside any
+    /// sandbox), and a value `request_secret` stores goes to the proxy.
+    pub fn under_proxy(mut self, proxy: ProxyHandle) -> Self {
+        self.proxy = Some(proxy);
+        self
+    }
+
+    /// The tools this server offers
+    pub(super) fn enabled_tools(&self) -> Vec<McpTool> {
+        let mut tools = self.mcp_config.tools();
+        if self.proxy.is_some() {
+            tools.retain(|tool| *tool != McpTool::Exec);
+        }
+        tools
     }
 
     /// The secrets this session can reach
@@ -61,7 +83,7 @@ impl FnoxMcpServer {
 
     pub(super) fn list_tools_result(&self) -> ListToolsResult {
         let all_tools = self.tool_router.list_all();
-        let tools = self.mcp_config.tools();
+        let tools = self.enabled_tools();
         let enabled: Vec<&str> = tools.iter().map(|t| t.tool_name()).collect();
         let filtered = all_tools
             .into_iter()
@@ -101,7 +123,7 @@ impl FnoxMcpServer {
 /// at call time).
 impl ServerHandler for FnoxMcpServer {
     fn get_info(&self) -> ServerConfig {
-        let tools = self.mcp_config.tools();
+        let tools = self.enabled_tools();
         let has_get_secret = tools.contains(&McpTool::GetSecret);
         let has_exec = tools.contains(&McpTool::Exec);
         let has_request_secret = tools.contains(&McpTool::RequestSecret);
@@ -121,6 +143,16 @@ impl ServerHandler for FnoxMcpServer {
             "fnox MCP server — no tools are currently enabled."
         }
         .to_string();
+        if self.proxy.is_some() {
+            instructions = "fnox MCP server inside fnox proxy run. Real secret values never reach you: \
+                 send a secret's placeholder, from its environment variable, where the secret goes, \
+                 and the proxy swaps in the real value for the API it belongs to."
+                .to_string();
+            if has_get_secret {
+                instructions
+                    .push_str(" get_secret tells you a secret's placeholder and where it works.");
+            }
+        }
         if has_request_secret {
             instructions.push_str(
                 " When a task needs a secret that isn't set, call request_secret: \
@@ -144,7 +176,7 @@ impl ServerHandler for FnoxMcpServer {
     }
 
     fn get_tool(&self, name: &str) -> Option<Tool> {
-        let tools = self.mcp_config.tools();
+        let tools = self.enabled_tools();
         let enabled: Vec<&str> = tools.iter().map(|t| t.tool_name()).collect();
         if !enabled.contains(&name) {
             return None;
@@ -157,7 +189,7 @@ impl ServerHandler for FnoxMcpServer {
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
-        let tools = self.mcp_config.tools();
+        let tools = self.enabled_tools();
         let enabled: Vec<&str> = tools.iter().map(|t| t.tool_name()).collect();
         if !enabled.contains(&request.name.as_ref()) {
             return Err(McpError::invalid_request(
@@ -193,7 +225,7 @@ pub(super) fn test_server(profile: Vec<String>, write_profile: Option<String>) -
         IndexMap::new(),
     )
     .with_write_target("fnox.toml".into(), write_profile);
-    FnoxMcpServer::new(session, McpConfig::default())
+    FnoxMcpServer::new(Arc::new(session), McpConfig::default())
 }
 
 #[cfg(test)]

@@ -71,11 +71,14 @@ impl FnoxMcpServer {
         &self,
         Parameters(params): Parameters<GetSecretParams>,
     ) -> Result<CallToolResult, McpError> {
-        if !self.mcp_config.tools().contains(&McpTool::GetSecret) {
+        if !self.enabled_tools().contains(&McpTool::GetSecret) {
             return Err(McpError::invalid_request(
                 "Tool 'get_secret' is not enabled in this configuration",
                 None,
             ));
+        }
+        if let Some(proxy) = &self.proxy {
+            return self.placeholder_result(proxy, &params.name);
         }
 
         self.reject_as_file(&params.name)?;
@@ -150,7 +153,7 @@ impl FnoxMcpServer {
         &self,
         Parameters(params): Parameters<ExecParams>,
     ) -> Result<CallToolResult, McpError> {
-        if !self.mcp_config.tools().contains(&McpTool::Exec) {
+        if !self.enabled_tools().contains(&McpTool::Exec) {
             return Err(McpError::invalid_request(
                 "Tool 'exec' is not enabled in this configuration",
                 None,

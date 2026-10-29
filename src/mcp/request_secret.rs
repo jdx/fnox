@@ -45,7 +45,7 @@ impl FnoxMcpServer {
         Parameters(params): Parameters<RequestSecretParams>,
         peer: Peer<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
-        if !self.mcp_config.tools().contains(&McpTool::RequestSecret) {
+        if !self.enabled_tools().contains(&McpTool::RequestSecret) {
             return Err(McpError::invalid_request(
                 "Tool 'request_secret' is not enabled in this configuration",
                 None,
@@ -68,8 +68,14 @@ impl FnoxMcpServer {
             .load_config()
             .map_err(|e| McpError::internal_error(format!("Failed to load config: {e}"), None))?;
         if !params.replace && self.has_value(&config, &name).await? {
+            let usage = match &self.proxy {
+                // The value may have just been loaded, such as after the
+                // terminal fallback, so the proxy may not have it yet
+                Some(proxy) => self.hand_to_proxy(proxy, &name).await,
+                None => "Use exec to run commands with it.".to_string(),
+            };
             return Ok(CallToolResult::success(vec![ContentBlock::text(format!(
-                "Secret '{name}' already has a value. Use exec to run commands with it, or call request_secret with replace=true to ask the user for a new value."
+                "Secret '{name}' already has a value. {usage} Call request_secret with replace=true to ask the user for a new value."
             ))]));
         }
 
@@ -204,7 +210,9 @@ impl FnoxMcpServer {
                 let _ = reply.send(Ok(format!(
                     "fnox stored {name}. You can close this tab and go back to the agent."
                 )));
-                let usage = if self
+                let usage = if let Some(proxy) = &self.proxy {
+                    self.hand_to_proxy(proxy, &name).await
+                } else if self
                     .secrets()
                     .get(&name)
                     .is_some_and(|secret| secret.env_mode().in_exec())

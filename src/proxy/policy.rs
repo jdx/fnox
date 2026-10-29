@@ -79,6 +79,8 @@ pub(super) struct ProxyPolicy {
     /// can read it from the child's environment.
     pub(super) token: String,
     pub(super) values: Arc<SecretValues>,
+    /// Serves MCP to `fnox mcp` relays that CONNECT to [`MCP_HOST`]
+    pub(super) mcp: std::sync::OnceLock<McpSlot>,
     pub(super) client: reqwest::Client,
 }
 

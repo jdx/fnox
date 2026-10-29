@@ -83,6 +83,8 @@ domain = "api.stripe.com"
 
 `fnox proxy run` starts anyway and warns that `STRIPE_KEY` isn't set. The command still gets its placeholder. A request that needs the secret is refused with `secret 'STRIPE_KEY' is not set yet`. Before refusing, fnox reads the config again and resolves the secret, at most once every few seconds. Once you set it, for example with `fnox set STRIPE_KEY` in another terminal, a matching request gets the real value without a restart. A request within 3 seconds of the last attempt is still refused, so retry after a moment. A lookup that takes longer than 15 seconds is abandoned and the request is refused; the next one tries again. A rule for a secret that isn't declared at all is still an error, so a typo in a rule doesn't go unnoticed.
 
+An agent can also ask you for a pending secret itself: with `request_secret` enabled, the agent's `fnox mcp` relays to the proxy, which shows you a page to enter the value (see [MCP inside `fnox proxy run`](/guide/mcp#inside-fnox-proxy-run)).
+
 Check the effective rules without resolving any secrets:
 
 ```sh

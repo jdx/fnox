@@ -233,7 +233,7 @@ pub(super) async fn handle_connection<S>(
     authority: Arc<CertificateAuthority>,
 ) -> Result<()>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let mut reader = BufReader::new(stream);
     let mut challenged: Option<ProxyRequestHead> = None;
@@ -284,6 +284,18 @@ where
         return Ok(());
     }
     let (domain, port) = parse_connect_target(&head.target)?;
+    if domain == MCP_HOST {
+        let Some(service) = policy.mcp.get() else {
+            policy.audit_refused("CONNECT", &head.target, None, "MCP is not served here");
+            return write_error(&mut stream, 404, "MCP is not served here").await;
+        };
+        stream
+            .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+            .await
+            .map_err(|error| proxy_error(format!("failed to open MCP connection: {error}")))?;
+        (service.0)(Box::new(stream)).await;
+        return Ok(());
+    }
     let refuse = async |stream: &mut S, status: u16, reason: &str| {
         policy.audit_refused("CONNECT", &head.target, None, reason);
         write_error(stream, status, reason).await

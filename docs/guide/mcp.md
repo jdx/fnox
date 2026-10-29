@@ -67,6 +67,22 @@ fnox refuses to store the value in plain text. The secret's provider, or `defaul
 
 The link uses MCP's URL-mode elicitation, from protocol version 2025-11-25. If the agent's client doesn't support it, `request_secret` doesn't open a page. It tells the agent to ask you to run `fnox set NAME` in your own terminal, which prompts with hidden input. When the agent calls `request_secret` again, fnox loads the stored value.
 
+## Inside `fnox proxy run`
+
+When the agent runs under the [credential proxy](/guide/proxy), for example with `fnox proxy run --sandbox -- claude`, the agent's `fnox mcp` doesn't serve the tools itself. It relays MCP to the `fnox proxy run` process, which runs outside the sandbox and holds the real values. Your `.mcp.json` doesn't change, and the relay needs no config, so it works where the sandbox hides `fnox.toml`.
+
+The tools then work with the proxy's placeholders:
+
+| Tool             | Inside `fnox proxy run`                                                                                                                                                    |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `get_secret`     | Returns the secret's placeholder, the environment variable that holds it, and the domains the proxy injects it into. Never the real value. Only secrets with a proxy rule. |
+| `exec`           | Not offered. It would run commands outside the sandbox; the agent runs commands inside it instead.                                                                         |
+| `request_secret` | Stores the value as above, then hands it to the proxy, so requests that carry the placeholder get the real value. The agent gets the placeholder.                          |
+
+`request_secret` pairs with [pending rules](/guide/proxy#secrets-that-aren-t-set-yet): declare the secret and write its rule, and the agent can ask you for the value when it first needs it. The page is served by the proxy process on `127.0.0.1`, where your browser can reach it and the sandboxed agent can't, so the agent can't fill in the form itself.
+
+`[mcp]` settings apply as usual: `tools` chooses the tools (minus `exec`) and `secrets` limits the names.
+
 ## How it behaves
 
 - On the first tool call, fnox resolves the allowed secrets in one batch, so you approve one YubiKey touch or SSO prompt per session rather than one per call. `env = false` secrets are resolved only when `get_secret` asks for them.
@@ -81,7 +97,7 @@ The `request_secret` page doesn't prove that you are the one filling it in. The 
 
 Shell integration is a separate channel. If your interactive shell already has secrets loaded, an agent started from it can read them regardless of `[mcp]`. Set `env = "exec"` to keep secrets out of the shell (see [running commands](/guide/running-commands#choose-which-secrets-reach-a-command)).
 
-For stronger isolation, give the agent API access through the [credential proxy](/guide/proxy) instead, and run it with [`fnox proxy run --sandbox`](/guide/proxy#sandbox).
+For stronger isolation, give the agent API access through the [credential proxy](/guide/proxy) instead, and run it with [`fnox proxy run --sandbox`](/guide/proxy#sandbox). The MCP tools then hand out placeholders; see [inside `fnox proxy run`](#inside-fnox-proxy-run).
 
 ## See also
 
