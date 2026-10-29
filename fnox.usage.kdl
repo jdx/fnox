@@ -11,7 +11,7 @@ fnox reads `fnox.toml` from the current directory and its parents, resolves each
 Commands by task:
 
  - Read and run: get, list, exec, env, export, check
- - Store and migrate: set, remove, import, sync, reencrypt, edit, files
+ - Store and migrate: set, remove, import, sync, push, reencrypt, edit, files
  - Configure: init, provider, plugin, profiles, config-files
  - Shell and tools: activate, deactivate, completion, tui, mcp
  - Diagnose: doctor, scan
@@ -1032,6 +1032,30 @@ Also enabled by `sandbox = true` in `[proxy]`. Needs `bwrap` on Linux or `sandbo
     }
     example "fnox proxy rules" header="Check the rules"
     example "fnox proxy run -- node agent.js" header="Run a command behind the proxy"
+}
+cmd push help="Copy secrets into write-only stores such as GitHub Actions or Vercel" {
+    long_help #"""
+Copy secrets into write-only stores such as GitHub Actions or Vercel
+
+Each secret's `push` field names targets from `[targets]`. fnox resolves the value through the secret's provider, as `fnox get` would, and writes it to every listed target. Targets that use a CLI receive the value on stdin.
+
+Targets cannot be read back, so fnox stays the source of truth: run push again after changing a value.
+"""#
+    after_long_help #"""
+See also:
+- Push targets: https://fnox.jdx.dev/guide/push
+- Target catalog: https://fnox.jdx.dev/targets/
+"""#
+    flag "-f --force" help="Push without asking for confirmation"
+    flag "-n --dry-run" help="List what would be pushed without pushing anything"
+    flag "-t --target" help="Push only to this target; repeat for several" var=#true {
+        arg <TARGET>
+    }
+    flag "-h --help" help="Print help" action=help builtin=#true
+    arg "[KEYS]..." help="Push only these keys"
+    example "fnox push --dry-run" header="Preview which secrets go where"
+    example "fnox push" header="Push every secret that lists targets"
+    example "fnox push STRIPE_KEY --target gh" header="Push one secret to one target"
 }
 cmd reencrypt help="Re-encrypt stored secrets with the current provider settings" {
     long_help #"""

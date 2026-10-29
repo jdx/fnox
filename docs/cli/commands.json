@@ -3496,6 +3496,106 @@
         ],
         "headings": []
       },
+      "push": {
+        "full_cmd": ["push"],
+        "usage": "push [FLAGS] [KEYS]…",
+        "subcommands": {},
+        "args": [
+          {
+            "name": "KEYS",
+            "usage": "[KEYS]…",
+            "help": "Push only these keys",
+            "help_first_line": "Push only these keys",
+            "required": false,
+            "double_dash": "Optional",
+            "var": true,
+            "hide": false
+          }
+        ],
+        "flags": [
+          {
+            "name": "force",
+            "usage": "-f --force",
+            "help": "Push without asking for confirmation",
+            "help_first_line": "Push without asking for confirmation",
+            "short": ["f"],
+            "long": ["force"],
+            "hide": false,
+            "global": false
+          },
+          {
+            "name": "dry-run",
+            "usage": "-n --dry-run",
+            "help": "List what would be pushed without pushing anything",
+            "help_first_line": "List what would be pushed without pushing anything",
+            "short": ["n"],
+            "long": ["dry-run"],
+            "hide": false,
+            "global": false
+          },
+          {
+            "name": "target",
+            "usage": "-t --target <TARGET>",
+            "help": "Push only to this target; repeat for several",
+            "help_first_line": "Push only to this target; repeat for several",
+            "short": ["t"],
+            "long": ["target"],
+            "var": true,
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "TARGET",
+              "usage": "<TARGET>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            }
+          },
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
+        "mounts": [],
+        "unknown_flags": null,
+        "hide": false,
+        "args_override_self": true,
+        "help": "Copy secrets into write-only stores such as GitHub Actions or Vercel",
+        "help_long": "Copy secrets into write-only stores such as GitHub Actions or Vercel\n\nEach secret's `push` field names targets from `[targets]`. fnox resolves the value through the secret's provider, as `fnox get` would, and writes it to every listed target. Targets that use a CLI receive the value on stdin.\n\nTargets cannot be read back, so fnox stays the source of truth: run push again after changing a value.",
+        "name": "push",
+        "aliases": [],
+        "hidden_aliases": [],
+        "after_help_long": "See also:\n- Push targets: https://fnox.jdx.dev/guide/push\n- Target catalog: https://fnox.jdx.dev/targets/",
+        "examples": [
+          {
+            "code": "fnox push --dry-run",
+            "header": "Preview which secrets go where",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox push",
+            "header": "Push every secret that lists targets",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox push STRIPE_KEY --target gh",
+            "header": "Push one secret to one target",
+            "help": null,
+            "lang": ""
+          }
+        ],
+        "headings": []
+      },
       "reencrypt": {
         "full_cmd": ["reencrypt"],
         "usage": "reencrypt [FLAGS] [KEYS]…",
@@ -5156,7 +5256,7 @@
     }
   },
   "about": "Load secrets from encrypted files, password managers, and cloud secret stores",
-  "about_long": "Load secrets from encrypted files, password managers, and cloud secret stores\n\nfnox reads `fnox.toml` from the current directory and its parents, resolves each secret through the provider it names, and hands the values to your shell or to the command you run.\n\nCommands by task:\n\n - Read and run: get, list, exec, env, export, check\n - Store and migrate: set, remove, import, sync, reencrypt, edit, files\n - Configure: init, provider, plugin, profiles, config-files\n - Shell and tools: activate, deactivate, completion, tui, mcp\n - Diagnose: doctor, scan\n - Cache and broker: daemon, lease, proxy\n\nPut fnox options before the `--` that starts a child command, as in `fnox -P prod exec -- npm start`. Everything after `--` belongs to the child command.",
+  "about_long": "Load secrets from encrypted files, password managers, and cloud secret stores\n\nfnox reads `fnox.toml` from the current directory and its parents, resolves each secret through the provider it names, and hands the values to your shell or to the command you run.\n\nCommands by task:\n\n - Read and run: get, list, exec, env, export, check\n - Store and migrate: set, remove, import, sync, push, reencrypt, edit, files\n - Configure: init, provider, plugin, profiles, config-files\n - Shell and tools: activate, deactivate, completion, tui, mcp\n - Diagnose: doctor, scan\n - Cache and broker: daemon, lease, proxy\n\nPut fnox options before the `--` that starts a child command, as in `fnox -P prod exec -- npm start`. Everything after `--` belongs to the child command.",
   "after_help_long": "See also:\n- Quick start: https://fnox.jdx.dev/guide/quick-start\n- Configuration reference: https://fnox.jdx.dev/reference/configuration",
   "min_usage_version": "1.3",
   "examples": [

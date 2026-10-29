@@ -28,6 +28,13 @@
         "$ref": "#/$defs/ProviderConfig"
       }
     },
+    "targets": {
+      "description": "Push targets (for default profile): write-only stores that\n`fnox push` copies secret values into",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/PushTargetConfig"
+      }
+    },
     "plugins": {
       "description": "Lua provider plugins to install, as `name = \"<git url>[#ref]\"`.\n`owner/repo` is shorthand for a GitHub repository.",
       "type": "object",
@@ -1529,6 +1536,280 @@
       "type": "string",
       "enum": ["bw", "rbw"]
     },
+    "PushTargetConfig": {
+      "description": "Configuration for a push target",
+      "oneOf": [
+        {
+          "description": "Cloudflare Workers secrets, set with `wrangler secret put`",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "cloudflare-workers"
+            },
+            "worker": {
+              "description": "Worker name (default: the name in the Wrangler config of the current\ndirectory)",
+              "type": ["string", "null"]
+            },
+            "environment": {
+              "description": "Wrangler environment to set the secret in",
+              "type": ["string", "null"]
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "description": "Fly.io app secrets, set with `fly secrets import`",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "fly"
+            },
+            "app": {
+              "description": "App name (default: the app in `fly.toml` in the current directory)",
+              "type": ["string", "null"]
+            },
+            "stage": {
+              "description": "Set the secret without redeploying the app's Machines",
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "description": "Forgejo or Gitea Actions secrets, set through the REST API",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "forgejo-actions"
+            },
+            "url": {
+              "description": "Base URL of the instance, such as `https://codeberg.org`",
+              "type": "string"
+            },
+            "repo": {
+              "description": "Repository as `owner/name`",
+              "type": ["string", "null"]
+            },
+            "org": {
+              "description": "Organization to set the secret in, instead of a repository",
+              "type": ["string", "null"]
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "url"]
+        },
+        {
+          "description": "GitHub Actions, Dependabot or Codespaces secrets, set with `gh secret set`",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "github-actions"
+            },
+            "repo": {
+              "description": "Repository as `owner/name` (default: the repository `gh` detects from\nthe current directory)",
+              "type": ["string", "null"]
+            },
+            "environment": {
+              "description": "Deployment environment to set the secret in, instead of the repository",
+              "type": ["string", "null"]
+            },
+            "org": {
+              "description": "Organization to set the secret in, instead of a repository",
+              "type": ["string", "null"]
+            },
+            "visibility": {
+              "description": "Which repositories can use an organization secret",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Visibility"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "repos": {
+              "description": "Repositories that can use an organization secret with\n`visibility = \"selected\"`",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "app": {
+              "description": "Which GitHub feature the secret is for (default: actions)",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/App"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "description": "GitLab CI/CD variables, set with `glab variable set`",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "gitlab-ci"
+            },
+            "repo": {
+              "description": "Project as `group/name` (default: the project `glab` detects from the\ncurrent directory)",
+              "type": ["string", "null"]
+            },
+            "group": {
+              "description": "Group to set the variable in, instead of a project",
+              "type": ["string", "null"]
+            },
+            "environment": {
+              "description": "Environment scope of the variable (default: all environments)",
+              "type": ["string", "null"]
+            },
+            "masked": {
+              "description": "Hide the value in job logs",
+              "type": ["boolean", "null"]
+            },
+            "protected": {
+              "description": "Expose the variable only to protected branches and tags",
+              "type": ["boolean", "null"]
+            },
+            "raw": {
+              "description": "Do not expand `$` references in the value",
+              "type": ["boolean", "null"]
+            },
+            "variable_type": {
+              "description": "Whether jobs get the value itself or a file path (default: env_var)",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VariableType"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "description": {
+              "description": "Description shown in GitLab",
+              "type": ["string", "null"]
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "description": "HCP Terraform or Terraform Enterprise workspace variables, set through\nthe REST API",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "hcp-terraform"
+            },
+            "url": {
+              "description": "Base URL of HCP Terraform or your Terraform Enterprise instance",
+              "type": "string"
+            },
+            "organization": {
+              "description": "Organization that owns the workspace",
+              "type": "string"
+            },
+            "workspace": {
+              "description": "Workspace name",
+              "type": "string"
+            },
+            "category": {
+              "description": "`\"terraform\"` for an input variable, `\"env\"` for an environment variable",
+              "$ref": "#/$defs/Category"
+            },
+            "sensitive": {
+              "description": "Write the value once and never show it again (default: true)",
+              "type": "boolean"
+            },
+            "hcl": {
+              "description": "Parse the value as HCL instead of a string",
+              "type": "boolean"
+            },
+            "description": {
+              "description": "Description shown in HCP Terraform",
+              "type": ["string", "null"]
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "organization", "workspace", "category"]
+        },
+        {
+          "description": "Vercel environment variables, set with `vercel env add`",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "vercel"
+            },
+            "environments": {
+              "description": "Environments to set the variable in: `production`, `preview`,\n`development`, or a custom environment",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "git_branch": {
+              "description": "Git branch for a `preview` variable (default: all preview branches)",
+              "type": ["string", "null"]
+            },
+            "sensitive": {
+              "description": "Store the value as sensitive, so it cannot be read back",
+              "type": ["boolean", "null"]
+            },
+            "scope": {
+              "description": "Team that owns the project (default: the team of the linked project)",
+              "type": ["string", "null"]
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "environments"]
+        }
+      ]
+    },
+    "Visibility": {
+      "description": "Which repositories can use an organization secret",
+      "type": "string",
+      "enum": ["all", "private", "selected"]
+    },
+    "App": {
+      "description": "Which GitHub feature a secret is for",
+      "type": "string",
+      "enum": ["actions", "dependabot", "codespaces"]
+    },
+    "VariableType": {
+      "description": "How GitLab exposes a variable to jobs",
+      "oneOf": [
+        {
+          "description": "An environment variable holding the value",
+          "type": "string",
+          "const": "env_var"
+        },
+        {
+          "description": "An environment variable holding the path of a file with the value",
+          "type": "string",
+          "const": "file"
+        }
+      ]
+    },
+    "Category": {
+      "description": "Whether a variable is a Terraform input variable or an environment variable",
+      "type": "string",
+      "enum": ["terraform", "env"]
+    },
     "string": {
       "type": "string"
     },
@@ -1612,6 +1893,13 @@
               "type": "null"
             }
           ]
+        },
+        "push": {
+          "description": "Push targets that `fnox push` copies this secret's value into",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "daemon_cache": {
           "description": "Whether this secret may be cached by the per-user daemon.\nDefaults to true; set false for secrets that should always resolve directly.",
@@ -1699,6 +1987,13 @@
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/ProviderConfig"
+          }
+        },
+        "targets": {
+          "description": "Push targets for this profile",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/PushTargetConfig"
           }
         },
         "default_provider": {

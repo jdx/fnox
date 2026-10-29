@@ -217,6 +217,7 @@ Secret names are environment variable names: they must match `^[A-Za-z_][A-Za-z0
 | `description`  | string                          | none               | Shown by `fnox list`.                                                            |
 | `daemon_cache` | boolean                         | `true`             | Set `false` to resolve this secret directly instead of from the daemon cache.    |
 | `sync`         | table                           | none               | Encrypted cache written by `fnox sync`.                                          |
+| `push`         | array of strings                | none               | [Push targets](#push-targets) that `fnox push` copies the value into.            |
 
 ### Resolution order
 
@@ -358,6 +359,7 @@ DATABASE_URL = { provider = "aws", value = "database-url" }
 | `providers`        | table            | Providers added to the top-level providers for this profile. |
 | `secrets`          | table            | Secrets that override top-level secrets of the same name.    |
 | `leases`           | table            | Lease backends for this profile.                             |
+| `targets`          | table            | Push targets for this profile.                               |
 | `default_provider` | string           | Overrides the top-level `default_provider`.                  |
 
 Other fields are rejected. Settings such as `if_missing`, `env`, `daemon`, `mcp`, and `proxy` are top-level only.
@@ -375,6 +377,20 @@ duration = "1h"
 ```
 
 Define lease backends under `[leases.<name>]` or `[profiles.<profile>.leases.<name>]`. Every backend has a `type` and an optional `duration` (default: `15m`); the service may cap the actual lifetime. Types: [`aws-sts`](/leases/aws-sts), [`azure-token`](/leases/azure-token), [`cloudflare`](/leases/cloudflare), [`command`](/leases/command), [`gcp-iam`](/leases/gcp-iam), [`github-app`](/leases/github-app), [`github-oauth`](/leases/github-oauth), [`gitlab`](/leases/gitlab), [`kubernetes`](/leases/kubernetes), [`oauth2-client-credentials`](/leases/oauth2-client-credentials), [`tailscale`](/leases/tailscale), and [`vault`](/leases/vault). See [credential leases](/guide/leases).
+
+## Push targets
+
+```toml
+[targets.gh]
+type = "github-actions"
+repo = "acme/api"
+environment = "production"
+
+[secrets]
+STRIPE_KEY = { provider = "op", value = "Stripe/secret key", push = ["gh"] }
+```
+
+Define push targets under `[targets.<name>]` or `[profiles.<profile>.targets.<name>]`, and list them in a secret's `push` field. `fnox push` resolves each such secret and writes it to its targets. Types: [`cloudflare-workers`](/targets/cloudflare-workers), [`fly`](/targets/fly), [`forgejo-actions`](/targets/forgejo-actions), [`github-actions`](/targets/github-actions), [`gitlab-ci`](/targets/gitlab-ci), [`hcp-terraform`](/targets/hcp-terraform), and [`vercel`](/targets/vercel). See [push targets](/guide/push).
 
 ## `plugins`
 
