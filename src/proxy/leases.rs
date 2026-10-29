@@ -138,6 +138,8 @@ struct Minted {
     /// Its ledger record's `created_at`, which tells it apart from another
     /// record with the same lease ID
     recorded_at: DateTime<Utc>,
+    /// Whether its record is in the ledger, or needn't be
+    recorded: Arc<AtomicBool>,
 }
 
 #[derive(Clone, Copy)]
@@ -252,16 +254,38 @@ impl ProxyLeases {
         // All at once, so shutdown waits for the slowest backend rather than
         // for every lease in turn
         let attempts = slots.iter().flat_map(|(name, slot, state)| {
-            state
-                .minted
-                .iter()
-                .map(move |minted| slot.revoke(name, minted, &self.setup))
+            state.minted.iter().map(move |minted| async move {
+                let outcome = slot.revoke(name, minted, &self.setup).await;
+                (*name, minted, outcome)
+            })
         });
-        let revoked: Vec<(String, String, DateTime<Utc>)> = futures::future::join_all(attempts)
-            .await
-            .into_iter()
-            .flatten()
-            .collect();
+        let mut revoked: Vec<(String, String, DateTime<Utc>)> = Vec::new();
+        let mut unrevoked = Vec::new();
+        for (name, minted, outcome) in futures::future::join_all(attempts).await {
+            match outcome {
+                Some(record) => revoked.push(record),
+                None => unrevoked.push((name, minted)),
+            }
+        }
+        // A lease that is still valid must be in the ledger, for `fnox lease
+        // revoke`. Its write may still be waiting for the ledger's lock, and
+        // fnox's exit would end it, so give it a bounded while.
+        let deadline = Instant::now() + LEDGER_TIMEOUT;
+        while unrevoked
+            .iter()
+            .any(|(_, minted)| !minted.recorded.load(Ordering::SeqCst))
+            && Instant::now() < deadline
+        {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        for (name, minted) in &unrevoked {
+            if !minted.recorded.load(Ordering::SeqCst) {
+                tracing::warn!(
+                    "fnox proxy: lease '{}' of '{name}' is still valid and not in the lease ledger, which stayed locked; revoke it in the service",
+                    minted.lease.lease_id
+                );
+            }
+        }
         if revoked.is_empty() {
             return;
         }
@@ -475,10 +499,11 @@ impl LeaseSlot {
         })?
         .map_err(MintError::Backend)?;
         let recorded_at = Utc::now();
-        self.record(name, &label, &lease, recorded_at, setup).await;
+        let recorded = self.record(name, &label, &lease, recorded_at, setup).await;
         state.minted.push(Minted {
             lease: lease.clone(),
             recorded_at,
+            recorded,
         });
 
         if lease.expires_at.is_some_and(|at| at <= Utc::now()) {
@@ -534,9 +559,9 @@ impl LeaseSlot {
         lease: &Lease,
         recorded_at: DateTime<Utc>,
         setup: &LeaseSetup,
-    ) {
+    ) -> Arc<AtomicBool> {
         let Some(project_dir) = setup.ledger.clone() else {
-            return;
+            return Arc::new(AtomicBool::new(true));
         };
         // Optional, so bounded: a provider that waits for a PIN or a key
         // touch must not hold up requests, or revocation at shutdown, which
@@ -583,6 +608,8 @@ impl LeaseSlot {
         let lease_id = lease.lease_id.clone();
         let backend = name.to_string();
         let revoked = self.revoked.clone();
+        let recorded = Arc::new(AtomicBool::new(false));
+        let done = recorded.clone();
         let write = on_ledger_thread(move || {
             let recorded = LeaseLedger::lock(&project_dir).and_then(|_lock| {
                 let mut ledger = LeaseLedger::load(&project_dir)?;
@@ -599,21 +626,23 @@ impl LeaseSlot {
                 }
                 ledger.save(&project_dir)
             });
-            if let Err(error) = recorded {
-                tracing::warn!(
+            match recorded {
+                Ok(()) => done.store(true, Ordering::SeqCst),
+                Err(error) => tracing::warn!(
                     "fnox proxy: lease '{lease_id}' of '{backend}' is not in the ledger: {error}"
-                );
+                ),
             }
         });
         // The lease is used meanwhile: holding requests on another process's
-        // lock is worse. fnox still revokes it when the session ends; only if
-        // fnox is killed first does it go unrecorded, so say which it is.
+        // lock is worse. Shutdown revokes it, or waits a while for the record
+        // and names the lease if it can do neither.
         if write.await.is_none() {
             tracing::warn!(
-                "fnox proxy: the lease ledger is locked, so lease '{}' of '{name}' is recorded once it isn't; if fnox is killed before then, revoke it in the service",
+                "fnox proxy: the lease ledger is locked, so lease '{}' of '{name}' is recorded once it isn't; if fnox ends before then without revoking it, revoke it in the service",
                 lease.lease_id
             );
         }
+        recorded
     }
 }
 

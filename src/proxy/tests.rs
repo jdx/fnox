@@ -1222,7 +1222,10 @@ async fn ending_the_session_revokes_every_minted_lease_and_stops_minting() {
 
     plan.policy.leases.revoke_all(&plan.policy.values).await;
     let revoked = std::fs::read_to_string(dir.path().join("revoked")).unwrap();
-    assert_eq!(revoked.lines().collect::<Vec<_>>(), ["lease-1", "lease-2"]);
+    // Revoked at once, so in either order
+    let mut revoked: Vec<_> = revoked.lines().collect();
+    revoked.sort_unstable();
+    assert_eq!(revoked, ["lease-1", "lease-2"]);
 
     let error = send_note(&plan).await.unwrap_err().to_string();
     assert!(error.contains("session is ending"), "{error}");
