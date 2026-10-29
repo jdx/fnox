@@ -644,6 +644,10 @@ impl FnoxMcpServer {
             ))]));
         }
 
+        // Refuse a provider that would leave the value in plain text before
+        // the user types anything, on the page or in the terminal
+        let provider = self.secure_provider(&config, &name).await?;
+
         if !peer
             .supported_elicitation_modes()
             .contains(&ElicitationMode::Url)
@@ -663,47 +667,6 @@ impl FnoxMcpServer {
             self.write_profile.as_deref(),
         )
         .map_err(internal)?;
-        let effective = config
-            .get_secret(std::slice::from_ref(&write_profile), &name)
-            .map_err(internal)?
-            .cloned();
-        let Some(provider) = storage_provider(&config, &write_profile, None, effective.as_ref())
-            .map_err(internal)?
-        else {
-            return Err(McpError::invalid_request(
-                format!(
-                    "Secret '{name}' has no provider and the config sets no default_provider, so fnox would store it in plain text. Ask the user to set default_provider."
-                ),
-                None,
-            ));
-        };
-        // Check before the user types anything that the provider can take a
-        // new value without leaving it in plain text in the config
-        let write_stack = std::slice::from_ref(&write_profile);
-        let providers = config.get_providers(write_stack).map_err(internal)?;
-        let Some(provider_config) = providers.get(&provider) else {
-            return Err(McpError::invalid_request(
-                format!("Provider '{provider}' not found in configuration"),
-                None,
-            ));
-        };
-        let capabilities = crate::providers::get_provider_resolved(
-            &config,
-            write_stack,
-            &provider,
-            provider_config,
-        )
-        .await
-        .map_err(internal)?
-        .capabilities();
-        if !stores_securely(provider_config, &capabilities) {
-            return Err(McpError::invalid_request(
-                format!(
-                    "Provider '{provider}' would leave '{name}' in plain text in the config. Ask the user to set default_provider to a provider that encrypts values or stores them remotely."
-                ),
-                None,
-            ));
-        }
 
         let reason = params
             .reason
@@ -769,7 +732,12 @@ impl FnoxMcpServer {
                 ))]))
             }
             Some(Submission::Value { value, reply }) => {
-                match self.store(&name, value, config, &target).await {
+                // The config may have changed while the page was open
+                let result = match self.recheck(&name, params.replace, &provider).await {
+                    Ok(config) => self.store(&name, value, config, &target).await,
+                    Err(e) => Err(e),
+                };
+                match result {
                     Ok(()) => {
                         let _ = reply.send(Ok(format!(
                             "fnox stored {name}. You can close this tab and go back to the agent."
@@ -789,6 +757,88 @@ impl FnoxMcpServer {
                 }
             }
         }
+    }
+
+    /// The provider a new value for `name` would be stored with, refusing one
+    /// that would leave it in plain text in the config
+    async fn secure_provider(&self, config: &Config, name: &str) -> Result<String, McpError> {
+        let internal = |e: crate::error::FnoxError| McpError::internal_error(e.to_string(), None);
+        let write_profile =
+            Config::resolve_write_profile(&self.profile, self.write_profile.as_deref())
+                .map_err(internal)?;
+        let write_stack = std::slice::from_ref(&write_profile);
+        let effective = config
+            .get_secret(write_stack, name)
+            .map_err(internal)?
+            .cloned();
+        let Some(provider) =
+            storage_provider(config, &write_profile, None, effective.as_ref()).map_err(internal)?
+        else {
+            return Err(McpError::invalid_request(
+                format!(
+                    "Secret '{name}' has no provider and the config sets no default_provider, so fnox would store it in plain text. Ask the user to set default_provider."
+                ),
+                None,
+            ));
+        };
+        let providers = config.get_providers(write_stack).map_err(internal)?;
+        let Some(provider_config) = providers.get(&provider) else {
+            return Err(McpError::invalid_request(
+                format!("Provider '{provider}' not found in configuration"),
+                None,
+            ));
+        };
+        let capabilities = crate::providers::get_provider_resolved(
+            config,
+            write_stack,
+            &provider,
+            provider_config,
+        )
+        .await
+        .map_err(internal)?
+        .capabilities();
+        if !stores_securely(provider_config, &capabilities) {
+            return Err(McpError::invalid_request(
+                format!(
+                    "Provider '{provider}' would leave '{name}' in plain text in the config. Ask the user to set default_provider to a provider that encrypts values or stores them remotely."
+                ),
+                None,
+            ));
+        }
+        Ok(provider)
+    }
+
+    /// Reload the config after the user submits and check that storing still
+    /// matches what the page showed: no value set meanwhile (unless
+    /// replacing), and the same secure provider
+    async fn recheck(
+        &self,
+        name: &str,
+        replace: bool,
+        provider: &str,
+    ) -> crate::error::Result<Config> {
+        let config = Config::load_smart(self.config_path.as_path())?;
+        let changed = |message: String| crate::error::FnoxError::Config(message);
+        if !replace
+            && self
+                .has_value(&config, name)
+                .await
+                .map_err(|e| changed(e.message.to_string()))?
+        {
+            return Err(changed(format!(
+                "'{name}' was set while this page was open, so fnox stored nothing"
+            )));
+        }
+        let current = self
+            .secure_provider(&config, name)
+            .await
+            .map_err(|e| changed(e.message.to_string()))?;
+        if current != provider {
+            return Err(changed(format!(
+                "the provider for '{name}' changed from '{provider}' to '{current}' while this page was open, so fnox stored nothing"
+            )));
+        }
+        Ok(config)
     }
 
     /// Whether `name` resolves to a value, checking `config` (freshly loaded)

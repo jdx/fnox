@@ -1495,7 +1495,18 @@ fn has_ambiguous_path_encoding(target: &str) -> bool {
             .any(|segment| segment == "." || segment == "..")
 }
 
-pub(crate) async fn read_http_request<S>(stream: &mut S) -> Result<HttpRequest>
+async fn read_http_request<S>(stream: &mut S) -> Result<HttpRequest>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    read_http_request_limited(stream, MAX_BODY_BYTES).await
+}
+
+/// Read one HTTP/1.1 request whose body is at most `max_body` bytes
+pub(crate) async fn read_http_request_limited<S>(
+    stream: &mut S,
+    max_body: usize,
+) -> Result<HttpRequest>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -1543,7 +1554,7 @@ where
         )));
     }
     let content_length = content_length.unwrap_or(0);
-    if content_length > MAX_BODY_BYTES {
+    if content_length > max_body {
         return Err(proxy_error("request body exceeded proxy limit"));
     }
     let mut body = vec![0; content_length];

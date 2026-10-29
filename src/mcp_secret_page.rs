@@ -15,10 +15,16 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::error::{FnoxError, Result};
-use crate::proxy::{HttpRequest, constant_time_eq, read_http_request};
+use crate::proxy::{HttpRequest, constant_time_eq, read_http_request_limited};
 
 /// How long a connection may take to send its request
 const READ_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Largest request body the page reads; its form needs a few KiB at most
+const MAX_BODY_BYTES: usize = 64 * 1024;
+
+/// Connections handled at once. Further connections wait to be accepted.
+const MAX_CONNECTIONS: usize = 8;
 
 /// What the page tells the user about the secret it collects
 pub struct PageDetails {
@@ -108,7 +114,12 @@ impl SecretPage {
 }
 
 async fn serve(listener: TcpListener, state: Arc<PageState>) {
+    let slots = Arc::new(tokio::sync::Semaphore::new(MAX_CONNECTIONS));
     loop {
+        // Never closed, so acquiring only waits
+        let Ok(slot) = slots.clone().acquire_owned().await else {
+            return;
+        };
         let stream = match listener.accept().await {
             Ok((stream, _)) => stream,
             Err(e) => {
@@ -121,12 +132,18 @@ async fn serve(listener: TcpListener, state: Arc<PageState>) {
             if let Err(e) = handle(stream, &state).await {
                 tracing::debug!("secret page request failed: {e}");
             }
+            drop(slot);
         });
     }
 }
 
 async fn handle(mut stream: TcpStream, state: &PageState) -> Result<()> {
-    let request = match tokio::time::timeout(READ_TIMEOUT, read_http_request(&mut stream)).await {
+    let request = match tokio::time::timeout(
+        READ_TIMEOUT,
+        read_http_request_limited(&mut stream, MAX_BODY_BYTES),
+    )
+    .await
+    {
         Ok(Ok(request)) => request,
         Ok(Err(e)) => {
             respond(&mut stream, 400, &message_page("Bad request", "")).await?;
@@ -478,6 +495,19 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), 400);
         assert!(response.text().await.unwrap().contains("Enter a value."));
+    }
+
+    #[tokio::test]
+    async fn refuses_an_oversized_body() {
+        let page = SecretPage::start(details()).await.unwrap();
+        let value = "x".repeat(MAX_BODY_BYTES + 1);
+        let response = client()
+            .post(page.url().clone())
+            .form(&[("value", value.as_str()), ("action", "save")])
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 400);
     }
 
     #[tokio::test]

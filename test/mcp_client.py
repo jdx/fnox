@@ -10,9 +10,12 @@ string "list" to list tools. A call named "$" runs its arguments as a command
 between tool calls, in the same session, and prints {"ran": <exit code>}.
 
 Prints one JSON line per call result, then {"page": <status or null>}.
+If BEFORE_SUBMIT is set, it runs as a shell command just before the page is
+submitted.
 """
 
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -59,6 +62,8 @@ def fill_page(url):
         fields = {"action": "decline"}
     else:
         fields = {"value": page_action.split(":", 1)[1], "action": "save"}
+    if os.environ.get("BEFORE_SUBMIT"):
+        subprocess.run(["sh", "-c", os.environ["BEFORE_SUBMIT"]], stdout=subprocess.DEVNULL, check=True)
     origin = "{0.scheme}://{0.netloc}".format(urllib.parse.urlsplit(url))
     data = urllib.parse.urlencode(fields).encode()
     req = urllib.request.Request(url, data=data, headers={"Origin": origin})

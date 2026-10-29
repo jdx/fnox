@@ -132,6 +132,25 @@ mcp_client() {
 	assert_line --index 1 '{"page": null}'
 }
 
+@test "request_secret refuses plain text before suggesting fnox set" {
+	sed -i.bak 's/^default_provider = .*/default_provider = "plain"/' fnox.toml
+	printf '\n[providers.plain]\ntype = "plain"\n' >>fnox.toml
+	mcp_client none none '[["request_secret", {"name": "API_TOKEN"}]]'
+	assert_success
+	assert_line --index 0 --partial "plain text"
+	refute_output --partial "fnox set"
+}
+
+@test "request_secret stores nothing if the secret is set while the page is open" {
+	export BEFORE_SUBMIT="echo from-terminal | '$FNOX_BIN' set API_TOKEN"
+	mcp_client url save:from-page '[["request_secret", {"name": "API_TOKEN"}]]'
+	assert_success
+	assert_line --index 0 --partial "was set while this page was open"
+	assert_line --index 1 '{"page": 500}'
+	run "$FNOX_BIN" get API_TOKEN
+	assert_output "from-terminal"
+}
+
 @test "request_secret only asks for names in mcp.secrets" {
 	sed -i.bak 's/^tools = .*/&\nsecrets = ["OTHER"]/' fnox.toml
 	mcp_client url none '[["request_secret", {"name": "API_TOKEN"}]]'

@@ -61,7 +61,7 @@ tools = ["exec", "request_secret"]
 
 The value never passes through the agent's client or its model. The link works once and expires after 10 minutes.
 
-fnox refuses to store the value in plain text. The secret's provider, or `default_provider` for a new secret, must encrypt values (such as `age`) or store them remotely (such as `1password`); the `plain` provider is refused. If the secret already has a value, the agent is told so and nothing is asked; it can pass `replace: true` to ask you for a new one.
+fnox refuses to store the value in plain text. The secret's provider, or `default_provider` for a new secret, must encrypt values (such as `age`) or store them remotely (such as `1password`); the `plain` provider is refused. If the secret already has a value, the agent is told so and nothing is asked; it can pass `replace: true` to ask you for a new one. If the secret gets a value or a different provider while the page is open, fnox stores nothing and says so on the page.
 
 ### Client support
 
