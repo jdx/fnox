@@ -666,8 +666,20 @@ mod tests {
             panic!("expected submission")
         };
         reply.send(Err("provider unavailable".into())).unwrap();
-        drop(page);
         assert_eq!(submit.await.unwrap().status(), 303);
+        let replay = tokio::time::timeout(
+            Duration::from_secs(5),
+            client()
+                .post(url.clone())
+                .form(&[("action", "save"), ("value", "replacement")])
+                .send(),
+        )
+        .await
+        .expect("a replay must not wait for another provider reply")
+        .unwrap();
+        assert_eq!(replay.status(), 303);
+        assert!(page.submissions.try_recv().is_err());
+        drop(page);
         let response = client().get(url).send().await.unwrap();
         assert_eq!(response.status(), 500);
         let body = response.text().await.unwrap();
@@ -706,5 +718,61 @@ mod tests {
                 .unwrap()
                 .contains("This request has expired")
         );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn confirmation_listener_closes_at_the_retention_deadline() {
+        // Real loopback I/O must not make Tokio auto-advance the paused clock.
+        // This runnable task keeps advancement under the test's control.
+        let clock_guard = tokio::spawn(async {
+            loop {
+                tokio::task::yield_now().await;
+            }
+        });
+        let page = SecretPage::start(details()).await.unwrap();
+        let url = page.url().clone();
+        let address = page.state.host.clone();
+        page.state.complete((200, message_page("Saved", "Stored.")));
+        let listener = page.server.abort_handle();
+        drop(page);
+        // Register the delayed shutdown before advancing time.
+        tokio::task::yield_now().await;
+
+        tokio::time::advance(CONFIRMATION_LIFETIME - Duration::from_millis(1)).await;
+        let response = client().get(url).send().await.unwrap();
+        assert_eq!(response.status(), 200);
+        assert!(response.text().await.unwrap().contains("<h1>Saved</h1>"));
+
+        tokio::time::advance(Duration::from_millis(1)).await;
+        for _ in 0..20 {
+            if listener.is_finished() {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert!(
+            listener.is_finished(),
+            "the confirmation listener must stop"
+        );
+        assert!(TcpStream::connect(address).await.is_err());
+        clock_guard.abort();
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn dropping_a_pending_page_closes_the_listener_without_a_grace_period() {
+        let page = SecretPage::start(details()).await.unwrap();
+        let address = page.state.host.clone();
+        let listener = page.server.abort_handle();
+        let before = tokio::time::Instant::now();
+        drop(page);
+        for _ in 0..20 {
+            if listener.is_finished() {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert!(listener.is_finished(), "a pending listener must stop");
+        assert!(TcpStream::connect(address).await.is_err());
+        assert_eq!(tokio::time::Instant::now(), before);
     }
 }

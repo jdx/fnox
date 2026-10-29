@@ -39,6 +39,7 @@ next_id = 0
 page_status = []
 page_threads = []
 page_reloads = []
+tool_returned = threading.Event()
 
 
 def send(message):
@@ -73,6 +74,7 @@ def fill_page(url):
             page_status.append(response.status)
             if os.environ.get("MCP_CLIENT_PAGE_RELOADS"):
                 assert "<h1>Saved</h1>" in response.read().decode()
+                assert tool_returned.wait(timeout=60), "tools/call did not return"
                 for _ in range(int(os.environ["MCP_CLIENT_PAGE_RELOADS"])):
                     with opener.open(url, timeout=30) as reloaded:
                         assert "<h1>Saved</h1>" in reloaded.read().decode()
@@ -119,6 +121,7 @@ else:
             print(json.dumps({"ran": ran.returncode}))
             continue
         response = wait_for(request("tools/call", {"name": name, "arguments": arguments}))
+        tool_returned.set()
         print(json.dumps(response.get("result") or response.get("error")))
 
 for thread in page_threads:
