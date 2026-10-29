@@ -54,7 +54,6 @@ pub(super) struct PreparedRule {
     pub(super) methods: HashSet<String>,
     pub(super) paths: Option<GlobSet>,
     pub(super) placeholder: String,
-    pub(super) value: String,
 }
 
 impl PreparedRule {
@@ -67,7 +66,6 @@ impl PreparedRule {
     }
 }
 
-#[derive(Debug)]
 pub(super) struct ProxyPolicy {
     pub(super) egress: ProxyEgress,
     pub(super) audit: bool,
@@ -79,7 +77,9 @@ pub(super) struct ProxyPolicy {
     /// their requests. It is not hidden from processes of the same user, which
     /// can read it from the child's environment.
     pub(super) token: String,
-    pub(super) redactions: Vec<Redaction>,
+    pub(super) secrets: Arc<ProxySecrets>,
+    /// Where `CONNECT` requests for [`MCP_TARGET`] go, when enabled
+    pub(super) mcp: std::sync::OnceLock<McpEndpoint>,
     pub(super) client: reqwest::Client,
 }
 
@@ -258,6 +258,7 @@ impl ProxyPolicy {
             )));
         }
 
+        let values = self.secrets.current();
         let mut injected = Vec::new();
         let mut checked = HashSet::new();
         for rule in &domain_rules {
@@ -285,6 +286,12 @@ impl ProxyPolicy {
                     rule.secret
                 )));
             }
+            let value = values.get(&rule.secret).ok_or_else(|| {
+                proxy_error(format!(
+                    "secret '{}' has no value yet; an agent can ask the user for it with the fnox MCP tool request_secret",
+                    rule.secret
+                ))
+            })?;
 
             let outside = || {
                 proxy_error(format!(
@@ -312,7 +319,7 @@ impl ProxyPolicy {
                 ) {
                     return Err(outside());
                 }
-                *header_value = header_value.replacen(&rule.placeholder, &rule.value, 1);
+                *header_value = header_value.replacen(&rule.placeholder, value, 1);
             } else {
                 let name = query
                     .param_containing(&rule.placeholder)
@@ -320,7 +327,7 @@ impl ProxyPolicy {
                 if !allows(&|target| matches!(target, Target::Query(allowed) if *allowed == name)) {
                     return Err(outside());
                 }
-                url.set_query(Some(&query.replaced(&rule.placeholder, &rule.value)));
+                url.set_query(Some(&query.replaced(&rule.placeholder, value)));
             }
             injected.push(rule.secret.clone());
         }

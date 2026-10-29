@@ -59,7 +59,7 @@ tools = ["exec", "request_secret"]
 3. You enter the value and choose **Save to fnox**, or choose **Decline**.
 4. fnox stores the value as `fnox set` would and tells the agent only that it was stored. From then on, `exec` sets it as an environment variable.
 
-The value never passes through the agent's client or its model. The link works once and expires after 10 minutes.
+The value never passes through the agent's client or its model. The link works once and expires after 10 minutes. With `exec`, the agent can still run commands that use the value; to keep it from the agent entirely, run the agent behind the [credential proxy](/guide/proxy#let-the-agent-ask-for-a-secret).
 
 fnox refuses to store the value in plain text. The secret's provider, or `default_provider` for a new secret, must encrypt values (such as `age`) or store them remotely (such as `1password`); the `plain` provider is refused. If the secret already has a value, the agent is told so and nothing is asked; it can pass `replace: true` to ask you for a new one. If the secret gets a value or a different provider while the page is open, fnox stores nothing and says so on the page.
 
@@ -81,7 +81,7 @@ The `request_secret` page doesn't prove that you are the one filling it in. The 
 
 Shell integration is a separate channel. If your interactive shell already has secrets loaded, an agent started from it can read them regardless of `[mcp]`. Set `env = "exec"` to keep secrets out of the shell (see [running commands](/guide/running-commands#choose-which-secrets-reach-a-command)).
 
-For stronger isolation, give the agent API access through the [credential proxy](/guide/proxy) instead, and run it with [`fnox proxy run --sandbox`](/guide/proxy#sandbox).
+For stronger isolation, give the agent API access through the [credential proxy](/guide/proxy) instead, and run it with [`fnox proxy run --sandbox`](/guide/proxy#sandbox). `request_secret` works there too: the agent asks for a missing key, and the proxy injects it into approved requests without the agent ever holding it. See [Let the agent ask for a secret](/guide/proxy#let-the-agent-ask-for-a-secret).
 
 ## See also
 

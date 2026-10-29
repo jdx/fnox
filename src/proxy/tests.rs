@@ -140,7 +140,7 @@ fn rejects_placeholder_in_another_header() {
 #[test]
 fn redacts_reflected_values() {
     let mut body = b"token=real-token".to_vec();
-    redact_values(&mut body, &policy().policy.redactions);
+    redact_values(&mut body, &policy().policy.secrets.current().redactions);
     assert_eq!(body, b"token=ghp_placeholder");
 }
 
@@ -167,7 +167,7 @@ fn redacts_overlapping_values_without_scanning_placeholders() {
     let plan = ProxyPlan::new(&config, &values).unwrap();
     let mut body = b"real-token token".to_vec();
 
-    redact_values(&mut body, &plan.policy.redactions);
+    redact_values(&mut body, &plan.policy.secrets.current().redactions);
 
     assert_eq!(
         body, b"placeholder-with-token short-placeholder",
@@ -419,7 +419,7 @@ fn query_rule_without_placeholder_leaves_url_untouched() {
 fn redacts_percent_encoded_query_secret() {
     let plan = plan_with(vec![query_rule("maps.example.com", "key")], "a b&c").unwrap();
     let mut body = b"Location: /?key=a+b%26c and a b&c".to_vec();
-    redact_values(&mut body, &plan.policy.redactions);
+    redact_values(&mut body, &plan.policy.secrets.current().redactions);
     assert_eq!(body, b"Location: /?key=key_placeholder and key_placeholder");
 }
 
@@ -508,7 +508,7 @@ fn labels_rule_targets() {
 fn redacts_any_percent_encoding_of_query_secret() {
     let plan = plan_with(vec![query_rule("maps.example.com", "key")], "a b&c/d").unwrap();
     let mut body = b"/?k=a%20b%26c%2Fd /?k=a%20b%26c/d /?k=a+b%26c%2fd /?k=%61%20b&c/d".to_vec();
-    redact_values(&mut body, &plan.policy.redactions);
+    redact_values(&mut body, &plan.policy.secrets.current().redactions);
     assert_eq!(
         String::from_utf8(body).unwrap(),
         "/?k=key_placeholder /?k=key_placeholder /?k=key_placeholder /?k=key_placeholder"
@@ -518,7 +518,7 @@ fn redacts_any_percent_encoding_of_query_secret() {
 #[test]
 fn header_secret_redaction_stays_exact() {
     let mut body = b"token=real%2Dtoken real-token".to_vec();
-    redact_values(&mut body, &policy().policy.redactions);
+    redact_values(&mut body, &policy().policy.secrets.current().redactions);
     assert_eq!(body, b"token=real%2Dtoken ghp_placeholder");
 }
 
@@ -540,7 +540,7 @@ fn rejects_percent_encoded_placeholder_in_path() {
 fn redacts_query_secret_containing_percent() {
     let plan = plan_with(vec![query_rule("maps.example.com", "key")], "50%off%41").unwrap();
     let mut body = b"a=50%25off%2541 b=50%off%41 c=50%25off%41 d=50%25off%2541x".to_vec();
-    redact_values(&mut body, &plan.policy.redactions);
+    redact_values(&mut body, &plan.policy.secrets.current().redactions);
     assert_eq!(
         String::from_utf8(body).unwrap(),
         "a=key_placeholder b=key_placeholder c=key_placeholder d=key_placeholderx"
@@ -872,4 +872,138 @@ fn loggable_targets_drop_credentials_and_queries() {
     ] {
         assert_eq!(loggable_target(target), logged, "{target}");
     }
+}
+
+fn pending_plan() -> ProxyPlan {
+    ProxyPlan::with_pending(
+        &config(),
+        &IndexMap::new(),
+        &["GITHUB_TOKEN".to_string()].into_iter().collect(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn missing_secret_fails_unless_pending() {
+    let error = ProxyPlan::new(&config(), &IndexMap::new()).err().unwrap();
+    assert!(error.to_string().contains("did not resolve"), "{error}");
+
+    let plan = pending_plan();
+    assert_eq!(plan.child_env["GITHUB_TOKEN"], "ghp_placeholder");
+    assert!(!plan.secrets().has_value("GITHUB_TOKEN"));
+}
+
+#[test]
+fn pending_secret_is_refused_until_set_then_injected() {
+    let plan = pending_plan();
+    let mut headers = vec![(
+        "authorization".to_string(),
+        "Bearer ghp_placeholder".to_string(),
+    )];
+    let error = authorize(
+        &plan,
+        "api.github.com",
+        "GET",
+        "/repos/example/a",
+        &mut headers,
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("has no value yet"), "{error}");
+    assert_eq!(headers[0].1, "Bearer ghp_placeholder");
+
+    plan.secrets()
+        .set("GITHUB_TOKEN", "entered-token".to_string())
+        .unwrap();
+    let (injected, _) = authorize(
+        &plan,
+        "api.github.com",
+        "GET",
+        "/repos/example/a",
+        &mut headers,
+    )
+    .unwrap();
+    assert_eq!(injected, ["GITHUB_TOKEN"]);
+    assert_eq!(headers[0].1, "Bearer entered-token");
+
+    let mut body = b"echo entered-token".to_vec();
+    redact_values(&mut body, &plan.policy.secrets.current().redactions);
+    assert_eq!(body, b"echo ghp_placeholder");
+}
+
+#[test]
+fn set_replaces_values_and_checks_them() {
+    let plan = policy();
+    let secrets = plan.secrets();
+    secrets
+        .set("GITHUB_TOKEN", "replaced-token".to_string())
+        .unwrap();
+    let mut body = b"real-token replaced-token".to_vec();
+    redact_values(&mut body, &plan.policy.secrets.current().redactions);
+    assert_eq!(body, b"real-token ghp_placeholder");
+
+    for (secret, value) in [
+        ("GITHUB_TOKEN", ""),
+        ("GITHUB_TOKEN", "ghp_placeholder"),
+        ("GITHUB_TOKEN", "x-ghp_placeholder-x"),
+        ("OTHER_TOKEN", "value"),
+    ] {
+        assert!(
+            secrets.set(secret, value.to_string()).is_err(),
+            "{secret}={value:?} should be refused"
+        );
+    }
+    // A refused value leaves the previous one in place
+    assert_eq!(
+        plan.policy.secrets.current().get("GITHUB_TOKEN"),
+        Some("replaced-token")
+    );
+}
+
+#[tokio::test]
+async fn mcp_connect_is_refused_unless_enabled() {
+    let running = RunningProxy::start(policy(), ProxyListener::Loopback)
+        .await
+        .unwrap();
+    let mut stream = TcpStream::connect(running.address.unwrap()).await.unwrap();
+    let response = connect(
+        &mut stream,
+        MCP_TARGET,
+        Some(&format!("fnox:{}", running.token)),
+    )
+    .await;
+    assert!(response.starts_with("HTTP/1.1 403 "), "{response}");
+    assert!(
+        response.contains("request_secret is not enabled"),
+        "{response}"
+    );
+    running.shutdown().await;
+}
+
+#[tokio::test]
+async fn mcp_connect_reaches_the_endpoint_with_credentials_only() {
+    let plan = policy();
+    plan.serve_mcp(Arc::new(|mut stream| {
+        Box::pin(async move {
+            let (mut reader, mut writer) = tokio::io::split(&mut stream);
+            let _ = tokio::io::copy(&mut reader, &mut writer).await;
+        })
+    }));
+    let running = RunningProxy::start(plan, ProxyListener::Loopback)
+        .await
+        .unwrap();
+
+    let mut refused = TcpStream::connect(running.address.unwrap()).await.unwrap();
+    let response = connect(&mut refused, MCP_TARGET, Some("fnox:wrong")).await;
+    assert!(response.starts_with("HTTP/1.1 407 "), "{response}");
+
+    let mut stream = TcpStream::connect(running.address.unwrap()).await.unwrap();
+    let response = connect(
+        &mut stream,
+        MCP_TARGET,
+        Some(&format!("fnox:{}", running.token)),
+    )
+    .await;
+    assert!(response.starts_with("HTTP/1.1 200 "), "{response}");
+    assert_echoes(&mut stream).await;
+    running.shutdown().await;
 }

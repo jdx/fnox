@@ -11,7 +11,9 @@ between tool calls, in the same session, and prints {"ran": <exit code>}.
 
 Prints one JSON line per call result, then {"page": <status or null>}.
 If BEFORE_SUBMIT is set, it runs as a shell command just before the page is
-submitted. MCP_CLIENT_FNOX_ARGS adds global flags before `mcp`.
+submitted. If PAGE_URL_FILE is set, the page's URL is written there instead,
+for something outside a sandbox to fill in. MCP_CLIENT_FNOX_ARGS adds global
+flags before `mcp`.
 """
 
 import json
@@ -81,6 +83,10 @@ def wait_for(request_id):
             params = message["params"]
             assert params["mode"] == "url", params
             send({"jsonrpc": "2.0", "id": message["id"], "result": {"action": "accept"}})
+            if os.environ.get("PAGE_URL_FILE"):
+                with open(os.environ["PAGE_URL_FILE"], "w") as url_file:
+                    url_file.write(params["url"])
+                continue
             thread = threading.Thread(target=fill_page, args=(params["url"],))
             thread.start()
             page_threads.append(thread)

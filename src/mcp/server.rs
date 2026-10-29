@@ -11,6 +11,7 @@ use tokio::sync::{OnceCell, RwLock};
 
 use crate::config::{self, Config, McpConfig, McpTool, SecretConfig};
 use crate::daemon::{Purpose, ResolveContext};
+use crate::proxy::ProxySecrets;
 
 /// The fnox MCP server — acts as a session-scoped secret broker.
 ///
@@ -45,6 +46,9 @@ pub struct FnoxMcpServer {
     /// Tracks whether secrets have been resolved (separate from cache emptiness,
     /// since all secrets may resolve to None for optional/absent secrets).
     pub(super) resolved: Arc<OnceCell<()>>,
+    /// Set when this server runs inside `fnox proxy run`: request_secret then
+    /// hands new values to the proxy instead of to `exec`
+    pub(super) proxy: Option<Arc<ProxySecrets>>,
     pub(super) tool_router: ToolRouter<FnoxMcpServer>,
 }
 
@@ -69,6 +73,7 @@ impl FnoxMcpServer {
             sent_to_terminal: Arc::new(std::sync::Mutex::new(HashSet::new())),
             cache: Arc::new(RwLock::new(HashMap::new())),
             resolved: Arc::new(OnceCell::new()),
+            proxy: None,
             tool_router: Self::secret_tools() + Self::request_secret_tools(),
         }
     }
@@ -82,6 +87,13 @@ impl FnoxMcpServer {
     ) -> Self {
         self.config_path = Arc::new(config_path);
         self.write_profile = Arc::new(write_profile);
+        self
+    }
+
+    /// Serve a `fnox proxy run` session: request_secret asks only for secrets
+    /// that a proxy rule names, and gives the proxy each value it loads
+    pub fn with_proxy(mut self, secrets: Arc<ProxySecrets>) -> Self {
+        self.proxy = Some(secrets);
         self
     }
 
@@ -107,8 +119,17 @@ impl FnoxMcpServer {
         Ok(())
     }
 
-    /// Make a secret stored during this session available to the tools
-    pub(super) async fn add_secret(&self, name: &str, secret: SecretConfig, value: String) {
+    /// Make a secret stored during this session available to the tools, and
+    /// to the proxy when serving one
+    pub(super) async fn add_secret(
+        &self,
+        name: &str,
+        secret: SecretConfig,
+        value: String,
+    ) -> crate::error::Result<()> {
+        if let Some(proxy) = &self.proxy {
+            proxy.set(name, value.clone())?;
+        }
         {
             let mut secrets = self
                 .profile_secrets
@@ -122,6 +143,7 @@ impl FnoxMcpServer {
             .write()
             .await
             .insert(name.to_string(), Some(value));
+        Ok(())
     }
 
     pub(super) fn list_tools_result(&self) -> ListToolsResult {
@@ -271,7 +293,15 @@ impl ServerHandler for FnoxMcpServer {
             "fnox MCP server — no tools are currently enabled."
         }
         .to_string();
-        if has_request_secret {
+        if has_request_secret && self.proxy.is_some() {
+            instructions = "fnox MCP server for a fnox proxy session. Your environment holds \
+                 placeholders, and the proxy swaps in real values on requests its rules allow. \
+                 When the proxy refuses a request because a secret has no value yet, call \
+                 request_secret with that secret's name: the user enters it on a local fnox \
+                 page, you never see it, and the proxy uses it from the next request on. \
+                 Never ask the user to paste a secret into the chat."
+                .to_string();
+        } else if has_request_secret {
             instructions.push_str(
                 " When a task needs a secret that isn't set, call request_secret: \
                  the user enters it on a local fnox page and you never see the value. \

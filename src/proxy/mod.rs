@@ -35,6 +35,7 @@ mod ca;
 mod destination;
 mod plan;
 mod policy;
+mod secrets;
 mod server;
 #[cfg(test)]
 mod tests;
@@ -45,7 +46,24 @@ use policy::*;
 
 pub use plan::{ProxyPlan, deny_inspection, validate_config};
 pub use policy::target_label;
+pub use secrets::ProxySecrets;
 pub use server::{ProxyListener, RunningProxy};
+
+/// The `CONNECT` target that opens an MCP session with the proxy instead of a
+/// tunnel. `.invalid` is reserved, so it can never name a real host.
+pub const MCP_TARGET: &str = "mcp.fnox.invalid:0";
+
+/// A client connection handed to the MCP endpoint
+pub trait ClientStream: AsyncRead + AsyncWrite + Unpin + Send + 'static {}
+
+impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> ClientStream for T {}
+
+/// Serves one MCP session over a client connection until it closes
+pub type McpEndpoint = Arc<
+    dyn Fn(Box<dyn ClientStream>) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>
+        + Send
+        + Sync,
+>;
 
 fn proxy_error(message: impl Into<String>) -> FnoxError {
     FnoxError::Config(format!("proxy: {}", message.into()))

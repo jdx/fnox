@@ -65,13 +65,30 @@ impl FnoxMcpServer {
                 None,
             ));
         }
+        if let Some(proxy) = &self.proxy
+            && !proxy.has_rule(&name)
+        {
+            return Err(McpError::invalid_request(
+                format!(
+                    "No [[proxy.rules]] entry names '{name}', so the proxy couldn't send it anywhere. Ask the user to add a rule for it and restart the proxy session."
+                ),
+                None,
+            ));
+        }
 
         let config = Config::load_smart(self.config_path.as_path())
             .map_err(|e| McpError::internal_error(format!("Failed to load config: {e}"), None))?;
         if !params.replace && self.has_value(&config, &name).await? {
-            return Ok(CallToolResult::success(vec![ContentBlock::text(format!(
-                "Secret '{name}' already has a value. Use exec to run commands with it, or call request_secret with replace=true to ask the user for a new value."
-            ))]));
+            let text = if self.proxy.is_some() {
+                format!(
+                    "Secret '{name}' already has a value, which the proxy sends on requests its rules allow. Call request_secret with replace=true to ask the user for a new value."
+                )
+            } else {
+                format!(
+                    "Secret '{name}' already has a value. Use exec to run commands with it, or call request_secret with replace=true to ask the user for a new value."
+                )
+            };
+            return Ok(CallToolResult::success(vec![ContentBlock::text(text)]));
         }
 
         // Refuse a provider that would leave the value in plain text before
@@ -211,7 +228,10 @@ impl FnoxMcpServer {
                 let _ = reply.send(Ok(format!(
                     "fnox stored {name}. You can close this tab and go back to the agent."
                 )));
-                let usage = if self
+                let usage = if self.proxy.is_some() {
+                    "The proxy now sends it in place of its placeholder on requests that match its rules."
+                        .to_string()
+                } else if self
                     .secrets()
                     .get(&name)
                     .is_some_and(|secret| secret.env_mode().in_exec())
@@ -409,7 +429,7 @@ impl FnoxMcpServer {
         .await?;
         match resolved.into_iter().next().and_then(|(_, value)| value) {
             Some(value) => {
-                self.add_secret(name, secret, value).await;
+                self.add_secret(name, secret, value).await?;
                 Ok(true)
             }
             None => Ok(false),

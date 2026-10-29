@@ -3,12 +3,15 @@
 //! [`server`] holds the session state and the MCP handler, [`tools`] the
 //! `get_secret` and `exec` tools, [`request_secret`] the tool that asks the
 //! user for a missing secret, and [`page`] the one-time local page it serves.
+//! Inside `fnox proxy run`, [`relay`] passes the session to the proxy instead.
 
 pub mod page;
+mod relay;
 mod request_secret;
 mod server;
 mod tools;
 
+pub use relay::relay;
 pub use request_secret::RequestSecretParams;
 pub use server::FnoxMcpServer;
 pub use tools::{ExecParams, GetSecretParams};

@@ -1,10 +1,14 @@
 use crate::commands::Cli;
-use crate::config::{Config, ProxyConfig, SecretConfig};
+use crate::config::{Config, McpConfig, McpTool, ProxyConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
-use crate::proxy::{ProxyListener, ProxyPlan, RunningProxy};
+use crate::mcp::FnoxMcpServer;
+use crate::proxy::{McpEndpoint, ProxyListener, ProxyPlan, ProxySecrets, RunningProxy};
 use crate::sandbox::{Sandbox, SandboxPolicy};
 use indexmap::IndexMap;
+use rmcp::ServiceExt;
+use std::collections::HashSet;
 use std::process::Stdio;
+use std::sync::Arc;
 
 const AMBIENT_CREDENTIAL_ENV_VARS: &[&str] = &[
     "FNOX_AGE_KEY",
@@ -235,23 +239,46 @@ fn show_rules(proxy: &ProxyConfig) -> Result<()> {
     Ok(())
 }
 
+/// The rule secrets that request_secret may fill in during the session, so
+/// they can start without a value or even a `[secrets]` entry
+fn requestable_secrets(proxy: &ProxyConfig, mcp: Option<&McpConfig>) -> HashSet<String> {
+    let Some(mcp) = mcp.filter(|mcp| mcp.tools().contains(&McpTool::RequestSecret)) else {
+        return HashSet::new();
+    };
+    proxy
+        .rules
+        .iter()
+        .map(|rule| &rule.secret)
+        .filter(|secret| {
+            mcp.secrets
+                .as_ref()
+                .is_none_or(|allowed| allowed.contains(secret))
+        })
+        .cloned()
+        .collect()
+}
+
 fn collect_requested_secrets(
     config: &Config,
     profile: &[String],
     proxy: &ProxyConfig,
     all_secrets: &IndexMap<String, SecretConfig>,
+    requestable: &HashSet<String>,
 ) -> Result<IndexMap<String, SecretConfig>> {
     let providers = config.get_providers(profile)?;
     let default_provider = config.get_default_provider(profile)?;
     let mut requested = IndexMap::new();
 
     for rule in &proxy.rules {
-        let secret = all_secrets.get(&rule.secret).ok_or_else(|| {
-            FnoxError::Config(format!(
+        let Some(secret) = all_secrets.get(&rule.secret) else {
+            if requestable.contains(&rule.secret) {
+                continue;
+            }
+            return Err(FnoxError::Config(format!(
                 "Proxy rule references unknown secret '{}'",
                 rule.secret
-            ))
-        })?;
+            )));
+        };
         requested.insert(rule.secret.clone(), secret.clone());
     }
 
@@ -319,7 +346,9 @@ impl ProxyRunCommand {
         crate::proxy::deny_inspection();
         let profile = Config::get_profiles(&cli.profile);
         let all_secrets = config.get_secrets(&profile)?;
-        let requested = collect_requested_secrets(&config, &profile, proxy_config, &all_secrets)?;
+        let requestable = requestable_secrets(proxy_config, config.mcp.as_ref());
+        let requested =
+            collect_requested_secrets(&config, &profile, proxy_config, &all_secrets, &requestable)?;
         let resolved = crate::daemon::resolve_batch(
             cli,
             &config,
@@ -330,19 +359,44 @@ impl ProxyRunCommand {
         )
         .await?;
         let mut values = IndexMap::new();
+        let mut pending = HashSet::new();
         for rule in &proxy_config.rules {
-            let value = resolved
-                .get(&rule.secret)
-                .cloned()
-                .flatten()
-                .ok_or_else(|| {
-                    FnoxError::Config(format!("Proxy secret '{}' did not resolve", rule.secret))
-                })?;
-            values.insert(rule.secret.clone(), value);
+            match resolved.get(&rule.secret).cloned().flatten() {
+                Some(value) => {
+                    values.insert(rule.secret.clone(), value);
+                }
+                None if requestable.contains(&rule.secret) => {
+                    if pending.insert(rule.secret.clone()) {
+                        tracing::warn!(
+                            "'{}' has no value yet; the proxy refuses requests that need it until it is entered through request_secret",
+                            rule.secret
+                        );
+                    }
+                }
+                None => {
+                    return Err(FnoxError::Config(format!(
+                        "Proxy secret '{}' did not resolve",
+                        rule.secret
+                    )));
+                }
+            }
         }
 
-        let plan = ProxyPlan::new(proxy_config, &values)?;
+        let plan = ProxyPlan::with_pending(proxy_config, &values, &pending)?;
         let child_env = plan.child_env.clone();
+        let serves_mcp = !requestable.is_empty();
+        if serves_mcp {
+            // Provider prompts from here on would fight the command for the
+            // terminal
+            crate::env::set_non_interactive(true);
+            plan.serve_mcp(mcp_endpoint(
+                cli,
+                &config,
+                profile.clone(),
+                &all_secrets,
+                plan.secrets(),
+            ));
+        }
         let listener = sandbox
             .as_ref()
             .map_or(ProxyListener::Loopback, Sandbox::listener);
@@ -401,6 +455,11 @@ impl ProxyRunCommand {
         }
         command.env("FNOX_DAEMON", "off");
         command.env("FNOX_NON_INTERACTIVE", "1");
+        if serves_mcp {
+            command.env("FNOX_PROXY_MCP", &proxy_url);
+        } else {
+            command.env_remove("FNOX_PROXY_MCP");
+        }
         for (key, placeholder) in child_env {
             command.env(key, placeholder);
         }
@@ -461,6 +520,46 @@ impl ProxyRunCommand {
         }
         Ok(())
     }
+}
+
+/// Serves request_secret to `fnox mcp` relays started by the command. The
+/// server runs here, outside any sandbox, with the session's config, and hands
+/// each value it loads to the proxy. It offers no other tool: `exec` and
+/// `get_secret` would give the command the real values the proxy keeps from it.
+fn mcp_endpoint(
+    cli: &Cli,
+    config: &Config,
+    profile: Vec<String>,
+    all_secrets: &IndexMap<String, SecretConfig>,
+    secrets: Arc<ProxySecrets>,
+) -> McpEndpoint {
+    let mut mcp_config = config.mcp.clone().unwrap_or_default();
+    mcp_config.set_tools(vec![McpTool::RequestSecret]);
+    let mut context = crate::daemon::ResolveContext::from_cli(cli);
+    context.non_interactive = true;
+    let profile_secrets = mcp_config.filter_secrets(all_secrets.clone());
+    let server = FnoxMcpServer::new(
+        config.clone(),
+        profile,
+        mcp_config,
+        context,
+        profile_secrets,
+    )
+    .with_write_target(cli.config.clone(), cli.write_profile.clone())
+    .with_proxy(secrets);
+    Arc::new(move |stream| {
+        let server = server.clone();
+        Box::pin(async move {
+            match server.serve(tokio::io::split(stream)).await {
+                Ok(service) => {
+                    if let Err(error) = service.waiting().await {
+                        tracing::debug!("MCP session failed: {error}");
+                    }
+                }
+                Err(error) => tracing::debug!("MCP session failed to start: {error}"),
+            }
+        })
+    })
 }
 
 /// How a command ended.
@@ -531,6 +630,7 @@ domain = "api.example.com"
             &profile,
             config.proxy.as_ref().unwrap(),
             &all_secrets,
+            &HashSet::new(),
         )
         .unwrap();
 

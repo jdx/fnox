@@ -55,22 +55,37 @@ pub fn validate_config(config: &ProxyConfig) -> Result<()> {
 
 impl ProxyPlan {
     pub fn new(config: &ProxyConfig, values: &IndexMap<String, String>) -> Result<Self> {
+        Self::with_pending(config, values, &HashSet::new())
+    }
+
+    /// Like `new`, but the secrets in `pending` may have no value yet. Their
+    /// placeholders are refused until `ProxySecrets::set` gives them one.
+    pub fn with_pending(
+        config: &ProxyConfig,
+        values: &IndexMap<String, String>,
+        pending: &HashSet<String>,
+    ) -> Result<Self> {
         validate_config(config)?;
 
         let mut placeholders = HashMap::<String, String>::new();
         let mut env_values = IndexMap::new();
         let mut prepared = Vec::new();
         let mut seen_placeholders = HashSet::new();
+        let mut rule_values = HashMap::new();
+        let mut in_query = HashSet::new();
 
         for rule in &config.rules {
-            let value = values
-                .get(&rule.secret)
-                .ok_or_else(|| proxy_error(format!("secret '{}' did not resolve", rule.secret)))?;
-            if value.is_empty() {
-                return Err(proxy_error(format!(
-                    "secret '{}' resolved to an empty value",
-                    rule.secret
-                )));
+            match values.get(&rule.secret) {
+                Some(value) => {
+                    rule_values.insert(rule.secret.clone(), value.clone());
+                }
+                None if pending.contains(&rule.secret) => {}
+                None => {
+                    return Err(proxy_error(format!(
+                        "secret '{}' did not resolve",
+                        rule.secret
+                    )));
+                }
             }
             let placeholder = match placeholders.get(&rule.secret) {
                 Some(existing) => {
@@ -95,12 +110,6 @@ impl ProxyPlan {
                             rule.secret
                         )));
                     }
-                    if placeholder == *value {
-                        return Err(proxy_error(format!(
-                            "placeholder for '{}' must differ from the real value",
-                            rule.secret
-                        )));
-                    }
                     if !seen_placeholders.insert(placeholder.clone()) {
                         return Err(proxy_error("placeholders must be unique across secrets"));
                     }
@@ -119,10 +128,14 @@ impl ProxyPlan {
             }
             env_values.insert(env_name.to_string(), placeholder.clone());
 
+            let target = Target::for_rule(rule);
+            if matches!(target, Target::Query(_)) {
+                in_query.insert(rule.secret.clone());
+            }
             prepared.push(PreparedRule {
                 secret: rule.secret.clone(),
                 domain: rule.domain.to_ascii_lowercase(),
-                target: Target::for_rule(rule),
+                target,
                 methods: rule
                     .methods
                     .iter()
@@ -130,7 +143,6 @@ impl ProxyPlan {
                     .collect(),
                 paths: compile_paths(&rule.paths)?,
                 placeholder,
-                value: value.clone(),
             });
         }
 
@@ -143,32 +155,8 @@ impl ProxyPlan {
                     ));
                 }
             }
-            if values
-                .values()
-                .any(|value| value.contains(placeholder.as_str()))
-            {
-                return Err(proxy_error(
-                    "a real secret value cannot contain a configured placeholder",
-                ));
-            }
         }
-
-        let mut redactions: Vec<Redaction> = Vec::new();
-        for rule in &prepared {
-            let lenient = matches!(rule.target, Target::Query(_));
-            match redactions
-                .iter_mut()
-                .find(|redaction| redaction.value == rule.value.as_bytes())
-            {
-                Some(existing) => existing.lenient |= lenient,
-                None => redactions.push(Redaction {
-                    value: rule.value.as_bytes().to_vec(),
-                    placeholder: rule.placeholder.as_bytes().to_vec(),
-                    lenient,
-                }),
-            }
-        }
-        redactions.sort_by_key(|redaction| std::cmp::Reverse(redaction.value.len()));
+        let secrets = Arc::new(ProxySecrets::new(placeholders, in_query, rule_values)?);
 
         let destinations = Arc::new(DestinationPolicy {
             allowed: config
@@ -190,7 +178,8 @@ impl ProxyPlan {
                     .collect(),
                 destinations: destinations.clone(),
                 token: data_encoding::HEXLOWER.encode(&rand::random::<[u8; 16]>()),
-                redactions,
+                secrets,
+                mcp: std::sync::OnceLock::new(),
                 client: reqwest::Client::builder()
                     .http1_only()
                     .no_proxy()
@@ -203,6 +192,19 @@ impl ProxyPlan {
             }),
             child_env: env_values,
         })
+    }
+
+    /// The values behind this plan's placeholders, which stay live while the
+    /// proxy runs
+    pub fn secrets(&self) -> Arc<ProxySecrets> {
+        self.policy.secrets.clone()
+    }
+
+    /// Accept MCP sessions on the proxy's port: a client that sends
+    /// `CONNECT` to [`MCP_TARGET`] with the proxy password is handed to
+    /// `endpoint`. Without this, such requests are refused.
+    pub fn serve_mcp(&self, endpoint: McpEndpoint) {
+        let _ = self.policy.mcp.set(endpoint);
     }
 }
 

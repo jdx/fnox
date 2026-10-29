@@ -12,6 +12,8 @@ Serve secrets to AI agents over the Model Context Protocol
 
 Starts an MCP server on stdin and stdout for an agent client to launch. It offers the `get_secret` and `exec` tools, limited by the `[mcp]` table: `tools` chooses which tools are offered and `secrets` restricts which secrets they can reach. Add `request_secret` to `tools` to let the agent ask you to enter a missing secret on a local page. The server never prompts in the terminal, so authenticate to your providers before starting the client.
 
+Inside `fnox proxy run` with `request_secret` enabled, the proxy serves the session instead: it offers only `request_secret` and injects each value the user enters into requests its rules allow.
+
 ## Flags
 
 - **`-h --help`** — Print help

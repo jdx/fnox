@@ -14,6 +14,10 @@ use rmcp::{RoleServer, ServiceExt};
 /// they can reach. Add `request_secret` to `tools` to let the agent ask you to
 /// enter a missing secret on a local page. The server never prompts in the
 /// terminal, so authenticate to your providers before starting the client.
+///
+/// Inside `fnox proxy run` with `request_secret` enabled, the proxy serves the
+/// session instead: it offers only `request_secret` and injects each value the
+/// user enters into requests its rules allow.
 #[derive(Debug, usage_rs::Args)]
 #[usage(
     example("fnox mcp", header = "Start the server for the current project"),

@@ -96,6 +96,11 @@ pub static FNOX_PROFILE: LazyLock<Vec<String>> = LazyLock::new(|| {
 // Age encryption key configuration
 pub static FNOX_AGE_KEY: LazyLock<Option<String>> = LazyLock::new(|| var("FNOX_AGE_KEY").ok());
 
+// Set by `fnox proxy run` for its command when request_secret is enabled:
+// the proxy URL, with its password, that `fnox mcp` relays its session to
+pub static FNOX_PROXY_MCP: LazyLock<Option<String>> =
+    LazyLock::new(|| var("FNOX_PROXY_MCP").ok().filter(|url| !url.is_empty()));
+
 // Auth prompt configuration (defaults to true if not set)
 pub static FNOX_PROMPT_AUTH: LazyLock<Option<bool>> = LazyLock::new(|| {
     var("FNOX_PROMPT_AUTH")

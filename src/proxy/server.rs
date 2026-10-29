@@ -233,7 +233,7 @@ pub(super) async fn handle_connection<S>(
     authority: Arc<CertificateAuthority>,
 ) -> Result<()>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let mut reader = BufReader::new(stream);
     let mut challenged: Option<ProxyRequestHead> = None;
@@ -276,6 +276,9 @@ where
         challenged = Some(head);
     };
 
+    if head.method == "CONNECT" && head.target.eq_ignore_ascii_case(MCP_TARGET) {
+        return serve_mcp(reader, &policy, &head).await;
+    }
     let mut stream = reader.into_inner();
     if head.method != "CONNECT" {
         let reason = "HTTPS CONNECT is required";
@@ -354,6 +357,34 @@ where
         tracing::debug!("failed to shut down client TLS connection: {error}");
     }
     result
+}
+
+/// Hands an authenticated `CONNECT` to [`MCP_TARGET`] to the MCP endpoint,
+/// which speaks MCP over the rest of the connection. The reader is passed on
+/// whole so bytes the client sent after its request aren't lost.
+async fn serve_mcp<S>(
+    mut reader: BufReader<S>,
+    policy: &ProxyPolicy,
+    head: &ProxyRequestHead,
+) -> Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let Some(endpoint) = policy.mcp.get() else {
+        let reason = "request_secret is not enabled for this proxy session";
+        policy.audit_refused(&head.method, &head.target, None, reason);
+        return write_error(reader.get_mut(), 403, reason).await;
+    };
+    reader
+        .get_mut()
+        .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+        .await
+        .map_err(|error| proxy_error(format!("failed to start MCP session: {error}")))?;
+    if policy.audit {
+        tracing::info!(target: "fnox::proxy", "MCP session started");
+    }
+    endpoint(Box::new(reader)).await;
+    Ok(())
 }
 
 pub(super) fn parse_connect_target(target: &str) -> Result<(String, u16)> {
@@ -489,7 +520,10 @@ where
         }
         body.extend_from_slice(&chunk);
     }
-    redact_values(&mut body, &policy.redactions);
+    // Includes a value request_secret added while the request was in flight
+    let values = policy.secrets.current();
+    let redactions = &values.redactions;
+    redact_values(&mut body, redactions);
 
     let reason = status.canonical_reason().unwrap_or("");
     let mut head = format!("HTTP/1.1 {} {}\r\n", status.as_u16(), reason);
@@ -500,7 +534,7 @@ where
             continue;
         }
         if let Ok(value) = value.to_str() {
-            let value = redact_string(value, &policy.redactions);
+            let value = redact_string(value, redactions);
             head.push_str(name.as_str());
             head.push_str(": ");
             head.push_str(&value);

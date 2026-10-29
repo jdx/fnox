@@ -85,6 +85,43 @@ fnox proxy rules
 
 The password stops other users' programs on a shared machine from using the proxy to send your credentials. Clients read it from `HTTPS_PROXY` automatically. It doesn't stop programs running as you: they can read the password from the command's environment, as they can read your fnox config (see [what it does not protect against](#what-it-does-not-protect-against)). On Linux, fnox also marks itself non-dumpable, so the command can't read fnox's memory or environment through `/proc`. On macOS, it refuses debugger attachment.
 
+## Let the agent ask for a secret
+
+An agent sometimes needs a key you haven't stored yet. Add `request_secret` to `[mcp] tools`, and a rule can name a secret that has no value. The agent then asks you for it over MCP, and the proxy uses it as soon as you enter it:
+
+```toml
+default_provider = "age"
+
+[mcp]
+tools = ["request_secret"]
+
+[proxy]
+sandbox = true
+
+[[proxy.rules]]
+secret = "STRIPE_API_KEY"
+domain = "api.stripe.com"
+```
+
+Add `fnox mcp` to the agent's MCP config as described in [MCP server](/guide/mcp#set-up), then start the agent with `fnox proxy run -- claude`.
+
+1. The proxy starts even though `STRIPE_API_KEY` has no value, and the agent gets a placeholder for it. Requests that carry the placeholder are refused with `secret 'STRIPE_API_KEY' has no value yet`.
+2. The agent calls `request_secret`. The `fnox mcp` server it started hands the call to the proxy, which runs outside the sandbox with your config.
+3. Your agent shows a link to a one-time page on `127.0.0.1`. You enter the value there, and fnox stores it the way `fnox set` would.
+4. The proxy injects the value from the next request on, without a restart.
+
+The agent only ever has the placeholder. With the sandbox, it also can't open the page itself, because the proxy's port is its only network route, and it can't read the config the value was stored in.
+
+Inside `fnox proxy run`:
+
+- `fnox mcp` offers only `request_secret`. `exec` and `get_secret` would give the agent the real values the proxy keeps from it.
+- `request_secret` asks only for secrets that a rule names, and `[mcp] secrets` still limits which ones. The secret doesn't need a `[secrets]` entry; fnox adds one when it stores the value. Without `request_secret` in `tools`, every rule's secret must have a value when the proxy starts.
+- `fnox mcp` reaches the proxy through `FNOX_PROXY_MCP`, which `fnox proxy run` sets for the command. If your agent starts MCP servers with a reduced environment, have it pass that variable on. Flags such as `-P` on `fnox mcp` are ignored there; the proxy session's profile and config apply.
+- If the agent's client doesn't support the link, it asks you to run `fnox set NAME` in your own terminal. When the agent calls `request_secret` again, the proxy loads the value.
+- If the agent can't open the link in your browser from inside the sandbox, copy it into your browser yourself.
+
+See [Let the agent ask for a secret](/guide/mcp#let-the-agent-ask-for-a-secret) for the page and its limits.
+
 ## Egress
 
 `egress = "strict"` (the default) refuses any host without a rule. `egress = "permissive"` lets unmatched traffic through as an uninspected tunnel. Use strict for agents.

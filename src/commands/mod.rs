@@ -365,7 +365,12 @@ impl Commands {
             Commands::Import(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Lease(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::List(cmd) => cmd.run(cli, self.load_config(cli)?).await,
-            Commands::Mcp(cmd) => cmd.run(cli, self.load_config(cli)?).await,
+            Commands::Mcp(cmd) => match crate::env::FNOX_PROXY_MCP.as_deref() {
+                // Inside `fnox proxy run` the proxy serves the session, and
+                // its sandbox may hide the config from this process
+                Some(proxy_url) => crate::mcp::relay(proxy_url).await,
+                None => cmd.run(cli, self.load_config(cli)?).await,
+            },
             Commands::Profiles(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Provider(cmd)
                 if matches!(&cmd.action, Some(provider::ProviderAction::Add(_))) =>
