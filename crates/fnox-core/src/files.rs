@@ -569,7 +569,8 @@ pub fn source_target<'a>(
     } else {
         path.clone()
     };
-    let canonical = |p: &Path| fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    // A path that does not exist yet is compared by its cleaned spelling
+    let canonical = |p: &Path| fs::canonicalize(p).unwrap_or_else(|_| clean(p));
     let real = canonical(&resolved);
     let config = file
         .source_path
@@ -673,6 +674,24 @@ mod tests {
             ..Default::default()
         };
         assert!(both.validate("k").is_err());
+    }
+
+    #[test]
+    fn source_target_matches_spellings_of_a_missing_source() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = |source: &str| FileConfig {
+            source: Some(source.into()),
+            source_path: Some(dir.path().join("config.toml")),
+            ..Default::default()
+        };
+        let other = FileEntry {
+            path: PathBuf::from("/a"),
+            key: "/a".into(),
+            profile: "default".into(),
+            config: file("files/a"),
+        };
+        assert!(source_target(&file("files/./a"), [&other]).is_err());
+        assert!(source_target(&file("files/b"), [&other]).is_ok());
     }
 
     #[cfg(unix)]

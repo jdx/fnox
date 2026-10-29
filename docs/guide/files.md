@@ -67,7 +67,7 @@ fnox set --file ~/.kube/config --source files/kube-config.age
 "~/.kube/config" = { provider = "age", source = "files/kube-config.age" }
 ```
 
-The path is relative to the config's directory and cannot leave it. Later `set` and `edit` commands keep writing to the same file. If a dotfiles manager such as stow links the config or the source file into the config directory, fnox follows the link and writes through it, so the link is kept.
+The path is relative to the config's directory and cannot leave it. Later `set` and `edit` commands keep writing to the same file. If a dotfiles manager such as stow links the config or an entry's source file into the config directory, fnox follows the link and writes through it, so the link is kept. The first `set --source` refuses a file or link already at that path, so create the link after it.
 
 ## Profiles
 
