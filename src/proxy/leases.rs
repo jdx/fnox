@@ -341,41 +341,42 @@ impl LedgerWriter {
         std::thread::Builder::new()
             .name("fnox-lease-ledger".to_string())
             .spawn(move || {
+                // Records not saved yet. Each change tries them again first,
+                // so a failed write doesn't leave a valid lease out of the
+                // ledger for good.
+                let mut pending: Vec<(LeaseRecord, Arc<AtomicBool>)> = Vec::new();
                 for change in received {
-                    match change {
+                    let (revoked, done) = match change {
                         LedgerChange::Record(record, saved) => {
-                            let lease_id = record.lease_id.clone();
-                            let backend = record.backend_name.clone();
-                            match Self::apply(&project_dir, |ledger| ledger.add(*record)) {
-                                Ok(()) => saved.store(true, Ordering::SeqCst),
-                                Err(error) => tracing::warn!(
-                                    "fnox proxy: lease '{lease_id}' of '{backend}' is not in the ledger: {error}"
-                                ),
+                            pending.push((*record, saved));
+                            (Vec::new(), None)
+                        }
+                        LedgerChange::MarkRevoked(revoked, done) => (revoked, Some(done)),
+                    };
+                    let written = if pending.is_empty() && revoked.is_empty() {
+                        Ok(())
+                    } else {
+                        Self::apply(&project_dir, |ledger| {
+                            for (record, _) in &pending {
+                                ledger.add(record.clone());
+                            }
+                            mark_revoked(ledger, &revoked);
+                        })
+                    };
+                    match &written {
+                        Ok(()) => {
+                            for (_, saved) in pending.drain(..) {
+                                saved.store(true, Ordering::SeqCst);
                             }
                         }
-                        LedgerChange::MarkRevoked(revoked, done) => {
-                            let marked = if revoked.is_empty() {
-                                Ok(())
-                            } else {
-                                Self::apply(&project_dir, |ledger| {
-                                    // Lease IDs need not be unique, even
-                                    // within one backend
-                                    for (name, lease_id, recorded_at) in &revoked {
-                                        if let Some(index) =
-                                            ledger.leases.iter().position(|record| {
-                                                !record.revoked
-                                                    && record.backend_name == *name
-                                                    && record.lease_id == *lease_id
-                                                    && record.created_at == *recorded_at
-                                            })
-                                        {
-                                            ledger.mark_revoked_at(index);
-                                        }
-                                    }
-                                })
-                            };
-                            let _ = done.send(marked);
-                        }
+                        Err(error) if done.is_none() => tracing::warn!(
+                            "fnox proxy: {} lease(s) are not in the ledger yet, and are tried again with its next change: {error}",
+                            pending.len()
+                        ),
+                        Err(_) => {}
+                    }
+                    if let Some(done) = done {
+                        let _ = done.send(written);
                     }
                 }
             })
@@ -415,6 +416,21 @@ impl LedgerWriter {
         let (done, marked) = tokio::sync::oneshot::channel();
         self.send(LedgerChange::MarkRevoked(revoked, done));
         marked
+    }
+}
+
+/// Mark the records `revoked` names revoked, by backend, lease ID and
+/// creation time: lease IDs need not be unique, even within one backend
+fn mark_revoked(ledger: &mut LeaseLedger, revoked: &[(String, String, DateTime<Utc>)]) {
+    for (name, lease_id, recorded_at) in revoked {
+        if let Some(index) = ledger.leases.iter().position(|record| {
+            !record.revoked
+                && record.backend_name == *name
+                && record.lease_id == *lease_id
+                && record.created_at == *recorded_at
+        }) {
+            ledger.mark_revoked_at(index);
+        }
     }
 }
 
@@ -693,6 +709,36 @@ fn renew_at(minted_at: DateTime<Utc>, expires_at: Option<DateTime<Utc>>) -> Rene
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn marking_revoked_finds_the_record_by_its_creation_time() {
+        let record = |created_at| LeaseRecord {
+            lease_id: "lease-1".to_string(),
+            backend_name: "forge".to_string(),
+            label: "fnox-proxy-forge".to_string(),
+            created_at,
+            expires_at: None,
+            revoked: false,
+            cached_credentials: None,
+            encryption_provider: None,
+            revoke_credentials: Some([("TOKEN".to_string(), "x".to_string())].into()),
+            config_hash: None,
+        };
+        let first = Utc::now() - chrono::Duration::minutes(5);
+        let second = Utc::now();
+        // The same backend and lease ID, as a `command` lease may print
+        let mut ledger = LeaseLedger {
+            leases: vec![record(first), record(second)],
+        };
+        mark_revoked(
+            &mut ledger,
+            &[("forge".to_string(), "lease-1".to_string(), second)],
+        );
+        assert!(!ledger.leases[0].revoked);
+        assert!(ledger.leases[0].revoke_credentials.is_some());
+        assert!(ledger.leases[1].revoked);
+        assert!(ledger.leases[1].revoke_credentials.is_none());
+    }
 
     #[test]
     fn a_command_lease_keeps_its_own_longer_timeout() {
