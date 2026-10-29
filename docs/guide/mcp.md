@@ -25,7 +25,7 @@ Add the server to your agent's MCP config. For Claude Code, create `.mcp.json` i
 
 Use `"args": ["-P", "staging", "mcp"]` to serve a profile. The agent must start the server from the project directory so fnox finds `fnox.toml`, or pass `-c <path>`.
 
-The server never prompts, so sign in to your providers (for example `op signin`) before starting the agent.
+The server never prompts in the terminal, so sign in to your providers (for example `op signin`) before starting the agent.
 
 ## Choose what the agent can do
 
@@ -35,12 +35,37 @@ tools = ["exec"]                         # default: ["get_secret", "exec"]
 secrets = ["GITHUB_TOKEN", "NPM_TOKEN"]  # default: every secret in the profile
 ```
 
-| Tool         | What the agent gets                                                                                           |
-| ------------ | ------------------------------------------------------------------------------------------------------------- |
-| `get_secret` | The value of one secret, by name.                                                                             |
-| `exec`       | Runs a command with the secrets injected and returns its output, with secret values replaced by `[REDACTED]`. |
+| Tool             | What the agent gets                                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- |
+| `get_secret`     | The value of one secret, by name.                                                                             |
+| `exec`           | Runs a command with the secrets injected and returns its output, with secret values replaced by `[REDACTED]`. |
+| `request_secret` | Asks you to enter a missing secret on a local page. The agent learns only that it was stored. Off by default. |
 
-`secrets` limits both tools: unlisted secrets are never resolved, injected, or returned. Disabled tools aren't advertised to the agent at all.
+`secrets` limits every tool: unlisted secrets are never resolved, injected, or returned, and `request_secret` can't ask for them. Disabled tools aren't advertised to the agent at all.
+
+## Let the agent ask for a secret
+
+When a task needs a credential you haven't stored yet, such as an API token, the agent would normally ask you to paste it into the chat. With `request_secret`, it asks fnox instead, and you type the value into a page that fnox serves on your machine:
+
+```toml
+default_provider = "age"
+
+[mcp]
+tools = ["exec", "request_secret"]
+```
+
+1. The agent calls `request_secret` with a name, such as `TAILSCALE_AUTHKEY`, and a reason, such as where to create the key.
+2. Your agent shows a link to a one-time page on `127.0.0.1`. The page shows the secret's name, the provider and config file fnox will store it in, and the agent's reason, labeled as written by the agent.
+3. You enter the value and choose **Save to fnox**, or choose **Decline**.
+4. fnox stores the value as `fnox set` would and tells the agent only that it was stored. From then on, `exec` sets it as an environment variable.
+
+The value never passes through the agent's client or its model. The link works once and expires after 10 minutes.
+
+fnox refuses to store the value in plain text. The secret's provider, or `default_provider` for a new secret, must encrypt values (such as `age`) or store them remotely (such as `1password`); the `plain` provider is refused. If the secret already has a value, the agent is told so and nothing is asked; it can pass `replace: true` to ask you for a new one. If the secret gets a value or a different provider while the page is open, fnox stores nothing and says so on the page.
+
+### Client support
+
+The link uses MCP's URL-mode elicitation, from protocol version 2025-11-25. If the agent's client doesn't support it, `request_secret` doesn't open a page. It tells the agent to ask you to run `fnox set NAME` in your own terminal, which prompts with hidden input. When the agent calls `request_secret` again, fnox loads the stored value.
 
 ## How it behaves
 
@@ -50,7 +75,9 @@ secrets = ["GITHUB_TOKEN", "NPM_TOKEN"]  # default: every secret in the profile
 
 ## What it does and doesn't protect
 
-`exec` without `get_secret` keeps raw values out of the agent's conversation in normal use, and every command it runs is visible to you. It is **not** isolation: the agent chooses the command, and a command can encode or send a value somewhere. Redaction matches literal values only, so base64 or other transformed output isn't caught. You can turn redaction off with `redact_output = false`, but there's rarely a reason to.
+`exec` without `get_secret` keeps raw values out of the agent's conversation in normal use, and every command it runs is visible to you. `request_secret` keeps a value you enter out of the conversation, but the stored value is then as reachable as any other secret: through `get_secret` if you enable it, and through `exec`. It is **not** isolation: the agent chooses the command, and a command can encode or send a value somewhere. Redaction matches literal values only, so base64 or other transformed output isn't caught. You can turn redaction off with `redact_output = false`, but there's rarely a reason to.
+
+The `request_secret` page doesn't prove that you are the one filling it in. The agent's client receives the link, and a program running as your user could open it and submit a value of its own. Check that a secret you didn't enter yourself holds what you expect. The page also displays text the agent wrote: enter only the value for the named secret, never a password manager's master password.
 
 Shell integration is a separate channel. If your interactive shell already has secrets loaded, an agent started from it can read them regardless of `[mcp]`. Set `env = "exec"` to keep secrets out of the shell (see [running commands](/guide/running-commands#choose-which-secrets-reach-a-command)).
 

@@ -86,7 +86,7 @@ fn extract_line(value: &str, line: usize) -> Result<String> {
 /// Apply post-processing to a secret value based on SecretConfig settings.
 /// `json_path` extracts a path from a JSON value; `line` returns the Nth
 /// line (1-indexed) of the raw value. The two are mutually exclusive.
-fn apply_post_processing(value: String, secret_config: &SecretConfig) -> Result<String> {
+pub fn apply_post_processing(value: String, secret_config: &SecretConfig) -> Result<String> {
     if secret_config.json_path.is_some() && secret_config.line.is_some() {
         return Err(FnoxError::Config(
             "`json_path` and `line` are mutually exclusive on a secret".to_string(),

@@ -723,7 +723,7 @@ cmd mcp help="Serve secrets to AI agents over the Model Context Protocol" {
     long_help #"""
 Serve secrets to AI agents over the Model Context Protocol
 
-Starts an MCP server on stdin and stdout for an agent client to launch. It offers the `get_secret` and `exec` tools, limited by the `[mcp]` table: `tools` chooses which tools are offered and `secrets` restricts which secrets they can reach. The server never prompts, so authenticate to your providers before starting the client.
+Starts an MCP server on stdin and stdout for an agent client to launch. It offers the `get_secret` and `exec` tools, limited by the `[mcp]` table: `tools` chooses which tools are offered and `secrets` restricts which secrets they can reach. Add `request_secret` to `tools` to let the agent ask you to enter a missing secret on a local page. The server never prompts in the terminal, so authenticate to your providers before starting the client.
 """#
     after_long_help #"""
 See also:

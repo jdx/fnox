@@ -1734,7 +1734,7 @@
       "type": "object",
       "properties": {
         "tools": {
-          "description": "Which MCP tools to expose (default: [\"get_secret\", \"exec\"])",
+          "description": "Which MCP tools to expose (default: [\"get_secret\", \"exec\"]).\n`request_secret` lets the agent ask you to enter a new secret.",
           "type": ["array", "null"],
           "items": {
             "$ref": "#/$defs/McpTool"
@@ -1751,7 +1751,7 @@
           "type": ["boolean", "null"]
         },
         "secrets": {
-          "description": "Optional allowlist of secret names visible to the MCP server.\nWhen set, only these secrets are resolved and available via get_secret/exec.\nWhen None, all profile secrets are available.",
+          "description": "Optional allowlist of secret names visible to the MCP server.\nWhen set, only these secrets are resolved and available via get_secret/exec,\nand request_secret can ask only for these names.\nWhen None, all profile secrets are available.",
           "type": ["array", "null"],
           "items": {
             "type": "string"
@@ -1763,7 +1763,7 @@
     "McpTool": {
       "description": "Available MCP tools",
       "type": "string",
-      "enum": ["get_secret", "exec"]
+      "enum": ["get_secret", "exec", "request_secret"]
     },
     "DaemonConfig": {
       "description": "Per-user daemon configuration",

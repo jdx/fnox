@@ -421,6 +421,7 @@ pub struct ProfileConfig {
 pub enum McpTool {
     GetSecret,
     Exec,
+    RequestSecret,
 }
 
 impl McpTool {
@@ -429,6 +430,7 @@ impl McpTool {
         match self {
             McpTool::GetSecret => "get_secret",
             McpTool::Exec => "exec",
+            McpTool::RequestSecret => "request_secret",
         }
     }
 }
@@ -438,7 +440,8 @@ impl McpTool {
 #[serde(deny_unknown_fields)]
 #[derive(Default)]
 pub struct McpConfig {
-    /// Which MCP tools to expose (default: ["get_secret", "exec"])
+    /// Which MCP tools to expose (default: ["get_secret", "exec"]).
+    /// `request_secret` lets the agent ask you to enter a new secret.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "tools")]
     tools_raw: Option<Vec<McpTool>>,
 
@@ -454,7 +457,8 @@ pub struct McpConfig {
     pub redact_output: Option<bool>,
 
     /// Optional allowlist of secret names visible to the MCP server.
-    /// When set, only these secrets are resolved and available via get_secret/exec.
+    /// When set, only these secrets are resolved and available via get_secret/exec,
+    /// and request_secret can ask only for these names.
     /// When None, all profile secrets are available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secrets: Option<Vec<String>>,

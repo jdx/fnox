@@ -84,7 +84,7 @@ regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
 rpassword = "7"
 rcgen = { version = "0.14", default-features = false, features = ["aws_lc_rs", "pem"] }
-rmcp = { version = "3", features = ["server", "transport-io", "macros"] }
+rmcp = { version = "3", features = ["server", "transport-io", "macros", "elicitation"] }
 rmp-serde = "1"
 # age loads its translations through rust-embed, which in debug builds reads them from the cargo registry at runtime; embed them so a debug binary run on another machine does not panic
 rust-embed = { version = "8", features = ["debug-embed"] }
