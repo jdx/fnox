@@ -65,6 +65,12 @@ jobs:
           cache: false
         env:
           MISE_LOCKED: "1"
+          # mise-action verifies the mise binary with sigstore-js, which caches
+          # TUF metadata under $XDG_DATA_HOME, else ~/.local/share. The
+          # container's /github/home is not writable, so give it the job's
+          # throwaway directory. Scoped to this step: fnox reads XDG_DATA_HOME
+          # too, and the measured environment must not change.
+          XDG_DATA_HOME: ${{ env.MISE_CACHE_DIR }}/xdg-data
 
       # cachegrind is the whole point: it counts instructions, which reproduce
       # to ~0.02% run-to-run where wall clock on this same hardware moves by
