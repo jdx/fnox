@@ -782,7 +782,7 @@ impl FnoxMcpServer {
                 );
                 let reloaded = {
                     let _reload = self.reload_lock.lock().await;
-                    let reloaded = self.reload_stored(&name).await;
+                    let reloaded = self.reload_stored(&name, &target).await;
                     if reloaded.is_ok() {
                         // The user just entered this value; nothing to wait for
                         self.sent_to_terminal
@@ -900,10 +900,19 @@ impl FnoxMcpServer {
             )));
         }
         // A value that doesn't fit the secret's json_path or line setting
-        // would replace a working one with one that can't be read
-        if let Some(secret) = config.get_secrets(&self.profile)?.get(name)
-            && (secret.json_path.is_some() || secret.line.is_some())
-        {
+        // would replace a working one with one that can't be read. Check the
+        // secret as the active profiles read it and as the write profile,
+        // which `--write-profile` may set to another profile, stores it.
+        let write_profile =
+            Config::resolve_write_profile(&self.profile, self.write_profile.as_deref())?;
+        let read = config.get_secrets(&self.profile)?.shift_remove(name);
+        let written = config
+            .get_secret(std::slice::from_ref(&write_profile), name)?
+            .cloned();
+        for secret in read.iter().chain(written.iter()) {
+            if secret.json_path.is_none() && secret.line.is_none() {
+                continue;
+            }
             crate::secret_resolver::apply_post_processing(value.to_string(), secret).map_err(
                 |e| {
                     changed(format!(
@@ -1039,7 +1048,11 @@ impl FnoxMcpServer {
     }
 
     /// Load a value `save` just stored, so the tools use it
-    async fn reload_stored(&self, name: &str) -> crate::error::Result<()> {
+    async fn reload_stored(
+        &self,
+        name: &str,
+        target: &std::path::Path,
+    ) -> crate::error::Result<()> {
         let config = Config::load_smart(self.config_path.as_path())?;
         // A remote provider keeps the same reference when a value is replaced,
         // so the daemon would otherwise keep serving the old value
@@ -1053,6 +1066,29 @@ impl FnoxMcpServer {
             return Err(crate::error::FnoxError::Config(
                 "it resolves to no value".into(),
             ));
+        }
+        // Another file that takes precedence may define the secret too, such
+        // as one created while the page was open; the stored value is then
+        // not the one in use
+        let source = self
+            .secrets()
+            .get(name)
+            .and_then(|secret| secret.source_path.clone());
+        if let Some(source) = source {
+            let same = |a: &std::path::Path, b: &std::path::Path| {
+                a == b
+                    || std::fs::canonicalize(a)
+                        .ok()
+                        .zip(std::fs::canonicalize(b).ok())
+                        .is_some_and(|(a, b)| a == b)
+            };
+            if !same(&source, target) {
+                return Err(crate::error::FnoxError::Config(format!(
+                    "'{name}' is read from {}, which takes precedence over {}, so the new value isn't in use",
+                    source.display(),
+                    target.display()
+                )));
+            }
         }
         Ok(())
     }

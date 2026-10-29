@@ -201,6 +201,28 @@ mcp_client() {
 	assert_output "from-terminal"
 }
 
+@test "request_secret reports a stored value that another file overrides" {
+	echo old-value | "$FNOX_BIN" set API_TOKEN
+	# While the page is open, fnox.local.toml starts defining the same secret
+	export BEFORE_SUBMIT='printf "[secrets]\n%s\n" "$(grep "^API_TOKEN" fnox.toml)" >fnox.local.toml'
+	mcp_client url save:new-value '[["request_secret", {"name": "API_TOKEN", "replace": true}]]'
+	assert_success
+	assert_line --index 0 --partial "fnox.local.toml, which takes precedence over"
+	assert_line --index 0 --partial '"isError": true'
+	run "$FNOX_BIN" get API_TOKEN
+	assert_output "old-value"
+}
+
+@test "request_secret checks json_path against the write profile's secret" {
+	echo old-value | "$FNOX_BIN" set API_TOKEN
+	printf '\n[profiles.prod.secrets]\nAPI_TOKEN = { json_path = "token" }\n' >>fnox.toml
+	export MCP_CLIENT_FNOX_ARGS="--write-profile prod"
+	mcp_client url save:plain-token '[["request_secret", {"name": "API_TOKEN", "replace": true}]]'
+	assert_success
+	assert_line --index 0 --partial "doesn't fit the json_path or line setting"
+	assert_line --index 1 '{"page": 500}'
+}
+
 @test "request_secret only asks for names in mcp.secrets" {
 	sed -i.bak 's/^tools = .*/&\nsecrets = ["OTHER"]/' fnox.toml
 	mcp_client url none '[["request_secret", {"name": "API_TOKEN"}]]'

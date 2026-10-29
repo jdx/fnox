@@ -11,7 +11,7 @@ between tool calls, in the same session, and prints {"ran": <exit code>}.
 
 Prints one JSON line per call result, then {"page": <status or null>}.
 If BEFORE_SUBMIT is set, it runs as a shell command just before the page is
-submitted.
+submitted. MCP_CLIENT_FNOX_ARGS adds global flags before `mcp`.
 """
 
 import json
@@ -26,7 +26,7 @@ import urllib.request
 fnox_bin, elicit, page_action, calls = sys.argv[1:5]
 
 proc = subprocess.Popen(
-    [fnox_bin, "mcp"],
+    [fnox_bin, *os.environ.get("MCP_CLIENT_FNOX_ARGS", "").split(), "mcp"],
     stdin=subprocess.PIPE,
     stdout=subprocess.PIPE,
     text=True,
