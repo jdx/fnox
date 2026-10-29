@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -89,6 +89,12 @@ pub struct FnoxMcpServer {
     config_path: Arc<PathBuf>,
     /// `--write-profile` value, for request_secret
     write_profile: Arc<Option<String>>,
+    /// Held while request_secret rechecks and stores a value, so two pages
+    /// can't both pass the recheck and overwrite each other
+    store_lock: Arc<tokio::sync::Mutex<()>>,
+    /// Names request_secret sent to `fnox set` in the terminal; their next
+    /// check reloads the value instead of trusting the cache
+    sent_to_terminal: Arc<std::sync::Mutex<HashSet<String>>>,
     /// Resolved secret values (raw). None means "resolved but absent".
     /// as_file conversion happens at exec time.
     cache: Arc<RwLock<HashMap<String, Option<String>>>>,
@@ -115,6 +121,8 @@ impl FnoxMcpServer {
             profile_secrets: Arc::new(std::sync::RwLock::new(Arc::new(profile_secrets))),
             config_path: Arc::new(PathBuf::from(config::DEFAULT_CONFIG_FILENAME)),
             write_profile: Arc::new(None),
+            store_lock: Arc::new(tokio::sync::Mutex::new(())),
+            sent_to_terminal: Arc::new(std::sync::Mutex::new(HashSet::new())),
             cache: Arc::new(RwLock::new(HashMap::new())),
             resolved: Arc::new(OnceCell::new()),
             tool_router: Self::tool_router(),
@@ -139,6 +147,20 @@ impl FnoxMcpServer {
             .read()
             .unwrap_or_else(|e| e.into_inner())
             .clone()
+    }
+
+    /// as_file secrets are meant to be consumed as file paths via exec, not
+    /// retrieved as raw content. Reject them to avoid leaking key material.
+    fn reject_as_file(&self, name: &str) -> Result<(), McpError> {
+        if self.secrets().get(name).is_some_and(|sc| sc.as_file) {
+            return Err(McpError::invalid_request(
+                format!(
+                    "Secret '{name}' is configured with as_file=true and can only be used via the exec tool"
+                ),
+                None,
+            ));
+        }
+        Ok(())
     }
 
     /// Make a secret stored during this session available to the tools
@@ -314,24 +336,13 @@ impl FnoxMcpServer {
             ));
         }
 
-        let profile_secrets = self.secrets();
-
-        // as_file secrets are meant to be consumed as file paths via exec, not
-        // retrieved as raw content. Reject them to avoid leaking key material.
-        if let Some(sc) = profile_secrets.get(&params.name)
-            && sc.as_file
-        {
-            return Err(McpError::invalid_request(
-                format!(
-                    "Secret '{}' is configured with as_file=true and can only be used via the exec tool",
-                    params.name
-                ),
-                None,
-            ));
-        }
+        self.reject_as_file(&params.name)?;
 
         // Ensure env-injectable secrets (env=true / env="exec") are batch-resolved
         self.ensure_resolved().await?;
+        // request_secret may have changed the secret while this waited, so
+        // read the current map and check again before returning a value
+        let profile_secrets = self.secrets();
 
         // Check cache (covers env=true/env="exec" secrets and previously
         // resolved env=false).
@@ -340,9 +351,12 @@ impl FnoxMcpServer {
             let cache = self.cache.read().await;
             if let Some(cached) = cache.get(&params.name) {
                 return match cached {
-                    Some(value) => Ok(CallToolResult::success(vec![ContentBlock::text(
-                        value.clone(),
-                    )])),
+                    Some(value) => {
+                        self.reject_as_file(&params.name)?;
+                        Ok(CallToolResult::success(vec![ContentBlock::text(
+                            value.clone(),
+                        )]))
+                    }
                     None => Err(McpError::invalid_request(
                         format!(
                             "Secret '{}' has no value (it may be optional and absent)",
@@ -359,7 +373,10 @@ impl FnoxMcpServer {
             // env=false secrets are deferred; try on-demand resolution
             if !secret_config.env_mode().in_exec() {
                 return match self.resolve_single(&params.name).await? {
-                    Some(value) => Ok(CallToolResult::success(vec![ContentBlock::text(value)])),
+                    Some(value) => {
+                        self.reject_as_file(&params.name)?;
+                        Ok(CallToolResult::success(vec![ContentBlock::text(value)]))
+                    }
                     None => Err(McpError::invalid_request(
                         format!(
                             "Secret '{}' has no value (it may be optional and absent)",
@@ -732,29 +749,48 @@ impl FnoxMcpServer {
                 ))]))
             }
             Some(Submission::Value { value, reply }) => {
+                // One store at a time, so two pages for the same name can't
+                // both pass the recheck
+                let _store = self.store_lock.lock().await;
                 // The config may have changed while the page was open
-                let result = match self.recheck(&name, params.replace, &provider).await {
-                    Ok(config) => self.store(&name, value, config, &target).await,
+                let saved = match self.recheck(&name, params.replace, &provider).await {
+                    Ok(config) => self.save(&name, value, config, &target).await,
                     Err(e) => Err(e),
                 };
-                match result {
-                    Ok(()) => {
-                        let _ = reply.send(Ok(format!(
-                            "fnox stored {name}. You can close this tab and go back to the agent."
-                        )));
-                        Ok(CallToolResult::success(vec![ContentBlock::text(format!(
-                            "The user entered '{name}'. fnox stored it with provider '{provider}' in {}. The exec tool now sets it as ${name}.",
-                            target.display()
-                        ))]))
-                    }
-                    Err(e) => {
-                        let _ = reply.send(Err(e.to_string()));
-                        Err(McpError::internal_error(
-                            format!("Failed to store '{name}': {e}"),
-                            None,
-                        ))
-                    }
+                if let Err(e) = saved {
+                    let _ = reply.send(Err(e.to_string()));
+                    return Err(McpError::internal_error(
+                        format!("Failed to store '{name}': {e}"),
+                        None,
+                    ));
                 }
+                let stored = format!(
+                    "fnox stored it with provider '{provider}' in {}",
+                    target.display()
+                );
+                if let Err(e) = self.reload_stored(&name).await {
+                    let _ = reply.send(Ok(format!(
+                        "fnox stored {name}, but couldn't read it back: {e}"
+                    )));
+                    return Ok(CallToolResult::error(vec![ContentBlock::text(format!(
+                        "The user entered '{name}' and {stored}, but reading it back failed: {e}. The value is saved; don't ask for it again."
+                    ))]));
+                }
+                let _ = reply.send(Ok(format!(
+                    "fnox stored {name}. You can close this tab and go back to the agent."
+                )));
+                let usage = if self
+                    .secrets()
+                    .get(&name)
+                    .is_some_and(|secret| secret.env_mode().in_exec())
+                {
+                    format!("The exec tool now sets it as ${name}.")
+                } else {
+                    "Its env setting keeps it out of commands that the exec tool runs.".into()
+                };
+                Ok(CallToolResult::success(vec![ContentBlock::text(format!(
+                    "The user entered '{name}'. {stored}. {usage}"
+                ))]))
             }
         }
     }
@@ -844,7 +880,22 @@ impl FnoxMcpServer {
     /// Whether `name` resolves to a value, checking `config` (freshly loaded)
     /// for a secret set outside this session, such as with `fnox set`
     async fn has_value(&self, config: &Config, name: &str) -> Result<bool, McpError> {
-        if matches!(self.cache.read().await.get(name), Some(Some(_))) {
+        // After the terminal fallback, the user may have replaced a value this
+        // session (and the daemon) still caches
+        let sent_to_terminal = self
+            .sent_to_terminal
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(name);
+        if sent_to_terminal {
+            crate::daemon::refresh_with_context(
+                &self.daemon_context,
+                config,
+                std::slice::from_ref(&name.to_string()),
+            )
+            .await
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+        } else if matches!(self.cache.read().await.get(name), Some(Some(_))) {
             return Ok(true);
         }
         self.load(config, name).await.map_err(|e| {
@@ -886,7 +937,7 @@ impl FnoxMcpServer {
     }
 
     /// Store a value the user entered, as `fnox set` would
-    async fn store(
+    async fn save(
         &self,
         name: &str,
         value: String,
@@ -921,6 +972,11 @@ impl FnoxMcpServer {
             true,
         )
         .await?;
+        Ok(())
+    }
+
+    /// Load a value `save` just stored, so the tools use it
+    async fn reload_stored(&self, name: &str) -> crate::error::Result<()> {
         let config = Config::load_smart(self.config_path.as_path())?;
         // A remote provider keeps the same reference when a value is replaced,
         // so the daemon would otherwise keep serving the old value
@@ -931,15 +987,19 @@ impl FnoxMcpServer {
         )
         .await?;
         if !self.load(&config, name).await? {
-            return Err(crate::error::FnoxError::Config(format!(
-                "stored '{name}', but it resolves to no value"
-            )));
+            return Err(crate::error::FnoxError::Config(
+                "it resolves to no value".into(),
+            ));
         }
         Ok(())
     }
 
     /// What to tell the agent when the client can't show a URL
     fn terminal_fallback(&self, name: &str) -> String {
+        self.sent_to_terminal
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(name.to_string());
         let mut command = vec!["fnox".to_string()];
         if self.config_path.as_path() != std::path::Path::new(config::DEFAULT_CONFIG_FILENAME) {
             command.push("-c".into());
@@ -948,11 +1008,11 @@ impl FnoxMcpServer {
         }
         if self.profile.as_slice() != ["default"] {
             command.push("-P".into());
-            command.push(self.profile.join(","));
+            command.push(crate::shell::posix_quote(&self.profile.join(",")).into_owned());
         }
         if let Some(write_profile) = self.write_profile.as_deref() {
             command.push("--write-profile".into());
-            command.push(write_profile.to_string());
+            command.push(crate::shell::posix_quote(write_profile).into_owned());
         }
         command.push("set".into());
         command.push(name.to_string());
@@ -1109,6 +1169,33 @@ mod tests {
         let result = server.list_tools_result();
         assert_eq!(result.ttl_ms, Some(0));
         assert_eq!(result.cache_scope, Some(CacheScope::Private));
+    }
+
+    #[test]
+    fn terminal_fallback_quotes_profile_names() {
+        let profile = vec!["my profile".to_string()];
+        let server = FnoxMcpServer::new(
+            Config::default(),
+            profile.clone(),
+            McpConfig::default(),
+            ResolveContext {
+                config: "fnox.toml".into(),
+                profile,
+                age_key_file: None,
+                if_missing: None,
+                no_defaults: false,
+                non_interactive: true,
+                no_daemon: true,
+            },
+            IndexMap::new(),
+        )
+        .with_write_target("fnox.toml".into(), Some("my profile".into()));
+
+        let text = server.terminal_fallback("API_TOKEN");
+        assert!(
+            text.contains("fnox -P 'my profile' --write-profile 'my profile' set API_TOKEN"),
+            "{text}"
+        );
     }
 
     #[test]

@@ -89,12 +89,29 @@ mcp_client() {
 	assert_line --index 3 --partial '[REDACTED]'
 }
 
+@test "request_secret loads a value replaced in the terminal during the session" {
+	echo old-value | "$FNOX_BIN" set API_TOKEN
+	mcp_client none none '[
+		["exec", {"command": ["sh", "-c", "test \"$API_TOKEN\" = old-value && echo old"]}],
+		["request_secret", {"name": "API_TOKEN", "replace": true}],
+		["$", ["sh", "-c", "echo new-value | \"$FNOX_BIN\" set API_TOKEN"]],
+		["request_secret", {"name": "API_TOKEN"}],
+		["exec", {"command": ["sh", "-c", "test \"$API_TOKEN\" = new-value && echo matched"]}]
+	]'
+	assert_success
+	assert_line --index 0 --partial old
+	assert_line --index 1 --partial "fnox set API_TOKEN"
+	assert_line --index 3 --partial "already has a value"
+	assert_line --index 4 --partial matched
+}
+
 @test "request_secret applies the top-level env default to a new secret" {
 	sed -i.bak 's/^default_provider = .*/&\nenv = false/' fnox.toml
 	mcp_client url save:hidden-value \
 		'[["request_secret", {"name": "API_TOKEN"}], ["exec", {"command": ["printenv", "API_TOKEN"]}]]'
 	assert_success
 	assert_line --index 0 --partial "fnox stored it"
+	assert_line --index 0 --partial "keeps it out of commands"
 	assert_line --index 1 --partial '[exit code: 1]'
 	refute_output --partial hidden-value
 }
