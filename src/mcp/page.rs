@@ -15,7 +15,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::error::{FnoxError, Result};
-use crate::proxy::{HttpRequest, constant_time_eq, read_http_request_limited};
+use crate::local_http::{HttpRequest, constant_time_eq, read_http_request_limited};
 
 /// How long a connection may take to send its request
 const READ_TIMEOUT: Duration = Duration::from_secs(30);
@@ -147,7 +147,7 @@ async fn handle(mut stream: TcpStream, state: &PageState) -> Result<()> {
         Ok(Ok(request)) => request,
         Ok(Err(e)) => {
             respond(&mut stream, 400, &message_page("Bad request", "")).await?;
-            return Err(e);
+            return Err(FnoxError::Config(e));
         }
         Err(_) => return Ok(()),
     };
