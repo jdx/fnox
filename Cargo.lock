@@ -2444,6 +2444,7 @@ dependencies = [
  "aho-corasick",
  "anyhow",
  "arboard",
+ "async-trait",
  "atty",
  "base64 0.23.1",
  "blake3",

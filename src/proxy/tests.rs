@@ -1088,44 +1088,103 @@ fn leases(toml: &str) -> IndexMap<String, crate::lease_backends::LeaseBackendCon
     toml_edit::de::from_str(toml).unwrap()
 }
 
-/// A `command` lease whose create command counts its runs in `dir` and
-/// mints `minted-<run>`, and whose revoke command logs the lease ID.
-/// `expires` is a shell word for its `expires_at`, which can read the run
-/// number from `$n`, or empty for a lease that doesn't expire.
-fn counting_lease(dir: &std::path::Path, expires: &str) -> String {
-    let dir = dir.display();
-    let extra = if expires.is_empty() {
-        ""
-    } else {
-        r#","expires_at":"%s""#
-    };
-    format!(
-        r#"
-[forge]
-type = "command"
-create_command = '''
-n=$(( $(cat {dir}/count 2>/dev/null || echo 0) + 1 ))
-echo $n > {dir}/count
-printf '{{"credentials":{{"TOKEN":"minted-%s"}},"lease_id":"lease-%s"{extra}}}' $n $n {expires}
-'''
-revoke_command = 'echo "$FNOX_LEASE_ID" >> {dir}/revoked'
-"#
-    )
+/// A lease backend in this process, so the tests spawn no commands: on some
+/// platforms a child spawned while another test opens a socket can inherit
+/// it. It mints `minted-<n>` with lease ID `lease-<n>`.
+struct FakeBackend {
+    mints: std::sync::atomic::AtomicUsize,
+    /// The expiry of the `n`th lease, from when it is minted
+    expiry: fn(usize) -> Option<chrono::Duration>,
+    fail: bool,
+    revoked: std::sync::Mutex<Vec<String>>,
 }
 
-fn lease_plan(leases_toml: &str) -> ProxyPlan {
+impl FakeBackend {
+    fn new(expiry: fn(usize) -> Option<chrono::Duration>) -> Arc<Self> {
+        Self::with(expiry, false)
+    }
+
+    /// One whose every mint fails
+    fn failing() -> Arc<Self> {
+        Self::with(|_| None, true)
+    }
+
+    fn with(expiry: fn(usize) -> Option<chrono::Duration>, fail: bool) -> Arc<Self> {
+        Arc::new(Self {
+            mints: Default::default(),
+            expiry,
+            fail,
+            revoked: Default::default(),
+        })
+    }
+
+    fn mints(&self) -> usize {
+        self.mints.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// The lease IDs revoked, sorted: leases are revoked concurrently
+    fn revoked(&self) -> Vec<String> {
+        let mut revoked = self.revoked.lock().unwrap().clone();
+        revoked.sort_unstable();
+        revoked
+    }
+}
+
+#[async_trait::async_trait]
+impl crate::lease_backends::LeaseBackend for FakeBackend {
+    async fn create_lease(
+        &self,
+        _duration: std::time::Duration,
+        _label: &str,
+    ) -> Result<crate::lease_backends::Lease> {
+        let n = self.mints.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        if self.fail {
+            return Err(FnoxError::Config("parent token rejected".to_string()));
+        }
+        Ok(crate::lease_backends::Lease {
+            credentials: [("TOKEN".to_string(), format!("minted-{n}"))]
+                .into_iter()
+                .collect(),
+            expires_at: (self.expiry)(n).map(|after| chrono::Utc::now() + after),
+            lease_id: format!("lease-{n}"),
+        })
+    }
+
+    async fn revoke_lease(
+        &self,
+        lease_id: &str,
+        _credentials: Option<&IndexMap<String, String>>,
+    ) -> Result<()> {
+        self.revoked.lock().unwrap().push(lease_id.to_string());
+        Ok(())
+    }
+
+    fn max_lease_duration(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(24 * 3600)
+    }
+}
+
+/// A plan whose rule injects `credential` of lease `forge`, minted by `backend`
+fn lease_plan_with(credential: &str, backend: Arc<FakeBackend>) -> ProxyPlan {
     let config = ProxyConfig {
         audit: false,
-        rules: vec![lease_rule("forge", Some("TOKEN"))],
+        rules: vec![lease_rule("forge", Some(credential))],
         ..ProxyConfig::default()
     };
-    ProxyPlan::with_leases(
-        &config,
-        &IndexMap::new(),
-        &leases(leases_toml),
-        LeaseSetup::default(),
-    )
-    .unwrap()
+    // A stand-in config: the backend is replaced before anything is minted
+    let stand_in = leases("[forge]\ntype = \"command\"\ncreate_command = \"false\"\n");
+    let mut plan =
+        ProxyPlan::with_leases(&config, &IndexMap::new(), &stand_in, LeaseSetup::default())
+            .unwrap();
+    Arc::get_mut(&mut plan.policy)
+        .expect("nothing else holds a new plan's policy")
+        .leases
+        .set_backend("forge", backend);
+    plan
+}
+
+fn lease_plan(backend: Arc<FakeBackend>) -> ProxyPlan {
+    lease_plan_with("TOKEN", backend)
 }
 
 fn note_request() -> (reqwest::Url, Vec<(String, String)>) {
@@ -1148,24 +1207,30 @@ async fn send_note(plan: &ProxyPlan) -> Result<(Vec<String>, String)> {
     Ok((injected, headers[0].1.clone()))
 }
 
-fn mints(dir: &std::path::Path) -> usize {
-    std::fs::read_to_string(dir.join("count"))
-        .map(|count| count.trim().parse().unwrap())
-        .unwrap_or(0)
+/// A first lease that lasts one second, then long ones. The first is due for
+/// renewal after three quarters of a second.
+fn short_then_long(n: usize) -> Option<chrono::Duration> {
+    Some(if n == 1 {
+        chrono::Duration::seconds(1)
+    } else {
+        chrono::Duration::hours(1)
+    })
 }
 
-#[cfg(unix)]
+/// Past the first lease's renewal time
+const PAST_RENEWAL: std::time::Duration = std::time::Duration::from_millis(850);
+
 #[tokio::test]
 async fn a_lease_is_minted_once_when_a_request_first_needs_it() {
-    let dir = tempfile::tempdir().unwrap();
-    let plan = lease_plan(&counting_lease(dir.path(), "2099-01-01T00:00:00Z"));
+    let backend = FakeBackend::new(|_| Some(chrono::Duration::hours(1)));
+    let plan = lease_plan(backend.clone());
     assert_eq!(plan.child_env["TOKEN"], "forge_placeholder");
     assert!(
         plan.pending().is_empty(),
         "a lease is never a pending secret"
     );
     // Nothing is minted until a request carries the placeholder
-    assert_eq!(mints(dir.path()), 0);
+    assert_eq!(backend.mints(), 0);
 
     // Concurrent requests share one lease
     let (first, second) = tokio::join!(send_note(&plan), send_note(&plan));
@@ -1174,7 +1239,7 @@ async fn a_lease_is_minted_once_when_a_request_first_needs_it() {
     assert_eq!(header, "minted-1");
     assert_eq!(second.unwrap().1, "minted-1");
     assert_eq!(send_note(&plan).await.unwrap().1, "minted-1");
-    assert_eq!(mints(dir.path()), 1);
+    assert_eq!(backend.mints(), 1);
 
     let mut body = b"token minted-1".to_vec();
     redact_values(&mut body, &plan.policy.redactions());
@@ -1194,59 +1259,41 @@ async fn a_lease_is_minted_once_when_a_request_first_needs_it() {
     );
 }
 
-#[cfg(unix)]
 #[tokio::test]
 async fn an_expiring_lease_is_replaced_and_its_old_value_stays_redacted() {
-    let dir = tempfile::tempdir().unwrap();
-    let plan = lease_plan(&counting_lease(dir.path(), &short_then_long()));
+    let backend = FakeBackend::new(short_then_long);
+    let plan = lease_plan(backend.clone());
     assert_eq!(send_note(&plan).await.unwrap().1, "minted-1");
     assert_eq!(send_note(&plan).await.unwrap().1, "minted-1");
-    // Past three quarters of the first lease's two to three seconds
-    tokio::time::sleep(std::time::Duration::from_millis(2400)).await;
+    tokio::time::sleep(PAST_RENEWAL).await;
     assert_eq!(send_note(&plan).await.unwrap().1, "minted-2");
-    assert_eq!(mints(dir.path()), 2);
+    assert_eq!(backend.mints(), 2);
 
     let mut body = b"old minted-1, new minted-2".to_vec();
     redact_values(&mut body, &plan.policy.redactions());
     assert_eq!(body, b"old forge_placeholder, new forge_placeholder");
 }
 
-#[cfg(unix)]
 #[tokio::test]
 async fn ending_the_session_revokes_every_minted_lease_and_stops_minting() {
-    let dir = tempfile::tempdir().unwrap();
-    let plan = lease_plan(&counting_lease(dir.path(), &short_then_long()));
+    let backend = FakeBackend::new(short_then_long);
+    let plan = lease_plan(backend.clone());
     send_note(&plan).await.unwrap();
-    tokio::time::sleep(std::time::Duration::from_millis(2400)).await;
+    tokio::time::sleep(PAST_RENEWAL).await;
     send_note(&plan).await.unwrap();
 
     plan.policy.leases.revoke_all(&plan.policy.values).await;
-    let revoked = std::fs::read_to_string(dir.path().join("revoked")).unwrap();
-    // Revoked at once, so in either order
-    let mut revoked: Vec<_> = revoked.lines().collect();
-    revoked.sort_unstable();
-    assert_eq!(revoked, ["lease-1", "lease-2"]);
+    assert_eq!(backend.revoked(), ["lease-1", "lease-2"]);
 
     let error = send_note(&plan).await.unwrap_err().to_string();
     assert!(error.contains("session is ending"), "{error}");
-    assert_eq!(mints(dir.path()), 2);
+    assert_eq!(backend.mints(), 2);
 }
 
-/// An expiry three seconds after the first run starts, and far off after it.
-/// The first is computed when the lease is minted, so a slow test setup
-/// can't make it expire first.
-fn short_then_long() -> String {
-    let format = "+%Y-%m-%dT%H:%M:%SZ";
-    format!(
-        r#""$(if [ $n = 1 ]; then t=$(( $(date +%s) + 3 )); date -u -d @$t {format} 2>/dev/null || date -u -r $t {format}; else echo 2099-01-01T00:00:00Z; fi)""#
-    )
-}
-
-#[cfg(unix)]
 #[tokio::test]
 async fn a_lease_that_has_already_expired_is_never_injected() {
-    let dir = tempfile::tempdir().unwrap();
-    let plan = lease_plan(&counting_lease(dir.path(), "2000-01-01T00:00:00Z"));
+    let backend = FakeBackend::new(|_| Some(chrono::Duration::seconds(-1)));
+    let plan = lease_plan(backend.clone());
     let error = send_note(&plan).await.unwrap_err().to_string();
     assert!(error.contains("could not be minted"), "{error}");
     assert_eq!(
@@ -1258,21 +1305,13 @@ async fn a_lease_that_has_already_expired_is_never_injected() {
     );
     // It was minted, so it is revoked at the end
     plan.policy.leases.revoke_all(&plan.policy.values).await;
-    assert!(dir.path().join("revoked").exists());
+    assert_eq!(backend.revoked(), ["lease-1"]);
 }
 
-#[cfg(unix)]
 #[tokio::test]
 async fn a_failed_mint_refuses_the_request_with_the_reason_and_waits_to_retry() {
-    let dir = tempfile::tempdir().unwrap();
-    let plan = lease_plan(&format!(
-        r#"
-[forge]
-type = "command"
-create_command = "echo x >> {}/count-attempts; echo 'parent token rejected' >&2; exit 1"
-"#,
-        dir.path().display()
-    ));
+    let backend = FakeBackend::failing();
+    let plan = lease_plan(backend.clone());
     let error = send_note(&plan).await.unwrap_err().to_string();
     assert!(
         error.contains("lease 'forge' could not be minted"),
@@ -1284,31 +1323,18 @@ create_command = "echo x >> {}/count-attempts; echo 'parent token rejected' >&2;
     // The next request right away gets the same answer without another try
     let again = send_note(&plan).await.unwrap_err().to_string();
     assert_eq!(again, error);
-    let attempts = std::fs::read_to_string(dir.path().join("count-attempts")).unwrap();
-    assert_eq!(attempts.lines().count(), 1);
+    assert_eq!(backend.mints(), 1);
 }
 
-#[cfg(unix)]
 #[tokio::test]
 async fn a_lease_without_the_rule_credential_is_refused() {
-    let dir = tempfile::tempdir().unwrap();
-    let config = ProxyConfig {
-        audit: false,
-        rules: vec![lease_rule("forge", Some("OTHER"))],
-        ..ProxyConfig::default()
-    };
-    let plan = ProxyPlan::with_leases(
-        &config,
-        &IndexMap::new(),
-        &leases(&counting_lease(dir.path(), "")),
-        LeaseSetup::default(),
-    )
-    .unwrap();
+    let backend = FakeBackend::new(|_| None);
+    let plan = lease_plan_with("OTHER", backend.clone());
     let error = send_note(&plan).await.unwrap_err().to_string();
     assert!(error.contains("the lease has no 'OTHER'"), "{error}");
     // It was minted, so it is revoked at the end
     plan.policy.leases.revoke_all(&plan.policy.values).await;
-    assert!(dir.path().join("revoked").exists());
+    assert_eq!(backend.revoked(), ["lease-1"]);
 }
 
 #[test]

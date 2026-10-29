@@ -199,6 +199,15 @@ impl ProxyLeases {
         })
     }
 
+    /// Mint `name`'s leases with `backend` instead
+    #[cfg(test)]
+    pub(super) fn set_backend(&mut self, name: &str, backend: Arc<dyn LeaseBackend>) {
+        self.slots
+            .get_mut(name)
+            .expect("the plan has this lease")
+            .backend = backend;
+    }
+
     /// Mint the leases among `names` that have no usable credential, or that
     /// are due for renewal
     pub(super) async fn ensure(&self, names: &[&str], values: &SecretValues) {
