@@ -46,7 +46,8 @@ pub(super) struct SecretValues {
     state: std::sync::RwLock<State>,
     /// Where pending secrets are resolved from; without one they stay pending
     session: std::sync::OnceLock<Arc<SecretSession>>,
-    attempts: std::sync::Mutex<Attempts>,
+    /// Shared with a config reload still running on the blocking pool
+    attempts: Arc<std::sync::Mutex<Attempts>>,
 }
 
 impl SecretValues {
@@ -62,7 +63,7 @@ impl SecretValues {
             rules,
             state: std::sync::RwLock::new(state),
             session: std::sync::OnceLock::new(),
-            attempts: std::sync::Mutex::new(Attempts::default()),
+            attempts: Arc::new(std::sync::Mutex::new(Attempts::default())),
         }
     }
 
@@ -193,15 +194,21 @@ impl SecretValues {
         }
         // Clears the in-flight marks however this ends, including when the
         // request is dropped mid-load
-        let _in_flight = InFlight {
-            values: self,
-            secrets: &due,
-        };
+        let in_flight = Arc::new(InFlight {
+            attempts: self.attempts.clone(),
+            secrets: due.clone(),
+        });
         // Reading the config is blocking file I/O: keep it off the async
-        // workers, and within the same deadline as the lookups
+        // workers, and within the same deadline as the lookups. A timeout
+        // can't stop the blocking task, so it keeps the marks until it ends;
+        // otherwise every later request could start another stalled reload.
         let reload = tokio::task::spawn_blocking({
             let session = session.clone();
-            move || session.load_config()
+            let in_flight = in_flight.clone();
+            move || {
+                let _in_flight = in_flight;
+                session.load_config()
+            }
         });
         let config = match tokio::time::timeout(PENDING_LOAD_TIMEOUT, reload).await {
             Ok(Ok(Ok(config))) => config,
@@ -254,20 +261,17 @@ impl SecretValues {
     }
 }
 
-/// Removes the in-flight marks of a refresh when it ends
-struct InFlight<'a> {
-    values: &'a SecretValues,
-    secrets: &'a [String],
+/// Removes the in-flight marks of a refresh when it, and the config reload it
+/// started, have both ended
+struct InFlight {
+    attempts: Arc<std::sync::Mutex<Attempts>>,
+    secrets: Vec<String>,
 }
 
-impl Drop for InFlight<'_> {
+impl Drop for InFlight {
     fn drop(&mut self) {
-        let mut attempts = self
-            .values
-            .attempts
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        for secret in self.secrets {
+        let mut attempts = self.attempts.lock().unwrap_or_else(|e| e.into_inner());
+        for secret in &self.secrets {
             attempts.in_flight.remove(secret);
         }
     }
