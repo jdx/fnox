@@ -631,15 +631,19 @@ async fn run_forwarding_signals(mut command: tokio::process::Command) -> std::io
     }
 }
 
-/// Whether fnox runs in the terminal's foreground process group, which the
-/// command shares: then Ctrl-C at the terminal reaches both of them. A
-/// `SIGINT` without that terminal, such as from a supervisor, reaches only
-/// fnox.
+/// Whether fnox runs in its controlling terminal's foreground process group,
+/// which the command shares: then Ctrl-C at the terminal reaches both of
+/// them, even with stdin redirected from a file. A `SIGINT` without that
+/// terminal, such as from a supervisor, reaches only fnox.
 #[cfg(unix)]
 fn terminal_interrupts_us() -> bool {
-    // SAFETY: both take and return only integers.
+    let Ok(tty) = std::fs::File::open("/dev/tty") else {
+        return false;
+    };
+    use std::os::fd::AsRawFd;
+    // SAFETY: both take and return only integers, and `tty` stays open.
     unsafe {
-        let foreground = libc::tcgetpgrp(libc::STDIN_FILENO);
+        let foreground = libc::tcgetpgrp(tty.as_raw_fd());
         foreground != -1 && foreground == libc::getpgrp()
     }
 }

@@ -114,8 +114,15 @@ teardown() {
 }
 
 @test "proxy run passes on an interrupt sent to fnox alone and revokes its leases" {
-	# No terminal here, so a SIGINT can only have been sent to fnox itself
-	run "$FNOX_BIN" proxy run -- sh -c '
+	# Without a controlling terminal, a SIGINT can only have been sent to fnox
+	# itself. A terminal would deliver Ctrl-C to the command too.
+	local detach=()
+	if command -v setsid >/dev/null 2>&1; then
+		detach=(setsid -w)
+	elif (: </dev/tty) 2>/dev/null; then
+		skip "needs setsid to run without the controlling terminal"
+	fi
+	run "${detach[@]}" "$FNOX_BIN" proxy run -- sh -c '
 		curl --noproxy "" -sS -o /dev/null --data "" \
 			-H "private-token: $FORGE_TOKEN" https://127.0.0.1/notes
 		trap "echo interrupted; exit 0" INT
