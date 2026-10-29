@@ -54,7 +54,6 @@ pub(super) struct PreparedRule {
     pub(super) methods: HashSet<String>,
     pub(super) paths: Option<GlobSet>,
     pub(super) placeholder: String,
-    pub(super) value: String,
 }
 
 impl PreparedRule {
@@ -79,7 +78,7 @@ pub(super) struct ProxyPolicy {
     /// their requests. It is not hidden from processes of the same user, which
     /// can read it from the child's environment.
     pub(super) token: String,
-    pub(super) redactions: Vec<Redaction>,
+    pub(super) values: Arc<SecretValues>,
     pub(super) client: reqwest::Client,
 }
 
@@ -174,6 +173,22 @@ pub(super) fn percent_decode(input: &str) -> String {
 }
 
 impl ProxyPolicy {
+    /// What to redact from responses, given the values known now
+    pub(super) fn redactions(&self) -> Arc<Vec<Redaction>> {
+        self.values.redactions()
+    }
+
+    /// Resolve again the pending secrets of the rules for `domain`
+    pub(super) async fn refresh_pending(&self, domain: &str) {
+        let secrets: Vec<&str> = self
+            .rules
+            .iter()
+            .filter(|rule| domain_matches(&rule.domain, domain))
+            .map(|rule| rule.secret.as_str())
+            .collect();
+        self.values.refresh(&secrets).await;
+    }
+
     pub(super) fn has_domain(&self, domain: &str) -> bool {
         self.rules
             .iter()
@@ -302,7 +317,14 @@ impl ProxyPolicy {
 
             if in_path > 0 {
                 return Err(outside());
-            } else if in_headers > 0 {
+            }
+            let Some(value) = self.values.value(&rule.secret) else {
+                return Err(proxy_error(format!(
+                    "secret '{}' is not set yet; set it, for example with `fnox set {}`, and retry",
+                    rule.secret, rule.secret
+                )));
+            };
+            if in_headers > 0 {
                 let (header_name, header_value) = headers
                     .iter_mut()
                     .find(|(_, value)| value.contains(&rule.placeholder))
@@ -312,7 +334,7 @@ impl ProxyPolicy {
                 ) {
                     return Err(outside());
                 }
-                *header_value = header_value.replacen(&rule.placeholder, &rule.value, 1);
+                *header_value = header_value.replacen(&rule.placeholder, &value, 1);
             } else {
                 let name = query
                     .param_containing(&rule.placeholder)
@@ -320,7 +342,7 @@ impl ProxyPolicy {
                 if !allows(&|target| matches!(target, Target::Query(allowed) if *allowed == name)) {
                     return Err(outside());
                 }
-                url.set_query(Some(&query.replaced(&rule.placeholder, &rule.value)));
+                url.set_query(Some(&query.replaced(&rule.placeholder, &value)));
             }
             injected.push(rule.secret.clone());
         }

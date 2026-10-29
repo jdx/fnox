@@ -50,6 +50,15 @@ pub struct SecretSession {
     store_lock: tokio::sync::Mutex<()>,
 }
 
+impl std::fmt::Debug for SecretSession {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SecretSession")
+            .field("config_path", &self.config_path)
+            .field("profile", &self.profile)
+            .finish_non_exhaustive()
+    }
+}
+
 impl SecretSession {
     pub fn new(
         config: Config,

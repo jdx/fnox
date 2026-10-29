@@ -415,6 +415,7 @@ where
         .await;
     }
     let mut headers = request.headers;
+    policy.refresh_pending(domain).await;
     let injected = match policy.authorize(domain, &request.method, &mut url, &mut headers) {
         Ok(injected) => injected,
         Err(error) => return refuse(stream, &path, &error.to_string()).await,
@@ -489,7 +490,8 @@ where
         }
         body.extend_from_slice(&chunk);
     }
-    redact_values(&mut body, &policy.redactions);
+    let redactions = policy.redactions();
+    redact_values(&mut body, &redactions);
 
     let reason = status.canonical_reason().unwrap_or("");
     let mut head = format!("HTTP/1.1 {} {}\r\n", status.as_u16(), reason);
@@ -500,7 +502,7 @@ where
             continue;
         }
         if let Ok(value) = value.to_str() {
-            let value = redact_string(value, &policy.redactions);
+            let value = redact_string(value, &redactions);
             head.push_str(name.as_str());
             head.push_str(": ");
             head.push_str(&value);

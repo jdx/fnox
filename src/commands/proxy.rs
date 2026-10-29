@@ -330,19 +330,24 @@ impl ProxyRunCommand {
         )
         .with_write_target(cli.config.clone(), cli.write_profile.clone());
         let resolved = session.resolve_now(&requested).await?;
-        let mut values = IndexMap::new();
-        for rule in &proxy_config.rules {
-            let value = resolved
-                .get(&rule.secret)
-                .cloned()
-                .flatten()
-                .ok_or_else(|| {
-                    FnoxError::Config(format!("Proxy secret '{}' did not resolve", rule.secret))
-                })?;
-            values.insert(rule.secret.clone(), value);
-        }
+        // A rule secret without a value is pending: the child still gets its
+        // placeholder, and the proxy resolves it again when a request needs it
+        let values: IndexMap<String, String> = proxy_config
+            .rules
+            .iter()
+            .filter_map(|rule| {
+                let value = resolved.get(&rule.secret).cloned().flatten()?;
+                Some((rule.secret.clone(), value))
+            })
+            .collect();
 
         let plan = ProxyPlan::new(proxy_config, &values)?;
+        plan.set_session(std::sync::Arc::new(session));
+        for secret in plan.pending() {
+            tracing::warn!(
+                "fnox proxy: '{secret}' is not set; requests that need it are refused until it is (for example, run `fnox set {secret}`)"
+            );
+        }
         let child_env = plan.child_env.clone();
         let listener = sandbox
             .as_ref()

@@ -54,6 +54,16 @@ pub fn validate_config(config: &ProxyConfig) -> Result<()> {
 }
 
 impl ProxyPlan {
+    /// Resolve pending secrets from `session` when a request needs them
+    pub fn set_session(&self, session: Arc<crate::secret_session::SecretSession>) {
+        self.policy.values.set_session(session);
+    }
+
+    /// Rule secrets that have no value yet
+    pub fn pending(&self) -> Vec<String> {
+        self.policy.values.pending()
+    }
+
     pub fn new(config: &ProxyConfig, values: &IndexMap<String, String>) -> Result<Self> {
         validate_config(config)?;
 
@@ -63,10 +73,9 @@ impl ProxyPlan {
         let mut seen_placeholders = HashSet::new();
 
         for rule in &config.rules {
-            let value = values
-                .get(&rule.secret)
-                .ok_or_else(|| proxy_error(format!("secret '{}' did not resolve", rule.secret)))?;
-            if value.is_empty() {
+            // A secret without a value is pending: see `values.rs`
+            let value = values.get(&rule.secret);
+            if value.is_some_and(|value| value.is_empty()) {
                 return Err(proxy_error(format!(
                     "secret '{}' resolved to an empty value",
                     rule.secret
@@ -95,7 +104,7 @@ impl ProxyPlan {
                             rule.secret
                         )));
                     }
-                    if placeholder == *value {
+                    if value.is_some_and(|value| *value == placeholder) {
                         return Err(proxy_error(format!(
                             "placeholder for '{}' must differ from the real value",
                             rule.secret
@@ -130,7 +139,6 @@ impl ProxyPlan {
                     .collect(),
                 paths: compile_paths(&rule.paths)?,
                 placeholder,
-                value: value.clone(),
             });
         }
 
@@ -153,22 +161,19 @@ impl ProxyPlan {
             }
         }
 
-        let mut redactions: Vec<Redaction> = Vec::new();
-        for rule in &prepared {
-            let lenient = matches!(rule.target, Target::Query(_));
-            match redactions
-                .iter_mut()
-                .find(|redaction| redaction.value == rule.value.as_bytes())
-            {
-                Some(existing) => existing.lenient |= lenient,
-                None => redactions.push(Redaction {
-                    value: rule.value.as_bytes().to_vec(),
-                    placeholder: rule.placeholder.as_bytes().to_vec(),
-                    lenient,
-                }),
-            }
-        }
-        redactions.sort_by_key(|redaction| std::cmp::Reverse(redaction.value.len()));
+        let rule_redactions = prepared
+            .iter()
+            .map(|rule| RuleRedaction {
+                secret: rule.secret.clone(),
+                placeholder: rule.placeholder.clone(),
+                lenient: matches!(rule.target, Target::Query(_)),
+            })
+            .collect();
+        let known = values
+            .iter()
+            .filter(|(secret, _)| prepared.iter().any(|rule| rule.secret == **secret))
+            .map(|(secret, value)| (secret.clone(), value.clone()))
+            .collect();
 
         let destinations = Arc::new(DestinationPolicy {
             allowed: config
@@ -190,7 +195,7 @@ impl ProxyPlan {
                     .collect(),
                 destinations: destinations.clone(),
                 token: data_encoding::HEXLOWER.encode(&rand::random::<[u8; 16]>()),
-                redactions,
+                values: Arc::new(SecretValues::new(rule_redactions, known)),
                 client: reqwest::Client::builder()
                     .http1_only()
                     .no_proxy()
