@@ -167,7 +167,7 @@ impl FnoxMcpServer {
                 };
                 // The config may have changed while the page was open
                 let saved = match self.recheck(&name, &value, params.replace, &provider).await {
-                    Ok(config) => self.session.save(config, &name, value).await,
+                    Ok(config) => self.session.save(config, &name, value, &target).await,
                     Err(e) => Err(e),
                 };
                 if let Err(e) = saved {
@@ -183,7 +183,7 @@ impl FnoxMcpServer {
                 );
                 let reloaded = {
                     let _reload = self.reload_lock.lock().await;
-                    let reloaded = self.session.reload_stored(&name).await;
+                    let reloaded = self.session.reload_stored(&name, &target).await;
                     if reloaded.is_ok() {
                         // The user just entered this value; nothing to wait for
                         self.sent_to_terminal

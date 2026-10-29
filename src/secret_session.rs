@@ -110,9 +110,19 @@ impl SecretSession {
         self.cache.read().await.get(name).cloned()
     }
 
-    /// A snapshot of every cached value
-    pub async fn cached_values(&self) -> HashMap<String, Option<String>> {
-        self.cache.read().await.clone()
+    /// The cached values whose names `include` selects, skipping absent ones.
+    /// Only the selected values are copied.
+    pub async fn cached_values_where(
+        &self,
+        include: impl Fn(&str) -> bool,
+    ) -> Vec<(String, String)> {
+        self.cache
+            .read()
+            .await
+            .iter()
+            .filter(|(key, _)| include(key))
+            .filter_map(|(key, value)| value.as_ref().map(|value| (key.clone(), value.clone())))
+            .collect()
     }
 
     /// Drop the cached value of `name`
@@ -325,9 +335,16 @@ impl SecretSession {
         &self.store_lock
     }
 
-    /// Store `value` for `name`, as `fnox set` would, into the file
-    /// [`Self::target_path`] picks. Plain text is refused.
-    pub async fn save(&self, config: Config, name: &str, value: String) -> Result<()> {
+    /// Store `value` for `name`, as `fnox set` would, into `target`: the file
+    /// [`Self::target_path`] picked when the user was asked, which they were
+    /// shown. Plain text is refused.
+    pub async fn save(
+        &self,
+        config: Config,
+        name: &str,
+        value: String,
+        target: &Path,
+    ) -> Result<()> {
         let set = SetCommand {
             key: Some(name.to_string()),
             value: Some(value),
@@ -352,15 +369,16 @@ impl SecretSession {
             config,
             &self.profile,
             self.write_profile.as_deref(),
-            &self.target_path()?,
+            target,
             true,
         )
         .await?;
         Ok(())
     }
 
-    /// Load a value [`Self::save`] just stored, so the session uses it
-    pub async fn reload_stored(&self, name: &str) -> Result<()> {
+    /// Load a value [`Self::save`] just stored in `target`, so the session
+    /// uses it
+    pub async fn reload_stored(&self, name: &str, target: &Path) -> Result<()> {
         let config = self.load_config()?;
         self.evict_from_daemon(&config, name).await?;
         if !self.load(&config, name).await? {
@@ -369,7 +387,6 @@ impl SecretSession {
         // Another file that takes precedence may define the secret too, such
         // as one created while the page was open; the stored value is then
         // not the one in use
-        let target = self.target_path()?;
         let source = self
             .secrets()
             .get(name)
@@ -382,7 +399,7 @@ impl SecretSession {
                         .zip(std::fs::canonicalize(b).ok())
                         .is_some_and(|(a, b)| a == b)
             };
-            if !same(&source, &target) {
+            if !same(&source, target) {
                 return Err(FnoxError::Config(format!(
                     "'{name}' is read from {}, which takes precedence over {}, so the new value isn't in use",
                     source.display(),

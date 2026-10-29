@@ -90,14 +90,11 @@ impl FnoxMcpServer {
         // resolved env=false).
         // Some(Some(v)) = present, Some(None) = known absent, None = not yet resolved.
         {
-            let cache = self.session.cached_values().await;
-            if let Some(cached) = cache.get(&params.name) {
+            if let Some(cached) = self.session.cached(&params.name).await {
                 return match cached {
                     Some(value) => {
                         self.reject_as_file(&params.name)?;
-                        Ok(CallToolResult::success(vec![ContentBlock::text(
-                            value.clone(),
-                        )]))
+                        Ok(CallToolResult::success(vec![ContentBlock::text(value)]))
                     }
                     None => Err(McpError::invalid_request(
                         format!(
@@ -171,18 +168,14 @@ impl FnoxMcpServer {
         // secrets (env="exec" is injected: exec subprocesses are its intended
         // destination). This releases the read lock before the potentially
         // long subprocess.
-        let env_vars: Vec<(String, String)> = {
-            let cache = self.session.cached_values().await;
-            cache
-                .iter()
-                .filter(|(key, _)| {
-                    profile_secrets
-                        .get(key.as_str())
-                        .is_some_and(|sc| sc.env_mode().in_exec())
-                })
-                .filter_map(|(k, v)| v.as_ref().map(|val| (k.clone(), val.clone())))
-                .collect()
-        };
+        let env_vars: Vec<(String, String)> = self
+            .session
+            .cached_values_where(|key| {
+                profile_secrets
+                    .get(key)
+                    .is_some_and(|sc| sc.env_mode().in_exec())
+            })
+            .await;
 
         // For as_file secrets, write raw values to temp files and inject the
         // file path as the env var. Temp files are kept alive until the
