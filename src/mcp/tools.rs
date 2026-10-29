@@ -1,0 +1,485 @@
+use rmcp::handler::server::wrapper::Parameters;
+use rmcp::model::*;
+use rmcp::schemars;
+use rmcp::{ErrorData as McpError, tool, tool_router};
+
+use super::server::FnoxMcpServer;
+use crate::config::McpTool;
+use crate::redact::redactable;
+use crate::temp_file_secrets::create_ephemeral_secret_file;
+
+/// Maximum output size (1 MiB) to prevent unbounded memory usage
+const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
+
+/// Per-stream (stdout/stderr) read limit. Half the total budget + 1 byte
+/// so we can detect truncation when a single stream overflows.
+const PER_STREAM_LIMIT: usize = (MAX_OUTPUT_BYTES / 2) + 1;
+
+/// Default execution timeout (5 minutes)
+const DEFAULT_EXEC_TIMEOUT_SECS: u64 = 300;
+
+fn scrub_age_identity(cmd: &mut tokio::process::Command) {
+    for key in crate::child_env::ambient_scrub_keys() {
+        cmd.env_remove(key);
+    }
+}
+
+/// MCP tool parameter: request a secret by name
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct GetSecretParams {
+    /// The name of the secret to retrieve (must match a key in fnox.toml secrets)
+    pub name: String,
+}
+
+/// MCP tool parameter: execute a command with secrets injected
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ExecParams {
+    /// The command and arguments to execute as a list where the first element is the program and the rest are arguments.
+    /// No shell is invoked — env vars are NOT expanded in argument strings. The injected secrets are available
+    /// as environment variables that the command reads through its own API. To use shell expansion, pass
+    /// ["sh", "-c", "your shell command here"].
+    pub command: Vec<String>,
+}
+
+#[tool_router(router = secret_tools, vis = "pub(super)")]
+impl FnoxMcpServer {
+    /// Write a secret value to a temp file and return the path.
+    /// The temp file handle is pushed to `temp_files` to keep it alive.
+    fn create_secret_file(
+        key: &str,
+        value: &str,
+        temp_files: &mut Vec<tempfile::NamedTempFile>,
+    ) -> Result<String, McpError> {
+        let temp_file = create_ephemeral_secret_file(key, value).map_err(|e| {
+            McpError::internal_error(
+                format!("Failed to create temp file for secret '{key}': {e}"),
+                None,
+            )
+        })?;
+        let file_path = temp_file.path().to_string_lossy().to_string();
+        temp_files.push(temp_file);
+        Ok(file_path)
+    }
+
+    /// Retrieve a single secret by name.
+    ///
+    /// env=true and env="exec" secrets are resolved eagerly in the first
+    /// batch. env=false secrets are resolved on-demand here (may trigger auth)
+    /// and cached for subsequent calls.
+    #[tool(description = "Get a secret value by name from the fnox configuration")]
+    async fn get_secret(
+        &self,
+        Parameters(params): Parameters<GetSecretParams>,
+    ) -> Result<CallToolResult, McpError> {
+        if !self.mcp_config.tools().contains(&McpTool::GetSecret) {
+            return Err(McpError::invalid_request(
+                "Tool 'get_secret' is not enabled in this configuration",
+                None,
+            ));
+        }
+
+        self.reject_as_file(&params.name)?;
+
+        // Ensure env-injectable secrets (env=true / env="exec") are batch-resolved
+        self.ensure_resolved().await?;
+        // request_secret may have changed the secret while this waited, so
+        // read the current map and check again before returning a value
+        let profile_secrets = self.secrets();
+
+        // Check cache (covers env=true/env="exec" secrets and previously
+        // resolved env=false).
+        // Some(Some(v)) = present, Some(None) = known absent, None = not yet resolved.
+        {
+            let cache = self.cache.read().await;
+            if let Some(cached) = cache.get(&params.name) {
+                return match cached {
+                    Some(value) => {
+                        self.reject_as_file(&params.name)?;
+                        Ok(CallToolResult::success(vec![ContentBlock::text(
+                            value.clone(),
+                        )]))
+                    }
+                    None => Err(McpError::invalid_request(
+                        format!(
+                            "Secret '{}' has no value (it may be optional and absent)",
+                            params.name
+                        ),
+                        None,
+                    )),
+                };
+            }
+        }
+
+        // Not in cache — check if it's a configured secret
+        if let Some(secret_config) = profile_secrets.get(&params.name) {
+            // env=false secrets are deferred; try on-demand resolution
+            if !secret_config.env_mode().in_exec() {
+                return match self.resolve_single(&params.name).await? {
+                    Some(value) => {
+                        self.reject_as_file(&params.name)?;
+                        Ok(CallToolResult::success(vec![ContentBlock::text(value)]))
+                    }
+                    None => Err(McpError::invalid_request(
+                        format!(
+                            "Secret '{}' has no value (it may be optional and absent)",
+                            params.name
+                        ),
+                        None,
+                    )),
+                };
+            }
+            // env=true or env="exec" but not in cache — should not happen
+            // after ensure_resolved, but handle gracefully
+            Err(McpError::invalid_request(
+                format!(
+                    "Secret '{}' has no value (it may be optional and absent)",
+                    params.name
+                ),
+                None,
+            ))
+        } else {
+            Err(McpError::invalid_params(
+                format!("Secret '{}' not found in configuration", params.name),
+                None,
+            ))
+        }
+    }
+
+    /// Execute a command with secrets injected as environment variables.
+    #[tool(
+        description = "Execute a command with secrets injected as environment variables. Returns the command's stdout and stderr."
+    )]
+    async fn exec(
+        &self,
+        Parameters(params): Parameters<ExecParams>,
+    ) -> Result<CallToolResult, McpError> {
+        if !self.mcp_config.tools().contains(&McpTool::Exec) {
+            return Err(McpError::invalid_request(
+                "Tool 'exec' is not enabled in this configuration",
+                None,
+            ));
+        }
+
+        if params.command.is_empty() || params.command[0].is_empty() {
+            return Err(McpError::invalid_params("Command must not be empty", None));
+        }
+
+        self.ensure_resolved().await?;
+        let profile_secrets = self.secrets();
+
+        // Snapshot env vars from cache, filtering out env=false and absent
+        // secrets (env="exec" is injected: exec subprocesses are its intended
+        // destination). This releases the read lock before the potentially
+        // long subprocess.
+        let env_vars: Vec<(String, String)> = {
+            let cache = self.cache.read().await;
+            cache
+                .iter()
+                .filter(|(key, _)| {
+                    profile_secrets
+                        .get(key.as_str())
+                        .is_some_and(|sc| sc.env_mode().in_exec())
+                })
+                .filter_map(|(k, v)| v.as_ref().map(|val| (k.clone(), val.clone())))
+                .collect()
+        };
+
+        // For as_file secrets, write raw values to temp files and inject the
+        // file path as the env var. Temp files are kept alive until the
+        // subprocess completes (held in _exec_temp_files).
+        let mut _exec_temp_files = Vec::new();
+
+        let cmd_name = &params.command[0];
+
+        #[cfg(windows)]
+        let cmd_path = which::which(cmd_name).unwrap_or_else(|_| cmd_name.into());
+        #[cfg(not(windows))]
+        let cmd_path = cmd_name;
+
+        let mut cmd = tokio::process::Command::new(cmd_path);
+        // MCP subprocesses must receive resolved secrets, not the ambient age
+        // identity that can decrypt other values in the configuration.
+        // Explicitly configured secrets with these names are injected below.
+        scrub_age_identity(&mut cmd);
+        if params.command.len() > 1 {
+            cmd.args(&params.command[1..]);
+        }
+
+        // Inject filtered secrets as env vars, converting as_file to temp paths
+        for (key, value) in &env_vars {
+            if let Some(sc) = profile_secrets.get(key.as_str())
+                && sc.as_file
+            {
+                let path = Self::create_secret_file(key, value, &mut _exec_temp_files)?;
+                cmd.env(key, &path);
+            } else {
+                cmd.env(key, value);
+            }
+        }
+
+        // Strip env=false secrets that resolve_secrets_batch may have set
+        // as process env vars (side effect of dependency resolution).
+        for (key, secret_config) in profile_secrets.iter() {
+            if !secret_config.env_mode().in_exec() {
+                cmd.env_remove(key);
+            }
+        }
+
+        // Must NOT inherit stdio — would corrupt JSON-RPC stream
+        cmd.stdin(std::process::Stdio::null());
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::piped());
+
+        // kill_on_drop ensures the child is killed if the future is cancelled
+        // (e.g. on timeout), preventing orphaned/zombie processes.
+        cmd.kill_on_drop(true);
+
+        let timeout_secs = self
+            .mcp_config
+            .exec_timeout_secs
+            .unwrap_or(DEFAULT_EXEC_TIMEOUT_SECS);
+        let mut child = cmd.spawn().map_err(|e| {
+            McpError::internal_error(
+                format!("Failed to execute command '{}': {e}", params.command[0]),
+                None,
+            )
+        })?;
+
+        // Read stdout/stderr concurrently with bounded buffers to prevent both
+        // OOM and pipe deadlocks (sequential reads can deadlock if the child
+        // fills one pipe buffer while we're blocked reading the other).
+        let mut child_stdout = child.stdout.take();
+        let mut child_stderr = child.stderr.take();
+
+        let collect_bounded = async {
+            use tokio::io::AsyncReadExt;
+            // Split budget: half for stdout, half for stderr (+1 each to detect truncation)
+            let per_stream_limit = PER_STREAM_LIMIT;
+
+            let stdout_fut = async {
+                let mut buf = Vec::with_capacity(per_stream_limit.min(65536));
+                if let Some(ref mut out) = child_stdout {
+                    out.take(per_stream_limit as u64)
+                        .read_to_end(&mut buf)
+                        .await
+                        .ok();
+                }
+                drop(child_stdout);
+                buf
+            };
+
+            let stderr_fut = async {
+                let mut buf = Vec::with_capacity(per_stream_limit.min(65536));
+                if let Some(ref mut err) = child_stderr {
+                    err.take(per_stream_limit as u64)
+                        .read_to_end(&mut buf)
+                        .await
+                        .ok();
+                }
+                drop(child_stderr);
+                buf
+            };
+
+            let (stdout_buf, stderr_buf) = tokio::join!(stdout_fut, stderr_fut);
+            let status = child.wait().await;
+            (stdout_buf, stderr_buf, status)
+        };
+
+        let (stdout_buf, stderr_buf, status) = tokio::time::timeout(
+            std::time::Duration::from_secs(timeout_secs),
+            collect_bounded,
+        )
+        .await
+        .map_err(|_| {
+            // child is dropped here → kill_on_drop sends SIGKILL
+            McpError::internal_error(
+                format!(
+                    "Command '{}' timed out after {timeout_secs}s",
+                    params.command[0]
+                ),
+                None,
+            )
+        })?;
+
+        let status = status.map_err(|e| {
+            McpError::internal_error(
+                format!("Failed to wait for command '{}': {e}", params.command[0]),
+                None,
+            )
+        })?;
+
+        let per_stream_cap = PER_STREAM_LIMIT;
+        let total_collected = stdout_buf.len() + stderr_buf.len();
+        let stdout_truncated = stdout_buf.len() >= per_stream_cap;
+        let stderr_truncated = stderr_buf.len() >= per_stream_cap;
+        let truncated = stdout_truncated || stderr_truncated || total_collected > MAX_OUTPUT_BYTES;
+
+        let display_limit = PER_STREAM_LIMIT - 1;
+        let stdout_raw =
+            String::from_utf8_lossy(&stdout_buf[..stdout_buf.len().min(display_limit)]);
+        let stderr_raw =
+            String::from_utf8_lossy(&stderr_buf[..stderr_buf.len().min(display_limit)]);
+
+        // Redact secret values from output to prevent exfiltration via
+        // commands like `printenv` or `echo $SECRET`.
+        let (stdout, stderr) = if self.mcp_config.redact_output() {
+            (
+                redact_secrets(&stdout_raw, &env_vars)?,
+                redact_secrets(&stderr_raw, &env_vars)?,
+            )
+        } else {
+            (stdout_raw.to_string(), stderr_raw.to_string())
+        };
+
+        let mut parts = Vec::new();
+        if !stdout.is_empty() {
+            parts.push(stdout);
+        }
+        if !stderr.is_empty() {
+            parts.push(format!("[stderr]\n{stderr}"));
+        }
+
+        let exit_code = status.code().unwrap_or(-1);
+        if !status.success() || parts.is_empty() {
+            parts.push(format!("[exit code: {exit_code}]"));
+        }
+        if truncated {
+            if stdout_truncated || stderr_truncated {
+                let stream_limit = per_stream_cap - 1;
+                parts.push(format!(
+                    "[output truncated: per-stream limit of {stream_limit} bytes exceeded (total collected: {total_collected} bytes)]"
+                ));
+            } else {
+                parts.push(format!(
+                    "[output truncated: {total_collected} bytes exceeded {MAX_OUTPUT_BYTES} byte limit]"
+                ));
+            }
+        }
+
+        let text = parts.join("\n");
+        if status.success() {
+            Ok(CallToolResult::success(vec![ContentBlock::text(text)]))
+        } else {
+            Ok(CallToolResult::error(vec![ContentBlock::text(text)]))
+        }
+    }
+}
+
+/// Replace all occurrences of secret values in `text` with `[REDACTED]`.
+///
+/// Uses Aho-Corasick with leftmost-longest matching for single-pass replacement,
+/// avoiding issues with sequential replacement (e.g., a short secret matching
+/// inside an already-placed `[REDACTED]` marker).
+///
+/// Secrets shorter than `MIN_REDACT_LENGTH` or that are empty/whitespace-only
+/// are skipped to avoid false positives. Values are trimmed before matching
+/// so that trailing newlines (common when secrets are loaded from files) don't
+/// prevent redaction of the core value in output.
+fn redact_secrets(text: &str, secret_values: &[(String, String)]) -> Result<String, McpError> {
+    let values: Vec<&str> = secret_values
+        .iter()
+        .filter_map(|(_, v)| redactable(v))
+        .collect();
+
+    if values.is_empty() {
+        return Ok(text.to_string());
+    }
+
+    let ac = aho_corasick::AhoCorasick::builder()
+        .match_kind(aho_corasick::MatchKind::LeftmostLongest)
+        .build(&values)
+        .map_err(|e| {
+            McpError::internal_error(
+                format!(
+                    "Failed to build redaction filter: {e}. Refusing to return unredacted output."
+                ),
+                None,
+            )
+        })?;
+
+    Ok(ac.replace_all(text, &vec!["[REDACTED]"; values.len()]))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mcp_exec_command_scrubs_ambient_age_identity() {
+        let mut cmd = tokio::process::Command::new("unused");
+        scrub_age_identity(&mut cmd);
+
+        let removed = cmd
+            .as_std()
+            .get_envs()
+            .filter_map(|(key, value)| value.is_none().then_some(key.to_string_lossy()))
+            .collect::<Vec<_>>();
+        assert!(removed.iter().any(|key| key == "FNOX_AGE_KEY"));
+        assert!(removed.iter().any(|key| key == "FNOX_AGE_KEY_FILE"));
+        assert!(removed.iter().any(|key| key == "FNOX_ENPASS_PASSWORD"));
+        assert!(removed.iter().any(|key| key == "ENPASS_PASSWORD"));
+    }
+
+    #[test]
+    fn redact_replaces_secret_values() {
+        let secrets = vec![
+            ("API_KEY".into(), "sk-abc123".into()),
+            ("DB_PASS".into(), "hunter2".into()),
+        ];
+        let input = "API_KEY=sk-abc123\nDB_PASS=hunter2\nOK=public";
+        let result = redact_secrets(input, &secrets).unwrap();
+        assert_eq!(result, "API_KEY=[REDACTED]\nDB_PASS=[REDACTED]\nOK=public");
+    }
+
+    #[test]
+    fn redact_longest_match_wins() {
+        let secrets = vec![
+            ("SHORT".into(), "abc".into()),
+            ("LONG".into(), "abcdef".into()),
+        ];
+        let input = "value is abcdef";
+        let result = redact_secrets(input, &secrets).unwrap();
+        assert_eq!(result, "value is [REDACTED]");
+    }
+
+    #[test]
+    fn redact_skips_empty_and_short_secrets() {
+        let secrets = vec![
+            ("EMPTY".into(), "".into()),
+            ("SPACES".into(), "   ".into()),
+            ("SHORT".into(), "ab".into()),
+            ("REAL".into(), "secret".into()),
+        ];
+        let input = "the secret has ab in it";
+        let result = redact_secrets(input, &secrets).unwrap();
+        assert_eq!(result, "the [REDACTED] has ab in it");
+    }
+
+    #[test]
+    fn redact_no_secrets_returns_unchanged() {
+        let input = "nothing to redact here";
+        let result = redact_secrets(input, &[]).unwrap();
+        assert_eq!(result, input);
+    }
+
+    #[test]
+    fn redact_multiple_occurrences() {
+        let secrets = vec![("TOKEN".into(), "xyz789".into())];
+        let input = "xyz789 and xyz789 again";
+        let result = redact_secrets(input, &secrets).unwrap();
+        assert_eq!(result, "[REDACTED] and [REDACTED] again");
+    }
+
+    #[test]
+    fn redact_does_not_corrupt_markers() {
+        // A secret that is a substring of "[REDACTED]" should not corrupt
+        // already-placed markers (aho-corasick does single-pass replacement).
+        let secrets = vec![
+            ("LONG".into(), "sk-abc123".into()),
+            ("OVERLAP".into(), "DACT".into()),
+        ];
+        let input = "sk-abc123 key";
+        let result = redact_secrets(input, &secrets).unwrap();
+        assert_eq!(result, "[REDACTED] key");
+    }
+}

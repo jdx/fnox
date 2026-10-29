@@ -1,7 +1,7 @@
 use crate::commands::Cli;
 use crate::config::{Config, McpTool};
 use crate::error::Result;
-use crate::mcp_server::FnoxMcpServer;
+use crate::mcp::FnoxMcpServer;
 use crate::{env, error::FnoxError};
 use rmcp::service::RunningService;
 use rmcp::{RoleServer, ServiceExt};
