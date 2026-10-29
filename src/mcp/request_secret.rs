@@ -99,8 +99,8 @@ impl FnoxMcpServer {
         let reason = params
             .reason
             .map(|reason| reason.chars().take(MAX_REASON_CHARS).collect());
-        // One deadline covers opening the link and submitting the page; the
-        // page stops serving when this call returns
+        // One deadline covers opening the link and submitting the page.
+        // After submission, the page keeps its confirmation readable briefly.
         let deadline = tokio::time::Instant::now() + REQUEST_SECRET_TIMEOUT;
         let mut page = SecretPage::start(PageDetails {
             name: name.clone(),

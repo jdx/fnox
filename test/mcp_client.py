@@ -38,6 +38,7 @@ watchdog.start()
 next_id = 0
 page_status = []
 page_threads = []
+page_reloads = []
 
 
 def send(message):
@@ -70,6 +71,12 @@ def fill_page(url):
     try:
         with opener.open(req, timeout=60) as response:
             page_status.append(response.status)
+            if os.environ.get("MCP_CLIENT_PAGE_RELOADS"):
+                assert "<h1>Saved</h1>" in response.read().decode()
+                for _ in range(int(os.environ["MCP_CLIENT_PAGE_RELOADS"])):
+                    with opener.open(url, timeout=30) as reloaded:
+                        assert "<h1>Saved</h1>" in reloaded.read().decode()
+                        page_reloads.append(reloaded.status)
     except urllib.error.HTTPError as error:
         page_status.append(error.code)
 
@@ -117,5 +124,7 @@ else:
 for thread in page_threads:
     thread.join()
 print(json.dumps({"page": page_status[0] if page_status else None}))
+if os.environ.get("MCP_CLIENT_PAGE_RELOADS"):
+    print(json.dumps({"reloads": page_reloads}))
 proc.stdin.close()
 proc.wait(timeout=10)
