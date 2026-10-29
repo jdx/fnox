@@ -90,7 +90,7 @@ impl FnoxMcpServer {
         // resolved env=false).
         // Some(Some(v)) = present, Some(None) = known absent, None = not yet resolved.
         {
-            let cache = self.cache.read().await;
+            let cache = self.session.cached_values().await;
             if let Some(cached) = cache.get(&params.name) {
                 return match cached {
                     Some(value) => {
@@ -172,7 +172,7 @@ impl FnoxMcpServer {
         // destination). This releases the read lock before the potentially
         // long subprocess.
         let env_vars: Vec<(String, String)> = {
-            let cache = self.cache.read().await;
+            let cache = self.session.cached_values().await;
             cache
                 .iter()
                 .filter(|(key, _)| {

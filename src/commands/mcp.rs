@@ -2,6 +2,7 @@ use crate::commands::Cli;
 use crate::config::{Config, McpTool};
 use crate::error::Result;
 use crate::mcp::FnoxMcpServer;
+use crate::secret_session::SecretSession;
 use crate::{env, error::FnoxError};
 use rmcp::service::RunningService;
 use rmcp::{RoleServer, ServiceExt};
@@ -82,10 +83,15 @@ impl McpCommand {
             ));
         }
 
-        let daemon_context = crate::daemon::ResolveContext::from_cli(cli);
-        let server =
-            FnoxMcpServer::new(config, profile, mcp_config, daemon_context, profile_secrets)
-                .with_write_target(cli.config.clone(), cli.write_profile.clone());
+        let session = SecretSession::new(
+            config,
+            profile,
+            crate::daemon::ResolveContext::from_cli(cli),
+            crate::daemon::Purpose::Mcp,
+            profile_secrets,
+        )
+        .with_write_target(cli.config.clone(), cli.write_profile.clone());
+        let server = FnoxMcpServer::new(session, mcp_config);
 
         let service: RunningService<RoleServer, FnoxMcpServer> = server
             .serve(rmcp::transport::io::stdio())

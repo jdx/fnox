@@ -1,5 +1,4 @@
-use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use indexmap::IndexMap;
@@ -7,10 +6,9 @@ use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::model::*;
 use rmcp::service::RequestContext;
 use rmcp::{ErrorData as McpError, RoleServer, ServerHandler};
-use tokio::sync::{OnceCell, RwLock};
 
-use crate::config::{self, Config, McpConfig, McpTool, SecretConfig};
-use crate::daemon::{Purpose, ResolveContext};
+use crate::config::{McpConfig, McpTool, SecretConfig};
+use crate::secret_session::SecretSession;
 
 /// The fnox MCP server — acts as a session-scoped secret broker.
 ///
@@ -19,78 +17,32 @@ use crate::daemon::{Purpose, ResolveContext};
 /// ephemeral temp files scoped to each exec call.
 #[derive(Clone)]
 pub struct FnoxMcpServer {
-    pub(super) config: Arc<Config>,
-    pub(super) profile: Arc<Vec<String>>,
+    pub(super) session: Arc<SecretSession>,
     pub(super) mcp_config: Arc<McpConfig>,
-    pub(super) daemon_context: Arc<ResolveContext>,
-    /// Replaced, not mutated, when request_secret stores a new secret
-    pub(super) profile_secrets: Arc<std::sync::RwLock<Arc<IndexMap<String, SecretConfig>>>>,
-    /// `--config` value, for finding the file request_secret writes to
-    pub(super) config_path: Arc<PathBuf>,
-    /// `--write-profile` value, for request_secret
-    pub(super) write_profile: Arc<Option<String>>,
-    /// Held while request_secret rechecks and stores a value, so two pages
-    /// can't both pass the recheck and overwrite each other
-    pub(super) store_lock: Arc<tokio::sync::Mutex<()>>,
-    /// Held while a name sent to the terminal is reloaded and while a stored
-    /// value is read back, so one can't drop a value the other just loaded.
-    /// Taken after `store_lock` when both are held.
-    pub(super) reload_lock: Arc<tokio::sync::Mutex<()>>,
     /// Names request_secret sent to `fnox set` in the terminal; their next
     /// check reloads the value instead of trusting the cache
     pub(super) sent_to_terminal: Arc<std::sync::Mutex<HashSet<String>>>,
-    /// Resolved secret values (raw). None means "resolved but absent".
-    /// as_file conversion happens at exec time.
-    pub(super) cache: Arc<RwLock<HashMap<String, Option<String>>>>,
-    /// Tracks whether secrets have been resolved (separate from cache emptiness,
-    /// since all secrets may resolve to None for optional/absent secrets).
-    pub(super) resolved: Arc<OnceCell<()>>,
+    /// Held while a name sent to the terminal is reloaded and while a stored
+    /// value is read back, so one can't drop a value the other just loaded.
+    /// Taken after the session's store lock when both are held.
+    pub(super) reload_lock: Arc<tokio::sync::Mutex<()>>,
     pub(super) tool_router: ToolRouter<FnoxMcpServer>,
 }
 
 impl FnoxMcpServer {
-    pub fn new(
-        config: Config,
-        profile: Vec<String>,
-        mcp_config: McpConfig,
-        daemon_context: ResolveContext,
-        profile_secrets: IndexMap<String, SecretConfig>,
-    ) -> Self {
+    pub fn new(session: SecretSession, mcp_config: McpConfig) -> Self {
         Self {
-            config: Arc::new(config),
-            profile: Arc::new(profile),
+            session: Arc::new(session),
             mcp_config: Arc::new(mcp_config),
-            daemon_context: Arc::new(daemon_context),
-            profile_secrets: Arc::new(std::sync::RwLock::new(Arc::new(profile_secrets))),
-            config_path: Arc::new(PathBuf::from(config::DEFAULT_CONFIG_FILENAME)),
-            write_profile: Arc::new(None),
-            store_lock: Arc::new(tokio::sync::Mutex::new(())),
-            reload_lock: Arc::new(tokio::sync::Mutex::new(())),
             sent_to_terminal: Arc::new(std::sync::Mutex::new(HashSet::new())),
-            cache: Arc::new(RwLock::new(HashMap::new())),
-            resolved: Arc::new(OnceCell::new()),
+            reload_lock: Arc::new(tokio::sync::Mutex::new(())),
             tool_router: Self::secret_tools() + Self::request_secret_tools(),
         }
     }
 
-    /// Set the `--config` and `--write-profile` values that decide where
-    /// request_secret stores a value, as `fnox set` would
-    pub fn with_write_target(
-        mut self,
-        config_path: PathBuf,
-        write_profile: Option<String>,
-    ) -> Self {
-        self.config_path = Arc::new(config_path);
-        self.write_profile = Arc::new(write_profile);
-        self
-    }
-
     /// The secrets this session can reach
     pub(super) fn secrets(&self) -> Arc<IndexMap<String, SecretConfig>> {
-        self.profile_secrets
-            .read()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        self.session.secrets()
     }
 
     /// as_file secrets are meant to be consumed as file paths via exec, not
@@ -105,23 +57,6 @@ impl FnoxMcpServer {
             ));
         }
         Ok(())
-    }
-
-    /// Make a secret stored during this session available to the tools
-    pub(super) async fn add_secret(&self, name: &str, secret: SecretConfig, value: String) {
-        {
-            let mut secrets = self
-                .profile_secrets
-                .write()
-                .unwrap_or_else(|e| e.into_inner());
-            let mut updated = (**secrets).clone();
-            updated.insert(name.to_string(), secret);
-            *secrets = Arc::new(updated);
-        }
-        self.cache
-            .write()
-            .await
-            .insert(name.to_string(), Some(value));
     }
 
     pub(super) fn list_tools_result(&self) -> ListToolsResult {
@@ -146,103 +81,18 @@ impl FnoxMcpServer {
     /// resolved on-demand by `get_secret` to avoid unnecessary auth prompts.
     /// env="exec" secrets ARE resolved: the exec tool needs them in cache.
     pub(super) async fn ensure_resolved(&self) -> Result<(), McpError> {
-        let config = self.config.clone();
-        let profile = self.profile.clone();
-        let profile_secrets = self.secrets();
-        let daemon_context = self.daemon_context.clone();
-        let cache = self.cache.clone();
-
-        self.resolved
-            .get_or_try_init(|| async {
-                // Only batch-resolve env-injectable secrets; env=false are deferred.
-                // Skip any that request_secret already cached: their config
-                // may name a provider this session's config predates.
-                let env_secrets: IndexMap<String, SecretConfig> = {
-                    let cached = cache.read().await;
-                    profile_secrets
-                        .iter()
-                        .filter(|(k, sc)| sc.env_mode().in_exec() && !cached.contains_key(*k))
-                        .map(|(k, v)| (k.clone(), v.clone()))
-                        .collect()
-                };
-
-                // include_all_modes=true: the map above is already filtered,
-                // and env="exec" secrets would otherwise be dropped by the
-                // shell-only filter in resolve_batch.
-                let resolved = crate::daemon::resolve_batch_with_context(
-                    &daemon_context,
-                    &config,
-                    &profile,
-                    &env_secrets,
-                    Purpose::Mcp,
-                    true,
-                )
-                .await
-                .map_err(|e| {
-                    McpError::internal_error(format!("Failed to resolve secrets: {e}"), None)
-                })?;
-
-                // request_secret may have stored one of these while the batch
-                // ran; keep its newer value
-                let mut cache = cache.write().await;
-                for (key, value) in resolved {
-                    cache.entry(key).or_insert(value);
-                }
-
-                Ok(())
-            })
-            .await?;
-
-        Ok(())
+        self.session
+            .resolve_batch_once(|sc| sc.env_mode().in_exec())
+            .await
+            .map_err(|e| McpError::internal_error(format!("Failed to resolve secrets: {e}"), None))
     }
 
     /// Resolve a single env=false secret on demand and cache it.
     /// Returns the cached value if already resolved, or None for absent secrets.
-    /// Caches None results so absent optional secrets don't re-trigger auth.
     pub(super) async fn resolve_single(&self, name: &str) -> Result<Option<String>, McpError> {
-        // Check cache first (Some(Some(_)) = present, Some(None) = known absent)
-        {
-            let cache = self.cache.read().await;
-            if let Some(v) = cache.get(name) {
-                return Ok(v.clone());
-            }
-        }
-
-        let profile_secrets = self.secrets();
-        let secret_config = match profile_secrets.get(name) {
-            Some(sc) => sc,
-            None => return Ok(None),
-        };
-
-        // Build a single-entry map for resolve_secrets_batch
-        let single: IndexMap<String, SecretConfig> = [(name.to_string(), secret_config.clone())]
-            .into_iter()
-            .collect();
-
-        let resolved = crate::daemon::resolve_batch_with_context(
-            &self.daemon_context,
-            &self.config,
-            &self.profile,
-            &single,
-            Purpose::Mcp,
-            true,
-        )
-        .await
-        .map_err(|e| {
+        self.session.resolve(name).await.map_err(|e| {
             McpError::internal_error(format!("Failed to resolve secret '{name}': {e}"), None)
-        })?;
-
-        let value = resolved.into_iter().next().and_then(|(_, v)| v);
-
-        let mut cache = self.cache.write().await;
-        // Re-check under write lock to avoid TOCTOU race: another concurrent
-        // get_secret may have resolved and cached this while we were waiting.
-        if let Some(existing) = cache.get(name) {
-            return Ok(existing.clone());
-        }
-        // Cache both present and absent (None) values to avoid re-triggering auth
-        cache.insert(name.to_string(), value.clone());
-        Ok(value)
+        })
     }
 }
 
@@ -323,27 +173,36 @@ impl ServerHandler for FnoxMcpServer {
     }
 }
 
+/// A server with an empty config and no daemon, for tests
+#[cfg(test)]
+pub(super) fn test_server(profile: Vec<String>, write_profile: Option<String>) -> FnoxMcpServer {
+    let context = crate::daemon::ResolveContext {
+        config: "fnox.toml".into(),
+        profile: profile.clone(),
+        age_key_file: None,
+        if_missing: None,
+        no_defaults: false,
+        non_interactive: true,
+        no_daemon: true,
+    };
+    let session = SecretSession::new(
+        crate::config::Config::default(),
+        profile,
+        context,
+        crate::daemon::Purpose::Mcp,
+        IndexMap::new(),
+    )
+    .with_write_target("fnox.toml".into(), write_profile);
+    FnoxMcpServer::new(session, McpConfig::default())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn list_tools_includes_conservative_cache_hints() {
-        let server = FnoxMcpServer::new(
-            Config::default(),
-            vec!["default".into()],
-            McpConfig::default(),
-            ResolveContext {
-                config: "fnox.toml".into(),
-                profile: vec!["default".into()],
-                age_key_file: None,
-                if_missing: None,
-                no_defaults: false,
-                non_interactive: true,
-                no_daemon: true,
-            },
-            IndexMap::new(),
-        );
+        let server = test_server(vec!["default".into()], None);
 
         let result = server.list_tools_result();
         assert_eq!(result.ttl_ms, Some(0));
