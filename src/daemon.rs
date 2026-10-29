@@ -484,17 +484,17 @@ async fn status_for_context(ctx: &ResolveContext) -> Result<Option<(u32, usize)>
 pub async fn clear(cli: &Cli, keys: &[String]) -> Result<()> {
     let paths = daemon_socket_paths()?;
     if paths.is_empty() {
-        clear_socket(socket_path(cli)?, keys, false).await?;
+        clear_socket(socket_path(cli)?, keys, false, false).await?;
         return Ok(());
     }
 
     let mut cleared = false;
     for path in paths {
-        cleared |= clear_socket(path, keys, true).await?;
+        cleared |= clear_socket(path, keys, true, false).await?;
     }
 
     if !cleared {
-        clear_socket(socket_path(cli)?, keys, false).await?;
+        clear_socket(socket_path(cli)?, keys, false, false).await?;
     }
     Ok(())
 }
@@ -503,10 +503,17 @@ pub async fn clear(cli: &Cli, keys: &[String]) -> Result<()> {
 /// next resolve fetches them from their providers and caches the new values.
 /// Does nothing when the daemon is disabled or not running.
 pub async fn refresh(cli: &Cli, config: &Config, keys: &[String]) -> Result<()> {
-    refresh_with_context(&ResolveContext::from_cli(cli), config, keys).await
+    let ctx = ResolveContext::from_cli(cli);
+    if keys.is_empty() || !should_use_daemon(&ctx, config) {
+        return Ok(());
+    }
+    clear_socket(socket_path_for_context(&ctx)?, keys, true, false).await?;
+    Ok(())
 }
 
-/// As [`refresh`], for the daemon that `ctx` resolves through
+/// As [`refresh`], for the daemon that `ctx` resolves through. A daemon too
+/// old to evict single keys has its whole cache cleared instead, so a caller
+/// that reads the keys back next never gets an old value.
 pub async fn refresh_with_context(
     ctx: &ResolveContext,
     config: &Config,
@@ -515,12 +522,18 @@ pub async fn refresh_with_context(
     if keys.is_empty() || !should_use_daemon(ctx, config) {
         return Ok(());
     }
-    clear_socket(socket_path_for_context(ctx)?, keys, true).await?;
+    clear_socket(socket_path_for_context(ctx)?, keys, true, true).await?;
     Ok(())
 }
 
-/// Returns whether a daemon was listening on `path`.
-async fn clear_socket(path: PathBuf, keys: &[String], ignore_missing: bool) -> Result<bool> {
+/// Returns whether a daemon was listening on `path`. With `clear_all_fallback`,
+/// a daemon that doesn't accept a keyed clear has its whole cache cleared.
+async fn clear_socket(
+    path: PathBuf,
+    keys: &[String],
+    ignore_missing: bool,
+    clear_all_fallback: bool,
+) -> Result<bool> {
     let request = if keys.is_empty() {
         Request::Clear
     } else {
@@ -536,7 +549,19 @@ async fn clear_socket(path: PathBuf, keys: &[String], ignore_missing: bool) -> R
         )),
         Err(e) if ignore_missing && e.is_socket_missing() => Ok(false),
         // A daemon from an older fnox drops the connection on a request it
-        // cannot decode. Leave its cache alone rather than failing the clear.
+        // cannot decode. Clear its whole cache if the caller needs the keys
+        // gone, since it understands that request.
+        Err(CallError::EmptyResponse) if clear_all_fallback && !keys.is_empty() => {
+            match call(path.clone(), Request::Clear).await {
+                Ok(Response::Ok) => Ok(true),
+                Ok(Response::Error { message }) => Err(FnoxError::Config(message)),
+                Ok(_) => Err(FnoxError::Config(
+                    "Invalid daemon response for Clear".to_string(),
+                )),
+                Err(e) => Err(into_fnox_error(e)),
+            }
+        }
+        // Otherwise leave its cache alone rather than failing the clear.
         Err(CallError::EmptyResponse) if ignore_missing && !keys.is_empty() => {
             tracing::warn!(
                 "fnox daemon at {} did not accept a keyed clear; it may be from an older fnox. Run `fnox daemon clear` to clear it fully",

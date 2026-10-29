@@ -105,6 +105,7 @@ mcp_client() {
 	assert_line --index 1 --partial "fnox set API_TOKEN"
 	assert_line --index 3 --partial "already has a value"
 	assert_line --index 4 --partial matched
+	refute_output --partial new-value
 }
 
 @test "request_secret applies the top-level env default to a new secret" {
@@ -131,6 +132,18 @@ mcp_client() {
 	assert_line --index 1 --partial matched
 	run "$FNOX_BIN" get API_TOKEN
 	assert_output "new-token"
+}
+
+@test "request_secret refuses a value that doesn't fit json_path" {
+	echo '{"token":"old-token"}' | "$FNOX_BIN" set API_TOKEN
+	sed -i.bak 's/^API_TOKEN *= *{ /API_TOKEN = { json_path = "token", /' fnox.toml
+	grep -q 'json_path = "token"' fnox.toml
+	mcp_client url save:plain-token '[["request_secret", {"name": "API_TOKEN", "replace": true}]]'
+	assert_success
+	assert_line --index 0 --partial "doesn't fit the json_path or line setting"
+	assert_line --index 1 '{"page": 500}'
+	run "$FNOX_BIN" get API_TOKEN
+	assert_output "old-token"
 }
 
 @test "request_secret reports a decline on the page" {

@@ -751,9 +751,16 @@ impl FnoxMcpServer {
             Some(Submission::Value { value, reply }) => {
                 // One store at a time, so two pages for the same name can't
                 // both pass the recheck
-                let _store = self.store_lock.lock().await;
+                let Ok(_store) = tokio::time::timeout_at(deadline, self.store_lock.lock()).await
+                else {
+                    let message = "another value was still being stored when this request expired, so fnox stored nothing";
+                    let _ = reply.send(Err(message.to_string()));
+                    return Ok(CallToolResult::error(vec![ContentBlock::text(format!(
+                        "Failed to store '{name}': {message}."
+                    ))]));
+                };
                 // The config may have changed while the page was open
-                let saved = match self.recheck(&name, params.replace, &provider).await {
+                let saved = match self.recheck(&name, &value, params.replace, &provider).await {
                     Ok(config) => self.save(&name, value, config, &target).await,
                     Err(e) => Err(e),
                 };
@@ -850,6 +857,7 @@ impl FnoxMcpServer {
     async fn recheck(
         &self,
         name: &str,
+        value: &str,
         replace: bool,
         provider: &str,
     ) -> crate::error::Result<Config> {
@@ -873,6 +881,19 @@ impl FnoxMcpServer {
             return Err(changed(format!(
                 "the provider for '{name}' changed from '{provider}' to '{current}' while this page was open, so fnox stored nothing"
             )));
+        }
+        // A value that doesn't fit the secret's json_path or line setting
+        // would replace a working one with one that can't be read
+        if let Some(secret) = config.get_secrets(&self.profile)?.get(name)
+            && (secret.json_path.is_some() || secret.line.is_some())
+        {
+            crate::secret_resolver::apply_post_processing(value.to_string(), secret).map_err(
+                |e| {
+                    changed(format!(
+                        "the value doesn't fit the json_path or line setting of '{name}' ({e}), so fnox stored nothing"
+                    ))
+                },
+            )?;
         }
         Ok(config)
     }
