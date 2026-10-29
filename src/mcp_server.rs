@@ -922,6 +922,14 @@ impl FnoxMcpServer {
         )
         .await?;
         let config = Config::load_smart(self.config_path.as_path())?;
+        // A remote provider keeps the same reference when a value is replaced,
+        // so the daemon would otherwise keep serving the old value
+        crate::daemon::refresh_with_context(
+            &self.daemon_context,
+            &config,
+            std::slice::from_ref(&name.to_string()),
+        )
+        .await?;
         if !self.load(&config, name).await? {
             return Err(crate::error::FnoxError::Config(format!(
                 "stored '{name}', but it resolves to no value"

@@ -157,3 +157,50 @@ mcp_client() {
 	assert_success
 	assert_line --index 0 --partial "not in mcp.secrets"
 }
+
+@test "request_secret replaces a remote value cached by the daemon" {
+	export XDG_RUNTIME_DIR="$TEST_TEMP_DIR/runtime"
+	mkdir -p "$XDG_RUNTIME_DIR" "$TEST_TEMP_DIR/bin" "$TEST_TEMP_DIR/store"
+	# A password-store stand-in that keeps each value in a file
+	cat >"$TEST_TEMP_DIR/bin/pass" <<'EOF'
+#!/bin/sh
+case "$1" in
+show) cat "$FAKE_PASS_STORE/$2" ;;
+insert) cat >"$FAKE_PASS_STORE/$4" ;;
+esac
+EOF
+	chmod +x "$TEST_TEMP_DIR/bin/pass"
+	export PATH="$TEST_TEMP_DIR/bin:$PATH"
+	export FAKE_PASS_STORE="$TEST_TEMP_DIR/store"
+	cat >fnox.toml <<'EOF'
+root = true
+default_provider = "pass"
+
+[daemon]
+enabled = true
+
+[providers.pass]
+type = "password-store"
+
+[mcp]
+tools = ["exec", "request_secret"]
+
+[secrets]
+EOF
+	# Replacing the value later leaves fnox.toml byte-for-byte the same, so the
+	# daemon's config fingerprint doesn't change
+	echo old-value | "$FNOX_BIN" set API_TOKEN
+
+	# The first exec has the session's daemon cache the old value
+	mcp_client url save:new-value '[
+		["exec", {"command": ["sh", "-c", "test \"$API_TOKEN\" = old-value && echo old"]}],
+		["request_secret", {"name": "API_TOKEN", "replace": true}],
+		["exec", {"command": ["sh", "-c", "test \"$API_TOKEN\" = new-value && echo matched"]}]
+	]'
+	"$FNOX_BIN" --non-interactive daemon stop >/dev/null 2>&1 || true
+	"$FNOX_BIN" daemon stop >/dev/null 2>&1 || true
+	assert_success
+	assert_line --index 0 --partial old
+	assert_line --index 1 --partial "fnox stored it"
+	assert_line --index 2 --partial matched
+}

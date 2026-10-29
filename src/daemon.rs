@@ -503,11 +503,19 @@ pub async fn clear(cli: &Cli, keys: &[String]) -> Result<()> {
 /// next resolve fetches them from their providers and caches the new values.
 /// Does nothing when the daemon is disabled or not running.
 pub async fn refresh(cli: &Cli, config: &Config, keys: &[String]) -> Result<()> {
-    let ctx = ResolveContext::from_cli(cli);
-    if keys.is_empty() || !should_use_daemon(&ctx, config) {
+    refresh_with_context(&ResolveContext::from_cli(cli), config, keys).await
+}
+
+/// As [`refresh`], for the daemon that `ctx` resolves through
+pub async fn refresh_with_context(
+    ctx: &ResolveContext,
+    config: &Config,
+    keys: &[String],
+) -> Result<()> {
+    if keys.is_empty() || !should_use_daemon(ctx, config) {
         return Ok(());
     }
-    clear_socket(socket_path_for_context(&ctx)?, keys, true).await?;
+    clear_socket(socket_path_for_context(ctx)?, keys, true).await?;
     Ok(())
 }
 
