@@ -245,6 +245,18 @@ teardown() {
 	[ -L "$FNOX_CONFIG_DIR/files/kube.age" ]
 }
 
+@test "files: set refuses a linked source that is the config file" {
+	printf 'token: abc\n' >"$HOME/source"
+	fnox set --file ~/.kube/config --from-file "$HOME/source" --source files/kube.age
+	ln -sf "$FNOX_CONFIG_DIR/config.toml" "$FNOX_CONFIG_DIR/files/kube.age"
+	cp "$FNOX_CONFIG_DIR/config.toml" "$HOME/config.before"
+
+	run fnox set --file ~/.kube/config --from-file "$HOME/source"
+	assert_failure
+	assert_output --partial "is the config file"
+	cmp "$FNOX_CONFIG_DIR/config.toml" "$HOME/config.before"
+}
+
 @test "files: a project config linked to the config directory cannot declare files" {
 	cat >"$FNOX_CONFIG_DIR/project.toml" <<'TOML'
 root = true

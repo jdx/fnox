@@ -337,6 +337,16 @@ pub async fn put_file(
 
     // Write through a linked source, and refuse a dangling link before storing
     let source_file = source_file.map(|f| files::resolve_source(&f)).transpose()?;
+    if let Some(source_file) = &source_file {
+        let canonical = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+        if canonical(source_file) == canonical(&target) {
+            return Err(FnoxError::Config(format!(
+                "Source '{}' is the config file {}; choose another name",
+                source_file.display(),
+                target.display()
+            )));
+        }
+    }
 
     if opts.dry_run {
         let label = console::style("[dry-run]").yellow().bold();
