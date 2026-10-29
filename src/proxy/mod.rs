@@ -33,6 +33,7 @@ const MAX_AUTH_ATTEMPTS: usize = 3;
 
 mod ca;
 mod destination;
+mod handle;
 mod plan;
 mod policy;
 mod server;
@@ -42,9 +43,13 @@ mod values;
 
 use ca::*;
 use destination::*;
+use handle::*;
 use policy::*;
 use values::*;
 
+pub use handle::{
+    ClientStream, MCP_HOST, MCP_RELAY_ENV, MCP_RELAY_PROFILE_ENV, McpService, ProxyHandle, RuleInfo,
+};
 pub use plan::{ProxyPlan, deny_inspection, validate_config};
 pub use policy::target_label;
 pub use server::{ProxyListener, RunningProxy};

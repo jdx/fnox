@@ -5,6 +5,7 @@ use super::*;
 pub struct ProxyPlan {
     pub(super) policy: Arc<ProxyPolicy>,
     pub child_env: IndexMap<String, String>,
+    pub(super) rules: Arc<Vec<RuleInfo>>,
 }
 
 /// Stops other processes of the same user, including the proxied command,
@@ -64,6 +65,19 @@ impl ProxyPlan {
         self.policy.values.pending()
     }
 
+    /// Serve MCP to `fnox mcp` relays in the child with `service`
+    pub fn set_mcp_service(&self, service: McpService) {
+        let _ = self.policy.mcp.set(McpSlot(service));
+    }
+
+    /// What the MCP tools may know about this proxy's rules and values
+    pub fn handle(&self) -> ProxyHandle {
+        ProxyHandle {
+            policy: self.policy.clone(),
+            rules: self.rules.clone(),
+        }
+    }
+
     pub fn new(config: &ProxyConfig, values: &IndexMap<String, String>) -> Result<Self> {
         validate_config(config)?;
 
@@ -71,6 +85,7 @@ impl ProxyPlan {
         let mut env_values = IndexMap::new();
         let mut prepared = Vec::new();
         let mut seen_placeholders = HashSet::new();
+        let mut rule_infos = Vec::new();
 
         for rule in &config.rules {
             // A secret without a value is pending: see `values.rs`
@@ -127,6 +142,12 @@ impl ProxyPlan {
                 )));
             }
             env_values.insert(env_name.to_string(), placeholder.clone());
+            rule_infos.push(RuleInfo {
+                secret: rule.secret.clone(),
+                env: env_name.to_string(),
+                domain: rule.domain.to_ascii_lowercase(),
+                placeholder: placeholder.clone(),
+            });
 
             prepared.push(PreparedRule {
                 secret: rule.secret.clone(),
@@ -196,6 +217,7 @@ impl ProxyPlan {
                 destinations: destinations.clone(),
                 token: data_encoding::HEXLOWER.encode(&rand::random::<[u8; 16]>()),
                 values: Arc::new(SecretValues::new(rule_redactions, known)),
+                mcp: std::sync::OnceLock::new(),
                 client: reqwest::Client::builder()
                     .http1_only()
                     .no_proxy()
@@ -207,6 +229,7 @@ impl ProxyPlan {
                     })?,
             }),
             child_env: env_values,
+            rules: Arc::new(rule_infos),
         })
     }
 }
@@ -233,6 +256,14 @@ pub(super) fn is_valid_domain_pattern(domain: &str) -> bool {
 pub(super) fn validate_rule(rule: &ProxyRule) -> Result<()> {
     if rule.secret.trim().is_empty() {
         return Err(proxy_error("rule secret cannot be empty"));
+    }
+    // A placeholder in these would turn the child's `fnox mcp` relay off
+    let env_name = rule.env.as_deref().unwrap_or(&rule.secret);
+    if [MCP_RELAY_ENV, MCP_RELAY_PROFILE_ENV].contains(&env_name) {
+        return Err(proxy_error(format!(
+            "rule for '{}' can't use the environment variable '{env_name}', which fnox reserves",
+            rule.secret
+        )));
     }
     if !is_valid_domain_pattern(&rule.domain) {
         return Err(proxy_error(format!(

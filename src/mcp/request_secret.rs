@@ -45,7 +45,7 @@ impl FnoxMcpServer {
         Parameters(params): Parameters<RequestSecretParams>,
         peer: Peer<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
-        if !self.mcp_config.tools().contains(&McpTool::RequestSecret) {
+        if !self.enabled_tools().contains(&McpTool::RequestSecret) {
             return Err(McpError::invalid_request(
                 "Tool 'request_secret' is not enabled in this configuration",
                 None,
@@ -68,8 +68,14 @@ impl FnoxMcpServer {
             .load_config()
             .map_err(|e| McpError::internal_error(format!("Failed to load config: {e}"), None))?;
         if !params.replace && self.has_value(&config, &name).await? {
+            let usage = match &self.proxy {
+                // The value may have just been loaded, such as after the
+                // terminal fallback, so the proxy may not have it yet
+                Some(proxy) => self.hand_to_proxy(proxy, &name).await,
+                None => "Use exec to run commands with it.".to_string(),
+            };
             return Ok(CallToolResult::success(vec![ContentBlock::text(format!(
-                "Secret '{name}' already has a value. Use exec to run commands with it, or call request_secret with replace=true to ask the user for a new value."
+                "Secret '{name}' already has a value. {usage} Call request_secret with replace=true to ask the user for a new value."
             ))]));
         }
 
@@ -182,29 +188,40 @@ impl FnoxMcpServer {
                     target.display()
                 );
                 let reloaded = {
-                    let _reload = self.reload_lock.lock().await;
+                    let _reload = self.session.reload_lock().lock().await;
                     let reloaded = self.session.reload_stored(&name, &target).await;
                     if reloaded.is_ok() {
                         // The user just entered this value; nothing to wait for
-                        self.sent_to_terminal
-                            .lock()
-                            .unwrap_or_else(|e| e.into_inner())
-                            .remove(&name);
+                        self.session.unmark_for_reload(&name);
                     }
                     reloaded
                 };
                 if let Err(e) = reloaded {
+                    // The session may still hold the old value; reload until a
+                    // later check reads the new one
+                    self.session.mark_for_reload(&name);
+                    // Nor may the proxy keep injecting the value this one
+                    // replaced; it reads the new one from the config instead
+                    let proxy_note = match &self.proxy {
+                        Some(proxy) if !proxy.rules_for(&name).is_empty() => {
+                            proxy.forget_value(&name);
+                            " The proxy reads it from the config on the next request that needs it."
+                        }
+                        _ => "",
+                    };
                     let _ = reply.send(Ok(format!(
                         "fnox stored {name}, but couldn't read it back: {e}"
                     )));
                     return Ok(CallToolResult::error(vec![ContentBlock::text(format!(
-                        "The user entered '{name}' and {stored}, but reading it back failed: {e}. The value is saved; don't ask for it again."
+                        "The user entered '{name}' and {stored}, but reading it back failed: {e}. The value is saved; don't ask for it again.{proxy_note}"
                     ))]));
                 }
                 let _ = reply.send(Ok(format!(
                     "fnox stored {name}. You can close this tab and go back to the agent."
                 )));
-                let usage = if self
+                let usage = if let Some(proxy) = &self.proxy {
+                    self.hand_to_proxy(proxy, &name).await
+                } else if self
                     .secrets()
                     .get(&name)
                     .is_some_and(|secret| secret.env_mode().in_exec())
@@ -263,13 +280,26 @@ impl FnoxMcpServer {
         }
         // A value that doesn't fit the secret's json_path or line setting
         // would replace a working one with one that can't be read
-        self.session
+        let effective = self
+            .session
             .check_value_fits(&config, name, value)
             .map_err(|e| {
                 changed(format!(
                     "the value doesn't fit the json_path or line setting of '{name}' ({e}), so fnox stored nothing"
                 ))
             })?;
+        // Under the proxy, a value it would refuse (such as one containing a
+        // placeholder, or an empty json_path result) would be saved but never
+        // injected. It gets the value after json_path or line, so check that.
+        if let Some(proxy) = &self.proxy
+            && !proxy.rules_for(name).is_empty()
+        {
+            proxy.check_value(name, &effective).map_err(|e| {
+                changed(format!(
+                    "the proxy can't use this value ({e}), so fnox stored nothing"
+                ))
+            })?;
+        }
         Ok(config)
     }
 
@@ -284,19 +314,14 @@ impl FnoxMcpServer {
                 None,
             )
         };
-        let marked = || {
-            self.sent_to_terminal
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .contains(name)
-        };
+        let marked = || self.session.is_marked_for_reload(name);
         let cached = async || self.session.cached(name).await.flatten();
 
         // After the terminal fallback, the user may replace a value this
         // session (and the daemon) still caches, so a name sent there is
         // reloaded on every check until its value changes
         let reload_guard = if marked() {
-            Some(self.reload_lock.lock().await)
+            Some(self.session.reload_lock().lock().await)
         } else {
             None
         };
@@ -318,20 +343,14 @@ impl FnoxMcpServer {
             self.session.forget(name).await;
         } else if cached().await != before {
             // The user's new value arrived; until then, keep reloading
-            self.sent_to_terminal
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .remove(name);
+            self.session.unmark_for_reload(name);
         }
         Ok(loaded)
     }
 
     /// What to tell the agent when the client can't show a URL
     fn terminal_fallback(&self, name: &str) -> String {
-        self.sent_to_terminal
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(name.to_string());
+        self.session.mark_for_reload(name);
         let mut command = vec!["fnox".to_string()];
         let config_path = self.session.config_path();
         if config_path != std::path::Path::new(config::DEFAULT_CONFIG_FILENAME) {

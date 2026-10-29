@@ -15,6 +15,9 @@ use rmcp::{RoleServer, ServiceExt};
 /// they can reach. Add `request_secret` to `tools` to let the agent ask you to
 /// enter a missing secret on a local page. The server never prompts in the
 /// terminal, so authenticate to your providers before starting the client.
+///
+/// Under `fnox proxy run`, `fnox mcp` relays to the proxy instead, which
+/// serves the tools with placeholders rather than real values.
 #[derive(Debug, usage_rs::Args)]
 #[usage(
     example("fnox mcp", header = "Start the server for the current project"),
@@ -91,7 +94,7 @@ impl McpCommand {
             profile_secrets,
         )
         .with_write_target(cli.config.clone(), cli.write_profile.clone());
-        let server = FnoxMcpServer::new(session, mcp_config);
+        let server = FnoxMcpServer::new(std::sync::Arc::new(session), mcp_config);
 
         let service: RunningService<RoleServer, FnoxMcpServer> = server
             .serve(rmcp::transport::io::stdio())

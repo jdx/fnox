@@ -5,6 +5,8 @@
 //! user for a missing secret, and [`page`] the one-time local page it serves.
 
 pub mod page;
+mod proxied;
+pub mod relay;
 mod request_secret;
 mod server;
 mod tools;

@@ -1028,3 +1028,30 @@ fn a_pending_query_secret_is_found_in_its_decoded_parameter_only() {
     let header = [("authorization".to_string(), "<TOKEN>".to_string())];
     assert_eq!(needed("/repos/example/fnox", &header), 0);
 }
+
+#[test]
+fn a_replaced_value_stays_redacted() {
+    let plan = policy();
+    plan.policy
+        .values
+        .replace("GITHUB_TOKEN", "new-token".to_string())
+        .unwrap();
+    // A response to a request sent with the old value may still echo it
+    let mut body = b"old real-token, new new-token".to_vec();
+    redact_values(&mut body, &plan.policy.redactions());
+    assert_eq!(body, b"old ghp_placeholder, new ghp_placeholder");
+}
+
+#[test]
+fn a_forgotten_value_is_pending_and_stays_redacted() {
+    let plan = policy();
+    plan.policy.values.forget("GITHUB_TOKEN");
+    assert_eq!(plan.policy.values.value("GITHUB_TOKEN"), None);
+    assert_eq!(
+        plan.policy.values.pending(),
+        vec!["GITHUB_TOKEN".to_string()]
+    );
+    let mut body = b"old real-token".to_vec();
+    redact_values(&mut body, &plan.policy.redactions());
+    assert_eq!(body, b"old ghp_placeholder");
+}
