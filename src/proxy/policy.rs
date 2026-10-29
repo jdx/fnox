@@ -209,6 +209,8 @@ impl ProxyPolicy {
             .filter(|rule| {
                 domain_matches(&rule.domain, domain)
                     && rule.route_matches(method, path)
+                    // `authorize` refuses a placeholder that appears more than once
+                    && Occurrences::count(&rule.placeholder, headers, path, &query).total == 1
                     && match &rule.target {
                         Target::Header(name) => headers.iter().any(|(header, value)| {
                             header.eq_ignore_ascii_case(name) && value.contains(&rule.placeholder)
@@ -314,16 +316,11 @@ impl ProxyPolicy {
             }
 
             let query = QuerySegments::parse(url.query());
-            let in_headers: usize = headers
-                .iter()
-                .map(|(_, value)| value.matches(&rule.placeholder).count())
-                .sum();
-            let in_path = path
-                .matches(&rule.placeholder)
-                .count()
-                .max(percent_decode(&path).matches(&rule.placeholder).count());
-            let in_query = query.occurrences(&rule.placeholder);
-            let occurrences = in_headers + in_path + in_query;
+            let Occurrences {
+                in_headers,
+                in_path,
+                total: occurrences,
+            } = Occurrences::count(&rule.placeholder, headers, &path, &query);
             if occurrences == 0 {
                 continue;
             }
@@ -348,15 +345,20 @@ impl ProxyPolicy {
                 })
             };
 
+            // Checked after the placeholder's place, so a misplaced one is
+            // reported as misplaced rather than as a secret to set
+            let value = || {
+                self.values.value(&rule.secret).ok_or_else(|| {
+                    proxy_error(format!(
+                        "secret '{}' is not set yet; set it, for example with `fnox set {}`, and retry",
+                        rule.secret, rule.secret
+                    ))
+                })
+            };
+
             if in_path > 0 {
                 return Err(outside());
             }
-            let Some(value) = self.values.value(&rule.secret) else {
-                return Err(proxy_error(format!(
-                    "secret '{}' is not set yet; set it, for example with `fnox set {}`, and retry",
-                    rule.secret, rule.secret
-                )));
-            };
             if in_headers > 0 {
                 let (header_name, header_value) = headers
                     .iter_mut()
@@ -367,7 +369,7 @@ impl ProxyPolicy {
                 ) {
                     return Err(outside());
                 }
-                *header_value = header_value.replacen(&rule.placeholder, &value, 1);
+                *header_value = header_value.replacen(&rule.placeholder, &value()?, 1);
             } else {
                 let name = query
                     .param_containing(&rule.placeholder)
@@ -375,7 +377,7 @@ impl ProxyPolicy {
                 if !allows(&|target| matches!(target, Target::Query(allowed) if *allowed == name)) {
                     return Err(outside());
                 }
-                url.set_query(Some(&query.replaced(&rule.placeholder, &value)));
+                url.set_query(Some(&query.replaced(&rule.placeholder, &value()?)));
             }
             injected.push(rule.secret.clone());
         }
@@ -385,6 +387,38 @@ impl ProxyPolicy {
 
 /// A request's raw query string split on `&`, keeping the original bytes of
 /// every segment so that only the substituted one is re-encoded.
+/// Where a placeholder appears in a request, counted the way `authorize`
+/// counts it
+pub(super) struct Occurrences {
+    pub(super) in_headers: usize,
+    pub(super) in_path: usize,
+    pub(super) total: usize,
+}
+
+impl Occurrences {
+    pub(super) fn count(
+        placeholder: &str,
+        headers: &[(String, String)],
+        path: &str,
+        query: &QuerySegments,
+    ) -> Self {
+        let in_headers: usize = headers
+            .iter()
+            .map(|(_, value)| value.matches(placeholder).count())
+            .sum();
+        let in_path = path
+            .matches(placeholder)
+            .count()
+            .max(percent_decode(path).matches(placeholder).count());
+        let in_query = query.occurrences(placeholder);
+        Self {
+            in_headers,
+            in_path,
+            total: in_headers + in_path + in_query,
+        }
+    }
+}
+
 pub(super) struct QuerySegments {
     pub(super) raw: Vec<String>,
 }

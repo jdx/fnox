@@ -176,10 +176,27 @@ impl SecretValues {
             values: self,
             secrets: &due,
         };
-        let config = match session.load_config() {
-            Ok(config) => config,
-            Err(error) => {
+        // Reading the config is blocking file I/O: keep it off the async
+        // workers, and within the same deadline as the lookups
+        let reload = tokio::task::spawn_blocking({
+            let session = session.clone();
+            move || session.load_config()
+        });
+        let config = match tokio::time::timeout(PENDING_LOAD_TIMEOUT, reload).await {
+            Ok(Ok(Ok(config))) => config,
+            Ok(Ok(Err(error))) => {
                 tracing::warn!("fnox proxy: could not reload the config: {error}");
+                return;
+            }
+            Ok(Err(error)) => {
+                tracing::warn!("fnox proxy: config reload failed: {error}");
+                return;
+            }
+            Err(_) => {
+                tracing::warn!(
+                    "fnox proxy: reloading the config took longer than {}s",
+                    PENDING_LOAD_TIMEOUT.as_secs()
+                );
                 return;
             }
         };

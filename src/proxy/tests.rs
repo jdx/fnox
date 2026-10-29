@@ -978,6 +978,34 @@ fn a_request_refreshes_only_the_pending_secrets_it_carries() {
     assert!(needed("GET", "/repos/example/fnox", "Bearer other").is_empty());
     assert!(needed("GET", "/user", "Bearer ghp_placeholder").is_empty());
     assert!(needed("POST", "/repos/example/fnox", "Bearer ghp_placeholder").is_empty());
+    // authorize refuses a placeholder that appears twice, so no lookup either
+    assert!(
+        needed(
+            "GET",
+            "/repos/example/fnox",
+            "ghp_placeholder ghp_placeholder"
+        )
+        .is_empty()
+    );
+}
+
+#[test]
+fn a_misplaced_placeholder_is_reported_before_a_missing_secret() {
+    let plan = pending_plan();
+    let mut headers = vec![("x-other".to_string(), "ghp_placeholder".to_string())];
+    let error = authorize(
+        &plan,
+        "api.github.com",
+        "GET",
+        "/repos/example/fnox",
+        &mut headers,
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(
+        error.contains("outside its allowed route or target"),
+        "{error}"
+    );
 }
 
 #[test]
