@@ -5,7 +5,7 @@
 //! never reaches the environment. Entries can only be declared in the global
 //! config, so a cloned project cannot name a path to write.
 
-use crate::config::{Config, EnvMode, IfMissing, SecretConfig};
+use crate::config::{Config, EnvMode, IfMissing, SecretConfig, SyncConfig};
 use crate::error::{FnoxError, Result};
 use crate::providers::{ProviderCapability, ProviderConfig, get_provider_resolved};
 use crate::secret_resolver;
@@ -39,6 +39,11 @@ pub struct FileConfig {
     /// directory of the config file. Keeps large ciphertext out of the config.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+
+    /// Cached sync data (provider + encrypted content from `fnox sync`). Reads
+    /// decrypt this copy instead of calling `provider`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sync: Option<SyncConfig>,
 
     /// Path to the config file where this entry was defined (not serialized)
     #[serde(skip)]
@@ -334,17 +339,58 @@ pub fn cli_path(path: &Path) -> Result<PathBuf> {
 
 /// The plaintext content of a file entry
 ///
-/// Resolved with the providers of the global config only, as `entry` is.
+/// Resolved with the providers of the global config only, as `entry` is. A
+/// `sync` cache is read in place of the stored content.
 pub async fn resolve_file(profiles: &[String], entry: &FileEntry) -> Result<String> {
+    resolve_content(profiles, entry, true).await
+}
+
+/// The plaintext content of a file entry from its own provider, ignoring any
+/// `sync` cache, so a refresh picks up changes at the source.
+pub async fn resolve_file_source(profiles: &[String], entry: &FileEntry) -> Result<String> {
+    resolve_content(profiles, entry, false).await
+}
+
+async fn resolve_content(profiles: &[String], entry: &FileEntry, cached: bool) -> Result<String> {
     let config = Config::load_global_only()?;
     let mut secret = SecretConfig::new();
     secret.set_provider(entry.config.provider.clone());
     secret.set_value(entry.config.stored_value()?);
+    if cached {
+        secret.sync = entry.config.sync.clone();
+    }
     secret.env = Some(EnvMode::Never);
     secret.if_missing = Some(IfMissing::Error);
     secret_resolver::resolve_secret(&config, profiles, &entry.key, &secret)
         .await?
         .ok_or_else(|| FnoxError::Config(format!("File '{}' has no content", entry.key)))
+}
+
+/// Encrypt `content` with the encryption provider `provider_name` of the
+/// global config, for the `sync` cache of a file.
+pub async fn encrypt_for_sync(
+    profiles: &[String],
+    provider_name: &str,
+    content: &str,
+) -> Result<String> {
+    let config = Config::load_global_only()?;
+    let providers = config.get_providers(profiles)?;
+    let provider_config = providers.get(provider_name).ok_or_else(|| {
+        FnoxError::Config(format!(
+            "Provider '{provider_name}' not found in the global config; \
+             files are cached with the providers of the global config only"
+        ))
+    })?;
+    let provider = get_provider_resolved(&config, profiles, provider_name, provider_config).await?;
+    if !provider
+        .capabilities()
+        .contains(&ProviderCapability::Encryption)
+    {
+        return Err(FnoxError::SyncTargetProviderUnsupported {
+            provider: provider_name.to_string(),
+        });
+    }
+    provider.encrypt(content).await
 }
 
 /// Store `content` with the provider and return what the config records for it:
@@ -483,6 +529,13 @@ pub fn save_entry(target: &Path, profile: &str, key: &str, file: &FileConfig) ->
         if let Some(value) = value {
             inline.insert(name, Value::from(value.as_str()));
         }
+    }
+    if let Some(sync) = &file.sync {
+        let mut sync_table = InlineTable::new();
+        sync_table.insert("provider", Value::from(sync.provider.as_str()));
+        sync_table.insert("value", Value::from(sync.value.as_str()));
+        sync_table.fmt();
+        inline.insert("sync", Value::InlineTable(sync_table));
     }
     table.insert(key, Item::Value(Value::InlineTable(inline)));
     if let Some(mut key) = table.key_mut(key) {

@@ -78,6 +78,23 @@ fnox -P work set --file ~/.kube/config
 fnox -P work files write
 ```
 
+## Cache a file locally
+
+A file stored at a slow remote provider such as 1Password can be cached under a local encryption provider, like secrets. `fnox sync` fetches each file once, encrypts it with the target provider, and records the ciphertext in the entry's `sync` field:
+
+```sh
+fnox sync -p sync-age
+```
+
+```toml
+[files]
+"~/.kube/config" = { provider = "1password", value = "kube-config", sync = { provider = "sync-age", value = "YWdl..." } }
+```
+
+`fnox get --file`, `fnox files write`, and `fnox edit --file` then decrypt the copy instead of calling 1Password. The original reference stays in place, so run `fnox sync` again after the file changes at its source. `fnox set --file`, `fnox edit --file`, and `fnox reencrypt` store new content and drop the old cache.
+
+The cache is written to the config that declares the entry, always the global config. The target provider must be an encryption provider of the global config. `--source`, `--filter`, and path arguments such as `fnox sync ~/.kube/config` narrow which files are cached; see [local sync cache](/guide/sync).
+
 ## Rotate encryption
 
 `fnox reencrypt` re-encrypts files along with secrets, writing the new ciphertext back to the `value` or `source` that holds it. Name secrets as arguments to leave the files out.

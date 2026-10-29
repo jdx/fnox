@@ -1,6 +1,7 @@
 use crate::commands::Cli;
 use crate::config::{self, Config, SecretConfig, SyncConfig, local_override_filename};
 use crate::error::{FnoxError, Result};
+use crate::files::{self, FileConfig, FileEntry};
 use crate::secret_resolver::resolve_secrets_batch;
 use crate::settings::Settings;
 use console;
@@ -22,6 +23,10 @@ use std::path::{Path, PathBuf};
 /// `fnox.toml`), the global config with `--global`, or with `--local-file` a
 /// personal `fnox.local.toml` to keep out of git. A full `--local-file` sync
 /// also removes cache entries for secrets that no longer have a source.
+///
+/// The files of the active profiles (see `fnox files`) are cached the same way,
+/// in the global config entry that declares them. KEYS and `--filter` match a
+/// file by its path as written in the config, such as `~/.kube/config`.
 #[derive(usage_rs::Args)]
 #[usage(
     example(
@@ -76,6 +81,40 @@ pub struct SyncCommand {
 }
 
 impl SyncCommand {
+    /// The file entries to cache: those stored by another provider than the
+    /// target that pass the `--source`, KEYS and `--filter` options
+    fn select_files(
+        &self,
+        config: &Config,
+        profile: &[String],
+        target_provider: &str,
+        filter: Option<&Regex>,
+    ) -> Result<Vec<FileEntry>> {
+        let wanted_paths: Vec<_> = self
+            .keys
+            .iter()
+            .filter_map(|key| files::normalize_path(key, None).ok())
+            .collect();
+        Ok(config
+            .get_files(profile)?
+            .into_iter()
+            .filter(|entry| {
+                let Some(provider) = entry.config.provider.as_deref() else {
+                    return false;
+                };
+                provider != target_provider
+                    && self
+                        .source
+                        .as_deref()
+                        .is_none_or(|source| provider == source)
+                    && (self.keys.is_empty()
+                        || self.keys.contains(&entry.key)
+                        || wanted_paths.contains(&entry.path))
+                    && filter.is_none_or(|regex| regex.is_match(&entry.key))
+            })
+            .collect())
+    }
+
     pub async fn run(&self, cli: &Cli, merged_config: Config) -> Result<()> {
         let profile = Config::get_profiles(cli.profile.as_slice());
         let write_profile = Config::resolve_write_profile(&profile, cli.write_profile.as_deref())?;
@@ -204,6 +243,15 @@ impl SyncCommand {
 
             secrets_to_sync.insert(key.clone(), secret_config.clone());
         }
+
+        // File entries are cached in the config that declares them, whichever
+        // destination the secrets are written to
+        let files_to_sync = self.select_files(
+            resolution_config,
+            &profile,
+            &target_provider_name,
+            filter_regex.as_ref(),
+        )?;
 
         // Determine target config file path
         let (target_path, ensure_parent_dir, local_cache_paths) = if self.local_file {
@@ -343,6 +391,7 @@ impl SyncCommand {
             .sum::<usize>();
 
         if secrets_to_sync.is_empty()
+            && files_to_sync.is_empty()
             && stale_local_secrets.is_empty()
             && unsynced_local_entries.is_empty()
         {
@@ -366,13 +415,21 @@ impl SyncCommand {
 
             println!(
                 "{dry_run_label} Would sync {} secrets in profile {styled_profile} to provider {styled_provider}{destination_suffix}:",
-                secrets_to_sync.len()
+                secrets_to_sync.len() + files_to_sync.len()
             );
             for (key, secret_config) in &secrets_to_sync {
                 let source = secret_config.provider().unwrap_or("unknown");
                 println!(
                     "  {} (from {})",
                     console::style(key).cyan(),
+                    console::style(source).dim()
+                );
+            }
+            for entry in &files_to_sync {
+                let source = entry.config.provider.as_deref().unwrap_or("unknown");
+                println!(
+                    "  {} (file, from {})",
+                    console::style(&entry.key).cyan(),
                     console::style(source).dim()
                 );
             }
@@ -392,7 +449,7 @@ impl SyncCommand {
         if !self.force {
             println!(
                 "\nReady to sync {} secrets to provider '{}':",
-                secrets_to_sync.len(),
+                secrets_to_sync.len() + files_to_sync.len(),
                 target_provider_name
             );
             for (key, secret_config) in secrets_to_sync.iter().take(10) {
@@ -401,6 +458,10 @@ impl SyncCommand {
             }
             if secrets_to_sync.len() > 10 {
                 println!("  ... and {} more", secrets_to_sync.len() - 10);
+            }
+            for entry in &files_to_sync {
+                let source = entry.config.provider.as_deref().unwrap_or("unknown");
+                println!("  {} (file, from {})", entry.key, source);
             }
             for key in &stale_local_secrets {
                 println!("  {} (remove stale local cache)", key);
@@ -496,7 +557,28 @@ impl SyncCommand {
             }
         }
 
+        // Resolve and encrypt every file before writing anything
+        let mut synced_files = Vec::with_capacity(files_to_sync.len());
+        for entry in &files_to_sync {
+            let plaintext = files::resolve_file_source(&profile, entry).await?;
+            let encrypted = files::encrypt_for_sync(&profile, &target_provider_name, &plaintext)
+                .await
+                .map_err(|e| FnoxError::SyncEncryptionFailed {
+                    key: entry.key.clone(),
+                    provider: target_provider_name.clone(),
+                    details: e.to_string(),
+                })?;
+            let mut file: FileConfig = entry.config.clone();
+            file.sync = Some(SyncConfig {
+                provider: target_provider_name.clone(),
+                value: encrypted,
+                local_source: false,
+            });
+            synced_files.push((entry, file));
+        }
+
         if synced_secrets.is_empty()
+            && synced_files.is_empty()
             && stale_local_secrets.is_empty()
             && unsynced_local_entries.is_empty()
         {
@@ -534,6 +616,16 @@ impl SyncCommand {
             if !unsynced.is_empty() {
                 Config::update_secrets_in_source(&unsynced, &[], profile, path)?;
             }
+        }
+
+        for (entry, file) in &synced_files {
+            let declared_in = entry
+                .config
+                .source_path
+                .clone()
+                .unwrap_or_else(Config::global_config_path);
+            files::save_entry(&declared_in, &entry.profile, &entry.key, file)?;
+            synced_count += 1;
         }
 
         if synced_count > 0 {

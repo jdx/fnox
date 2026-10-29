@@ -598,3 +598,41 @@ TOML
 	run diff "$FNOX_CONFIG_DIR/config.toml" "$HOME/config.recipients"
 	assert_success
 }
+
+@test "files: sync caches a file with another provider and reads use the cache" {
+	age-keygen -o "$HOME/sync-key.txt" 2>/dev/null
+	local sync_public
+	sync_public="$(grep 'public key:' "$HOME/sync-key.txt" | cut -d: -f2- | xargs)"
+	cat >>"$FNOX_CONFIG_DIR/config.toml" <<TOML
+
+[providers.sync-age]
+type = "age"
+recipients = ["$sync_public"]
+key_file = "$HOME/sync-key.txt"
+TOML
+	printf 'token: abc123\n' >"$HOME/source"
+	run fnox set --file ~/.kube/config --from-file "$HOME/source"
+	assert_success
+
+	run fnox sync -p sync-age --force --global
+	assert_success
+	assert_output --partial "Synced 1 secrets"
+
+	run grep -F 'sync' "$FNOX_CONFIG_DIR/config.toml"
+	assert_success
+
+	# Reads decrypt the cache: the source key is no longer needed
+	unset FNOX_AGE_KEY
+	run fnox get --file ~/.kube/config
+	assert_success
+	[ "$output" = "token: abc123" ]
+
+	# Storing new content drops the stale cache
+	export FNOX_AGE_KEY
+	FNOX_AGE_KEY="$(grep 'AGE-SECRET-KEY' "$HOME/key.txt")"
+	printf 'token: new\n' >"$HOME/source"
+	run fnox set --file ~/.kube/config --from-file "$HOME/source"
+	assert_success
+	run grep -F 'sync = ' "$FNOX_CONFIG_DIR/config.toml"
+	assert_failure
+}

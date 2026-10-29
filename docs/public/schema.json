@@ -1672,6 +1672,17 @@
         "source": {
           "description": "File holding the stored content that `value` would hold, relative to the\ndirectory of the config file. Keeps large ciphertext out of the config.",
           "type": ["string", "null"]
+        },
+        "sync": {
+          "description": "Cached sync data (provider + encrypted content from `fnox sync`). Reads\ndecrypt this copy instead of calling `provider`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SyncConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false
