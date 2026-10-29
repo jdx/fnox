@@ -257,6 +257,20 @@ teardown() {
 	cmp "$FNOX_CONFIG_DIR/config.toml" "$HOME/config.before"
 }
 
+@test "files: set refuses a linked source that stores another file" {
+	printf 'kube\n' >"$HOME/kube"
+	printf 'npm\n' >"$HOME/npm"
+	fnox set --file ~/.kube/config --from-file "$HOME/kube" --source files/kube.age
+	fnox set --file ~/.npmrc --from-file "$HOME/npm" --source files/npmrc.age
+	ln -sf "$FNOX_CONFIG_DIR/files/kube.age" "$FNOX_CONFIG_DIR/files/npmrc.age"
+
+	run fnox set --file ~/.npmrc --from-file "$HOME/npm"
+	assert_failure
+	assert_output --partial "already stores ~/.kube/config"
+	run fnox get --file ~/.kube/config
+	assert_output "kube"
+}
+
 @test "files: a project config linked to the config directory cannot declare files" {
 	cat >"$FNOX_CONFIG_DIR/project.toml" <<'TOML'
 root = true

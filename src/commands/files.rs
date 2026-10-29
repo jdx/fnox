@@ -346,6 +346,19 @@ pub async fn put_file(
                 target.display()
             )));
         }
+        // A link must not lead to the stored content of another file either
+        let resolved = canonical(source_file);
+        if let Some(other) = others().find(|e| {
+            e.config
+                .source_file()
+                .is_some_and(|other| canonical(&other) == resolved)
+        }) {
+            return Err(FnoxError::Config(format!(
+                "Source '{}' already stores {}; choose another name",
+                source_file.display(),
+                other.key
+            )));
+        }
     }
 
     if opts.dry_run {

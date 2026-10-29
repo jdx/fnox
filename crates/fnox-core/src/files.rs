@@ -173,11 +173,12 @@ impl FileConfig {
         Ok(())
     }
 
-    /// The content the provider is given: `value`, or the contents of `source`
-    pub fn stored_value(&self) -> Result<Option<String>> {
-        let Some(source) = &self.source else {
-            return Ok(self.value.clone());
-        };
+    /// The path of `source`, in the directory of the config that declares it.
+    ///
+    /// `validate` keeps `source` inside the directory. A symlink there, as a
+    /// dotfiles manager makes it, is the user's own and is followed.
+    pub fn source_file(&self) -> Option<PathBuf> {
+        let source = self.source.as_ref()?;
         let dir = self
             .source_path
             .as_deref()
@@ -189,9 +190,14 @@ impl FileConfig {
                     .map(Path::to_path_buf)
                     .unwrap_or_default()
             });
-        // `validate` keeps `source` inside the directory. A symlink there, as a
-        // dotfiles manager makes it, is the user's own and is followed.
-        let path = dir.join(source);
+        Some(dir.join(source))
+    }
+
+    /// The content the provider is given: `value`, or the contents of `source`
+    pub fn stored_value(&self) -> Result<Option<String>> {
+        let Some(path) = self.source_file() else {
+            return Ok(self.value.clone());
+        };
         fs::read_to_string(&path)
             .map(Some)
             .map_err(|source| FnoxError::SecretFileReadFailed { path, source })
