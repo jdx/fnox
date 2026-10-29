@@ -6,7 +6,7 @@ description: "Load secrets from encrypted files, password managers, and cloud se
 
 # `fnox`
 
-**Version:** 1.44.0
+**Version:** 1.45.0
 
 - **Usage:** `fnox [FLAGS] <SUBCOMMAND>`
 
