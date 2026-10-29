@@ -14,7 +14,7 @@ Decrypts each matching secret stored with an encryption provider, such as age or
 
 The files of the active profiles (see `fnox files`) are re-encrypted too, unless you name secrets with KEYS.
 
-fnox asks for confirmation unless you pass `--force`. Only the active profile's secrets are processed, so repeat with `-P` for other profiles. `fnox sync` caches on re-encrypted secrets are cleared; run `fnox sync` again to rebuild them.
+fnox asks for confirmation unless you pass `--force`. Only the active profile's secrets are processed, so repeat with `-P` for other profiles. `fnox sync` caches on re-encrypted secrets and files are cleared; run `fnox sync` again to rebuild them.
 
 ## Arguments
 

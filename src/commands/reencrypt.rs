@@ -22,8 +22,8 @@ use std::path::PathBuf;
 ///
 /// fnox asks for confirmation unless you pass `--force`. Only the active
 /// profile's secrets are processed, so repeat with `-P` for other profiles.
-/// `fnox sync` caches on re-encrypted secrets are cleared; run `fnox sync` again
-/// to rebuild them.
+/// `fnox sync` caches on re-encrypted secrets and files are cleared; run
+/// `fnox sync` again to rebuild them.
 #[derive(usage_rs::Args)]
 #[usage(
     example(
@@ -200,7 +200,8 @@ impl ReencryptCommand {
         let declared = config.declared_files();
         let mut updated = Vec::with_capacity(selected.len());
         for (entry, provider_name, provider) in &selected {
-            let plaintext = crate::files::resolve_file(&profile, entry)
+            // Read the source, not the sync cache, which may be stale
+            let plaintext = crate::files::resolve_file_source(&profile, entry)
                 .await
                 .map_err(|e| FnoxError::ReencryptDecryptFailed {
                     key: entry.key.clone(),
@@ -227,6 +228,7 @@ impl ReencryptCommand {
                 .clone()
                 .unwrap_or_else(Config::global_config_path);
             let mut file = entry.config.clone();
+            file.sync = None; // Clear stale sync cache
             match source_file {
                 Some(source_file) => {
                     crate::files::write_file(source_file, encrypted)?;

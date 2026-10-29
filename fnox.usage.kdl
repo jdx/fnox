@@ -1065,7 +1065,7 @@ Decrypts each matching secret stored with an encryption provider, such as age or
 
 The files of the active profiles (see `fnox files`) are re-encrypted too, unless you name secrets with KEYS.
 
-fnox asks for confirmation unless you pass `--force`. Only the active profile's secrets are processed, so repeat with `-P` for other profiles. `fnox sync` caches on re-encrypted secrets are cleared; run `fnox sync` again to rebuild them.
+fnox asks for confirmation unless you pass `--force`. Only the active profile's secrets are processed, so repeat with `-P` for other profiles. `fnox sync` caches on re-encrypted secrets and files are cleared; run `fnox sync` again to rebuild them.
 """#
     after_long_help #"""
 See also:
@@ -1287,6 +1287,8 @@ Cache remote secrets locally, encrypted with a local provider
 Fetches each secret whose provider differs from the target, encrypts the value with the target encryption provider, and stores the ciphertext in the secret's `sync` field. Later reads decrypt that copy instead of calling the source provider. The original reference stays in place, so run sync again after source values change.
 
 The target is `--provider`, else `default_provider`, and must be an encryption provider. The cache is written to the `-c` file (default: `fnox.toml`), the global config with `--global`, or with `--local-file` a personal `fnox.local.toml` to keep out of git. A full `--local-file` sync also removes cache entries for secrets that no longer have a source.
+
+The files of the active profiles (see `fnox files`) are cached the same way, in the global config entry that declares them. KEYS and `--filter` match a file by its path as written in the config, such as `~/.kube/config`.
 """#
     after_long_help #"""
 See also:
