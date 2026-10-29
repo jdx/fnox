@@ -47,6 +47,7 @@ mcp_client() {
 	refute_output --partial "The user declined"
 	assert_line --index 1 '{"page": null}'
 	run "$FNOX_BIN" list
+	assert_success
 	refute_output --partial API_TOKEN
 }
 
@@ -58,6 +59,7 @@ mcp_client() {
 	refute_output --partial "The user declined"
 	assert_line --index 1 '{"page": null}'
 	run "$FNOX_BIN" list
+	assert_success
 	refute_output --partial API_TOKEN
 }
 
