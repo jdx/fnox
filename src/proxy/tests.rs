@@ -1201,8 +1201,8 @@ async fn an_expiring_lease_is_replaced_and_its_old_value_stays_redacted() {
     let plan = lease_plan(&counting_lease(dir.path(), &short_then_long()));
     assert_eq!(send_note(&plan).await.unwrap().1, "minted-1");
     assert_eq!(send_note(&plan).await.unwrap().1, "minted-1");
-    // Past three quarters of the first lease's two seconds
-    tokio::time::sleep(std::time::Duration::from_millis(1600)).await;
+    // Past three quarters of the first lease's two to three seconds
+    tokio::time::sleep(std::time::Duration::from_millis(2400)).await;
     assert_eq!(send_note(&plan).await.unwrap().1, "minted-2");
     assert_eq!(mints(dir.path()), 2);
 
@@ -1217,7 +1217,7 @@ async fn ending_the_session_revokes_every_minted_lease_and_stops_minting() {
     let dir = tempfile::tempdir().unwrap();
     let plan = lease_plan(&counting_lease(dir.path(), &short_then_long()));
     send_note(&plan).await.unwrap();
-    tokio::time::sleep(std::time::Duration::from_millis(1600)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(2400)).await;
     send_note(&plan).await.unwrap();
 
     plan.policy.leases.revoke_all(&plan.policy.values).await;
@@ -1229,10 +1229,14 @@ async fn ending_the_session_revokes_every_minted_lease_and_stops_minting() {
     assert_eq!(mints(dir.path()), 2);
 }
 
-/// An expiry two seconds from now for the first run, and far off after it
+/// An expiry three seconds after the first run starts, and far off after it.
+/// The first is computed when the lease is minted, so a slow test setup
+/// can't make it expire first.
 fn short_then_long() -> String {
-    let soon = (chrono::Utc::now() + chrono::Duration::seconds(2)).to_rfc3339();
-    format!(r#""$(if [ $n = 1 ]; then echo {soon}; else echo 2099-01-01T00:00:00Z; fi)""#)
+    let format = "+%Y-%m-%dT%H:%M:%SZ";
+    format!(
+        r#""$(if [ $n = 1 ]; then t=$(( $(date +%s) + 3 )); date -u -d @$t {format} 2>/dev/null || date -u -r $t {format}; else echo 2099-01-01T00:00:00Z; fi)""#
+    )
 }
 
 #[cfg(unix)]

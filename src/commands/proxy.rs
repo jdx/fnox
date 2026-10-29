@@ -444,7 +444,19 @@ impl ProxyRunCommand {
             crate::proxy::LeaseSetup {
                 ledger: Some(crate::lease::project_dir_from_config(&config, &cli.config)),
                 encryption,
-                hidden: lease_values.values().flatten().cloned().collect(),
+                // The parent credentials fnox resolved, and the ones a lease
+                // backend reads from fnox's own environment instead
+                hidden: lease_values
+                    .values()
+                    .flatten()
+                    .cloned()
+                    .chain(rule_leases.values().flat_map(|lease| {
+                        lease
+                            .consumed_env_vars()
+                            .iter()
+                            .filter_map(|key| crate::env::var(key).ok())
+                    }))
+                    .collect(),
             },
         )?;
         let session = std::sync::Arc::new(session);
@@ -593,10 +605,12 @@ impl ProxyRunCommand {
 }
 
 /// Runs `command` without letting a signal end fnox first, so fnox can still
-/// stop the proxy and revoke its leases when the command exits. `SIGTERM`,
-/// `SIGHUP`, and a `SIGINT` sent to fnox alone are passed on. Ctrl-C at the
-/// terminal already reaches the command, so passing it on would deliver it
-/// twice.
+/// stop the proxy and revoke its leases when the command exits. `SIGTERM` and
+/// `SIGHUP` are passed on. So is `SIGINT`, unless fnox is in its terminal's
+/// foreground process group: Ctrl-C at the terminal has then reached the
+/// command too, and passing it on would deliver it twice. A `kill -INT` sent
+/// to fnox alone there can't be told apart from Ctrl-C, so it isn't passed
+/// on; `SIGTERM` stops the command instead.
 async fn run_forwarding_signals(mut command: tokio::process::Command) -> std::io::Result<Outcome> {
     #[cfg(unix)]
     {

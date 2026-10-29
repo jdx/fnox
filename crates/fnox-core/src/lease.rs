@@ -152,6 +152,9 @@ impl LeaseLedger {
             }
             match r.expires_at {
                 Some(exp) => exp > cutoff,
+                // Kept for a later revocation, so a lease that never expires
+                // isn't forgotten while still valid
+                None if r.revoke_credentials.is_some() => true,
                 // No expiry: prune if created more than 24h ago
                 None => r.created_at > cutoff,
             }

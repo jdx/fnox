@@ -22,8 +22,9 @@ use std::time::{Duration, Instant};
 /// lease's own timeout is longer
 const LEASE_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// How long encrypting a minted lease's credentials for the ledger may take
-const ENCRYPT_TIMEOUT: Duration = Duration::from_secs(5);
+/// How long encrypting a minted lease's credentials for the ledger, or
+/// waiting for the ledger's lock, may hold up a request or shutdown
+const LEDGER_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// How long after a failed mint a request may try again
 const MINT_RETRY: Duration = Duration::from_secs(10);
@@ -122,6 +123,8 @@ struct SlotState {
     last_failure: Option<Instant>,
     /// Every lease minted this session, to revoke when it ends
     minted: Vec<Minted>,
+    /// Ledger writes still waiting for the ledger's lock
+    recording: Vec<tokio::task::JoinHandle<()>>,
 }
 
 struct Minted {
@@ -209,13 +212,15 @@ impl ProxyLeases {
                 .unwrap_or_else(|e| e.into_inner())
                 .clone()
         });
-        if let Some(reason) = failure {
-            proxy_error(format!(
-                "lease '{name}' could not be minted: {reason}; a later request tries again"
-            ))
-        } else if self.closed.load(Ordering::SeqCst) {
+        // Nothing is minted once the session is ending, so a stored failure
+        // would wrongly promise a retry
+        if self.closed.load(Ordering::SeqCst) {
             proxy_error(format!(
                 "lease '{name}' is not available because the session is ending"
+            ))
+        } else if let Some(reason) = failure {
+            proxy_error(format!(
+                "lease '{name}' could not be minted: {reason}; a later request tries again"
             ))
         } else {
             proxy_error(format!("lease '{name}' has no credential yet; retry"))
@@ -228,10 +233,21 @@ impl ProxyLeases {
     /// `fnox lease cleanup`.
     pub(super) async fn revoke_all(&self, values: &SecretValues) {
         self.closed.store(true, Ordering::SeqCst);
-        let mut revoked: Vec<(&str, String, DateTime<Utc>)> = Vec::new();
+        let mut revoked: Vec<(String, String, DateTime<Utc>)> = Vec::new();
         for (name, slot) in &self.slots {
             // Waits for a mint in flight, so its lease is revoked too
-            let state = slot.state.lock().await;
+            let mut state = slot.state.lock().await;
+            // A record written after the marking below would stay active
+            for recording in state.recording.drain(..) {
+                if tokio::time::timeout(LEDGER_TIMEOUT, recording)
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!(
+                        "fnox proxy: a lease of '{name}' may show as active in the ledger after it is revoked: the ledger stayed locked"
+                    );
+                }
+            }
             for credential in &slot.credentials {
                 values.forget(&source(name, credential));
             }
@@ -244,20 +260,20 @@ impl ProxyLeases {
                 match tokio::time::timeout(slot.timeout, revoke).await {
                     Ok(Ok(())) => {
                         tracing::debug!("fnox proxy: revoked lease '{}'", lease.lease_id);
-                        revoked.push((name, lease.lease_id.clone(), minted.recorded_at));
+                        revoked.push((name.clone(), lease.lease_id.clone(), minted.recorded_at));
                     }
                     // It is no longer valid anyway
                     _ if expired => {
-                        revoked.push((name, lease.lease_id.clone(), minted.recorded_at))
+                        revoked.push((name.clone(), lease.lease_id.clone(), minted.recorded_at))
                     }
                     Ok(Err(error)) => tracing::warn!(
-                        "fnox proxy: could not revoke lease '{}' of '{name}': {}; run `fnox lease revoke {}` to retry",
+                        "fnox proxy: could not revoke lease '{}' of '{name}': {}; run `fnox lease revoke {}` to retry, or revoke it in the service",
                         lease.lease_id,
                         self.setup.scrub(&error.to_string()),
                         lease.lease_id
                     ),
                     Err(_) => tracing::warn!(
-                        "fnox proxy: revoking lease '{}' of '{name}' took longer than {}s; run `fnox lease revoke {}` to retry",
+                        "fnox proxy: revoking lease '{}' of '{name}' took longer than {}s; run `fnox lease revoke {}` to retry, or revoke it in the service",
                         lease.lease_id,
                         slot.timeout.as_secs(),
                         lease.lease_id
@@ -268,10 +284,11 @@ impl ProxyLeases {
         if revoked.is_empty() {
             return;
         }
-        if let Some(project_dir) = &self.setup.ledger {
-            let marked = (|| -> Result<()> {
-                let _lock = LeaseLedger::lock(project_dir)?;
-                let mut ledger = LeaseLedger::load(project_dir)?;
+        if let Some(project_dir) = self.setup.ledger.clone() {
+            // The ledger's lock blocks, so it is taken off the async workers
+            let mark = tokio::task::spawn_blocking(move || -> Result<()> {
+                let _lock = LeaseLedger::lock(&project_dir)?;
+                let mut ledger = LeaseLedger::load(&project_dir)?;
                 // By backend, ID and creation time: lease IDs need not be
                 // unique, even within one backend
                 for (name, lease_id, recorded_at) in &revoked {
@@ -284,10 +301,19 @@ impl ProxyLeases {
                         ledger.mark_revoked_at(index);
                     }
                 }
-                ledger.save(project_dir)
-            })();
-            if let Err(error) = marked {
-                tracing::warn!("fnox proxy: could not mark revoked leases in the ledger: {error}");
+                ledger.save(&project_dir)
+            });
+            match tokio::time::timeout(LEDGER_TIMEOUT, mark).await {
+                Ok(Ok(Ok(()))) => {}
+                Ok(Ok(Err(error))) => tracing::warn!(
+                    "fnox proxy: could not mark revoked leases in the ledger: {error}"
+                ),
+                Ok(Err(error)) => tracing::warn!(
+                    "fnox proxy: could not mark revoked leases in the ledger: {error}"
+                ),
+                Err(_) => tracing::warn!(
+                    "fnox proxy: revoked leases may show as active in the ledger: it stayed locked"
+                ),
             }
         }
     }
@@ -405,10 +431,8 @@ impl LeaseSlot {
         })?
         .map_err(MintError::Backend)?;
         let recorded_at = Utc::now();
-        if let Some(project_dir) = &setup.ledger {
-            self.record(name, &label, &lease, recorded_at, setup, project_dir)
-                .await;
-        }
+        self.record(name, &label, &lease, recorded_at, setup, state)
+            .await;
         state.minted.push(Minted {
             lease: lease.clone(),
             recorded_at,
@@ -467,20 +491,23 @@ impl LeaseSlot {
         lease: &Lease,
         recorded_at: DateTime<Utc>,
         setup: &LeaseSetup,
-        project_dir: &std::path::Path,
+        state: &mut SlotState,
     ) {
+        let Some(project_dir) = setup.ledger.clone() else {
+            return;
+        };
         // Optional, so bounded: a provider that waits for a PIN or a key
         // touch must not hold up requests, or revocation at shutdown, which
         // waits for this lease's lock
         let (revoke_credentials, encryption_provider) = match &setup.encryption {
             Some((provider_name, provider)) => {
                 let encrypt = lease::encrypt_credentials(provider.as_ref(), &lease.credentials);
-                let encrypted = match tokio::time::timeout(ENCRYPT_TIMEOUT, encrypt).await {
+                let encrypted = match tokio::time::timeout(LEDGER_TIMEOUT, encrypt).await {
                     Ok(Ok(encrypted)) => Ok(encrypted),
                     Ok(Err(error)) => Err(setup.scrub(&error.to_string())),
                     Err(_) => Err(format!(
                         "encrypting its credentials took longer than {}s",
-                        ENCRYPT_TIMEOUT.as_secs()
+                        LEDGER_TIMEOUT.as_secs()
                     )),
                 };
                 match encrypted {
@@ -496,27 +523,40 @@ impl LeaseSlot {
             }
             None => (None, None),
         };
-        let recorded = LeaseLedger::lock(project_dir).and_then(|_lock| {
-            let mut ledger = LeaseLedger::load(project_dir)?;
-            ledger.add(LeaseRecord {
-                lease_id: lease.lease_id.clone(),
-                backend_name: name.to_string(),
-                label: label.to_string(),
-                created_at: recorded_at,
-                expires_at: lease.expires_at,
-                revoked: false,
-                cached_credentials: None,
-                encryption_provider,
-                revoke_credentials,
-                config_hash: Some(self.config_hash.clone()),
+        let record = LeaseRecord {
+            lease_id: lease.lease_id.clone(),
+            backend_name: name.to_string(),
+            label: label.to_string(),
+            created_at: recorded_at,
+            expires_at: lease.expires_at,
+            revoked: false,
+            cached_credentials: None,
+            encryption_provider,
+            revoke_credentials,
+            config_hash: Some(self.config_hash.clone()),
+        };
+        // The ledger's lock blocks, and another fnox may hold it for a while,
+        // such as `fnox lease revoke` waiting on a backend: write off the
+        // async workers, and leave a slow write to finish on its own
+        let lease_id = lease.lease_id.clone();
+        let backend = name.to_string();
+        let mut write = tokio::task::spawn_blocking(move || {
+            let recorded = LeaseLedger::lock(&project_dir).and_then(|_lock| {
+                let mut ledger = LeaseLedger::load(&project_dir)?;
+                ledger.add(record);
+                ledger.save(&project_dir)
             });
-            ledger.save(project_dir)
+            if let Err(error) = recorded {
+                tracing::warn!(
+                    "fnox proxy: lease '{lease_id}' of '{backend}' is not in the ledger: {error}"
+                );
+            }
         });
-        if let Err(error) = recorded {
-            tracing::warn!(
-                "fnox proxy: lease '{}' of '{name}' is not in the ledger: {error}",
-                lease.lease_id
-            );
+        if tokio::time::timeout(LEDGER_TIMEOUT, &mut write)
+            .await
+            .is_err()
+        {
+            state.recording.push(write);
         }
     }
 }
