@@ -216,6 +216,35 @@ sensitive = true'
 	assert_line "vercel env add KEY preview --force --yes --sensitive|s3cret"
 }
 
+@test "vercel tries every environment when one fails" {
+	single_target 'type = "vercel"
+environments = ["production", "preview"]'
+	export STUB_FAIL="vercel env add KEY production"
+	run "$FNOX_BIN" push --force
+	assert_failure
+	assert_output --partial "vercel env add failed for production"
+	run cat "$STUB_LOG"
+	assert_output "vercel env add KEY preview --force --yes|s3cret"
+}
+
+@test "push resolves the secrets a pushed value depends on" {
+	cat >fnox.toml <<'TOML'
+[providers.plain]
+type = "plain"
+
+[targets.t]
+type = "cloudflare-workers"
+
+[secrets]
+DB_HOST = { provider = "plain", value = "db.internal" }
+DATABASE_URL = { default = "postgres://${DB_HOST}/app", push = ["t"] }
+TOML
+	run "$FNOX_BIN" push --force
+	assert_success
+	run cat "$STUB_LOG"
+	assert_output "wrangler secret put DATABASE_URL|postgres://db.internal/app"
+}
+
 @test "cloudflare-workers puts the secret with wrangler" {
 	single_target 'type = "cloudflare-workers"
 worker = "api"

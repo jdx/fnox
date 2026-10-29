@@ -83,10 +83,18 @@ impl PushTarget for Vercel {
     }
 
     async fn push(&self, name: &str, value: &str) -> Result<()> {
+        // Try every environment, so one failure does not skip the rest
+        let mut failures = Vec::new();
         for environment in &self.environments {
-            CLI.run(&self.args(name, environment), value).await?;
+            if let Err(stderr) = CLI.try_run(&self.args(name, environment), value).await? {
+                failures.push(format!("{environment}: {stderr}"));
+            }
         }
-        Ok(())
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(CLI.failed(format!("vercel env add failed for {}", failures.join("; "))))
+        }
     }
 }
 

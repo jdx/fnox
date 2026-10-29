@@ -2,7 +2,7 @@ use crate::commands::Cli;
 use crate::config::{Config, SecretConfig};
 use crate::error::{FnoxError, Result};
 use crate::push_targets::PushTargetConfig;
-use crate::secret_resolver::resolve_secrets_batch;
+use crate::secret_resolver::{dependency_closure, resolve_secrets_batch};
 use console;
 use indexmap::IndexMap;
 use std::io;
@@ -91,10 +91,10 @@ impl PushCommand {
             }
         }
 
-        let to_resolve: IndexMap<String, SecretConfig> = plan
-            .keys()
-            .map(|key| (key.clone(), secrets[key].clone()))
-            .collect();
+        // Resolve the secrets each pushed value depends on too (defaults that
+        // reference other secrets, provider credentials), but push only the plan
+        let roots: Vec<String> = plan.keys().cloned().collect();
+        let to_resolve = dependency_closure(&config, &profiles, &secrets, &roots)?;
         let resolved = resolve_secrets_batch(&config, &profiles, &to_resolve).await?;
 
         let mut pushed = 0;
