@@ -132,16 +132,17 @@ impl SecretSession {
 
     /// Make a secret and its value available to the session
     pub async fn add(&self, name: &str, secret: SecretConfig, value: String) {
-        {
-            let mut secrets = self.secrets.write().unwrap_or_else(|e| e.into_inner());
-            let mut updated = (**secrets).clone();
-            updated.insert(name.to_string(), secret);
-            *secrets = Arc::new(updated);
-        }
+        // Cache the value before publishing the secret: a first batch that
+        // starts in between skips cached names, so it never resolves this one
+        // against the starting config
         self.cache
             .write()
             .await
             .insert(name.to_string(), Some(value));
+        let mut secrets = self.secrets.write().unwrap_or_else(|e| e.into_inner());
+        let mut updated = (**secrets).clone();
+        updated.insert(name.to_string(), secret);
+        *secrets = Arc::new(updated);
     }
 
     /// Resolve the secrets `include` selects, once per session, in one batch
