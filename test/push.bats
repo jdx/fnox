@@ -130,6 +130,16 @@ org = "jdx"'
 	assert_output --partial "push target 't': set either org"
 }
 
+@test "push rejects a reserved GitHub name before pushing anything" {
+	cat >>fnox.toml <<'TOML'
+GITHUB_TOKEN = { provider = "plain", value = "x", push = ["gh"] }
+TOML
+	run "$FNOX_BIN" push --force
+	assert_failure
+	assert_output --partial "cannot push 'GITHUB_TOKEN' to target 'gh'"
+	assert_file_not_exists "$STUB_LOG"
+}
+
 @test "push rejects a key without push targets" {
 	run "$FNOX_BIN" push --force LOCAL_ONLY
 	assert_failure

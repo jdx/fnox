@@ -60,6 +60,13 @@ impl PushCommand {
                 target.validate(name)?;
             }
         }
+        for (key, target_names) in &plan {
+            for name in target_names {
+                targets[name].target().validate_name(key).map_err(|msg| {
+                    FnoxError::Config(format!("cannot push '{key}' to target '{name}': {msg}"))
+                })?;
+            }
+        }
 
         let pushes: usize = plan.values().map(Vec::len).sum();
         if self.dry_run {

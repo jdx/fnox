@@ -35,6 +35,11 @@ pub trait PushTarget: Send + Sync {
         Ok(())
     }
 
+    /// Reject a secret name this target cannot store, before anything is pushed
+    fn validate_name(&self, _name: &str) -> std::result::Result<(), String> {
+        Ok(())
+    }
+
     /// Store `value` under `name`, replacing any existing value
     async fn push(&self, name: &str, value: &str) -> Result<()>;
 }
@@ -80,6 +85,17 @@ impl PushTargetConfig {
             .validate()
             .map_err(|msg| FnoxError::Config(format!("push target '{name}': {msg}")))
     }
+}
+
+/// Whether `segment` is safe to put in a URL path as one segment: a name made
+/// of letters, digits, `-`, `_` and `.`, other than `.` and `..`
+fn is_path_segment(segment: &str) -> bool {
+    !segment.is_empty()
+        && segment != "."
+        && segment != ".."
+        && segment
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
 /// Documentation URL for a target type
@@ -135,6 +151,14 @@ mod tests {
                     .unwrap()
             }
             None => v,
+        }
+    }
+
+    #[test]
+    fn path_segments() {
+        assert!(is_path_segment("acme-corp.io_1"));
+        for bad in ["", ".", "..", "a/b", "a?b", "a#b", "a b", "a%2F"] {
+            assert!(!is_path_segment(bad), "{bad}");
         }
     }
 

@@ -53,4 +53,4 @@ app = "dependabot"
 
 ## Notes
 
-- The secret name is the fnox key. GitHub rejects names that start with `GITHUB_` or a digit.
+- The secret name is the fnox key. GitHub reserves names that start with `GITHUB_`, so fnox refuses to push such a key before it writes anything.

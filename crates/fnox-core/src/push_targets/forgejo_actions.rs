@@ -66,6 +66,18 @@ impl PushTarget for ForgejoActions {
         if self.repo.is_some() == self.org.is_some() {
             return Err("set exactly one of repo or org".into());
         }
+        // Both are built into the URL path
+        if let Some(repo) = &self.repo {
+            let parts: Vec<&str> = repo.split('/').collect();
+            if parts.len() != 2 || !parts.iter().all(|p| super::is_path_segment(p)) {
+                return Err(format!("repo '{repo}' must be owner/name"));
+            }
+        }
+        if let Some(org) = &self.org
+            && !super::is_path_segment(org)
+        {
+            return Err(format!("org '{org}' must be a single name"));
+        }
         require_secure_url(TARGET_TYPE, "url", &self.url).map_err(|e| e.to_string())
     }
 
@@ -134,6 +146,17 @@ mod tests {
         );
         assert!(
             parse("url = \"http://codeberg.org\"\nrepo = \"a/b\"")
+                .validate()
+                .is_err()
+        );
+        for repo in ["a", "a/b/c", "a/b?x", "a/..", "a/b#c"] {
+            let t = parse(&format!(
+                "url = \"https://codeberg.org\"\nrepo = \"{repo}\""
+            ));
+            assert!(t.validate().is_err(), "{repo}");
+        }
+        assert!(
+            parse("url = \"https://codeberg.org\"\norg = \"a/b\"")
                 .validate()
                 .is_err()
         );

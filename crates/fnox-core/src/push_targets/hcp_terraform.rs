@@ -182,6 +182,16 @@ impl PushTarget for HcpTerraform {
     }
 
     fn validate(&self) -> std::result::Result<(), String> {
+        for (field, value) in [
+            ("organization", &self.organization),
+            ("workspace", &self.workspace),
+        ] {
+            if !super::is_path_segment(value) {
+                return Err(format!(
+                    "{field} '{value}' must be a name of letters, digits, '-', '_' and '.'"
+                ));
+            }
+        }
         require_secure_url(TARGET_TYPE, "url", &self.url).map_err(|e| e.to_string())
     }
 
@@ -211,11 +221,12 @@ impl PushTarget for HcpTerraform {
                 None,
             )
             .await?;
-        let existing = vars["data"].as_array().and_then(|vars| {
-            vars.iter().find(|v| {
-                v["attributes"]["key"] == name
-                    && v["attributes"]["category"] == self.category.as_str()
-            })
+        // Without the list, fnox cannot tell an update from a create
+        let vars = vars["data"]
+            .as_array()
+            .ok_or_else(|| Self::error("variables response has no data array".to_string()))?;
+        let existing = vars.iter().find(|v| {
+            v["attributes"]["key"] == name && v["attributes"]["category"] == self.category.as_str()
         });
 
         let mut attributes = json!({
@@ -275,6 +286,14 @@ mod tests {
             t.describe(),
             "HCP Terraform environment variable in acme/prod"
         );
+    }
+
+    #[test]
+    fn rejects_names_that_change_the_path() {
+        let t = parse("organization = \"acme\"\nworkspace = \"prod?x=1\"\ncategory = \"env\"");
+        assert!(t.validate().is_err());
+        let t = parse("organization = \"../admin\"\nworkspace = \"prod\"\ncategory = \"env\"");
+        assert!(t.validate().is_err());
     }
 
     #[test]

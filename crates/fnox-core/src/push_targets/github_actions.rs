@@ -120,6 +120,14 @@ impl PushTarget for GithubActions {
         Ok(())
     }
 
+    fn validate_name(&self, name: &str) -> std::result::Result<(), String> {
+        // GitHub reserves the prefix, in any case
+        if name.to_ascii_uppercase().starts_with("GITHUB_") {
+            return Err("GitHub secret names cannot start with GITHUB_".into());
+        }
+        Ok(())
+    }
+
     async fn push(&self, name: &str, value: &str) -> Result<()> {
         // Without --body, gh reads the value from stdin until EOF
         CLI.run(&self.args(name), value).await
@@ -187,6 +195,14 @@ mod tests {
         ] {
             assert!(parse(toml).validate().is_err(), "{toml}");
         }
+    }
+
+    #[test]
+    fn rejects_reserved_names() {
+        let t = parse("");
+        assert!(t.validate_name("GITHUB_TOKEN").is_err());
+        assert!(t.validate_name("github_token").is_err());
+        assert!(t.validate_name("MY_GITHUB_TOKEN").is_ok());
     }
 
     #[test]
