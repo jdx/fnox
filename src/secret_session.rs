@@ -48,6 +48,16 @@ pub struct SecretSession {
     /// Held while a value is rechecked and stored, so two stores can't both
     /// pass their checks and overwrite each other
     store_lock: tokio::sync::Mutex<()>,
+    /// Names whose value may change outside the session (such as with
+    /// `fnox set` in a terminal); they are reloaded until it does
+    reload_marks: std::sync::Mutex<std::collections::HashSet<String>>,
+    /// Held while a marked name is reloaded and while a stored value is read
+    /// back, so one can't drop a value the other just loaded. Taken after
+    /// `store_lock` when both are held.
+    reload_lock: tokio::sync::Mutex<()>,
+    /// Counts stores, so a load that started before a newer store doesn't
+    /// replace the stored value with what it read
+    writes: std::sync::atomic::AtomicU64,
 }
 
 impl std::fmt::Debug for SecretSession {
@@ -78,6 +88,9 @@ impl SecretSession {
             cache: RwLock::new(HashMap::new()),
             batch: OnceCell::new(),
             store_lock: tokio::sync::Mutex::new(()),
+            reload_marks: std::sync::Mutex::new(std::collections::HashSet::new()),
+            reload_lock: tokio::sync::Mutex::new(()),
+            writes: std::sync::atomic::AtomicU64::new(0),
         }
     }
 
@@ -238,6 +251,7 @@ impl SecretSession {
     /// the resolver applies the top-level `env` default and settings such as
     /// `json_path`.
     pub async fn load(&self, config: &Config, name: &str) -> Result<bool> {
+        let started = self.writes.load(std::sync::atomic::Ordering::Acquire);
         let all_secrets = config.get_secrets(&self.profile)?;
         let Some(secret) = all_secrets.get(name).cloned() else {
             return Ok(false);
@@ -260,11 +274,43 @@ impl SecretSession {
         .await?;
         match resolved.shift_remove(name).flatten() {
             Some(value) => {
-                self.add(name, secret, value).await;
+                // A store that finished while this read ran holds the newer
+                // value; keep it
+                if self.writes.load(std::sync::atomic::Ordering::Acquire) == started {
+                    self.add(name, secret, value).await;
+                }
                 Ok(true)
             }
             None => Ok(false),
         }
+    }
+
+    /// Mark `name` to be reloaded until its value changes
+    pub fn mark_for_reload(&self, name: &str) {
+        self.reload_marks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(name.to_string());
+    }
+
+    pub fn is_marked_for_reload(&self, name: &str) -> bool {
+        self.reload_marks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(name)
+    }
+
+    pub fn unmark_for_reload(&self, name: &str) {
+        self.reload_marks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(name);
+    }
+
+    /// Held while a marked name is reloaded and while a stored value is read
+    /// back
+    pub fn reload_lock(&self) -> &tokio::sync::Mutex<()> {
+        &self.reload_lock
     }
 
     /// Evict `name` from the daemon this session resolves through. A remote
@@ -389,6 +435,8 @@ impl SecretSession {
             true,
         )
         .await?;
+        self.writes
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
         Ok(())
     }
 

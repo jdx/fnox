@@ -400,7 +400,8 @@ impl ProxyRunCommand {
         command.env("FNOX_DAEMON", "off");
         command.env("FNOX_NON_INTERACTIVE", "1");
         // `fnox mcp` in the child relays to the tools this process serves
-        command.env(crate::mcp::relay::RELAY_ENV, "1");
+        command.env(crate::proxy::MCP_RELAY_ENV, "1");
+        command.env(crate::proxy::MCP_RELAY_PROFILE_ENV, profile.join(","));
         for (key, placeholder) in child_env {
             command.env(key, placeholder);
         }

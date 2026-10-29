@@ -188,14 +188,11 @@ impl FnoxMcpServer {
                     target.display()
                 );
                 let reloaded = {
-                    let _reload = self.reload_lock.lock().await;
+                    let _reload = self.session.reload_lock().lock().await;
                     let reloaded = self.session.reload_stored(&name, &target).await;
                     if reloaded.is_ok() {
                         // The user just entered this value; nothing to wait for
-                        self.sent_to_terminal
-                            .lock()
-                            .unwrap_or_else(|e| e.into_inner())
-                            .remove(&name);
+                        self.session.unmark_for_reload(&name);
                     }
                     reloaded
                 };
@@ -250,6 +247,17 @@ impl FnoxMcpServer {
     ) -> crate::error::Result<Config> {
         let config = self.session.load_config()?;
         let changed = |message: String| crate::error::FnoxError::Config(message);
+        // Under the proxy, a value it would refuse (such as one containing a
+        // placeholder) would be saved but never injected
+        if let Some(proxy) = &self.proxy
+            && !proxy.rules_for(name).is_empty()
+        {
+            proxy.check_value(name, value).map_err(|e| {
+                changed(format!(
+                    "the proxy can't use this value ({e}), so fnox stored nothing"
+                ))
+            })?;
+        }
         if !replace
             && self
                 .has_value(&config, name)
@@ -292,19 +300,14 @@ impl FnoxMcpServer {
                 None,
             )
         };
-        let marked = || {
-            self.sent_to_terminal
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .contains(name)
-        };
+        let marked = || self.session.is_marked_for_reload(name);
         let cached = async || self.session.cached(name).await.flatten();
 
         // After the terminal fallback, the user may replace a value this
         // session (and the daemon) still caches, so a name sent there is
         // reloaded on every check until its value changes
         let reload_guard = if marked() {
-            Some(self.reload_lock.lock().await)
+            Some(self.session.reload_lock().lock().await)
         } else {
             None
         };
@@ -326,20 +329,14 @@ impl FnoxMcpServer {
             self.session.forget(name).await;
         } else if cached().await != before {
             // The user's new value arrived; until then, keep reloading
-            self.sent_to_terminal
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .remove(name);
+            self.session.unmark_for_reload(name);
         }
         Ok(loaded)
     }
 
     /// What to tell the agent when the client can't show a URL
     fn terminal_fallback(&self, name: &str) -> String {
-        self.sent_to_terminal
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(name.to_string());
+        self.session.mark_for_reload(name);
         let mut command = vec!["fnox".to_string()];
         let config_path = self.session.config_path();
         if config_path != std::path::Path::new(config::DEFAULT_CONFIG_FILENAME) {

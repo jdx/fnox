@@ -8,6 +8,13 @@ use super::*;
 /// service. The `.invalid` top-level domain never resolves (RFC 2606).
 pub const MCP_HOST: &str = "fnox-mcp.invalid";
 
+/// Set to `1` by `fnox proxy run` in the child's environment, so `fnox mcp`
+/// relays to the proxy
+pub const MCP_RELAY_ENV: &str = "FNOX_PROXY_MCP";
+
+/// The profiles the proxy serves, comma-separated, for the relay to check
+pub const MCP_RELAY_PROFILE_ENV: &str = "FNOX_PROXY_MCP_PROFILE";
+
 /// A client connection handed to the MCP service
 pub trait ClientStream: AsyncRead + AsyncWrite + Send + Unpin {}
 impl<T: AsyncRead + AsyncWrite + Send + Unpin> ClientStream for T {}
@@ -61,6 +68,12 @@ impl ProxyHandle {
     /// Whether `secret` has no value yet
     pub fn is_pending(&self, secret: &str) -> bool {
         self.policy.values.value(secret).is_none()
+    }
+
+    /// Whether the proxy could use `value` for `secret`: the checks a value
+    /// gets at startup
+    pub fn check_value(&self, secret: &str, value: &str) -> Result<()> {
+        self.policy.values.validate(secret, value)
     }
 
     /// Inject `value` for `secret` from now on. A value it replaces stays

@@ -117,7 +117,9 @@ impl SecretValues {
 
     /// Use `value` for `secret` after the checks startup values get, unless
     /// `only_if_pending` and it already has a value
-    fn set_checked(&self, secret: &str, value: String, only_if_pending: bool) -> Result<bool> {
+    /// The checks a value gets before the proxy uses it, the same as at
+    /// startup
+    pub(super) fn validate(&self, secret: &str, value: &str) -> Result<()> {
         if value.is_empty() {
             return Err(proxy_error(format!(
                 "secret '{secret}' resolved to an empty value"
@@ -135,6 +137,11 @@ impl SecretValues {
                 ));
             }
         }
+        Ok(())
+    }
+
+    fn set_checked(&self, secret: &str, value: String, only_if_pending: bool) -> Result<bool> {
+        self.validate(secret, &value)?;
         let mut state = self.state.write().unwrap_or_else(|e| e.into_inner());
         if only_if_pending && state.values.contains_key(secret) {
             return Ok(false);

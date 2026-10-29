@@ -6,10 +6,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 use crate::error::{FnoxError, Result};
-use crate::proxy::MCP_HOST;
-
-/// Set to `1` by `fnox proxy run` in the child's environment
-pub const RELAY_ENV: &str = "FNOX_PROXY_MCP";
+use crate::proxy::{MCP_HOST, MCP_RELAY_ENV as RELAY_ENV, MCP_RELAY_PROFILE_ENV};
 
 /// Longest proxy response head the relay reads
 const MAX_RESPONSE_HEAD: usize = 8 * 1024;
@@ -17,6 +14,32 @@ const MAX_RESPONSE_HEAD: usize = 8 * 1024;
 /// Whether `fnox mcp` should relay to the proxy it runs under
 pub fn requested() -> bool {
     crate::env::var(RELAY_ENV).is_ok_and(|value| value == "1")
+}
+
+/// The relay serves the proxy's config and profiles; refuse flags that ask
+/// for others instead of silently ignoring them
+pub fn check_flags(config_arg: &std::path::Path, profile_flag: &[String]) -> Result<()> {
+    if config_arg != std::path::Path::new(crate::config::DEFAULT_CONFIG_FILENAME) {
+        return Err(FnoxError::Config(
+            "fnox mcp under fnox proxy run serves the proxy's config; pass -c to fnox proxy run instead"
+                .into(),
+        ));
+    }
+    if profile_flag.is_empty() {
+        return Ok(());
+    }
+    let requested = crate::config::Config::normalize_profiles(profile_flag);
+    let served = crate::env::var(MCP_RELAY_PROFILE_ENV)
+        .map(|served| crate::config::Config::normalize_profiles(&[served]))
+        .unwrap_or_default();
+    if requested != served {
+        return Err(FnoxError::Config(format!(
+            "fnox mcp under fnox proxy run serves profile '{}', not '{}'; pass -P to fnox proxy run instead",
+            served.join(","),
+            requested.join(",")
+        )));
+    }
+    Ok(())
 }
 
 /// The proxy's address and password, from `HTTPS_PROXY`

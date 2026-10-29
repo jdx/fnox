@@ -109,8 +109,12 @@ mcp_client_under_proxy() {
 
 @test "fnox mcp relays to the proxy from inside --sandbox, where the config is hidden" {
 	local output
+	# Skip only when this machine can't sandbox; any other failure is a bug
 	if ! output="$("$FNOX_BIN" proxy run --sandbox -- true 2>&1)"; then
-		skip "sandbox unavailable: ${output:0:200}"
+		if [[ $output =~ bwrap|bubblewrap|sandbox-exec|"sandbox could not start"|"not supported" ]]; then
+			skip "sandbox unavailable: ${output:0:200}"
+		fi
+		fail "proxy run --sandbox failed: $output"
 	fi
 	echo real-value | "$FNOX_BIN" set API_TOKEN
 	run "$FNOX_BIN" proxy run --sandbox -- \
@@ -143,4 +147,30 @@ PY
 	FNOX_PROXY_MCP=1 HTTPS_PROXY="http://fnox:token@127.0.0.1:$port" \
 		run run_with_timeout 10 "$FNOX_BIN" mcp < <(sleep 30)
 	assert_success
+}
+
+@test "proxy rules can't use the relay's reserved environment names" {
+	printf '\n[[proxy.rules]]\nsecret = "API_TOKEN"\nenv = "FNOX_PROXY_MCP"\ndomain = "api.example.com"\n' >>fnox.toml
+	run "$FNOX_BIN" proxy run -- true
+	assert_failure
+	assert_output --partial "'FNOX_PROXY_MCP', which fnox reserves"
+}
+
+@test "fnox mcp under proxy run refuses another profile or config" {
+	run "$FNOX_BIN" proxy run -- "$FNOX_BIN" -P staging mcp </dev/null
+	assert_failure
+	assert_output --partial "'default', not 'staging'"
+	run "$FNOX_BIN" proxy run -- "$FNOX_BIN" -c ./other.toml mcp </dev/null
+	assert_failure
+	assert_output --partial "pass -c to fnox proxy run"
+}
+
+@test "request_secret under proxy run refuses a value the proxy can't use" {
+	sed -i.bak 's/^domain = "127.0.0.1"/&\nplaceholder = "fnox_ph_api"/' fnox.toml
+	mcp_client_under_proxy url save:has-fnox_ph_api-inside '[["request_secret", {"name": "API_TOKEN"}]]'
+	assert_success
+	assert_output --partial "the proxy can't use this value"
+	assert_output --partial '{"page": 500}'
+	run "$FNOX_BIN" get API_TOKEN
+	refute_output --partial has-fnox_ph_api-inside
 }

@@ -257,6 +257,14 @@ pub(super) fn validate_rule(rule: &ProxyRule) -> Result<()> {
     if rule.secret.trim().is_empty() {
         return Err(proxy_error("rule secret cannot be empty"));
     }
+    // A placeholder in these would turn the child's `fnox mcp` relay off
+    let env_name = rule.env.as_deref().unwrap_or(&rule.secret);
+    if [MCP_RELAY_ENV, MCP_RELAY_PROFILE_ENV].contains(&env_name) {
+        return Err(proxy_error(format!(
+            "rule for '{}' can't use the environment variable '{env_name}', which fnox reserves",
+            rule.secret
+        )));
+    }
     if !is_valid_domain_pattern(&rule.domain) {
         return Err(proxy_error(format!(
             "rule for '{}' has an invalid domain '{}'",
