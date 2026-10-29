@@ -261,9 +261,11 @@ impl SyncCommand {
         )?;
         // Files are cached with the global config's providers, so fail now
         // rather than after the secrets are fetched
-        if !files_to_sync.is_empty() {
-            files::check_sync_target(&profile, &target_provider_name).await?;
-        }
+        let file_target = if files_to_sync.is_empty() {
+            None
+        } else {
+            Some(files::sync_target(&profile, &target_provider_name).await?)
+        };
 
         // Determine target config file path
         let (target_path, ensure_parent_dir, local_cache_paths) = if self.local_file {
@@ -583,7 +585,10 @@ impl SyncCommand {
         let mut synced_files = Vec::with_capacity(files_to_sync.len());
         for entry in &files_to_sync {
             let plaintext = files::resolve_file_source(&profile, entry).await?;
-            let encrypted = files::encrypt_for_sync(&profile, &target_provider_name, &plaintext)
+            let encrypted = file_target
+                .as_ref()
+                .expect("a target is built when there are files to sync")
+                .encrypt(&plaintext)
                 .await
                 .map_err(|e| FnoxError::SyncEncryptionFailed {
                     key: entry.key.clone(),

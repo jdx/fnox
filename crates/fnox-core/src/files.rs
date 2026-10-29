@@ -367,11 +367,9 @@ async fn resolve_content(profiles: &[String], entry: &FileEntry, cached: bool) -
         .ok_or_else(|| FnoxError::Config(format!("File '{}' has no content", entry.key)))
 }
 
-/// The encryption provider `provider_name` of the global config, to cache files with
-async fn sync_target(
-    profiles: &[String],
-    provider_name: &str,
-) -> Result<(Config, Box<dyn Provider>)> {
+/// The encryption provider `provider_name` of the global config, to cache files
+/// with. Build it once and call `encrypt` for each file.
+pub async fn sync_target(profiles: &[String], provider_name: &str) -> Result<Box<dyn Provider>> {
     let config = Config::load_global_only()?;
     let providers = config.get_providers(profiles)?;
     let provider_config = providers.get(provider_name).ok_or_else(|| {
@@ -397,23 +395,7 @@ async fn sync_target(
             provider: provider_name.to_string(),
         });
     }
-    Ok((config, provider))
-}
-
-/// Check that `provider_name` can cache files, before any work is done for it
-pub async fn check_sync_target(profiles: &[String], provider_name: &str) -> Result<()> {
-    sync_target(profiles, provider_name).await.map(|_| ())
-}
-
-/// Encrypt `content` with the encryption provider `provider_name` of the
-/// global config, for the `sync` cache of a file.
-pub async fn encrypt_for_sync(
-    profiles: &[String],
-    provider_name: &str,
-    content: &str,
-) -> Result<String> {
-    let (_, provider) = sync_target(profiles, provider_name).await?;
-    provider.encrypt(content).await
+    Ok(provider)
 }
 
 /// Store `content` with the provider and return what the config records for it:

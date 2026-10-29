@@ -682,7 +682,7 @@ TOML
 	run fnox sync -p sync-age --force --global
 	assert_success
 
-	sed -i 's/{ provider = "age"/{ provider = "sync-age"/' "$FNOX_CONFIG_DIR/config.toml"
+	sed -i.bak 's/{ provider = "age"/{ provider = "sync-age"/' "$FNOX_CONFIG_DIR/config.toml"
 	run fnox sync -p sync-age --force --global
 	assert_success
 	assert_output --partial "Removed 1 stale file caches"
