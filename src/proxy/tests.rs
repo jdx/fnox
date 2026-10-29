@@ -905,10 +905,20 @@ fn a_rule_without_a_value_is_pending_and_refused() {
 fn a_pending_secret_is_injected_and_redacted_once_set() {
     let plan = pending_plan();
     assert!(plan.policy.redactions().is_empty());
-    plan.policy
-        .values
-        .set("GITHUB_TOKEN", "real-token".to_string())
-        .unwrap();
+    assert!(
+        plan.policy
+            .values
+            .fill("GITHUB_TOKEN", "real-token".to_string())
+            .unwrap()
+    );
+    // A refresh never replaces a value that is set
+    assert!(
+        !plan
+            .policy
+            .values
+            .fill("GITHUB_TOKEN", "other-token".to_string())
+            .unwrap()
+    );
     assert!(plan.pending().is_empty());
 
     let mut headers = vec![(
@@ -934,16 +944,38 @@ fn a_pending_secret_is_injected_and_redacted_once_set() {
 #[test]
 fn a_pending_secret_gets_the_startup_checks_when_set() {
     let values = &pending_plan().policy.values;
-    assert!(values.set("GITHUB_TOKEN", String::new()).is_err());
+    assert!(values.fill("GITHUB_TOKEN", String::new()).is_err());
     assert!(
         values
-            .set("GITHUB_TOKEN", "ghp_placeholder".to_string())
+            .fill("GITHUB_TOKEN", "ghp_placeholder".to_string())
             .is_err()
     );
     assert!(
         values
-            .set("GITHUB_TOKEN", "x-ghp_placeholder-x".to_string())
+            .fill("GITHUB_TOKEN", "x-ghp_placeholder-x".to_string())
             .is_err()
     );
     assert_eq!(values.pending(), vec!["GITHUB_TOKEN".to_string()]);
+}
+
+#[test]
+fn a_request_refreshes_only_the_pending_secrets_it_carries() {
+    let plan = pending_plan();
+    let needed = |method: &str, target: &str, header: &str| {
+        let url = reqwest::Url::parse(&format!("https://api.github.com{target}")).unwrap();
+        let headers = vec![("authorization".to_string(), header.to_string())];
+        plan.policy
+            .secrets_needed("api.github.com", method, &url, &headers)
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        needed("GET", "/repos/example/fnox", "Bearer ghp_placeholder"),
+        vec!["GITHUB_TOKEN".to_string()]
+    );
+    // No placeholder, another route, or another method: nothing to resolve
+    assert!(needed("GET", "/repos/example/fnox", "Bearer other").is_empty());
+    assert!(needed("GET", "/user", "Bearer ghp_placeholder").is_empty());
+    assert!(needed("POST", "/repos/example/fnox", "Bearer ghp_placeholder").is_empty());
 }

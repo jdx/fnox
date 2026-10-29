@@ -20,6 +20,14 @@ pub(super) struct RuleRedaction {
 }
 
 #[derive(Debug, Default)]
+struct Attempts {
+    /// Last time each pending secret was resolved again
+    last: HashMap<String, Instant>,
+    /// Pending secrets being resolved now
+    in_flight: HashSet<String>,
+}
+
+#[derive(Debug, Default)]
 struct State {
     values: HashMap<String, String>,
     redactions: Arc<Vec<Redaction>>,
@@ -31,8 +39,7 @@ pub(super) struct SecretValues {
     state: std::sync::RwLock<State>,
     /// Where pending secrets are resolved from; without one they stay pending
     session: std::sync::OnceLock<Arc<SecretSession>>,
-    /// Last time each pending secret was resolved again
-    attempts: tokio::sync::Mutex<HashMap<String, Instant>>,
+    attempts: std::sync::Mutex<Attempts>,
 }
 
 impl SecretValues {
@@ -47,7 +54,7 @@ impl SecretValues {
             rules,
             state: std::sync::RwLock::new(state),
             session: std::sync::OnceLock::new(),
-            attempts: tokio::sync::Mutex::new(HashMap::new()),
+            attempts: std::sync::Mutex::new(Attempts::default()),
         }
     }
 
@@ -84,9 +91,19 @@ impl SecretValues {
         pending
     }
 
-    /// Use `value` for `secret` from now on, after the checks startup values
-    /// get
-    pub(super) fn set(&self, secret: &str, value: String) -> Result<()> {
+    /// Use `value` for a still-pending `secret`; returns whether it was. A
+    /// refresh never replaces a value: that would drop the old value's
+    /// redaction while a response that echoes it may still be in flight.
+    pub(super) fn fill(&self, secret: &str, value: String) -> Result<bool> {
+        if self.value(secret).is_some() {
+            return Ok(false);
+        }
+        self.set_checked(secret, value, true)
+    }
+
+    /// Use `value` for `secret` after the checks startup values get, unless
+    /// `only_if_pending` and it already has a value
+    fn set_checked(&self, secret: &str, value: String, only_if_pending: bool) -> Result<bool> {
         if value.is_empty() {
             return Err(proxy_error(format!(
                 "secret '{secret}' resolved to an empty value"
@@ -105,61 +122,77 @@ impl SecretValues {
             }
         }
         let mut state = self.state.write().unwrap_or_else(|e| e.into_inner());
+        if only_if_pending && state.values.contains_key(secret) {
+            return Ok(false);
+        }
         state.values.insert(secret.to_string(), value);
         state.redactions = Arc::new(build_redactions(&self.rules, &state.values));
-        Ok(())
+        Ok(true)
     }
 
     /// Resolve the pending ones among `secrets` again, each at most once per
-    /// [`PENDING_RETRY`], from the config as it is on disk now
+    /// [`PENDING_RETRY`] and never twice at once, from the config as it is on
+    /// disk now
     pub(super) async fn refresh(&self, secrets: &[&str]) {
         let Some(session) = self.session.get() else {
             return;
         };
-        let pending: Vec<&str> = {
+        // Pick the due secrets and record the attempt before any slow work,
+        // so a failed config reload also waits PENDING_RETRY and another
+        // request doesn't load the same secret meanwhile. The lock is not
+        // held while providers run.
+        let due: Vec<String> = {
             let state = self.state.read().unwrap_or_else(|e| e.into_inner());
-            secrets
-                .iter()
-                .copied()
-                .filter(|secret| !state.values.contains_key(*secret))
-                .collect()
+            let mut attempts = self.attempts.lock().unwrap_or_else(|e| e.into_inner());
+            let now = Instant::now();
+            let mut due: Vec<String> = Vec::new();
+            for secret in secrets {
+                if state.values.contains_key(*secret)
+                    || due.iter().any(|picked| picked == secret)
+                    || attempts.in_flight.contains(*secret)
+                    || attempts
+                        .last
+                        .get(*secret)
+                        .is_some_and(|last| now.duration_since(*last) < PENDING_RETRY)
+                {
+                    continue;
+                }
+                attempts.last.insert(secret.to_string(), now);
+                attempts.in_flight.insert(secret.to_string());
+                due.push(secret.to_string());
+            }
+            due
         };
-        if pending.is_empty() {
-            return;
-        }
-        let mut attempts = self.attempts.lock().await;
-        let now = Instant::now();
-        let due: Vec<&str> = pending
-            .into_iter()
-            .filter(|secret| {
-                attempts
-                    .get(*secret)
-                    .is_none_or(|last| now.duration_since(*last) >= PENDING_RETRY)
-            })
-            .collect();
         if due.is_empty() {
             return;
         }
+        let done = || {
+            let mut attempts = self.attempts.lock().unwrap_or_else(|e| e.into_inner());
+            for secret in &due {
+                attempts.in_flight.remove(secret);
+            }
+        };
         let config = match session.load_config() {
             Ok(config) => config,
             Err(error) => {
                 tracing::warn!("fnox proxy: could not reload the config: {error}");
+                done();
                 return;
             }
         };
-        for secret in due {
-            attempts.insert(secret.to_string(), now);
+        for secret in &due {
             match session.load(&config, secret).await {
                 Ok(true) => {
                     let Some(Some(value)) = session.cached(secret).await else {
                         continue;
                     };
-                    match self.set(secret, value) {
-                        Ok(()) => tracing::info!(
+                    match self.fill(secret, value) {
+                        Ok(true) => tracing::info!(
                             target: "fnox::proxy",
-                            secret,
+                            secret = secret.as_str(),
                             "pending secret is now set"
                         ),
+                        Ok(false) => {}
                         Err(error) => tracing::warn!("fnox proxy: {error}"),
                     }
                 }
@@ -169,6 +202,7 @@ impl SecretValues {
                 }
             }
         }
+        done();
     }
 }
 

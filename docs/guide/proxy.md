@@ -81,7 +81,7 @@ secret = "STRIPE_KEY"
 domain = "api.stripe.com"
 ```
 
-`fnox proxy run` starts anyway and warns that `STRIPE_KEY` isn't set. The command still gets its placeholder. A request that needs the secret is refused with `secret 'STRIPE_KEY' is not set yet`. Before refusing, fnox reads the config again and resolves the secret, at most once every few seconds. Once you set it, for example with `fnox set STRIPE_KEY` in another terminal, the next matching request gets the real value without a restart. A rule for a secret that isn't declared at all is still an error, so a typo in a rule doesn't go unnoticed.
+`fnox proxy run` starts anyway and warns that `STRIPE_KEY` isn't set. The command still gets its placeholder. A request that needs the secret is refused with `secret 'STRIPE_KEY' is not set yet`. Before refusing, fnox reads the config again and resolves the secret, at most once every few seconds. Once you set it, for example with `fnox set STRIPE_KEY` in another terminal, a matching request gets the real value without a restart. A request within 3 seconds of the last attempt is still refused, so retry after a moment. A rule for a secret that isn't declared at all is still an error, so a typo in a rule doesn't go unnoticed.
 
 Check the effective rules without resolving any secrets:
 

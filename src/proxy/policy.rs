@@ -178,15 +178,43 @@ impl ProxyPolicy {
         self.values.redactions()
     }
 
-    /// Resolve again the pending secrets of the rules for `domain`
-    pub(super) async fn refresh_pending(&self, domain: &str) {
-        let secrets: Vec<&str> = self
-            .rules
+    /// Resolve again the pending secrets this request needs
+    pub(super) async fn refresh_pending(
+        &self,
+        domain: &str,
+        method: &str,
+        url: &reqwest::Url,
+        headers: &[(String, String)],
+    ) {
+        let secrets = self.secrets_needed(domain, method, url, headers);
+        if !secrets.is_empty() {
+            self.values.refresh(&secrets).await;
+        }
+    }
+
+    /// The secrets of rules whose domain and route match a request and whose
+    /// placeholder it carries
+    pub(super) fn secrets_needed(
+        &self,
+        domain: &str,
+        method: &str,
+        url: &reqwest::Url,
+        headers: &[(String, String)],
+    ) -> Vec<&str> {
+        let path = url.path();
+        let target = url.as_str();
+        self.rules
             .iter()
-            .filter(|rule| domain_matches(&rule.domain, domain))
+            .filter(|rule| {
+                domain_matches(&rule.domain, domain)
+                    && rule.route_matches(method, path)
+                    && (target.contains(&rule.placeholder)
+                        || headers
+                            .iter()
+                            .any(|(_, value)| value.contains(&rule.placeholder)))
+            })
             .map(|rule| rule.secret.as_str())
-            .collect();
-        self.values.refresh(&secrets).await;
+            .collect()
     }
 
     pub(super) fn has_domain(&self, domain: &str) -> bool {

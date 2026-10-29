@@ -415,7 +415,9 @@ where
         .await;
     }
     let mut headers = request.headers;
-    policy.refresh_pending(domain).await;
+    policy
+        .refresh_pending(domain, &request.method, &url, &headers)
+        .await;
     let injected = match policy.authorize(domain, &request.method, &mut url, &mut headers) {
         Ok(injected) => injected,
         Err(error) => return refuse(stream, &path, &error.to_string()).await,
