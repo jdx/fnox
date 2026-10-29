@@ -67,6 +67,8 @@ fnox refuses to store the value in plain text. The secret's provider, or `defaul
 
 The link uses MCP's URL-mode elicitation, from protocol version 2025-11-25. If the agent's client doesn't support it, `request_secret` doesn't open a page. It tells the agent to ask you to run `fnox set NAME` in your own terminal, which prompts with hidden input. When the agent calls `request_secret` again, fnox loads the stored value.
 
+If the client returns `decline` while opening the link, fnox reports the client's response without assuming you declined: a client can reject a URL or block a prompt without showing it. If you never saw the prompt, check the client's approval policy and URL restrictions. A canceled opening request, a timeout waiting for the client, and choosing **Decline** on the fnox page are reported separately. The agent is told not to reopen a rejected or canceled prompt automatically.
+
 ## Inside `fnox proxy run`
 
 When the agent runs under the [credential proxy](/guide/proxy), for example with `fnox proxy run --sandbox -- claude`, the agent's `fnox mcp` doesn't serve the tools itself. It relays MCP to the `fnox proxy run` process, which runs outside the sandbox and holds the real values. Your `.mcp.json` doesn't change, and the relay needs no config, so it works where the sandbox hides `fnox.toml`.

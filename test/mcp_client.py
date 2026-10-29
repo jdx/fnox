@@ -4,6 +4,8 @@
 usage: mcp_client.py FNOX_BIN ELICIT PAGE CALLS
 
 ELICIT is "url" to declare URL-mode elicitation or "none" to declare none.
+MCP_CLIENT_ELICIT_ACTION can return "decline", "cancel", or "error" instead
+of accepting a page-opening request; in those cases the page is not opened.
 PAGE says what to do on the page an elicitation links to: "save:VALUE",
 "decline", or "none". CALLS is a JSON list of [tool, arguments] pairs, or the
 string "list" to list tools. A call named "$" runs its arguments as a command
@@ -89,7 +91,13 @@ def wait_for(request_id):
         if message.get("method") == "elicitation/create":
             params = message["params"]
             assert params["mode"] == "url", params
-            send({"jsonrpc": "2.0", "id": message["id"], "result": {"action": "accept"}})
+            action = os.environ.get("MCP_CLIENT_ELICIT_ACTION", "accept")
+            if action == "error":
+                send({"jsonrpc": "2.0", "id": message["id"], "error": {"code": -32603, "message": "client transport failed"}})
+                continue
+            send({"jsonrpc": "2.0", "id": message["id"], "result": {"action": action}})
+            if action != "accept":
+                continue
             thread = threading.Thread(target=fill_page, args=(params["url"],))
             thread.start()
             page_threads.append(thread)

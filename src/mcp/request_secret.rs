@@ -4,7 +4,7 @@ use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::*;
 use rmcp::schemars;
 use rmcp::service::{ElicitationError, ElicitationMode};
-use rmcp::{ErrorData as McpError, Peer, RoleServer, tool, tool_router};
+use rmcp::{ErrorData as McpError, Peer, RoleServer, ServiceError, tool, tool_router};
 
 use super::page::{PageDetails, SecretPage, Submission};
 use super::server::FnoxMcpServer;
@@ -112,36 +112,11 @@ impl FnoxMcpServer {
         .await
         .map_err(internal)?;
 
-        let elicitation_id = data_encoding::HEXLOWER.encode(&rand::random::<[u8; 16]>());
-        let message = format!(
-            "fnox needs a value for {name}. Open this local page to enter it. fnox stores it with provider '{provider}' and does not show it to the agent."
-        );
-        match peer
-            .elicit_url_with_timeout(
-                message,
-                page.url().clone(),
-                elicitation_id,
-                Some(deadline.saturating_duration_since(tokio::time::Instant::now())),
-            )
-            .await
+        if let Some(result) = self
+            .open_secret_page(&peer, &name, &provider, &page, deadline)
+            .await?
         {
-            Ok(ElicitationAction::Accept) => {}
-            Ok(_) => {
-                return Ok(CallToolResult::error(vec![ContentBlock::text(format!(
-                    "The user declined to open the page for '{name}'. Don't ask for the value in the chat."
-                ))]));
-            }
-            Err(ElicitationError::CapabilityNotSupported) => {
-                return Ok(CallToolResult::error(vec![ContentBlock::text(
-                    self.terminal_fallback(&name),
-                )]));
-            }
-            Err(e) => {
-                return Err(McpError::internal_error(
-                    format!("Failed to show the secret page link: {e}"),
-                    None,
-                ));
-            }
+            return Ok(result);
         }
 
         // Accepting the elicitation only means the user opened the link; the
@@ -234,6 +209,50 @@ impl FnoxMcpServer {
                     "The user entered '{name}'. {stored}. {usage}"
                 ))]))
             }
+        }
+    }
+
+    /// Open the input page through the client, reporting transport outcomes
+    /// separately from a decision made on the form itself.
+    async fn open_secret_page(
+        &self,
+        peer: &Peer<RoleServer>,
+        name: &str,
+        provider: &str,
+        page: &SecretPage,
+        deadline: tokio::time::Instant,
+    ) -> Result<Option<CallToolResult>, McpError> {
+        let elicitation_id = data_encoding::HEXLOWER.encode(&rand::random::<[u8; 16]>());
+        let message = format!(
+            "fnox needs a value for {name}. Open this local page to enter it. fnox stores it with provider '{provider}' and does not show it to the agent."
+        );
+        match peer
+            .elicit_url_with_timeout(
+                message,
+                page.url().clone(),
+                elicitation_id,
+                Some(deadline.saturating_duration_since(tokio::time::Instant::now())),
+            )
+            .await
+        {
+            Ok(ElicitationAction::Accept) => Ok(None),
+            Ok(action) => Ok(Some(CallToolResult::error(vec![ContentBlock::text(
+                page_open_outcome(name, &action),
+            )]))),
+            Err(ElicitationError::CapabilityNotSupported) => {
+                Ok(Some(CallToolResult::error(vec![ContentBlock::text(
+                    self.terminal_fallback(name),
+                )])))
+            }
+            Err(ElicitationError::Service(ServiceError::Timeout { .. })) => Ok(Some(
+                CallToolResult::error(vec![ContentBlock::text(format!(
+                    "Timed out waiting for the MCP client to answer the page-opening request for '{name}'. fnox stored no value through this request. This is not a user decline. Don't reopen the page automatically or ask for the value in the chat."
+                ))]),
+            )),
+            Err(e) => Err(McpError::internal_error(
+                format!("Failed to show the secret page link: {e}"),
+                None,
+            )),
         }
     }
 
@@ -382,9 +401,29 @@ impl FnoxMcpServer {
     }
 }
 
+/// A client can return `decline` without showing the prompt at all. The wire
+/// response identifies the client action, not who made the decision.
+fn page_open_outcome(name: &str, action: &ElicitationAction) -> String {
+    let outcome = match action {
+        ElicitationAction::Decline => format!(
+            "The MCP client returned 'decline' for the page-opening request for '{name}'. fnox cannot tell whether the user declined or the client rejected the URL or blocked the prompt. If no prompt was shown, check the client's approval policy and support for the page's URL."
+        ),
+        ElicitationAction::Cancel => format!(
+            "The MCP client canceled the page-opening request for '{name}'. fnox stored no value through this request. This is not a user decline."
+        ),
+        _ => format!(
+            "The MCP client did not accept the page-opening request for '{name}'. fnox stored no value through this request."
+        ),
+    };
+    format!("{outcome} Don't reopen the page automatically or ask for the value in the chat.")
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::mcp::server::test_server;
+    use rmcp::ServiceExt;
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
     #[test]
     fn terminal_fallback_quotes_profile_names() {
@@ -395,5 +434,111 @@ mod tests {
             text.contains("fnox -P 'my profile' --write-profile 'my profile' set API_TOKEN"),
             "{text}"
         );
+    }
+
+    #[test]
+    fn a_client_decline_is_not_attributed_to_the_user() {
+        let text = page_open_outcome("API_TOKEN", &ElicitationAction::Decline);
+        assert!(text.contains("MCP client returned 'decline'"));
+        assert!(text.contains("fnox cannot tell whether the user declined"));
+        assert!(text.contains("approval policy"));
+        assert!(text.contains("Don't reopen the page automatically"));
+        assert!(!text.contains("The user declined"));
+    }
+
+    #[test]
+    fn a_canceled_opening_request_is_reported_separately() {
+        let text = page_open_outcome("API_TOKEN", &ElicitationAction::Cancel);
+        assert!(text.contains("MCP client canceled"));
+        assert!(text.contains("fnox stored no value"));
+        assert!(!text.contains("The user declined"));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn an_unanswered_opening_request_times_out_without_a_retry() {
+        let server = test_server(vec!["default".into()], None);
+        let (server_io, client_io) = tokio::io::duplex(8192);
+        let serving = tokio::spawn({
+            let server = server.clone();
+            async move { server.serve(server_io).await.unwrap() }
+        });
+        let mut client = BufReader::new(client_io);
+        let initialize = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": { "elicitation": { "url": {} } },
+                "clientInfo": { "name": "unresponsive-test-client", "version": "1" }
+            }
+        });
+        client
+            .get_mut()
+            .write_all(format!("{initialize}\n").as_bytes())
+            .await
+            .unwrap();
+        let mut line = String::new();
+        client.read_line(&mut line).await.unwrap();
+        let response: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(response["id"], 1);
+        assert!(response.get("error").is_none());
+        client
+            .get_mut()
+            .write_all(b"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n")
+            .await
+            .unwrap();
+        let service = serving.await.unwrap();
+        let peer = service.peer().clone();
+        let page = SecretPage::start(PageDetails {
+            name: "API_TOKEN".into(),
+            reason: None,
+            provider: "age".into(),
+            target: "fnox.toml".into(),
+            profile: "default".into(),
+        })
+        .await
+        .unwrap();
+        let opening = tokio::spawn(async move {
+            server
+                .open_secret_page(
+                    &peer,
+                    "API_TOKEN",
+                    "age",
+                    &page,
+                    tokio::time::Instant::now() + Duration::from_secs(2),
+                )
+                .await
+        });
+        line.clear();
+        client.read_line(&mut line).await.unwrap();
+        let request: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(request["method"], "elicitation/create");
+        assert_eq!(request["params"]["mode"], "url");
+        // The client deliberately never answers this request.
+        tokio::time::advance(Duration::from_secs(1)).await;
+        assert!(!opening.is_finished());
+        tokio::time::advance(Duration::from_secs(1)).await;
+        let result = opening.await.unwrap().unwrap().unwrap();
+        assert_eq!(result.is_error, Some(true));
+        let response = serde_json::to_value(result).unwrap();
+        let text = response["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("Timed out waiting for the MCP client"));
+        assert!(text.contains("fnox stored no value"));
+        assert!(text.contains("This is not a user decline"));
+        assert!(text.contains("Don't reopen the page automatically"));
+        assert!(text.contains("or ask for the value in the chat"));
+        line.clear();
+        let deadline = tokio::time::Instant::now() + Duration::from_millis(100);
+        while let Ok(read) = tokio::time::timeout_at(deadline, client.read_line(&mut line)).await {
+            if read.unwrap() == 0 {
+                break;
+            }
+            let message: serde_json::Value = serde_json::from_str(&line).unwrap();
+            assert_ne!(
+                message["method"], "elicitation/create",
+                "unexpected retry: {line}"
+            );
+            line.clear();
+        }
+        service.cancel().await.unwrap();
     }
 }
