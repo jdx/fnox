@@ -153,6 +153,7 @@ console = { workspace = true }
 crossterm = { workspace = true }
 data-encoding = { workspace = true }
 demand = { workspace = true }
+futures = { workspace = true }
 globset = { workspace = true }
 hex = { workspace = true }
 ignore = { workspace = true }
