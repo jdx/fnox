@@ -79,7 +79,7 @@ The tools then work with the proxy's placeholders:
 | `exec`           | Not offered. It would run commands outside the sandbox; the agent runs commands inside it instead.                                                                         |
 | `request_secret` | Stores the value as above, then hands it to the proxy, so requests that carry the placeholder get the real value. The agent gets the placeholder.                          |
 
-`request_secret` pairs with [pending rules](/guide/proxy#secrets-that-aren-t-set-yet): declare the secret and write its rule, and the agent can ask you for the value when it first needs it. The page is served by the proxy process on `127.0.0.1`, where your browser can reach it and the sandboxed agent can't, so the agent can't fill in the form itself.
+`request_secret` pairs with [pending rules](/guide/proxy#secrets-that-aren-t-set-yet): declare the secret and write its rule, and the agent can ask you for the value when it first needs it. The page is served by the proxy process on `127.0.0.1`, where your browser can reach it. With the default strict egress the sandboxed agent can't, so it can't fill in the form itself. If `allow_private` lists loopback and `egress` is permissive, the agent can reach the page through the proxy; keep those off when you rely on this.
 
 `[mcp]` settings apply as usual: `tools` chooses the tools (minus `exec`) and `secrets` limits the names. The relay serves the proxy's config and profile, so `fnox mcp` refuses `-c`, or a `-P` naming another profile, under `fnox proxy run`; pass those to `fnox proxy run` instead.
 

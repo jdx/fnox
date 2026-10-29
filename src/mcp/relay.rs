@@ -18,10 +18,20 @@ pub fn requested() -> bool {
 
 /// The relay serves the proxy's config and profiles; refuse flags that ask
 /// for others instead of silently ignoring them
-pub fn check_flags(config_arg: &std::path::Path, profile_flag: &[String]) -> Result<()> {
+pub fn check_flags(
+    config_arg: &std::path::Path,
+    profile_flag: &[String],
+    write_profile_flag: Option<&str>,
+) -> Result<()> {
     if config_arg != std::path::Path::new(crate::config::DEFAULT_CONFIG_FILENAME) {
         return Err(FnoxError::Config(
             "fnox mcp under fnox proxy run serves the proxy's config; pass -c to fnox proxy run instead"
+                .into(),
+        ));
+    }
+    if write_profile_flag.is_some() {
+        return Err(FnoxError::Config(
+            "fnox mcp under fnox proxy run stores values in the proxy's write profile; pass --write-profile to fnox proxy run instead"
                 .into(),
         ));
     }

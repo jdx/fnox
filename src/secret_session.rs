@@ -55,9 +55,9 @@ pub struct SecretSession {
     /// back, so one can't drop a value the other just loaded. Taken after
     /// `store_lock` when both are held.
     reload_lock: tokio::sync::Mutex<()>,
-    /// Counts stores, so a load that started before a newer store doesn't
-    /// replace the stored value with what it read
-    writes: std::sync::atomic::AtomicU64,
+    /// Counts stores per name, so a load that started before a newer store
+    /// of the same secret doesn't replace the stored value with what it read
+    writes: std::sync::Mutex<HashMap<String, u64>>,
 }
 
 impl std::fmt::Debug for SecretSession {
@@ -90,7 +90,7 @@ impl SecretSession {
             store_lock: tokio::sync::Mutex::new(()),
             reload_marks: std::sync::Mutex::new(std::collections::HashSet::new()),
             reload_lock: tokio::sync::Mutex::new(()),
-            writes: std::sync::atomic::AtomicU64::new(0),
+            writes: std::sync::Mutex::new(HashMap::new()),
         }
     }
 
@@ -251,7 +251,7 @@ impl SecretSession {
     /// the resolver applies the top-level `env` default and settings such as
     /// `json_path`.
     pub async fn load(&self, config: &Config, name: &str) -> Result<bool> {
-        let started = self.writes.load(std::sync::atomic::Ordering::Acquire);
+        let started = self.writes_of(name);
         let all_secrets = config.get_secrets(&self.profile)?;
         let Some(secret) = all_secrets.get(name).cloned() else {
             return Ok(false);
@@ -274,9 +274,9 @@ impl SecretSession {
         .await?;
         match resolved.shift_remove(name).flatten() {
             Some(value) => {
-                // A store that finished while this read ran holds the newer
-                // value; keep it
-                if self.writes.load(std::sync::atomic::Ordering::Acquire) == started {
+                // A store of this secret that finished while this read ran
+                // holds the newer value; keep it
+                if self.writes_of(name) == started {
                     self.add(name, secret, value).await;
                 }
                 Ok(true)
@@ -375,8 +375,8 @@ impl SecretSession {
 
     /// Check that `value` fits the `json_path` or `line` setting of `name` in
     /// `config`, so storing it can't replace a working value with one that
-    /// can't be read
-    pub fn check_value_fits(&self, config: &Config, name: &str, value: &str) -> Result<()> {
+    /// can't be read. Returns the value as the active profiles read it.
+    pub fn check_value_fits(&self, config: &Config, name: &str, value: &str) -> Result<String> {
         // Check the secret as the active profiles read it and as the write
         // profile, which `--write-profile` may set to another profile, stores it
         let write_profile = self.write_profile()?;
@@ -384,12 +384,17 @@ impl SecretSession {
         let written = config
             .get_secret(std::slice::from_ref(&write_profile), name)?
             .cloned();
-        for secret in read.iter().chain(written.iter()) {
+        let mut effective = value.to_string();
+        for (i, secret) in read.iter().chain(written.iter()).enumerate() {
             if secret.json_path.is_some() || secret.line.is_some() {
-                crate::secret_resolver::apply_post_processing(value.to_string(), secret)?;
+                let processed =
+                    crate::secret_resolver::apply_post_processing(value.to_string(), secret)?;
+                if i == 0 && read.is_some() {
+                    effective = processed;
+                }
             }
         }
-        Ok(())
+        Ok(effective)
     }
 
     /// Held while a value is rechecked and stored
@@ -435,9 +440,23 @@ impl SecretSession {
             true,
         )
         .await?;
-        self.writes
-            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        *self
+            .writes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .entry(name.to_string())
+            .or_default() += 1;
         Ok(())
+    }
+
+    /// How many times [`Self::save`] has stored `name`
+    fn writes_of(&self, name: &str) -> u64 {
+        self.writes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(name)
+            .copied()
+            .unwrap_or(0)
     }
 
     /// Load a value [`Self::save`] just stored in `target`, so the session

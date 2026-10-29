@@ -197,6 +197,9 @@ impl FnoxMcpServer {
                     reloaded
                 };
                 if let Err(e) = reloaded {
+                    // The session may still hold the old value; reload until a
+                    // later check reads the new one
+                    self.session.mark_for_reload(&name);
                     let _ = reply.send(Ok(format!(
                         "fnox stored {name}, but couldn't read it back: {e}"
                     )));
@@ -247,17 +250,6 @@ impl FnoxMcpServer {
     ) -> crate::error::Result<Config> {
         let config = self.session.load_config()?;
         let changed = |message: String| crate::error::FnoxError::Config(message);
-        // Under the proxy, a value it would refuse (such as one containing a
-        // placeholder) would be saved but never injected
-        if let Some(proxy) = &self.proxy
-            && !proxy.rules_for(name).is_empty()
-        {
-            proxy.check_value(name, value).map_err(|e| {
-                changed(format!(
-                    "the proxy can't use this value ({e}), so fnox stored nothing"
-                ))
-            })?;
-        }
         if !replace
             && self
                 .has_value(&config, name)
@@ -279,13 +271,26 @@ impl FnoxMcpServer {
         }
         // A value that doesn't fit the secret's json_path or line setting
         // would replace a working one with one that can't be read
-        self.session
+        let effective = self
+            .session
             .check_value_fits(&config, name, value)
             .map_err(|e| {
                 changed(format!(
                     "the value doesn't fit the json_path or line setting of '{name}' ({e}), so fnox stored nothing"
                 ))
             })?;
+        // Under the proxy, a value it would refuse (such as one containing a
+        // placeholder, or an empty json_path result) would be saved but never
+        // injected. It gets the value after json_path or line, so check that.
+        if let Some(proxy) = &self.proxy
+            && !proxy.rules_for(name).is_empty()
+        {
+            proxy.check_value(name, &effective).map_err(|e| {
+                changed(format!(
+                    "the proxy can't use this value ({e}), so fnox stored nothing"
+                ))
+            })?;
+        }
         Ok(config)
     }
 

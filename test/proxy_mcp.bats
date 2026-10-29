@@ -156,13 +156,16 @@ PY
 	assert_output --partial "'FNOX_PROXY_MCP', which fnox reserves"
 }
 
-@test "fnox mcp under proxy run refuses another profile or config" {
+@test "fnox mcp under proxy run refuses another profile, config or write profile" {
 	run "$FNOX_BIN" proxy run -- "$FNOX_BIN" -P staging mcp </dev/null
 	assert_failure
 	assert_output --partial "'default', not 'staging'"
 	run "$FNOX_BIN" proxy run -- "$FNOX_BIN" -c ./other.toml mcp </dev/null
 	assert_failure
 	assert_output --partial "pass -c to fnox proxy run"
+	run "$FNOX_BIN" proxy run -- "$FNOX_BIN" --write-profile staging mcp </dev/null
+	assert_failure
+	assert_output --partial "pass --write-profile to fnox proxy run"
 }
 
 @test "request_secret under proxy run refuses a value the proxy can't use" {
@@ -173,4 +176,14 @@ PY
 	assert_output --partial '{"page": 500}'
 	run "$FNOX_BIN" get API_TOKEN
 	refute_output --partial has-fnox_ph_api-inside
+}
+
+@test "request_secret under proxy run checks the value json_path extracts" {
+	sed -i.bak 's/^API_TOKEN = { description = "not set yet" }/API_TOKEN = { description = "not set yet", json_path = "token" }/' fnox.toml
+	mcp_client_under_proxy url 'save:{"token":""}' '[["request_secret", {"name": "API_TOKEN"}]]'
+	assert_success
+	assert_output --partial "the proxy can't use this value"
+	assert_output --partial "empty value"
+	run "$FNOX_BIN" get API_TOKEN
+	refute_output --partial token
 }

@@ -368,7 +368,11 @@ impl Commands {
             // Inside `fnox proxy run`, the proxy serves the tools; the relay
             // needs no config, which a sandbox may hide
             Commands::Mcp(_) if crate::mcp::relay::requested() => {
-                crate::mcp::relay::check_flags(&cli.config, &cli.profile)?;
+                crate::mcp::relay::check_flags(
+                    &cli.config,
+                    &cli.profile,
+                    cli.write_profile.as_deref(),
+                )?;
                 crate::mcp::relay::run().await
             }
             Commands::Mcp(cmd) => cmd.run(cli, self.load_config(cli)?).await,
