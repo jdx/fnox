@@ -75,14 +75,43 @@ mcp_client() {
 	refute_output --partial API_TOKEN
 }
 
-@test "request_secret picks up a value set in the terminal after the fallback" {
-	mcp_client none none '[["request_secret", {"name": "API_TOKEN"}]]'
+@test "request_secret picks up a value set in the terminal during the session" {
+	mcp_client none none '[
+		["request_secret", {"name": "API_TOKEN"}],
+		["$", ["sh", "-c", "echo from-terminal | \"$FNOX_BIN\" set API_TOKEN"]],
+		["request_secret", {"name": "API_TOKEN"}],
+		["exec", {"command": ["printenv", "API_TOKEN"]}]
+	]'
 	assert_success
-	echo "from-terminal" | "$FNOX_BIN" set API_TOKEN
-	mcp_client none none '[["request_secret", {"name": "API_TOKEN"}], ["exec", {"command": ["printenv", "API_TOKEN"]}]]'
+	assert_line --index 0 --partial "fnox set API_TOKEN"
+	assert_line --index 1 '{"ran": 0}'
+	assert_line --index 2 --partial "already has a value"
+	assert_line --index 3 --partial '[REDACTED]'
+}
+
+@test "request_secret applies the top-level env default to a new secret" {
+	sed -i.bak 's/^default_provider = .*/&\nenv = false/' fnox.toml
+	mcp_client url save:hidden-value \
+		'[["request_secret", {"name": "API_TOKEN"}], ["exec", {"command": ["printenv", "API_TOKEN"]}]]'
 	assert_success
-	assert_line --index 0 --partial "already has a value"
-	assert_line --index 1 --partial '[REDACTED]'
+	assert_line --index 0 --partial "fnox stored it"
+	assert_line --index 1 --partial '[exit code: 1]'
+	refute_output --partial hidden-value
+}
+
+@test "request_secret replaces a value and keeps json_path" {
+	echo '{"token":"old-token"}' | "$FNOX_BIN" set API_TOKEN
+	sed -i.bak 's/^API_TOKEN *= *{ /API_TOKEN = { json_path = "token", /' fnox.toml
+	grep -q 'json_path = "token"' fnox.toml
+	mcp_client url 'save:{"token":"new-token"}' '[
+		["request_secret", {"name": "API_TOKEN", "replace": true}],
+		["exec", {"command": ["sh", "-c", "test \"$API_TOKEN\" = new-token && echo matched"]}]
+	]'
+	assert_success
+	assert_line --index 0 --partial "fnox stored it"
+	assert_line --index 1 --partial matched
+	run "$FNOX_BIN" get API_TOKEN
+	assert_output "new-token"
 }
 
 @test "request_secret reports a decline on the page" {

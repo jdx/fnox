@@ -6,7 +6,8 @@ usage: mcp_client.py FNOX_BIN ELICIT PAGE CALLS
 ELICIT is "url" to declare URL-mode elicitation or "none" to declare none.
 PAGE says what to do on the page an elicitation links to: "save:VALUE",
 "decline", or "none". CALLS is a JSON list of [tool, arguments] pairs, or the
-string "list" to list tools.
+string "list" to list tools. A call named "$" runs its arguments as a command
+between tool calls, in the same session, and prints {"ran": <exit code>}.
 
 Prints one JSON line per call result, then {"page": <status or null>}.
 """
@@ -101,6 +102,10 @@ if calls == "list":
     print(json.dumps([tool["name"] for tool in result["result"]["tools"]]))
 else:
     for name, arguments in json.loads(calls):
+        if name == "$":
+            ran = subprocess.run(arguments, stdout=subprocess.DEVNULL)
+            print(json.dumps({"ran": ran.returncode}))
+            continue
         response = wait_for(request("tools/call", {"name": name, "arguments": arguments}))
         print(json.dumps(response.get("result") or response.get("error")))
 

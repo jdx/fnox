@@ -216,9 +216,11 @@ impl FnoxMcpServer {
                     McpError::internal_error(format!("Failed to resolve secrets: {e}"), None)
                 })?;
 
+                // request_secret may have stored one of these while the batch
+                // ran; keep its newer value
                 let mut cache = cache.write().await;
                 for (key, value) in resolved {
-                    cache.insert(key, value);
+                    cache.entry(key).or_insert(value);
                 }
 
                 Ok(())
@@ -706,6 +708,9 @@ impl FnoxMcpServer {
         let reason = params
             .reason
             .map(|reason| reason.chars().take(MAX_REASON_CHARS).collect());
+        // One deadline covers opening the link and submitting the page; the
+        // page stops serving when this call returns
+        let deadline = tokio::time::Instant::now() + REQUEST_SECRET_TIMEOUT;
         let mut page = SecretPage::start(PageDetails {
             name: name.clone(),
             reason,
@@ -725,7 +730,7 @@ impl FnoxMcpServer {
                 message,
                 page.url().clone(),
                 elicitation_id,
-                Some(REQUEST_SECRET_TIMEOUT),
+                Some(deadline.saturating_duration_since(tokio::time::Instant::now())),
             )
             .await
         {
@@ -750,7 +755,7 @@ impl FnoxMcpServer {
 
         // Accepting the elicitation only means the user opened the link; the
         // value arrives when they submit the page.
-        let submission = tokio::time::timeout(REQUEST_SECRET_TIMEOUT, page.next())
+        let submission = tokio::time::timeout_at(deadline, page.next())
             .await
             .ok()
             .flatten();
@@ -792,11 +797,22 @@ impl FnoxMcpServer {
         if matches!(self.cache.read().await.get(name), Some(Some(_))) {
             return Ok(true);
         }
-        let Some(secret) = config
-            .get_secrets(&self.profile)
-            .map_err(|e| McpError::internal_error(format!("Failed to load secrets: {e}"), None))?
-            .shift_remove(name)
-        else {
+        self.load(config, name).await.map_err(|e| {
+            McpError::internal_error(
+                format!(
+                    "Secret '{name}' is configured but failed to resolve: {e}. Call request_secret with replace=true to ask the user for a new value."
+                ),
+                None,
+            )
+        })
+    }
+
+    /// Resolve `name` from `config` the way a new session would, and make it
+    /// available to the tools if it has a value. Going through `get_secrets`
+    /// and the resolver applies the top-level `env` default and settings such
+    /// as `json_path`.
+    async fn load(&self, config: &Config, name: &str) -> crate::error::Result<bool> {
+        let Some(secret) = config.get_secrets(&self.profile)?.shift_remove(name) else {
             return Ok(false);
         };
         let single: IndexMap<String, SecretConfig> =
@@ -809,15 +825,7 @@ impl FnoxMcpServer {
             Purpose::Mcp,
             true,
         )
-        .await
-        .map_err(|e| {
-            McpError::internal_error(
-                format!(
-                    "Secret '{name}' is configured but failed to resolve: {e}. Call request_secret with replace=true to ask the user for a new value."
-                ),
-                None,
-            )
-        })?;
+        .await?;
         match resolved.into_iter().next().and_then(|(_, value)| value) {
             Some(value) => {
                 self.add_secret(name, secret, value).await;
@@ -837,7 +845,7 @@ impl FnoxMcpServer {
     ) -> crate::error::Result<()> {
         let set = SetCommand {
             key: Some(name.to_string()),
-            value: Some(value.clone()),
+            value: Some(value),
             description: None,
             global: false,
             key_name: None,
@@ -855,16 +863,20 @@ impl FnoxMcpServer {
             show: false,
             source: None,
         };
-        let stored = set
-            .store_at(
-                config,
-                &self.profile,
-                self.write_profile.as_deref(),
-                target,
-                true,
-            )
-            .await?;
-        self.add_secret(name, stored.secret, value).await;
+        set.store_at(
+            config,
+            &self.profile,
+            self.write_profile.as_deref(),
+            target,
+            true,
+        )
+        .await?;
+        let config = Config::load_smart(self.config_path.as_path())?;
+        if !self.load(&config, name).await? {
+            return Err(crate::error::FnoxError::Config(format!(
+                "stored '{name}', but it resolves to no value"
+            )));
+        }
         Ok(())
     }
 

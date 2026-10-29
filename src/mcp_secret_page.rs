@@ -182,7 +182,7 @@ async fn route(request: &HttpRequest, state: &PageState) -> (u16, String) {
             for (key, field) in url::form_urlencoded::parse(&request.body) {
                 match key.as_ref() {
                     "action" => action = Some(field.into_owned()),
-                    "value" => value = Some(field.trim().to_string()),
+                    "value" => value = Some(field.into_owned()),
                     _ => {}
                 }
             }
@@ -203,7 +203,9 @@ async fn route(request: &HttpRequest, state: &PageState) -> (u16, String) {
                     )
                 }
                 Some("save") => {
-                    let Some(value) = value.filter(|value| !value.is_empty()) else {
+                    // Spaces can be part of a credential, so only an all-blank
+                    // value is refused, and the value is kept as entered
+                    let Some(value) = value.filter(|value| !value.trim().is_empty()) else {
                         return (400, form_page(&state.details, Some("Enter a value.")));
                     };
                     if state.finished.swap(true, Ordering::AcqRel) {
@@ -435,7 +437,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn hands_over_a_trimmed_value_once() {
+    async fn hands_over_the_value_as_entered_once() {
         let mut page = SecretPage::start(details()).await.unwrap();
         let url = page.url().clone();
         let origin = format!("http://{}", url.authority());
@@ -445,7 +447,7 @@ mod tests {
                 client()
                     .post(url)
                     .header("origin", origin)
-                    .form(&[("value", "  secret-value\n"), ("action", "save")])
+                    .form(&[("value", " secret value "), ("action", "save")])
                     .send()
                     .await
                     .unwrap()
@@ -455,7 +457,7 @@ mod tests {
         let Some(Submission::Value { value, reply }) = page.next().await else {
             panic!("expected a value");
         };
-        assert_eq!(value, "secret-value");
+        assert_eq!(value, " secret value ");
         reply.send(Ok("stored it".into())).unwrap();
         let response = submit.await.unwrap();
         assert_eq!(response.status(), 200);
