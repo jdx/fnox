@@ -92,6 +92,10 @@ pub struct FnoxMcpServer {
     /// Held while request_secret rechecks and stores a value, so two pages
     /// can't both pass the recheck and overwrite each other
     store_lock: Arc<tokio::sync::Mutex<()>>,
+    /// Held while a name sent to the terminal is reloaded and while a stored
+    /// value is read back, so one can't drop a value the other just loaded.
+    /// Taken after `store_lock` when both are held.
+    reload_lock: Arc<tokio::sync::Mutex<()>>,
     /// Names request_secret sent to `fnox set` in the terminal; their next
     /// check reloads the value instead of trusting the cache
     sent_to_terminal: Arc<std::sync::Mutex<HashSet<String>>>,
@@ -122,6 +126,7 @@ impl FnoxMcpServer {
             config_path: Arc::new(PathBuf::from(config::DEFAULT_CONFIG_FILENAME)),
             write_profile: Arc::new(None),
             store_lock: Arc::new(tokio::sync::Mutex::new(())),
+            reload_lock: Arc::new(tokio::sync::Mutex::new(())),
             sent_to_terminal: Arc::new(std::sync::Mutex::new(HashSet::new())),
             cache: Arc::new(RwLock::new(HashMap::new())),
             resolved: Arc::new(OnceCell::new()),
@@ -775,7 +780,19 @@ impl FnoxMcpServer {
                     "fnox stored it with provider '{provider}' in {}",
                     target.display()
                 );
-                if let Err(e) = self.reload_stored(&name).await {
+                let reloaded = {
+                    let _reload = self.reload_lock.lock().await;
+                    let reloaded = self.reload_stored(&name).await;
+                    if reloaded.is_ok() {
+                        // The user just entered this value; nothing to wait for
+                        self.sent_to_terminal
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .remove(&name);
+                    }
+                    reloaded
+                };
+                if let Err(e) = reloaded {
                     let _ = reply.send(Ok(format!(
                         "fnox stored {name}, but couldn't read it back: {e}"
                     )));
@@ -901,38 +918,51 @@ impl FnoxMcpServer {
     /// Whether `name` resolves to a value, checking `config` (freshly loaded)
     /// for a secret set outside this session, such as with `fnox set`
     async fn has_value(&self, config: &Config, name: &str) -> Result<bool, McpError> {
-        // After the terminal fallback, the user may have replaced a value this
-        // session (and the daemon) still caches. Keep the mark until the
-        // reload succeeds, so a retry after a failure still reloads.
-        let sent_to_terminal = self
-            .sent_to_terminal
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .contains(name);
-        if sent_to_terminal {
-            crate::daemon::refresh_with_context(
-                &self.daemon_context,
-                config,
-                std::slice::from_ref(&name.to_string()),
-            )
-            .await
-            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        } else if matches!(self.cache.read().await.get(name), Some(Some(_))) {
-            return Ok(true);
-        }
-        let loaded = self.load(config, name).await.map_err(|e| {
+        let load_error = |e: crate::error::FnoxError| {
             McpError::internal_error(
                 format!(
                     "Secret '{name}' is configured but failed to resolve: {e}. Call request_secret with replace=true to ask the user for a new value."
                 ),
                 None,
             )
-        })?;
-        if sent_to_terminal {
-            if !loaded {
-                // Don't keep serving a value the config no longer has
-                self.cache.write().await.remove(name);
+        };
+        let marked = || {
+            self.sent_to_terminal
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .contains(name)
+        };
+        let cached = async || self.cache.read().await.get(name).cloned().flatten();
+
+        // After the terminal fallback, the user may replace a value this
+        // session (and the daemon) still caches, so a name sent there is
+        // reloaded on every check until its value changes
+        let reload_guard = if marked() {
+            Some(self.reload_lock.lock().await)
+        } else {
+            None
+        };
+        if reload_guard.is_none() || !marked() {
+            if cached().await.is_some() {
+                return Ok(true);
             }
+            return self.load(config, name).await.map_err(load_error);
+        }
+
+        crate::daemon::refresh_with_context(
+            &self.daemon_context,
+            config,
+            std::slice::from_ref(&name.to_string()),
+        )
+        .await
+        .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+        let before = cached().await;
+        let loaded = self.load(config, name).await.map_err(load_error)?;
+        if !loaded {
+            // Don't keep serving a value the config no longer has
+            self.cache.write().await.remove(name);
+        } else if cached().await != before {
+            // The user's new value arrived; until then, keep reloading
             self.sent_to_terminal
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())

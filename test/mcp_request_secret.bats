@@ -108,6 +108,24 @@ mcp_client() {
 	refute_output --partial new-value
 }
 
+@test "request_secret keeps reloading a name sent to the terminal until its value changes" {
+	echo old-value | "$FNOX_BIN" set API_TOKEN
+	mcp_client none none '[
+		["exec", {"command": ["sh", "-c", "test \"$API_TOKEN\" = old-value && echo old"]}],
+		["request_secret", {"name": "API_TOKEN", "replace": true}],
+		["request_secret", {"name": "API_TOKEN"}],
+		["$", ["sh", "-c", "echo new-value | \"$FNOX_BIN\" set API_TOKEN"]],
+		["request_secret", {"name": "API_TOKEN"}],
+		["exec", {"command": ["sh", "-c", "test \"$API_TOKEN\" = new-value && echo matched"]}]
+	]'
+	assert_success
+	assert_line --index 1 --partial "fnox set API_TOKEN"
+	# Retried before the user ran the command: still the old value
+	assert_line --index 2 --partial "already has a value"
+	assert_line --index 4 --partial "already has a value"
+	assert_line --index 5 --partial matched
+}
+
 @test "request_secret applies the top-level env default to a new secret" {
 	sed -i.bak 's/^default_provider = .*/&\nenv = false/' fnox.toml
 	mcp_client url save:hidden-value \
