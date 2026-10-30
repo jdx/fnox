@@ -192,8 +192,20 @@ time.sleep(60)' >listener.port &
 PLIST
 	printf '#!/bin/sh\ntouch "%s"\n' "$marker" >Probe.app/Contents/MacOS/probe
 	chmod +x Probe.app/Contents/MacOS/probe
+	# Control: without the sandbox the probe launches and leaves the marker, so
+	# a failure below can only come from the sandbox.
+	"$FNOX_BIN" proxy run --no-sandbox -- open -g -j ./Probe.app || true
+	local tries=20
+	while [ ! -e "$marker" ] && [ "$tries" -gt 0 ]; do
+		sleep 0.5
+		tries=$((tries - 1))
+	done
+	[ -e "$marker" ] || skip "Launch Services cannot launch the probe app here"
+	rm -f "$marker"
+
 	run "$FNOX_BIN" proxy run --sandbox -- open -g -j ./Probe.app
 	assert_failure
+	assert_output --partial "-54"
 	sleep 3
 	assert_file_not_exists "$marker"
 }
