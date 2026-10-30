@@ -2117,7 +2117,7 @@
           "default": []
         },
         "allow_private": {
-          "description": "Non-public networks the proxy may connect to, as IP addresses or CIDR\nblocks. Loopback, link-local (including cloud metadata endpoints),\nprivate, and other non-public addresses are refused unless listed.",
+          "description": "Non-public networks the proxy may connect to, as IP addresses or CIDR\nblocks, each optionally followed by a port (`127.0.0.1:4790`,\n`[::1]:4790`) that limits the entry to that port. Loopback, link-local\n(including cloud metadata endpoints), private, and other non-public\naddresses are refused unless listed.",
           "type": "array",
           "items": {
             "type": "string"

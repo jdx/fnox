@@ -154,6 +154,16 @@ If a rule's API lives on your internal network, allow that network:
 allow_private = ["10.20.0.0/16", "192.168.1.5"]
 ```
 
+An entry allows every port on its addresses. To open one local service and nothing else on that address, add a port. IPv6 addresses go in brackets:
+
+```toml
+[proxy]
+allow_domains = ["127.0.0.1"]
+allow_private = ["127.0.0.1:4790"]
+```
+
+With strict egress, the destination host must also be in `allow_domains`, so list the name the client connects to (`127.0.0.1` here, or `localhost`). With `egress = "permissive"`, `allow_domains` isn't needed. Either way, a client can tunnel to `127.0.0.1:4790`, but a request to another loopback port, such as a browser's remote-debugging port, is still refused.
+
 ## Limits
 
 - Substitution happens in one HTTP header or one query parameter per rule. Request bodies and the URL path are never rewritten.

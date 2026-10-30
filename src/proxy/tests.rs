@@ -602,31 +602,144 @@ fn classifies_non_public_addresses() {
 fn allow_private_permits_listed_networks_only() {
     let destinations = DestinationPolicy {
         allowed: vec![
-            parse_network("10.0.0.0/8").unwrap(),
-            parse_network("127.0.0.1").unwrap(),
+            parse_allowed("10.0.0.0/8").unwrap(),
+            parse_allowed("127.0.0.1").unwrap(),
         ],
     };
-    assert!(destinations.permits("10.9.8.7".parse().unwrap()));
-    assert!(destinations.permits("::ffff:127.0.0.1".parse().unwrap()));
-    assert!(!destinations.permits("127.0.0.2".parse().unwrap()));
-    assert!(!destinations.permits("169.254.169.254".parse().unwrap()));
-    assert!(destinations.permits("8.8.8.8".parse().unwrap()));
+    assert!(destinations.permits("10.9.8.7".parse().unwrap(), 443));
+    assert!(destinations.permits("::ffff:127.0.0.1".parse().unwrap(), 443));
+    assert!(!destinations.permits("127.0.0.2".parse().unwrap(), 443));
+    assert!(!destinations.permits("169.254.169.254".parse().unwrap(), 443));
+    assert!(destinations.permits("8.8.8.8".parse().unwrap(), 443));
 
     // Entries written in IPv4-mapped form match like their IPv4 form.
     let mapped = DestinationPolicy {
         allowed: vec![
-            parse_network("::ffff:127.0.0.1").unwrap(),
-            parse_network("::ffff:10.0.0.0/104").unwrap(),
+            parse_allowed("::ffff:127.0.0.1").unwrap(),
+            parse_allowed("::ffff:10.0.0.0/104").unwrap(),
         ],
     };
-    assert!(mapped.permits("127.0.0.1".parse().unwrap()));
-    assert!(mapped.permits("::ffff:127.0.0.1".parse().unwrap()));
-    assert!(mapped.permits("10.200.0.1".parse().unwrap()));
-    assert!(!mapped.permits("127.0.0.2".parse().unwrap()));
+    assert!(mapped.permits("127.0.0.1".parse().unwrap(), 443));
+    assert!(mapped.permits("::ffff:127.0.0.1".parse().unwrap(), 443));
+    assert!(mapped.permits("10.200.0.1".parse().unwrap(), 443));
+    assert!(!mapped.permits("127.0.0.2".parse().unwrap(), 443));
     assert_eq!(
         parse_network("::ffff:10.0.0.0/104").unwrap(),
         parse_network("10.0.0.0/8").unwrap()
     );
+}
+
+#[test]
+fn allow_private_entry_with_a_port_permits_only_that_port() {
+    let destinations = DestinationPolicy {
+        allowed: vec![
+            parse_allowed("127.0.0.1:4790").unwrap(),
+            parse_allowed("[::1]:4790").unwrap(),
+            parse_allowed("10.0.0.0/8:8080").unwrap(),
+            parse_allowed("[fd00::/8]:9000").unwrap(),
+        ],
+    };
+    assert!(destinations.permits("127.0.0.1".parse().unwrap(), 4790));
+    assert!(!destinations.permits("127.0.0.1".parse().unwrap(), 9242));
+    assert!(destinations.permits("::ffff:127.0.0.1".parse().unwrap(), 4790));
+    assert!(destinations.permits("::1".parse().unwrap(), 4790));
+    assert!(!destinations.permits("::1".parse().unwrap(), 80));
+    assert!(destinations.permits("10.1.2.3".parse().unwrap(), 8080));
+    assert!(!destinations.permits("10.1.2.3".parse().unwrap(), 8081));
+    assert!(destinations.permits("fd00::1".parse().unwrap(), 9000));
+    assert!(!destinations.permits("fd00::1".parse().unwrap(), 443));
+    // Public addresses never depend on the list.
+    assert!(destinations.permits("8.8.8.8".parse().unwrap(), 443));
+
+    // A port-scoped entry doesn't narrow a bare entry for the same address.
+    let both = DestinationPolicy {
+        allowed: vec![
+            parse_allowed("127.0.0.1:4790").unwrap(),
+            parse_allowed("127.0.0.1").unwrap(),
+        ],
+    };
+    assert!(both.permits("127.0.0.1".parse().unwrap(), 9242));
+}
+
+#[tokio::test]
+async fn upstream_lookups_are_checked_against_port_443() {
+    use reqwest::dns::Resolve;
+
+    // Credential injection connects to port 443, so an entry scoped to it
+    // must let the upstream client's own lookups through.
+    let resolver = DestinationResolver(Arc::new(DestinationPolicy {
+        allowed: vec![parse_allowed("127.0.0.1:443").unwrap()],
+    }));
+    let name = "127.0.0.1".parse().unwrap();
+    let addresses: Vec<_> = resolver.resolve(name).await.unwrap().collect();
+    assert_eq!(addresses, ["127.0.0.1:443".parse().unwrap()]);
+
+    // An entry for another port doesn't.
+    let resolver = DestinationResolver(Arc::new(DestinationPolicy {
+        allowed: vec![parse_allowed("127.0.0.1:4790").unwrap()],
+    }));
+    assert!(
+        resolver
+            .resolve("127.0.0.1".parse().unwrap())
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn upstream_client_applies_the_destination_policy_to_its_lookups() {
+    // `localhost` resolves to loopback, which an entry for another port
+    // doesn't allow. The refusal comes from the destination resolver; with
+    // the system resolver the request would fail on connecting instead.
+    let mut config = tunnel_config(&["127.0.0.1:4790", "[::1]:4790"]);
+    config.rules[0].domain = "localhost".to_string();
+    let plan = plan_from(config);
+    let error = plan
+        .policy
+        .client
+        .get("https://localhost/")
+        .send()
+        .await
+        .unwrap_err();
+    let mut chain = Vec::new();
+    let mut source: Option<&dyn std::error::Error> = Some(&error);
+    while let Some(error) = source {
+        chain.push(error.to_string());
+        source = error.source();
+    }
+    assert!(
+        chain
+            .iter()
+            .any(|message| message.contains("non-public address")),
+        "{chain:?}"
+    );
+}
+
+#[test]
+fn parses_allow_private_entries() {
+    let bare = parse_allowed("::1").unwrap();
+    assert_eq!(bare.network, parse_network("::1").unwrap());
+    assert_eq!(bare.port, None);
+    assert_eq!(parse_allowed("[::1]").unwrap(), bare);
+    assert_eq!(parse_allowed("fd00::/8").unwrap().port, None);
+    assert_eq!(parse_allowed("127.0.0.1:4790").unwrap().port, Some(4790));
+    assert_eq!(parse_allowed("[::1]:4790").unwrap().port, Some(4790));
+    for invalid in [
+        "127.0.0.1:",
+        "127.0.0.1:0",
+        "127.0.0.1:65536",
+        "127.0.0.1:http",
+        "[::1:4790",
+        "[::1]4790",
+        "[::1]:",
+        "localhost:4790",
+        "10.0.0.0/33:80",
+    ] {
+        assert!(
+            parse_allowed(invalid).is_err(),
+            "{invalid} should be invalid"
+        );
+    }
 }
 
 #[test]
@@ -641,10 +754,14 @@ fn validates_allow_lists() {
     assert!(validate_config(&config).is_ok());
     config.allow_private = vec!["10.0.0.0/33".to_string()];
     assert!(validate_config(&config).is_err());
+    config.allow_private = vec!["127.0.0.1:0".to_string()];
+    assert!(validate_config(&config).is_err());
     config.allow_private = vec![
         "10.0.0.0/8".to_string(),
         "fd00::/8".to_string(),
         "192.168.1.5".to_string(),
+        "127.0.0.1:4790".to_string(),
+        "[::1]:4790".to_string(),
     ];
     assert!(validate_config(&config).is_ok());
 }
@@ -773,6 +890,39 @@ async fn loopback_proxy_challenges_then_accepts_credentials_on_one_connection() 
     let established = connect(&mut stream, &target, Some(&credentials)).await;
     assert!(established.starts_with("HTTP/1.1 200 "), "{established}");
     assert_echoes(&mut stream).await;
+    running.shutdown().await;
+}
+
+#[tokio::test]
+async fn allow_private_port_opens_only_that_port_through_the_tunnel() {
+    let allowed = echo_server().await;
+    let other = echo_server().await;
+    let entry = format!("127.0.0.1:{}", allowed.port());
+    let running = RunningProxy::start(plan_from(tunnel_config(&[&entry])), ProxyListener::Loopback)
+        .await
+        .unwrap();
+    let address = running.address.unwrap();
+    let credentials = format!("fnox:{}", running.token);
+
+    let mut stream = TcpStream::connect(address).await.unwrap();
+    let established = connect(
+        &mut stream,
+        &format!("localhost:{}", allowed.port()),
+        Some(&credentials),
+    )
+    .await;
+    assert!(established.starts_with("HTTP/1.1 200 "), "{established}");
+    assert_echoes(&mut stream).await;
+
+    let mut stream = TcpStream::connect(address).await.unwrap();
+    let refused = connect(
+        &mut stream,
+        &format!("localhost:{}", other.port()),
+        Some(&credentials),
+    )
+    .await;
+    assert!(refused.starts_with("HTTP/1.1 403 "), "{refused}");
+    assert!(refused.contains("non-public address"), "{refused}");
     running.shutdown().await;
 }
 

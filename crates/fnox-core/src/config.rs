@@ -535,8 +535,10 @@ pub struct ProxyConfig {
     pub allow_domains: Vec<String>,
 
     /// Non-public networks the proxy may connect to, as IP addresses or CIDR
-    /// blocks. Loopback, link-local (including cloud metadata endpoints),
-    /// private, and other non-public addresses are refused unless listed.
+    /// blocks, each optionally followed by a port (`127.0.0.1:4790`,
+    /// `[::1]:4790`) that limits the entry to that port. Loopback, link-local
+    /// (including cloud metadata endpoints), private, and other non-public
+    /// addresses are refused unless listed.
     #[serde(default)]
     pub allow_private: Vec<String>,
 

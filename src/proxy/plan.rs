@@ -50,7 +50,7 @@ pub fn validate_config(config: &ProxyConfig) -> Result<()> {
         }
     }
     for entry in &config.allow_private {
-        parse_network(entry)?;
+        parse_allowed(entry)?;
     }
     Ok(())
 }
@@ -241,7 +241,7 @@ impl ProxyPlan {
             allowed: config
                 .allow_private
                 .iter()
-                .map(|entry| parse_network(entry))
+                .map(|entry| parse_allowed(entry))
                 .collect::<Result<_>>()?,
         });
 
