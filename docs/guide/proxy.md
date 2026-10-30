@@ -158,10 +158,11 @@ An entry allows every port on its addresses. To open one local service and nothi
 
 ```toml
 [proxy]
-allow_private = ["127.0.0.1:4790", "[::1]:4790"]
+allow_domains = ["127.0.0.1"]
+allow_private = ["127.0.0.1:4790"]
 ```
 
-With this, a sandboxed agent can tunnel to a local service on port 4790, but a request to another loopback port, such as a browser's remote-debugging port, is still refused.
+With strict egress, the destination host must also be in `allow_domains`, so list the name the client connects to (`127.0.0.1` here, or `localhost`). With `egress = "permissive"`, `allow_domains` isn't needed. Either way, a client can tunnel to `127.0.0.1:4790`, but a request to another loopback port, such as a browser's remote-debugging port, is still refused.
 
 ## Limits
 
