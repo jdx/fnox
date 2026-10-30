@@ -14,6 +14,8 @@ Fetches each secret whose provider differs from the target, encrypts the value w
 
 The target is `--provider`, else `default_provider`, and must be an encryption provider. The cache is written to the `-c` file (default: `fnox.toml`), the global config with `--global`, or with `--local-file` a personal `fnox.local.toml` to keep out of git. A full `--local-file` sync also removes cache entries for secrets that no longer have a source.
 
+The files of the active profiles (see `fnox files`) are cached the same way, in the global config entry that declares them. KEYS and `--filter` match a file by its path as written in the config, such as `~/.kube/config`.
+
 ## Arguments
 
 - **`[KEYS]…`** — Sync only these keys

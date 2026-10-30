@@ -217,6 +217,7 @@ Secret names are environment variable names: they must match `^[A-Za-z_][A-Za-z0
 | `description`  | string                          | none               | Shown by `fnox list`.                                                            |
 | `daemon_cache` | boolean                         | `true`             | Set `false` to resolve this secret directly instead of from the daemon cache.    |
 | `sync`         | table                           | none               | Encrypted cache written by `fnox sync`.                                          |
+| `push`         | array of strings                | none               | [Push targets](#push-targets) that `fnox push` copies the value into.            |
 
 ### Resolution order
 
@@ -358,6 +359,7 @@ DATABASE_URL = { provider = "aws", value = "database-url" }
 | `providers`        | table            | Providers added to the top-level providers for this profile. |
 | `secrets`          | table            | Secrets that override top-level secrets of the same name.    |
 | `leases`           | table            | Lease backends for this profile.                             |
+| `targets`          | table            | Push targets for this profile.                               |
 | `default_provider` | string           | Overrides the top-level `default_provider`.                  |
 
 Other fields are rejected. Settings such as `if_missing`, `env`, `daemon`, `mcp`, and `proxy` are top-level only.
@@ -375,6 +377,20 @@ duration = "1h"
 ```
 
 Define lease backends under `[leases.<name>]` or `[profiles.<profile>.leases.<name>]`. Every backend has a `type` and an optional `duration` (default: `15m`); the service may cap the actual lifetime. Types: [`aws-sts`](/leases/aws-sts), [`azure-token`](/leases/azure-token), [`cloudflare`](/leases/cloudflare), [`command`](/leases/command), [`gcp-iam`](/leases/gcp-iam), [`github-app`](/leases/github-app), [`github-oauth`](/leases/github-oauth), [`gitlab`](/leases/gitlab), [`kubernetes`](/leases/kubernetes), [`oauth2-client-credentials`](/leases/oauth2-client-credentials), [`tailscale`](/leases/tailscale), and [`vault`](/leases/vault). See [credential leases](/guide/leases).
+
+## Push targets
+
+```toml
+[targets.gh]
+type = "github-actions"
+repo = "acme/api"
+environment = "production"
+
+[secrets]
+STRIPE_KEY = { provider = "op", value = "Stripe/secret key", push = ["gh"] }
+```
+
+Define push targets under `[targets.<name>]` or `[profiles.<profile>.targets.<name>]`, and list them in a secret's `push` field. `fnox push` resolves each such secret and writes it to its targets. Types: [`cloudflare-workers`](/targets/cloudflare-workers), [`fly`](/targets/fly), [`forgejo-actions`](/targets/forgejo-actions), [`github-actions`](/targets/github-actions), [`gitlab-ci`](/targets/gitlab-ci), [`hcp-terraform`](/targets/hcp-terraform), and [`vercel`](/targets/vercel). See [push targets](/guide/push).
 
 ## `plugins`
 
@@ -455,26 +471,33 @@ paths = ["/repos/example/**"]
 secret = "MAPS_KEY"
 domain = "*.maps.example.com"
 query = "key"
+
+[[proxy.rules]]
+lease = "forge"
+domain = "forge.example.com"
+header = "private-token"
 ```
 
-| Field                 | Type                       | Default           | Description                                                                                                                |
-| --------------------- | -------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `egress`              | `"strict"`, `"permissive"` | `"strict"`        | Reject destinations without a rule, or tunnel them without credentials.                                                    |
-| `audit`               | boolean                    | `true`            | Log proxied and refused requests. Headers, bodies, and values are never logged.                                            |
-| `allow_domains`       | array of strings           | none              | Domains tunneled without credentials, even with strict egress. Same patterns as `rules[].domain`.                          |
-| `allow_private`       | array of IPs or CIDRs      | none              | Non-public networks the proxy may connect to, each optionally with a port (`"127.0.0.1:4790"`). Refused otherwise.         |
-| `sandbox`             | boolean                    | `false`           | Run `fnox proxy run` commands in an OS sandbox whose only network route is the proxy. See [sandbox](/guide/proxy#sandbox). |
-| `sandbox_allow_write` | array of paths             | none              | Extra paths the sandboxed command may write, besides the working directory and temporary files.                            |
-| `sandbox_deny_read`   | array of paths             | none              | Extra paths the sandboxed command may not read.                                                                            |
-| `sandbox_allow_read`  | array of paths             | none              | Paths the sandbox hides by default that the command may read, such as `fnox.toml`.                                         |
-| `rules[].secret`      | string                     | required          | Secret to inject, from the active profile.                                                                                 |
-| `rules[].domain`      | string                     | required          | TLS server name the secret may be sent to. A leading `*.` matches one subdomain label.                                     |
-| `rules[].env`         | string                     | `rules[].secret`  | Variable that holds the placeholder in the command's environment.                                                          |
-| `rules[].header`      | string                     | `"authorization"` | Header, case-insensitive, in which the placeholder is replaced. Not allowed with `query`.                                  |
-| `rules[].query`       | string                     | none              | Query parameter in which the placeholder is replaced, instead of a header. Not allowed with `header`.                      |
-| `rules[].methods`     | array of strings           | every method      | Allowed HTTP methods.                                                                                                      |
-| `rules[].paths`       | array of globs             | every path        | Allowed URL paths.                                                                                                         |
-| `rules[].placeholder` | string                     | generated         | Placeholder value given to the command.                                                                                    |
+| Field                 | Type                       | Default                  | Description                                                                                                                                   |
+| --------------------- | -------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `egress`              | `"strict"`, `"permissive"` | `"strict"`               | Reject destinations without a rule, or tunnel them without credentials.                                                                       |
+| `audit`               | boolean                    | `true`                   | Log proxied and refused requests. Headers, bodies, and values are never logged.                                                               |
+| `allow_domains`       | array of strings           | none                     | Domains tunneled without credentials, even with strict egress. Same patterns as `rules[].domain`.                                             |
+| `allow_private`       | array of IPs or CIDRs      | none                     | Non-public networks the proxy may connect to, each optionally with a port (`"127.0.0.1:4790"`). Refused otherwise.                            |
+| `sandbox`             | boolean                    | `false`                  | Run `fnox proxy run` commands in an OS sandbox whose only network route is the proxy. See [sandbox](/guide/proxy#sandbox).                    |
+| `sandbox_allow_write` | array of paths             | none                     | Extra paths the sandboxed command may write, besides the working directory and temporary files.                                               |
+| `sandbox_deny_read`   | array of paths             | none                     | Extra paths the sandboxed command may not read.                                                                                               |
+| `sandbox_allow_read`  | array of paths             | none                     | Paths the sandbox hides by default that the command may read, such as `fnox.toml`.                                                            |
+| `rules[].secret`      | string                     | none                     | Secret to inject, from the active profile. Set exactly one of `secret` and `lease`.                                                           |
+| `rules[].lease`       | string                     | none                     | Lease from `[leases]` whose credential the proxy mints, renews, and revokes. See [leases](/guide/proxy#short-lived-credentials-from-a-lease). |
+| `rules[].credential`  | string                     | the only one             | Variable of the lease to inject, for a lease that produces several. Lease rules only.                                                         |
+| `rules[].domain`      | string                     | required                 | TLS server name the secret may be sent to. A leading `*.` matches one subdomain label.                                                        |
+| `rules[].env`         | string                     | the secret or credential | Variable that holds the placeholder in the command's environment.                                                                             |
+| `rules[].header`      | string                     | `"authorization"`        | Header, case-insensitive, in which the placeholder is replaced. Not allowed with `query`.                                                     |
+| `rules[].query`       | string                     | none                     | Query parameter in which the placeholder is replaced, instead of a header. Not allowed with `header`.                                         |
+| `rules[].methods`     | array of strings           | every method             | Allowed HTTP methods.                                                                                                                         |
+| `rules[].paths`       | array of globs             | every path               | Allowed URL paths.                                                                                                                            |
+| `rules[].placeholder` | string                     | generated                | Placeholder value given to the command.                                                                                                       |
 
 A later config file that sets `[proxy]` replaces the whole table, so it must restate every rule it allows. See [credential proxy](/guide/proxy).
 

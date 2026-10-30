@@ -280,6 +280,8 @@ pub async fn put_file(
         provider: Some(provider_name.clone()),
         value: None,
         source: source.clone(),
+        // New content leaves an old cache stale; run `fnox sync` to cache it again
+        sync: None,
         source_path: Some(target.clone()),
     };
     file.validate(&key)?;

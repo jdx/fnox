@@ -7,8 +7,8 @@
 
 pub use fnox_core::{
     auth_prompt, config, config_path, env, error, files, http, lease, lease_backends, library,
-    plugins, providers, secret_file, secret_resolver, settings, source_registry, spanned, suggest,
-    temp_file_secrets,
+    plugins, providers, push_targets, secret_file, secret_resolver, settings, source_registry,
+    spanned, suggest, temp_file_secrets,
 };
 
 // CLI-only modules — depend on fnox-core for everything else.

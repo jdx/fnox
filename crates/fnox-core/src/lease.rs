@@ -27,6 +27,12 @@ pub struct LeaseRecord {
     pub cached_credentials: Option<IndexMap<String, String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub encryption_provider: Option<String>,
+    /// Credentials kept only so the lease can be revoked later, never handed
+    /// to a command, encrypted with `encryption_provider`. The proxy records
+    /// its leases this way: a backend such as GitHub App revokes a token by
+    /// authenticating with it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revoke_credentials: Option<IndexMap<String, String>>,
     /// Hash of the backend config at lease creation time, used to invalidate
     /// cached credentials when the config changes (e.g., role ARN rotation).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -146,6 +152,9 @@ impl LeaseLedger {
             }
             match r.expires_at {
                 Some(exp) => exp > cutoff,
+                // Kept for a later revocation, so a lease that never expires
+                // isn't forgotten while still valid
+                None if r.revoke_credentials.is_some() => true,
                 // No expiry: prune if created more than 24h ago
                 None => r.created_at > cutoff,
             }
@@ -205,6 +214,7 @@ impl LeaseLedger {
         let record = &mut self.leases[index];
         record.revoked = true;
         record.cached_credentials = None;
+        record.revoke_credentials = None;
         record.encryption_provider = None;
     }
 
@@ -403,6 +413,7 @@ fn record_lease(
         revoked: false,
         cached_credentials,
         encryption_provider,
+        revoke_credentials: None,
         config_hash: Some(config_hash),
     });
     if let Err(save_err) = ledger.save(project_dir) {
