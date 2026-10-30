@@ -146,7 +146,7 @@ PY
 	"${PYTHON3:-python3}" fake_proxy.py >fake_proxy.port 2>fake_proxy.err &
 	local fake_pid=$! port=""
 	for _ in $(seq 1 100); do
-		port=$(cat fake_proxy.port)
+		port=$(cat fake_proxy.port 2>/dev/null || true)
 		[[ -n $port ]] && break
 		kill -0 "$fake_pid" 2>/dev/null || break
 		sleep 0.1
