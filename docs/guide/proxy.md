@@ -124,6 +124,15 @@ If a rule's API lives on your internal network, allow that network:
 allow_private = ["10.20.0.0/16", "192.168.1.5"]
 ```
 
+An entry allows every port on its addresses. To open one local service and nothing else on that address, add a port. IPv6 addresses go in brackets:
+
+```toml
+[proxy]
+allow_private = ["127.0.0.1:4790", "[::1]:4790"]
+```
+
+With this, a sandboxed agent can tunnel to a local service on port 4790, but a request to another loopback port, such as a browser's remote-debugging port, is still refused.
+
 ## Limits
 
 - Substitution happens in one HTTP header or one query parameter per rule. Request bodies and the URL path are never rewritten.

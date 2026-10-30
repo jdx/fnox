@@ -462,7 +462,7 @@ query = "key"
 | `egress`              | `"strict"`, `"permissive"` | `"strict"`        | Reject destinations without a rule, or tunnel them without credentials.                                                    |
 | `audit`               | boolean                    | `true`            | Log proxied and refused requests. Headers, bodies, and values are never logged.                                            |
 | `allow_domains`       | array of strings           | none              | Domains tunneled without credentials, even with strict egress. Same patterns as `rules[].domain`.                          |
-| `allow_private`       | array of IPs or CIDRs      | none              | Non-public networks the proxy may connect to. Loopback, link-local, and private addresses are refused otherwise.           |
+| `allow_private`       | array of IPs or CIDRs      | none              | Non-public networks the proxy may connect to, each optionally with a port (`"127.0.0.1:4790"`). Refused otherwise.         |
 | `sandbox`             | boolean                    | `false`           | Run `fnox proxy run` commands in an OS sandbox whose only network route is the proxy. See [sandbox](/guide/proxy#sandbox). |
 | `sandbox_allow_write` | array of paths             | none              | Extra paths the sandboxed command may write, besides the working directory and temporary files.                            |
 | `sandbox_deny_read`   | array of paths             | none              | Extra paths the sandboxed command may not read.                                                                            |

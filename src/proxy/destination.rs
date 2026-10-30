@@ -66,10 +66,18 @@ pub(super) fn embedded_ipv4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
     }
 }
 
+/// A non-public network from `allow_private`, optionally limited to one port.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct AllowedNetwork {
+    pub(super) network: IpNet,
+    /// `None` allows every port.
+    pub(super) port: Option<u16>,
+}
+
 /// Which resolved addresses the proxy may connect to.
 #[derive(Debug, Default)]
 pub(super) struct DestinationPolicy {
-    pub(super) allowed: Vec<IpNet>,
+    pub(super) allowed: Vec<AllowedNetwork>,
 }
 
 #[derive(Debug)]
@@ -91,9 +99,12 @@ impl std::fmt::Display for DestinationError {
 impl std::error::Error for DestinationError {}
 
 impl DestinationPolicy {
-    pub(super) fn permits(&self, ip: IpAddr) -> bool {
+    pub(super) fn permits(&self, ip: IpAddr, port: u16) -> bool {
         let ip = ip.to_canonical();
-        is_public(ip) || self.allowed.iter().any(|network| network.contains(&ip))
+        is_public(ip)
+            || self.allowed.iter().any(|allowed| {
+                allowed.network.contains(&ip) && allowed.port.is_none_or(|only| only == port)
+            })
     }
 
     /// Resolves `host` and keeps only addresses the proxy may connect to.
@@ -115,7 +126,7 @@ impl DestinationPolicy {
         }
         let permitted: Vec<_> = resolved
             .into_iter()
-            .filter(|address| self.permits(address.ip()))
+            .filter(|address| self.permits(address.ip(), port))
             .collect();
         if permitted.is_empty() {
             return Err(DestinationError::Refused);
@@ -132,10 +143,48 @@ impl reqwest::dns::Resolve for DestinationResolver {
         let destinations = self.0.clone();
         let host = name.as_str().to_string();
         Box::pin(async move {
-            let addresses = destinations.resolve(&host, 0).await?;
+            // Credential injection connects to port 443 and nothing else.
+            let addresses = destinations.resolve(&host, 443).await?;
             Ok(Box::new(addresses.into_iter()) as reqwest::dns::Addrs)
         })
     }
+}
+
+/// Parses an `allow_private` entry: an IP address or CIDR block, optionally
+/// followed by a port (`10.0.0.5:8080`, `[::1]:4790`, `[fd00::/8]:80`). An
+/// entry without a port allows every port.
+pub(super) fn parse_allowed(entry: &str) -> Result<AllowedNetwork> {
+    let invalid = || {
+        proxy_error(format!(
+            "allow_private entry '{entry}' is not an IP address or CIDR block, optionally with a port"
+        ))
+    };
+    let (network, port) = if let Some(bracketed) = entry.strip_prefix('[') {
+        let (network, rest) = bracketed.split_once(']').ok_or_else(invalid)?;
+        match rest {
+            "" => (network, None),
+            _ => (network, Some(rest.strip_prefix(':').ok_or_else(invalid)?)),
+        }
+    } else if entry.matches(':').count() == 1 {
+        // A single colon can only be IPv4 followed by a port.
+        let (network, port) = entry.split_once(':').ok_or_else(invalid)?;
+        (network, Some(port))
+    } else {
+        (entry, None)
+    };
+    let port = match port {
+        Some(port) => Some(
+            port.parse::<u16>()
+                .ok()
+                .filter(|port| *port != 0)
+                .ok_or_else(invalid)?,
+        ),
+        None => None,
+    };
+    Ok(AllowedNetwork {
+        network: parse_network(network).map_err(|_| invalid())?,
+        port,
+    })
 }
 
 pub(super) fn parse_network(entry: &str) -> Result<IpNet> {
