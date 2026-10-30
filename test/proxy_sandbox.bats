@@ -175,3 +175,37 @@ time.sleep(60)' >listener.port &
 	assert_equal "$status" 130
 	assert_file_not_exists fnox.local.toml
 }
+
+@test "proxy run --sandbox blocks launching apps with open on macOS" {
+	[ "$(uname)" = "Darwin" ] || skip "Launch Services is macOS-only"
+	_require_sandbox
+	local marker="$PWD/launched-marker"
+	mkdir -p Probe.app/Contents/MacOS
+	cat >Probe.app/Contents/Info.plist <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>probe</string>
+<key>CFBundleIdentifier</key><string>local.fnox.sandboxprobe</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>LSBackgroundOnly</key><true/>
+</dict></plist>
+PLIST
+	printf '#!/bin/sh\ntouch "%s"\n' "$marker" >Probe.app/Contents/MacOS/probe
+	chmod +x Probe.app/Contents/MacOS/probe
+	# Control: without the sandbox the probe launches and leaves the marker, so
+	# a failure below can only come from the sandbox.
+	run "$FNOX_BIN" proxy run --no-sandbox -- open -g -j ./Probe.app
+	[ "$status" -eq 0 ] || skip "Launch Services cannot open apps here: ${output:0:200}"
+	local tries=20
+	while [ ! -e "$marker" ] && [ "$tries" -gt 0 ]; do
+		sleep 0.5
+		tries=$((tries - 1))
+	done
+	[ -e "$marker" ] || fail "the probe app was opened but never wrote its marker"
+	rm -f "$marker"
+
+	run "$FNOX_BIN" proxy run --sandbox -- open -g -j -W ./Probe.app
+	assert_failure
+	assert_output --partial "-54"
+	assert_file_not_exists "$marker"
+}

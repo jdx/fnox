@@ -461,14 +461,16 @@ pub fn bwrap_args(
 
 /// The seatbelt profile for `sandbox-exec`: everything is allowed except
 /// network access (other than to `proxy_port` on this machine), writes
-/// outside `policy.writable` and temporary directories, and reads of hidden
-/// paths.
+/// outside `policy.writable` and temporary directories, reads of hidden
+/// paths, and launching apps through Launch Services (`open`), which would
+/// start them outside the sandbox.
 pub fn seatbelt_profile(policy: &SandboxPolicy, proxy_port: u16) -> String {
     let quote = |path: &Path| {
         let text = path.to_string_lossy();
         format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
     };
-    let mut profile = String::from("(version 1)\n(allow default)\n(deny network*)\n");
+    let mut profile =
+        String::from("(version 1)\n(allow default)\n(deny network*)\n(deny lsopen)\n");
     profile.push_str(&format!(
         "(allow network-outbound (remote ip \"localhost:{proxy_port}\"))\n"
     ));
@@ -1009,6 +1011,7 @@ key_file = { secret = "AGE_KEY_PATH" }
         };
         let profile = seatbelt_profile(&policy, 4242);
         assert!(profile.contains("(deny network*)"));
+        assert!(profile.contains("(deny lsopen)"));
         assert!(profile.contains("(allow network-outbound (remote ip \"localhost:4242\"))"));
         assert!(profile.contains("(subpath \"/work\")"));
         assert!(profile.contains("(subpath \"/odd\\\"dir\")"));
