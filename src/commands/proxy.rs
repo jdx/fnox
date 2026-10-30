@@ -1,10 +1,14 @@
 use crate::commands::Cli;
 use crate::config::{Config, ProxyConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
-use crate::proxy::{ProxyListener, ProxyPlan, RunningProxy};
+use crate::lease::{LeaseLedger, LeaseRecord};
+use crate::lease_backends::{Lease, LeaseBackendConfig};
+use crate::proxy::{LeaseMinter, MintFuture, ProxyListener, ProxyPlan, RunningProxy};
 use crate::sandbox::{Sandbox, SandboxPolicy};
 use crate::secret_session::SecretSession;
 use indexmap::IndexMap;
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::process::Stdio;
 
 const AMBIENT_CREDENTIAL_ENV_VARS: &[&str] = &[
@@ -127,8 +131,9 @@ enum ProxySubcommand {
     /// Print the effective proxy rules
     ///
     /// Validates the `[proxy]` table and prints its egress mode, audit setting,
-    /// and each rule's secret, domain, methods, paths, header or query parameter, and
-    /// placeholder variable. Secrets are not resolved.
+    /// and each rule's secret or lease, domain, methods, paths, header or query
+    /// parameter, and placeholder variable. Secrets are not resolved and no lease
+    /// is created.
     #[usage(
         example("fnox proxy rules", header = "Print the rules"),
         example(
@@ -144,7 +149,8 @@ enum ProxySubcommand {
 /// Run a command with placeholder credentials behind the proxy
 ///
 /// Resolves the secrets that `[[proxy.rules]]` names, plus any secrets their
-/// providers need, starts the proxy on a local port, and runs COMMAND with:
+/// providers need and the parent credentials of the leases rules name, starts
+/// the proxy on a local port, and runs COMMAND with:
 ///
 ///  - each rule's variable set to a placeholder instead of the real value
 ///  - `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` pointing at the proxy, with
@@ -157,8 +163,9 @@ enum ProxySubcommand {
 /// except for the working directory and temporary files, and fnox's
 /// configuration, keys and common credential directories are hidden.
 ///
-/// The command's HTTP client must honor those proxy and CA settings. fnox exits
-/// with the command's exit status.
+/// A lease is created the first time a request needs it and revoked when
+/// COMMAND exits. The command's HTTP client must honor those proxy and CA
+/// settings. fnox exits with the command's exit status.
 #[derive(Debug, usage_rs::Args)]
 #[usage(
     example(
@@ -196,13 +203,17 @@ impl ProxyCommand {
             )
         })?;
         match &self.command {
-            ProxySubcommand::Rules => show_rules(proxy),
+            ProxySubcommand::Rules => {
+                let profile = Config::get_profiles(&cli.profile);
+                let leases = config.get_leases(&profile)?;
+                show_rules(proxy, &lease_credentials(proxy, &leases)?)
+            }
             ProxySubcommand::Run(command) => command.run(cli, config).await,
         }
     }
 }
 
-fn show_rules(proxy: &ProxyConfig) -> Result<()> {
+fn show_rules(proxy: &ProxyConfig, lease_credentials: &HashMap<String, String>) -> Result<()> {
     crate::proxy::validate_config(proxy)?;
     println!("egress: {:?}", proxy.egress);
     println!("audit: {}", proxy.audit);
@@ -223,14 +234,19 @@ fn show_rules(proxy: &ProxyConfig) -> Result<()> {
         } else {
             rule.paths.join(",")
         };
+        let name = rule.value_name();
+        let credential = rule
+            .lease
+            .as_ref()
+            .and_then(|lease| rule.credential.as_ref().or(lease_credentials.get(lease)));
         println!(
             "{} -> https://{} methods={} paths={} {} env={}",
-            rule.secret,
+            name,
             rule.domain,
             methods,
             paths,
             crate::proxy::target_label(rule),
-            rule.env.as_deref().unwrap_or(&rule.secret)
+            rule.env.as_ref().or(credential).unwrap_or(&name)
         );
     }
     Ok(())
@@ -264,17 +280,126 @@ fn collect_requested_secrets(
     all_secrets: &IndexMap<String, SecretConfig>,
 ) -> Result<IndexMap<String, SecretConfig>> {
     let mut requested = IndexMap::new();
-    for rule in &proxy.rules {
-        let secret = all_secrets.get(&rule.secret).ok_or_else(|| {
-            FnoxError::Config(format!(
-                "Proxy rule references unknown secret '{}'",
-                rule.secret
-            ))
+    for name in proxy.rules.iter().filter_map(|rule| rule.secret.as_ref()) {
+        let secret = all_secrets.get(name).ok_or_else(|| {
+            FnoxError::Config(format!("Proxy rule references unknown secret '{name}'"))
         })?;
-        requested.insert(rule.secret.clone(), secret.clone());
+        requested.insert(name.clone(), secret.clone());
     }
 
     crate::secret_session::with_provider_dependencies(config, profile, all_secrets, requested)
+}
+
+/// The variable each lease that rules name injects by default: the only one
+/// it produces. Also checks that each lease exists and produces the
+/// `credential` a rule picks.
+fn lease_credentials(
+    proxy: &ProxyConfig,
+    leases: &IndexMap<String, LeaseBackendConfig>,
+) -> Result<HashMap<String, String>> {
+    let mut credentials = HashMap::new();
+    for rule in &proxy.rules {
+        let Some(name) = &rule.lease else {
+            continue;
+        };
+        let lease = leases.get(name).ok_or_else(|| {
+            FnoxError::Config(format!("Proxy rule references unknown lease '{name}'"))
+        })?;
+        let produced = lease.produced_env_vars();
+        if let Some(credential) = &rule.credential {
+            // A `command` lease's variables are known only once it runs
+            if !produced.is_empty() && !produced.contains(&credential.as_str()) {
+                return Err(FnoxError::Config(format!(
+                    "Proxy rule picks credential '{credential}', which lease '{name}' doesn't produce (it produces {})",
+                    produced.join(", ")
+                )));
+            }
+        } else if let [only] = produced.as_slice() {
+            credentials.insert(name.clone(), only.to_string());
+        } else if produced.is_empty() {
+            return Err(FnoxError::Config(format!(
+                "Proxy rule for lease '{name}' needs `credential`: the lease's variables are known only once it runs"
+            )));
+        } else {
+            return Err(FnoxError::Config(format!(
+                "Proxy rule for lease '{name}' needs `credential` to pick one of {}",
+                produced.join(", ")
+            )));
+        }
+    }
+    Ok(credentials)
+}
+
+/// Creates the leases rules name, and records each in the lease ledger so
+/// `fnox lease list` and `fnox lease revoke` see it. No credentials are
+/// cached: a later `fnox exec` must not reuse a token only the proxy holds.
+struct LedgerMinter {
+    leases: IndexMap<String, LeaseBackendConfig>,
+    project_dir: PathBuf,
+}
+
+impl LeaseMinter for LedgerMinter {
+    fn mint<'a>(&'a self, name: &'a str) -> MintFuture<'a, Lease> {
+        Box::pin(async move {
+            let config = self.lease(name)?;
+            let backend = config.create_backend()?;
+            let duration_str = config
+                .duration()
+                .unwrap_or(crate::lease::DEFAULT_LEASE_DURATION);
+            let duration = crate::lease::parse_duration(duration_str)?;
+            if duration > backend.max_lease_duration() {
+                return Err(FnoxError::Config(format!(
+                    "Lease duration '{duration_str}' for '{name}' exceeds maximum {:?}",
+                    backend.max_lease_duration()
+                )));
+            }
+            let label = format!("fnox-proxy-{name}");
+            let lease = backend.create_lease(duration, &label).await?;
+            let _lock = LeaseLedger::lock(&self.project_dir)?;
+            let mut ledger = LeaseLedger::load(&self.project_dir)?;
+            ledger.add(LeaseRecord {
+                lease_id: lease.lease_id.clone(),
+                backend_name: name.to_string(),
+                label,
+                created_at: chrono::Utc::now(),
+                expires_at: lease.expires_at,
+                revoked: false,
+                cached_credentials: None,
+                encryption_provider: None,
+                config_hash: Some(config.config_hash()),
+            });
+            if let Err(error) = ledger.save(&self.project_dir) {
+                tracing::warn!(
+                    "Lease '{}' created for '{name}' but the ledger save failed: {error}",
+                    lease.lease_id
+                );
+            }
+            Ok(lease)
+        })
+    }
+
+    fn revoke<'a>(&'a self, name: &'a str, minted: &'a Lease) -> MintFuture<'a, ()> {
+        Box::pin(async move {
+            self.lease(name)?
+                .create_backend()?
+                .revoke_lease(&minted.lease_id, Some(&minted.credentials))
+                .await?;
+            let _lock = LeaseLedger::lock(&self.project_dir)?;
+            let mut ledger = LeaseLedger::load(&self.project_dir)?;
+            if ledger.mark_revoked(&minted.lease_id) {
+                ledger.save(&self.project_dir)?;
+            }
+            Ok(())
+        })
+    }
+}
+
+impl LedgerMinter {
+    fn lease(&self, name: &str) -> Result<&LeaseBackendConfig> {
+        self.leases
+            .get(name)
+            .ok_or_else(|| FnoxError::Config(format!("unknown lease '{name}'")))
+    }
 }
 
 impl ProxyRunCommand {
@@ -319,12 +444,48 @@ impl ProxyRunCommand {
             .rules
             .iter()
             .filter_map(|rule| {
-                let value = resolved.get(&rule.secret).cloned().flatten()?;
-                Some((rule.secret.clone(), value))
+                let secret = rule.secret.as_ref()?;
+                let value = resolved.get(secret).cloned().flatten()?;
+                Some((secret.clone(), value))
             })
             .collect();
 
-        let plan = ProxyPlan::new(proxy_config, &values)?;
+        let all_leases = config.get_leases(&profile)?;
+        let lease_credentials = lease_credentials(proxy_config, &all_leases)?;
+        let leases: IndexMap<String, LeaseBackendConfig> = all_leases
+            .into_iter()
+            .filter(|(name, _)| {
+                proxy_config
+                    .rules
+                    .iter()
+                    .any(|rule| rule.lease.as_ref() == Some(name))
+            })
+            .collect();
+        // A backend reads its parent credential from this process's
+        // environment when it creates a lease, so load it now and keep it
+        // for the session. The child's environment drops it below.
+        let mut lease_env = crate::lease::TempEnvGuard::default();
+        let mut _lease_files = Vec::new();
+        for (name, lease) in &leases {
+            _lease_files.extend(
+                crate::lease::load_backend_secrets(lease, &config, &profile, &mut lease_env)
+                    .await?,
+            );
+            if let Some(missing) = lease.check_prerequisites() {
+                return Err(FnoxError::Config(format!(
+                    "Proxy rule for lease '{name}' can't create it: {missing}"
+                )));
+            }
+        }
+
+        let plan = ProxyPlan::with_leases(proxy_config, &values, &lease_credentials)?;
+        if !leases.is_empty() {
+            plan.set_lease_minter(std::sync::Arc::new(LedgerMinter {
+                project_dir: crate::lease::project_dir_from_config(&config, &cli.config),
+                leases: leases.clone(),
+            }));
+        }
+        let proxy_leases = plan.leases();
         let session = std::sync::Arc::new(session);
         plan.set_session(session.clone());
         // Resolving later (a pending secret, or an MCP tool) must not prompt:
@@ -392,6 +553,14 @@ impl ProxyRunCommand {
                 command.env_remove(dependency);
             }
         }
+        for key in &lease_env.keys {
+            command.env_remove(key);
+        }
+        for lease in leases.values() {
+            for key in lease.consumed_env_vars() {
+                command.env_remove(key);
+            }
+        }
         if sandbox.is_some() {
             for key in crate::sandbox::UNSET_ENV {
                 command.env_remove(key);
@@ -432,11 +601,16 @@ impl ProxyRunCommand {
 
         let outcome = if sandbox.is_some() {
             run_until_interrupted(command).await
+        } else if !leases.is_empty() {
+            // Ctrl-C would otherwise end fnox before it revokes the leases
+            run_forwarding_signals(command).await
         } else {
             command.status().await.map(Outcome::Exited)
         };
         crate::sandbox::remove_mount_points(&mount_points);
         running.shutdown().await;
+        proxy_leases.revoke_all().await;
+        drop(lease_env);
         // `process::exit` below skips destructors, so this removes the
         // sandbox's socket directory.
         drop(sandbox);
@@ -492,6 +666,37 @@ async fn run_until_interrupted(mut command: tokio::process::Command) -> std::io:
         };
         let _ = child.kill().await;
         Ok(Outcome::Interrupted(number))
+    }
+    #[cfg(not(unix))]
+    {
+        command.status().await.map(Outcome::Exited)
+    }
+}
+
+/// Runs `command` and passes SIGINT and SIGTERM on to it instead of letting
+/// them end fnox, so fnox outlives the command and can clean up after it.
+async fn run_forwarding_signals(mut command: tokio::process::Command) -> std::io::Result<Outcome> {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+
+        let mut interrupt = signal(SignalKind::interrupt())?;
+        let mut terminate = signal(SignalKind::terminate())?;
+        let mut child = command.spawn()?;
+        let pid = child.id();
+        let forward = |signal| {
+            if let Some(pid) = pid {
+                // SAFETY: kill takes only integer arguments.
+                unsafe { libc::kill(pid as i32, signal) };
+            }
+        };
+        loop {
+            tokio::select! {
+                status = child.wait() => return status.map(Outcome::Exited),
+                _ = interrupt.recv() => forward(libc::SIGINT),
+                _ = terminate.recv() => forward(libc::SIGTERM),
+            }
+        }
     }
     #[cfg(not(unix))]
     {

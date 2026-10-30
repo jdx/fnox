@@ -16,7 +16,7 @@ fnox proxy run -- node agent.js
 
 ## Write rules
 
-Each rule says which secret may be sent where:
+Each rule says which secret, or which [lease](#short-lived-credentials-from-a-lease), may be sent where:
 
 ```toml
 [providers.op]
@@ -85,6 +85,48 @@ domain = "api.stripe.com"
 
 An agent can also ask you for a pending secret itself: with `request_secret` enabled, the agent's `fnox mcp` relays to the proxy, which shows you a page to enter the value (see [MCP inside `fnox proxy run`](/guide/mcp#inside-fnox-proxy-run)).
 
+### Short-lived credentials from a lease
+
+A rule can name a [lease](/guide/leases) instead of a secret. fnox then creates a short-lived credential for the session, sends it only on requests that match the rule, and revokes it when the command exits. The command never holds a token, not even a short-lived one.
+
+```toml
+[secrets]
+GITLAB_TOKEN = { provider = "op", value = "Forge/parent token", env = false }
+
+[leases.forge]
+type = "gitlab"
+url = "https://forge.example.com"
+project = "team/app"
+scopes = ["api"]
+duration = "1h"
+
+[[proxy.rules]]
+lease = "forge"
+domain = "forge.example.com"
+header = "private-token"
+methods = ["POST"]
+paths = ["/api/v4/projects/42/merge_requests/*/notes"]
+```
+
+The command sees a placeholder in `GITLAB_TOKEN`, the variable the lease produces (set `env` to use another name). The parent token stays in fnox:
+
+- **Created on first use.** fnox reads the lease's parent credential at startup, and fails there if it is missing. It creates the lease the first time a request that matches the rule carries the placeholder, so a session that never calls the API creates nothing. Concurrent requests share one lease.
+- **Reused while valid.** The same credential is sent until 30 seconds before it expires; then the next request gets a new one. A replaced value stays redacted from responses.
+- **Revoked at exit.** When the command exits, fnox revokes every lease it created, for backends that support revocation (see the [backend table](/guide/leases#supported-backends)). Under `fnox proxy run` without `--sandbox`, Ctrl-C reaches the command and fnox waits for it to exit before revoking.
+- **Recorded in the ledger.** `fnox lease list` shows each lease the proxy created, labelled `fnox-proxy-<lease>`, and `fnox lease revoke` works on it if fnox was killed before it could revoke. Its credentials aren't cached, so `fnox exec` never reuses a token only the proxy held, and the proxy never reuses one that `fnox exec` cached.
+- **Failures refuse the request.** If fnox can't create the lease, the request is refused with `lease 'forge' could not be created`, and the reason is logged. The next matching request tries again, at most once every 3 seconds.
+
+A lease that produces several variables, or a `command` lease, needs `credential` to pick the one to inject:
+
+```toml
+[[proxy.rules]]
+lease = "db"
+credential = "DB_TOKEN"
+domain = "db-api.example.com"
+```
+
+Rules substitute one value in one header or query parameter, so a lease must produce a bearer-style credential. `aws-sts` credentials, which sign each request, don't work this way.
+
 Check the effective rules without resolving any secrets:
 
 ```sh
@@ -93,12 +135,12 @@ fnox proxy rules
 
 ## What happens
 
-1. fnox blocks other processes from reading its memory, then resolves the secrets named in rules, plus anything their providers need. A secret without a value stays [pending](#secrets-that-aren-t-set-yet).
+1. fnox blocks other processes from reading its memory, then resolves the secrets named in rules, plus anything their providers need, and the parent credentials of the [leases](#short-lived-credentials-from-a-lease) rules name. A secret without a value stays [pending](#secrets-that-aren-t-set-yet).
 2. It starts a proxy on `127.0.0.1` with a temporary certificate authority and a random password for this session.
 3. It starts the command with placeholders, `HTTPS_PROXY` (with the password in the URL), and the CA file in the standard environment variables.
 4. For each request, fnox checks the proxy password, verifies the real server's TLS certificate, and substitutes the placeholder only if domain, method, path, and the header or query parameter all match a rule.
 5. If a response echoes a real secret back, fnox replaces it with the placeholder.
-6. When the command exits, fnox stops the proxy and deletes the CA file. The CA's private key never leaves fnox's memory, and real values go only to the matched service, over TLS, never to the child.
+6. When the command exits, fnox stops the proxy, revokes the leases it created, and deletes the CA file. The CA's private key never leaves fnox's memory, and real values go only to the matched service, over TLS, never to the child.
 
 The password stops other users' programs on a shared machine from using the proxy to send your credentials. Clients read it from `HTTPS_PROXY` automatically. It doesn't stop programs running as you: they can read the password from the command's environment, as they can read your fnox config (see [what it does not protect against](#what-it-does-not-protect-against)). On Linux, fnox also marks itself non-dumpable, so the command can't read fnox's memory or environment through `/proc`. On macOS, it refuses debugger attachment.
 

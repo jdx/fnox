@@ -70,6 +70,16 @@ impl ProxyPlan {
         let _ = self.policy.mcp.set(McpSlot(service));
     }
 
+    /// Create the leases rules name with `minter`
+    pub fn set_lease_minter(&self, minter: Arc<dyn LeaseMinter>) {
+        self.policy.leases.set_minter(minter);
+    }
+
+    /// The leases this proxy creates, to revoke when the session ends
+    pub fn leases(&self) -> Arc<ProxyLeases> {
+        self.policy.leases.clone()
+    }
+
     /// What the MCP tools may know about this proxy's rules and values
     pub fn handle(&self) -> ProxyHandle {
         ProxyHandle {
@@ -79,6 +89,16 @@ impl ProxyPlan {
     }
 
     pub fn new(config: &ProxyConfig, values: &IndexMap<String, String>) -> Result<Self> {
+        Self::with_leases(config, values, &HashMap::new())
+    }
+
+    /// `lease_credentials` maps each lease that rules name to the variable a
+    /// rule injects when it doesn't set `credential`
+    pub fn with_leases(
+        config: &ProxyConfig,
+        values: &IndexMap<String, String>,
+        lease_credentials: &HashMap<String, String>,
+    ) -> Result<Self> {
         validate_config(config)?;
 
         let mut placeholders = HashMap::<String, String>::new();
@@ -86,24 +106,52 @@ impl ProxyPlan {
         let mut prepared = Vec::new();
         let mut seen_placeholders = HashSet::new();
         let mut rule_infos = Vec::new();
+        let mut chosen_credentials = HashMap::<String, String>::new();
 
         for rule in &config.rules {
+            let name = rule.value_name();
+            let credential = match &rule.lease {
+                Some(lease) => {
+                    let credential = rule
+                        .credential
+                        .clone()
+                        .or_else(|| lease_credentials.get(lease).cloned())
+                        .ok_or_else(|| {
+                            proxy_error(format!(
+                                "rule for lease '{lease}' needs `credential` to pick the variable to inject"
+                            ))
+                        })?;
+                    match chosen_credentials.get(lease) {
+                        Some(existing) if *existing != credential => {
+                            return Err(proxy_error(format!(
+                                "rules for lease '{lease}' use different credentials"
+                            )));
+                        }
+                        Some(_) => {}
+                        None => {
+                            chosen_credentials.insert(lease.clone(), credential.clone());
+                        }
+                    }
+                    Some(credential)
+                }
+                None => None,
+            };
             // A secret without a value is pending: see `values.rs`
-            let value = values.get(&rule.secret);
+            let value = values.get(&name);
             if value.is_some_and(|value| value.is_empty()) {
                 return Err(proxy_error(format!(
                     "secret '{}' resolved to an empty value",
-                    rule.secret
+                    name
                 )));
             }
-            let placeholder = match placeholders.get(&rule.secret) {
+            let placeholder = match placeholders.get(&name) {
                 Some(existing) => {
                     if let Some(configured) = &rule.placeholder
                         && configured != existing
                     {
                         return Err(proxy_error(format!(
                             "rules for '{}' use different placeholders",
-                            rule.secret
+                            name
                         )));
                     }
                     existing.clone()
@@ -112,28 +160,37 @@ impl ProxyPlan {
                     let placeholder = rule
                         .placeholder
                         .clone()
-                        .unwrap_or_else(|| generated_placeholder(&rule.secret));
+                        .unwrap_or_else(|| generated_placeholder(&name));
                     if placeholder.is_empty() {
                         return Err(proxy_error(format!(
                             "placeholder for '{}' cannot be empty",
-                            rule.secret
+                            name
                         )));
                     }
                     if value.is_some_and(|value| *value == placeholder) {
                         return Err(proxy_error(format!(
                             "placeholder for '{}' must differ from the real value",
-                            rule.secret
+                            name
                         )));
                     }
                     if !seen_placeholders.insert(placeholder.clone()) {
                         return Err(proxy_error("placeholders must be unique across secrets"));
                     }
-                    placeholders.insert(rule.secret.clone(), placeholder.clone());
+                    placeholders.insert(name.clone(), placeholder.clone());
                     placeholder
                 }
             };
 
-            let env_name = rule.env.as_deref().unwrap_or(&rule.secret);
+            let env_name = rule
+                .env
+                .as_deref()
+                .or(credential.as_deref())
+                .unwrap_or(&name);
+            if [MCP_RELAY_ENV, MCP_RELAY_PROFILE_ENV].contains(&env_name) {
+                return Err(proxy_error(format!(
+                    "rule for '{name}' can't use the environment variable '{env_name}', which fnox reserves"
+                )));
+            }
             if let Some(existing) = env_values.get(env_name)
                 && existing != &placeholder
             {
@@ -142,15 +199,19 @@ impl ProxyPlan {
                 )));
             }
             env_values.insert(env_name.to_string(), placeholder.clone());
-            rule_infos.push(RuleInfo {
-                secret: rule.secret.clone(),
-                env: env_name.to_string(),
-                domain: rule.domain.to_ascii_lowercase(),
-                placeholder: placeholder.clone(),
-            });
+            // A lease isn't a secret the MCP tools could describe or set
+            if rule.lease.is_none() {
+                rule_infos.push(RuleInfo {
+                    secret: name.clone(),
+                    env: env_name.to_string(),
+                    domain: rule.domain.to_ascii_lowercase(),
+                    placeholder: placeholder.clone(),
+                });
+            }
 
             prepared.push(PreparedRule {
-                secret: rule.secret.clone(),
+                secret: name.clone(),
+                lease: rule.lease.clone(),
                 domain: rule.domain.to_ascii_lowercase(),
                 target: Target::for_rule(rule),
                 methods: rule
@@ -188,6 +249,7 @@ impl ProxyPlan {
                 secret: rule.secret.clone(),
                 placeholder: rule.placeholder.clone(),
                 lenient: matches!(rule.target, Target::Query(_)),
+                lease: rule.lease.is_some(),
             })
             .collect();
         let known = values
@@ -217,6 +279,7 @@ impl ProxyPlan {
                 destinations: destinations.clone(),
                 token: data_encoding::HEXLOWER.encode(&rand::random::<[u8; 16]>()),
                 values: Arc::new(SecretValues::new(rule_redactions, known)),
+                leases: Arc::new(ProxyLeases::new(chosen_credentials)),
                 mcp: std::sync::OnceLock::new(),
                 client: reqwest::Client::builder()
                     .http1_only()
@@ -254,27 +317,51 @@ pub(super) fn is_valid_domain_pattern(domain: &str) -> bool {
 }
 
 pub(super) fn validate_rule(rule: &ProxyRule) -> Result<()> {
-    if rule.secret.trim().is_empty() {
-        return Err(proxy_error("rule secret cannot be empty"));
+    match (&rule.secret, &rule.lease) {
+        (Some(_), Some(_)) => {
+            return Err(proxy_error(format!(
+                "rule for domain '{}' sets both secret and lease; choose one",
+                rule.domain
+            )));
+        }
+        (None, None) => {
+            return Err(proxy_error(format!(
+                "rule for domain '{}' needs a secret or a lease",
+                rule.domain
+            )));
+        }
+        (Some(secret), None) if secret.trim().is_empty() => {
+            return Err(proxy_error("rule secret cannot be empty"));
+        }
+        (None, Some(lease)) if lease.trim().is_empty() => {
+            return Err(proxy_error("rule lease cannot be empty"));
+        }
+        _ => {}
     }
-    // A placeholder in these would turn the child's `fnox mcp` relay off
-    let env_name = rule.env.as_deref().unwrap_or(&rule.secret);
-    if [MCP_RELAY_ENV, MCP_RELAY_PROFILE_ENV].contains(&env_name) {
+    let name = rule.value_name();
+    if rule.credential.is_some() && rule.lease.is_none() {
         return Err(proxy_error(format!(
-            "rule for '{}' can't use the environment variable '{env_name}', which fnox reserves",
-            rule.secret
+            "rule for '{name}' sets credential, but credential is only valid with a lease"
+        )));
+    }
+    // A placeholder in these would turn the child's `fnox mcp` relay off. A
+    // lease rule's default variable is checked when the plan is built.
+    if let Some(env_name) = rule.env.as_deref().or(rule.secret.as_deref())
+        && [MCP_RELAY_ENV, MCP_RELAY_PROFILE_ENV].contains(&env_name)
+    {
+        return Err(proxy_error(format!(
+            "rule for '{name}' can't use the environment variable '{env_name}', which fnox reserves"
         )));
     }
     if !is_valid_domain_pattern(&rule.domain) {
         return Err(proxy_error(format!(
-            "rule for '{}' has an invalid domain '{}'",
-            rule.secret, rule.domain
+            "rule for '{name}' has an invalid domain '{}'",
+            rule.domain
         )));
     }
     if rule.header.is_some() && rule.query.is_some() {
         return Err(proxy_error(format!(
-            "rule for '{}' sets both header and query; choose one",
-            rule.secret
+            "rule for '{name}' sets both header and query; choose one"
         )));
     }
     if let Some(header) = &rule.header
@@ -284,23 +371,20 @@ pub(super) fn validate_rule(rule: &ProxyRule) -> Result<()> {
                 .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-'))
     {
         return Err(proxy_error(format!(
-            "rule for '{}' has an invalid header name",
-            rule.secret
+            "rule for '{name}' has an invalid header name"
         )));
     }
     if let Some(query) = &rule.query
         && query.is_empty()
     {
         return Err(proxy_error(format!(
-            "rule for '{}' has an empty query parameter name",
-            rule.secret
+            "rule for '{name}' has an empty query parameter name"
         )));
     }
     for method in &rule.methods {
         Method::from_bytes(method.as_bytes()).map_err(|_| {
             proxy_error(format!(
-                "rule for '{}' has an invalid HTTP method '{method}'",
-                rule.secret
+                "rule for '{name}' has an invalid HTTP method '{method}'"
             ))
         })?;
     }

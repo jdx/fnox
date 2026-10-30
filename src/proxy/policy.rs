@@ -48,7 +48,9 @@ pub(super) fn domain_matches(pattern: &str, domain: &str) -> bool {
 
 #[derive(Debug)]
 pub(super) struct PreparedRule {
+    /// The secret's name, or `lease:<name>` for a lease rule
     pub(super) secret: String,
+    pub(super) lease: Option<String>,
     pub(super) domain: String,
     pub(super) target: Target,
     pub(super) methods: HashSet<String>,
@@ -79,6 +81,7 @@ pub(super) struct ProxyPolicy {
     /// can read it from the child's environment.
     pub(super) token: String,
     pub(super) values: Arc<SecretValues>,
+    pub(super) leases: Arc<ProxyLeases>,
     /// Serves MCP to `fnox mcp` relays that CONNECT to [`MCP_HOST`]
     pub(super) mcp: std::sync::OnceLock<McpSlot>,
     pub(super) client: reqwest::Client,
@@ -180,7 +183,8 @@ impl ProxyPolicy {
         self.values.redactions()
     }
 
-    /// Resolve again the pending secrets this request needs
+    /// Resolve again the pending secrets this request needs, and create the
+    /// leases it needs that have no usable value
     pub(super) async fn refresh_pending(
         &self,
         domain: &str,
@@ -188,15 +192,26 @@ impl ProxyPolicy {
         url: &reqwest::Url,
         headers: &[(String, String)],
     ) {
-        let secrets = self.secrets_needed(domain, method, url, headers);
+        let rules = self.rules_needed(domain, method, url, headers);
+        let secrets: Vec<&str> = rules
+            .iter()
+            .filter(|rule| rule.lease.is_none())
+            .map(|rule| rule.secret.as_str())
+            .collect();
         if !secrets.is_empty() {
             self.values.refresh(&secrets).await;
         }
+        let leases: Vec<&str> = rules
+            .iter()
+            .filter_map(|rule| rule.lease.as_deref())
+            .collect();
+        if !leases.is_empty() {
+            self.leases.ensure(&self.values, &leases).await;
+        }
     }
 
-    /// The secrets of rules whose domain and route match a request and whose
-    /// placeholder it carries in the rule's own header or query parameter,
-    /// read the way [`Self::authorize`] reads them (query values decoded)
+    /// The secrets of the rules [`Self::rules_needed`] returns
+    #[cfg(test)]
     pub(super) fn secrets_needed(
         &self,
         domain: &str,
@@ -204,6 +219,22 @@ impl ProxyPolicy {
         url: &reqwest::Url,
         headers: &[(String, String)],
     ) -> Vec<&str> {
+        self.rules_needed(domain, method, url, headers)
+            .into_iter()
+            .map(|rule| rule.secret.as_str())
+            .collect()
+    }
+
+    /// Rules whose domain and route match a request and whose placeholder it
+    /// carries in the rule's own header or query parameter, read the way
+    /// [`Self::authorize`] reads them (query values decoded)
+    fn rules_needed(
+        &self,
+        domain: &str,
+        method: &str,
+        url: &reqwest::Url,
+        headers: &[(String, String)],
+    ) -> Vec<&PreparedRule> {
         let path = url.path();
         let query = QuerySegments::parse(url.query());
         self.rules
@@ -222,7 +253,6 @@ impl ProxyPolicy {
                             .is_some_and(|param| param == *name),
                     }
             })
-            .map(|rule| rule.secret.as_str())
             .collect()
     }
 
@@ -350,12 +380,17 @@ impl ProxyPolicy {
             // Checked after the placeholder's place, so a misplaced one is
             // reported as misplaced rather than as a secret to set
             let value = || {
-                self.values.value(&rule.secret).ok_or_else(|| {
-                    proxy_error(format!(
-                        "secret '{}' is not set yet; set it, for example with `fnox set {}`, and retry",
-                        rule.secret, rule.secret
-                    ))
-                })
+                self.values
+                    .value(&rule.secret)
+                    .ok_or_else(|| match &rule.lease {
+                        Some(lease) => proxy_error(format!(
+                            "lease '{lease}' could not be created; see the fnox log, and retry"
+                        )),
+                        None => proxy_error(format!(
+                            "secret '{}' is not set yet; set it, for example with `fnox set {}`, and retry",
+                            rule.secret, rule.secret
+                        )),
+                    })
             };
 
             if in_path > 0 {

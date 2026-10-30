@@ -131,6 +131,10 @@ Leases are recorded in a per-project ledger under `~/.local/state/fnox/leases/`.
 
 Entries are pruned automatically 24 hours after they expire, or 24 hours after they were created if they have no expiry, whether or not they were revoked. Revoking a ledger entry for a backend that "expires on its own" doesn't invalidate the credential early.
 
+## Leases in the proxy
+
+`fnox exec` puts lease credentials in the command's environment. To keep them out of it, name the lease in a [proxy rule](/guide/proxy#short-lived-credentials-from-a-lease): `fnox proxy run` creates the lease on first use, sends it only on requests the rule allows, and revokes it when the command exits.
+
 ## Leases in profiles
 
 Define `[profiles.<name>.leases.<lease>]` to use a different role or account per environment. See the [configuration reference](/reference/configuration#lease-backend-settings).

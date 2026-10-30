@@ -249,14 +249,9 @@ mod tests {
     fn under_the_proxy_tools_describe_placeholders() {
         let config = crate::config::ProxyConfig {
             rules: vec![crate::config::ProxyRule {
-                secret: "API_TOKEN".into(),
+                secret: Some("API_TOKEN".into()),
                 domain: "api.example.com".into(),
-                env: None,
-                header: None,
-                query: None,
-                methods: vec![],
-                paths: vec![],
-                placeholder: None,
+                ..Default::default()
             }],
             ..Default::default()
         };

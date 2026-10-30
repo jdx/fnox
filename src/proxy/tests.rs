@@ -9,7 +9,9 @@ fn config() -> ProxyConfig {
         egress: ProxyEgress::Strict,
         audit: false,
         rules: vec![ProxyRule {
-            secret: "GITHUB_TOKEN".to_string(),
+            secret: Some("GITHUB_TOKEN".to_string()),
+            lease: None,
+            credential: None,
             domain: "api.github.com".to_string(),
             env: None,
             header: Some("authorization".to_string()),
@@ -149,7 +151,9 @@ fn redacts_overlapping_values_without_scanning_placeholders() {
     let mut config = config();
     config.rules[0].placeholder = Some("placeholder-with-token".to_string());
     config.rules.push(ProxyRule {
-        secret: "SHORT_TOKEN".to_string(),
+        secret: Some("SHORT_TOKEN".to_string()),
+        lease: None,
+        credential: None,
         domain: "api.github.com".to_string(),
         env: None,
         header: Some("x-api-key".to_string()),
@@ -194,7 +198,9 @@ fn sibling_rules_allow_any_matching_route() {
     let mut config = config();
     config.rules[0].paths = vec!["/repos/example/issues/**".to_string()];
     config.rules.push(ProxyRule {
-        secret: "GITHUB_TOKEN".to_string(),
+        secret: Some("GITHUB_TOKEN".to_string()),
+        lease: None,
+        credential: None,
         domain: "api.github.com".to_string(),
         env: None,
         header: Some("authorization".to_string()),
@@ -271,7 +277,9 @@ async fn explicit_empty_request_body_is_allowed() {
 fn rejects_overlapping_placeholders() {
     let mut config = config();
     config.rules.push(ProxyRule {
-        secret: "OTHER_TOKEN".to_string(),
+        secret: Some("OTHER_TOKEN".to_string()),
+        lease: None,
+        credential: None,
         domain: "api.github.com".to_string(),
         env: None,
         header: Some("x-api-key".to_string()),
@@ -306,7 +314,9 @@ fn plan_with(rules: Vec<ProxyRule>, value: &str) -> Result<ProxyPlan> {
 
 fn query_rule(domain: &str, query: &str) -> ProxyRule {
     ProxyRule {
-        secret: "API_KEY".to_string(),
+        secret: Some("API_KEY".to_string()),
+        lease: None,
+        credential: None,
         domain: domain.to_string(),
         env: None,
         header: None,
@@ -1054,4 +1064,264 @@ fn a_forgotten_value_is_pending_and_stays_redacted() {
     let mut body = b"old real-token".to_vec();
     redact_values(&mut body, &plan.policy.redactions());
     assert_eq!(body, b"old ghp_placeholder");
+}
+
+fn lease_rule() -> ProxyRule {
+    ProxyRule {
+        lease: Some("forge".to_string()),
+        domain: "forge.example.com".to_string(),
+        header: Some("private-token".to_string()),
+        methods: vec!["POST".to_string()],
+        paths: vec!["/api/v4/projects/42/merge_requests/*/notes".to_string()],
+        placeholder: Some("glpat-placeholder".to_string()),
+        ..ProxyRule::default()
+    }
+}
+
+fn lease_config(rules: Vec<ProxyRule>) -> ProxyConfig {
+    ProxyConfig {
+        egress: ProxyEgress::Strict,
+        audit: false,
+        rules,
+        ..ProxyConfig::default()
+    }
+}
+
+/// Mints `forge-token-1`, `forge-token-2`, ... and records every call
+#[derive(Default)]
+struct FakeMinter {
+    minted: std::sync::Mutex<Vec<String>>,
+    revoked: std::sync::Mutex<Vec<String>>,
+    fail: std::sync::atomic::AtomicBool,
+    /// Lifetime of each minted lease; `None` never expires
+    lifetime: Option<chrono::Duration>,
+}
+
+impl LeaseMinter for FakeMinter {
+    fn mint<'a>(&'a self, lease: &'a str) -> MintFuture<'a, crate::lease_backends::Lease> {
+        Box::pin(async move {
+            if self.fail.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err(proxy_error("backend unavailable"));
+            }
+            // Lets concurrent requests overlap while one is minting
+            tokio::task::yield_now().await;
+            let mut minted = self.minted.lock().unwrap();
+            let id = format!("{lease}-{}", minted.len() + 1);
+            minted.push(id.clone());
+            Ok(crate::lease_backends::Lease {
+                credentials: [(
+                    "GITLAB_TOKEN".to_string(),
+                    format!("{lease}-token-{}", minted.len()),
+                )]
+                .into_iter()
+                .collect(),
+                expires_at: self.lifetime.map(|lifetime| chrono::Utc::now() + lifetime),
+                lease_id: id,
+            })
+        })
+    }
+
+    fn revoke<'a>(
+        &'a self,
+        _lease: &'a str,
+        minted: &'a crate::lease_backends::Lease,
+    ) -> MintFuture<'a, ()> {
+        Box::pin(async move {
+            self.revoked.lock().unwrap().push(minted.lease_id.clone());
+            Ok(())
+        })
+    }
+}
+
+fn lease_plan(minter: Arc<FakeMinter>) -> ProxyPlan {
+    let credentials = [("forge".to_string(), "GITLAB_TOKEN".to_string())]
+        .into_iter()
+        .collect();
+    let plan = ProxyPlan::with_leases(
+        &lease_config(vec![lease_rule()]),
+        &IndexMap::new(),
+        &credentials,
+    )
+    .unwrap();
+    plan.set_lease_minter(minter);
+    plan
+}
+
+const NOTES: &str = "/api/v4/projects/42/merge_requests/7/notes";
+
+/// Sends one request through the same steps the server takes
+async fn send(plan: &ProxyPlan, method: &str, target: &str) -> Result<(Vec<String>, String)> {
+    let url = reqwest::Url::parse(&format!("https://forge.example.com{target}")).unwrap();
+    let mut headers = vec![("private-token".to_string(), "glpat-placeholder".to_string())];
+    plan.policy
+        .refresh_pending("forge.example.com", method, &url, &headers)
+        .await;
+    let (injected, _) = authorize(plan, "forge.example.com", method, target, &mut headers)?;
+    Ok((injected, headers[0].1.clone()))
+}
+
+#[test]
+fn a_rule_names_exactly_one_of_secret_or_lease() {
+    let both = ProxyRule {
+        secret: Some("GITLAB_TOKEN".to_string()),
+        ..lease_rule()
+    };
+    let error = validate_config(&lease_config(vec![both]))
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("both secret and lease"), "{error}");
+
+    let neither = ProxyRule {
+        lease: None,
+        ..lease_rule()
+    };
+    let error = validate_config(&lease_config(vec![neither]))
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("needs a secret or a lease"), "{error}");
+
+    let credential_without_lease = ProxyRule {
+        secret: Some("GITLAB_TOKEN".to_string()),
+        lease: None,
+        credential: Some("GITLAB_TOKEN".to_string()),
+        ..lease_rule()
+    };
+    let error = validate_config(&lease_config(vec![credential_without_lease]))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("credential is only valid with a lease"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_lease_rule_hands_the_child_a_placeholder_under_the_credential_name() {
+    let plan = lease_plan(Arc::default());
+    assert_eq!(plan.child_env["GITLAB_TOKEN"], "glpat-placeholder");
+    // Not a secret: nothing to `fnox set`, and nothing the MCP tools may offer
+    assert!(plan.pending().is_empty());
+    assert!(plan.handle().rules().is_empty());
+}
+
+#[test]
+fn rules_for_one_lease_must_pick_the_same_credential() {
+    let other = ProxyRule {
+        credential: Some("OTHER".to_string()),
+        paths: vec![],
+        ..lease_rule()
+    };
+    let credentials = [("forge".to_string(), "GITLAB_TOKEN".to_string())]
+        .into_iter()
+        .collect();
+    let mut first = lease_rule();
+    first.credential = Some("GITLAB_TOKEN".to_string());
+    let error = ProxyPlan::with_leases(
+        &lease_config(vec![first, other]),
+        &IndexMap::new(),
+        &credentials,
+    )
+    .err()
+    .unwrap()
+    .to_string();
+    assert!(error.contains("different credentials"), "{error}");
+}
+
+#[tokio::test]
+async fn a_lease_is_minted_on_first_use_and_reused() {
+    let minter = Arc::new(FakeMinter::default());
+    let plan = lease_plan(minter.clone());
+    assert!(minter.minted.lock().unwrap().is_empty(), "minting is lazy");
+
+    let (injected, header) = send(&plan, "POST", NOTES).await.unwrap();
+    assert_eq!(injected, vec!["lease:forge".to_string()]);
+    assert_eq!(header, "forge-token-1");
+    let (_, header) = send(&plan, "POST", NOTES).await.unwrap();
+    assert_eq!(header, "forge-token-1");
+    assert_eq!(*minter.minted.lock().unwrap(), vec!["forge-1".to_string()]);
+
+    let mut body = b"echo forge-token-1".to_vec();
+    redact_values(&mut body, &plan.policy.redactions());
+    assert_eq!(body, b"echo glpat-placeholder");
+}
+
+#[tokio::test]
+async fn a_request_outside_the_rule_mints_nothing() {
+    let minter = Arc::new(FakeMinter::default());
+    let plan = lease_plan(minter.clone());
+    assert!(send(&plan, "GET", NOTES).await.is_err());
+    assert!(send(&plan, "POST", "/api/v4/user").await.is_err());
+    assert!(minter.minted.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn concurrent_requests_share_one_lease() {
+    let minter = Arc::new(FakeMinter::default());
+    let plan = Arc::new(lease_plan(minter.clone()));
+    let requests = (0..8).map(|_| {
+        let plan = plan.clone();
+        tokio::spawn(async move { send(&plan, "POST", NOTES).await.unwrap().1 })
+    });
+    for request in requests {
+        assert_eq!(request.await.unwrap(), "forge-token-1");
+    }
+    assert_eq!(minter.minted.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn an_expiring_lease_is_minted_again_and_the_old_value_stays_redacted() {
+    let minter = Arc::new(FakeMinter {
+        // Inside the reuse margin from the start
+        lifetime: Some(chrono::Duration::seconds(5)),
+        ..FakeMinter::default()
+    });
+    let plan = lease_plan(minter.clone());
+    assert_eq!(send(&plan, "POST", NOTES).await.unwrap().1, "forge-token-1");
+    assert_eq!(send(&plan, "POST", NOTES).await.unwrap().1, "forge-token-2");
+
+    let mut body = b"forge-token-1 forge-token-2".to_vec();
+    redact_values(&mut body, &plan.policy.redactions());
+    assert_eq!(body, b"glpat-placeholder glpat-placeholder");
+}
+
+#[tokio::test]
+async fn a_failed_mint_refuses_the_request_and_is_retried_later() {
+    let minter = Arc::new(FakeMinter::default());
+    minter.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    let plan = lease_plan(minter.clone());
+
+    let error = send(&plan, "POST", NOTES).await.unwrap_err().to_string();
+    assert!(
+        error.contains("lease 'forge' could not be created"),
+        "{error}"
+    );
+
+    minter
+        .fail
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    // Within the retry window the failure stands
+    assert!(send(&plan, "POST", NOTES).await.is_err());
+    plan.policy.leases.retry_now("forge");
+    assert_eq!(send(&plan, "POST", NOTES).await.unwrap().1, "forge-token-1");
+}
+
+#[tokio::test]
+async fn every_lease_minted_in_the_session_is_revoked_at_the_end() {
+    let minter = Arc::new(FakeMinter {
+        lifetime: Some(chrono::Duration::seconds(5)),
+        ..FakeMinter::default()
+    });
+    let plan = lease_plan(minter.clone());
+    let leases = plan.leases();
+    send(&plan, "POST", NOTES).await.unwrap();
+    send(&plan, "POST", NOTES).await.unwrap();
+
+    leases.revoke_all().await;
+    assert_eq!(
+        *minter.revoked.lock().unwrap(),
+        vec!["forge-1".to_string(), "forge-2".to_string()]
+    );
+    // Revoking twice does nothing more
+    leases.revoke_all().await;
+    assert_eq!(minter.revoked.lock().unwrap().len(), 2);
 }

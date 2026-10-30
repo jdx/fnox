@@ -457,24 +457,26 @@ domain = "*.maps.example.com"
 query = "key"
 ```
 
-| Field                 | Type                       | Default           | Description                                                                                                                |
-| --------------------- | -------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `egress`              | `"strict"`, `"permissive"` | `"strict"`        | Reject destinations without a rule, or tunnel them without credentials.                                                    |
-| `audit`               | boolean                    | `true`            | Log proxied and refused requests. Headers, bodies, and values are never logged.                                            |
-| `allow_domains`       | array of strings           | none              | Domains tunneled without credentials, even with strict egress. Same patterns as `rules[].domain`.                          |
-| `allow_private`       | array of IPs or CIDRs      | none              | Non-public networks the proxy may connect to. Loopback, link-local, and private addresses are refused otherwise.           |
-| `sandbox`             | boolean                    | `false`           | Run `fnox proxy run` commands in an OS sandbox whose only network route is the proxy. See [sandbox](/guide/proxy#sandbox). |
-| `sandbox_allow_write` | array of paths             | none              | Extra paths the sandboxed command may write, besides the working directory and temporary files.                            |
-| `sandbox_deny_read`   | array of paths             | none              | Extra paths the sandboxed command may not read.                                                                            |
-| `sandbox_allow_read`  | array of paths             | none              | Paths the sandbox hides by default that the command may read, such as `fnox.toml`.                                         |
-| `rules[].secret`      | string                     | required          | Secret to inject, from the active profile.                                                                                 |
-| `rules[].domain`      | string                     | required          | TLS server name the secret may be sent to. A leading `*.` matches one subdomain label.                                     |
-| `rules[].env`         | string                     | `rules[].secret`  | Variable that holds the placeholder in the command's environment.                                                          |
-| `rules[].header`      | string                     | `"authorization"` | Header, case-insensitive, in which the placeholder is replaced. Not allowed with `query`.                                  |
-| `rules[].query`       | string                     | none              | Query parameter in which the placeholder is replaced, instead of a header. Not allowed with `header`.                      |
-| `rules[].methods`     | array of strings           | every method      | Allowed HTTP methods.                                                                                                      |
-| `rules[].paths`       | array of globs             | every path        | Allowed URL paths.                                                                                                         |
-| `rules[].placeholder` | string                     | generated         | Placeholder value given to the command.                                                                                    |
+| Field                 | Type                       | Default              | Description                                                                                                                |
+| --------------------- | -------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `egress`              | `"strict"`, `"permissive"` | `"strict"`           | Reject destinations without a rule, or tunnel them without credentials.                                                    |
+| `audit`               | boolean                    | `true`               | Log proxied and refused requests. Headers, bodies, and values are never logged.                                            |
+| `allow_domains`       | array of strings           | none                 | Domains tunneled without credentials, even with strict egress. Same patterns as `rules[].domain`.                          |
+| `allow_private`       | array of IPs or CIDRs      | none                 | Non-public networks the proxy may connect to. Loopback, link-local, and private addresses are refused otherwise.           |
+| `sandbox`             | boolean                    | `false`              | Run `fnox proxy run` commands in an OS sandbox whose only network route is the proxy. See [sandbox](/guide/proxy#sandbox). |
+| `sandbox_allow_write` | array of paths             | none                 | Extra paths the sandboxed command may write, besides the working directory and temporary files.                            |
+| `sandbox_deny_read`   | array of paths             | none                 | Extra paths the sandboxed command may not read.                                                                            |
+| `sandbox_allow_read`  | array of paths             | none                 | Paths the sandbox hides by default that the command may read, such as `fnox.toml`.                                         |
+| `rules[].secret`      | string                     | none                 | Secret to inject, from the active profile. Set this or `lease`.                                                            |
+| `rules[].lease`       | string                     | none                 | Lease to create and inject instead of a secret. See [leases](/guide/proxy#short-lived-credentials-from-a-lease).           |
+| `rules[].credential`  | string                     | the only one         | Variable of the lease to inject. Required when the lease produces several, or for a `command` lease.                       |
+| `rules[].domain`      | string                     | required             | TLS server name the secret may be sent to. A leading `*.` matches one subdomain label.                                     |
+| `rules[].env`         | string                     | secret or credential | Variable that holds the placeholder in the command's environment.                                                          |
+| `rules[].header`      | string                     | `"authorization"`    | Header, case-insensitive, in which the placeholder is replaced. Not allowed with `query`.                                  |
+| `rules[].query`       | string                     | none                 | Query parameter in which the placeholder is replaced, instead of a header. Not allowed with `header`.                      |
+| `rules[].methods`     | array of strings           | every method         | Allowed HTTP methods.                                                                                                      |
+| `rules[].paths`       | array of globs             | every path           | Allowed URL paths.                                                                                                         |
+| `rules[].placeholder` | string                     | generated            | Placeholder value given to the command.                                                                                    |
 
 A later config file that sets `[proxy]` replaces the whole table, so it must restate every rule it allows. See [credential proxy](/guide/proxy).
 

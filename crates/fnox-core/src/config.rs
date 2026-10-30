@@ -577,18 +577,31 @@ pub enum ProxyEgress {
     Permissive,
 }
 
-/// Substitute one configured secret into requests for an approved destination.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+/// Substitute one configured secret, or a lease's credential, into requests
+/// for an approved destination.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProxyRule {
-    /// Secret name from the active fnox profile.
-    pub secret: String,
+    /// Secret name from the active fnox profile. Set this or `lease`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret: Option<String>,
+
+    /// Lease backend from `[leases]` whose credential the proxy creates on
+    /// first use and revokes when the session ends. Set this or `secret`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lease: Option<String>,
+
+    /// Which variable the lease produces to inject. Defaults to the only one;
+    /// required when the lease produces several or is a `command` lease.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credential: Option<String>,
 
     /// TLS server name to which the secret may be sent. A leading `*.` matches
     /// exactly one subdomain label, such as `*.example.com`.
     pub domain: String,
 
-    /// Environment variable exposed to the child. Defaults to `secret`.
+    /// Environment variable exposed to the child. Defaults to `secret`, or
+    /// to the lease's credential.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub env: Option<String>,
 
@@ -613,6 +626,18 @@ pub struct ProxyRule {
     /// Placeholder passed to the child. A unique value is generated when omitted.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placeholder: Option<String>,
+}
+
+impl ProxyRule {
+    /// The name the proxy uses for this rule's value in lookups, errors and
+    /// audit lines: the secret, or `lease:<name>`
+    pub fn value_name(&self) -> String {
+        match (&self.secret, &self.lease) {
+            (Some(secret), _) => secret.clone(),
+            (None, Some(lease)) => format!("lease:{lease}"),
+            (None, None) => String::new(),
+        }
+    }
 }
 
 fn default_true() -> bool {
@@ -3704,14 +3729,9 @@ inherits = []
 
     fn proxy_rule(secret: &str, domain: &str) -> ProxyRule {
         ProxyRule {
-            secret: secret.into(),
+            secret: Some(secret.into()),
             domain: domain.into(),
-            env: None,
-            header: None,
-            query: None,
-            methods: Vec::new(),
-            paths: Vec::new(),
-            placeholder: None,
+            ..ProxyRule::default()
         }
     }
 
@@ -3739,7 +3759,7 @@ inherits = []
             .rules;
 
         assert_eq!(rules.len(), 1, "overlay must replace the base rules");
-        assert_eq!(rules[0].secret, "B");
+        assert_eq!(rules[0].secret.as_deref(), Some("B"));
     }
 
     #[test]
@@ -3759,7 +3779,7 @@ inherits = []
             .rules;
 
         assert_eq!(rules.len(), 1);
-        assert_eq!(rules[0].secret, "A");
+        assert_eq!(rules[0].secret.as_deref(), Some("A"));
     }
 
     #[test]
@@ -3955,7 +3975,7 @@ placeholder = "ghp_placeholder"
         assert_eq!(proxy.egress, ProxyEgress::Strict);
         assert!(proxy.audit);
         assert_eq!(proxy.rules.len(), 1);
-        assert_eq!(proxy.rules[0].secret, "GITHUB_TOKEN");
+        assert_eq!(proxy.rules[0].secret.as_deref(), Some("GITHUB_TOKEN"));
         assert_eq!(proxy.rules[0].domain, "api.github.com");
         assert_eq!(proxy.rules[0].methods, ["GET", "POST"]);
     }

@@ -21,6 +21,8 @@ pub(super) struct RuleRedaction {
     pub(super) secret: String,
     pub(super) placeholder: String,
     pub(super) lenient: bool,
+    /// A lease's value is created, never set, so it is not pending
+    pub(super) lease: bool,
 }
 
 #[derive(Debug, Default)]
@@ -92,7 +94,7 @@ impl SecretValues {
     pub(super) fn pending(&self) -> Vec<String> {
         let state = self.state.read().unwrap_or_else(|e| e.into_inner());
         let mut pending: Vec<String> = Vec::new();
-        for rule in &self.rules {
+        for rule in self.rules.iter().filter(|rule| !rule.lease) {
             if !state.values.contains_key(&rule.secret) && !pending.contains(&rule.secret) {
                 pending.push(rule.secret.clone());
             }

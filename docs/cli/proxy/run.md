@@ -10,7 +10,7 @@ description: "Run a command with placeholder credentials behind the proxy. Usage
 
 Run a command with placeholder credentials behind the proxy
 
-Resolves the secrets that `[[proxy.rules]]` names, plus any secrets their providers need, starts the proxy on a local port, and runs COMMAND with:
+Resolves the secrets that `[[proxy.rules]]` names, plus any secrets their providers need and the parent credentials of the leases rules name, starts the proxy on a local port, and runs COMMAND with:
 
 - each rule's variable set to a placeholder instead of the real value
 - `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` pointing at the proxy, with
@@ -20,7 +20,7 @@ Resolves the secrets that `[[proxy.rules]]` names, plus any secrets their provid
 
 With `--sandbox` (or `sandbox = true`), the command also runs in an OS sandbox: its only network route is the proxy, the filesystem is read-only except for the working directory and temporary files, and fnox's configuration, keys and common credential directories are hidden.
 
-The command's HTTP client must honor those proxy and CA settings. fnox exits with the command's exit status.
+A lease is created the first time a request needs it and revoked when COMMAND exits. The command's HTTP client must honor those proxy and CA settings. fnox exits with the command's exit status.
 
 ## Arguments
 
