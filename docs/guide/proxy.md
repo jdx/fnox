@@ -240,7 +240,7 @@ sandbox_allow_read = ["fnox.toml"]
 | Platform | Needs                                                                   | How it works                                                                                                                                             |
 | -------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Linux    | [`bwrap`](https://github.com/containers/bubblewrap) and user namespaces | The command runs in new network, PID, and IPC namespaces. A small forwarder, `fnox sandbox-bridge`, exposes the proxy on `127.0.0.1` inside the sandbox. |
-| macOS    | `/usr/bin/sandbox-exec`                                                 | A generated seatbelt profile allows network access only to the proxy's loopback port.                                                                    |
+| macOS    | `/usr/bin/sandbox-exec`                                                 | A generated seatbelt profile allows network access only to the proxy's loopback port and blocks launching apps with `open`.                              |
 | Windows  | not supported                                                           | `--sandbox` is an error.                                                                                                                                 |
 
 fnox never falls back to running unsandboxed: if the tool is missing or the machine forbids user namespaces, `fnox proxy run` exits before it resolves any secret. Some distributions restrict unprivileged user namespaces (Ubuntu 24.04 does by default through AppArmor); allow `bwrap` there or relax the restriction.
@@ -248,7 +248,7 @@ fnox never falls back to running unsandboxed: if the tool is missing or the mach
 ### Limits
 
 - The sandbox starts a new session on Linux so the command can't inject keystrokes into your terminal. Interactive programs still read and write the terminal, but Ctrl-C reaches fnox rather than the command, and fnox stops it.
-- On macOS the sandbox cannot hide other processes or Mach services. `sandbox-exec` is deprecated by Apple but still works, and the Keychain stays reachable through its system service. fnox keeps `deny_inspection` on its own memory.
+- On macOS the sandbox cannot hide other processes or Mach services. `sandbox-exec` is deprecated by Apple but still works, and the Keychain stays reachable through its system service. The profile does block `open`, because an app it launched would run outside the sandbox. fnox keeps `deny_inspection` on its own memory.
 - The command can still do whatever your rules allow: the sandbox limits where credentials can go, not what an allowed request says.
 - A kernel or sandbox vulnerability is out of scope, as is a command that tricks you into running something outside the sandbox later, such as editing a project file you then execute.
 
