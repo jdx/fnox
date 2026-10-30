@@ -203,9 +203,8 @@ PLIST
 	[ -e "$marker" ] || skip "Launch Services cannot launch the probe app here"
 	rm -f "$marker"
 
-	run "$FNOX_BIN" proxy run --sandbox -- open -g -j ./Probe.app
+	run "$FNOX_BIN" proxy run --sandbox -- open -g -j -W ./Probe.app
 	assert_failure
 	assert_output --partial "-54"
-	sleep 3
 	assert_file_not_exists "$marker"
 }
