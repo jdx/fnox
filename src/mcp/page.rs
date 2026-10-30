@@ -480,6 +480,34 @@ mod tests {
             .unwrap()
     }
 
+    /// Checks that the page is gone rather than that its port refuses connections:
+    /// tests run in parallel, and another can bind a freed port before this looks.
+    /// It uses a blocking socket because Tokio's paused clock can't bound real I/O.
+    async fn assert_page_not_served(url: &url::Url) {
+        let address = url.socket_addrs(|| None).unwrap()[0];
+        let request = format!(
+            "GET {} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n",
+            url.path()
+        );
+        let status = tokio::task::spawn_blocking(move || {
+            use std::io::{Read, Write};
+            let wait = Duration::from_secs(2);
+            let mut stream = std::net::TcpStream::connect_timeout(&address, wait).ok()?;
+            stream.set_read_timeout(Some(wait)).ok()?;
+            stream.write_all(request.as_bytes()).ok()?;
+            let mut status = [0u8; 12];
+            stream.read_exact(&mut status).ok()?;
+            Some(status)
+        })
+        .await
+        .unwrap();
+        assert_ne!(
+            status.as_ref(),
+            Some(b"HTTP/1.1 200"),
+            "the page must stop being served"
+        );
+    }
+
     #[tokio::test]
     async fn serves_the_form_only_at_its_token_path() {
         let page = SecretPage::start(details()).await.unwrap();
@@ -731,7 +759,6 @@ mod tests {
         });
         let page = SecretPage::start(details()).await.unwrap();
         let url = page.url().clone();
-        let address = page.state.host.clone();
         page.state.complete((200, message_page("Saved", "Stored.")));
         let listener = page.server.abort_handle();
         drop(page);
@@ -739,7 +766,7 @@ mod tests {
         tokio::task::yield_now().await;
 
         tokio::time::advance(CONFIRMATION_LIFETIME - Duration::from_millis(1)).await;
-        let response = client().get(url).send().await.unwrap();
+        let response = client().get(url.clone()).send().await.unwrap();
         assert_eq!(response.status(), 200);
         assert!(response.text().await.unwrap().contains("<h1>Saved</h1>"));
 
@@ -754,14 +781,14 @@ mod tests {
             listener.is_finished(),
             "the confirmation listener must stop"
         );
-        assert!(TcpStream::connect(address).await.is_err());
+        assert_page_not_served(&url).await;
         clock_guard.abort();
     }
 
     #[tokio::test(start_paused = true)]
     async fn dropping_a_pending_page_closes_the_listener_without_a_grace_period() {
         let page = SecretPage::start(details()).await.unwrap();
-        let address = page.state.host.clone();
+        let url = page.url().clone();
         let listener = page.server.abort_handle();
         let before = tokio::time::Instant::now();
         drop(page);
@@ -772,7 +799,7 @@ mod tests {
             tokio::task::yield_now().await;
         }
         assert!(listener.is_finished(), "a pending listener must stop");
-        assert!(TcpStream::connect(address).await.is_err());
+        assert_page_not_served(&url).await;
         assert_eq!(tokio::time::Instant::now(), before);
     }
 }

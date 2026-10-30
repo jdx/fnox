@@ -141,12 +141,25 @@ while b"\r\n\r\n" not in data:
 c.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
 c.close()
 PY
-	coproc FAKE_PROXY { "${PYTHON3:-python3}" fake_proxy.py; }
-	local port
-	read -r port <&"${FAKE_PROXY[0]}"
+	# The port goes through a file rather than a coproc, whose descriptors bash
+	# closes as soon as the child is reaped (seen failing on macOS)
+	"${PYTHON3:-python3}" fake_proxy.py >fake_proxy.port 2>fake_proxy.err &
+	local fake_pid=$! port=""
+	for _ in $(seq 1 100); do
+		port=$(cat fake_proxy.port 2>/dev/null || true)
+		[[ -n $port ]] && break
+		kill -0 "$fake_pid" 2>/dev/null || break
+		sleep 0.1
+	done
+	if [[ -z $port ]]; then
+		cat fake_proxy.err >&2
+		kill "$fake_pid" 2>/dev/null || true
+		return 1
+	fi
 	# The client keeps stdin open; the relay must still end
 	FNOX_PROXY_MCP=1 HTTPS_PROXY="http://fnox:token@127.0.0.1:$port" \
 		run run_with_timeout 10 "$FNOX_BIN" mcp < <(sleep 30)
+	kill "$fake_pid" 2>/dev/null || true
 	assert_success
 }
 
