@@ -686,6 +686,35 @@ async fn upstream_lookups_are_checked_against_port_443() {
     );
 }
 
+#[tokio::test]
+async fn upstream_client_applies_the_destination_policy_to_its_lookups() {
+    // `localhost` resolves to loopback, which an entry for another port
+    // doesn't allow. The refusal comes from the destination resolver; with
+    // the system resolver the request would fail on connecting instead.
+    let mut config = tunnel_config(&["127.0.0.1:4790", "[::1]:4790"]);
+    config.rules[0].domain = "localhost".to_string();
+    let plan = plan_from(config);
+    let error = plan
+        .policy
+        .client
+        .get("https://localhost/")
+        .send()
+        .await
+        .unwrap_err();
+    let mut chain = Vec::new();
+    let mut source: Option<&dyn std::error::Error> = Some(&error);
+    while let Some(error) = source {
+        chain.push(error.to_string());
+        source = error.source();
+    }
+    assert!(
+        chain
+            .iter()
+            .any(|message| message.contains("non-public address")),
+        "{chain:?}"
+    );
+}
+
 #[test]
 fn parses_allow_private_entries() {
     let bare = parse_allowed("::1").unwrap();
