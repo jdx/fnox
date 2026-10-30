@@ -661,6 +661,31 @@ fn allow_private_entry_with_a_port_permits_only_that_port() {
     assert!(both.permits("127.0.0.1".parse().unwrap(), 9242));
 }
 
+#[tokio::test]
+async fn upstream_lookups_are_checked_against_port_443() {
+    use reqwest::dns::Resolve;
+
+    // Credential injection connects to port 443, so an entry scoped to it
+    // must let the upstream client's own lookups through.
+    let resolver = DestinationResolver(Arc::new(DestinationPolicy {
+        allowed: vec![parse_allowed("127.0.0.1:443").unwrap()],
+    }));
+    let name = "127.0.0.1".parse().unwrap();
+    let addresses: Vec<_> = resolver.resolve(name).await.unwrap().collect();
+    assert_eq!(addresses, ["127.0.0.1:443".parse().unwrap()]);
+
+    // An entry for another port doesn't.
+    let resolver = DestinationResolver(Arc::new(DestinationPolicy {
+        allowed: vec![parse_allowed("127.0.0.1:4790").unwrap()],
+    }));
+    assert!(
+        resolver
+            .resolve("127.0.0.1".parse().unwrap())
+            .await
+            .is_err()
+    );
+}
+
 #[test]
 fn parses_allow_private_entries() {
     let bare = parse_allowed("::1").unwrap();
