@@ -476,12 +476,20 @@ impl AgeEncryptionProvider {
             };
 
             // Load identity file content
-            let content = std::fs::read_to_string(&key_file_path).map_err(|e| {
-                FnoxError::AgeIdentityReadFailed {
+            let bytes =
+                std::fs::read(&key_file_path).map_err(|e| FnoxError::AgeIdentityReadFailed {
                     path: key_file_path.clone(),
                     source: e,
-                }
-            })?;
+                })?;
+
+            let content = if is_age_encrypted(&bytes) {
+                decrypt_identity_file(&key_file_path, &bytes)?
+            } else {
+                String::from_utf8(bytes).map_err(|e| FnoxError::AgeIdentityReadFailed {
+                    path: key_file_path.clone(),
+                    source: std::io::Error::new(std::io::ErrorKind::InvalidData, e),
+                })?
+            };
 
             (content, Some(key_file_path))
         };
@@ -545,11 +553,98 @@ impl AgeEncryptionProvider {
     }
 }
 
+/// Identity files decrypted with a prompted passphrase, so one run asks once per file.
+static DECRYPTED_IDENTITIES: std::sync::LazyLock<Mutex<HashMap<PathBuf, String>>> =
+    std::sync::LazyLock::new(Default::default);
+
+/// True when the bytes are an age-encrypted file (binary or ASCII-armored), such as
+/// the output of `age-keygen | age -p`.
+fn is_age_encrypted(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"age-encryption.org/v1\n")
+        || bytes.starts_with(b"-----BEGIN AGE ENCRYPTED FILE-----")
+}
+
+fn identity_auth_error(path: &std::path::Path, details: String, hint: &str) -> FnoxError {
+    FnoxError::ProviderAuthFailed {
+        provider: "age".to_string(),
+        details: format!("identity file {}: {details}", path.display()),
+        hint: hint.to_string(),
+        url: "https://fnox.jdx.dev/providers/age".to_string(),
+    }
+}
+
+/// Decrypt a passphrase-encrypted identity file, prompting for the passphrase.
+fn decrypt_identity_file(path: &std::path::Path, bytes: &[u8]) -> Result<String> {
+    let mut cache = DECRYPTED_IDENTITIES
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(content) = cache.get(path) {
+        return Ok(content.clone());
+    }
+    if env::is_non_interactive() {
+        return Err(identity_auth_error(
+            path,
+            "it is passphrase-protected and no terminal is available to prompt".to_string(),
+            "Run in a terminal to enter the passphrase, or decrypt the identity and set FNOX_AGE_KEY",
+        ));
+    }
+    let passphrase =
+        rpassword::prompt_password(format!("Passphrase for age identity {}: ", path.display()))
+            .map_err(|e| {
+                identity_auth_error(
+                    path,
+                    format!("could not read passphrase from terminal: {e}"),
+                    "Run in a terminal to enter the passphrase",
+                )
+            })?;
+    let content = decrypt_with_passphrase(bytes, passphrase).map_err(|details| {
+        identity_auth_error(path, details, "Check the passphrase and try again")
+    })?;
+    cache.insert(path.to_path_buf(), content.clone());
+    Ok(content)
+}
+
+fn decrypt_with_passphrase(
+    bytes: &[u8],
+    passphrase: String,
+) -> std::result::Result<String, String> {
+    let reader = age::armor::ArmoredReader::new(bytes);
+    let decryptor = age::Decryptor::new(reader).map_err(|e| e.to_string())?;
+    let identity = age::scrypt::Identity::new(age::secrecy::SecretString::from(passphrase));
+    let mut reader = decryptor
+        .decrypt(std::iter::once(&identity as &dyn age::Identity))
+        .map_err(|e| e.to_string())?;
+    let mut out = vec![];
+    reader.read_to_end(&mut out).map_err(|e| e.to_string())?;
+    String::from_utf8(out).map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::providers::Provider;
     use age::secrecy::ExposeSecret;
+
+    #[test]
+    fn detects_and_decrypts_passphrase_encrypted_identity() {
+        let identity = age::x25519::Identity::generate();
+        let secret = identity.to_string();
+        let encryptor = age::Encryptor::with_user_passphrase(age::secrecy::SecretString::from(
+            "hunter2".to_string(),
+        ));
+        let mut encrypted = vec![];
+        let mut writer = encryptor.wrap_output(&mut encrypted).unwrap();
+        std::io::Write::write_all(&mut writer, secret.expose_secret().as_bytes()).unwrap();
+        writer.finish().unwrap();
+
+        assert!(is_age_encrypted(&encrypted));
+        assert!(!is_age_encrypted(secret.expose_secret().as_bytes()));
+        assert_eq!(
+            decrypt_with_passphrase(&encrypted, "hunter2".to_string()).unwrap(),
+            *secret.expose_secret()
+        );
+        assert!(decrypt_with_passphrase(&encrypted, "wrong".to_string()).is_err());
+    }
 
     fn test_provider() -> (AgeEncryptionProvider, tempfile::TempPath) {
         let identity = age::x25519::Identity::generate();

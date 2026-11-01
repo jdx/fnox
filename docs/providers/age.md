@@ -84,6 +84,23 @@ See [CI/CD](/guide/ci) for non-interactive runs and pull requests from forks.
 
 Relative `key_file` paths are resolved from the config file that declares the provider. Paths beginning with `~` expand to your home directory, and absolute paths are used unchanged.
 
+### Passphrase-protected identity
+
+`key_file` can point to an identity encrypted with a passphrase, binary or armored. fnox detects it and prompts for the passphrase when it decrypts a secret. Encrypting needs only the public recipient, so it never prompts.
+
+```sh
+age-keygen | age -p -o identity.age
+```
+
+```toml
+[providers.age]
+type = "age"
+recipients = ["age1..."]
+key_file = "./identity.age"
+```
+
+The passphrase is asked for once per file in a single fnox run. fnox needs a terminal to ask: without one it fails, so decrypt the identity ahead of time and pass it in `FNOX_AGE_KEY`. The daemon does not cache the passphrase.
+
 Every provider also accepts [`auth_command` and `daemon_cache`](/reference/configuration#provider-configuration).
 
 Store the identity in another provider, such as the [OS keychain](/providers/keychain), so it never sits in a file:
