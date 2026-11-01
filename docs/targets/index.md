@@ -1,10 +1,10 @@
 ---
-description: "The write-only stores fnox push can copy secrets into: GitHub Actions, GitLab CI, Vercel, Cloudflare Workers, Fly.io, Forgejo, HCP Terraform and Azure Container Apps."
+description: "The stores fnox push can copy secrets into: GitHub Actions, GitLab CI, Vercel, Cloudflare Workers, Fly.io, Forgejo, HCP Terraform and Azure Container Apps. The Readable afterwards column shows which targets return values."
 ---
 
 # Push targets
 
-A push target is a place that needs your secrets but never gives them back, such as CI secrets or a hosting platform's environment variables. Define one under `[targets.<name>]`, list it in a secret's `push` field, and run `fnox push`. See [the push guide](/guide/push) for how pushing works, profiles, and what it protects.
+A push target is a place that needs your secrets, such as CI secrets or a hosting platform's environment variables. Define one under `[targets.<name>]`, list it in a secret's `push` field, and run `fnox push`. See [the push guide](/guide/push) for how pushing works, profiles, and what it protects.
 
 | Target                                                | Config type            | Sets                                        | Through        | Readable afterwards  |
 | ----------------------------------------------------- | ---------------------- | ------------------------------------------- | -------------- | -------------------- |

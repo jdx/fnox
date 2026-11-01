@@ -206,17 +206,19 @@ fn merge_env(
     let mut changed = false;
     for &(name, value) in values {
         let wanted = json!({ "name": name, "value": value });
-        match env.iter_mut().find(|var| var["name"] == name) {
-            // Replaces a `secretRef` entry too
-            Some(var) if *var != wanted => {
-                *var = wanted;
+        // Replaces every entry with this name, `secretRef` ones too, because
+        // Azure applies the last duplicate
+        let mut found = false;
+        for var in env.iter_mut().filter(|var| var["name"] == name) {
+            found = true;
+            if *var != wanted {
+                *var = wanted.clone();
                 changed = true;
             }
-            Some(_) => {}
-            None => {
-                env.push(wanted);
-                changed = true;
-            }
+        }
+        if !found {
+            env.push(wanted);
+            changed = true;
         }
     }
     Ok(changed.then_some(Value::Array(containers)))
@@ -342,6 +344,19 @@ mod tests {
                     { "name": "NEW", "value": "n" }
                 ]
             }])
+        );
+    }
+
+    #[test]
+    fn replaces_every_duplicate() {
+        let app = app(json!([{ "name": "api", "env": [
+            { "name": "A", "value": "new" },
+            { "name": "A", "value": "old" }
+        ] }]));
+        let out = merge_env(&app, None, &[("A", "new")]).unwrap().unwrap();
+        assert_eq!(
+            out[0]["env"],
+            json!([{ "name": "A", "value": "new" }, { "name": "A", "value": "new" }])
         );
     }
 

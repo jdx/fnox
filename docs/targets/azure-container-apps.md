@@ -27,7 +27,7 @@ LOG_LEVEL = { default = "info", push = ["api"] }
 ```
 
 ```sh
-fnox -P dev push --target api --force
+fnox push --target api --force
 ```
 
 ## Configuration
