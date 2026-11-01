@@ -308,6 +308,56 @@ EOF
 	assert_output "secret-value"
 }
 
+@test "named age identities accept provider-backed references" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local keygen1 keygen2
+	keygen1=$(age-keygen -o key1.txt 2>&1)
+	keygen2=$(age-keygen -o key2.txt 2>&1)
+	local public1 public2 private1
+	public1=$(echo "$keygen1" | grep "^Public key:" | cut -d' ' -f3)
+	public2=$(echo "$keygen2" | grep "^Public key:" | cut -d' ' -f3)
+	private1=$(grep "^AGE-SECRET-KEY" key1.txt)
+	rm key1.txt
+
+	# plain stands in for a FIDO2 provider that unlocks the identity.
+	cat >fnox.toml <<EOF2
+root = true
+
+[providers.plain]
+type = "plain"
+
+[providers.age]
+type = "age"
+recipients = ["$public1", "$public2"]
+default_identity = "yk1"
+
+[providers.age.identities]
+yk1 = { provider = "plain", value = "$private1" }
+recovery = "key2.txt"
+broken = { provider = "missing-provider", value = "unused" }
+
+[secrets]
+EOF2
+
+	run "$FNOX_BIN" set MY_SECRET "secret-value" --provider age
+	assert_success
+
+	run "$FNOX_BIN" get MY_SECRET
+	assert_success
+	assert_output "secret-value"
+
+	FNOX_AGE_IDENTITY=recovery run "$FNOX_BIN" get MY_SECRET
+	assert_success
+	assert_output "secret-value"
+
+	FNOX_AGE_IDENTITY=broken run "$FNOX_BIN" get MY_SECRET
+	assert_failure
+	assert_output --partial "missing-provider"
+}
+
 @test "mutual provider-backed age identities fail with cycle error" {
 	cat >fnox.toml <<EOF
 root = true

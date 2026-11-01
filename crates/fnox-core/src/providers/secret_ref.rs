@@ -285,9 +285,69 @@ impl Serialize for OptionProviderSecretRef {
     }
 }
 
+/// A value that is either a string (literal or secret reference) or a provider-backed reference.
+///
+/// In TOML, this deserializes from:
+/// - `field = "literal-value"`
+/// - `field = { secret = "SECRET_NAME" }`
+/// - `field = { provider = "keychain", value = "age-key" }`
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum StringOrProviderRef {
+    /// A provider-backed reference, resolved through another provider
+    Provider(ProviderSecretRef),
+    /// A literal string or a reference to a secret
+    String(StringOrSecretRef),
+}
+
+/// A [`StringOrProviderRef`] with any secret reference resolved. Provider references are
+/// kept as-is and resolved by the provider that uses them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResolvedStringOrProviderRef {
+    String(String),
+    Provider(ProviderSecretRef),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_string_or_provider_ref_deser() {
+        #[derive(Deserialize)]
+        struct Test {
+            map: indexmap::IndexMap<String, StringOrProviderRef>,
+        }
+        let parsed: Test = toml_edit::de::from_str(
+            r#"
+            [map]
+            path = "~/key.txt"
+            secret = { secret = "KEY" }
+            provider = { provider = "fido2", value = "abc" }
+            "#,
+        )
+        .unwrap();
+        assert_eq!(
+            parsed.map["path"],
+            StringOrProviderRef::String(StringOrSecretRef::Literal("~/key.txt".into()))
+        );
+        assert_eq!(
+            parsed.map["secret"],
+            StringOrProviderRef::String(StringOrSecretRef::SecretRef {
+                secret: "KEY".into()
+            })
+        );
+        assert_eq!(
+            parsed.map["provider"],
+            StringOrProviderRef::Provider(ProviderSecretRef {
+                provider: "fido2".into(),
+                value: "abc".into()
+            })
+        );
+        assert!(
+            toml_edit::de::from_str::<Test>(r#"map = { bad = { provider = "fido2" } }"#).is_err()
+        );
+    }
 
     #[test]
     fn test_string_or_secret_ref_literal_deser() {

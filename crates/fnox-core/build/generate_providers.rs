@@ -254,7 +254,7 @@ fn generate_provider_config(
         use schemars::JsonSchema;
         use serde::{Deserialize, Serialize};
         use strum::AsRefStr;
-        use super::super::secret_ref::{OptionProviderSecretRef, OptionStringOrSecretRef, StringOrSecretRef};
+        use super::super::secret_ref::{OptionProviderSecretRef, OptionStringOrSecretRef, ResolvedStringOrProviderRef, StringOrProviderRef, StringOrSecretRef};
         use super::super::BitwardenBackend;
 
         fn default_bitwarden_backend() -> Option<BitwardenBackend> {
@@ -326,6 +326,12 @@ fn generate_config_variant_fields(provider: &ProviderToml) -> Vec<TokenStream> {
                     #field_name: indexmap::IndexMap<String, StringOrSecretRef>
                 });
             }
+            "string_or_provider_ref_map" => {
+                fields.push(quote! {
+                    #[serde(default, skip_serializing_if = "indexmap::IndexMap::is_empty")]
+                    #field_name: indexmap::IndexMap<String, StringOrProviderRef>
+                });
+            }
             _ => {}
         }
     }
@@ -367,6 +373,11 @@ fn generate_resolved_variant_fields(provider: &ProviderToml) -> Vec<TokenStream>
             }
             "string_map" => {
                 fields.push(quote! { #field_name: indexmap::IndexMap<String, String> });
+            }
+            "string_or_provider_ref_map" => {
+                fields.push(
+                    quote! { #field_name: indexmap::IndexMap<String, ResolvedStringOrProviderRef> },
+                );
             }
             _ => {}
         }
@@ -453,7 +464,7 @@ fn generate_provider_methods(
     let output = quote! {
         use crate::error::{FnoxError, Result};
         use super::providers_config::{ProviderConfig, ResolvedProviderConfig};
-        use super::super::secret_ref::{OptionProviderSecretRef, OptionStringOrSecretRef, StringOrSecretRef};
+        use super::super::secret_ref::{OptionProviderSecretRef, OptionStringOrSecretRef, ResolvedStringOrProviderRef, StringOrProviderRef, StringOrSecretRef};
         use std::collections::HashMap;
         #(#module_uses)*
 
@@ -632,6 +643,20 @@ fn generate_try_to_resolved_body(provider: &ProviderToml) -> TokenStream {
                         .collect::<Result<indexmap::IndexMap<String, String>>>()?
                 });
             }
+            "string_or_provider_ref_map" => {
+                field_conversions.push(quote! {
+                    #field_name: #local_ident
+                        .iter()
+                        .map(|(k, v)| {
+                            let v = match v {
+                                StringOrProviderRef::String(s) => ResolvedStringOrProviderRef::String(req(s)?),
+                                StringOrProviderRef::Provider(p) => ResolvedStringOrProviderRef::Provider(p.clone()),
+                            };
+                            Ok((k.clone(), v))
+                        })
+                        .collect::<Result<indexmap::IndexMap<String, ResolvedStringOrProviderRef>>>()?
+                });
+            }
             _ => {}
         }
     }
@@ -724,7 +749,7 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
             "optional" => {
                 field_inits.push(quote! { #field_name: get_optional(#name_str) });
             }
-            "string_map" => {
+            "string_map" | "string_or_provider_ref_map" => {
                 field_inits.push(quote! { #field_name: Default::default() });
             }
             "vec_string" | "backend_enum" => {
@@ -894,6 +919,23 @@ fn generate_resolver_fields(provider: &ProviderToml) -> Vec<TokenStream> {
                             let mut resolved = indexmap::IndexMap::with_capacity(#local_ident.len());
                             for (key, value) in #local_ident {
                                 let value = super::super::resolver::resolve_required(config, profile, provider_name, &format!("{}.{}", #name_str, key), value, ctx).await?;
+                                resolved.insert(key.clone(), value);
+                            }
+                            resolved
+                        }
+                    }
+                }
+                "string_or_provider_ref_map" => {
+                    quote! {
+                        #field_name: {
+                            let mut resolved = indexmap::IndexMap::with_capacity(#local_ident.len());
+                            for (key, value) in #local_ident {
+                                let value = match value {
+                                    super::super::secret_ref::StringOrProviderRef::String(s) => super::super::secret_ref::ResolvedStringOrProviderRef::String(
+                                        super::super::resolver::resolve_required(config, profile, provider_name, &format!("{}.{}", #name_str, key), s, ctx).await?,
+                                    ),
+                                    super::super::secret_ref::StringOrProviderRef::Provider(p) => super::super::secret_ref::ResolvedStringOrProviderRef::Provider(p.clone()),
+                                };
                                 resolved.insert(key.clone(), value);
                             }
                             resolved

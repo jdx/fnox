@@ -1,6 +1,6 @@
 use crate::env;
 use crate::error::{FnoxError, Result};
-use crate::providers::OptionProviderSecretRef;
+use crate::providers::{OptionProviderSecretRef, ResolvedStringOrProviderRef};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::io::Read;
@@ -31,7 +31,8 @@ pub(crate) struct KeySelection {
 }
 
 /// Picks the key file to decrypt with. A named identity (`FNOX_AGE_IDENTITY`, else
-/// `default_identity`) replaces `key_file` and the `identity` reference. An inline
+/// `default_identity`) replaces `key_file` and the `identity` reference: a path entry becomes
+/// the key file, and a `{ provider, value }` entry becomes the `identity` reference. An inline
 /// `FNOX_AGE_KEY` outranks all of them, so it skips the selection.
 ///
 /// `FNOX_AGE_IDENTITY` is read on every call: the daemon changes its environment per request.
@@ -39,7 +40,7 @@ pub(crate) fn select_key_file(
     provider_name: &str,
     key_file: Option<String>,
     identity: OptionProviderSecretRef,
-    identities: &indexmap::IndexMap<String, String>,
+    identities: &indexmap::IndexMap<String, ResolvedStringOrProviderRef>,
     default_identity: Option<&str>,
 ) -> Result<KeySelection> {
     select_key_file_with(
@@ -57,7 +58,7 @@ fn select_key_file_with(
     provider_name: &str,
     key_file: Option<String>,
     identity: OptionProviderSecretRef,
-    identities: &indexmap::IndexMap<String, String>,
+    identities: &indexmap::IndexMap<String, ResolvedStringOrProviderRef>,
     default_identity: Option<&str>,
     env_identity: Option<&str>,
     inline_key_set: bool,
@@ -73,9 +74,13 @@ fn select_key_file_with(
         return Ok(unchanged);
     };
     match identities.get(name) {
-        Some(path) => Ok(KeySelection {
+        Some(ResolvedStringOrProviderRef::String(path)) => Ok(KeySelection {
             key_file: Some(path.clone()),
             identity: OptionProviderSecretRef::none(),
+        }),
+        Some(ResolvedStringOrProviderRef::Provider(identity)) => Ok(KeySelection {
+            key_file: None,
+            identity: OptionProviderSecretRef(Some(identity.clone())),
         }),
         None => Err(FnoxError::Config(format!(
             "Age identity '{name}' is not defined in provider '{provider_name}' (available: {})",
@@ -89,7 +94,7 @@ impl AgeEncryptionProvider {
         recipients: Vec<String>,
         key_file: Option<String>,
         identity: OptionProviderSecretRef,
-        identities: indexmap::IndexMap<String, String>,
+        identities: indexmap::IndexMap<String, ResolvedStringOrProviderRef>,
         default_identity: Option<String>,
     ) -> Result<Self> {
         let selected = select_key_file(
@@ -704,9 +709,18 @@ mod tests {
 
     #[test]
     fn select_key_file_uses_named_identity() {
-        let identities: indexmap::IndexMap<String, String> = [
-            ("yk1".to_string(), "yk1.txt".to_string()),
-            ("yk2".to_string(), "yk2.txt".to_string()),
+        let path = |p: &str| ResolvedStringOrProviderRef::String(p.to_string());
+        let fido2 = crate::providers::secret_ref::ProviderSecretRef {
+            provider: "fido2".to_string(),
+            value: "wrapped".to_string(),
+        };
+        let identities: indexmap::IndexMap<String, ResolvedStringOrProviderRef> = [
+            ("yk1".to_string(), path("yk1.txt")),
+            ("yk2".to_string(), path("yk2.txt")),
+            (
+                "fido".to_string(),
+                ResolvedStringOrProviderRef::Provider(fido2.clone()),
+            ),
         ]
         .into();
         let select = |default: Option<&str>, env_id: Option<&str>, inline: bool| {
@@ -747,10 +761,14 @@ mod tests {
                 .as_deref(),
             Some("k.txt")
         );
+        // A provider-backed entry becomes the identity reference and drops key_file.
+        let selected = select(Some("fido"), None, false).unwrap();
+        assert_eq!(selected.key_file, None);
+        assert_eq!(selected.identity.as_ref(), Some(&fido2));
         let err = select(None, Some("nope"), false).err().unwrap();
         let msg = err.to_string();
         assert!(msg.contains("'nope'"), "{msg}");
-        assert!(msg.contains("(available: yk1, yk2)"), "{msg}");
+        assert!(msg.contains("(available: yk1, yk2, fido)"), "{msg}");
     }
 
     fn passphrase_encrypt(plaintext: &str, armor: bool) -> Vec<u8> {
