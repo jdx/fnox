@@ -321,6 +321,8 @@ EOF
 	public2=$(echo "$keygen2" | grep "^Public key:" | cut -d' ' -f3)
 	private1=$(grep "^AGE-SECRET-KEY" key1.txt)
 	rm key1.txt
+	# A file-backed lookup, so decrypting proves the provider was called.
+	echo "YK1_KEY=$private1" >identities.env
 
 	# plain stands in for a FIDO2 provider that unlocks the identity.
 	cat >fnox.toml <<EOF2
@@ -328,6 +330,8 @@ root = true
 
 [providers.plain]
 type = "plain"
+file = "identities.env"
+format = "env"
 
 [providers.age]
 type = "age"
@@ -335,7 +339,7 @@ recipients = ["$public1", "$public2"]
 default_identity = "yk1"
 
 [providers.age.identities]
-yk1 = { provider = "plain", value = "$private1" }
+yk1 = { provider = "plain", value = "YK1_KEY" }
 recovery = "key2.txt"
 broken = { provider = "missing-provider", value = "unused" }
 

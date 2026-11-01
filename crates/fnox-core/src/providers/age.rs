@@ -28,6 +28,8 @@ pub struct AgeEncryptionProvider {
 pub(crate) struct KeySelection {
     pub key_file: Option<String>,
     pub identity: OptionProviderSecretRef,
+    /// The selected named identity is a `{ provider, value }` entry.
+    pub named_provider_ref: bool,
 }
 
 /// Picks the key file to decrypt with. A named identity (`FNOX_AGE_IDENTITY`, else
@@ -66,6 +68,7 @@ fn select_key_file_with(
     let unchanged = KeySelection {
         key_file: key_file.clone(),
         identity: identity.clone(),
+        named_provider_ref: false,
     };
     if inline_key_set {
         return Ok(unchanged);
@@ -77,10 +80,12 @@ fn select_key_file_with(
         Some(ResolvedStringOrProviderRef::String(path)) => Ok(KeySelection {
             key_file: Some(path.clone()),
             identity: OptionProviderSecretRef::none(),
+            named_provider_ref: false,
         }),
         Some(ResolvedStringOrProviderRef::Provider(identity)) => Ok(KeySelection {
             key_file: None,
             identity: OptionProviderSecretRef(Some(identity.clone())),
+            named_provider_ref: true,
         }),
         None => Err(FnoxError::Config(format!(
             "Age identity '{name}' is not defined in provider '{provider_name}' (available: {})",
@@ -104,6 +109,12 @@ impl AgeEncryptionProvider {
             &identities,
             default_identity.as_deref(),
         )?;
+        // Without a config there is no provider to resolve the reference through.
+        if selected.named_provider_ref {
+            return Err(FnoxError::Config(
+                "A provider-backed named age identity needs the config to resolve it".to_string(),
+            ));
+        }
         Ok(Self {
             recipients,
             key_file: selected
@@ -769,6 +780,33 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("'nope'"), "{msg}");
         assert!(msg.contains("(available: yk1, yk2, fido)"), "{msg}");
+    }
+
+    #[test]
+    fn new_rejects_provider_backed_named_identity() {
+        if env::FNOX_AGE_KEY.is_some() || env::fnox_age_identity().is_some() {
+            return;
+        }
+        let identities: indexmap::IndexMap<String, ResolvedStringOrProviderRef> = [(
+            "fido".to_string(),
+            ResolvedStringOrProviderRef::Provider(
+                crate::providers::secret_ref::ProviderSecretRef {
+                    provider: "fido2".to_string(),
+                    value: "wrapped".to_string(),
+                },
+            ),
+        )]
+        .into();
+        let err = AgeEncryptionProvider::new(
+            vec![],
+            None,
+            OptionProviderSecretRef::none(),
+            identities,
+            Some("fido".to_string()),
+        )
+        .err()
+        .expect("construction should fail without config");
+        assert!(err.to_string().contains("needs the config"), "{err}");
     }
 
     fn passphrase_encrypt(plaintext: &str, armor: bool) -> Vec<u8> {

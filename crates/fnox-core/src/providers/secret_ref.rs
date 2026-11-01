@@ -291,13 +291,44 @@ impl Serialize for OptionProviderSecretRef {
 /// - `field = "literal-value"`
 /// - `field = { secret = "SECRET_NAME" }`
 /// - `field = { provider = "keychain", value = "age-key" }`
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
 #[serde(untagged)]
 pub enum StringOrProviderRef {
     /// A provider-backed reference, resolved through another provider
     Provider(ProviderSecretRef),
     /// A literal string or a reference to a secret
     String(StringOrSecretRef),
+}
+
+impl<'de> Deserialize<'de> for StringOrProviderRef {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Unlike `StringOrSecretRef`, a secret reference rejects extra keys, so a table that
+        // mixes `secret` with `provider`/`value` is an error rather than a dropped reference.
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct SecretRef {
+            secret: String,
+        }
+
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Helper {
+            Provider(ProviderSecretRef),
+            Literal(String),
+            SecretRef(SecretRef),
+        }
+
+        Ok(match Helper::deserialize(deserializer)? {
+            Helper::Provider(p) => Self::Provider(p),
+            Helper::Literal(s) => Self::String(StringOrSecretRef::Literal(s)),
+            Helper::SecretRef(SecretRef { secret }) => {
+                Self::String(StringOrSecretRef::SecretRef { secret })
+            }
+        })
+    }
 }
 
 /// A [`StringOrProviderRef`] with any secret reference resolved. Provider references are
@@ -346,6 +377,12 @@ mod tests {
         );
         assert!(
             toml_edit::de::from_str::<Test>(r#"map = { bad = { provider = "fido2" } }"#).is_err()
+        );
+        assert!(
+            toml_edit::de::from_str::<Test>(
+                r#"map = { bad = { provider = "fido2", value = "abc", secret = "KEY" } }"#
+            )
+            .is_err()
         );
     }
 
