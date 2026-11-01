@@ -48,8 +48,8 @@ The same credential chain as the [`azure-sm`](/providers/azure-sm) and [`azure-a
 ## Notes
 
 - **One revision per push.** Every env change creates a new revision, so fnox writes all of a target's variables in a single request. A push whose values already match writes nothing.
-- **Concurrent changes.** The write carries the `ETag` from the read as `If-Match`, so if another deployment changes the app in between, fnox writes nothing and reports it; run the push again.
-- **fnox does not wait.** The write returns once Azure accepts it. Rolling the image and waiting for the revision to become ready stays in your deploy script.
+- **Concurrent changes.** When Azure returns an `ETag` for the app (fnox logs a warning if it does not), the write carries it as `If-Match`, so if another deployment changes the app in between, fnox writes nothing and reports it; run the push again. Without an `ETag` a concurrent change can be overwritten.
+- **Waiting.** If Azure answers the update with a long-running operation, fnox polls it (for a few minutes) and reports a failed update as failed. It does not wait for the new revision to become ready; rolling the image and waiting for readiness stays in your deploy script.
 - **Plain variables only.** A pushed variable is stored as a plain `value`, replacing an existing variable of that name even if it used a `secretRef`. The app's `secrets` are not touched.
 - **Public cloud only.** The target talks to `management.azure.com`.
 - A failed batch marks every variable in it as failed.

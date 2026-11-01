@@ -18,6 +18,16 @@ const TARGET_TYPE: &str = "azure-container-apps";
 const ARM: &str = "https://management.azure.com";
 const SCOPE: &str = "https://management.azure.com/.default";
 const API_VERSION: &str = "2024-03-01";
+/// Polls of a long-running update before giving up (a few minutes)
+const POLL_ATTEMPTS: u32 = 60;
+
+/// What an ARM request answered
+struct Reply {
+    value: Value,
+    etag: Option<String>,
+    /// URL to poll when the request started a long-running operation
+    operation: Option<String>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -86,7 +96,7 @@ impl AzureContainerApps {
         method: reqwest::Method,
         body: Option<Value>,
         if_match: Option<&str>,
-    ) -> Result<(Value, Option<String>)> {
+    ) -> Result<Reply> {
         let mut request = crate::http::credential_client()
             .request(method.clone(), self.app_url())
             .bearer_auth(token);
@@ -108,6 +118,20 @@ impl AzureContainerApps {
             .get(reqwest::header::ETAG)
             .and_then(|v| v.to_str().ok())
             .map(String::from);
+        // A 202 names the long-running operation to poll
+        let operation = (status == reqwest::StatusCode::ACCEPTED)
+            .then(|| {
+                ["azure-asyncoperation", "location"]
+                    .iter()
+                    .find_map(|name| {
+                        response
+                            .headers()
+                            .get(*name)
+                            .and_then(|v| v.to_str().ok())
+                            .map(String::from)
+                    })
+            })
+            .flatten();
         let text = response.text().await.unwrap_or_default();
         if status == reqwest::StatusCode::PRECONDITION_FAILED {
             return Err(Self::error(format!(
@@ -122,19 +146,87 @@ impl AzureContainerApps {
             )));
         }
         if text.trim().is_empty() {
-            return Ok((Value::Null, header_etag));
+            return Ok(Reply {
+                value: Value::Null,
+                etag: header_etag,
+                operation,
+            });
         }
         let value: Value = serde_json::from_str(&text)
             .map_err(|e| Self::error(format!("{method} container app: invalid JSON: {e}")))?;
         let etag =
             header_etag.or_else(|| value.get("etag").and_then(Value::as_str).map(String::from));
-        Ok((value, etag))
+        Ok(Reply {
+            value,
+            etag,
+            operation,
+        })
+    }
+
+    /// Poll a long-running operation until Azure reports it finished, so a
+    /// 202 for an update that later fails is not reported as pushed
+    async fn wait_for(&self, token: &str, url: &str) -> Result<()> {
+        // The token must not go anywhere but Azure Resource Manager
+        if !url.starts_with(&format!("{ARM}/")) {
+            return Err(Self::error(format!(
+                "{}: Azure returned an operation URL outside {ARM}, which fnox will not poll",
+                self.app
+            )));
+        }
+        for _ in 0..POLL_ATTEMPTS {
+            let response = crate::http::credential_client()
+                .get(url)
+                .bearer_auth(token)
+                .send()
+                .await
+                .map_err(|e| {
+                    Self::error(format!("{}: polling the update failed: {e}", self.app))
+                })?;
+            let status = response.status();
+            let delay = response
+                .headers()
+                .get(reqwest::header::RETRY_AFTER)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(2)
+                .clamp(1, 10);
+            let text = response.text().await.unwrap_or_default();
+            if !status.is_success() {
+                return Err(Self::error(format!(
+                    "{}: polling the update: HTTP {status}: {}",
+                    self.app,
+                    text.trim()
+                )));
+            }
+            if status != reqwest::StatusCode::ACCEPTED {
+                let value: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
+                match value["status"].as_str() {
+                    Some("Succeeded") | None => return Ok(()),
+                    Some(state @ ("Failed" | "Canceled")) => {
+                        return Err(Self::error(format!(
+                            "{}: the update {}: {}",
+                            self.app,
+                            state.to_lowercase(),
+                            value["error"]
+                        )));
+                    }
+                    Some(_) => {}
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
+        }
+        Err(Self::error(format!(
+            "{}: the update was still running after {} polls; check the app in Azure",
+            self.app, POLL_ATTEMPTS
+        )))
     }
 
     /// Set every pair in one read and at most one write
     async fn write(&self, values: &[(&str, &str)]) -> Result<()> {
         let token = self.token().await?;
-        let (app, etag) = self
+        let Reply {
+            value: app, etag, ..
+        } = self
             .request(&token, reqwest::Method::GET, None, None)
             .await?;
         let containers = merge_env(&app, self.container.as_deref(), values)
@@ -154,8 +246,12 @@ impl AzureContainerApps {
                 self.app
             );
         }
-        self.request(&token, reqwest::Method::PATCH, Some(body), etag.as_deref())
+        let reply = self
+            .request(&token, reqwest::Method::PATCH, Some(body), etag.as_deref())
             .await?;
+        if let Some(url) = reply.operation {
+            self.wait_for(&token, &url).await?;
+        }
         Ok(())
     }
 }
