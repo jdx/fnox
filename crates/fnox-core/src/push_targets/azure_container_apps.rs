@@ -196,14 +196,16 @@ impl AzureContainerApps {
                 .unwrap_or(2)
                 .max(1);
             let text = response.text().await.unwrap_or_default();
-            if !status.is_success() {
+            // Throttling does not mean the update failed: wait and poll again
+            let throttled = matches!(status.as_u16(), 429 | 503);
+            if !status.is_success() && !throttled {
                 return Err(Self::error(format!(
                     "{}: polling the update: HTTP {status}: {}",
                     self.app,
                     text.trim()
                 )));
             }
-            if status != reqwest::StatusCode::ACCEPTED {
+            if status.is_success() && status != reqwest::StatusCode::ACCEPTED {
                 let value: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
                 match value["status"].as_str() {
                     Some("Succeeded") | None => return Ok(()),
