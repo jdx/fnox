@@ -76,11 +76,13 @@ See [CI/CD](/guide/ci) for non-interactive runs and pull requests from forks.
 
 ## Configuration
 
-| Field        | Required | Default | Description                                                                                                        |
-| ------------ | -------- | ------- | ------------------------------------------------------------------------------------------------------------------ |
-| `recipients` | Yes      | None    | Public recipients to encrypt to: `age1...` keys, `ssh-ed25519` or `ssh-rsa` public keys, or age plugin recipients. |
-| `key_file`   | No       | None    | Path to an identity file: an age key, SSH private key, or plugin identity. Accepts `{ secret = "NAME" }`.          |
-| `identity`   | No       | None    | A `{ provider = "...", value = "..." }` reference that resolves to the identity contents through another provider. |
+| Field              | Required | Default | Description                                                                                                        |
+| ------------------ | -------- | ------- | ------------------------------------------------------------------------------------------------------------------ |
+| `recipients`       | Yes      | None    | Public recipients to encrypt to: `age1...` keys, `ssh-ed25519` or `ssh-rsa` public keys, or age plugin recipients. |
+| `key_file`         | No       | None    | Path to an identity file: an age key, SSH private key, or plugin identity. Accepts `{ secret = "NAME" }`.          |
+| `identity`         | No       | None    | A `{ provider = "...", value = "..." }` reference that resolves to the identity contents through another provider. |
+| `identities`       | No       | None    | Table of named identity file paths; see [multiple identities](#multiple-identities).                               |
+| `default_identity` | No       | None    | Name from `identities` to decrypt with. `FNOX_AGE_IDENTITY` overrides it.                                          |
 
 Relative `key_file` paths are resolved from the config file that declares the provider. Paths beginning with `~` expand to your home directory, and absolute paths are used unchanged.
 
@@ -170,6 +172,26 @@ key_file = "~/.config/fnox/yubikey-identity.txt"
 ```
 
 Within one command, fnox decrypts each ciphertext once, so a PIN or touch prompt is not repeated when several secrets or providers share a value. Refer to each plugin's documentation for setup. [Syncing secrets locally](/guide/sync) has walkthroughs for Secure Enclave, YubiKey, TPM, and FIDO2 plugins.
+
+## Multiple identities {#multiple-identities}
+
+When one config is shared by machines that hold different keys, such as a separate YubiKey on each computer, name each identity file and choose one per machine:
+
+```toml
+[providers.age]
+type = "age"
+recipients = ["age1yubikey1...", "age1yubikey1...", "age1..."]
+default_identity = "yk1"
+
+[providers.age.identities]
+yk1 = "~/.config/fnox/yk1-identity.txt"
+yk2 = "~/.config/fnox/yk2-identity.txt"
+recovery = "~/.config/fnox/recovery.txt"
+```
+
+Secrets are encrypted to every recipient, and each machine decrypts with the identity it selects. On a machine that uses the second YubiKey, set `FNOX_AGE_IDENTITY=yk2` in your shell configuration; it overrides `default_identity`. Naming an identity that is not in `identities` is an error. Paths resolve like `key_file`.
+
+A selected identity replaces `key_file`. `FNOX_AGE_KEY` still takes precedence over it, and the provider's `identity` reference is not used while a named identity is selected.
 
 ## Team workflow
 

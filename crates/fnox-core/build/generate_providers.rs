@@ -663,6 +663,8 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
                 ],
                 key_file: OptionStringOrSecretRef::none(),
                 identity: OptionProviderSecretRef::none(),
+                identities: Default::default(),
+                default_identity: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
             })

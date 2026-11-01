@@ -24,16 +24,87 @@ pub struct AgeEncryptionProvider {
     identity_cycle_guard: Option<AgeIdentityCycleGuard>,
 }
 
+/// The key file to decrypt with, and the `identity` reference to use alongside it.
+pub(crate) struct KeySelection {
+    pub key_file: Option<String>,
+    pub identity: OptionProviderSecretRef,
+}
+
+/// Picks the key file to decrypt with. A named identity (`FNOX_AGE_IDENTITY`, else
+/// `default_identity`) replaces `key_file` and the `identity` reference. An inline
+/// `FNOX_AGE_KEY` outranks all of them, so it skips the selection.
+///
+/// `FNOX_AGE_IDENTITY` is read on every call: the daemon changes its environment per request.
+pub(crate) fn select_key_file(
+    provider_name: &str,
+    key_file: Option<String>,
+    identity: OptionProviderSecretRef,
+    identities: &indexmap::IndexMap<String, String>,
+    default_identity: Option<&str>,
+) -> Result<KeySelection> {
+    select_key_file_with(
+        provider_name,
+        key_file,
+        identity,
+        identities,
+        default_identity,
+        env::fnox_age_identity().as_deref(),
+        env::FNOX_AGE_KEY.is_some(),
+    )
+}
+
+fn select_key_file_with(
+    provider_name: &str,
+    key_file: Option<String>,
+    identity: OptionProviderSecretRef,
+    identities: &indexmap::IndexMap<String, String>,
+    default_identity: Option<&str>,
+    env_identity: Option<&str>,
+    inline_key_set: bool,
+) -> Result<KeySelection> {
+    let unchanged = KeySelection {
+        key_file: key_file.clone(),
+        identity: identity.clone(),
+    };
+    if inline_key_set {
+        return Ok(unchanged);
+    }
+    let Some(name) = env_identity.or(default_identity) else {
+        return Ok(unchanged);
+    };
+    match identities.get(name) {
+        Some(path) => Ok(KeySelection {
+            key_file: Some(path.clone()),
+            identity: OptionProviderSecretRef::none(),
+        }),
+        None => Err(FnoxError::Config(format!(
+            "Age identity '{name}' is not defined in provider '{provider_name}' (available: {})",
+            identities.keys().cloned().collect::<Vec<_>>().join(", ")
+        ))),
+    }
+}
+
 impl AgeEncryptionProvider {
     pub fn new(
         recipients: Vec<String>,
         key_file: Option<String>,
         identity: OptionProviderSecretRef,
+        identities: indexmap::IndexMap<String, String>,
+        default_identity: Option<String>,
     ) -> Result<Self> {
+        let selected = select_key_file(
+            "age",
+            key_file,
+            identity,
+            &identities,
+            default_identity.as_deref(),
+        )?;
         Ok(Self {
             recipients,
-            key_file: key_file.map(|k| crate::config_path::resolve_relative_to_file(&k, None)),
-            identity,
+            key_file: selected
+                .key_file
+                .map(|k| crate::config_path::resolve_relative_to_file(&k, None)),
+            identity: selected.identity,
             config: None,
             profile: vec!["default".to_string()],
             provider_name: "age".to_string(),
@@ -631,6 +702,57 @@ mod tests {
     use crate::providers::Provider;
     use age::secrecy::ExposeSecret;
 
+    #[test]
+    fn select_key_file_uses_named_identity() {
+        let identities: indexmap::IndexMap<String, String> = [
+            ("yk1".to_string(), "yk1.txt".to_string()),
+            ("yk2".to_string(), "yk2.txt".to_string()),
+        ]
+        .into();
+        let select = |default: Option<&str>, env_id: Option<&str>, inline: bool| {
+            select_key_file_with(
+                "age",
+                Some("k.txt".into()),
+                OptionProviderSecretRef::none(),
+                &identities,
+                default,
+                env_id,
+                inline,
+            )
+        };
+        assert_eq!(
+            select(Some("yk1"), None, false)
+                .unwrap()
+                .key_file
+                .as_deref(),
+            Some("yk1.txt")
+        );
+        // The environment name wins over default_identity.
+        assert_eq!(
+            select(Some("yk1"), Some("yk2"), false)
+                .unwrap()
+                .key_file
+                .as_deref(),
+            Some("yk2.txt")
+        );
+        assert_eq!(
+            select(None, None, false).unwrap().key_file.as_deref(),
+            Some("k.txt")
+        );
+        // An inline FNOX_AGE_KEY skips selection, even for an unknown name.
+        assert_eq!(
+            select(None, Some("nope"), true)
+                .unwrap()
+                .key_file
+                .as_deref(),
+            Some("k.txt")
+        );
+        let err = select(None, Some("nope"), false).err().unwrap();
+        let msg = err.to_string();
+        assert!(msg.contains("'nope'"), "{msg}");
+        assert!(msg.contains("(available: yk1, yk2)"), "{msg}");
+    }
+
     fn passphrase_encrypt(plaintext: &str, armor: bool) -> Vec<u8> {
         let encryptor = age::Encryptor::with_user_passphrase(age::secrecy::SecretString::from(
             "hunter2".to_string(),
@@ -679,6 +801,8 @@ mod tests {
                 vec![identity.to_public().to_string()],
                 Some(key_path),
                 OptionProviderSecretRef::none(),
+                Default::default(),
+                None,
             )
             .unwrap(),
             key_file,
@@ -695,9 +819,14 @@ mod tests {
     async fn plugin_recipient_is_not_rejected_as_invalid_hrp() {
         let recipient =
             "age1yubikey1qwla8v7cu3mx6mp79asgrh5ad2h52flwln7c66ydcyy50lg5uh0gxh4kmaz".to_string();
-        let provider =
-            AgeEncryptionProvider::new(vec![recipient], None, OptionProviderSecretRef::none())
-                .expect("provider construction should succeed");
+        let provider = AgeEncryptionProvider::new(
+            vec![recipient],
+            None,
+            OptionProviderSecretRef::none(),
+            Default::default(),
+            None,
+        )
+        .expect("provider construction should succeed");
 
         if let Err(err) = provider.encrypt("plaintext").await {
             let message = err.to_string();
