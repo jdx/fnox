@@ -390,7 +390,7 @@ environment = "production"
 STRIPE_KEY = { provider = "op", value = "Stripe/secret key", push = ["gh"] }
 ```
 
-Define push targets under `[targets.<name>]` or `[profiles.<profile>.targets.<name>]`, and list them in a secret's `push` field. `fnox push` resolves each such secret and writes it to its targets. Types: [`cloudflare-workers`](/targets/cloudflare-workers), [`fly`](/targets/fly), [`forgejo-actions`](/targets/forgejo-actions), [`github-actions`](/targets/github-actions), [`gitlab-ci`](/targets/gitlab-ci), [`hcp-terraform`](/targets/hcp-terraform), and [`vercel`](/targets/vercel). See [push targets](/guide/push).
+Define push targets under `[targets.<name>]` or `[profiles.<profile>.targets.<name>]`, and list them in a secret's `push` field. `fnox push` resolves each such secret and writes it to its targets. Types: [`azure-container-apps`](/targets/azure-container-apps), [`cloudflare-workers`](/targets/cloudflare-workers), [`fly`](/targets/fly), [`forgejo-actions`](/targets/forgejo-actions), [`github-actions`](/targets/github-actions), [`gitlab-ci`](/targets/gitlab-ci), [`hcp-terraform`](/targets/hcp-terraform), and [`vercel`](/targets/vercel). See [push targets](/guide/push).
 
 ## `plugins`
 

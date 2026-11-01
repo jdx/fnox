@@ -14,6 +14,7 @@ use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+pub mod azure_container_apps;
 mod cli;
 pub mod cloudflare_workers;
 pub mod fly;
@@ -42,12 +43,29 @@ pub trait PushTarget: Send + Sync {
 
     /// Store `value` under `name`, replacing any existing value
     async fn push(&self, name: &str, value: &str) -> Result<()>;
+
+    /// Store every `(name, value)` pair, replacing existing values, and return
+    /// one result per pair in the same order. `fnox push` calls this once per
+    /// target, so a target where each write has a side effect (such as a new
+    /// revision) can override it to write once. The default calls [`push`]
+    /// for each pair.
+    ///
+    /// [`push`]: PushTarget::push
+    async fn push_all(&self, values: &[(&str, &str)]) -> Vec<Result<()>> {
+        let mut results = Vec::with_capacity(values.len());
+        for (name, value) in values {
+            results.push(self.push(name, value).await);
+        }
+        results
+    }
 }
 
 /// Configuration for a push target
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum PushTargetConfig {
+    /// Azure Container Apps environment variables, set through the ARM REST API
+    AzureContainerApps(azure_container_apps::AzureContainerApps),
     /// Cloudflare Workers secrets, set with `wrangler secret put`
     CloudflareWorkers(cloudflare_workers::CloudflareWorkers),
     /// Fly.io app secrets, set with `fly secrets import`
@@ -69,6 +87,7 @@ impl PushTargetConfig {
     /// The target implementation for this config
     pub fn target(&self) -> &dyn PushTarget {
         match self {
+            Self::AzureContainerApps(t) => t,
             Self::CloudflareWorkers(t) => t,
             Self::Fly(t) => t,
             Self::ForgejoActions(t) => t,
