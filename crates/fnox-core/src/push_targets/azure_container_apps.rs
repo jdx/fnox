@@ -18,8 +18,8 @@ const TARGET_TYPE: &str = "azure-container-apps";
 const ARM: &str = "https://management.azure.com";
 const SCOPE: &str = "https://management.azure.com/.default";
 const API_VERSION: &str = "2024-03-01";
-/// Polls of a long-running update before giving up (a few minutes)
-const POLL_ATTEMPTS: u32 = 60;
+/// How long to follow a long-running update before giving up
+const POLL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
 
 /// What an ARM request answered
 struct Reply {
@@ -177,7 +177,8 @@ impl AzureContainerApps {
                 self.app
             )));
         }
-        for _ in 0..POLL_ATTEMPTS {
+        let deadline = std::time::Instant::now() + POLL_TIMEOUT;
+        while std::time::Instant::now() < deadline {
             let response = crate::http::credential_client()
                 .get(url)
                 .bearer_auth(token)
@@ -193,7 +194,7 @@ impl AzureContainerApps {
                 .and_then(|v| v.to_str().ok())
                 .and_then(|v| v.parse::<u64>().ok())
                 .unwrap_or(2)
-                .clamp(1, 10);
+                .max(1);
             let text = response.text().await.unwrap_or_default();
             if !status.is_success() {
                 return Err(Self::error(format!(
@@ -217,11 +218,17 @@ impl AzureContainerApps {
                     Some(_) => {}
                 }
             }
-            tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
+            // Honor the delay Azure asks for; the deadline bounds the total wait
+            let delay = std::time::Duration::from_secs(delay);
+            if std::time::Instant::now() + delay >= deadline {
+                break;
+            }
+            tokio::time::sleep(delay).await;
         }
         Err(Self::error(format!(
-            "{}: the update was still running after {} polls; check the app in Azure",
-            self.app, POLL_ATTEMPTS
+            "{}: the update was still running after {}s; check the app in Azure",
+            self.app,
+            POLL_TIMEOUT.as_secs()
         )))
     }
 
