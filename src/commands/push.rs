@@ -106,6 +106,8 @@ impl PushCommand {
 
         let mut pushed = 0;
         let mut failed = Vec::new();
+        // Group values by target, so a target can write them all at once
+        let mut by_target: IndexMap<&str, Vec<(&str, &str)>> = IndexMap::new();
         for (key, target_names) in &plan {
             let Some(Some(value)) = resolved.get(key) else {
                 tracing::warn!("Skipping '{key}': could not resolve value");
@@ -113,7 +115,13 @@ impl PushCommand {
                 continue;
             };
             for target_name in target_names {
-                match targets[target_name].target().push(key, value).await {
+                by_target.entry(target_name).or_default().push((key, value));
+            }
+        }
+        for (target_name, values) in &by_target {
+            let results = targets[*target_name].target().push_all(values).await;
+            for ((key, _), result) in values.iter().zip(results) {
+                match result {
                     Ok(()) => {
                         pushed += 1;
                         println!(

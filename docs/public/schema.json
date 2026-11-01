@@ -1540,6 +1540,42 @@
       "description": "Configuration for a push target",
       "oneOf": [
         {
+          "description": "Azure Container Apps environment variables, set through the ARM REST API",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "azure-container-apps"
+            },
+            "subscription": {
+              "description": "Subscription ID that holds the container app",
+              "type": "string"
+            },
+            "resource_group": {
+              "description": "Resource group that holds the container app",
+              "type": "string"
+            },
+            "app": {
+              "description": "Container app name",
+              "type": "string"
+            },
+            "container": {
+              "description": "Container to set the variables in (default: the app's only container)",
+              "type": ["string", "null"]
+            },
+            "auth": {
+              "description": "Authentication: `\"default\"` or `\"managed-identity\"`",
+              "type": ["string", "null"]
+            },
+            "managed_identity_client_id": {
+              "description": "Client ID of a user-assigned managed identity (with `auth = \"managed-identity\"`)",
+              "type": ["string", "null"]
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "subscription", "resource_group", "app"]
+        },
+        {
           "description": "Cloudflare Workers secrets, set with `wrangler secret put`",
           "type": "object",
           "properties": {

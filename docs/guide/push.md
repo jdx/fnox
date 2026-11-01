@@ -8,7 +8,7 @@ Some places that need your secrets will accept a value but never return it. CI s
 
 fnox stays the source of truth. When you rotate a key, change it in fnox and run `fnox push` again, instead of updating every dashboard by hand.
 
-fnox can push to GitHub Actions, GitLab CI/CD, Vercel, Cloudflare Workers, Fly.io, Forgejo and Gitea, and HCP Terraform. See the [target catalog](/targets/) for each one's settings.
+fnox can push to GitHub Actions, GitLab CI/CD, Vercel, Cloudflare Workers, Fly.io, Forgejo and Gitea, HCP Terraform, and Azure Container Apps. See the [target catalog](/targets/) for each one's settings.
 
 ::: warning Experimental
 Push targets are new, and their config format may change.

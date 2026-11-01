@@ -165,6 +165,7 @@ const targets = [
       ["Fly.io", "fly"],
       ["Forgejo and Gitea", "forgejo-actions"],
       ["HCP Terraform", "hcp-terraform"],
+      ["Azure Container Apps", "azure-container-apps"],
     ].map(([name, slug]) => page(name, `/targets/${slug}`)),
   },
   reference,
