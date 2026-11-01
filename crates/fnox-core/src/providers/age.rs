@@ -625,25 +625,40 @@ mod tests {
     use crate::providers::Provider;
     use age::secrecy::ExposeSecret;
 
-    #[test]
-    fn detects_and_decrypts_passphrase_encrypted_identity() {
-        let identity = age::x25519::Identity::generate();
-        let secret = identity.to_string();
+    fn passphrase_encrypt(plaintext: &str, armor: bool) -> Vec<u8> {
         let encryptor = age::Encryptor::with_user_passphrase(age::secrecy::SecretString::from(
             "hunter2".to_string(),
         ));
         let mut encrypted = vec![];
-        let mut writer = encryptor.wrap_output(&mut encrypted).unwrap();
-        std::io::Write::write_all(&mut writer, secret.expose_secret().as_bytes()).unwrap();
-        writer.finish().unwrap();
+        let output = if armor {
+            age::armor::ArmoredWriter::wrap_output(&mut encrypted, age::armor::Format::AsciiArmor)
+                .unwrap()
+        } else {
+            age::armor::ArmoredWriter::wrap_output(&mut encrypted, age::armor::Format::Binary)
+                .unwrap()
+        };
+        let mut writer = encryptor.wrap_output(output).unwrap();
+        std::io::Write::write_all(&mut writer, plaintext.as_bytes()).unwrap();
+        writer.finish().unwrap().finish().unwrap();
+        encrypted
+    }
 
-        assert!(is_age_encrypted(&encrypted));
+    #[test]
+    fn detects_and_decrypts_passphrase_encrypted_identity() {
+        let identity = age::x25519::Identity::generate();
+        let secret = identity.to_string();
         assert!(!is_age_encrypted(secret.expose_secret().as_bytes()));
-        assert_eq!(
-            decrypt_with_passphrase(&encrypted, "hunter2".to_string()).unwrap(),
-            *secret.expose_secret()
-        );
-        assert!(decrypt_with_passphrase(&encrypted, "wrong".to_string()).is_err());
+
+        for armor in [false, true] {
+            let encrypted = passphrase_encrypt(secret.expose_secret(), armor);
+            assert_eq!(encrypted.starts_with(b"-----BEGIN AGE"), armor);
+            assert!(is_age_encrypted(&encrypted));
+            assert_eq!(
+                decrypt_with_passphrase(&encrypted, "hunter2".to_string()).unwrap(),
+                *secret.expose_secret()
+            );
+            assert!(decrypt_with_passphrase(&encrypted, "wrong".to_string()).is_err());
+        }
     }
 
     fn test_provider() -> (AgeEncryptionProvider, tempfile::TempPath) {
