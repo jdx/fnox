@@ -554,7 +554,10 @@ impl AgeEncryptionProvider {
 }
 
 /// Identity files decrypted with a prompted passphrase, so one run asks once per file.
-static DECRYPTED_IDENTITIES: std::sync::LazyLock<Mutex<HashMap<PathBuf, String>>> =
+/// Keyed by canonical path; the encrypted bytes are kept so an edited file is not served stale.
+type DecryptedIdentities = HashMap<PathBuf, (Vec<u8>, String)>;
+
+static DECRYPTED_IDENTITIES: std::sync::LazyLock<Mutex<DecryptedIdentities>> =
     std::sync::LazyLock::new(Default::default);
 
 /// True when the bytes are an age-encrypted file (binary or ASCII-armored), such as
@@ -575,10 +578,13 @@ fn identity_auth_error(path: &std::path::Path, details: String, hint: &str) -> F
 
 /// Decrypt a passphrase-encrypted identity file, prompting for the passphrase.
 fn decrypt_identity_file(path: &std::path::Path, bytes: &[u8]) -> Result<String> {
+    let key = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let mut cache = DECRYPTED_IDENTITIES
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    if let Some(content) = cache.get(path) {
+    if let Some((cached_bytes, content)) = cache.get(&key)
+        && cached_bytes.as_slice() == bytes
+    {
         return Ok(content.clone());
     }
     if env::is_non_interactive() {
@@ -600,7 +606,7 @@ fn decrypt_identity_file(path: &std::path::Path, bytes: &[u8]) -> Result<String>
     let content = decrypt_with_passphrase(bytes, passphrase).map_err(|details| {
         identity_auth_error(path, details, "Check the passphrase and try again")
     })?;
-    cache.insert(path.to_path_buf(), content.clone());
+    cache.insert(key, (bytes.to_vec(), content.clone()));
     Ok(content)
 }
 
