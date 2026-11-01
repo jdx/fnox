@@ -85,10 +85,14 @@ impl AzureContainerApps {
         token: &str,
         method: reqwest::Method,
         body: Option<Value>,
-    ) -> Result<Value> {
+        if_match: Option<&str>,
+    ) -> Result<(Value, Option<String>)> {
         let mut request = crate::http::credential_client()
             .request(method.clone(), self.app_url())
             .bearer_auth(token);
+        if let Some(etag) = if_match {
+            request = request.header("If-Match", etag);
+        }
         if let Some(body) = body {
             request = request
                 .header("Content-Type", "application/json")
@@ -99,7 +103,18 @@ impl AzureContainerApps {
             .await
             .map_err(|e| Self::error(format!("{method} container app: request failed: {e}")))?;
         let status = response.status();
+        let header_etag = response
+            .headers()
+            .get(reqwest::header::ETAG)
+            .and_then(|v| v.to_str().ok())
+            .map(String::from);
         let text = response.text().await.unwrap_or_default();
+        if status == reqwest::StatusCode::PRECONDITION_FAILED {
+            return Err(Self::error(format!(
+                "{}: the app changed since fnox read it, so nothing was written; run fnox push again",
+                self.app
+            )));
+        }
         if !status.is_success() {
             return Err(Self::error(format!(
                 "{method} container app: HTTP {status}: {}",
@@ -107,16 +122,21 @@ impl AzureContainerApps {
             )));
         }
         if text.trim().is_empty() {
-            return Ok(Value::Null);
+            return Ok((Value::Null, header_etag));
         }
-        serde_json::from_str(&text)
-            .map_err(|e| Self::error(format!("{method} container app: invalid JSON: {e}")))
+        let value: Value = serde_json::from_str(&text)
+            .map_err(|e| Self::error(format!("{method} container app: invalid JSON: {e}")))?;
+        let etag =
+            header_etag.or_else(|| value.get("etag").and_then(Value::as_str).map(String::from));
+        Ok((value, etag))
     }
 
     /// Set every pair in one read and at most one write
     async fn write(&self, values: &[(&str, &str)]) -> Result<()> {
         let token = self.token().await?;
-        let app = self.request(&token, reqwest::Method::GET, None).await?;
+        let (app, etag) = self
+            .request(&token, reqwest::Method::GET, None, None)
+            .await?;
         let containers = merge_env(&app, self.container.as_deref(), values)
             .map_err(|why| Self::error(format!("{}: {why}", self.app)))?;
         let Some(containers) = containers else {
@@ -126,7 +146,15 @@ impl AzureContainerApps {
         // A merge patch replaces arrays whole, so this sends every container
         // as read; it leaves the app's `secrets` and the rest of the template alone
         let body = json!({ "properties": { "template": { "containers": containers } } });
-        self.request(&token, reqwest::Method::PATCH, Some(body))
+        // The patch sends back every container as read, so it must fail if
+        // another deployment changed the app since: If-Match turns that into a 412
+        if etag.is_none() {
+            tracing::warn!(
+                "{}: Azure returned no etag, so a concurrent change to the app cannot be detected",
+                self.app
+            );
+        }
+        self.request(&token, reqwest::Method::PATCH, Some(body), etag.as_deref())
             .await?;
         Ok(())
     }
