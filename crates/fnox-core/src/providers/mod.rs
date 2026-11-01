@@ -363,13 +363,22 @@ pub(crate) fn get_provider_from_resolved_with_context_and_identity_cycle_guard(
         recipients,
         key_file,
         identity,
+        identities,
+        default_identity,
     } = resolved
     {
         let provider_source = provider_source_path(config, profile, provider_name);
+        // A selected named identity (FNOX_AGE_IDENTITY, else default_identity) replaces `key_file`.
+        let key_file = age::select_key_file(
+            provider_name,
+            key_file.clone(),
+            identities,
+            default_identity.as_deref(),
+        )?;
         return Ok(Box::new(age::AgeEncryptionProvider::new_with_config(
             recipients.clone(),
             crate::config_path::resolve_optional_string_relative_to_file(
-                key_file.clone(),
+                key_file,
                 provider_source.as_deref(),
             ),
             identity.clone(),

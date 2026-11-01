@@ -24,12 +24,35 @@ pub struct AgeEncryptionProvider {
     identity_cycle_guard: Option<AgeIdentityCycleGuard>,
 }
 
+/// Picks the key file to decrypt with. A named identity (`FNOX_AGE_IDENTITY`, else
+/// `default_identity`) takes precedence over the plain `key_file`.
+pub(crate) fn select_key_file(
+    provider_name: &str,
+    key_file: Option<String>,
+    identities: &indexmap::IndexMap<String, String>,
+    default_identity: Option<&str>,
+) -> Result<Option<String>> {
+    let Some(name) = env::FNOX_AGE_IDENTITY.as_deref().or(default_identity) else {
+        return Ok(key_file);
+    };
+    match identities.get(name) {
+        Some(path) => Ok(Some(path.clone())),
+        None => Err(FnoxError::Config(format!(
+            "Age identity '{name}' is not defined in provider '{provider_name}' (available: {})",
+            identities.keys().cloned().collect::<Vec<_>>().join(", ")
+        ))),
+    }
+}
+
 impl AgeEncryptionProvider {
     pub fn new(
         recipients: Vec<String>,
         key_file: Option<String>,
         identity: OptionProviderSecretRef,
+        identities: indexmap::IndexMap<String, String>,
+        default_identity: Option<String>,
     ) -> Result<Self> {
+        let key_file = select_key_file("age", key_file, &identities, default_identity.as_deref())?;
         Ok(Self {
             recipients,
             key_file: key_file.map(|k| crate::config_path::resolve_relative_to_file(&k, None)),
@@ -551,6 +574,21 @@ mod tests {
     use crate::providers::Provider;
     use age::secrecy::ExposeSecret;
 
+    #[test]
+    fn select_key_file_uses_named_identity() {
+        let identities: indexmap::IndexMap<String, String> = [
+            ("yk1".to_string(), "yk1.txt".to_string()),
+            ("yk2".to_string(), "yk2.txt".to_string()),
+        ]
+        .into();
+        let selected = select_key_file("age", Some("k.txt".into()), &identities, Some("yk2"));
+        assert_eq!(selected.unwrap().as_deref(), Some("yk2.txt"));
+        let kept = select_key_file("age", Some("k.txt".into()), &identities, None);
+        assert_eq!(kept.unwrap().as_deref(), Some("k.txt"));
+        let err = select_key_file("age", None, &identities, Some("nope")).unwrap_err();
+        assert!(err.to_string().contains("'nope'"), "{err}");
+    }
+
     fn test_provider() -> (AgeEncryptionProvider, tempfile::TempPath) {
         let identity = age::x25519::Identity::generate();
         let key_file = tempfile::NamedTempFile::new().unwrap();
@@ -563,6 +601,8 @@ mod tests {
                 vec![identity.to_public().to_string()],
                 Some(key_path),
                 OptionProviderSecretRef::none(),
+                Default::default(),
+                None,
             )
             .unwrap(),
             key_file,
@@ -579,9 +619,14 @@ mod tests {
     async fn plugin_recipient_is_not_rejected_as_invalid_hrp() {
         let recipient =
             "age1yubikey1qwla8v7cu3mx6mp79asgrh5ad2h52flwln7c66ydcyy50lg5uh0gxh4kmaz".to_string();
-        let provider =
-            AgeEncryptionProvider::new(vec![recipient], None, OptionProviderSecretRef::none())
-                .expect("provider construction should succeed");
+        let provider = AgeEncryptionProvider::new(
+            vec![recipient],
+            None,
+            OptionProviderSecretRef::none(),
+            Default::default(),
+            None,
+        )
+        .expect("provider construction should succeed");
 
         if let Err(err) = provider.encrypt("plaintext").await {
             let message = err.to_string();

@@ -235,6 +235,8 @@ impl AddCommand {
                 recipients: vec!["age1...".to_string()],
                 key_file: OptionStringOrSecretRef::none(),
                 identity: OptionProviderSecretRef::none(),
+                identities: Default::default(),
+                default_identity: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
             },

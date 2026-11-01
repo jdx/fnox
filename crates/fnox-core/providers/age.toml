@@ -23,6 +23,16 @@ wizard = false
 type = "provider_ref"
 wizard = false
 
+# Named identity files (name -> key file path), selected with `default_identity` or FNOX_AGE_IDENTITY
+[fields.identities]
+type = "string_map"
+
+[fields.default_identity]
+type = "optional"
+placeholder = ""
+label = "Default identity name (optional):"
+wizard = false
+
 # TODO: Remove wizard_fields and have the wizard support vec_string fields directly
 # Currently uses a simplified 'recipient' field (singular) that maps to recipients[0]
 [wizard_fields.recipient]
