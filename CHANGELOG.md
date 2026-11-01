@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.46.0](https://github.com/jdx/fnox/compare/v1.45.0..v1.46.0) - 2026-10-31
+
+### 🚀 Features
+
+- **(config)** let proxy allow_private entries name a single port by [@jdx](https://github.com/jdx) in [#1088](https://github.com/jdx/fnox/pull/1088)
+- **(proxy)** inject short-lived lease credentials from proxy rules by [@jdx](https://github.com/jdx) in [#1078](https://github.com/jdx/fnox/pull/1078)
+- **(push)** copy secrets into CI and hosting secret stores with fnox push by [@jdx](https://github.com/jdx) in [#1079](https://github.com/jdx/fnox/pull/1079)
+- **(sync)** cache [files] entries with a local encryption provider by [@jdx](https://github.com/jdx) in [#1081](https://github.com/jdx/fnox/pull/1081)
+
+### 🐛 Bug Fixes
+
+- **(proxy)** block launching apps with open in the macOS sandbox by [@jdx](https://github.com/jdx) in [#1090](https://github.com/jdx/fnox/pull/1090)
+
+### 🧪 Testing
+
+- fix two flaky tests that failed macOS CI by [@jdx](https://github.com/jdx) in [#1089](https://github.com/jdx/fnox/pull/1089)
+
+### 🔍 Other Changes
+
+- add Entire's StopFailure hook for Claude Code by [@jdx](https://github.com/jdx) in [#1091](https://github.com/jdx/fnox/pull/1091)
+
+### 📦️ Dependency Updates
+
+- update rust crate usage-rs to v7.1.4 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1087](https://github.com/jdx/fnox/pull/1087)
+
 ## [1.45.0](https://github.com/jdx/fnox/compare/v1.44.0..v1.45.0) - 2026-10-29
 
 ### 🚀 Features
