@@ -27,6 +27,8 @@ struct Reply {
     etag: Option<String>,
     /// URL to poll when the request started a long-running operation
     operation: Option<String>,
+    /// Whether Azure answered 202, so the update is not known to be done
+    accepted: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -150,6 +152,7 @@ impl AzureContainerApps {
                 value: Value::Null,
                 etag: header_etag,
                 operation,
+                accepted: status == reqwest::StatusCode::ACCEPTED,
             });
         }
         let value: Value = serde_json::from_str(&text)
@@ -160,6 +163,7 @@ impl AzureContainerApps {
             value,
             etag,
             operation,
+            accepted: status == reqwest::StatusCode::ACCEPTED,
         })
     }
 
@@ -249,8 +253,16 @@ impl AzureContainerApps {
         let reply = self
             .request(&token, reqwest::Method::PATCH, Some(body), etag.as_deref())
             .await?;
-        if let Some(url) = reply.operation {
-            self.wait_for(&token, &url).await?;
+        match reply.operation {
+            Some(url) => self.wait_for(&token, &url).await?,
+            // Nothing to poll, so the update cannot be confirmed
+            None if reply.accepted => {
+                return Err(Self::error(format!(
+                    "{}: Azure accepted the update but named no operation to follow, so fnox cannot confirm it finished; check the app in Azure",
+                    self.app
+                )));
+            }
+            None => {}
         }
         Ok(())
     }
