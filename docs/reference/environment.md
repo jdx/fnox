@@ -32,7 +32,7 @@ For the full order in which `--if-missing`, these variables, and the config comb
 | `FNOX_AGE_KEY`      | age identity contents. Takes precedence over every other identity source, including the provider's `identity` and `key_file`.               |
 | `FNOX_AGE_KEY_FILE` | Path to an age identity or SSH private key. Used only when `FNOX_AGE_KEY` is unset and the provider sets neither `identity` nor `key_file`. |
 
-`FNOX_AGE_IDENTITY` selects a named entry from the age provider's `identities` table, overriding `default_identity`. See [multiple identities](/providers/age#multiple-identities).
+`FNOX_AGE_IDENTITY` selects a named entry from the `identities` table of every age provider in the config, overriding `default_identity`. If an age provider's `identities` table lacks the name, reading a secret from that provider fails. `FNOX_AGE_KEY` still takes precedence. See [multiple identities](/providers/age#multiple-identities).
 
 Without either, fnox reads `age.txt` in `FNOX_CONFIG_DIR`. `fnox exec` removes both variables from the command's environment. See [age identity selection](/providers/age#set-decryption-key).
 

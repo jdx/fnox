@@ -698,6 +698,15 @@
             "identity": {
               "$ref": "#/$defs/OptionProviderSecretRef"
             },
+            "identities": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/StringOrSecretRef"
+              }
+            },
+            "default_identity": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "auth_command": {
               "type": ["string", "null"]
             },

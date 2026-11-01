@@ -24,19 +24,59 @@ pub struct AgeEncryptionProvider {
     identity_cycle_guard: Option<AgeIdentityCycleGuard>,
 }
 
+/// The key file to decrypt with, and the `identity` reference to use alongside it.
+pub(crate) struct KeySelection {
+    pub key_file: Option<String>,
+    pub identity: OptionProviderSecretRef,
+}
+
 /// Picks the key file to decrypt with. A named identity (`FNOX_AGE_IDENTITY`, else
-/// `default_identity`) takes precedence over the plain `key_file`.
+/// `default_identity`) replaces `key_file` and the `identity` reference. An inline
+/// `FNOX_AGE_KEY` outranks all of them, so it skips the selection.
+///
+/// `FNOX_AGE_IDENTITY` is read on every call: the daemon changes its environment per request.
 pub(crate) fn select_key_file(
     provider_name: &str,
     key_file: Option<String>,
+    identity: OptionProviderSecretRef,
     identities: &indexmap::IndexMap<String, String>,
     default_identity: Option<&str>,
-) -> Result<Option<String>> {
-    let Some(name) = env::FNOX_AGE_IDENTITY.as_deref().or(default_identity) else {
-        return Ok(key_file);
+) -> Result<KeySelection> {
+    select_key_file_with(
+        provider_name,
+        key_file,
+        identity,
+        identities,
+        default_identity,
+        env::fnox_age_identity().as_deref(),
+        env::FNOX_AGE_KEY.is_some(),
+    )
+}
+
+fn select_key_file_with(
+    provider_name: &str,
+    key_file: Option<String>,
+    identity: OptionProviderSecretRef,
+    identities: &indexmap::IndexMap<String, String>,
+    default_identity: Option<&str>,
+    env_identity: Option<&str>,
+    inline_key_set: bool,
+) -> Result<KeySelection> {
+    let unchanged = KeySelection {
+        key_file: key_file.clone(),
+        identity: identity.clone(),
+    };
+    if inline_key_set {
+        return Ok(unchanged);
+    }
+    let Some(name) = env_identity.or(default_identity) else {
+        return Ok(unchanged);
     };
     match identities.get(name) {
-        Some(path) => Ok(Some(path.clone())),
+        Some(path) => Ok(KeySelection {
+            key_file: Some(path.clone()),
+            identity: OptionProviderSecretRef::none(),
+        }),
         None => Err(FnoxError::Config(format!(
             "Age identity '{name}' is not defined in provider '{provider_name}' (available: {})",
             identities.keys().cloned().collect::<Vec<_>>().join(", ")
@@ -52,11 +92,19 @@ impl AgeEncryptionProvider {
         identities: indexmap::IndexMap<String, String>,
         default_identity: Option<String>,
     ) -> Result<Self> {
-        let key_file = select_key_file("age", key_file, &identities, default_identity.as_deref())?;
+        let selected = select_key_file(
+            "age",
+            key_file,
+            identity,
+            &identities,
+            default_identity.as_deref(),
+        )?;
         Ok(Self {
             recipients,
-            key_file: key_file.map(|k| crate::config_path::resolve_relative_to_file(&k, None)),
-            identity,
+            key_file: selected
+                .key_file
+                .map(|k| crate::config_path::resolve_relative_to_file(&k, None)),
+            identity: selected.identity,
             config: None,
             profile: vec!["default".to_string()],
             provider_name: "age".to_string(),
@@ -581,11 +629,45 @@ mod tests {
             ("yk2".to_string(), "yk2.txt".to_string()),
         ]
         .into();
-        let selected = select_key_file("age", Some("k.txt".into()), &identities, Some("yk2"));
-        assert_eq!(selected.unwrap().as_deref(), Some("yk2.txt"));
-        let kept = select_key_file("age", Some("k.txt".into()), &identities, None);
-        assert_eq!(kept.unwrap().as_deref(), Some("k.txt"));
-        let err = select_key_file("age", None, &identities, Some("nope")).unwrap_err();
+        let select = |default: Option<&str>, env_id: Option<&str>, inline: bool| {
+            select_key_file_with(
+                "age",
+                Some("k.txt".into()),
+                OptionProviderSecretRef::none(),
+                &identities,
+                default,
+                env_id,
+                inline,
+            )
+        };
+        assert_eq!(
+            select(Some("yk1"), None, false)
+                .unwrap()
+                .key_file
+                .as_deref(),
+            Some("yk1.txt")
+        );
+        // The environment name wins over default_identity.
+        assert_eq!(
+            select(Some("yk1"), Some("yk2"), false)
+                .unwrap()
+                .key_file
+                .as_deref(),
+            Some("yk2.txt")
+        );
+        assert_eq!(
+            select(None, None, false).unwrap().key_file.as_deref(),
+            Some("k.txt")
+        );
+        // An inline FNOX_AGE_KEY skips selection, even for an unknown name.
+        assert_eq!(
+            select(None, Some("nope"), true)
+                .unwrap()
+                .key_file
+                .as_deref(),
+            Some("k.txt")
+        );
+        let err = select(None, Some("nope"), false).err().unwrap();
         assert!(err.to_string().contains("'nope'"), "{err}");
     }
 

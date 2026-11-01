@@ -96,9 +96,11 @@ pub static FNOX_PROFILE: LazyLock<Vec<String>> = LazyLock::new(|| {
 // Age encryption key configuration
 pub static FNOX_AGE_KEY: LazyLock<Option<String>> = LazyLock::new(|| var("FNOX_AGE_KEY").ok());
 
-// Selects a named age identity from the provider's `identities` table
-pub static FNOX_AGE_IDENTITY: LazyLock<Option<String>> =
-    LazyLock::new(|| var("FNOX_AGE_IDENTITY").ok().filter(|v| !v.is_empty()));
+/// Named age identity to decrypt with. Read on each call, not cached: the daemon changes its
+/// environment for every request.
+pub fn fnox_age_identity() -> Option<String> {
+    var("FNOX_AGE_IDENTITY").ok().filter(|v| !v.is_empty())
+}
 
 // Auth prompt configuration (defaults to true if not set)
 pub static FNOX_PROMPT_AUTH: LazyLock<Option<bool>> = LazyLock::new(|| {
