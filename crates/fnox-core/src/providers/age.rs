@@ -748,7 +748,9 @@ mod tests {
             Some("k.txt")
         );
         let err = select(None, Some("nope"), false).err().unwrap();
-        assert!(err.to_string().contains("'nope'"), "{err}");
+        let msg = err.to_string();
+        assert!(msg.contains("'nope'"), "{msg}");
+        assert!(msg.contains("(available: yk1, yk2)"), "{msg}");
     }
 
     fn passphrase_encrypt(plaintext: &str, armor: bool) -> Vec<u8> {

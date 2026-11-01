@@ -34,7 +34,7 @@ For the full order in which `--if-missing`, these variables, and the config comb
 
 `FNOX_AGE_IDENTITY` selects a named entry from the `identities` table of every age provider in the config, overriding `default_identity`. If an age provider's `identities` table lacks the name, reading a secret from that provider fails. `FNOX_AGE_KEY` still takes precedence. See [multiple identities](/providers/age#multiple-identities).
 
-Without either, fnox reads `age.txt` in `FNOX_CONFIG_DIR`. `fnox exec` removes both variables from the command's environment. See [age identity selection](/providers/age#set-decryption-key).
+Without either variable, and without `default_identity` or `FNOX_AGE_IDENTITY`, fnox reads `age.txt` in `FNOX_CONFIG_DIR`. `fnox exec` removes both variables from the command's environment. See [age identity selection](/providers/age#set-decryption-key).
 
 ## Directories
 
