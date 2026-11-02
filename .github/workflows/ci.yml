@@ -20,7 +20,7 @@ jobs:
   trusted:
     if: ${{ github.actor == 'jdx' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'jdx')) }}
     permissions:
-      contents: write
+      contents: read
     uses: $/.github/workflows/ci-impl.yml
     with:
       trusted: true
@@ -30,10 +30,37 @@ jobs:
   untrusted:
     if: ${{ github.actor != 'jdx' || (github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login != 'jdx')) }}
     permissions:
-      contents: write
+      contents: read
     uses: $/.github/workflows/ci-impl.yml
     with:
       trusted: false
+
+  # Pushes the timings that ci-other recorded on main. It is its own job so the
+  # test jobs, which run pull request code, never hold a write token.
+  cost:
+    name: cost
+    needs: trusted
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.trusted.result == 'success' }}
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true # `jouet cost push` pushes with it
+      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
+        with:
+          cache: false
+          install_args: jouet
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: jouet-cost
+          path: ${{ runner.temp }}
+      - name: Push the timings
+        run: |
+          git fetch "$RUNNER_TEMP/jouet-cost.bundle" refs/notes/jouet-cost:refs/notes/jouet-cost
+          jouet cost push
 
   final:
     name: final

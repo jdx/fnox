@@ -255,9 +255,6 @@ jobs:
   ci-other:
     name: ci-other (${{ matrix.os }})
     needs: build
-    # `jouet cost push` writes refs/notes/jouet-cost on pushes to main.
-    permissions:
-      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -272,8 +269,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
-          # Only main keeps the token, for `jouet cost push` below.
-          persist-credentials: ${{ inputs.trusted && matrix.os == 'ubuntu-latest' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          persist-credentials: false
       - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
           cache: false
@@ -327,13 +323,18 @@ jobs:
       - name: Run tests
         if: ${{ !(inputs.trusted && matrix.os == 'ubuntu-latest' && github.event_name == 'push' && github.ref == 'refs/heads/main') }}
         run: cargo test --workspace
-      # On main the same run goes through jouet so its timing is recorded, and
-      # `jouet cost push` shares the timings with agents.
-      - name: Run tests with jouet and share timings
+      # On main the same run goes through jouet so its timing is recorded. The
+      # `cost` job in ci.yml pushes the timings, so this job needs no write token.
+      - name: Run tests with jouet
         if: ${{ inputs.trusted && matrix.os == 'ubuntu-latest' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         run: |
           jouet test --cmd -- cargo test --workspace
-          jouet cost push
+          git bundle create "$RUNNER_TEMP/jouet-cost.bundle" refs/notes/jouet-cost
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ inputs.trusted && matrix.os == 'ubuntu-latest' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        with:
+          name: jouet-cost
+          path: ${{ runner.temp }}/jouet-cost.bundle
       - name: mise run render
         run: mise run render
       - name: assert render produces no diff
