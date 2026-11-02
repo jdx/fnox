@@ -48,7 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: true # `jouet cost push` pushes with it
+          persist-credentials: false # the token reaches only the push step
       - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
           cache: false
@@ -59,7 +59,12 @@ jobs:
           merge-multiple: true
           path: jouet-cost-bundles
       - name: Merge and push the timings
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
+          auth=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader "GIT_CONFIG_VALUE_0=AUTHORIZATION: basic $auth"
           for b in jouet-cost-bundles/*.bundle; do
             [ -e "$b" ] || continue
             jouet cost fetch "./$b"

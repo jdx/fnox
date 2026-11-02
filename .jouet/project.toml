@@ -4,6 +4,7 @@ lint = "mise run lint"
 before_push = [
   "cargo clippy --workspace --all-targets -- -D warnings",
   "mise run render",
+  "git diff --exit-code",
 ]
 
 [checks.focused]
