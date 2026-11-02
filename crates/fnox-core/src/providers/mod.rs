@@ -44,7 +44,10 @@ pub mod yubikey_usb;
 
 pub use bitwarden::BitwardenBackend;
 pub use resolver::resolve_provider_config;
-pub use secret_ref::{OptionProviderSecretRef, OptionStringOrSecretRef, StringOrSecretRef};
+pub use secret_ref::{
+    OptionProviderSecretRef, OptionStringOrSecretRef, ResolvedStringOrProviderRef,
+    StringOrProviderRef, StringOrSecretRef,
+};
 
 /// Provider capabilities - what a provider can do
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

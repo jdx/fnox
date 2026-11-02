@@ -701,7 +701,7 @@
             "identities": {
               "type": "object",
               "additionalProperties": {
-                "$ref": "#/$defs/StringOrSecretRef"
+                "$ref": "#/$defs/StringOrProviderRef"
               }
             },
             "default_identity": {
@@ -1540,6 +1540,19 @@
       },
       "additionalProperties": false,
       "required": ["provider", "value"]
+    },
+    "StringOrProviderRef": {
+      "description": "A value that is either a string (literal or secret reference) or a provider-backed reference.\n\nIn TOML, this deserializes from:\n- `field = \"literal-value\"`\n- `field = { secret = \"SECRET_NAME\" }`\n- `field = { provider = \"keychain\", value = \"age-key\" }`",
+      "anyOf": [
+        {
+          "description": "A provider-backed reference, resolved through another provider",
+          "$ref": "#/$defs/ProviderSecretRef"
+        },
+        {
+          "description": "A literal string or a reference to a secret",
+          "$ref": "#/$defs/StringOrSecretRef"
+        }
+      ]
     },
     "BitwardenBackend": {
       "type": "string",

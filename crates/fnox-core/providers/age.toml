@@ -23,9 +23,9 @@ wizard = false
 type = "provider_ref"
 wizard = false
 
-# Named identity files (name -> key file path), selected with `default_identity` or FNOX_AGE_IDENTITY
+# Named identities (name -> key file path or `{ provider, value }` reference), selected with `default_identity` or FNOX_AGE_IDENTITY
 [fields.identities]
-type = "string_map"
+type = "string_or_provider_ref_map"
 
 [fields.default_identity]
 type = "optional"
