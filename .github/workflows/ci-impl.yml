@@ -255,6 +255,9 @@ jobs:
   ci-other:
     name: ci-other (${{ matrix.os }})
     needs: build
+    # `jouet cost push` writes refs/notes/jouet-cost on pushes to main.
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -269,7 +272,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
-          persist-credentials: false
+          # Only main keeps the token, for `jouet cost push` below.
+          persist-credentials: ${{ inputs.trusted && matrix.os == 'ubuntu-latest' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
           cache: false
@@ -321,7 +325,15 @@ jobs:
             ~/.cargo/.global-cache
             target
       - name: Run tests
+        if: ${{ !(inputs.trusted && matrix.os == 'ubuntu-latest' && github.event_name == 'push' && github.ref == 'refs/heads/main') }}
         run: cargo test --workspace
+      # On main the same run goes through jouet so its timing is recorded, and
+      # `jouet cost push` shares the timings with agents.
+      - name: Run tests with jouet and share timings
+        if: ${{ inputs.trusted && matrix.os == 'ubuntu-latest' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        run: |
+          jouet test --cmd -- cargo test --workspace
+          jouet cost push
       - name: mise run render
         run: mise run render
       - name: assert render produces no diff

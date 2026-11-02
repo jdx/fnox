@@ -20,7 +20,7 @@ jobs:
   trusted:
     if: ${{ github.actor == 'jdx' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'jdx')) }}
     permissions:
-      contents: read
+      contents: write
     uses: $/.github/workflows/ci-impl.yml
     with:
       trusted: true
@@ -30,7 +30,7 @@ jobs:
   untrusted:
     if: ${{ github.actor != 'jdx' || (github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login != 'jdx')) }}
     permissions:
-      contents: read
+      contents: write
     uses: $/.github/workflows/ci-impl.yml
     with:
       trusted: false
