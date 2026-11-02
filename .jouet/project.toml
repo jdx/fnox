@@ -1,0 +1,12 @@
+[checks]
+full = "mise run test"
+lint = "mise run lint"
+before_push = [
+  "cargo clippy --workspace --all-targets -- -D warnings",
+  "mise run render",
+  "test -z \"$(git status --porcelain)\"",
+]
+
+[checks.focused]
+unit = "jouet test --affected"
+bats = "jouet test --cmd -- mise run test:bats -- test/NAME.bats"
