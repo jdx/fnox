@@ -323,10 +323,17 @@ impl SyncCommand {
                 for profile in &cache_profiles {
                     let profile_secrets =
                         resolution_config.get_secrets(std::slice::from_ref(profile))?;
-                    let profile_default_provider = resolution_config
+                    // Without its default provider this profile's sources are
+                    // unknown, so keep its cache entries rather than drop them.
+                    let profile_default_provider = match resolution_config
                         .get_default_provider(std::slice::from_ref(profile))
-                        .ok()
-                        .flatten();
+                    {
+                        Ok(provider) => provider,
+                        Err(e) => {
+                            tracing::debug!("Keeping local cache of profile '{}': {}", profile, e);
+                            continue;
+                        }
+                    };
                     let has_profile_source = |key: &str| {
                         profile_secrets.get(key).is_some_and(|secret| {
                             source_provider(secret, profile_default_provider.as_deref())
