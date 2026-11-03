@@ -323,23 +323,30 @@ impl SyncCommand {
                 for profile in &cache_profiles {
                     let profile_secrets =
                         resolution_config.get_secrets(std::slice::from_ref(profile))?;
-                    // Without its default provider this profile's sources are
-                    // unknown, so keep its cache entries rather than drop them.
-                    let profile_default_provider = match resolution_config
-                        .get_default_provider(std::slice::from_ref(profile))
-                    {
-                        Ok(provider) => provider,
-                        Err(e) => {
-                            tracing::debug!("Keeping local cache of profile '{}': {}", profile, e);
-                            continue;
-                        }
-                    };
+                    let profile_default_provider =
+                        resolution_config.get_default_provider(std::slice::from_ref(profile));
+                    if let Err(e) = &profile_default_provider {
+                        tracing::debug!(
+                            "Could not read default provider of profile '{}': {}",
+                            profile,
+                            e
+                        );
+                    }
                     let has_profile_source = |key: &str| {
                         profile_secrets.get(key).is_some_and(|secret| {
-                            source_provider(secret, profile_default_provider.as_deref())
-                                .is_some_and(|source_provider| {
-                                    source_provider != target_provider_name
-                                })
+                            let default_provider = match &profile_default_provider {
+                                Ok(provider) => provider.as_deref(),
+                                // A secret that would read through the unknown
+                                // default provider may still have a source, so
+                                // keep its cache rather than drop it.
+                                Err(_) if secret.provider().is_none() => {
+                                    return secret.value().is_some();
+                                }
+                                Err(_) => None,
+                            };
+                            source_provider(secret, default_provider).is_some_and(
+                                |source_provider| source_provider != target_provider_name,
+                            )
                         })
                     };
                     let cached_secrets = if profile == "default" {
