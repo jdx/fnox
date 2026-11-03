@@ -4,7 +4,7 @@ lockfile_version = 2
 
 [[tools.1password]]
 version = "2.41.1"
-backend = "vfox:mise-plugins/vfox-1password"
+backend = "vfox:jdx/vfox-1password"
 specifiers = ["latest"]
 
 [tools.1password."platforms.linux-arm64"]
