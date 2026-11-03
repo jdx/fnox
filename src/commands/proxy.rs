@@ -195,6 +195,10 @@ struct ProxyRunCommand {
 }
 
 impl ProxyCommand {
+    pub(crate) fn serves_connections(&self) -> bool {
+        matches!(self.command, ProxySubcommand::Run(_))
+    }
+
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
         let proxy = config.proxy.as_ref().ok_or_else(|| {
             FnoxError::Config(

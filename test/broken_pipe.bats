@@ -39,3 +39,33 @@ EOF
 	# "141".
 	refute_line "fnox_exit=1"
 }
+
+# Regression (#1111): `fnox proxy run` was killed by SIGPIPE when a client
+# closed a rule-domain connection before fnox wrote the response, leaving the
+# child pointed at a dead proxy. The proxy must ignore SIGPIPE, while the
+# command it runs still starts with the default disposition.
+@test "proxy run ignores SIGPIPE but its command does not" {
+	if [[ ! -r /proc/self/status ]]; then
+		skip "needs /proc"
+	fi
+	cat >fnox.toml <<'EOF2'
+root = true
+
+[secrets]
+API_TOKEN = { default = "dummy" }
+
+[[proxy.rules]]
+secret = "API_TOKEN"
+domain = "api.example.com"
+EOF2
+
+	# SigIgn is a hex mask; SIGPIPE is signal 13, bit 0x1000.
+	run "$FNOX_BIN" proxy run -- bash -c '
+		sigpipe_ignored() { local mask; mask=$(awk "/^SigIgn:/ {print \$2}" "/proc/$1/status"); echo $(( (0x$mask & 0x1000) != 0 )); }
+		echo "proxy=$(sigpipe_ignored $PPID)"
+		echo "child=$(sigpipe_ignored $$)"
+	'
+	assert_success
+	assert_line "proxy=1"
+	assert_line "child=0"
+}

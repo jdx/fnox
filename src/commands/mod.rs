@@ -322,6 +322,19 @@ pub fn completion_app() -> usage_rs::complete::App<'static> {
 }
 
 impl Commands {
+    /// Whether this command keeps serving connections until it is stopped.
+    ///
+    /// Such a command must survive a peer that hangs up mid-write, so it
+    /// ignores SIGPIPE; other commands die on it like a normal Unix tool.
+    pub fn serves_connections(&self) -> bool {
+        match self {
+            Commands::Daemon(cmd) => cmd.serves_connections(),
+            Commands::Proxy(cmd) => cmd.serves_connections(),
+            Commands::SandboxBridge(_) => true,
+            _ => false,
+        }
+    }
+
     pub async fn run(&self, cli: &Cli) -> Result<()> {
         match self {
             // Commands that don't need config
