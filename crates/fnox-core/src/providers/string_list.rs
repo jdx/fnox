@@ -110,7 +110,8 @@ mod tests {
     fn round_trips_table() {
         let w: Wrapper = toml_edit::de::from_str("[recipients]\nlaptop = \"b\"\n").unwrap();
         let out = toml_edit::ser::to_string(&w).unwrap();
-        assert!(out.contains("laptop = \"b\""), "{out}");
+        let back: Wrapper = toml_edit::de::from_str(&out).unwrap();
+        assert_eq!(back.recipients, w.recipients, "{out}");
     }
 
     #[test]
