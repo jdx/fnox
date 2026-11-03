@@ -165,6 +165,50 @@ impl Redaction {
         Self::match_lenient(&self.value, input)
     }
 
+    /// The most input bytes a match can span: a lenient match may write
+    /// every value byte as a three-byte `%XX` escape.
+    pub(super) fn max_match_len(&self) -> usize {
+        if self.lenient {
+            self.value.len() * 3
+        } else {
+            self.value.len()
+        }
+    }
+
+    /// Whether some reading of `input` as this redaction's value reaches the
+    /// end of `input` before the value is complete, so more input could
+    /// still decide the match.
+    pub(super) fn needs_more(&self, input: &[u8]) -> bool {
+        if !self.lenient {
+            return input.len() < self.value.len() && self.value.starts_with(input);
+        }
+        Self::needs_more_lenient(&self.value, input)
+    }
+
+    /// [`Self::needs_more`] over the readings [`Self::match_lenient`] tries.
+    fn needs_more_lenient(value: &[u8], input: &[u8]) -> bool {
+        let Some((&expected, rest_value)) = value.split_first() else {
+            return false;
+        };
+        let Some(&first) = input.first() else {
+            return true;
+        };
+        if first == b'%' {
+            if input.len() < 3 {
+                // A cut-off `%XX` escape could still spell `expected`.
+                if input.get(1).is_none_or(u8::is_ascii_hexdigit) {
+                    return true;
+                }
+            } else if decode_hex_pair(input[1], input[2]) == Some(expected)
+                && Self::needs_more_lenient(rest_value, &input[3..])
+            {
+                return true;
+            }
+        }
+        (first == expected || (first == b'+' && expected == b' '))
+            && Self::needs_more_lenient(rest_value, &input[1..])
+    }
+
     /// Matches `value` against `input` where each value byte may appear
     /// literally, as `+` for a space, or as a `%XX` escape. A literal `%` in the
     /// value can be either itself or the start of `%25`, so a failed branch
@@ -548,6 +592,7 @@ pub(super) fn has_ambiguous_path_encoding(target: &str) -> bool {
             .any(|segment| segment == "." || segment == "..")
 }
 
+#[cfg(test)]
 pub(super) fn redact_values(body: &mut Vec<u8>, redactions: &[Redaction]) {
     *body = redact_bytes(body, redactions);
 }
@@ -559,13 +604,75 @@ pub(super) fn redact_string(value: &str, redactions: &[Redaction]) -> String {
 
 pub(super) fn redact_bytes(input: &[u8], redactions: &[Redaction]) -> Vec<u8> {
     let mut output = Vec::with_capacity(input.len());
+    redact_into(input, redactions, 0, &mut output);
+    output
+}
+
+/// Redacts a body that arrives in pieces. A value split across two pieces is
+/// still caught: a tail that could be the start of a match is held back until
+/// the next piece arrives, and the rest is released at once, so the end of a
+/// streamed event is not delayed until the next one.
+pub(super) struct StreamRedactor<'a> {
+    redactions: &'a [Redaction],
+    pending: Vec<u8>,
+    /// The longest input a match can span. Only a tail shorter than this can
+    /// be an unfinished match.
+    longest: usize,
+}
+
+impl<'a> StreamRedactor<'a> {
+    pub(super) fn new(redactions: &'a [Redaction]) -> Self {
+        Self {
+            redactions,
+            pending: Vec::new(),
+            longest: redactions
+                .iter()
+                .map(Redaction::max_match_len)
+                .max()
+                .unwrap_or(0),
+        }
+    }
+
+    /// Redacts what can be decided once `chunk` is added.
+    pub(super) fn push(&mut self, chunk: &[u8]) -> Vec<u8> {
+        self.pending.extend_from_slice(chunk);
+        let mut output = Vec::with_capacity(self.pending.len());
+        let consumed = redact_into(&self.pending, self.redactions, self.longest, &mut output);
+        self.pending.drain(..consumed);
+        output
+    }
+
+    /// Redacts the held-back tail at the end of the body.
+    pub(super) fn finish(self) -> Vec<u8> {
+        redact_bytes(&self.pending, self.redactions)
+    }
+}
+
+/// Redacts `input` into `output` and returns how many bytes it consumed. It
+/// stops early at a tail shorter than `longest` that more input could still
+/// turn into a match; pass 0 for input that is complete. A match never reads
+/// past [`Redaction::max_match_len`] bytes, and no match path runs out of
+/// input before the stop, so each decision is the one the whole body gives.
+fn redact_into(
+    input: &[u8],
+    redactions: &[Redaction],
+    longest: usize,
+    output: &mut Vec<u8>,
+) -> usize {
     let mut offset = 0;
     while offset < input.len() {
-        if let Some((redaction, length)) = redactions.iter().find_map(|redaction| {
-            redaction
-                .match_len(&input[offset..])
-                .map(|length| (redaction, length))
-        }) {
+        let rest = &input[offset..];
+        if rest.len() < longest
+            && redactions
+                .iter()
+                .any(|redaction| redaction.needs_more(rest))
+        {
+            break;
+        }
+        if let Some((redaction, length)) = redactions
+            .iter()
+            .find_map(|redaction| redaction.match_len(rest).map(|length| (redaction, length)))
+        {
             output.extend_from_slice(&redaction.placeholder);
             offset += length;
         } else {
@@ -573,5 +680,5 @@ pub(super) fn redact_bytes(input: &[u8], redactions: &[Redaction]) -> Vec<u8> {
             offset += 1;
         }
     }
-    output
+    offset
 }
