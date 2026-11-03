@@ -61,6 +61,8 @@ value = "YWdl..." # ciphertext, abbreviated
 
 When fnox resolves a secret that has a `sync` entry, it decrypts that and never calls the original provider.
 
+A secret without its own `provider` is cached from the profile's `default_provider`, the provider reads would use. Secrets already stored by the sync target are left alone.
+
 ## Refresh
 
 The cache never updates itself. After a value changes in the vault:
