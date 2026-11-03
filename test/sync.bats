@@ -942,6 +942,109 @@ EOF
 	assert_failure
 }
 
+@test "fnox sync --local-file caches secrets that use a profile default_provider" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local keygen_output
+	keygen_output=$(age-keygen -o key.txt 2>&1)
+	local public_key
+	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+	export FNOX_AGE_KEY
+	FNOX_AGE_KEY=$(grep "^AGE-SECRET-KEY" key.txt)
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.remote]
+type = "plain"
+
+[providers.cache]
+type = "age"
+recipients = ["$public_key"]
+
+[secrets]
+EXPLICIT = { provider = "remote", value = "explicit" }
+
+[profiles.dev]
+default_provider = "remote"
+
+[profiles.dev.secrets]
+IMPLICIT = { value = "implicit" }
+EOF
+
+	assert_fnox_success --profile dev sync --local-file --provider cache --dry-run IMPLICIT
+	assert_output --partial "IMPLICIT (from remote)"
+
+	assert_fnox_success --profile dev sync --local-file --provider cache --force
+	assert_output --partial "Synced 2 secrets"
+
+	run grep '^IMPLICIT.*sync = { provider = "cache", value = "' fnox.local.toml
+	assert_success
+	# The local entry shadows fnox.toml, so change its value to prove the read
+	# comes from the cache
+	sed -i.bak 's/^\(IMPLICIT *= { value = \)"implicit"/\1"changed"/' fnox.local.toml
+	run grep '"changed"' fnox.local.toml
+	assert_success
+	assert_fnox_success --profile dev get IMPLICIT
+	assert_output "implicit"
+}
+
+@test "fnox sync --local-file keeps inherited caches of default_provider secrets" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local keygen_output
+	keygen_output=$(age-keygen -o key.txt 2>&1)
+	local public_key
+	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
+	export FNOX_AGE_KEY
+	FNOX_AGE_KEY=$(grep "^AGE-SECRET-KEY" key.txt)
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.source]
+type = "plain"
+
+[profiles.base]
+default_provider = "source"
+
+[profiles.base.secrets]
+SHARED_SECRET = { value = "base", if_missing = "error" }
+
+[profiles.development]
+inherits = ["base"]
+EOF
+	cat >fnox.local.toml <<EOF
+[providers.age]
+type = "age"
+recipients = ["$public_key"]
+EOF
+
+	assert_fnox_success --profile base sync -p age --local-file --force
+	assert_fnox_success --profile development sync -p age --local-file --force
+	cat >>fnox.toml <<EOF
+
+[profiles.development.secrets]
+SHARED_SECRET = { default = "development" }
+EOF
+
+	# Only the development cache is stale; base still reads SHARED_SECRET
+	# through its default_provider
+	assert_fnox_success --profile development sync -p age --local-file --force
+	assert_output --partial "Removed 1 stale entries from the local cache"
+	run grep -c 'SHARED_SECRET' fnox.local.toml
+	assert_success
+	assert_output "1"
+	assert_fnox_success --profile base get SHARED_SECRET
+	assert_output "base"
+	assert_fnox_success --profile development get SHARED_SECRET
+	assert_output "development"
+}
+
 @test "fnox sync with no eligible secrets shows message" {
 	if ! command -v age-keygen >/dev/null 2>&1; then
 		skip "age-keygen not installed"

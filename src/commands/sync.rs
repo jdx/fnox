@@ -217,10 +217,15 @@ impl SyncCommand {
         };
 
         let keys_filter: std::collections::HashSet<_> = self.keys.iter().collect();
+        let default_provider = resolution_config
+            .get_default_provider(&profile)
+            .ok()
+            .flatten();
         let mut secrets_to_sync = IndexMap::new();
         for (key, secret_config) in &all_secrets {
-            // Must have a provider configured (skip env-var-only and default-only secrets)
-            let Some(source_provider) = secret_config.provider() else {
+            // Must have a provider to read from (skip env-var-only and default-only secrets)
+            let Some(source_provider) = source_provider(secret_config, default_provider.as_deref())
+            else {
                 continue;
             };
 
@@ -318,6 +323,32 @@ impl SyncCommand {
                 for profile in &cache_profiles {
                     let profile_secrets =
                         resolution_config.get_secrets(std::slice::from_ref(profile))?;
+                    let profile_default_provider =
+                        resolution_config.get_default_provider(std::slice::from_ref(profile));
+                    if let Err(e) = &profile_default_provider {
+                        tracing::debug!(
+                            "Could not read default provider of profile '{}': {}",
+                            profile,
+                            e
+                        );
+                    }
+                    let has_profile_source = |key: &str| {
+                        profile_secrets.get(key).is_some_and(|secret| {
+                            let default_provider = match &profile_default_provider {
+                                Ok(provider) => provider.as_deref(),
+                                // A secret that would read through the unknown
+                                // default provider may still have a source, so
+                                // keep its cache rather than drop it.
+                                Err(_) if secret.provider().is_none() => {
+                                    return secret.value().is_some();
+                                }
+                                Err(_) => None,
+                            };
+                            source_provider(secret, default_provider).is_some_and(
+                                |source_provider| source_provider != target_provider_name,
+                            )
+                        })
+                    };
                     let cached_secrets = if profile == "default" {
                         Some(&local_config.secrets)
                     } else {
@@ -332,14 +363,8 @@ impl SyncCommand {
                         .filter(|(key, secret)| {
                             // Another profile may still source this key from a
                             // remote provider, so check this profile's own source.
-                            let has_profile_source =
-                                profile_secrets.get(*key).is_some_and(|secret| {
-                                    secret.provider().is_some_and(|source_provider| {
-                                        source_provider != target_provider_name
-                                    })
-                                });
                             secret.sync.as_ref().is_some_and(|sync| sync.local_source)
-                                && !has_profile_source
+                                && !has_profile_source(key)
                         })
                         .map(|(key, secret)| {
                             let mut secret = secret.clone();
@@ -354,17 +379,11 @@ impl SyncCommand {
                         .into_iter()
                         .flat_map(|secrets| secrets.iter())
                         .filter(|(key, secret)| {
-                            let has_profile_source =
-                                profile_secrets.get(*key).is_some_and(|secret| {
-                                    secret.provider().is_some_and(|source_provider| {
-                                        source_provider != target_provider_name
-                                    })
-                                });
                             // A `local_source` entry is the personal secret's own
                             // definition, so it is never a removable cache copy.
                             secret.sync.as_ref().is_some_and(|sync| !sync.local_source)
                                 && !secrets_to_sync.contains_key(*key)
-                                && !has_profile_source
+                                && !has_profile_source(key)
                         })
                         .map(|(key, _)| key.clone())
                         .collect::<Vec<_>>();
@@ -433,7 +452,8 @@ impl SyncCommand {
                 secrets_to_sync.len() + files_to_sync.len()
             );
             for (key, secret_config) in &secrets_to_sync {
-                let source = secret_config.provider().unwrap_or("unknown");
+                let source = source_provider(secret_config, default_provider.as_deref())
+                    .unwrap_or("unknown");
                 println!(
                     "  {} (from {})",
                     console::style(key).cyan(),
@@ -474,7 +494,8 @@ impl SyncCommand {
                 target_provider_name
             );
             for (key, secret_config) in secrets_to_sync.iter().take(10) {
-                let source = secret_config.provider().unwrap_or("unknown");
+                let source = source_provider(secret_config, default_provider.as_deref())
+                    .unwrap_or("unknown");
                 println!("  {} (from {})", key, source);
             }
             if secrets_to_sync.len() > 10 {
@@ -699,6 +720,17 @@ impl SyncCommand {
 
         Ok(())
     }
+}
+
+/// The provider a read resolves the secret from: its own `provider`, else
+/// `default_provider` when it has a value to pass to one.
+fn source_provider<'a>(
+    secret: &'a SecretConfig,
+    default_provider: Option<&'a str>,
+) -> Option<&'a str> {
+    secret
+        .provider()
+        .or_else(|| secret.value().and(default_provider))
 }
 
 /// Whether the secret's source entry lives in the file and profile table that
