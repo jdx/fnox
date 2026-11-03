@@ -232,7 +232,7 @@ impl AddCommand {
                 }
             }
             ProviderType::Age => crate::config::ProviderConfig::AgeEncryption {
-                recipients: vec!["age1...".to_string()],
+                recipients: vec!["age1...".to_string()].into(),
                 key_file: OptionStringOrSecretRef::none(),
                 identity: OptionProviderSecretRef::none(),
                 identities: Default::default(),

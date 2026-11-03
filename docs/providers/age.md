@@ -76,13 +76,13 @@ See [CI/CD](/guide/ci) for non-interactive runs and pull requests from forks.
 
 ## Configuration
 
-| Field              | Required | Default | Description                                                                                                         |
-| ------------------ | -------- | ------- | ------------------------------------------------------------------------------------------------------------------- |
-| `recipients`       | Yes      | None    | Public recipients to encrypt to: `age1...` keys, `ssh-ed25519` or `ssh-rsa` public keys, or age plugin recipients.  |
-| `key_file`         | No       | None    | Path to an identity file: an age key, SSH private key, or plugin identity. Accepts `{ secret = "NAME" }`.           |
-| `identity`         | No       | None    | A `{ provider = "...", value = "..." }` reference that resolves to the identity contents through another provider.  |
-| `identities`       | No       | None    | Table of named identity file paths or `identity`-style references; see [multiple identities](#multiple-identities). |
-| `default_identity` | No       | None    | Name from `identities` to decrypt with. `FNOX_AGE_IDENTITY` overrides it.                                           |
+| Field              | Required | Default | Description                                                                                                                      |
+| ------------------ | -------- | ------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `recipients`       | Yes      | None    | Keys to encrypt to (`age1...`, `ssh-ed25519`/`ssh-rsa` or plugin recipients), as an array or a [named table](#named-recipients). |
+| `key_file`         | No       | None    | Path to an identity file: an age key, SSH private key, or plugin identity. Accepts `{ secret = "NAME" }`.                        |
+| `identity`         | No       | None    | A `{ provider = "...", value = "..." }` reference that resolves to the identity contents through another provider.               |
+| `identities`       | No       | None    | Table of named identity file paths or `identity`-style references; see [multiple identities](#multiple-identities).              |
+| `default_identity` | No       | None    | Name from `identities` to decrypt with. `FNOX_AGE_IDENTITY` overrides it.                                                        |
 
 Relative `key_file` paths are resolved from the config file that declares the provider. Paths beginning with `~` expand to your home directory, and absolute paths are used unchanged.
 
@@ -216,6 +216,22 @@ Only the selected entry is resolved, so a machine never touches the other YubiKe
 
 A selected identity replaces `key_file`. `FNOX_AGE_KEY` still takes precedence over it, and the provider's `identity` reference is not used while a named identity is selected.
 
+## Named recipients {#named-recipients}
+
+`recipients` can also be a table that names each public key, which documents whose key it is without TOML comments:
+
+```toml
+[providers.age]
+type = "age"
+
+[providers.age.recipients]
+desktop = "age1..."
+laptop = "age1..."
+recovery = "age1..."
+```
+
+Secrets are encrypted to every key in the table. The names are labels only: fnox does not use them to select anything, and renaming one does not require `fnox reencrypt`. The array form keeps working.
+
 ## Team workflow
 
 Encrypt each secret to every teammate's public key. Anyone whose recipient was included can decrypt with their own private key.
@@ -227,16 +243,16 @@ Encrypt each secret to every teammate's public key. Anyone whose recipient was i
    cat ~/.ssh/id_ed25519.pub              # SSH key
    ```
 
-2. List every recipient on the provider:
+2. List every recipient on the provider, named after whose key it is:
 
    ```toml
    [providers.age]
    type = "age"
-   recipients = [
-     "ssh-ed25519 AAAAC3Nza...", # alice
-     "ssh-ed25519 AAAAC3Nza...", # bob
-     "age1...",                  # ci
-   ]
+
+   [providers.age.recipients]
+   alice = "ssh-ed25519 AAAAC3Nza..."
+   bob = "ssh-ed25519 AAAAC3Nza..."
+   ci = "age1..."
    ```
 
 3. Encrypt secrets with `fnox set KEY --provider age` and commit `fnox.toml`.

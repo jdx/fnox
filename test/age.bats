@@ -111,6 +111,47 @@ EOF
 	assert_output "secret-value"
 }
 
+@test "named recipients table encrypts to every listed key" {
+	if ! command -v age-keygen >/dev/null 2>&1; then
+		skip "age-keygen not installed"
+	fi
+
+	local laptop_output desktop_output
+	laptop_output=$(age-keygen -o laptop.txt 2>&1)
+	desktop_output=$(age-keygen -o desktop.txt 2>&1)
+	local laptop_public desktop_public
+	laptop_public=$(echo "$laptop_output" | grep "^Public key:" | cut -d' ' -f3)
+	desktop_public=$(echo "$desktop_output" | grep "^Public key:" | cut -d' ' -f3)
+
+	cat >fnox.toml <<EOF
+root = true
+
+[providers.age]
+type = "age"
+
+[providers.age.recipients]
+laptop = "$laptop_public"
+desktop = "$desktop_public"
+
+[secrets]
+EOF
+
+	run "$FNOX_BIN" set MY_SECRET "secret-value"
+	assert_success
+	assert_config_not_contains "secret-value"
+
+	FNOX_AGE_KEY=$(grep "^AGE-SECRET-KEY" laptop.txt)
+	export FNOX_AGE_KEY
+	run "$FNOX_BIN" get MY_SECRET
+	assert_success
+	assert_output "secret-value"
+
+	FNOX_AGE_KEY=$(grep "^AGE-SECRET-KEY" desktop.txt)
+	run "$FNOX_BIN" get MY_SECRET
+	assert_success
+	assert_output "secret-value"
+}
+
 @test "decrypts using provider-backed identity" {
 	# Skip if age not installed
 	if ! command -v age-keygen >/dev/null 2>&1; then
