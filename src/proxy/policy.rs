@@ -195,8 +195,12 @@ impl Redaction {
         };
         if first == b'%' {
             if input.len() < 3 {
-                // A cut-off `%XX` escape could still spell `expected`.
-                if input.get(1).is_none_or(u8::is_ascii_hexdigit) {
+                // A cut-off `%XX` escape could still spell `expected` only if
+                // its high digit, when present, matches the high nibble.
+                if input
+                    .get(1)
+                    .is_none_or(|&high| decode_hex_pair(high, b'0') == Some(expected & 0xF0))
+                {
                     return true;
                 }
             } else if decode_hex_pair(input[1], input[2]) == Some(expected)
@@ -611,40 +615,33 @@ pub(super) fn redact_bytes(input: &[u8], redactions: &[Redaction]) -> Vec<u8> {
 /// Redacts a body that arrives in pieces. A value split across two pieces is
 /// still caught: a tail that could be the start of a match is held back until
 /// the next piece arrives, and the rest is released at once, so the end of a
-/// streamed event is not delayed until the next one.
-pub(super) struct StreamRedactor<'a> {
-    redactions: &'a [Redaction],
+/// streamed event is not delayed until the next one. Each piece takes the
+/// redactions known when it arrives, so a value minted while the response is
+/// open is redacted from later pieces, including the held-back tail.
+#[derive(Default)]
+pub(super) struct StreamRedactor {
     pending: Vec<u8>,
-    /// The longest input a match can span. Only a tail shorter than this can
-    /// be an unfinished match.
-    longest: usize,
 }
 
-impl<'a> StreamRedactor<'a> {
-    pub(super) fn new(redactions: &'a [Redaction]) -> Self {
-        Self {
-            redactions,
-            pending: Vec::new(),
-            longest: redactions
-                .iter()
-                .map(Redaction::max_match_len)
-                .max()
-                .unwrap_or(0),
-        }
-    }
-
+impl StreamRedactor {
     /// Redacts what can be decided once `chunk` is added.
-    pub(super) fn push(&mut self, chunk: &[u8]) -> Vec<u8> {
+    pub(super) fn push(&mut self, chunk: &[u8], redactions: &[Redaction]) -> Vec<u8> {
+        // Only a tail shorter than the longest possible match can be unfinished.
+        let longest = redactions
+            .iter()
+            .map(Redaction::max_match_len)
+            .max()
+            .unwrap_or(0);
         self.pending.extend_from_slice(chunk);
         let mut output = Vec::with_capacity(self.pending.len());
-        let consumed = redact_into(&self.pending, self.redactions, self.longest, &mut output);
+        let consumed = redact_into(&self.pending, redactions, longest, &mut output);
         self.pending.drain(..consumed);
         output
     }
 
     /// Redacts the held-back tail at the end of the body.
-    pub(super) fn finish(self) -> Vec<u8> {
-        redact_bytes(&self.pending, self.redactions)
+    pub(super) fn finish(self, redactions: &[Redaction]) -> Vec<u8> {
+        redact_bytes(&self.pending, redactions)
     }
 }
 

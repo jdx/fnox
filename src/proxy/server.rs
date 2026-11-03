@@ -494,13 +494,12 @@ where
         return Ok(());
     }
     let has_body = method_has_response_body(&request.method, status);
-    let redactions = policy.redactions();
     write_streamed_response(
         stream,
         status,
         &response_headers,
         has_body,
-        &redactions,
+        || policy.redactions(),
         &mut response,
     )
     .await
@@ -536,19 +535,21 @@ impl BodyChunks for reqwest::Response {
 /// Redaction can change the body length, so the body is sent chunked rather
 /// than with a `content-length`. Memory stays bounded by one upstream chunk
 /// plus the tail held back for a match split across chunks, so a long stream
-/// needs no total size limit.
+/// needs no total size limit. `redactions` is asked again for each piece, so
+/// a value minted while the response is open is redacted from the rest of it.
 pub(super) async fn write_streamed_response<S, B>(
     stream: &mut S,
     status: reqwest::StatusCode,
     headers: &reqwest::header::HeaderMap,
     has_body: bool,
-    redactions: &[Redaction],
+    redactions: impl Fn() -> Arc<Vec<Redaction>>,
     body: &mut B,
 ) -> Result<()>
 where
     S: AsyncWrite + Unpin,
     B: BodyChunks,
 {
+    let header_redactions = redactions();
     let reason = status.canonical_reason().unwrap_or("");
     let mut head = format!("HTTP/1.1 {} {}\r\n", status.as_u16(), reason);
     for (name, value) in headers {
@@ -558,7 +559,7 @@ where
             continue;
         }
         if let Ok(value) = value.to_str() {
-            let value = redact_string(value, redactions);
+            let value = redact_string(value, &header_redactions);
             head.push_str(name.as_str());
             head.push_str(": ");
             head.push_str(&value);
@@ -574,7 +575,7 @@ where
         return Ok(());
     }
 
-    let mut redactor = StreamRedactor::new(redactions);
+    let mut redactor = StreamRedactor::default();
     loop {
         let chunk = match body.next_chunk().await {
             Ok(Some(chunk)) => chunk,
@@ -586,9 +587,9 @@ where
                 return Err(proxy_error("failed to read upstream response"));
             }
         };
-        write_chunk(stream, &redactor.push(&chunk)).await?;
+        write_chunk(stream, &redactor.push(&chunk, &redactions())).await?;
     }
-    write_chunk(stream, &redactor.finish()).await?;
+    write_chunk(stream, &redactor.finish(&redactions())).await?;
     write_flushed(stream, b"0\r\n\r\n").await
 }
 

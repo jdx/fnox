@@ -560,15 +560,15 @@ fn redacts_query_secret_containing_percent() {
 /// Redacts `body` as the proxy does when the upstream sends it in pieces cut
 /// at `cuts`.
 fn redact_streamed(body: &[u8], cuts: &[usize], redactions: &[Redaction]) -> Vec<u8> {
-    let mut redactor = StreamRedactor::new(redactions);
+    let mut redactor = StreamRedactor::default();
     let mut output = Vec::new();
     let mut start = 0;
     for &cut in cuts {
-        output.extend(redactor.push(&body[start..cut]));
+        output.extend(redactor.push(&body[start..cut], redactions));
         start = cut;
     }
-    output.extend(redactor.push(&body[start..]));
-    output.extend(redactor.finish());
+    output.extend(redactor.push(&body[start..], redactions));
+    output.extend(redactor.finish(redactions));
     output
 }
 
@@ -576,16 +576,19 @@ fn redact_streamed(body: &[u8], cuts: &[usize], redactions: &[Redaction]) -> Vec
 fn redacts_a_value_split_across_chunks() {
     let header = policy();
     let query = plan_with(vec![query_rule("maps.example.com", "key")], "50%off%41").unwrap();
+    let spaced = plan_with(vec![query_rule("maps.example.com", "key")], "a b&c").unwrap();
     for (plan, body) in [
         (&header, &b"token=real-token real-tok real-token"[..]),
         (
             &query,
             b"a=50%25off%2541 b=50%off%41 c=50%25off%41 d=50%25off%2541x",
         ),
+        (&spaced, b"q=a+b%26c r=a%20b%26c s=a+b"),
     ] {
         let redactions = plan.policy.redactions();
         let whole = redact_bytes(body, &redactions);
-        assert!(!String::from_utf8_lossy(&whole).contains("50%"));
+        let whole_text = String::from_utf8_lossy(&whole);
+        assert!(!whole_text.contains("50%") && !whole_text.contains("b%26c"));
         for first in 0..=body.len() {
             for second in first..=body.len() {
                 assert_eq!(
@@ -604,12 +607,21 @@ fn redacts_a_value_split_across_chunks() {
 fn streamed_redaction_holds_back_only_a_possible_match() {
     let plan = policy();
     let redactions = plan.policy.redactions();
-    let mut redactor = StreamRedactor::new(&redactions);
-    assert_eq!(redactor.push(b"data: one\n\n"), b"data: one\n\n");
-    assert_eq!(redactor.push(b"data: real-"), b"data: ");
-    assert_eq!(redactor.push(b"token\n\n"), b"ghp_placeholder\n\n");
-    assert_eq!(redactor.push(b"real"), b"");
-    assert_eq!(redactor.finish(), b"real");
+    let mut redactor = StreamRedactor::default();
+    let mut push = |chunk: &[u8]| redactor.push(chunk, &redactions);
+    assert_eq!(push(b"data: one\n\n"), b"data: one\n\n");
+    assert_eq!(push(b"data: real-"), b"data: ");
+    assert_eq!(push(b"token\n\n"), b"ghp_placeholder\n\n");
+    assert_eq!(push(b"real"), b"");
+    assert_eq!(redactor.finish(&redactions), b"real");
+
+    // A `%` whose next digit cannot begin an escape of the value is released.
+    let query = plan_with(vec![query_rule("maps.example.com", "key")], "a b&c").unwrap();
+    let redactions = query.policy.redactions();
+    let mut redactor = StreamRedactor::default();
+    assert_eq!(redactor.push(b"100%2", &redactions), b"100%2");
+    assert_eq!(redactor.push(b"x %6", &redactions), b"x ");
+    assert_eq!(redactor.push(b"1+b&c", &redactions), b"key_placeholder");
 }
 
 /// An upstream body fed by the test one piece at a time.
@@ -649,7 +661,8 @@ async fn read_chunk<S: AsyncRead + Unpin>(stream: &mut S) -> Vec<u8> {
 
 #[tokio::test]
 async fn streams_redacted_chunks_before_the_upstream_finishes() {
-    let redactions = policy().policy.redactions();
+    let plan = policy();
+    let values = plan.policy.clone();
     let (mut client, mut server) = tokio::io::duplex(4096);
     let (upstream, receiver) = tokio::sync::mpsc::unbounded_channel();
     let mut headers = reqwest::header::HeaderMap::new();
@@ -663,7 +676,7 @@ async fn streams_redacted_chunks_before_the_upstream_finishes() {
             reqwest::StatusCode::OK,
             &headers,
             true,
-            &redactions,
+            || values.redactions(),
             &mut body,
         )
         .await
@@ -681,6 +694,19 @@ async fn streams_redacted_chunks_before_the_upstream_finishes() {
     upstream.send(b"token\n\n".to_vec()).unwrap();
     let second = within(read_chunk(&mut client)).await;
     assert_eq!(second, b"ghp_placeholder\n\n");
+
+    // A value minted while the response is open is redacted from the rest.
+    plan.policy
+        .values
+        .replace(&Source::secret("GITHUB_TOKEN"), "new-token".to_string())
+        .unwrap();
+    upstream.send(b"data: new-".to_vec()).unwrap();
+    assert_eq!(within(read_chunk(&mut client)).await, b"data: ");
+    upstream.send(b"token real-token\n\n".to_vec()).unwrap();
+    assert_eq!(
+        within(read_chunk(&mut client)).await,
+        b"ghp_placeholder ghp_placeholder\n\n"
+    );
     drop(upstream);
     let mut rest = Vec::new();
     within(client.read_to_end(&mut rest)).await.unwrap();
@@ -706,7 +732,7 @@ async fn a_failed_upstream_body_leaves_the_chunked_response_unterminated() {
         reqwest::StatusCode::OK,
         &reqwest::header::HeaderMap::new(),
         true,
-        &redactions,
+        || redactions.clone(),
         &mut Failing(false),
     )
     .await;
@@ -728,7 +754,7 @@ async fn a_bodiless_response_is_not_chunked() {
         reqwest::StatusCode::NO_CONTENT,
         &reqwest::header::HeaderMap::new(),
         false,
-        &redactions,
+        || redactions.clone(),
         &mut body,
     )
     .await
