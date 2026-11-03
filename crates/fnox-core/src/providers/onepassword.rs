@@ -19,6 +19,10 @@ const ENVIRONMENT_PREFIX: &str = "environment://";
 static ERROR_PREFIX_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?m)^\[ERROR\] \d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} ").unwrap());
 
+/// A secret reference that `op` echoes back in quotes, as in `could not read secret 'op://…'`.
+static QUOTED_REFERENCE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"'op://[^']*'").unwrap());
+
 pub struct OnePasswordProvider {
     vault: Option<String>,
     account: Option<String>,
@@ -649,7 +653,9 @@ fn op_failure(stderr: &[u8]) -> FnoxError {
         "session expired",
         "invalid session",
     ];
-    if AUTH_PATTERNS.iter().any(|p| details.contains(p)) {
+    // Item, vault, and field names are user-chosen and must not read as an auth error.
+    let message = QUOTED_REFERENCE_RE.replace_all(&details, "''");
+    if AUTH_PATTERNS.iter().any(|p| message.contains(p)) {
         return FnoxError::ProviderAuthFailed {
             provider: "1Password".to_string(),
             details,
@@ -763,5 +769,14 @@ mod tests {
             b"[ERROR] 2026/11/02 13:44:03 error initializing client: multiple accounts found.",
         );
         assert!(matches!(err, FnoxError::ProviderCliFailed { .. }));
+    }
+
+    #[test]
+    fn echoed_reference_names_do_not_look_like_auth_failures() {
+        let err = op_failure(
+            b"[ERROR] 2026/11/02 13:44:03 could not read secret 'op://Private/api-authorization/password': error initializing client: multiple accounts found.",
+        );
+        assert!(matches!(err, FnoxError::ProviderCliFailed { .. }));
+        assert!(err.to_string().contains("api-authorization"));
     }
 }
