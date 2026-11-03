@@ -443,6 +443,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn only_connection_servers_ignore_sigpipe() {
+        fn serves(args: &[&str]) -> bool {
+            let argv: Vec<&std::ffi::OsStr> = args.iter().map(std::ffi::OsStr::new).collect();
+            let (cli, _) = Cli::parse_from_with_settings(&argv)
+                .unwrap_or_else(|error| panic!("parse {args:?}: {error:?}"));
+            cli.command.serves_connections()
+        }
+
+        assert!(serves(&["proxy", "run", "--", "true"]));
+        assert!(serves(&["daemon", "serve"]));
+        assert!(serves(&[
+            "sandbox-bridge",
+            "--port",
+            "1",
+            "--socket",
+            "/tmp/fnox.sock",
+            "--",
+            "true"
+        ]));
+        assert!(!serves(&["proxy", "rules"]));
+        assert!(!serves(&["daemon", "status"]));
+        assert!(!serves(&["daemon", "stop"]));
+        assert!(!serves(&["get", "FOO"]));
+    }
+
+    #[test]
     fn the_flags_this_cli_reads_are_the_flags_its_settings_declare() {
         // A flag documented as setting something and read by nothing — or bound and
         // documented nowhere — fails here rather than in a user's hands.
