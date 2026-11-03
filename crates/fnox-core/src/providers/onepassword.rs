@@ -19,6 +19,10 @@ const ENVIRONMENT_PREFIX: &str = "environment://";
 static ERROR_PREFIX_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?m)^\[ERROR\] \d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} ").unwrap());
 
+/// A secret reference that `op` echoes back in quotes, as in `could not read secret 'op://…'`.
+static QUOTED_REFERENCE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"'op://[^']*'").unwrap());
+
 pub struct OnePasswordProvider {
     vault: Option<String>,
     account: Option<String>,
@@ -270,33 +274,7 @@ impl OnePasswordProvider {
         })?;
 
         if !output.status.success() {
-            let cow = String::from_utf8_lossy(&output.stderr);
-            let replaced = ERROR_PREFIX_RE.replace_all(&cow, "");
-            let stderr = replaced.trim();
-
-            // Check for 1Password CLI auth errors (tested with op CLI v2.x)
-            // Common patterns: "not signed in", "authenticate", "authorization invalid"
-            if stderr.contains("not signed in")
-                || stderr.contains("signed in to an account")
-                || stderr.contains("authenticate")
-                || stderr.contains("authorization")
-                || stderr.contains("session expired")
-                || stderr.contains("invalid session")
-            {
-                return Err(FnoxError::ProviderAuthFailed {
-                    provider: "1Password".to_string(),
-                    details: stderr.to_string(),
-                    hint: "Run 'op signin' or set OP_SERVICE_ACCOUNT_TOKEN".to_string(),
-                    url: "https://fnox.jdx.dev/providers/1password".to_string(),
-                });
-            }
-
-            return Err(FnoxError::ProviderCliFailed {
-                provider: "1Password".to_string(),
-                details: stderr.to_string(),
-                hint: "Check your 1Password configuration and authentication".to_string(),
-                url: "https://fnox.jdx.dev/providers/1password".to_string(),
-            });
+            return Err(op_failure(&output.stderr));
         }
 
         let stdout =
@@ -375,33 +353,7 @@ impl OnePasswordProvider {
             })?;
 
         if !output.status.success() {
-            let cow = String::from_utf8_lossy(&output.stderr);
-            let replaced = ERROR_PREFIX_RE.replace_all(&cow, "");
-            let stderr = replaced.trim();
-
-            // Check for 1Password CLI auth errors (tested with op CLI v2.x)
-            // Use same patterns as get_secret for consistency
-            if stderr.contains("not signed in")
-                || stderr.contains("signed in to an account")
-                || stderr.contains("authenticate")
-                || stderr.contains("authorization")
-                || stderr.contains("session expired")
-                || stderr.contains("invalid session")
-            {
-                return Err(FnoxError::ProviderAuthFailed {
-                    provider: "1Password".to_string(),
-                    details: stderr.to_string(),
-                    hint: "Run 'op signin' or set OP_SERVICE_ACCOUNT_TOKEN".to_string(),
-                    url: "https://fnox.jdx.dev/providers/1password".to_string(),
-                });
-            }
-
-            return Err(FnoxError::ProviderCliFailed {
-                provider: "1Password".to_string(),
-                details: stderr.to_string(),
-                hint: "Check your 1Password configuration and authentication".to_string(),
-                url: "https://fnox.jdx.dev/providers/1password".to_string(),
-            });
+            return Err(op_failure(&output.stderr));
         }
 
         let stdout =
@@ -685,6 +637,41 @@ fn unescape_double_quoted(s: &str) -> String {
     out
 }
 
+/// Classify a failed `op` call from its stderr, so sign-in failures reach auth prompting.
+fn op_failure(stderr: &[u8]) -> FnoxError {
+    let cow = String::from_utf8_lossy(stderr);
+    let replaced = ERROR_PREFIX_RE.replace_all(&cow, "");
+    let details = replaced.trim().to_string();
+
+    // Phrases op CLI v2.x prints when it has no usable session or token.
+    const AUTH_PATTERNS: &[&str] = &[
+        "not signed in",
+        "not currently signed in",
+        "signed in to an account",
+        "authenticate",
+        "authorization",
+        "session expired",
+        "invalid session",
+    ];
+    // Item, vault, and field names are user-chosen and must not read as an auth error.
+    let message = QUOTED_REFERENCE_RE.replace_all(&details, "''");
+    if AUTH_PATTERNS.iter().any(|p| message.contains(p)) {
+        return FnoxError::ProviderAuthFailed {
+            provider: "1Password".to_string(),
+            details,
+            hint: "Run 'op signin' or set OP_SERVICE_ACCOUNT_TOKEN".to_string(),
+            url: "https://fnox.jdx.dev/providers/1password".to_string(),
+        };
+    }
+
+    FnoxError::ProviderCliFailed {
+        provider: "1Password".to_string(),
+        details,
+        hint: "Check your 1Password configuration and authentication".to_string(),
+        url: "https://fnox.jdx.dev/providers/1password".to_string(),
+    }
+}
+
 pub fn env_dependencies() -> &'static [&'static str] {
     &["OP_SERVICE_ACCOUNT_TOKEN", "FNOX_OP_SERVICE_ACCOUNT_TOKEN"]
 }
@@ -765,5 +752,31 @@ mod tests {
                 "{spec:?}"
             );
         }
+    }
+
+    #[test]
+    fn signed_out_error_is_auth_failure() {
+        let err = op_failure(
+            b"[ERROR] 2026/11/02 19:37:10 error initializing client: You are not currently signed in. Please run `op signin --help` for instructions",
+        );
+        assert!(err.is_auth_error());
+        assert!(!err.to_string().contains("[ERROR]"));
+    }
+
+    #[test]
+    fn other_op_errors_are_cli_failures() {
+        let err = op_failure(
+            b"[ERROR] 2026/11/02 13:44:03 error initializing client: multiple accounts found.",
+        );
+        assert!(matches!(err, FnoxError::ProviderCliFailed { .. }));
+    }
+
+    #[test]
+    fn echoed_reference_names_do_not_look_like_auth_failures() {
+        let err = op_failure(
+            b"[ERROR] 2026/11/02 13:44:03 could not read secret 'op://Private/api-authorization/password': error initializing client: multiple accounts found.",
+        );
+        assert!(matches!(err, FnoxError::ProviderCliFailed { .. }));
+        assert!(err.to_string().contains("api-authorization"));
     }
 }
