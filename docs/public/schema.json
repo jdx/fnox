@@ -687,10 +687,7 @@
               "const": "age"
             },
             "recipients": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
+              "$ref": "#/$defs/StringListOrMap"
             },
             "key_file": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
@@ -1484,6 +1481,25 @@
           },
           "additionalProperties": false,
           "required": ["type", "plugin"]
+        }
+      ]
+    },
+    "StringListOrMap": {
+      "description": "A list of strings, written either as an array or as a table whose keys only name the values.\n\nIn TOML, this deserializes from either:\n- `field = [\"value1\", \"value2\"]`\n- `[provider.field]` with `name = \"value\"` entries\n\nThe names only document the values; the values are used in the order they were written.",
+      "anyOf": [
+        {
+          "description": "A plain list of values",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "description": "Values keyed by a descriptive name",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       ]
     },

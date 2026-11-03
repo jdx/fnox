@@ -255,7 +255,7 @@ fn generate_provider_config(
         use serde::{Deserialize, Serialize};
         use strum::AsRefStr;
         use super::super::secret_ref::{OptionProviderSecretRef, OptionStringOrSecretRef, ResolvedStringOrProviderRef, StringOrProviderRef, StringOrSecretRef};
-        use super::super::BitwardenBackend;
+        use super::super::{BitwardenBackend, StringListOrMap};
 
         fn default_bitwarden_backend() -> Option<BitwardenBackend> {
             Some(BitwardenBackend::Bw)
@@ -303,6 +303,11 @@ fn generate_config_variant_fields(provider: &ProviderToml) -> Vec<TokenStream> {
             "vec_string" => {
                 fields.push(quote! {
                     #field_name: Vec<String>
+                });
+            }
+            "string_list_or_map" => {
+                fields.push(quote! {
+                    #field_name: StringListOrMap
                 });
             }
             "backend_enum" => {
@@ -362,7 +367,7 @@ fn generate_resolved_variant_fields(provider: &ProviderToml) -> Vec<TokenStream>
             "optional" => {
                 fields.push(quote! { #field_name: Option<String> });
             }
-            "vec_string" => {
+            "vec_string" | "string_list_or_map" => {
                 fields.push(quote! { #field_name: Vec<String> });
             }
             "backend_enum" => {
@@ -629,6 +634,9 @@ fn generate_try_to_resolved_body(provider: &ProviderToml) -> TokenStream {
             "vec_string" => {
                 field_conversions.push(quote! { #field_name: #local_ident.clone() });
             }
+            "string_list_or_map" => {
+                field_conversions.push(quote! { #field_name: #local_ident.to_vec() });
+            }
             "backend_enum" => {
                 field_conversions.push(quote! { backend: *backend });
             }
@@ -685,7 +693,8 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
                         .filter(|s| !s.is_empty())
                         .cloned()
                         .ok_or_else(|| FnoxError::Config("recipient is required".to_string()))?,
-                ],
+                ]
+                .into(),
                 key_file: OptionStringOrSecretRef::none(),
                 identity: OptionProviderSecretRef::none(),
                 identities: Default::default(),
@@ -752,7 +761,7 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
             "string_map" | "string_or_provider_ref_map" => {
                 field_inits.push(quote! { #field_name: Default::default() });
             }
-            "vec_string" | "backend_enum" => {
+            "vec_string" | "string_list_or_map" | "backend_enum" => {
                 // Skip - handled specially
             }
             _ => {}
@@ -906,6 +915,9 @@ fn generate_resolver_fields(provider: &ProviderToml) -> Vec<TokenStream> {
                 }
                 "vec_string" => {
                     quote! { #field_name: #local_ident.clone() }
+                }
+                "string_list_or_map" => {
+                    quote! { #field_name: #local_ident.to_vec() }
                 }
                 "backend_enum" => {
                     quote! { backend: *backend }

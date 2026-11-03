@@ -38,6 +38,7 @@ pub mod proton_pass;
 pub mod resolved;
 pub mod resolver;
 pub mod secret_ref;
+pub mod string_list;
 pub mod vault;
 pub mod yubikey;
 pub mod yubikey_usb;
@@ -48,6 +49,7 @@ pub use secret_ref::{
     OptionProviderSecretRef, OptionStringOrSecretRef, ResolvedStringOrProviderRef,
     StringOrProviderRef, StringOrSecretRef,
 };
+pub use string_list::StringListOrMap;
 
 /// Provider capabilities - what a provider can do
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
