@@ -1,6 +1,37 @@
 # Changelog
 
-## [1.46.0](https://github.com/jdx/fnox/compare/v1.45.0..v1.46.0) - 2026-10-31
+## [1.47.0](https://github.com/jdx/fnox/compare/v1.46.0..v1.47.0) - 2026-11-03
+
+### 🚀 Features
+
+- **(age)** support passphrase-encrypted identity files by [@jdx](https://github.com/jdx) in [#1097](https://github.com/jdx/fnox/pull/1097)
+- **(age)** select a named identity with default_identity or FNOX_AGE_IDENTITY by [@jdx](https://github.com/jdx) in [#1099](https://github.com/jdx/fnox/pull/1099)
+- **(age)** accept provider-backed references in named identities by [@jdx](https://github.com/jdx) in [#1100](https://github.com/jdx/fnox/pull/1100)
+- **(age)** accept a table of named recipients by [@jdx](https://github.com/jdx) in [#1104](https://github.com/jdx/fnox/pull/1104)
+- **(push)** add azure-container-apps target with one write per push by [@jdx](https://github.com/jdx) in [#1098](https://github.com/jdx/fnox/pull/1098)
+
+### 🐛 Bug Fixes
+
+- **(1password)** offer op signin when op reports "not currently signed in" by [@djgoku](https://github.com/djgoku) in [#1102](https://github.com/jdx/fnox/pull/1102)
+- **(sync)** cache secrets that use a profile's default_provider by [@jdx](https://github.com/jdx) in [#1106](https://github.com/jdx/fnox/pull/1106)
+
+### 🛡️ Security
+
+- **(contributing)** remove the AI reply restriction by [@jdx](https://github.com/jdx) in [#1101](https://github.com/jdx/fnox/pull/1101)
+
+### 🔍 Other Changes
+
+- set up jouet for agents by [@jdx](https://github.com/jdx) in [#1103](https://github.com/jdx/fnox/pull/1103)
+
+### 📦️ Dependency Updates
+
+- update rust crate usage-rs to v7.1.5 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1092](https://github.com/jdx/fnox/pull/1092)
+
+### New Contributors
+
+- @djgoku made their first contribution in [#1102](https://github.com/jdx/fnox/pull/1102)
+
+## [1.46.0](https://github.com/jdx/fnox/compare/v1.45.0..v1.46.0) - 2026-11-01
 
 ### 🚀 Features
 
