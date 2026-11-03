@@ -537,6 +537,8 @@ impl BodyChunks for reqwest::Response {
 /// plus the tail held back for a match split across chunks, so a long stream
 /// needs no total size limit. `redactions` is asked again for each piece, so
 /// a value minted while the response is open is redacted from the rest of it.
+/// Pieces already written cannot be recalled: if the upstream sent the start
+/// of a value before fnox knew it, that start has already reached the client.
 pub(super) async fn write_streamed_response<S, B>(
     stream: &mut S,
     status: reqwest::StatusCode,
