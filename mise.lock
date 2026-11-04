@@ -3,37 +3,37 @@
 lockfile_version = 2
 
 [[tools.1password]]
-version = "2.41.1"
+version = "2.42.0"
 backend = "vfox:jdx/vfox-1password"
 specifiers = ["latest"]
 
 [tools.1password."platforms.linux-arm64"]
-checksum = "sha256:89abd60c17d5c614066c20e6abed816449eb018c5e0679ed63d57071c7bee85e"
-url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.41.1/op_linux_arm64_v2.41.1.zip"
+checksum = "sha256:e56c379fabafb393ce699258e484694abe464870fb41f35ce1b5c3f17868ba61"
+url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.42.0/op_linux_arm64_v2.42.0.zip"
 
 [tools.1password."platforms.linux-arm64-musl"]
-checksum = "sha256:89abd60c17d5c614066c20e6abed816449eb018c5e0679ed63d57071c7bee85e"
-url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.41.1/op_linux_arm64_v2.41.1.zip"
+checksum = "sha256:e56c379fabafb393ce699258e484694abe464870fb41f35ce1b5c3f17868ba61"
+url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.42.0/op_linux_arm64_v2.42.0.zip"
 
 [tools.1password."platforms.linux-x64"]
-checksum = "sha256:e52476700cba9202ac7469bdfb2648ecdbf3438ac85822010f77230139e74966"
-url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.41.1/op_linux_amd64_v2.41.1.zip"
+checksum = "sha256:261fe3844a43e7e83a3d85e8a9f36411729436a1d3add1dc7dd46cbbceebe9e5"
+url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.42.0/op_linux_amd64_v2.42.0.zip"
 
 [tools.1password."platforms.linux-x64-musl"]
-checksum = "sha256:e52476700cba9202ac7469bdfb2648ecdbf3438ac85822010f77230139e74966"
-url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.41.1/op_linux_amd64_v2.41.1.zip"
+checksum = "sha256:261fe3844a43e7e83a3d85e8a9f36411729436a1d3add1dc7dd46cbbceebe9e5"
+url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.42.0/op_linux_amd64_v2.42.0.zip"
 
 [tools.1password."platforms.macos-arm64"]
-checksum = "sha256:2289771b68b521ee3dc1d63a013a6a1c5691e0c53e4c4fe79af8042b6ad3c7f5"
-url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.41.1/op_darwin_arm64_v2.41.1.zip"
+checksum = "sha256:216e86c6db491c752ccb7819b3b1851cc8456ea015a1f7c8a58dd103ef0a474e"
+url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.42.0/op_darwin_arm64_v2.42.0.zip"
 
 [tools.1password."platforms.macos-x64"]
-checksum = "sha256:e77fc9a8ebb23c176fed7c56ea6e4a7184d2b89957e9a5d9a2feb724e7e0574b"
-url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.41.1/op_darwin_amd64_v2.41.1.zip"
+checksum = "sha256:917b0d2b41de3d943bb6562331275c43c4b525af6b003eade06248905ddd62b0"
+url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.42.0/op_darwin_amd64_v2.42.0.zip"
 
 [tools.1password."platforms.windows-x64"]
-checksum = "sha256:7c7ab33e0c1096db62645b72bdf3e284e8734cd39ee0175922ef7ab2a18370da"
-url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.41.1/op_windows_amd64_v2.41.1.zip"
+checksum = "sha256:8c457a0dc852c15beb35af77717ed32294345a300e15c444ed42c79ebc4330e9"
+url = "https://cache.agilebits.com/dist/1P/op2/pkg/v2.42.0/op_windows_amd64_v2.42.0.zip"
 
 [[tools.age]]
 version = "1.3.2"
@@ -350,7 +350,7 @@ url = "https://github.com/jdx/hk/releases/download/v2.11.1/hk-x86_64-pc-windows-
 signer = "sigstore-oidc:https://github.com/jdx/hk/.github/workflows/release.yml"
 
 [[tools.infisical]]
-version = "0.44.12"
+version = "0.44.14"
 backend = "github:Infisical/cli"
 specifiers = ["latest"]
 
@@ -358,46 +358,46 @@ specifiers = ["latest"]
 asset_pattern = "cli_{{ version }}_{{ os(macos='darwin') }}_{{ arch(x64='amd64') }}.tar.gz"
 
 [tools.infisical."platforms.linux-arm64"]
-checksum = "sha256:03f45146e1769cbee33aa4a00bb277ab9d7d953eb7cd026462578720d7d98d72"
+checksum = "sha256:6bfbe716251cc9067c01c1dc45d755fee05a5b8dd8204770111d390803e36859"
 checksum_source = "mise-versions"
-url = "https://github.com/Infisical/cli/releases/download/v0.44.12/cli_0.44.12_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/702143127"
+url = "https://github.com/Infisical/cli/releases/download/v0.44.14/cli_0.44.14_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/707117387"
 
 [tools.infisical."platforms.linux-arm64-musl"]
-checksum = "sha256:03f45146e1769cbee33aa4a00bb277ab9d7d953eb7cd026462578720d7d98d72"
+checksum = "sha256:6bfbe716251cc9067c01c1dc45d755fee05a5b8dd8204770111d390803e36859"
 checksum_source = "mise-versions"
-url = "https://github.com/Infisical/cli/releases/download/v0.44.12/cli_0.44.12_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/702143127"
+url = "https://github.com/Infisical/cli/releases/download/v0.44.14/cli_0.44.14_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/707117387"
 
 [tools.infisical."platforms.linux-x64"]
-checksum = "sha256:82cad3d11fb34e9a90772a803e538a2bc8e5dfe99a8b135fa352b9f0eae2ae9a"
+checksum = "sha256:b91725788fedb319ff761c8e93b7df926fa3b298993c4cea5b40e284943b630b"
 checksum_source = "mise-versions"
-url = "https://github.com/Infisical/cli/releases/download/v0.44.12/cli_0.44.12_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/702143136"
+url = "https://github.com/Infisical/cli/releases/download/v0.44.14/cli_0.44.14_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/707117370"
 
 [tools.infisical."platforms.linux-x64-musl"]
-checksum = "sha256:82cad3d11fb34e9a90772a803e538a2bc8e5dfe99a8b135fa352b9f0eae2ae9a"
+checksum = "sha256:b91725788fedb319ff761c8e93b7df926fa3b298993c4cea5b40e284943b630b"
 checksum_source = "mise-versions"
-url = "https://github.com/Infisical/cli/releases/download/v0.44.12/cli_0.44.12_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/702143136"
+url = "https://github.com/Infisical/cli/releases/download/v0.44.14/cli_0.44.14_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/707117370"
 
 [tools.infisical."platforms.macos-arm64"]
-checksum = "sha256:ce99eb9825791574ab0f658c4694466ffc93c77951c0ffce4e9ef3e04a031951"
+checksum = "sha256:460c73d25b01c3ef70844ed1cac25931f569e2abd0aa929d4c99a24d5753cb91"
 checksum_source = "mise-versions"
-url = "https://github.com/Infisical/cli/releases/download/v0.44.12/cli_0.44.12_darwin_arm64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/702115511"
+url = "https://github.com/Infisical/cli/releases/download/v0.44.14/cli_0.44.14_darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/707092530"
 
 [tools.infisical."platforms.macos-x64"]
-checksum = "sha256:2df965e7510bc3d77651845bd83e2b956afc1b7ef279099b336111590d8b9fd4"
+checksum = "sha256:ff0f1c7fd67e6a83f47206965585c52b98e70cf24721ce81e51dd6276e33b83b"
 checksum_source = "mise-versions"
-url = "https://github.com/Infisical/cli/releases/download/v0.44.12/cli_0.44.12_darwin_amd64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/702115531"
+url = "https://github.com/Infisical/cli/releases/download/v0.44.14/cli_0.44.14_darwin_amd64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/707092534"
 
 [tools.infisical."platforms.windows-x64"]
-checksum = "sha256:caecac5ee694e77b7ccfe0690e16a75416ffa18622b752eb87f6d5914afabf2a"
+checksum = "sha256:4b59ed6558c396421feff24e35ce41819b7101cdca37354cbba86be8806482dd"
 checksum_source = "mise-versions"
-url = "https://github.com/Infisical/cli/releases/download/v0.44.12/cli_0.44.12_windows_amd64.tar.gz"
-url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/702129402"
+url = "https://github.com/Infisical/cli/releases/download/v0.44.14/cli_0.44.14_windows_amd64.tar.gz"
+url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/707110035"
 
 [[tools.jactionlint]]
 version = "2.4.0"
