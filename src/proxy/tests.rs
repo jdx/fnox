@@ -557,6 +557,217 @@ fn redacts_query_secret_containing_percent() {
     );
 }
 
+/// Redacts `body` as the proxy does when the upstream sends it in pieces cut
+/// at `cuts`.
+fn redact_streamed(body: &[u8], cuts: &[usize], redactions: &[Redaction]) -> Vec<u8> {
+    let mut redactor = StreamRedactor::default();
+    let mut output = Vec::new();
+    let mut start = 0;
+    for &cut in cuts {
+        output.extend(redactor.push(&body[start..cut], redactions));
+        start = cut;
+    }
+    output.extend(redactor.push(&body[start..], redactions));
+    output.extend(redactor.finish(redactions));
+    output
+}
+
+#[test]
+fn redacts_a_value_split_across_chunks() {
+    let header = policy();
+    let query = plan_with(vec![query_rule("maps.example.com", "key")], "50%off%41").unwrap();
+    let spaced = plan_with(vec![query_rule("maps.example.com", "key")], "a b&c").unwrap();
+    for (plan, body) in [
+        (&header, &b"token=real-token real-tok real-token"[..]),
+        (
+            &query,
+            b"a=50%25off%2541 b=50%off%41 c=50%25off%41 d=50%25off%2541x",
+        ),
+        (&spaced, b"q=a+b%26c r=a%20b%26c s=a+b"),
+    ] {
+        let redactions = plan.policy.redactions();
+        let whole = redact_bytes(body, &redactions);
+        let whole_text = String::from_utf8_lossy(&whole);
+        assert!(!whole_text.contains("50%") && !whole_text.contains("b%26c"));
+        for first in 0..=body.len() {
+            for second in first..=body.len() {
+                assert_eq!(
+                    redact_streamed(body, &[first, second], &redactions),
+                    whole,
+                    "cut at {first} and {second}"
+                );
+            }
+        }
+        let every_byte: Vec<usize> = (1..body.len()).collect();
+        assert_eq!(redact_streamed(body, &every_byte, &redactions), whole);
+    }
+}
+
+#[test]
+fn streamed_redaction_holds_back_only_a_possible_match() {
+    let plan = policy();
+    let redactions = plan.policy.redactions();
+    let mut redactor = StreamRedactor::default();
+    let mut push = |chunk: &[u8]| redactor.push(chunk, &redactions);
+    assert_eq!(push(b"data: one\n\n"), b"data: one\n\n");
+    assert_eq!(push(b"data: real-"), b"data: ");
+    assert_eq!(push(b"token\n\n"), b"ghp_placeholder\n\n");
+    assert_eq!(push(b"real"), b"");
+    assert_eq!(redactor.finish(&redactions), b"real");
+
+    // A `%` whose next digit cannot begin an escape of the value is released.
+    let query = plan_with(vec![query_rule("maps.example.com", "key")], "a b&c").unwrap();
+    let redactions = query.policy.redactions();
+    let mut redactor = StreamRedactor::default();
+    assert_eq!(redactor.push(b"100%2", &redactions), b"100%2");
+    assert_eq!(redactor.push(b"x %6", &redactions), b"x ");
+    assert_eq!(redactor.push(b"1+b&c", &redactions), b"key_placeholder");
+}
+
+/// An upstream body fed by the test one piece at a time.
+struct ChannelBody(tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>);
+
+impl BodyChunks for ChannelBody {
+    async fn next_chunk(&mut self) -> std::result::Result<Option<Vec<u8>>, String> {
+        Ok(self.0.recv().await)
+    }
+}
+
+async fn read_until<S: AsyncRead + Unpin>(stream: &mut S, end: &[u8]) -> Vec<u8> {
+    let mut read = Vec::new();
+    let mut byte = [0u8; 1];
+    while !read.ends_with(end) {
+        stream.read_exact(&mut byte).await.unwrap();
+        read.push(byte[0]);
+    }
+    read
+}
+
+async fn within<F: std::future::Future>(future: F) -> F::Output {
+    tokio::time::timeout(std::time::Duration::from_secs(5), future)
+        .await
+        .expect("the proxy should have written by now")
+}
+
+async fn read_chunk<S: AsyncRead + Unpin>(stream: &mut S) -> Vec<u8> {
+    let size = read_until(stream, b"\r\n").await;
+    let size = std::str::from_utf8(&size).unwrap().trim_end();
+    let mut data = vec![0; usize::from_str_radix(size, 16).unwrap() + 2];
+    stream.read_exact(&mut data).await.unwrap();
+    assert!(data.ends_with(b"\r\n"));
+    data.truncate(data.len() - 2);
+    data
+}
+
+#[tokio::test]
+async fn streams_redacted_chunks_before_the_upstream_finishes() {
+    let plan = policy();
+    let values = plan.policy.clone();
+    let (mut client, mut server) = tokio::io::duplex(4096);
+    let (upstream, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert("content-type", "text/event-stream".parse().unwrap());
+    headers.insert("content-length", "999".parse().unwrap());
+    headers.insert("x-echo", "real-token".parse().unwrap());
+    let writer = tokio::spawn(async move {
+        let mut body = ChannelBody(receiver);
+        write_streamed_response(
+            &mut server,
+            reqwest::StatusCode::OK,
+            &headers,
+            true,
+            || values.redactions(),
+            &mut body,
+        )
+        .await
+    });
+
+    let head = String::from_utf8(within(read_until(&mut client, b"\r\n\r\n")).await).unwrap();
+    assert!(head.starts_with("HTTP/1.1 200 OK\r\n"), "{head}");
+    assert!(head.contains("transfer-encoding: chunked\r\n"), "{head}");
+    assert!(head.contains("x-echo: ghp_placeholder\r\n"), "{head}");
+    assert!(!head.contains("content-length"), "{head}");
+
+    upstream.send(b"data: one\n\ndata: real-".to_vec()).unwrap();
+    let first = within(read_chunk(&mut client)).await;
+    assert_eq!(first, b"data: one\n\ndata: ");
+    upstream.send(b"token\n\n".to_vec()).unwrap();
+    let second = within(read_chunk(&mut client)).await;
+    assert_eq!(second, b"ghp_placeholder\n\n");
+
+    // A value minted while the response is open is redacted from the rest.
+    plan.policy
+        .values
+        .replace(&Source::secret("GITHUB_TOKEN"), "new-token".to_string())
+        .unwrap();
+    upstream.send(b"data: new-".to_vec()).unwrap();
+    assert_eq!(within(read_chunk(&mut client)).await, b"data: ");
+    upstream.send(b"token real-token\n\n".to_vec()).unwrap();
+    assert_eq!(
+        within(read_chunk(&mut client)).await,
+        b"ghp_placeholder ghp_placeholder\n\n"
+    );
+    drop(upstream);
+    let mut rest = Vec::new();
+    within(client.read_to_end(&mut rest)).await.unwrap();
+    assert_eq!(rest, b"0\r\n\r\n");
+    writer.await.unwrap().unwrap();
+}
+
+#[tokio::test]
+async fn a_failed_upstream_body_leaves_the_chunked_response_unterminated() {
+    let redactions = policy().policy.redactions();
+    let (mut client, mut server) = tokio::io::duplex(4096);
+    struct Failing(bool);
+    impl BodyChunks for Failing {
+        async fn next_chunk(&mut self) -> std::result::Result<Option<Vec<u8>>, String> {
+            if std::mem::replace(&mut self.0, true) {
+                return Err("connection reset".to_string());
+            }
+            Ok(Some(b"partial".to_vec()))
+        }
+    }
+    let result = write_streamed_response(
+        &mut server,
+        reqwest::StatusCode::OK,
+        &reqwest::header::HeaderMap::new(),
+        true,
+        || redactions.clone(),
+        &mut Failing(false),
+    )
+    .await;
+    assert!(result.is_err());
+    drop(server);
+    let mut written = Vec::new();
+    client.read_to_end(&mut written).await.unwrap();
+    let written = String::from_utf8(written).unwrap();
+    assert!(written.ends_with("\r\n\r\n7\r\npartial\r\n"), "{written}");
+}
+
+#[tokio::test]
+async fn a_bodiless_response_is_not_chunked() {
+    let redactions = policy().policy.redactions();
+    let (mut client, mut server) = tokio::io::duplex(4096);
+    let mut body = ChannelBody(tokio::sync::mpsc::unbounded_channel().1);
+    write_streamed_response(
+        &mut server,
+        reqwest::StatusCode::NO_CONTENT,
+        &reqwest::header::HeaderMap::new(),
+        false,
+        || redactions.clone(),
+        &mut body,
+    )
+    .await
+    .unwrap();
+    drop(server);
+    let mut written = Vec::new();
+    client.read_to_end(&mut written).await.unwrap();
+    assert_eq!(
+        String::from_utf8(written).unwrap(),
+        "HTTP/1.1 204 No Content\r\nconnection: close\r\n\r\n"
+    );
+}
+
 #[test]
 fn classifies_non_public_addresses() {
     for address in [

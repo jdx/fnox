@@ -493,55 +493,131 @@ where
         .await?;
         return Ok(());
     }
-    let mut body = Vec::new();
-    loop {
-        let chunk = match response.chunk().await {
-            Ok(Some(chunk)) => chunk,
-            Ok(None) => break,
-            Err(error) => {
-                tracing::debug!("failed to read upstream response: {}", error.without_url());
-                write_error(stream, 502, "failed to read upstream response").await?;
-                return Ok(());
-            }
-        };
-        if chunk.len() > MAX_BODY_BYTES.saturating_sub(body.len()) {
-            write_error(stream, 502, "upstream response exceeded proxy limit").await?;
-            return Ok(());
-        }
-        body.extend_from_slice(&chunk);
-    }
-    let redactions = policy.redactions();
-    redact_values(&mut body, &redactions);
+    let has_body = method_has_response_body(&request.method, status);
+    write_streamed_response(
+        stream,
+        status,
+        &response_headers,
+        has_body,
+        || policy.redactions(),
+        &mut response,
+    )
+    .await
+}
 
+/// Whether a response to `method` with `status` carries a body to frame.
+fn method_has_response_body(method: &str, status: reqwest::StatusCode) -> bool {
+    !method.eq_ignore_ascii_case("HEAD")
+        && !status.is_informational()
+        && status != reqwest::StatusCode::NO_CONTENT
+        && status != reqwest::StatusCode::NOT_MODIFIED
+}
+
+/// A response body read one piece at a time as the upstream sends it.
+pub(super) trait BodyChunks {
+    fn next_chunk(
+        &mut self,
+    ) -> impl std::future::Future<Output = std::result::Result<Option<Vec<u8>>, String>>;
+}
+
+impl BodyChunks for reqwest::Response {
+    async fn next_chunk(&mut self) -> std::result::Result<Option<Vec<u8>>, String> {
+        match self.chunk().await {
+            Ok(chunk) => Ok(chunk.map(|chunk| chunk.to_vec())),
+            // reqwest errors embed the request URL, which can carry a query secret.
+            Err(error) => Err(error.without_url().to_string()),
+        }
+    }
+}
+
+/// Writes a response to the client as the upstream sends it, so streaming
+/// responses such as server-sent events arrive as they are produced.
+/// Redaction can change the body length, so the body is sent chunked rather
+/// than with a `content-length`. Memory stays bounded by one upstream chunk
+/// plus the tail held back for a match split across chunks, so a long stream
+/// needs no total size limit. `redactions` is asked again for each piece, so
+/// a value minted while the response is open is redacted from the rest of it.
+/// Pieces already written cannot be recalled: if the upstream sent the start
+/// of a value before fnox knew it, that start has already reached the client.
+pub(super) async fn write_streamed_response<S, B>(
+    stream: &mut S,
+    status: reqwest::StatusCode,
+    headers: &reqwest::header::HeaderMap,
+    has_body: bool,
+    redactions: impl Fn() -> Arc<Vec<Redaction>>,
+    body: &mut B,
+) -> Result<()>
+where
+    S: AsyncWrite + Unpin,
+    B: BodyChunks,
+{
+    let header_redactions = redactions();
     let reason = status.canonical_reason().unwrap_or("");
     let mut head = format!("HTTP/1.1 {} {}\r\n", status.as_u16(), reason);
-    for (name, value) in &response_headers {
+    for (name, value) in headers {
         if is_hop_by_hop_header(name.as_str())
             || name.as_str().eq_ignore_ascii_case("content-length")
         {
             continue;
         }
         if let Ok(value) = value.to_str() {
-            let value = redact_string(value, &redactions);
+            let value = redact_string(value, &header_redactions);
             head.push_str(name.as_str());
             head.push_str(": ");
             head.push_str(&value);
             head.push_str("\r\n");
         }
     }
-    head.push_str(&format!(
-        "content-length: {}\r\nconnection: close\r\n\r\n",
-        body.len()
-    ));
-    stream
-        .write_all(head.as_bytes())
-        .await
-        .map_err(|error| proxy_error(format!("failed to write client response: {error}")))?;
-    stream
-        .write_all(&body)
-        .await
-        .map_err(|error| proxy_error(format!("failed to write client response: {error}")))?;
-    Ok(())
+    if has_body {
+        head.push_str("transfer-encoding: chunked\r\n");
+    }
+    head.push_str("connection: close\r\n\r\n");
+    write_flushed(stream, head.as_bytes()).await?;
+    if !has_body {
+        return Ok(());
+    }
+
+    let mut redactor = StreamRedactor::default();
+    loop {
+        let chunk = match body.next_chunk().await {
+            Ok(Some(chunk)) => chunk,
+            Ok(None) => break,
+            Err(error) => {
+                // The status line is already sent. Ending without the final
+                // chunk tells the client the body is incomplete.
+                tracing::debug!("failed to read upstream response: {error}");
+                return Err(proxy_error("failed to read upstream response"));
+            }
+        };
+        write_chunk(stream, &redactor.push(&chunk, &redactions())).await?;
+    }
+    write_chunk(stream, &redactor.finish(&redactions())).await?;
+    write_flushed(stream, b"0\r\n\r\n").await
+}
+
+/// Writes one chunk of a chunked body. An empty chunk would end the body, so
+/// nothing is written for one.
+async fn write_chunk<S>(stream: &mut S, data: &[u8]) -> Result<()>
+where
+    S: AsyncWrite + Unpin,
+{
+    if data.is_empty() {
+        return Ok(());
+    }
+    let mut framed = format!("{:x}\r\n", data.len()).into_bytes();
+    framed.extend_from_slice(data);
+    framed.extend_from_slice(b"\r\n");
+    write_flushed(stream, &framed).await
+}
+
+async fn write_flushed<S>(stream: &mut S, data: &[u8]) -> Result<()>
+where
+    S: AsyncWrite + Unpin,
+{
+    let write_failed =
+        |error: std::io::Error| proxy_error(format!("failed to write client response: {error}"));
+    stream.write_all(data).await.map_err(write_failed)?;
+    stream.flush().await.map_err(write_failed)
 }
 
 pub(super) async fn read_http_request<S>(stream: &mut S) -> Result<HttpRequest>
