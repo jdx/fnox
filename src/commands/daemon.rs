@@ -76,6 +76,10 @@ enum DaemonSubcommand {
 }
 
 impl DaemonCommand {
+    pub(crate) fn serves_connections(&self) -> bool {
+        matches!(self.command, DaemonSubcommand::Serve)
+    }
+
     pub async fn run(&self, cli: &Cli) -> Result<()> {
         match &self.command {
             DaemonSubcommand::Clear { keys } => {

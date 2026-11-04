@@ -322,6 +322,19 @@ pub fn completion_app() -> usage_rs::complete::App<'static> {
 }
 
 impl Commands {
+    /// Whether this command keeps serving connections until it is stopped.
+    ///
+    /// Such a command must survive a peer that hangs up mid-write, so it
+    /// ignores SIGPIPE; other commands die on it like a normal Unix tool.
+    pub fn serves_connections(&self) -> bool {
+        match self {
+            Commands::Daemon(cmd) => cmd.serves_connections(),
+            Commands::Proxy(cmd) => cmd.serves_connections(),
+            Commands::SandboxBridge(_) => true,
+            _ => false,
+        }
+    }
+
     pub async fn run(&self, cli: &Cli) -> Result<()> {
         match self {
             // Commands that don't need config
@@ -428,6 +441,32 @@ pub(crate) fn load_read_config(cli: &Cli) -> Result<Config> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_connection_servers_ignore_sigpipe() {
+        fn serves(args: &[&str]) -> bool {
+            let argv: Vec<&std::ffi::OsStr> = args.iter().map(std::ffi::OsStr::new).collect();
+            let (cli, _) = Cli::parse_from_with_settings(&argv)
+                .unwrap_or_else(|error| panic!("parse {args:?}: {error:?}"));
+            cli.command.serves_connections()
+        }
+
+        assert!(serves(&["proxy", "run", "--", "true"]));
+        assert!(serves(&["daemon", "serve"]));
+        assert!(serves(&[
+            "sandbox-bridge",
+            "--port",
+            "1",
+            "--socket",
+            "/tmp/fnox.sock",
+            "--",
+            "true"
+        ]));
+        assert!(!serves(&["proxy", "rules"]));
+        assert!(!serves(&["daemon", "status"]));
+        assert!(!serves(&["daemon", "stop"]));
+        assert!(!serves(&["get", "FOO"]));
+    }
 
     #[test]
     fn the_flags_this_cli_reads_are_the_flags_its_settings_declare() {

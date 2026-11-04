@@ -17,16 +17,7 @@ async fn run(argv: Vec<std::ffi::OsString>) -> miette::Result<()> {
     // `fnox get FOO | head -c 0` would crash with "failed printing to stdout".
     // SIG_DFL makes the process exit on the signal like a normal Unix tool.
     #[cfg(unix)]
-    unsafe {
-        let _ = nix::sys::signal::sigaction(
-            nix::sys::signal::Signal::SIGPIPE,
-            &nix::sys::signal::SigAction::new(
-                nix::sys::signal::SigHandler::SigDfl,
-                nix::sys::signal::SaFlags::empty(),
-                nix::sys::signal::SigSet::empty(),
-            ),
-        );
-    }
+    set_sigpipe(nix::sys::signal::SigHandler::SigDfl);
 
     miette::set_panic_hook();
 
@@ -42,6 +33,16 @@ async fn run(argv: Vec<std::ffi::OsString>) -> miette::Result<()> {
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
 
     let (cli, settings_layer) = Cli::parse_with_settings();
+
+    // A server must outlive a client that hangs up before its reply is
+    // written: `writev` on a closed socket raises SIGPIPE, which would kill
+    // `fnox proxy run` and leave its child pointed at a dead proxy. Ignored,
+    // the write fails with EPIPE and only that connection ends. Children still
+    // start with SIG_DFL, because std resets SIGPIPE when it spawns them.
+    #[cfg(unix)]
+    if cli.command.serves_connections() {
+        set_sigpipe(nix::sys::signal::SigHandler::SigIgn);
+    }
 
     // Hand the settings system the command line as the parser saw it: what was given
     // contributes, what was left off does not, and nothing here copies fields by hand.
@@ -73,4 +74,20 @@ async fn run(argv: Vec<std::ffi::OsString>) -> miette::Result<()> {
     tracing::debug!("Using config file: {}", cli.config.display());
 
     cli.command.run(&cli).await.map_err(miette::Report::new)
+}
+
+#[cfg(unix)]
+fn set_sigpipe(handler: nix::sys::signal::SigHandler) {
+    // SAFETY: SIG_DFL and SIG_IGN are not handler functions, so no code runs
+    // in signal context.
+    unsafe {
+        let _ = nix::sys::signal::sigaction(
+            nix::sys::signal::Signal::SIGPIPE,
+            &nix::sys::signal::SigAction::new(
+                handler,
+                nix::sys::signal::SaFlags::empty(),
+                nix::sys::signal::SigSet::empty(),
+            ),
+        );
+    }
 }
