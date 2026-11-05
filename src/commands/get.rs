@@ -144,7 +144,11 @@ impl GetCommand {
             crate::daemon::Purpose::Get,
         )
         .await;
-        if !matches!(resolved, Ok(Some(_))) && !dependencies.is_empty() {
+        // Credentials the user already supplied are never replaced by the retry
+        let credentials_supplied = dependencies
+            .keys()
+            .any(|key| fnox_core::env::var(key).is_ok());
+        if !matches!(resolved, Ok(Some(_))) && !dependencies.is_empty() && !credentials_supplied {
             // A failure here must not hide the outcome of the first read
             let values = crate::daemon::resolve_batch(
                 cli,
@@ -176,8 +180,17 @@ impl GetCommand {
                     crate::daemon::Purpose::Get,
                 )
                 .await;
-                // Keep an allowed missing result if the retry only fails
-                if resolved.is_err() || matches!(retried, Ok(Some(_))) {
+                // Keep an allowed missing result if the retry only fails to reach the
+                // provider; errors reading the returned value still surface
+                let provider_unavailable = matches!(
+                    &retried,
+                    Err(FnoxError::Provider(_)
+                        | FnoxError::ProviderAuthFailed { .. }
+                        | FnoxError::ProviderSecretNotFound { .. }
+                        | FnoxError::ProviderCliFailed { .. }
+                        | FnoxError::ProviderApiError { .. })
+                );
+                if resolved.is_err() || !provider_unavailable {
                     resolved = retried;
                 }
             }
