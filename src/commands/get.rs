@@ -146,13 +146,15 @@ impl GetCommand {
             // Credentials the user already supplied are never replaced by the retry.
             // `FNOX_X` and `X` name the same credential, so either one counts.
             let base = |key: &str| key.strip_prefix("FNOX_").unwrap_or(key).to_string();
-            let provider_name = secret_config.provider().map(str::to_string).or_else(|| {
-                config
-                    .get_default_provider(&profile)
-                    .ok()
-                    .flatten()
-                    .filter(|_| secret_config.value().is_some())
-            });
+            // The provider the read goes through: the sync target when synced
+            let provider_name = match &secret_config.sync {
+                Some(sync) => Some(sync.provider.clone()),
+                None if secret_config.value().is_some() => secret_config
+                    .provider()
+                    .map(str::to_string)
+                    .or_else(|| config.get_default_provider(&profile).ok().flatten()),
+                None => None,
+            };
             let provider = provider_name.and_then(|name| {
                 config
                     .get_providers(&profile)
