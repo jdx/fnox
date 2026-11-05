@@ -116,13 +116,14 @@ impl GetCommand {
 
         // Resolve the secret together with the secrets its provider needs to
         // authenticate (such as an access token kept as another secret). Unused
-        // `default` references are not pulled in, so a fallback can't block a read.
-        let closure = crate::secret_session::with_provider_dependencies(
+        // `default` references are followed only where the default is the source
+        // (no provider), so an unused fallback can't block a read.
+        let closure = crate::secret_resolver::with_read_dependencies(
             &config,
             &profile,
-            &profile_secrets,
-            IndexMap::from([(self.key().to_string(), secret_config.clone())]),
-        )?;
+            &IndexMap::from([(self.key().to_string(), secret_config.clone())]),
+            &|_| false,
+        );
 
         if self.refresh {
             let keys: Vec<String> = closure.keys().cloned().collect();
