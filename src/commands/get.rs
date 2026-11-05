@@ -144,9 +144,16 @@ impl GetCommand {
             crate::daemon::Purpose::Get,
         )
         .await;
-        // Credentials the user already supplied are never replaced by the retry
-        dependencies.retain(|key, _| fnox_core::env::var(key).is_err());
         if !matches!(resolved, Ok(Some(_))) && !dependencies.is_empty() {
+            // Credentials the user already supplied are never replaced by the retry.
+            // `FNOX_X` and `X` name the same credential, so either one counts.
+            let base = |key: &str| key.strip_prefix("FNOX_").unwrap_or(key).to_string();
+            let supplied: Vec<(String, String)> = dependencies
+                .keys()
+                .filter_map(|key| Some((key.clone(), fnox_core::env::var(key).ok()?)))
+                .collect();
+            let supplied_names: std::collections::HashSet<String> =
+                supplied.iter().map(|(key, _)| base(key)).collect();
             // A failure here must not hide the outcome of the first read
             let values = crate::daemon::resolve_batch(
                 cli,
@@ -161,9 +168,15 @@ impl GetCommand {
                 tracing::debug!("could not resolve dependencies of {}: {e}", self.key());
                 Default::default()
             });
+            // Resolving may have overwritten supplied variables in this process
+            for (key, value) in &supplied {
+                fnox_core::env::set_var(key, value);
+            }
             let mut exposed = false;
             for (key, value) in values {
-                if let Some(value) = value {
+                if let Some(value) = value
+                    && !supplied_names.contains(&base(&key))
+                {
                     fnox_core::env::set_var(key, value);
                     exposed = true;
                 }
