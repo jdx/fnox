@@ -133,8 +133,6 @@ impl GetCommand {
         // its provider may need other secrets to authenticate (such as an access
         // token kept as another secret), resolve those, expose them as environment
         // variables for the provider, and try once more.
-        let mut dependencies = closure;
-        dependencies.shift_remove(self.key());
         let mut resolved = crate::daemon::resolve_one(
             cli,
             &config,
@@ -144,10 +142,46 @@ impl GetCommand {
             crate::daemon::Purpose::Get,
         )
         .await;
-        if !matches!(resolved, Ok(Some(_))) && !dependencies.is_empty() {
+        if !matches!(resolved, Ok(Some(_))) && closure.len() > 1 {
             // Credentials the user already supplied are never replaced by the retry.
             // `FNOX_X` and `X` name the same credential, so either one counts.
             let base = |key: &str| key.strip_prefix("FNOX_").unwrap_or(key).to_string();
+            let provider_name = secret_config.provider().map(str::to_string).or_else(|| {
+                config
+                    .get_default_provider(&profile)
+                    .ok()
+                    .flatten()
+                    .filter(|_| secret_config.value().is_some())
+            });
+            let provider = provider_name.and_then(|name| {
+                config
+                    .get_providers(&profile)
+                    .ok()
+                    .and_then(|providers| providers.get(&name).cloned())
+            });
+            let mut dependencies: IndexMap<String, SecretConfig> = match provider {
+                // Resolve each credential the user has not supplied, with whatever
+                // it references; a supplied one is left out whole
+                Some(provider) => {
+                    let mut wanted = IndexMap::new();
+                    for name in provider.env_dependencies() {
+                        let supplied = provider.env_dependencies().iter().any(|other| {
+                            base(other) == base(name) && fnox_core::env::var(other).is_ok()
+                        });
+                        if let Some(dep) = profile_secrets.get(*name).filter(|_| !supplied) {
+                            wanted.extend(crate::secret_resolver::with_read_dependencies(
+                                &config,
+                                &profile,
+                                &IndexMap::from([(name.to_string(), dep.clone())]),
+                                &|_| false,
+                            ));
+                        }
+                    }
+                    wanted
+                }
+                None => closure.clone(),
+            };
+            dependencies.shift_remove(self.key());
             let supplied: Vec<(String, String)> = dependencies
                 .keys()
                 .filter_map(|key| Some((key.clone(), fnox_core::env::var(key).ok()?)))
@@ -155,19 +189,23 @@ impl GetCommand {
             let supplied_names: std::collections::HashSet<String> =
                 supplied.iter().map(|(key, _)| base(key)).collect();
             // A failure here must not hide the outcome of the first read
-            let values = crate::daemon::resolve_batch(
-                cli,
-                &config,
-                &profile,
-                &dependencies,
-                crate::daemon::Purpose::Get,
-                true,
-            )
-            .await
-            .unwrap_or_else(|e| {
-                tracing::debug!("could not resolve dependencies of {}: {e}", self.key());
+            let values = if dependencies.is_empty() {
                 Default::default()
-            });
+            } else {
+                crate::daemon::resolve_batch(
+                    cli,
+                    &config,
+                    &profile,
+                    &dependencies,
+                    crate::daemon::Purpose::Get,
+                    true,
+                )
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::debug!("could not resolve dependencies of {}: {e}", self.key());
+                    Default::default()
+                })
+            };
             // Resolving may have overwritten supplied variables in this process
             for (key, value) in &supplied {
                 fnox_core::env::set_var(key, value);
