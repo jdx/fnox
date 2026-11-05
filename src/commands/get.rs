@@ -119,17 +119,38 @@ impl GetCommand {
                 .await?;
         }
 
-        // Resolve the secret using centralized resolver
-        match crate::daemon::resolve_one(
-            cli,
+        // Resolve the secret together with the secrets it needs (such as a
+        // provider's access token kept as another secret), as `fnox exec` does
+        let roots = [self.key().to_string()];
+        let closure = crate::secret_resolver::dependency_closure(
             &config,
             &profile,
-            self.key(),
-            secret_config,
-            crate::daemon::Purpose::Get,
-        )
-        .await
-        {
+            &profile_secrets,
+            &roots,
+        )?;
+        let resolved = if closure.len() > 1 {
+            crate::daemon::resolve_batch(
+                cli,
+                &config,
+                &profile,
+                &closure,
+                crate::daemon::Purpose::Get,
+                true,
+            )
+            .await
+            .map(|mut values| values.swap_remove(self.key()).flatten())
+        } else {
+            crate::daemon::resolve_one(
+                cli,
+                &config,
+                &profile,
+                self.key(),
+                secret_config,
+                crate::daemon::Purpose::Get,
+            )
+            .await
+        };
+        match resolved {
             Ok(Some(value)) => {
                 let value = self.maybe_base64_decode(value)?;
 
