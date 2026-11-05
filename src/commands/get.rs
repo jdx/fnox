@@ -129,7 +129,7 @@ impl GetCommand {
             let keys: Vec<String> = closure.keys().cloned().collect();
             crate::daemon::refresh(cli, &config, &keys).await?;
         }
-        // Resolve the requested secret on its own first. Only when that fails, and
+        // Resolve the requested secret on its own first. Only when that fails or finds nothing, and
         // its provider may need other secrets to authenticate (such as an access
         // token kept as another secret), resolve those, expose them as environment
         // variables for the provider, and try once more.
@@ -144,7 +144,7 @@ impl GetCommand {
             crate::daemon::Purpose::Get,
         )
         .await;
-        if resolved.is_err() && !dependencies.is_empty() {
+        if !matches!(resolved, Ok(Some(_))) && !dependencies.is_empty() {
             let values = crate::daemon::resolve_batch(
                 cli,
                 &config,
