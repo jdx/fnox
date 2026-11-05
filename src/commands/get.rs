@@ -145,10 +145,8 @@ impl GetCommand {
         )
         .await;
         // Credentials the user already supplied are never replaced by the retry
-        let credentials_supplied = dependencies
-            .keys()
-            .any(|key| fnox_core::env::var(key).is_ok());
-        if !matches!(resolved, Ok(Some(_))) && !dependencies.is_empty() && !credentials_supplied {
+        dependencies.retain(|key, _| fnox_core::env::var(key).is_err());
+        if !matches!(resolved, Ok(Some(_))) && !dependencies.is_empty() {
             // A failure here must not hide the outcome of the first read
             let values = crate::daemon::resolve_batch(
                 cli,
