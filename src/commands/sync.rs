@@ -2,7 +2,8 @@ use crate::commands::Cli;
 use crate::config::{self, Config, SecretConfig, SyncConfig, local_override_filename};
 use crate::error::{FnoxError, Result};
 use crate::files::{self, FileConfig, FileEntry};
-use crate::secret_resolver::{dependency_closure, resolve_secrets_batch};
+use crate::secret_resolver::resolve_secrets_batch;
+use crate::secret_session::with_provider_dependencies;
 use crate::settings::Settings;
 use console;
 use indexmap::IndexMap;
@@ -540,10 +541,12 @@ impl SyncCommand {
         } else {
             // Also resolve the secrets they need (such as a provider's access
             // token kept as another secret), but sync only the selected ones
-            let mut lookup = all_secrets.clone();
-            lookup.extend(secrets_for_resolve.clone());
-            let roots: Vec<String> = secrets_for_resolve.keys().cloned().collect();
-            let to_resolve = dependency_closure(resolution_config, &profile, &lookup, &roots)?;
+            let to_resolve = with_provider_dependencies(
+                resolution_config,
+                &profile,
+                &all_secrets,
+                secrets_for_resolve.clone(),
+            )?;
             let mut resolved =
                 resolve_secrets_batch(resolution_config, &profile, &to_resolve).await?;
             resolved.retain(|key, _| secrets_for_resolve.contains_key(key));

@@ -114,20 +114,20 @@ impl GetCommand {
             }
         })?;
 
-        if self.refresh {
-            crate::daemon::refresh(cli, &config, std::slice::from_ref(&self.key().to_string()))
-                .await?;
-        }
-
-        // Resolve the secret together with the secrets it needs (such as a
-        // provider's access token kept as another secret), as `fnox exec` does
-        let roots = [self.key().to_string()];
-        let closure = crate::secret_resolver::dependency_closure(
+        // Resolve the secret together with the secrets its provider needs to
+        // authenticate (such as an access token kept as another secret). Unused
+        // `default` references are not pulled in, so a fallback can't block a read.
+        let closure = crate::secret_session::with_provider_dependencies(
             &config,
             &profile,
             &profile_secrets,
-            &roots,
+            IndexMap::from([(self.key().to_string(), secret_config.clone())]),
         )?;
+
+        if self.refresh {
+            let keys: Vec<String> = closure.keys().cloned().collect();
+            crate::daemon::refresh(cli, &config, &keys).await?;
+        }
         let resolved = if closure.len() > 1 {
             crate::daemon::resolve_batch(
                 cli,
