@@ -145,6 +145,7 @@ impl GetCommand {
         )
         .await;
         if !matches!(resolved, Ok(Some(_))) && !dependencies.is_empty() {
+            // A failure here must not hide the outcome of the first read
             let values = crate::daemon::resolve_batch(
                 cli,
                 &config,
@@ -153,7 +154,11 @@ impl GetCommand {
                 crate::daemon::Purpose::Get,
                 true,
             )
-            .await?;
+            .await
+            .unwrap_or_else(|e| {
+                tracing::debug!("could not resolve dependencies of {}: {e}", self.key());
+                Default::default()
+            });
             let mut exposed = false;
             for (key, value) in values {
                 if let Some(value) = value {
@@ -162,7 +167,7 @@ impl GetCommand {
                 }
             }
             if exposed {
-                resolved = crate::daemon::resolve_one(
+                let retried = crate::daemon::resolve_one(
                     cli,
                     &config,
                     &profile,
@@ -171,6 +176,10 @@ impl GetCommand {
                     crate::daemon::Purpose::Get,
                 )
                 .await;
+                // Keep an allowed missing result if the retry only fails
+                if resolved.is_err() || matches!(retried, Ok(Some(_))) {
+                    resolved = retried;
+                }
             }
         }
         match resolved {
