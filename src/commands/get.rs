@@ -129,28 +129,50 @@ impl GetCommand {
             let keys: Vec<String> = closure.keys().cloned().collect();
             crate::daemon::refresh(cli, &config, &keys).await?;
         }
-        let resolved = if closure.len() > 1 {
-            crate::daemon::resolve_batch(
+        // Resolve the requested secret on its own first. Only when that fails, and
+        // its provider may need other secrets to authenticate (such as an access
+        // token kept as another secret), resolve those, expose them as environment
+        // variables for the provider, and try once more.
+        let mut dependencies = closure;
+        dependencies.shift_remove(self.key());
+        let mut resolved = crate::daemon::resolve_one(
+            cli,
+            &config,
+            &profile,
+            self.key(),
+            secret_config,
+            crate::daemon::Purpose::Get,
+        )
+        .await;
+        if resolved.is_err() && !dependencies.is_empty() {
+            let values = crate::daemon::resolve_batch(
                 cli,
                 &config,
                 &profile,
-                &closure,
+                &dependencies,
                 crate::daemon::Purpose::Get,
                 true,
             )
-            .await
-            .map(|mut values| values.swap_remove(self.key()).flatten())
-        } else {
-            crate::daemon::resolve_one(
-                cli,
-                &config,
-                &profile,
-                self.key(),
-                secret_config,
-                crate::daemon::Purpose::Get,
-            )
-            .await
-        };
+            .await?;
+            let mut exposed = false;
+            for (key, value) in values {
+                if let Some(value) = value {
+                    fnox_core::env::set_var(key, value);
+                    exposed = true;
+                }
+            }
+            if exposed {
+                resolved = crate::daemon::resolve_one(
+                    cli,
+                    &config,
+                    &profile,
+                    self.key(),
+                    secret_config,
+                    crate::daemon::Purpose::Get,
+                )
+                .await;
+            }
+        }
         match resolved {
             Ok(Some(value)) => {
                 let value = self.maybe_base64_decode(value)?;
