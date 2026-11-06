@@ -43,3 +43,19 @@ CONFIG
 	assert_output --partial "expected a string"
 	refute_output --partial "Failed to read configuration file"
 }
+
+@test "hook-env reports a root schema error even when .config/fnox.local.toml is valid" {
+	cat >fnox.toml <<'CONFIG'
+root = true
+[secrets]
+VALID = { default = "1" }
+TEST = { default = 1 }
+CONFIG
+	mkdir -p .config
+	touch .config/fnox.local.toml
+
+	run "$FNOX_BIN" hook-env -s bash
+	assert_success
+	assert_output --partial "expected a string"
+	refute_output --partial "export VALID="
+}
