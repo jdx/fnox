@@ -742,7 +742,7 @@ fn source_provider<'a>(
 /// Shown beside "remove stale local cache" entries. Entries synced by fnox
 /// 1.36.0 or older lack `local_source`, so a personal secret can look like a
 /// removable cache copy.
-const STALE_LOCAL_CACHE_HINT: &str = "If any entry above is a personal secret (its source is defined in fnox.local.toml),\nadd `local_source = true` inside its `sync = { ... }` table before syncing.";
+const STALE_LOCAL_CACHE_HINT: &str = "If any entry above is a personal secret (its source is defined in fnox.local.toml or .fnox.local.toml),\nadd `local_source = true` inside its `sync` table before syncing.";
 
 /// Whether the secret's source entry lives in the file and profile table that
 /// `--local-file` is about to write, so the cached copy replaces the personal
