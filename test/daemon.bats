@@ -119,7 +119,7 @@ if [ -n "${HIDDEN:-}" ]; then
 	echo "unrelated hidden secret leaked" >&2
 	exit 1
 fi
-printf 'remote-value\n'
+printf 'remote-value'
 EOF
 	chmod +x "$TEST_TEMP_DIR/bin/op"
 	export PATH="$TEST_TEMP_DIR/bin:$PATH"

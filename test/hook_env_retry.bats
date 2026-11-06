@@ -19,7 +19,7 @@ MOCK
 printf 'called\n' >> op-calls
 [ "$OP_SERVICE_ACCOUNT_TOKEN" = test-token ] || exit 2
 [ -f provider-ready ] || exit 1
-printf 'mock-url\n'
+printf 'mock-url'
 MOCK
 	chmod +x bin/pass bin/op
 	cat >fnox.toml <<'CONFIG'

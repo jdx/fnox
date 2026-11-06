@@ -232,8 +232,13 @@ impl OnePasswordProvider {
         results
     }
 
-    /// Execute op CLI command with proper authentication
+    /// Execute an op CLI command and return its output with surrounding whitespace trimmed.
     async fn execute_op_command(&self, args: &[&str]) -> Result<String> {
+        Ok(self.execute_op_command_raw(args).await?.trim().to_string())
+    }
+
+    /// Execute op CLI command with proper authentication, returning stdout byte-for-byte.
+    async fn execute_op_command_raw(&self, args: &[&str]) -> Result<String> {
         tracing::debug!("Executing op command with args: {:?}", args);
 
         let mut cmd = Command::new("op");
@@ -285,7 +290,7 @@ impl OnePasswordProvider {
                 url: "https://fnox.jdx.dev/providers/1password".to_string(),
             })?;
 
-        Ok(stdout.trim().to_string())
+        Ok(stdout)
     }
 
     /// Execute op inject command with stdin/stdout
@@ -380,8 +385,10 @@ impl crate::providers::Provider for OnePasswordProvider {
         let reference = self.value_to_reference(value)?;
         tracing::debug!("Reading 1Password secret: {}", reference);
 
-        // Use 'op read' to fetch the secret
-        self.execute_op_command(&["read", &reference]).await
+        // `--no-newline` drops the newline `op read` appends, so the value keeps exactly
+        // the bytes 1Password stores (e.g. the final newline of an SSH private key).
+        self.execute_op_command_raw(&["read", "--no-newline", &reference])
+            .await
     }
 
     async fn get_secrets_batch(
@@ -437,7 +444,9 @@ impl OnePasswordProvider {
         }
 
         // Build input for op inject
-        // Format: KEY1=op://vault/item/field\nKEY2=op://vault/item2/field2\n...
+        // Each reference is preceded by a marker line carrying a random nonce, so the
+        // output can be split back into values without guessing where one ends.
+        let nonce = format!("FNOX_OP_BATCH_{:016x}_", rand::random::<u64>());
         let mut input = String::new();
         let mut key_order = Vec::new();
         let mut results = HashMap::new();
@@ -445,7 +454,11 @@ impl OnePasswordProvider {
         for (key, value) in secrets {
             match self.value_to_reference(value) {
                 Ok(reference) => {
-                    input.push_str(&format!("{}={}\n", key, reference));
+                    input.push_str(&format!(
+                        "{}\n{}\n",
+                        batch_marker(&nonce, key_order.len()),
+                        reference
+                    ));
                     key_order.push(key.clone());
                 }
                 Err(e) => {
@@ -461,48 +474,33 @@ impl OnePasswordProvider {
             return results;
         }
 
+        // Closing marker so the last value is delimited like the others.
+        input.push_str(&batch_marker(&nonce, key_order.len()));
+        input.push('\n');
+
         tracing::debug!("Injecting secrets with input:\n{}", input);
 
         // Execute op inject with stdin
         match self.execute_op_inject(&input).await {
             Ok(output) => {
-                // Parse output handling multi-line secrets
-                // Format: KEY1=value1\nKEY2=value2_line1\nvalue2_line2\nKEY3=value3
-                // We need to identify where each key starts and collect all lines until the next key
-                let mut current_key: Option<String> = None;
-                let mut current_value = String::new();
-
-                for line in output.lines() {
-                    // Check if this line starts a new key (contains '=' and the prefix matches a key we're looking for)
-                    if let Some(eq_pos) = line.find('=') {
-                        let potential_key = &line[..eq_pos];
-
-                        // Check if this is one of our expected keys
-                        if key_order.iter().any(|k| k == potential_key) {
-                            // Save the previous key-value pair if we have one
-                            if let Some(key) = current_key.take() {
-                                results.insert(key, Ok(current_value.clone()));
+                match parse_inject_output(&output, &nonce, key_order.len()) {
+                    Some(values) => {
+                        for (key, value) in key_order.iter().zip(values) {
+                            results.insert(key.clone(), Ok(value));
+                        }
+                    }
+                    None => {
+                        // Output didn't have the shape we sent; read each secret on its own.
+                        tracing::warn!(
+                            "unexpected op inject output, falling back to individual calls"
+                        );
+                        for (key, value) in secrets {
+                            if !results.contains_key(key) {
+                                let result = self.get_secret(value).await;
+                                results.insert(key.clone(), result);
                             }
-
-                            // Start collecting the new key
-                            current_key = Some(potential_key.to_string());
-                            current_value = line[eq_pos + 1..].to_string();
-                            continue;
                         }
                     }
-
-                    // This line is a continuation of the current value
-                    if current_key.is_some() {
-                        if !current_value.is_empty() {
-                            current_value.push('\n');
-                        }
-                        current_value.push_str(line);
-                    }
-                }
-
-                // Don't forget the last key-value pair
-                if let Some(key) = current_key {
-                    results.insert(key, Ok(current_value));
                 }
 
                 // Check if any secrets are missing from output
@@ -682,9 +680,66 @@ fn op_service_account_token() -> Option<String> {
         .ok()
 }
 
+/// Marker line number `index` of an `op inject` batch.
+fn batch_marker(nonce: &str, index: usize) -> String {
+    format!("{nonce}{index}")
+}
+
+/// Split the output of an `op inject` batch into `count` values, byte-for-byte.
+///
+/// The input was `marker0 \n ref0 \n marker1 \n ref1 \n … marker<count> \n`, so the
+/// output is the same with each reference replaced by its value. Returns `None` if
+/// the markers are not found in order.
+fn parse_inject_output(output: &str, nonce: &str, count: usize) -> Option<Vec<String>> {
+    let first = format!("{}\n", batch_marker(nonce, 0));
+    let mut cursor = output.strip_prefix(first.as_str())?;
+    let mut values = Vec::with_capacity(count);
+    for i in 1..=count {
+        let next = format!("\n{}\n", batch_marker(nonce, i));
+        let end = cursor.find(&next)?;
+        values.push(cursor[..end].to_string());
+        cursor = &cursor[end + next.len()..];
+    }
+    Some(values)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inject_output_keeps_values_byte_for_byte() {
+        let n = "N_";
+        let out =
+            "N_0\n-----BEGIN-----\nabc\n-----END-----\n\nN_1\n\n\nline\nN_2\n\nN_3\nFOO=bar\nN_4\n";
+        let values = parse_inject_output(out, n, 4).unwrap();
+        assert_eq!(values[0], "-----BEGIN-----\nabc\n-----END-----\n");
+        assert_eq!(values[1], "\n\nline");
+        assert_eq!(values[2], "");
+        assert_eq!(values[3], "FOO=bar");
+    }
+
+    #[test]
+    fn inject_output_marker_prefixes_do_not_collide() {
+        let out: String = (0..=11)
+            .map(|i| {
+                if i < 11 {
+                    format!("N_{i}\nv{i}\n")
+                } else {
+                    format!("N_{i}\n")
+                }
+            })
+            .collect();
+        let values = parse_inject_output(&out, "N_", 11).unwrap();
+        assert_eq!(values[1], "v1");
+        assert_eq!(values[10], "v10");
+    }
+
+    #[test]
+    fn inject_output_rejects_unexpected_shape() {
+        assert!(parse_inject_output("garbage", "N_", 1).is_none());
+        assert!(parse_inject_output("N_0\nv\n", "N_", 1).is_none());
+    }
 
     #[test]
     fn parses_plain_and_exported_lines() {

@@ -41,12 +41,14 @@ ENV
 fi
 if [ "$1" = "whoami" ]; then exit 0; fi
 if [ "$1" = "inject" ]; then
-	# KEY=op://vault/item/field  ->  KEY=value-of-item-field
-	sed -E 's#=op://[^/]+/([^/]+)/(.+)$#=value-of-\1-\2#'
+	# a line holding only op://vault/item/field  ->  value-of-item-field
+	sed -E 's#^op://[^/]+/([^/]+)/(.+)$#value-of-\1-\2#'
 	exit 0
 fi
 if [ "$1" = "read" ]; then
-	echo "$2" | sed -E 's#^op://[^/]+/([^/]+)/(.+)$#value-of-\1-\2#'
+	nl="\n"
+	if [ "$2" = "--no-newline" ]; then nl=""; ref="$3"; else ref="$2"; fi
+	printf "%s$nl" "$(echo "$ref" | sed -E 's#^op://[^/]+/([^/]+)/(.+)$#value-of-\1-\2#')"
 	exit 0
 fi
 echo "[ERROR] 2026/10/08 00:00:00 unexpected op call: $*" >&2
@@ -166,6 +168,9 @@ TOML
 	assert_output "1"
 	run grep -c '^inject' "$OP_STUB_LOG"
 	assert_output "1"
+	# the batch parsed cleanly, so nothing fell back to individual reads
+	run grep -c '^read' "$OP_STUB_LOG"
+	assert_output "0"
 }
 
 @test "OP_FORMAT from the user's shell does not change how an environment is read" {
