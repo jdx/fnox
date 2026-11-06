@@ -168,6 +168,9 @@ TOML
 	assert_output "1"
 	run grep -c '^inject' "$OP_STUB_LOG"
 	assert_output "1"
+	# the batch parsed cleanly, so nothing fell back to individual reads
+	run grep -c '^read' "$OP_STUB_LOG"
+	assert_output "0"
 }
 
 @test "OP_FORMAT from the user's shell does not change how an environment is read" {
