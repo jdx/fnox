@@ -149,6 +149,24 @@ Sync again, and reads now go through the Secure Enclave. Whether you are asked f
 
 If `FNOX_AGE_KEY` is set in your environment, unset it: it takes precedence over `key_file`.
 
+### Touch ID and the daemon {#touch-id-and-the-daemon}
+
+You can combine the Secure Enclave with the optional [memory cache](/guide/daemon).
+The first read of each uncached secret decrypts it through `age-plugin-se` and
+may prompt for Touch ID, depending on the access-control policy. When caching is
+allowed, later reads for the same purpose can reuse a matching in-memory entry.
+For example, `fnox get` and shell integration use different purposes and can each
+require decryption. Profile, configuration, credential, or relevant environment
+changes can select a different entry, and `--refresh` evicts the entry before
+reading. Secrets or original providers with `daemon_cache = false` are not cached
+and may prompt again on repeated reads.
+
+Other uncached secrets can still prompt on their first read. Eviction, clearing
+the cache, stopping the daemon, or its idle timeout removes cached values.
+
+See the [Touch ID session concept](/guide/touch-id-session-concept) for a static
+design proposal, not an implemented screen.
+
 ### YubiKey {#yubikey}
 
 With [age-plugin-yubikey](https://github.com/str4d/age-plugin-yubikey) set up, use its recipient and identity:

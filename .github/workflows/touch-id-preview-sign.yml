@@ -1,0 +1,43 @@
+name: Sign macOS verification preview
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    # Signing secrets must never run against a fork or an arbitrary PR revision.
+    if: github.repository == 'jdx/fnox' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+      - name: Build universal preview
+        run: |
+          cmake -S native/touch-id-preview -B build/preview \
+            -DCMAKE_BUILD_TYPE=Debug -DCMAKE_OSX_ARCHITECTURES='arm64;x86_64' \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0
+          cmake --build build/preview --target fnox-touch-id-preview --parallel 4
+      - uses: apple-actions/import-codesign-certs@77ba2a2a8f5cfc8c405ebf3159f767c323e238f9 # v7.1.0
+        with:
+          p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
+          p12-password: ${{ secrets.CERTIFICATES_P12_PASS }}
+      - name: Sign, notarize, and staple app
+        env:
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: bash native/touch-id-preview/sign-app.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fnox-touch-id-preview-macos
+          path: dist/
+          if-no-files-found: error
