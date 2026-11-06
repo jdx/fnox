@@ -244,36 +244,11 @@ async fn load_secrets_from_config(cli: &Cli) -> Result<LoadedSecrets> {
     // This handles fnox.toml and fnox.local.toml with proper recursion
     let settings =
         Settings::try_get().map_err(|e| anyhow::anyhow!("Failed to get settings: {}", e))?;
-    let profiles = Config::get_profiles(&[]);
-    let filenames = crate::config::all_config_filenames(&profiles);
-    let mut last_error = None;
-    let mut config = None;
-    for filename in &filenames {
-        match Config::load_smart(filename) {
-            Ok(c) => {
-                config = Some(c);
-                break;
-            }
-            Err(e) => {
-                // Only store parse errors (not "file not found" errors)
-                // to show detailed error messages for actual config issues
-                let is_not_found = matches!(&e, crate::error::FnoxError::ConfigNotFound { .. });
-                if !is_not_found {
-                    last_error = Some(e);
-                }
-            }
-        }
-    }
-    let config = match (config, last_error) {
-        (Some(c), _) => c,
-        (None, Some(e)) => return Err(anyhow::anyhow!("{}", e)),
-        (None, None) => {
-            return Err(anyhow::anyhow!(
-                "No configuration file found (tried: {})",
-                filenames.join(", ")
-            ));
-        }
-    };
+    // A bare default filename triggers full upward discovery (including the
+    // `.config/` and local override variants), so one call is authoritative.
+    // Trying each filename separately let a later "file not found" error mask
+    // the real parse error from the first call.
+    let config = Config::load_smart(crate::config::DEFAULT_CONFIG_FILENAME)?;
 
     // Get the active profile (settings was already loaded above)
     let profile_name = &settings.profile;
