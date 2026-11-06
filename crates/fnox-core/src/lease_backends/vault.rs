@@ -78,6 +78,7 @@ pub struct VaultBackend {
 }
 
 impl VaultBackend {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         address: Option<String>,
         token: Option<String>,
