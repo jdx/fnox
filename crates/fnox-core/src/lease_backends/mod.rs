@@ -520,6 +520,15 @@ impl LeaseBackendConfig {
 
     /// Create a lease backend instance from this configuration
     pub fn create_backend(&self) -> Result<Box<dyn LeaseBackend>> {
+        self.create_backend_with_duration(None)
+    }
+
+    /// Like [`create_backend`](Self::create_backend), but `duration_override` (for example
+    /// from `fnox lease create --duration`) counts as an explicitly requested duration.
+    pub fn create_backend_with_duration(
+        &self,
+        duration_override: Option<&str>,
+    ) -> Result<Box<dyn LeaseBackend>> {
         match self {
             LeaseBackendConfig::AwsSts {
                 region,
@@ -561,7 +570,7 @@ impl LeaseBackendConfig {
                 namespace.clone(),
                 env_map.clone(),
                 method.clone(),
-                duration.is_some(),
+                duration_override.is_some() || duration.is_some(),
             )?)),
             LeaseBackendConfig::AzureToken {
                 scope,

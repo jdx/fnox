@@ -385,7 +385,7 @@ impl LeaseCreateCommand {
             .unwrap_or(lease::DEFAULT_LEASE_DURATION);
         let duration = lease::parse_duration(duration_str)?;
 
-        let backend = backend_config.create_backend()?;
+        let backend = backend_config.create_backend_with_duration(self.duration.as_deref())?;
 
         // Check duration against max
         let max_duration = backend.max_lease_duration();
