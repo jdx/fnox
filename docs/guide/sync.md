@@ -82,6 +82,33 @@ fnox sync --provider sync-age --local-file --dry-run         # preview
 
 Run sync from the project directory without `-c`: `--local-file` writes next to the discovered config, and an explicit config path wouldn't load that file on later reads.
 
+## Personal secrets in `fnox.local.toml` {#personal-secrets}
+
+A secret whose source reference lives in `fnox.local.toml` itself (a personal secret) has no shared copy to fall back on. `fnox sync --local-file` marks its `sync` entry with `local_source = true`:
+
+```toml
+[secrets.MY_TOKEN]
+provider = "op"
+value = "op://Vault/Item/password"
+
+[secrets.MY_TOKEN.sync]
+provider = "sync-age"
+value = "YWdl..." # ciphertext, abbreviated
+local_source = true
+```
+
+fnox sets `local_source` itself when the source entry is in the same local file and profile table it writes to. You don't need to add, edit or commit it by hand. It tells later syncs to keep the entry and refresh the ciphertext. Without it, a `--local-file` sync treats an entry with a `sync` block as a cache copy and removes it once the shared source is gone, including the source reference.
+
+### Recover entries synced by v1.36.0 or older
+
+Personal entries synced by v1.36.0 or older have a `sync` block without `local_source`. Current versions read them as removable cache copies, so the next `--local-file` sync deletes them. Before syncing, preview:
+
+```sh
+fnox sync --provider sync-age --local-file --dry-run
+```
+
+If a personal secret is listed as `(remove stale local cache)`, either add `local_source = true` inside its `sync = { ... }` table, or delete the entry's `sync` table. Then sync again. Entries that fnox already removed have to be restored from your own backup or version control, or written again by hand.
+
 ## Offline use
 
 A local target such as age decrypts with no network access. A cloud KMS provider also works as a sync target, but then every read needs that cloud's API.

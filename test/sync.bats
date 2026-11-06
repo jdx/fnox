@@ -335,6 +335,9 @@ EOF
 	assert_output "0"
 
 	sed -i.bak '/PARENT_PERSONAL/d' ../fnox.local.toml
+	assert_fnox_success sync -p age --local-file --dry-run
+	assert_output --partial "PARENT_PERSONAL"
+	assert_output --partial "add \`local_source = true\`"
 	assert_fnox_success sync -p age --local-file --force
 	assert_output --partial "Removed 1 stale entries from the local cache"
 	run grep 'PARENT_PERSONAL' fnox.local.toml
