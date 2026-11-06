@@ -62,6 +62,16 @@ Commands that write or administer (`set`, `remove`, `sync`, `reencrypt`, `edit`,
 
 On a cache miss, fnox resolves the secret in your terminal and hands the result to the daemon. That way 1Password or SSO prompts, FIDO2 PINs, and YubiKey touches happen where you can see them. With `--non-interactive`, misses are resolved inside the daemon and never prompt.
 
+For a local sync cache encrypted with Apple's Secure Enclave, the first read of
+an uncached secret runs `age-plugin-se` and may show macOS's Touch ID prompt.
+When caching is allowed, later reads for the same purpose can reuse a matching
+entry. Profile, configuration, credential, or relevant environment changes can
+cause a miss; `--refresh` evicts the entry before reading. Secrets or original
+providers with `daemon_cache = false` are not cached and may prompt again.
+Clearing the cache, stopping the daemon, or its idle timeout also removes cached
+values. Other uncached secrets can still need their first decryption. See
+[Touch ID and the daemon](/guide/sync#touch-id-and-the-daemon) for setup.
+
 ## Exclude a secret or provider
 
 ```toml
