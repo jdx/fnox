@@ -3,6 +3,7 @@ use crate::config::{self, Config, SecretConfig, SyncConfig, local_override_filen
 use crate::error::{FnoxError, Result};
 use crate::files::{self, FileConfig, FileEntry};
 use crate::secret_resolver::resolve_secrets_batch;
+use crate::secret_resolver::with_read_dependencies;
 use crate::settings::Settings;
 use console;
 use indexmap::IndexMap;
@@ -538,7 +539,16 @@ impl SyncCommand {
         let resolved = if secrets_for_resolve.is_empty() {
             IndexMap::new()
         } else {
-            resolve_secrets_batch(resolution_config, &profile, &secrets_for_resolve).await?
+            // Also resolve the secrets they need (such as a provider's access
+            // token kept as another secret), but sync only the selected ones
+            let to_resolve =
+                with_read_dependencies(resolution_config, &profile, &secrets_for_resolve, &|_| {
+                    false
+                });
+            let mut resolved =
+                resolve_secrets_batch(resolution_config, &profile, &to_resolve).await?;
+            resolved.retain(|key, _| secrets_for_resolve.contains_key(key));
+            resolved
         };
 
         // Encrypt each value and build updated secret configs

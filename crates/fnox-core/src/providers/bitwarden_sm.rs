@@ -39,7 +39,8 @@ impl BitwardenSecretsManagerProvider {
         bws_access_token().ok_or_else(|| FnoxError::ProviderAuthFailed {
             provider: "Bitwarden Secrets Manager".to_string(),
             details: "Access token not found".to_string(),
-            hint: "Set BWS_ACCESS_TOKEN or FNOX_BWS_ACCESS_TOKEN".to_string(),
+            hint: "Set BWS_ACCESS_TOKEN or FNOX_BWS_ACCESS_TOKEN in the environment. A config secret with that name is loaded only by commands that resolve secrets, not by fnox set or fnox provider test"
+                .to_string(),
             url: URL.to_string(),
         })
     }

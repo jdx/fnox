@@ -114,13 +114,26 @@ impl GetCommand {
             }
         })?;
 
-        if self.refresh {
-            crate::daemon::refresh(cli, &config, std::slice::from_ref(&self.key().to_string()))
-                .await?;
-        }
+        // Resolve the secret together with the secrets its provider needs to
+        // authenticate (such as an access token kept as another secret). Unused
+        // `default` references are followed only where the default is the source
+        // (no provider), so an unused fallback can't block a read.
+        let closure = crate::secret_resolver::with_read_dependencies(
+            &config,
+            &profile,
+            &IndexMap::from([(self.key().to_string(), secret_config.clone())]),
+            &|_| false,
+        );
 
-        // Resolve the secret using centralized resolver
-        match crate::daemon::resolve_one(
+        if self.refresh {
+            let keys: Vec<String> = closure.keys().cloned().collect();
+            crate::daemon::refresh(cli, &config, &keys).await?;
+        }
+        // Resolve the requested secret on its own first. Only when that fails or finds nothing, and
+        // its provider may need other secrets to authenticate (such as an access
+        // token kept as another secret), resolve those, expose them as environment
+        // variables for the provider, and try once more.
+        let mut resolved = crate::daemon::resolve_one(
             cli,
             &config,
             &profile,
@@ -128,8 +141,112 @@ impl GetCommand {
             secret_config,
             crate::daemon::Purpose::Get,
         )
-        .await
-        {
+        .await;
+        if !matches!(resolved, Ok(Some(_))) && closure.len() > 1 {
+            // Credentials the user already supplied are never replaced by the retry.
+            // `FNOX_X` and `X` name the same credential, so either one counts.
+            let base = |key: &str| key.strip_prefix("FNOX_").unwrap_or(key).to_string();
+            // The provider the read goes through: the sync target when synced
+            let provider_name = match &secret_config.sync {
+                Some(sync) => Some(sync.provider.clone()),
+                None if secret_config.value().is_some() => secret_config
+                    .provider()
+                    .map(str::to_string)
+                    .or_else(|| config.get_default_provider(&profile).ok().flatten()),
+                None => None,
+            };
+            let provider = provider_name.and_then(|name| {
+                config
+                    .get_providers(&profile)
+                    .ok()
+                    .and_then(|providers| providers.get(&name).cloned())
+            });
+            let mut dependencies: IndexMap<String, SecretConfig> = match provider {
+                // Resolve each credential the user has not supplied, with whatever
+                // it references; a supplied one is left out whole
+                Some(provider) => {
+                    let mut wanted = IndexMap::new();
+                    for name in provider.env_dependencies() {
+                        let supplied = provider.env_dependencies().iter().any(|other| {
+                            base(other) == base(name) && fnox_core::env::var(other).is_ok()
+                        });
+                        if let Some(dep) = profile_secrets.get(*name).filter(|_| !supplied) {
+                            wanted.extend(crate::secret_resolver::with_read_dependencies(
+                                &config,
+                                &profile,
+                                &IndexMap::from([(name.to_string(), dep.clone())]),
+                                &|_| false,
+                            ));
+                        }
+                    }
+                    wanted
+                }
+                None => closure.clone(),
+            };
+            dependencies.shift_remove(self.key());
+            let supplied: Vec<(String, String)> = dependencies
+                .keys()
+                .filter_map(|key| Some((key.clone(), fnox_core::env::var(key).ok()?)))
+                .collect();
+            let supplied_names: std::collections::HashSet<String> =
+                supplied.iter().map(|(key, _)| base(key)).collect();
+            // A failure here must not hide the outcome of the first read
+            let values = if dependencies.is_empty() {
+                Default::default()
+            } else {
+                crate::daemon::resolve_batch(
+                    cli,
+                    &config,
+                    &profile,
+                    &dependencies,
+                    crate::daemon::Purpose::Get,
+                    true,
+                )
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::debug!("could not resolve dependencies of {}: {e}", self.key());
+                    Default::default()
+                })
+            };
+            // Resolving may have overwritten supplied variables in this process
+            for (key, value) in &supplied {
+                fnox_core::env::set_var(key, value);
+            }
+            let mut exposed = false;
+            for (key, value) in values {
+                if let Some(value) = value
+                    && !supplied_names.contains(&base(&key))
+                {
+                    fnox_core::env::set_var(key, value);
+                    exposed = true;
+                }
+            }
+            if exposed {
+                let retried = crate::daemon::resolve_one(
+                    cli,
+                    &config,
+                    &profile,
+                    self.key(),
+                    secret_config,
+                    crate::daemon::Purpose::Get,
+                )
+                .await;
+                // Keep an allowed missing result if the retry only fails to reach the
+                // provider; errors reading the returned value still surface
+                let provider_unavailable = matches!(
+                    &retried,
+                    Err(FnoxError::Provider(_)
+                        | FnoxError::ProviderAuthFailed { .. }
+                        | FnoxError::ProviderSecretNotFound { .. }
+                        | FnoxError::ProviderCliFailed { .. }
+                        | FnoxError::ProviderApiError { .. })
+                );
+                if resolved.is_err() || !provider_unavailable {
+                    resolved = retried;
+                }
+            }
+        }
+        match resolved {
             Ok(Some(value)) => {
                 let value = self.maybe_base64_decode(value)?;
 
