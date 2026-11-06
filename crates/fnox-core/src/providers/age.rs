@@ -37,7 +37,7 @@ pub(crate) struct KeySelection {
 /// the key file, and a `{ provider, value }` entry becomes the `identity` reference. An inline
 /// `FNOX_AGE_KEY` outranks all of them, so it skips the selection.
 ///
-/// `FNOX_AGE_IDENTITY` is read on every call: the daemon changes its environment per request.
+/// Age environment variables are read on every call: the daemon changes its environment per request.
 pub(crate) fn select_key_file(
     provider_name: &str,
     key_file: Option<String>,
@@ -52,7 +52,7 @@ pub(crate) fn select_key_file(
         identities,
         default_identity,
         env::fnox_age_identity().as_deref(),
-        env::FNOX_AGE_KEY.is_some(),
+        env::fnox_age_key().is_some(),
     )
 }
 
@@ -533,9 +533,9 @@ impl AgeEncryptionProvider {
         // 3. self.key_file (from provider config)
         // 4. Settings age_key_file (from CLI flag - deprecated)
         // 5. Default path (~/.config/fnox/age.txt)
-        let (identity_content, key_file_path_opt) = if let Some(ref age_key) = *env::FNOX_AGE_KEY {
+        let (identity_content, key_file_path_opt) = if let Some(age_key) = env::fnox_age_key() {
             // Use the key directly from the environment variable
-            (age_key.clone(), None)
+            (age_key, None)
         } else if let Some(identity) = self.resolve_provider_identity(value).await? {
             (identity, None)
         } else {
@@ -784,7 +784,7 @@ mod tests {
 
     #[test]
     fn new_rejects_provider_backed_named_identity() {
-        if env::FNOX_AGE_KEY.is_some() || env::fnox_age_identity().is_some() {
+        if env::fnox_age_key().is_some() || env::fnox_age_identity().is_some() {
             return;
         }
         let identities: indexmap::IndexMap<String, ResolvedStringOrProviderRef> = [(
