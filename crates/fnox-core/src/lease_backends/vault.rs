@@ -72,9 +72,13 @@ pub struct VaultBackend {
     namespace: Option<String>,
     env_map: IndexMap<String, String>,
     method: String,
+    /// Whether the user set `duration` explicitly. When false, no `ttl` is sent so
+    /// engines that reject unknown fields (or have a fixed TTL) keep working.
+    send_ttl: bool,
 }
 
 impl VaultBackend {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         address: Option<String>,
         token: Option<String>,
@@ -83,6 +87,7 @@ impl VaultBackend {
         namespace: Option<String>,
         env_map: IndexMap<String, String>,
         method: String,
+        send_ttl: bool,
     ) -> Result<Self> {
         let address = address
             .or_else(|| {
@@ -128,7 +133,13 @@ impl VaultBackend {
             namespace,
             env_map,
             method,
+            send_ttl,
         })
+    }
+
+    /// The `ttl` to request, or `None` when the user did not set `duration`.
+    fn ttl_value(&self, duration: Duration) -> Option<String> {
+        self.send_ttl.then(|| format!("{}s", duration.as_secs()))
     }
 
     fn credential_command_context(&self) -> serde_json::Value {
@@ -205,20 +216,22 @@ impl LeaseBackend for VaultBackend {
         );
 
         let client = crate::http::http_client();
-        let ttl_value = format!("{}s", duration.as_secs());
+        let ttl_value = self.ttl_value(duration);
         let token = self.token().await?;
-        let mut request = if self.method.eq_ignore_ascii_case("post")
-            || self.method.eq_ignore_ascii_case("put")
-        {
-            client
-                .post(&url)
-                .header("X-Vault-Token", &token)
-                .json(&serde_json::json!({ "ttl": ttl_value }))
+        let is_write =
+            self.method.eq_ignore_ascii_case("post") || self.method.eq_ignore_ascii_case("put");
+        let mut request = if is_write {
+            let request = client.post(&url).header("X-Vault-Token", &token);
+            match &ttl_value {
+                Some(ttl) => request.json(&serde_json::json!({ "ttl": ttl })),
+                None => request,
+            }
         } else {
-            client
-                .get(&url)
-                .header("X-Vault-Token", &token)
-                .query(&[("ttl", &ttl_value)])
+            let request = client.get(&url).header("X-Vault-Token", &token);
+            match &ttl_value {
+                Some(ttl) => request.query(&[("ttl", ttl)]),
+                None => request,
+            }
         };
 
         if let Some(ns) = &self.namespace {
@@ -320,7 +333,7 @@ impl LeaseBackend for VaultBackend {
         // Warn if Vault returned a different TTL than requested — many engines
         // (database, pki, rabbitmq) silently ignore the ?ttl query parameter
         // and use the role's configured default TTL instead.
-        if let Some(actual_secs) = lease_duration {
+        if let (true, Some(actual_secs)) = (self.send_ttl, lease_duration) {
             let requested_secs = duration.as_secs() as i64;
             let diff = (actual_secs - requested_secs).abs();
             if diff > 30 {
@@ -431,11 +444,110 @@ mod tests {
             None,
             env_map,
             "get".to_string(),
+            true,
         )
         .unwrap();
 
         assert_eq!(backend.namespace.as_deref(), Some("admin/test"));
 
         env::remove_var("FNOX_VAULT_NAMESPACE");
+    }
+
+    #[test]
+    fn ttl_is_only_sent_when_duration_is_explicit() {
+        let mut env_map = IndexMap::new();
+        env_map.insert("token".to_string(), "GH_TOKEN".to_string());
+        let make = |send_ttl| {
+            VaultBackend::new(
+                Some("https://vault.example.com".to_string()),
+                Some("token".to_string()),
+                None,
+                "github/token/reviewer".to_string(),
+                None,
+                env_map.clone(),
+                "get".to_string(),
+                send_ttl,
+            )
+            .unwrap()
+        };
+        let d = Duration::from_secs(900);
+        assert_eq!(make(true).ttl_value(d).as_deref(), Some("900s"));
+        assert_eq!(make(false).ttl_value(d), None);
+    }
+
+    use axum::{
+        Router,
+        body::Bytes,
+        extract::{RawQuery, State},
+        routing::any,
+    };
+    use std::sync::{Arc, Mutex};
+
+    type Captured = Arc<Mutex<Vec<(Option<String>, String)>>>;
+
+    async fn capture(
+        State(seen): State<Captured>,
+        RawQuery(query): RawQuery,
+        body: Bytes,
+    ) -> axum::Json<serde_json::Value> {
+        seen.lock()
+            .unwrap()
+            .push((query, String::from_utf8_lossy(&body).into_owned()));
+        axum::Json(serde_json::json!({
+            "lease_id": "id-1",
+            "lease_duration": 0,
+            "data": { "token": "t" },
+        }))
+    }
+
+    /// Create a lease against a local server and return the (query, body) it received.
+    async fn request_for(method: &str, send_ttl: bool) -> (Option<String>, String) {
+        let seen = Captured::default();
+        let app = Router::new()
+            .route("/v1/github/token/reviewer", any(capture))
+            .with_state(seen.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let mut env_map = IndexMap::new();
+        env_map.insert("token".to_string(), "GH_TOKEN".to_string());
+        let backend = VaultBackend::new(
+            Some(format!("http://{address}")),
+            Some("token".to_string()),
+            None,
+            "github/token/reviewer".to_string(),
+            None,
+            env_map,
+            method.to_string(),
+            send_ttl,
+        )
+        .unwrap();
+        backend
+            .create_lease(Duration::from_secs(900), "label")
+            .await
+            .unwrap();
+        let mut seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), 1);
+        seen.remove(0)
+    }
+
+    #[tokio::test]
+    async fn get_request_only_includes_ttl_when_requested() {
+        let (query, _) = request_for("get", true).await;
+        assert_eq!(query.as_deref(), Some("ttl=900s"));
+        let (query, _) = request_for("get", false).await;
+        assert_eq!(query, None);
+    }
+
+    #[tokio::test]
+    async fn post_request_only_includes_ttl_when_requested() {
+        let (query, body) = request_for("post", true).await;
+        assert_eq!(query, None);
+        assert_eq!(body, r#"{"ttl":"900s"}"#);
+        let (_, body) = request_for("post", false).await;
+        assert_eq!(body, "");
     }
 }

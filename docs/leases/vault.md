@@ -85,10 +85,11 @@ password = "DB_PASSWORD"
 | `credential_command` | No       | none     | Shell command that prints a token, used when no token is configured.       |
 | `namespace`          | No       | env vars | Namespace for Vault Enterprise or HCP Vault, sent as `X-Vault-Namespace`.  |
 | `method`             | No       | `"get"`  | `"get"`, or `"post"` for engines that issue on write, such as `pki/issue`. |
-| `duration`           | No       | `"15m"`  | TTL sent to Vault as `ttl`, at most `"24h"`.                               |
+| `duration`           | No       | `"15m"`  | TTL sent to Vault as `ttl`, at most `"24h"`. Not sent when unset.          |
 
 ### Response handling
 
+- **`ttl` is sent only when `duration` is set.** Engines that reject unknown fields, such as vault-plugin-secrets-github, then work and use their own TTL. The 15m default only applies to fnox's own limit checks.
 - **TTL is advisory.** Many engines (database, pki, rabbitmq) ignore the requested `ttl` and use the role's TTL. fnox records the `lease_duration` Vault returns and logs a warning when it differs from `duration` by more than 30 seconds.
 - **KV v2 is unwrapped.** When `data` contains a nested `data` object, fnox reads fields from the inner one.
 - **No expiry when `lease_duration` is 0.** Static KV secrets have no Vault lease, so the fnox lease stays active until you revoke it.
