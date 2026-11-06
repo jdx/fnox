@@ -72,6 +72,9 @@ pub struct VaultBackend {
     namespace: Option<String>,
     env_map: IndexMap<String, String>,
     method: String,
+    /// Whether the user set `duration` explicitly. When false, no `ttl` is sent so
+    /// engines that reject unknown fields (or have a fixed TTL) keep working.
+    send_ttl: bool,
 }
 
 impl VaultBackend {
@@ -83,6 +86,7 @@ impl VaultBackend {
         namespace: Option<String>,
         env_map: IndexMap<String, String>,
         method: String,
+        send_ttl: bool,
     ) -> Result<Self> {
         let address = address
             .or_else(|| {
@@ -128,7 +132,13 @@ impl VaultBackend {
             namespace,
             env_map,
             method,
+            send_ttl,
         })
+    }
+
+    /// The `ttl` to request, or `None` when the user did not set `duration`.
+    fn ttl_value(&self, duration: Duration) -> Option<String> {
+        self.send_ttl.then(|| format!("{}s", duration.as_secs()))
     }
 
     fn credential_command_context(&self) -> serde_json::Value {
@@ -205,20 +215,22 @@ impl LeaseBackend for VaultBackend {
         );
 
         let client = crate::http::http_client();
-        let ttl_value = format!("{}s", duration.as_secs());
+        let ttl_value = self.ttl_value(duration);
         let token = self.token().await?;
-        let mut request = if self.method.eq_ignore_ascii_case("post")
-            || self.method.eq_ignore_ascii_case("put")
-        {
-            client
-                .post(&url)
-                .header("X-Vault-Token", &token)
-                .json(&serde_json::json!({ "ttl": ttl_value }))
+        let is_write =
+            self.method.eq_ignore_ascii_case("post") || self.method.eq_ignore_ascii_case("put");
+        let mut request = if is_write {
+            let request = client.post(&url).header("X-Vault-Token", &token);
+            match &ttl_value {
+                Some(ttl) => request.json(&serde_json::json!({ "ttl": ttl })),
+                None => request,
+            }
         } else {
-            client
-                .get(&url)
-                .header("X-Vault-Token", &token)
-                .query(&[("ttl", &ttl_value)])
+            let request = client.get(&url).header("X-Vault-Token", &token);
+            match &ttl_value {
+                Some(ttl) => request.query(&[("ttl", ttl)]),
+                None => request,
+            }
         };
 
         if let Some(ns) = &self.namespace {
@@ -320,7 +332,7 @@ impl LeaseBackend for VaultBackend {
         // Warn if Vault returned a different TTL than requested — many engines
         // (database, pki, rabbitmq) silently ignore the ?ttl query parameter
         // and use the role's configured default TTL instead.
-        if let Some(actual_secs) = lease_duration {
+        if let (true, Some(actual_secs)) = (self.send_ttl, lease_duration) {
             let requested_secs = duration.as_secs() as i64;
             let diff = (actual_secs - requested_secs).abs();
             if diff > 30 {
@@ -431,11 +443,34 @@ mod tests {
             None,
             env_map,
             "get".to_string(),
+            true,
         )
         .unwrap();
 
         assert_eq!(backend.namespace.as_deref(), Some("admin/test"));
 
         env::remove_var("FNOX_VAULT_NAMESPACE");
+    }
+
+    #[test]
+    fn ttl_is_only_sent_when_duration_is_explicit() {
+        let mut env_map = IndexMap::new();
+        env_map.insert("token".to_string(), "GH_TOKEN".to_string());
+        let make = |send_ttl| {
+            VaultBackend::new(
+                Some("https://vault.example.com".to_string()),
+                Some("token".to_string()),
+                None,
+                "github/token/reviewer".to_string(),
+                None,
+                env_map.clone(),
+                "get".to_string(),
+                send_ttl,
+            )
+            .unwrap()
+        };
+        let d = Duration::from_secs(900);
+        assert_eq!(make(true).ttl_value(d).as_deref(), Some("900s"));
+        assert_eq!(make(false).ttl_value(d), None);
     }
 }

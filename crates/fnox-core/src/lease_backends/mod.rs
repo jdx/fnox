@@ -551,6 +551,7 @@ impl LeaseBackendConfig {
                 namespace,
                 env_map,
                 method,
+                duration,
                 ..
             } => Ok(Box::new(vault::VaultBackend::new(
                 address.clone(),
@@ -560,6 +561,7 @@ impl LeaseBackendConfig {
                 namespace.clone(),
                 env_map.clone(),
                 method.clone(),
+                duration.is_some(),
             )?)),
             LeaseBackendConfig::AzureToken {
                 scope,
