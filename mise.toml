@@ -26,7 +26,7 @@ bitwarden = "latest"
 bitwarden-secrets-manager = "latest"
 vault = "latest"
 infisical = "latest"
-node = "24"
+node = "26"
 rush = "latest"
 
 [wrappers.cargo]

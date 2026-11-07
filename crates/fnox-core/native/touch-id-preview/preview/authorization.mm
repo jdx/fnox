@@ -16,17 +16,24 @@ bool FnoxPreviewAcceptTouchId() {
 namespace fnox {
 struct PreviewAuthorization::Impl {
   LAContext* context = [LAContext new];
+  bool system_verification = false;
   bool cancelled = false;
 };
-PreviewAuthorization::PreviewAuthorization() : impl_(std::make_unique<Impl>()) {}
+PreviewAuthorization::PreviewAuthorization(bool system_verification)
+    : impl_(std::make_unique<Impl>()) {
+  impl_->system_verification = system_verification;
+}
 PreviewAuthorization::~PreviewAuthorization() { Invalidate(); }
 void PreviewAuthorization::Invalidate() {
   impl_->cancelled = true;
   [impl_->context invalidate];
 }
-bool PreviewAuthorization::AuthenticateWithEvents(std::string_view, PreviewError& error,
+void* PreviewAuthorization::AuthenticationContext() const {
+  return (__bridge void*)impl_->context;
+}
+bool PreviewAuthorization::AuthenticateWithEvents(std::string_view reason, PreviewError& error,
                                                   const std::function<void()>& process_events) {
-  if (!IsSystemVerification()) {
+  if (!impl_->system_verification && !IsSystemVerification()) {
     while (!impl_->cancelled && !gFnoxPreviewAccepted) {
       process_events();
       [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
@@ -34,8 +41,6 @@ bool PreviewAuthorization::AuthenticateWithEvents(std::string_view, PreviewError
     if (impl_->cancelled) error.status = PreviewStatus::kCancelled;
     return !impl_->cancelled && gFnoxPreviewAccepted;
   }
-  // This verifies the person only. A future protected Keychain operation must
-  // bind its own access control to this context; this demo never reads a secret.
   NSError* availability = nil;
   impl_->context.localizedFallbackTitle = @"";
   if (![impl_->context canEvaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics
@@ -52,8 +57,13 @@ bool PreviewAuthorization::AuthenticateWithEvents(std::string_view, PreviewError
     std::string detail;
   };
   auto result = std::make_shared<Result>();
+  NSString* localizedReason = [[NSString alloc] initWithBytes:reason.data()
+                                                        length:reason.size()
+                                                      encoding:NSUTF8StringEncoding];
+  if (localizedReason.length == 0) localizedReason = @"authorize this Fnox Keychain request";
+  impl_->context.localizedReason = localizedReason;
   [impl_->context evaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics
-                 localizedReason:@"verify this Fnox request preview. No credentials will be read."
+                 localizedReason:localizedReason
                            reply:^(BOOL approved, NSError* failure) {
                              result->approved = approved;
                              if (failure) {

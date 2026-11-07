@@ -22,7 +22,7 @@ struct PreviewError {
 
 class PreviewAuthorization final {
  public:
-  PreviewAuthorization();
+  explicit PreviewAuthorization(bool system_verification = false);
   ~PreviewAuthorization();
 
   PreviewAuthorization(const PreviewAuthorization&) = delete;
@@ -32,6 +32,7 @@ class PreviewAuthorization final {
 
   bool AuthenticateWithEvents(std::string_view reason, PreviewError& error,
                               const std::function<void()>& process_events);
+  void* AuthenticationContext() const;
   void Invalidate();
 
  private:

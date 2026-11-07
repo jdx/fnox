@@ -31,7 +31,7 @@
           nativeBuildInputs = with pkgs; [
             perl
             pkg-config
-          ];
+          ] ++ lib.optionals stdenv.isDarwin [ nodejs_26 ];
           buildInputs =
             with pkgs;
             [ ]
@@ -77,7 +77,7 @@
             cargo
             clippy
             rustfmt
-          ];
+          ] ++ lib.optionals stdenv.isDarwin [ nodejs_26 ];
         };
       }
     );

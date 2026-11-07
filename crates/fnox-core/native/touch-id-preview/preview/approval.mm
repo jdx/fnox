@@ -138,7 +138,10 @@ int main() {
                 }];
     fnox::RunOptions options;
     options.credentials.push_back({"project:keel/GITHUB_TOKEN", "GITHUB_TOKEN"});
-    options.executable.canonical_path = "/usr/local/bin/claude";
+    options.executable.canonical_path = "/usr/local/bin/fnox";
+    options.invoking_command = "fnox exec -- ./release.sh";
+    options.project_directory = "/Users/jdalton/projects/keel";
+    options.credential_source = "1Password · op";
     fnox::PreviewAuthorization context;
     fnox::PreviewError error;
     const bool approved = fnox::ShowApprovalPrompt(options, std::string(64, 'a'), context,

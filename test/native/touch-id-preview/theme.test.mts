@@ -5,18 +5,18 @@ import {
   contrastRatio,
   luminance,
   transformLightColor,
-} from "../../../native/touch-id-preview/color.mts";
+} from "../../../crates/fnox-core/native/touch-id-preview/color.mts";
 import {
   DARK_THEME,
   LIGHT_RULES,
   LIGHT_THEME,
   themeHeader,
-} from "../../../native/touch-id-preview/theme.mts";
+} from "../../../crates/fnox-core/native/touch-id-preview/theme.mts";
 import {
   fingerprintFrame,
   fingerprintVisitedFrames,
   FINGERPRINT_PALETTES,
-} from "../../../native/touch-id-preview/animation.mts";
+} from "../../../crates/fnox-core/native/touch-id-preview/animation.mts";
 
 test("color math rejects malformed inputs and uses standard luminance endpoints", () => {
   assert.equal(luminance("#000000"), 0);
@@ -73,7 +73,7 @@ test("acceptance starts without an overlay and never recolors untouched ridges",
   const flow = JSON.parse(
     fs.readFileSync(
       new URL(
-        "../../../native/touch-id-preview/assets/flow.json",
+        "../../../crates/fnox-core/native/touch-id-preview/assets/flow.json",
         import.meta.url,
       ),
       "utf8",

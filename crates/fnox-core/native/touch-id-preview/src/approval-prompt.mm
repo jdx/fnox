@@ -815,28 +815,29 @@ NSString* CredentialSummary(const RunOptions& options) {
 
 NSArray<NSArray<NSString*>*>* RequestDetailRows(const RunOptions& options,
                                                 std::string_view request_id, NSString* operation) {
-  (void)options;
-  (void)request_id;
-  (void)operation;
-  NSString* approval =
-      fnox::IsSystemVerification() ? @"Touch ID · verification only, no credential access"
+  NSString* executable = MakeString(options.executable.canonical_path) ?: @"";
+  NSString* command = options.invoking_command.empty()
+                          ? (executable.lastPathComponent ?: executable)
+                          : (MakeString(options.invoking_command) ?: @"");
+  NSString* project = MakeString(options.project_directory) ?: @"";
+  command = [NSString stringWithFormat:@"Caller-provided; not verified: %@", command];
+  project = [NSString stringWithFormat:@"Caller-provided; not verified: %@", project];
+  NSString* secret = CredentialSummary(options) ?: @"";
+  NSString* source = MakeString(options.credential_source) ?: @"";
+  const bool systemVerification = options.system_verification || fnox::IsSystemVerification();
+  NSString* approval = systemVerification
+      ? (options.credential_access ? @"Touch ID required for this Keychain read"
+                                   : @"Touch ID · verification only, no credential access")
       : fnox::IsScreenshotMode() ? @"Touch ID" : @"Touch ID · Shift + Return in preview";
+  NSString* request = MakeString(request_id);
+  if (request.length > 12) request = [request substringToIndex:12];
   return @[
-    @[
-      @"Fnox request", @"Sample credential proxy request · preview only",
-      @"Sample credential proxy request · preview only"
-    ],
-    @[ @"Action", @"Start credential proxy", @"Start credential proxy" ],
-    @[ @"Command", @"claude", @"claude" ],
-    @[ @"Project", @"/Users/jdalton/projects/keel", @"/Users/jdalton/projects/keel" ],
-    @[ @"Secret", @"GITHUB_TOKEN", @"GITHUB_TOKEN" ],
-    @[ @"Credential source", @"1Password · op", @"1Password · op" ],
-    @[ @"Destination", @"api.github.com", @"api.github.com" ],
-    @[ @"Allowed requests", @"GET /repos/jdalton/keel/**", @"GET /repos/jdalton/keel/**" ],
-    @[
-      @"Credential delivery", @"Authorization header · proxy only",
-      @"Authorization header · proxy only"
-    ],
+    @[ @"Fnox request", request, request ],
+    @[ @"Action", operation, operation ],
+    @[ @"Command", command, command ],
+    @[ @"Project", project, project ],
+    @[ @"Secret", secret, secret ],
+    @[ @"Credential source", source, source ],
     @[ @"Approval", approval, approval ],
   ];
 }
@@ -947,7 +948,9 @@ static bool ShowApprovalPromptImpl(const RunOptions& options, std::string_view r
     details.toolTip = @"Show Touch ID request details";
     details.accessibilityLabel = details.toolTip;
     FnoxInstructionLabel* instruction = [[FnoxInstructionLabel alloc] initWithFrame:NSZeroRect];
-    instruction.stringValue = fnox::IsSystemVerification() ? @"Verify with Touch ID" : @"Touch ID to continue";
+    instruction.stringValue = options.system_verification || fnox::IsSystemVerification()
+                                  ? @"Verify with Touch ID"
+                                  : @"Touch ID to continue";
     instruction.bezeled = NO;
     instruction.drawsBackground = NO;
     instruction.focusRingType = NSFocusRingTypeNone;
@@ -1001,7 +1004,7 @@ static bool ShowApprovalPromptImpl(const RunOptions& options, std::string_view r
     __block NSUInteger keyboardFocusIndex = 0;
     __block BOOL showKeyboardHint = NO;
     NSTimer* previewHintTimer =
-        (fnox::IsScreenshotMode() || fnox::IsSystemVerification())
+        (fnox::IsScreenshotMode() || options.system_verification || fnox::IsSystemVerification())
             ? nil
             : [NSTimer scheduledTimerWithTimeInterval:2.8
                                               repeats:YES
@@ -1307,7 +1310,9 @@ static bool ShowApprovalPromptImpl(const RunOptions& options, std::string_view r
                                          return nil;
                                        }
                                        if (verifying || transitioningDetails) return event;
-                                       if ((key == 36 || key == 76) &&
+                                       if (!options.system_verification &&
+                                           !fnox::IsSystemVerification() &&
+                                           (key == 36 || key == 76) &&
                                            (event.modifierFlags & NSEventModifierFlagShift) != 0) {
                                          FnoxPreviewAcceptTouchId();
                                          return nil;
@@ -1416,7 +1421,9 @@ static bool ShowApprovalPromptImpl(const RunOptions& options, std::string_view r
         cancel.keyEquivalent = @"";
         details.enabled = NO;
         scanStartedAt = [NSDate date];
-        fingerprint.accessibilityLabel = fnox::IsSystemVerification() ? @"User verified" : @"Simulated approval";
+        fingerprint.accessibilityLabel = options.system_verification || fnox::IsSystemVerification()
+                                             ? @"User verified"
+                                             : @"Simulated approval";
         [fingerprint animateSuccess];
         if (NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion) {
           cancel.alphaValue = 0;

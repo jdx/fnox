@@ -668,6 +668,42 @@ mod tests {
     }
 
     #[test]
+    fn touch_id_keychain_is_interactive_and_never_uses_daemon_cache() {
+        let protected = ProviderConfig::Keychain {
+            service: StringOrSecretRef::from("fnox"),
+            prefix: OptionStringOrSecretRef::none(),
+            touch_id: true,
+            auth_command: None,
+            daemon_cache: Some(true),
+        };
+        assert!(protected.requires_interactive_auth());
+        assert!(!protected.daemon_cache_enabled());
+
+        let ordinary = ProviderConfig::Keychain {
+            service: StringOrSecretRef::from("fnox"),
+            prefix: OptionStringOrSecretRef::none(),
+            touch_id: false,
+            auth_command: None,
+            daemon_cache: Some(true),
+        };
+        assert!(!ordinary.requires_interactive_auth());
+        assert!(ordinary.daemon_cache_enabled());
+    }
+
+    #[test]
+    fn keychain_wizard_preserves_touch_id_checkbox_value() {
+        let fields = HashMap::from([
+            ("service".to_string(), "fnox".to_string()),
+            ("touch_id".to_string(), "true".to_string()),
+        ]);
+        let config = ProviderConfig::from_wizard_fields("keychain", &fields).unwrap();
+        let ProviderConfig::Keychain { touch_id, .. } = config else {
+            panic!("wizard returned the wrong provider config");
+        };
+        assert!(touch_id);
+    }
+
+    #[test]
     fn keeper_config_file_resolves_relative_to_provider_source() {
         let mut config = Config::new();
         config.provider_sources.insert(
