@@ -3,13 +3,13 @@ name: Verification preview
 on:
   pull_request:
     paths:
-      - native/touch-id-preview/**
+      - crates/fnox-core/native/touch-id-preview/**
       - test/native/touch-id-preview/**
       - .github/workflows/touch-id-preview*.yml
   push:
     branches: [main]
     paths:
-      - native/touch-id-preview/**
+      - crates/fnox-core/native/touch-id-preview/**
       - test/native/touch-id-preview/**
       - .github/workflows/touch-id-preview*.yml
 
@@ -34,14 +34,14 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: "24"
+          node-version: "26"
       - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
         with:
           install_args: aube
       - name: Install script test dependencies
         run: aube install --frozen-lockfile
       - name: Check scripts
-        run: node --experimental-strip-types --test test/native/touch-id-preview/*.test.mts
+        run: node --test test/native/touch-id-preview/*.test.mts
       - name: Install Linux Qt
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y qt6-base-dev libqt6svg6-dev
@@ -54,7 +54,7 @@ jobs:
           "CMAKE_PREFIX_PATH=$env:RUNNER_TEMP/qt/6.8.3/msvc2022_64" >> $env:GITHUB_ENV
           "$env:RUNNER_TEMP/qt/6.8.3/msvc2022_64/bin" >> $env:GITHUB_PATH
       - name: Configure
-        run: cmake -S native/touch-id-preview -B build/preview -DCMAKE_BUILD_TYPE=Debug
+        run: cmake -S crates/fnox-core/native/touch-id-preview -B build/preview -DCMAKE_BUILD_TYPE=Debug
       - name: Build unsigned preview
         run: cmake --build build/preview --config Debug --target fnox-touch-id-preview --parallel 4
       - name: Check portable simulation

@@ -9,6 +9,8 @@ setup_instructions = """
 Uses native OS secure storage.
 No setup required on macOS/Windows.
 Linux requires libsecret."""
+requires_interactive_auth_field = "touch_id"
+daemon_cache_disabled_field = "touch_id"
 
 [fields.service]
 type = "required"
@@ -21,3 +23,7 @@ type = "optional"
 placeholder = ""
 label = "Secret name prefix (optional):"
 wizard = true
+
+[fields.touch_id]
+type = "bool"
+label = "Require Touch ID on macOS:"

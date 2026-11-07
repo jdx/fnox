@@ -16,8 +16,8 @@ add_custom_command(
   OUTPUT "${FINGERPRINT_HEADER}"
   BYPRODUCTS "${GENERATED_DIR}/theme.generated.h"
              "${GENERATED_DIR}/detail-copy-icons.generated.h"
-  COMMAND "${NODE_EXECUTABLE}" --experimental-strip-types
-          "${CMAKE_CURRENT_SOURCE_DIR}/build-header.mts" "${GENERATED_DIR}"
+  COMMAND "${NODE_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/build-header.mts"
+          "${GENERATED_DIR}"
   DEPENDS
     build-header.mts animation.mts native.mts theme.mts color.mts
     assets/geometry.svg assets/flow.json assets/copy.svg assets/check.svg assets/logo.svg

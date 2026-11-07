@@ -14,12 +14,12 @@ import {
   parseFingerprintColor,
   sampleFingerprintFlow,
   FINGERPRINT_PALETTES,
-} from "../../../native/touch-id-preview/animation.mts";
+} from "../../../crates/fnox-core/native/touch-id-preview/animation.mts";
 
 const flow = JSON.parse(
   fs.readFileSync(
     new URL(
-      "../../../native/touch-id-preview/assets/flow.json",
+      "../../../crates/fnox-core/native/touch-id-preview/assets/flow.json",
       import.meta.url,
     ),
     "utf8",

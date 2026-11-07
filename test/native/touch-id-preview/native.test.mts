@@ -4,15 +4,22 @@ import test from "node:test";
 import {
   fingerprintNativeSamples,
   parseFingerprintRidges,
-} from "../../../native/touch-id-preview/native.mts";
+} from "../../../crates/fnox-core/native/touch-id-preview/native.mts";
 import {
   DARK_THEME,
   LIGHT_THEME,
-} from "../../../native/touch-id-preview/theme.mts";
+} from "../../../crates/fnox-core/native/touch-id-preview/theme.mts";
 
 const svg = fs.readFileSync(
   new URL(
-    "../../../native/touch-id-preview/assets/geometry.svg",
+    "../../../crates/fnox-core/native/touch-id-preview/assets/geometry.svg",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const approvalPrompt = fs.readFileSync(
+  new URL(
+    "../../../crates/fnox-core/native/touch-id-preview/src/approval-prompt.mm",
     import.meta.url,
   ),
   "utf8",
@@ -20,12 +27,20 @@ const svg = fs.readFileSync(
 const flow = JSON.parse(
   fs.readFileSync(
     new URL(
-      "../../../native/touch-id-preview/assets/flow.json",
+      "../../../crates/fnox-core/native/touch-id-preview/assets/flow.json",
       import.meta.url,
     ),
     "utf8",
   ),
 );
+
+test("approval details identify caller-provided command and project as unverified", () => {
+  assert.match(approvalPrompt, /Caller-provided; not verified: %@/);
+  assert.equal(
+    (approvalPrompt.match(/Caller-provided; not verified: %@/g) ?? []).length,
+    2,
+  );
+});
 
 test("parsed geometry retains separate ridges, opposing arcs, and finite coordinates", () => {
   const paths = parseFingerprintRidges(svg);

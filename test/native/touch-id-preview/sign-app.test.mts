@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const script = fileURLToPath(
-  new URL("../../../native/touch-id-preview/sign-app.sh", import.meta.url),
+  new URL("../../../crates/fnox-core/native/touch-id-preview/sign-app.sh", import.meta.url),
 );
 // The script uses macOS tools. No test invokes real signing or contacts Apple.
 for (const verdict of [

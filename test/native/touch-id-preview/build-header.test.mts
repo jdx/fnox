@@ -5,17 +5,17 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { generateHeaders } from "../../../native/touch-id-preview/build-header.mts";
+import { generateHeaders } from "../../../crates/fnox-core/native/touch-id-preview/build-header.mts";
 
 const script = fileURLToPath(
-  new URL("../../../native/touch-id-preview/build-header.mts", import.meta.url),
+  new URL("../../../crates/fnox-core/native/touch-id-preview/build-header.mts", import.meta.url),
 );
 
 test("header command rejects missing output without creating artifacts", () => {
   assert.throws(() => generateHeaders(""));
   const missing = spawnSync(
     process.execPath,
-    ["--experimental-strip-types", script],
+    [script],
     { encoding: "utf8" },
   );
   assert.notEqual(missing.status, 0);
@@ -34,7 +34,7 @@ test("header generation is deterministic and works outside the repository direct
     assert.ok(before.every((bytes) => bytes.length > 0));
     const run = spawnSync(
       process.execPath,
-      ["--experimental-strip-types", script, directory],
+      [script, directory],
       { cwd: os.tmpdir(), encoding: "utf8" },
     );
     assert.equal(run.status, 0, run.stderr);
