@@ -2,6 +2,8 @@
 
 `theme.mts` is the source of truth. Dark mode is the approved source palette. Light mode is derived; there is no second hand-maintained palette. The generator emits the same values for the AppKit controls and fingerprint animation, so AppKit and animation share the palette. Dark-mode buttons retain their resting fill. Light-mode Cancel and detail-copy buttons have no fill and use a one-point outline matching their labels.
 
+Generating the theme and running its tests use the [requirements in the preview README](README.md#requirements). CMake checks the local runtime before generating headers.
+
 ## Formula
 
 `color.mts` first decodes hexadecimal sRGB into linear RGB using the standard sRGB transfer function, then converts linear RGB to OKLab. OKLab separates perceptual lightness (`L`) from chromatic coordinates (`a`, `b`).
@@ -51,5 +53,5 @@ Color edits do not change the captured fingerprint geometry, crawl/retraction pa
 Run the small theme/animation checks with:
 
 ```sh
-node --experimental-strip-types --test test/native/touch-id-preview/*.test.mts
+node --test test/native/touch-id-preview/*.test.mts
 ```

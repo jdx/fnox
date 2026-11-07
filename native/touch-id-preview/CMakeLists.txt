@@ -10,13 +10,24 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_OBJCXX_EXTENSIONS OFF)
 
 find_program(NODE_EXECUTABLE node REQUIRED)
+execute_process(
+  COMMAND "${NODE_EXECUTABLE}" --version
+  OUTPUT_VARIABLE NODE_VERSION_OUTPUT
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  RESULT_VARIABLE NODE_VERSION_RESULT
+)
+if(NOT NODE_VERSION_RESULT EQUAL 0)
+  message(FATAL_ERROR "Could not determine the Node.js version from ${NODE_EXECUTABLE}")
+endif()
+include("${CMAKE_CURRENT_LIST_DIR}/node-version-check.cmake")
+fnox_require_typescript_node("${NODE_VERSION_OUTPUT}" "${NODE_EXECUTABLE}")
 set(GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(FINGERPRINT_HEADER "${GENERATED_DIR}/fingerprint-animation.generated.h")
 add_custom_command(
   OUTPUT "${FINGERPRINT_HEADER}"
   BYPRODUCTS "${GENERATED_DIR}/theme.generated.h"
              "${GENERATED_DIR}/detail-copy-icons.generated.h"
-  COMMAND "${NODE_EXECUTABLE}" --experimental-strip-types
+  COMMAND "${NODE_EXECUTABLE}"
           "${CMAKE_CURRENT_SOURCE_DIR}/build-header.mts" "${GENERATED_DIR}"
   DEPENDS
     build-header.mts animation.mts native.mts theme.mts color.mts

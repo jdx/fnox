@@ -13,11 +13,9 @@ const script = fileURLToPath(
 
 test("header command rejects missing output without creating artifacts", () => {
   assert.throws(() => generateHeaders(""));
-  const missing = spawnSync(
-    process.execPath,
-    ["--experimental-strip-types", script],
-    { encoding: "utf8" },
-  );
+  const missing = spawnSync(process.execPath, [script], {
+    encoding: "utf8",
+  });
   assert.notEqual(missing.status, 0);
 });
 
@@ -32,11 +30,10 @@ test("header generation is deterministic and works outside the repository direct
     ]);
     const before = paths.map((file) => fs.readFileSync(file));
     assert.ok(before.every((bytes) => bytes.length > 0));
-    const run = spawnSync(
-      process.execPath,
-      ["--experimental-strip-types", script, directory],
-      { cwd: os.tmpdir(), encoding: "utf8" },
-    );
+    const run = spawnSync(process.execPath, [script, directory], {
+      cwd: os.tmpdir(),
+      encoding: "utf8",
+    });
     assert.equal(run.status, 0, run.stderr);
     assert.deepEqual(
       paths.map((file) => fs.readFileSync(file)),
