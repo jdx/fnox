@@ -96,6 +96,12 @@ pub static FNOX_PROFILE: LazyLock<Vec<String>> = LazyLock::new(|| {
 // Age encryption key configuration
 pub static FNOX_AGE_KEY: LazyLock<Option<String>> = LazyLock::new(|| var("FNOX_AGE_KEY").ok());
 
+/// Inline age identity for the current request. Read on each call, not cached: the daemon
+/// changes its environment for every request.
+pub fn fnox_age_key() -> Option<String> {
+    var("FNOX_AGE_KEY").ok()
+}
+
 /// Named age identity to decrypt with. Read on each call, not cached: the daemon changes its
 /// environment for every request.
 pub fn fnox_age_identity() -> Option<String> {

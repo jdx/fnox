@@ -18,10 +18,16 @@ pub struct AgeEncryptionProvider {
     recipients: Vec<String>,
     key_file: Option<PathBuf>,
     identity: OptionProviderSecretRef,
+    named_identities: Option<NamedIdentities>,
     config: Option<Arc<crate::config::Config>>,
     profile: Vec<String>,
     provider_name: String,
     identity_cycle_guard: Option<AgeIdentityCycleGuard>,
+}
+
+struct NamedIdentities {
+    identities: indexmap::IndexMap<String, ResolvedStringOrProviderRef>,
+    default_identity: Option<String>,
 }
 
 /// The key file to decrypt with, and the `identity` reference to use alongside it.
@@ -37,7 +43,7 @@ pub(crate) struct KeySelection {
 /// the key file, and a `{ provider, value }` entry becomes the `identity` reference. An inline
 /// `FNOX_AGE_KEY` outranks all of them, so it skips the selection.
 ///
-/// `FNOX_AGE_IDENTITY` is read on every call: the daemon changes its environment per request.
+/// Age environment variables are read on every call: the daemon changes its environment per request.
 pub(crate) fn select_key_file(
     provider_name: &str,
     key_file: Option<String>,
@@ -52,7 +58,7 @@ pub(crate) fn select_key_file(
         identities,
         default_identity,
         env::fnox_age_identity().as_deref(),
-        env::FNOX_AGE_KEY.is_some(),
+        env::fnox_age_key().is_some(),
     )
 }
 
@@ -104,8 +110,8 @@ impl AgeEncryptionProvider {
     ) -> Result<Self> {
         let selected = select_key_file(
             "age",
-            key_file,
-            identity,
+            key_file.clone(),
+            identity.clone(),
             &identities,
             default_identity.as_deref(),
         )?;
@@ -117,10 +123,25 @@ impl AgeEncryptionProvider {
         }
         Ok(Self {
             recipients,
-            key_file: selected
-                .key_file
-                .map(|k| crate::config_path::resolve_relative_to_file(&k, None)),
-            identity: selected.identity,
+            key_file: key_file.map(|k| crate::config_path::resolve_relative_to_file(&k, None)),
+            identity,
+            named_identities: Some(NamedIdentities {
+                identities: identities
+                    .into_iter()
+                    .map(|(name, identity)| {
+                        let identity = match identity {
+                            ResolvedStringOrProviderRef::String(path) => {
+                                ResolvedStringOrProviderRef::String(
+                                    crate::config_path::resolve_string_relative_to_file(path, None),
+                                )
+                            }
+                            identity => identity,
+                        };
+                        (name, identity)
+                    })
+                    .collect(),
+                default_identity,
+            }),
             config: None,
             profile: vec!["default".to_string()],
             provider_name: "age".to_string(),
@@ -141,6 +162,7 @@ impl AgeEncryptionProvider {
             recipients,
             key_file: key_file.map(|k| crate::config_path::resolve_relative_to_file(&k, None)),
             identity,
+            named_identities: None,
             config: Some(config),
             profile,
             provider_name,
@@ -148,8 +170,54 @@ impl AgeEncryptionProvider {
         })
     }
 
-    async fn resolve_provider_identity(&self, ciphertext: &str) -> Result<Option<String>> {
-        let Some(identity) = self.identity.as_ref() else {
+    pub(crate) fn with_named_identities(
+        mut self,
+        identities: indexmap::IndexMap<String, ResolvedStringOrProviderRef>,
+        default_identity: Option<String>,
+    ) -> Result<Self> {
+        select_key_file(
+            &self.provider_name,
+            None,
+            self.identity.clone(),
+            &identities,
+            default_identity.as_deref(),
+        )?;
+        self.named_identities = Some(NamedIdentities {
+            identities,
+            default_identity,
+        });
+        Ok(self)
+    }
+
+    fn selected_identity(&self) -> Result<KeySelection> {
+        let key_file = self
+            .key_file
+            .as_ref()
+            .map(|p| p.to_string_lossy().into_owned());
+        let Some(named) = &self.named_identities else {
+            return Ok(KeySelection {
+                key_file,
+                identity: self.identity.clone(),
+                named_provider_ref: false,
+            });
+        };
+        select_key_file_with(
+            &self.provider_name,
+            key_file,
+            self.identity.clone(),
+            &named.identities,
+            named.default_identity.as_deref(),
+            env::fnox_age_identity().as_deref(),
+            false,
+        )
+    }
+
+    async fn resolve_provider_identity(
+        &self,
+        ciphertext: &str,
+        selected_identity: &OptionProviderSecretRef,
+    ) -> Result<Option<String>> {
+        let Some(identity) = selected_identity.as_ref() else {
             return Ok(None);
         };
 
@@ -173,7 +241,7 @@ impl AgeEncryptionProvider {
         crate::providers::resolver::resolve_provider_ref_with_identity_cycle_guard(
             config,
             &self.profile,
-            &self.identity,
+            selected_identity,
             &mut ctx,
             identity_cycle_guard,
         )
@@ -468,7 +536,7 @@ impl crate::providers::Provider for AgeEncryptionProvider {
     }
 }
 
-type DecryptCells = HashMap<String, Arc<tokio::sync::OnceCell<String>>>;
+type DecryptCells = HashMap<(String, Option<blake3::Hash>), Arc<tokio::sync::OnceCell<String>>>;
 
 tokio::task_local! {
     static DECRYPT_SCOPE: Arc<Mutex<DecryptCells>>;
@@ -483,7 +551,11 @@ pub async fn with_decrypt_scope<F: std::future::Future>(fut: F) -> F::Output {
     }
 }
 
-async fn decrypt_once<F, Fut>(ciphertext: &str, decrypt: F) -> Result<String>
+async fn decrypt_once<F, Fut>(
+    ciphertext: &str,
+    inline_key: Option<&str>,
+    decrypt: F,
+) -> Result<String>
 where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = Result<String>>,
@@ -494,7 +566,10 @@ where
     let cell = cells
         .lock()
         .unwrap()
-        .entry(ciphertext.to_string())
+        .entry((
+            ciphertext.to_string(),
+            inline_key.map(|key| blake3::hash(key.as_bytes())),
+        ))
         .or_default()
         .clone();
     cell.get_or_try_init(decrypt).await.cloned()
@@ -502,6 +577,7 @@ where
 
 impl AgeEncryptionProvider {
     async fn decrypt_age_value(&self, value: &str) -> Result<String> {
+        let inline_key = env::fnox_age_key();
         // Re-entered from an identity lookup on this chain (same provider or same
         // ciphertext): waiting on the outer, unfinished decrypt would never return.
         if self
@@ -509,12 +585,21 @@ impl AgeEncryptionProvider {
             .as_ref()
             .is_some_and(|guard| guard.is_reentrant(&self.provider_name, value))
         {
-            return self.decrypt_age_value_uncached(value).await;
+            return self
+                .decrypt_age_value_uncached(value, inline_key.as_deref())
+                .await;
         }
-        decrypt_once(value, || self.decrypt_age_value_uncached(value)).await
+        decrypt_once(value, inline_key.as_deref(), || {
+            self.decrypt_age_value_uncached(value, inline_key.as_deref())
+        })
+        .await
     }
 
-    async fn decrypt_age_value_uncached(&self, value: &str) -> Result<String> {
+    async fn decrypt_age_value_uncached(
+        &self,
+        value: &str,
+        inline_key: Option<&str>,
+    ) -> Result<String> {
         // value contains the encrypted blob (might be base64 encoded or raw)
 
         // Try to decode as base64 first, if that fails, treat as raw bytes
@@ -529,20 +614,29 @@ impl AgeEncryptionProvider {
 
         // Priority for identity:
         // 1. FNOX_AGE_KEY env var (inline key content)
-        // 2. self.identity (from provider config, resolved from another provider)
-        // 3. self.key_file (from provider config)
-        // 4. Settings age_key_file (from CLI flag - deprecated)
-        // 5. Default path (~/.config/fnox/age.txt)
-        let (identity_content, key_file_path_opt) = if let Some(ref age_key) = *env::FNOX_AGE_KEY {
+        // 2. Selected named identity, then provider identity/key_file
+        // 3. Settings age_key_file (from CLI flag - deprecated)
+        // 4. Default path (~/.config/fnox/age.txt)
+        let (provider_identity, key_file) = if inline_key.is_none() {
+            let selected = self.selected_identity()?;
+            (
+                self.resolve_provider_identity(value, &selected.identity)
+                    .await?,
+                selected.key_file,
+            )
+        } else {
+            (None, None)
+        };
+        let (identity_content, key_file_path_opt) = if let Some(age_key) = inline_key {
             // Use the key directly from the environment variable
-            (age_key.clone(), None)
-        } else if let Some(identity) = self.resolve_provider_identity(value).await? {
+            (age_key.to_string(), None)
+        } else if let Some(identity) = provider_identity {
             (identity, None)
         } else {
             // Determine which key file to use
-            let key_file_path = if let Some(ref config_key_file) = self.key_file {
+            let key_file_path = if let Some(ref config_key_file) = key_file {
                 // Use key file from provider config
-                config_key_file.clone()
+                crate::config_path::resolve_relative_to_file(config_key_file, None)
             } else {
                 // Get settings which merges CLI flags, env vars, and defaults
                 let settings = crate::settings::Settings::get();
@@ -784,7 +878,7 @@ mod tests {
 
     #[test]
     fn new_rejects_provider_backed_named_identity() {
-        if env::FNOX_AGE_KEY.is_some() || env::fnox_age_identity().is_some() {
+        if env::fnox_age_key().is_some() || env::fnox_age_identity().is_some() {
             return;
         }
         let identities: indexmap::IndexMap<String, ResolvedStringOrProviderRef> = [(
@@ -863,6 +957,140 @@ mod tests {
             .unwrap(),
             key_file,
         )
+    }
+
+    #[test]
+    fn inline_key_changes_preserve_identity_selection_and_cache_boundaries() {
+        const CHILD: &str = "FNOX_TEST_INLINE_IDENTITY_CHILD";
+        if env::var_os(CHILD).is_none() {
+            // Environment changes stay in a separate, single-test process.
+            let output = std::process::Command::new(env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "providers::age::tests::inline_key_changes_preserve_identity_selection_and_cache_boundaries",
+                    "--nocapture",
+                ])
+                .env(CHILD, "1")
+                .env_remove("FNOX_AGE_KEY")
+                .env_remove("FNOX_AGE_IDENTITY")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let first = age::x25519::Identity::generate();
+                let second = age::x25519::Identity::generate();
+                let directory = tempfile::tempdir().unwrap();
+                let named = directory.path().join("named.txt");
+                std::fs::write(&named, second.to_string().expose_secret()).unwrap();
+                env::set_var("FNOX_AGE_KEY", first.to_string().expose_secret());
+                let provider = AgeEncryptionProvider::new(
+                    vec![second.to_public().to_string()],
+                    Some(
+                        directory
+                            .path()
+                            .join("missing.txt")
+                            .to_string_lossy()
+                            .into(),
+                    ),
+                    OptionProviderSecretRef::none(),
+                    [(
+                        "named".into(),
+                        ResolvedStringOrProviderRef::String(named.to_string_lossy().into()),
+                    )]
+                    .into(),
+                    Some("named".into()),
+                )
+                .unwrap();
+                let named_ciphertext = provider.encrypt("named-value").await.unwrap();
+                env::remove_var("FNOX_AGE_KEY");
+                let named_result = provider.get_secret(&named_ciphertext).await;
+
+                env::set_var("FNOX_AGE_KEY", first.to_string().expose_secret());
+                let mut config = crate::config::Config::new();
+                config
+                    .provider_sources
+                    .insert("age".into(), directory.path().join("fnox.toml"));
+                let resolved = crate::providers::ResolvedProviderConfig::AgeEncryption {
+                    recipients: vec![second.to_public().to_string()],
+                    key_file: Some("missing.txt".into()),
+                    identity: OptionProviderSecretRef::none(),
+                    identities: [(
+                        "named".into(),
+                        ResolvedStringOrProviderRef::String("named.txt".into()),
+                    )]
+                    .into(),
+                    default_identity: Some("named".into()),
+                };
+                let configured = crate::providers::get_provider_from_resolved_with_context(
+                    &config,
+                    &["default".into()],
+                    "age",
+                    &resolved,
+                )
+                .unwrap();
+                env::remove_var("FNOX_AGE_KEY");
+                assert_eq!(
+                    configured.get_secret(&named_ciphertext).await.unwrap(),
+                    "named-value"
+                );
+                env::set_var("FNOX_AGE_IDENTITY", "missing");
+                assert!(configured.get_secret(&named_ciphertext).await.is_err());
+                env::set_var("FNOX_AGE_KEY", second.to_string().expose_secret());
+                assert_eq!(
+                    configured.get_secret(&named_ciphertext).await.unwrap(),
+                    "named-value"
+                );
+                env::remove_var("FNOX_AGE_IDENTITY");
+                env::remove_var("FNOX_AGE_KEY");
+
+                let provider = AgeEncryptionProvider::new(
+                    vec![first.to_public().to_string()],
+                    None,
+                    OptionProviderSecretRef::none(),
+                    Default::default(),
+                    None,
+                )
+                .unwrap();
+                let ciphertext = provider.encrypt("first-value").await.unwrap();
+                let cached_result = with_decrypt_scope(async {
+                    env::set_var("FNOX_AGE_KEY", first.to_string().expose_secret());
+                    assert_eq!(
+                        provider.get_secret(&ciphertext).await.unwrap(),
+                        "first-value"
+                    );
+                    env::set_var("FNOX_AGE_KEY", second.to_string().expose_secret());
+                    let replaced = provider.get_secret(&ciphertext).await;
+                    env::remove_var("FNOX_AGE_KEY");
+                    assert!(configured.get_secret(&ciphertext).await.is_err());
+                    env::set_var("FNOX_AGE_KEY", first.to_string().expose_secret());
+                    assert_eq!(
+                        provider.get_secret(&ciphertext).await.unwrap(),
+                        "first-value"
+                    );
+                    replaced
+                })
+                .await;
+                env::remove_var("FNOX_AGE_KEY");
+                assert!(
+                    named_result.is_ok() && cached_result.is_err(),
+                    "named identity restored: {}; unrelated replacement key rejected: {}",
+                    named_result.is_ok(),
+                    cached_result.is_err()
+                );
+                assert_eq!(named_result.unwrap(), "named-value");
+            });
     }
 
     /// Regression test for the "incorrect HRP" failure on age plugin recipients
@@ -950,8 +1178,8 @@ mod tests {
 
         let (first, second) = with_decrypt_scope(async {
             tokio::join!(
-                decrypt_once("ciphertext", decrypt),
-                decrypt_once("ciphertext", decrypt)
+                decrypt_once("ciphertext", None, decrypt),
+                decrypt_once("ciphertext", None, decrypt)
             )
         })
         .await;
@@ -977,8 +1205,8 @@ mod tests {
         };
 
         let (first, second) = with_decrypt_scope(async {
-            let first = decrypt_once("ciphertext", decrypt).await;
-            let second = decrypt_once("ciphertext", decrypt).await;
+            let first = decrypt_once("ciphertext", None, decrypt).await;
+            let second = decrypt_once("ciphertext", None, decrypt).await;
             (first, second)
         })
         .await;

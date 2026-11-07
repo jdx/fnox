@@ -373,26 +373,38 @@ pub(crate) fn get_provider_from_resolved_with_context_and_identity_cycle_guard(
     } = resolved
     {
         let provider_source = provider_source_path(config, profile, provider_name);
-        // A selected named identity (FNOX_AGE_IDENTITY, else default_identity) replaces `key_file`.
-        let selected = age::select_key_file(
-            provider_name,
-            key_file.clone(),
-            identity.clone(),
-            identities,
-            default_identity.as_deref(),
-        )?;
-        return Ok(Box::new(age::AgeEncryptionProvider::new_with_config(
-            recipients.clone(),
-            crate::config_path::resolve_optional_string_relative_to_file(
-                selected.key_file,
-                provider_source.as_deref(),
-            ),
-            selected.identity,
-            std::sync::Arc::new(config.clone()),
-            profile.to_vec(),
-            provider_name.to_string(),
-            identity_cycle_guard,
-        )?));
+        let identities = identities
+            .iter()
+            .map(|(name, identity)| {
+                let identity = match identity {
+                    ResolvedStringOrProviderRef::String(path) => {
+                        ResolvedStringOrProviderRef::String(
+                            crate::config_path::resolve_string_relative_to_file(
+                                path.clone(),
+                                provider_source.as_deref(),
+                            ),
+                        )
+                    }
+                    identity => identity.clone(),
+                };
+                (name.clone(), identity)
+            })
+            .collect();
+        return Ok(Box::new(
+            age::AgeEncryptionProvider::new_with_config(
+                recipients.clone(),
+                crate::config_path::resolve_optional_string_relative_to_file(
+                    key_file.clone(),
+                    provider_source.as_deref(),
+                ),
+                identity.clone(),
+                std::sync::Arc::new(config.clone()),
+                profile.to_vec(),
+                provider_name.to_string(),
+                identity_cycle_guard,
+            )?
+            .with_named_identities(identities, default_identity.clone())?,
+        ));
     }
     if let ResolvedProviderConfig::KeePass {
         database,
