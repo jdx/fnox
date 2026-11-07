@@ -4,11 +4,13 @@ use crate::error::Result;
 use strum::{Display, EnumString, VariantNames};
 
 mod add;
+mod discover;
 mod list;
 mod remove;
 mod test;
 
 pub use add::AddCommand;
+pub use discover::DiscoverCommand;
 pub use list::ListCommand;
 pub use remove::RemoveCommand;
 pub use test::TestCommand;
@@ -141,6 +143,7 @@ pub struct ProviderCommand {
 #[derive(Debug, usage_rs::Subcommands)]
 pub enum ProviderAction {
     Add(AddCommand),
+    Discover(DiscoverCommand),
     List(ListCommand),
     Remove(RemoveCommand),
     Test(TestCommand),
@@ -150,6 +153,7 @@ impl ProviderCommand {
     pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
         match &self.action {
             None => ListCommand { complete: false }.run(cli, config).await,
+            Some(ProviderAction::Discover(cmd)) => cmd.run(cli, config).await,
             Some(ProviderAction::List(cmd)) => cmd.run(cli, config).await,
             Some(ProviderAction::Add(cmd)) => cmd.run(cli).await,
             Some(ProviderAction::Remove(cmd)) => cmd.run(cli).await,

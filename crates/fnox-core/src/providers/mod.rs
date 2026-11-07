@@ -15,6 +15,7 @@ pub(crate) mod azure_shared;
 pub mod azure_sm;
 pub mod bitwarden;
 pub mod bitwarden_sm;
+pub mod discovery;
 pub mod doppler;
 pub mod enpass;
 #[cfg(not(target_env = "musl"))]
@@ -185,6 +186,14 @@ pub use generated::providers_wizard::ALL_WIZARD_INFO;
 
 #[async_trait]
 pub trait Provider: Send + Sync {
+    /// Discover item metadata without reading secret fields. Unsupported
+    /// providers fail explicitly instead of returning an empty successful list.
+    async fn discover(&self, _tags: &[String]) -> Result<Vec<discovery::DiscoveredItem>> {
+        Err(crate::error::FnoxError::Provider(
+            "This provider does not support item discovery".to_string(),
+        ))
+    }
+
     /// Get a secret value from the provider (decrypt if needed)
     async fn get_secret(&self, value: &str) -> Result<String>;
 

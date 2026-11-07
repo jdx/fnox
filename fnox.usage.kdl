@@ -919,6 +919,25 @@ See also:
         example "fnox provider add sync-age age --global" header="Add an age provider to the global config"
         example "fnox provider add corp lua --plugin fnox-plugin-corp" header="Add a Lua plugin provider"
     }
+    cmd discover help="Discover provider items, optionally narrowed by tags" {
+        long_help #"""
+Discover provider items, optionally narrowed by tags
+
+Currently supports 1Password. Outputs item IDs, titles, tags, and vaults, never secret fields. Uses the configured account and vault, or all accessible vaults when none is configured. Provider credential references are resolved directly, bypassing the daemon cache. Does not modify fnox.toml.
+"""#
+        after_long_help #"""
+See also:
+- 1Password: https://fnox.jdx.dev/providers/1password
+"""#
+        flag --json help="Output a JSON array of item metadata"
+        flag --tags help="Tag filters (comma-separated or repeated); omitted lists all items in scope" var=#true delimiter=, {
+            arg <TAGS>
+        }
+        flag "-h --help" help="Print help" action=help builtin=#true
+        arg <PROVIDER> help="Configured provider name"
+        example "fnox provider discover op --tags project/example" header="Find tagged items"
+        example "fnox provider discover op --tags project/example --json" header="Read item metadata as JSON"
+    }
     cmd list help="List the providers configured for the active profile" {
         alias ls
         long_help #"""

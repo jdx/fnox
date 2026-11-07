@@ -77,6 +77,21 @@ OP_SERVICE_ACCOUNT_TOKEN = { provider = "age", value = "YWdl...", env = false } 
 
 Each field accepts `{ secret = "NAME" }` to read its value from another secret. Fields shared by all providers, such as `auth_command` and `daemon_cache`, are in the [configuration reference](/reference/configuration).
 
+## Discover items by tag
+
+Narrow discovery to items tagged for a project before selecting a secret reference:
+
+```sh
+fnox provider discover op --tags project/example
+fnox provider discover op --tags project/example --json
+```
+
+Discovery runs `op item list` with the configured 1Password account. If you configure a vault, results are limited to that vault; otherwise, fnox lists items in every vault accessible to the account. Output includes item IDs, titles, tags, and vault metadata, but no secret fields. Discovery does not change `fnox.toml`. Provider credential references are resolved directly, bypassing the daemon cache. Archived items are excluded. JSON output is an array; no matches return `[]`.
+
+Pass comma-separated tags or repeat `--tags`. Matching follows the [1Password CLI's tag rules](https://www.1password.dev/cli/reference/management-commands/item#item-list), including nested tags: `project/example` also finds `project/example/development`. Omitting `--tags` lists every non-archived item within the configured vault, or across all accessible vaults when none is configured.
+
+Once you choose an item, use its vault and item IDs in an `op://<vault-id>/<item-id>/<field>` reference. Choose the field explicitly; discovery does not assume that every item has a password field. Reading that reference is a separate operation through the normal provider and optional daemon cache.
+
 ## Reference formats
 
 | `value`                              | What fnox reads                                                      |
