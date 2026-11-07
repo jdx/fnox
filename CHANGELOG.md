@@ -1,5 +1,51 @@
 # Changelog
 
+## [1.48.0](https://github.com/jdx/fnox/compare/v1.47.0..v1.48.0) - 2026-11-07
+
+### 🚀 Features
+
+- **(provider)** discover 1password items by tag by [@jdalton](https://github.com/jdalton) in [#1138](https://github.com/jdx/fnox/pull/1138)
+- **(proxy)** stream rule-domain responses by [@jdx](https://github.com/jdx) in [#1113](https://github.com/jdx/fnox/pull/1113)
+- preview credential approval with native verification by [@jdalton](https://github.com/jdalton) in [#1132](https://github.com/jdx/fnox/pull/1132)
+
+### 🐛 Bug Fixes
+
+- **(1password)** preserve trailing newline in secret values by [@jdx](https://github.com/jdx) in [#1131](https://github.com/jdx/fnox/pull/1131)
+- **(age)** honor inline key changes in daemon shell hooks by [@Aschenbath](https://github.com/Aschenbath) in [#1137](https://github.com/jdx/fnox/pull/1137)
+- **(config)** report the real config error from hook-env by [@jdx](https://github.com/jdx) in [#1130](https://github.com/jdx/fnox/pull/1130)
+- **(config)** omit vault lease ttl unless duration is set by [@jdx](https://github.com/jdx) in [#1129](https://github.com/jdx/fnox/pull/1129)
+- **(get)** resolve provider access tokens kept as config secrets in get and sync by [@jdx](https://github.com/jdx) in [#1125](https://github.com/jdx/fnox/pull/1125)
+- **(proxy)** keep proxy run alive when a client hangs up mid-response by [@jdx](https://github.com/jdx) in [#1112](https://github.com/jdx/fnox/pull/1112)
+
+### 📚 Documentation
+
+- **(sync)** document local_source and warn before removing stale local cache by [@jdx](https://github.com/jdx) in [#1135](https://github.com/jdx/fnox/pull/1135)
+
+### 🛡️ Security
+
+- **(deps)** update github actions by [@renovate[bot]](https://github.com/renovate[bot]) in [#1114](https://github.com/jdx/fnox/pull/1114)
+
+### 🔍 Other Changes
+
+- release weekly instead of daily by [@jdx](https://github.com/jdx) in [#1107](https://github.com/jdx/fnox/pull/1107)
+
+### 📦️ Dependency Updates
+
+- update rust crate usage-rs to v7.2.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1108](https://github.com/jdx/fnox/pull/1108)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1116](https://github.com/jdx/fnox/pull/1116)
+- update rust crates by [@renovate[bot]](https://github.com/renovate[bot]) in [#1115](https://github.com/jdx/fnox/pull/1115)
+- update jdx/packslip action to v1.11.2 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1117](https://github.com/jdx/fnox/pull/1117)
+- update rust crate k8s-openapi to 0.29 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1119](https://github.com/jdx/fnox/pull/1119)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1118](https://github.com/jdx/fnox/pull/1118)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1120](https://github.com/jdx/fnox/pull/1120)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1121](https://github.com/jdx/fnox/pull/1121)
+- update rust crate usage-rs to v7.3.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1133](https://github.com/jdx/fnox/pull/1133)
+
+### New Contributors
+
+- @jdalton made their first contribution in [#1138](https://github.com/jdx/fnox/pull/1138)
+- @Aschenbath made their first contribution in [#1137](https://github.com/jdx/fnox/pull/1137)
+
 ## [1.47.0](https://github.com/jdx/fnox/compare/v1.46.0..v1.47.0) - 2026-11-03
 
 ### 🚀 Features
