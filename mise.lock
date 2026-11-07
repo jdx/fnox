@@ -124,43 +124,36 @@ specifiers = ["latest"]
 
 [tools.bitwarden."platforms.linux-arm64"]
 checksum = "sha256:79ecb3293fb259660961c949d3e32fdab8682b2bcff0f6764ce38a411ca1ac5d"
-checksum_source = "mise-versions"
 url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.10.1/bw-linux-arm64-2026.10.1.zip"
 url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/688476446"
 
 [tools.bitwarden."platforms.linux-arm64-musl"]
 checksum = "sha256:79ecb3293fb259660961c949d3e32fdab8682b2bcff0f6764ce38a411ca1ac5d"
-checksum_source = "mise-versions"
 url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.10.1/bw-linux-arm64-2026.10.1.zip"
 url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/688476446"
 
 [tools.bitwarden."platforms.linux-x64"]
 checksum = "sha256:eb09c3715291c21cf744819b873a255c1247b1b8b45bae138621a644ec7ad8f5"
-checksum_source = "mise-versions"
 url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.10.1/bw-linux-2026.10.1.zip"
 url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/688476344"
 
 [tools.bitwarden."platforms.linux-x64-musl"]
 checksum = "sha256:eb09c3715291c21cf744819b873a255c1247b1b8b45bae138621a644ec7ad8f5"
-checksum_source = "mise-versions"
 url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.10.1/bw-linux-2026.10.1.zip"
 url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/688476344"
 
 [tools.bitwarden."platforms.macos-arm64"]
 checksum = "sha256:4e595f9da80ef8b30abca808d0c78a1560d9589466d1bccd2b3e70f321fb12bf"
-checksum_source = "mise-versions"
 url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.10.1/bw-macos-arm64-2026.10.1.zip"
 url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/688476006"
 
 [tools.bitwarden."platforms.macos-x64"]
 checksum = "sha256:0f96f40975972dc0ec568e689d21cdb3cb8caa30ec9bb066a55bf254512fb3c7"
-checksum_source = "mise-versions"
 url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.10.1/bw-macos-2026.10.1.zip"
 url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/688475897"
 
 [tools.bitwarden."platforms.windows-x64"]
 checksum = "sha256:5043129ffbad5fa494b387ccd5e14e19ec9411b3dfc7f75c276aadc9f070e7f1"
-checksum_source = "mise-versions"
 url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.10.1/bw-windows-2026.10.1.zip"
 url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/688475674"
 
@@ -211,31 +204,26 @@ specifiers = ["latest"]
 
 [tools.cargo-msrv."platforms.linux-x64"]
 checksum = "sha256:5fa075586e40d1fb0c57bc1c69e31e6608e2765fa4a16c1920d4e4c1ca76efef"
-checksum_source = "mise-versions"
 url = "https://github.com/foresterre/cargo-msrv/releases/download/v0.19.6/cargo-msrv-x86_64-unknown-linux-gnu-v0.19.6.tgz"
 url_api = "https://api.github.com/repos/foresterre/cargo-msrv/releases/assets/664092192"
 
 [tools.cargo-msrv."platforms.linux-x64-musl"]
 checksum = "sha256:55f60d7bd89c6b765aab1d738d6ce63132b7daa5dfc240be0c680f48a4b82058"
-checksum_source = "mise-versions"
 url = "https://github.com/foresterre/cargo-msrv/releases/download/v0.19.6/cargo-msrv-x86_64-unknown-linux-musl-v0.19.6.tgz"
 url_api = "https://api.github.com/repos/foresterre/cargo-msrv/releases/assets/664093469"
 
 [tools.cargo-msrv."platforms.macos-arm64"]
 checksum = "sha256:9c2af7930eab0bb325321a0d32c34a09fc3bcb7116f36f92e0d5e110984f6244"
-checksum_source = "mise-versions"
 url = "https://github.com/foresterre/cargo-msrv/releases/download/v0.19.6/cargo-msrv-aarch64-apple-darwin-v0.19.6.tgz"
 url_api = "https://api.github.com/repos/foresterre/cargo-msrv/releases/assets/664091723"
 
 [tools.cargo-msrv."platforms.macos-x64"]
 checksum = "sha256:f1525fb20fe47e5e1c380ea2158cf67f4588fd74f1a081734c9444f95f0cd0b0"
-checksum_source = "mise-versions"
 url = "https://github.com/foresterre/cargo-msrv/releases/download/v0.19.6/cargo-msrv-x86_64-apple-darwin-v0.19.6.tgz"
 url_api = "https://api.github.com/repos/foresterre/cargo-msrv/releases/assets/664130506"
 
 [tools.cargo-msrv."platforms.windows-x64"]
 checksum = "sha256:6378f5ed2a7dfeac778ec16243246f9c27da0dddd30a411208b2b1fabafeca48"
-checksum_source = "mise-versions"
 url = "https://github.com/foresterre/cargo-msrv/releases/download/v0.19.6/cargo-msrv-x86_64-pc-windows-msvc-v0.19.6.zip"
 url_api = "https://api.github.com/repos/foresterre/cargo-msrv/releases/assets/664099616"
 
@@ -359,43 +347,36 @@ asset_pattern = "cli_{{ version }}_{{ os(macos='darwin') }}_{{ arch(x64='amd64')
 
 [tools.infisical."platforms.linux-arm64"]
 checksum = "sha256:6bfbe716251cc9067c01c1dc45d755fee05a5b8dd8204770111d390803e36859"
-checksum_source = "mise-versions"
 url = "https://github.com/Infisical/cli/releases/download/v0.44.14/cli_0.44.14_linux_arm64.tar.gz"
 url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/707117387"
 
 [tools.infisical."platforms.linux-arm64-musl"]
 checksum = "sha256:6bfbe716251cc9067c01c1dc45d755fee05a5b8dd8204770111d390803e36859"
-checksum_source = "mise-versions"
 url = "https://github.com/Infisical/cli/releases/download/v0.44.14/cli_0.44.14_linux_arm64.tar.gz"
 url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/707117387"
 
 [tools.infisical."platforms.linux-x64"]
 checksum = "sha256:b91725788fedb319ff761c8e93b7df926fa3b298993c4cea5b40e284943b630b"
-checksum_source = "mise-versions"
 url = "https://github.com/Infisical/cli/releases/download/v0.44.14/cli_0.44.14_linux_amd64.tar.gz"
 url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/707117370"
 
 [tools.infisical."platforms.linux-x64-musl"]
 checksum = "sha256:b91725788fedb319ff761c8e93b7df926fa3b298993c4cea5b40e284943b630b"
-checksum_source = "mise-versions"
 url = "https://github.com/Infisical/cli/releases/download/v0.44.14/cli_0.44.14_linux_amd64.tar.gz"
 url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/707117370"
 
 [tools.infisical."platforms.macos-arm64"]
 checksum = "sha256:460c73d25b01c3ef70844ed1cac25931f569e2abd0aa929d4c99a24d5753cb91"
-checksum_source = "mise-versions"
 url = "https://github.com/Infisical/cli/releases/download/v0.44.14/cli_0.44.14_darwin_arm64.tar.gz"
 url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/707092530"
 
 [tools.infisical."platforms.macos-x64"]
 checksum = "sha256:ff0f1c7fd67e6a83f47206965585c52b98e70cf24721ce81e51dd6276e33b83b"
-checksum_source = "mise-versions"
 url = "https://github.com/Infisical/cli/releases/download/v0.44.14/cli_0.44.14_darwin_amd64.tar.gz"
 url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/707092534"
 
 [tools.infisical."platforms.windows-x64"]
 checksum = "sha256:4b59ed6558c396421feff24e35ce41819b7101cdca37354cbba86be8806482dd"
-checksum_source = "mise-versions"
 url = "https://github.com/Infisical/cli/releases/download/v0.44.14/cli_0.44.14_windows_amd64.tar.gz"
 url_api = "https://api.github.com/repos/Infisical/cli/releases/assets/707110035"
 
@@ -517,39 +498,37 @@ url = "https://github.com/jdx/mr-boxington/releases/download/v1.29.2/mbx-x86_64-
 signer = "sigstore-oidc:https://github.com/jdx/mr-boxington/.github/workflows/release.yml"
 
 [[tools.node]]
-version = "24.22.2"
+version = "26.13.0"
 backend = "core:node"
-specifiers = ["24"]
+specifiers = ["26"]
 
 [tools.node."platforms.linux-arm64"]
-checksum = "sha256:95c264150aceb7f3437a29fd6984924f5f8d1511ea3cbd6c508b83f6c555dae2"
-url = "https://nodejs.org/dist/v24.22.2/node-v24.22.2-linux-arm64.tar.gz"
+checksum = "sha256:439e9c438acdf6a6ffe47418da709153d66c4bed812e30a473faacb107dd2791"
+url = "https://nodejs.org/dist/v26.13.0/node-v26.13.0-linux-arm64.tar.gz"
 
 [tools.node."platforms.linux-arm64-musl"]
-checksum = "sha256:b2f5443a34a38d863e87c0f5f80c03630fc16917dfe16f26c1cec44c0b542959"
-url = "https://nodejs.org/dist/v24.22.2/node-v24.22.2.tar.gz"
-install = "source"
+checksum = "sha256:f3dda772ba0c1f2cd6fec46f6ec24687584767f2c3f9117a47edf191e7786720"
+url = "https://unofficial-builds.nodejs.org/download/release/v26.13.0/node-v26.13.0-linux-arm64-musl.tar.gz"
 
 [tools.node."platforms.linux-x64"]
-checksum = "sha256:361718c444e49af2ca5a110c83ba6a8901143f23ab285ebbef0341f391f482a9"
-url = "https://nodejs.org/dist/v24.22.2/node-v24.22.2-linux-x64.tar.gz"
+checksum = "sha256:5848553868b402d3fabb5b09270649977780a390f832155721025a08b5104455"
+url = "https://nodejs.org/dist/v26.13.0/node-v26.13.0-linux-x64.tar.gz"
 
 [tools.node."platforms.linux-x64-musl"]
-checksum = "sha256:b2f5443a34a38d863e87c0f5f80c03630fc16917dfe16f26c1cec44c0b542959"
-url = "https://nodejs.org/dist/v24.22.2/node-v24.22.2.tar.gz"
-install = "source"
+checksum = "sha256:c6c738fe564c3eb053172bfd4ca1166eec8bc076f84231a2ea70165e316f5809"
+url = "https://unofficial-builds.nodejs.org/download/release/v26.13.0/node-v26.13.0-linux-x64-musl.tar.gz"
 
 [tools.node."platforms.macos-arm64"]
-checksum = "sha256:aa9549349e47dffaa42dcf95d6e06ade8c4bdafc980979883b88767670df385a"
-url = "https://nodejs.org/dist/v24.22.2/node-v24.22.2-darwin-arm64.tar.gz"
+checksum = "sha256:d38bd5e5a2ddce6bbb5ce45e46e208337da4d51fffe611e567fd32073d6439f6"
+url = "https://nodejs.org/dist/v26.13.0/node-v26.13.0-darwin-arm64.tar.gz"
 
 [tools.node."platforms.macos-x64"]
-checksum = "sha256:d5e336d588c45be0c37dbd52cc29895593009ca4997a77a1fd02815131ed0e52"
-url = "https://nodejs.org/dist/v24.22.2/node-v24.22.2-darwin-x64.tar.gz"
+checksum = "sha256:525c9b29bb0263d687de60a4cec0e2a6db876a8eb032369e5795eca71e7c358e"
+url = "https://nodejs.org/dist/v26.13.0/node-v26.13.0-darwin-x64.tar.gz"
 
 [tools.node."platforms.windows-x64"]
-checksum = "sha256:ca1bff5d8ead13c9f2ea404a176db46bd430704d5b5113734049fa365e7799e2"
-url = "https://nodejs.org/dist/v24.22.2/node-v24.22.2-win-x64.zip"
+checksum = "sha256:dcc60d59a0746999f99064a01c020445d54d84228c691cdbf25b49ac3b59150a"
+url = "https://nodejs.org/dist/v26.13.0/node-v26.13.0-win-x64.zip"
 
 [[tools.oxfmt]]
 version = "0.76.0"
@@ -564,43 +543,36 @@ specifiers = ["latest"]
 
 [tools.pkl."platforms.linux-arm64"]
 checksum = "sha256:e60744e17d4ddc0257a35260998b5f98387b5d6a5e868317cccfbebe8d962ae3"
-checksum_source = "mise-versions"
 url = "https://github.com/apple/pkl/releases/download/0.32.2/pkl-linux-aarch64"
 url_api = "https://api.github.com/repos/apple/pkl/releases/assets/663850794"
 
 [tools.pkl."platforms.linux-arm64-musl"]
 checksum = "sha256:e60744e17d4ddc0257a35260998b5f98387b5d6a5e868317cccfbebe8d962ae3"
-checksum_source = "mise-versions"
 url = "https://github.com/apple/pkl/releases/download/0.32.2/pkl-linux-aarch64"
 url_api = "https://api.github.com/repos/apple/pkl/releases/assets/663850794"
 
 [tools.pkl."platforms.linux-x64"]
 checksum = "sha256:874c75484c79add77fb2346ea4ab2e8875eea35fb707894bf5457a2df5d03def"
-checksum_source = "mise-versions"
 url = "https://github.com/apple/pkl/releases/download/0.32.2/pkl-linux-amd64"
 url_api = "https://api.github.com/repos/apple/pkl/releases/assets/663850808"
 
 [tools.pkl."platforms.linux-x64-musl"]
 checksum = "sha256:874c75484c79add77fb2346ea4ab2e8875eea35fb707894bf5457a2df5d03def"
-checksum_source = "mise-versions"
 url = "https://github.com/apple/pkl/releases/download/0.32.2/pkl-linux-amd64"
 url_api = "https://api.github.com/repos/apple/pkl/releases/assets/663850808"
 
 [tools.pkl."platforms.macos-arm64"]
 checksum = "sha256:466952f0b30c93dfa36393a5b3695159917ce4291e3c936a18a0a240cfbe98e9"
-checksum_source = "mise-versions"
 url = "https://github.com/apple/pkl/releases/download/0.32.2/pkl-macos-aarch64"
 url_api = "https://api.github.com/repos/apple/pkl/releases/assets/663850972"
 
 [tools.pkl."platforms.macos-x64"]
 checksum = "sha256:3c4c914a75210d3f3292740b4a8d447f9f832e81b60720bec57221e884717eee"
-checksum_source = "mise-versions"
 url = "https://github.com/apple/pkl/releases/download/0.32.2/pkl-macos-amd64"
 url_api = "https://api.github.com/repos/apple/pkl/releases/assets/663850987"
 
 [tools.pkl."platforms.windows-x64"]
 checksum = "sha256:ac3c55c2e43c20964dc5faf51e47bf73a90150dfe1874aa37753651753edf201"
-checksum_source = "mise-versions"
 url = "https://github.com/apple/pkl/releases/download/0.32.2/pkl-windows-amd64.exe"
 url_api = "https://api.github.com/repos/apple/pkl/releases/assets/663854370"
 
@@ -611,43 +583,36 @@ specifiers = ["latest"]
 
 [tools.rush."platforms.linux-arm64"]
 checksum = "sha256:5008abfafa8c2e7c69c0f8714c06ebd08899b0a082e95db14bae50495f695efc"
-checksum_source = "mise-versions"
 url = "https://github.com/shenwei356/rush/releases/download/v0.11.1/rush_linux_arm64.tar.gz"
 url_api = "https://api.github.com/repos/shenwei356/rush/releases/assets/700065148"
 
 [tools.rush."platforms.linux-arm64-musl"]
 checksum = "sha256:5008abfafa8c2e7c69c0f8714c06ebd08899b0a082e95db14bae50495f695efc"
-checksum_source = "mise-versions"
 url = "https://github.com/shenwei356/rush/releases/download/v0.11.1/rush_linux_arm64.tar.gz"
 url_api = "https://api.github.com/repos/shenwei356/rush/releases/assets/700065148"
 
 [tools.rush."platforms.linux-x64"]
 checksum = "sha256:1a08baa9f2751c8581f0655fe1aa40a15595ffe70d5f3377d113060329c58fc4"
-checksum_source = "mise-versions"
 url = "https://github.com/shenwei356/rush/releases/download/v0.11.1/rush_linux_amd64.tar.gz"
 url_api = "https://api.github.com/repos/shenwei356/rush/releases/assets/700065006"
 
 [tools.rush."platforms.linux-x64-musl"]
 checksum = "sha256:1a08baa9f2751c8581f0655fe1aa40a15595ffe70d5f3377d113060329c58fc4"
-checksum_source = "mise-versions"
 url = "https://github.com/shenwei356/rush/releases/download/v0.11.1/rush_linux_amd64.tar.gz"
 url_api = "https://api.github.com/repos/shenwei356/rush/releases/assets/700065006"
 
 [tools.rush."platforms.macos-arm64"]
 checksum = "sha256:bbcbf882da03ab06f17f6c5c8ee29dc50cd9515937dc8373d5b6cc25de19dcd9"
-checksum_source = "mise-versions"
 url = "https://github.com/shenwei356/rush/releases/download/v0.11.1/rush_darwin_arm64.tar.gz"
 url_api = "https://api.github.com/repos/shenwei356/rush/releases/assets/700064344"
 
 [tools.rush."platforms.macos-x64"]
 checksum = "sha256:3e5f6f320fbbdd67a900705ed1486d9aecee6db7bc16d0eaf61b686b91b8f524"
-checksum_source = "mise-versions"
 url = "https://github.com/shenwei356/rush/releases/download/v0.11.1/rush_darwin_amd64.tar.gz"
 url_api = "https://api.github.com/repos/shenwei356/rush/releases/assets/700063910"
 
 [tools.rush."platforms.windows-x64"]
 checksum = "sha256:4b81911ebf7f4b7343fbe099c2f07947c7e75047342ad8ff207a952c0bb48656"
-checksum_source = "mise-versions"
 url = "https://github.com/shenwei356/rush/releases/download/v0.11.1/rush_windows_amd64.exe.tar.gz"
 url_api = "https://api.github.com/repos/shenwei356/rush/releases/assets/700065723"
 
