@@ -322,6 +322,7 @@ rotate_both() {
 
 age_daemon_config() {
 	local provider_options="$1"
+	local plaintext="${2:-age-value}"
 	local keygen_output public_key
 	keygen_output=$(age-keygen -o key.txt 2>&1)
 	public_key=$(echo "$keygen_output" | grep "^Public key:" | cut -d' ' -f3)
@@ -341,7 +342,7 @@ $provider_options
 [secrets]
 EOF
 
-	run "$FNOX_BIN" --no-daemon set MY_SECRET "age-value" --provider age
+	run "$FNOX_BIN" --no-daemon set MY_SECRET "$plaintext" --provider age
 	assert_success
 }
 
@@ -350,7 +351,7 @@ inline_age_daemon_config() {
 		skip "age-keygen not installed"
 	fi
 	unset FNOX_AGE_KEY FNOX_AGE_IDENTITY
-	age_daemon_config ""
+	age_daemon_config "" "${1:-age-value}"
 	# Keep the synthetic identity outside the provider's file search paths.
 	sed -i.bak '/^key_file = /d' fnox.toml
 }
@@ -388,15 +389,15 @@ inline_age_daemon_config() {
 	assert_output --partial "export MY_SECRET=age-value"
 
 	mv key.txt first-key.txt
-	inline_age_daemon_config
+	inline_age_daemon_config "replacement-value"
 	FNOX_AGE_KEY=$(cat key.txt)
 	export FNOX_AGE_KEY
 	run "$FNOX_BIN" --no-daemon hook-env -s zsh
 	assert_success
-	assert_output --partial "export MY_SECRET=age-value"
+	assert_output --partial "export MY_SECRET=replacement-value"
 	run "$FNOX_BIN" hook-env -s zsh
 	assert_success
-	assert_output --partial "export MY_SECRET=age-value"
+	assert_output --partial "export MY_SECRET=replacement-value"
 }
 
 @test "daemon hook stops using an age key removed from the calling shell" {
