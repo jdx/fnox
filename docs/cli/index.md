@@ -98,6 +98,7 @@ Put fnox options before the `--` that starts a child command, as in `fnox -P pro
 - [`fnox profiles`](/cli/profiles.md)
 - [`fnox provider [SUBCOMMAND]`](/cli/provider.md)
 - [`fnox provider add [FLAGS] <PROVIDER> <PROVIDER_TYPE>`](/cli/provider/add.md)
+- [`fnox provider discover [--json] [--tags <TAGS>] <PROVIDER>`](/cli/provider/discover.md)
 - [`fnox provider list`](/cli/provider/list.md)
 - [`fnox provider remove [-g --global] <PROVIDER>`](/cli/provider/remove.md)
 - [`fnox provider test [-a --all] [PROVIDER]`](/cli/provider/test.md)

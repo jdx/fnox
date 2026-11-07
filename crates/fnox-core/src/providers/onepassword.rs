@@ -1,3 +1,5 @@
+pub mod discovery;
+
 use crate::env;
 use crate::error::{FnoxError, Result};
 use crate::providers::Provider as _;
@@ -375,6 +377,13 @@ impl OnePasswordProvider {
 
 #[async_trait]
 impl crate::providers::Provider for OnePasswordProvider {
+    async fn discover(
+        &self,
+        tags: &[String],
+    ) -> Result<Vec<crate::providers::discovery::DiscoveredItem>> {
+        self.discover_items(tags).await
+    }
+
     async fn get_secret(&self, value: &str) -> Result<String> {
         tracing::debug!("Getting secret '{}' from 1Password", value);
 

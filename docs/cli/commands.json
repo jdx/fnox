@@ -3106,6 +3106,90 @@
             ],
             "headings": []
           },
+          "discover": {
+            "full_cmd": ["provider", "discover"],
+            "usage": "provider discover [--json] [--tags <TAGS>] <PROVIDER>",
+            "subcommands": {},
+            "args": [
+              {
+                "name": "PROVIDER",
+                "usage": "<PROVIDER>",
+                "help": "Configured provider name",
+                "help_first_line": "Configured provider name",
+                "required": true,
+                "double_dash": "Optional",
+                "hide": false
+              }
+            ],
+            "flags": [
+              {
+                "name": "json",
+                "usage": "--json",
+                "help": "Output a JSON array of item metadata",
+                "help_first_line": "Output a JSON array of item metadata",
+                "short": [],
+                "long": ["json"],
+                "hide": false,
+                "global": false
+              },
+              {
+                "name": "tags",
+                "usage": "--tags <TAGS>",
+                "help": "Tag filters (comma-separated or repeated); omitted lists all items in scope",
+                "help_first_line": "Tag filters (comma-separated or repeated); omitted lists all items in scope",
+                "short": [],
+                "long": ["tags"],
+                "var": true,
+                "hide": false,
+                "global": false,
+                "arg": {
+                  "name": "TAGS",
+                  "usage": "<TAGS>",
+                  "required": true,
+                  "double_dash": "Optional",
+                  "delimiter": ",",
+                  "hide": false
+                }
+              },
+              {
+                "name": "help",
+                "usage": "-h --help",
+                "help": "Print help",
+                "help_first_line": "Print help",
+                "short": ["h"],
+                "long": ["help"],
+                "hide": false,
+                "global": false,
+                "action": "help",
+                "builtin": true
+              }
+            ],
+            "mounts": [],
+            "unknown_flags": null,
+            "hide": false,
+            "args_override_self": true,
+            "help": "Discover provider items, optionally narrowed by tags",
+            "help_long": "Discover provider items, optionally narrowed by tags\n\nCurrently supports 1Password. Outputs item IDs, titles, tags, and vaults, never secret fields. Uses the configured account and vault, or all accessible vaults when none is configured. Provider credential references are resolved directly, bypassing the daemon cache. Does not modify fnox.toml.",
+            "name": "discover",
+            "aliases": [],
+            "hidden_aliases": [],
+            "after_help_long": "See also:\n- 1Password: https://fnox.jdx.dev/providers/1password",
+            "examples": [
+              {
+                "code": "fnox provider discover op --tags project/example",
+                "header": "Find tagged items",
+                "help": null,
+                "lang": ""
+              },
+              {
+                "code": "fnox provider discover op --tags project/example --json",
+                "header": "Read item metadata as JSON",
+                "help": null,
+                "lang": ""
+              }
+            ],
+            "headings": []
+          },
           "list": {
             "full_cmd": ["provider", "list"],
             "usage": "provider list",
