@@ -1,10 +1,22 @@
 # Fnox verification preview
 
-A standalone approval UI for the [Touch ID proposal](../../docs/proposals/macos-touch-id-approval.md). It shows sample request metadata and simulates approval by default. An explicit system mode verifies the current user through the platform API. **Neither mode reads credentials, starts a proxy, or grants a reusable authorization lease.**
+A standalone UI for the [Touch ID proposal](../../docs/proposals/macos-touch-id-approval.md). It shows sample request details and simulates approval by default. System mode verifies the user. Neither mode reads credentials, starts a proxy, or grants authorization.
 
-## macOS
+## Requirements
 
-Requires macOS 14+, an Xcode SDK containing `NSGlassEffectView` (macOS 26+), CMake 3.25+, and Node.js 22.6+ with TypeScript stripping. Liquid Glass is used on macOS 26; earlier systems and Reduce Transparency use an opaque fallback. Reduce Motion suppresses decorative movement.
+| Purpose              | Version                                 |
+| -------------------- | --------------------------------------- |
+| Local `.mts` scripts | Node 22.18.0+; Node 23 requires 23.6.0+ |
+| Recommended          | Node 26.13.0 LTS                        |
+| CI                   | Node 26                                 |
+
+CMake checks the local Node version. macOS builds target macOS 14+ and require the macOS 26 SDK for `NSGlassEffectView` and CMake 3.25+. Older systems use a standard opaque AppKit view. Reduce Transparency keeps the surface opaque; Reduce Motion limits animation.
+
+Windows and Linux builds use Qt 6 Widgets and SVG. Linux also requires Qt D-Bus. Windows builds require MSVC and the Windows 11 SDK.
+
+## Build and run
+
+### macOS
 
 ```sh
 cmake -S native/touch-id-preview -B /tmp/fnox-touch-id-build -DCMAKE_BUILD_TYPE=Debug
@@ -12,57 +24,56 @@ cmake --build /tmp/fnox-touch-id-build --target fnox-touch-id-preview --parallel
 open /tmp/fnox-touch-id-build/fnox-touch-id-preview.app
 ```
 
-Press **Shift+Return** to simulate approval. Cancel or Escape dismisses the panel. Details shows sample metadata; its label buttons copy the corresponding values. Relaunch to replay the animation.
+Press **Shift+Return** to simulate approval. Cancel or Escape closes the panel. Details shows sample metadata; labels copy values.
 
-To verify with actual Touch ID, run the executable directly:
+To use macOS Touch ID, run:
 
 ```sh
 FNOX_PREVIEW_AUTH=system /tmp/fnox-touch-id-build/fnox-touch-id-preview.app/Contents/MacOS/fnox-touch-id-preview
 ```
 
-macOS presents its own authentication dialog. Only biometric success starts the approval animation. Shift+Return cannot approve a system request, and unavailable biometrics or cancellation never fall back to simulation. Success exits with status 0; unsuccessful verification exits with status 1; invalid authentication configuration exits with status 2.
+Only successful biometric verification approves. Cancellation or unavailable biometrics never falls back to simulation. Exit codes: `0` success, `1` unsuccessful verification, `2` invalid configuration.
 
-## Windows and Linux
-
-The portable Qt 6 Widgets presentation uses opaque surfaces, the shared theme, and sample metadata. It uses a static success mark; it does not reproduce the macOS crawl animation, Liquid Glass, or spring physics. Install Qt 6 with Widgets and SVG support; Linux also needs Qt D-Bus. Use an MSVC toolchain and a Windows 11 SDK on Windows.
+### Windows and Linux
 
 ```sh
 cmake -S native/touch-id-preview -B build/preview -DCMAKE_BUILD_TYPE=Debug
 cmake --build build/preview --config Debug --target fnox-touch-id-preview
 ```
 
-Set `CMAKE_PREFIX_PATH` to the Qt installation if CMake cannot find it. The executable is in the build directory (under `Debug` with Visual Studio). The same `FNOX_PREVIEW_AUTH=system` option enables native verification:
+Set `CMAKE_PREFIX_PATH` if CMake cannot find Qt. Use `FNOX_PREVIEW_AUTH=system` for platform verification:
 
-- **Windows 11 (build 22000+):** the desktop Windows Hello API owns the prompt. Windows may offer PIN, face, or fingerprint verification; this is not fingerprint-only authentication.
-- **Linux:** fprintd verifies the current user's enrolled fingerprint over the system D-Bus. The app displays instructions because fprintd has no universal authentication window. A supported reader, enrollment, a desktop session, and existing policy permissions are required. The preview does not change PAM or polkit configuration.
+- **Windows 11:** Windows Hello may use PIN, face, or fingerprint.
+- **Linux:** fprintd verifies an enrolled fingerprint over D-Bus. A supported reader, enrollment, desktop session, and existing permissions are required. The preview does not change PAM or polkit.
 
-Windows/Linux hardware verification has not been tested on this macOS development machine. CI builds and simulated smoke checks cannot establish that hardware verification works on a user's device.
+Windows and Linux hardware verification is untested here. CI builds and simulation checks do not verify user hardware.
 
 ## Appearance and captures
 
-`FNOX_PREVIEW_APPEARANCE=light` or `dark` overrides the system appearance. Human preview mode shows a Preview label. On macOS it alternates the Touch ID instruction with the simulation shortcut in a fixed position.
+Set `FNOX_PREVIEW_APPEARANCE=light` or `dark` to override the system. `FNOX_PREVIEW_MODE=screenshot` hides preview and simulation cues; it never enables authentication. Label captures as prototypes. macOS captures are on the [media branch](https://github.com/jdalton/fnox/tree/assets/touch-id-preview).
 
-`FNOX_PREVIEW_MODE=screenshot` hides preview decoration and simulation hints. It changes presentation only; it never enables real authentication. Published captures must identify the UI as a prototype. Actual macOS captures are hosted on the [separate media branch](https://github.com/jdalton/fnox/tree/assets/touch-id-preview), not in this source tree. No Windows/Linux captures are claimed.
+## Development
 
-## Theme and assets
+`theme.mts` defines the palette and derives light mode using the [OKLab rules](THEME.md). CMake generates headers in the build directory.
 
-Please tweak the colors to taste. `theme.mts` holds the dark palette and derives light mode through the documented [OKLab formula and contrast rules](THEME.md). Native controls and the fingerprint consume generated colors; animation timing and geometry are independent.
+The unit suite is for regression checks, not launching the preview. CI runs it when preview files change. Run locally after code changes:
 
-Unit tests mirror the source paths under `test/native/touch-id-preview/`. They cover color math, animation boundaries, SVG parsing, header generation, and signing failure paths with mocked Apple tools. Portable smoke checks also reject simulated approval in system mode.
+```sh
+node --test test/native/touch-id-preview/*.test.mts
+```
 
-SVG sources live in `assets/`; byte arrays and theme/animation headers are generated only into the CMake build directory. Optimize with:
+Tests cover color math, animation, SVG parsing, header generation, and signing failures. They do not check appearance; inspect the preview after UI changes.
+
+To optimize edited SVG assets:
 
 ```sh
 npx --yes svgo@4.0.0 --config native/touch-id-preview/svgo.config.mjs -f native/touch-id-preview/assets
-node --experimental-strip-types --test test/native/touch-id-preview/*.test.mts
 ```
 
-The SVGO configuration deliberately preserves the fingerprint's 22 separately animated paths and absolute coordinates. Merging paths or converting them to relative commands would break the native parser. These assets were already compact; the main cleanup removes checked-in generated byte arrays rather than promising substantial SVG size savings.
+The fingerprint uses 22 animated paths with absolute coordinates. Do not merge or convert them to relative paths.
 
-## Signing and production boundary
+## Signing and production
 
-The optional `Sign macOS verification preview` workflow builds a universal app from trusted upstream `main`, signs it with Fnox's existing Developer ID identity, notarizes and staples it, and uploads an artifact. It reuses the certificate and App Store Connect secret names from `release.yml`. It does not modify CLI releases or sign arbitrary pull-request code. The workflow has not been run with maintainer credentials; their presence and validity cannot be inferred from YAML references.
+The optional signing workflow builds from trusted `main`, signs and notarizes the universal macOS preview, then uploads it. It does not affect CLI releases and has not been run with maintainer credentials. Windows and Linux packaging remain future work.
 
-Fnox and mise already sign their CLI binaries. Neither existing CLI pipeline packages this app. Windows/Linux distribution signing and packaging remain follow-up work.
-
-A successful platform verification only demonstrates the user's presence. Production credential access must bind the approved operation to protected storage and the requesting process. On macOS, the protected Keychain operation must use the appropriate access control and authentication context. Do not use this demo's result or exit status as a credential authorization mechanism.
+Platform verification establishes user presence only. Production credential access must bind protected storage to the approved operation and requesting process. Never use this demo's result or exit code to authorize access.

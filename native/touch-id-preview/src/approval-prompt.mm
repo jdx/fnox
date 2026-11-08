@@ -454,6 +454,7 @@ namespace {
 NSView* ApprovalContent(NSPanel* panel) { return ((FnoxApprovalPanel*)panel).approvalContent; }
 
 void InstallApprovalGlass(FnoxApprovalPanel* panel, CGFloat width, CGFloat height) {
+  // Keep the panel's standard content view on systems without NSGlassEffectView.
   panel.approvalContent = panel.contentView;
   if (@available(macOS 26.0, *)) {
     panel.styleMask |= NSWindowStyleMaskFullSizeContentView;
