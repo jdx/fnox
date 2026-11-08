@@ -4,10 +4,138 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 fn main() -> miette::Result<()> {
     let argv: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+    #[cfg(target_os = "macos")]
+    {
+        match argv.first().and_then(|argument| argument.to_str()) {
+            Some("__touch-id-read") => return run_touch_id_read(&argv),
+            Some("__touch-id-set") => return run_touch_id_set(&argv),
+            Some("__touch-id-delete") => return run_touch_id_delete(&argv),
+            _ => {}
+        }
+    }
     if fnox::hook_env::can_exit_before_startup(&argv) {
         return Ok(());
     }
     run(argv)
+}
+
+#[cfg(target_os = "macos")]
+fn run_touch_id_read(argv: &[std::ffi::OsString]) -> miette::Result<()> {
+    use std::io::Write;
+
+    if argv.len() != 7 {
+        miette::bail!("Invalid internal Touch ID request");
+    }
+    await_touch_id_helper_approval()?;
+    validate_touch_id_helper_parent()?;
+    let values = argv[1..].iter().map(|value| value.to_string_lossy());
+    let values: Vec<_> = values.collect();
+    match fnox::providers::keychain::read_touch_id_for_helper(
+        &values[0], &values[1], &values[2], &values[3], &values[4], &values[5],
+    ) {
+        Ok(secret) => std::io::stdout()
+            .lock()
+            .write_all(secret.as_bytes())
+            .map_err(|error| miette::miette!("Unable to return Keychain value: {error}")),
+        Err((status, details)) => {
+            eprintln!("{status}\n{details}");
+            std::process::exit(1);
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn run_touch_id_set(argv: &[std::ffi::OsString]) -> miette::Result<()> {
+    use std::io::Read;
+
+    if argv.len() != 4 {
+        miette::bail!("Invalid internal Touch ID write request");
+    }
+    await_touch_id_helper_approval()?;
+    validate_touch_id_helper_parent()?;
+    let values: Vec<_> = argv[1..]
+        .iter()
+        .map(|value| value.to_string_lossy())
+        .collect();
+    let mut secret = Vec::new();
+    std::io::stdin()
+        .lock()
+        .read_to_end(&mut secret)
+        .map_err(|error| miette::miette!("Unable to read protected Keychain value: {error}"))?;
+    match fnox::providers::keychain::write_touch_id_for_helper(
+        &values[0], &values[1], &secret, &values[2],
+    ) {
+        Ok(()) => Ok(()),
+        Err((status, details)) => {
+            eprintln!("{status}\n{details}");
+            std::process::exit(1);
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn run_touch_id_delete(argv: &[std::ffi::OsString]) -> miette::Result<()> {
+    if argv.len() != 3 {
+        miette::bail!("Invalid internal Touch ID cleanup request");
+    }
+    await_touch_id_helper_approval()?;
+    validate_touch_id_helper_parent()?;
+    let values: Vec<_> = argv[1..]
+        .iter()
+        .map(|value| value.to_string_lossy())
+        .collect();
+    match fnox::providers::keychain::delete_touch_id_for_helper(&values[0], &values[1]) {
+        Ok(()) => Ok(()),
+        Err((status, details)) => {
+            eprintln!("{status}\n{details}");
+            std::process::exit(1);
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn validate_touch_id_helper_parent() -> miette::Result<()> {
+    fnox::providers::keychain::validate_touch_id_helper_parent().map_err(|(status, details)| {
+        miette::miette!("Untrusted Touch ID helper caller (status {status}): {details}")
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn await_touch_id_helper_approval() -> miette::Result<()> {
+    read_touch_id_helper_approval(&mut std::io::stdin().lock())
+        .map_err(|error| miette::miette!("Fnox did not approve the Touch ID helper: {error}"))
+}
+
+#[cfg(target_os = "macos")]
+fn read_touch_id_helper_approval(reader: &mut impl std::io::Read) -> std::io::Result<()> {
+    let mut approval = [0];
+    reader.read_exact(&mut approval)?;
+    if approval[0] == fnox::providers::keychain::TOUCH_ID_HELPER_APPROVAL {
+        Ok(())
+    } else {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "invalid helper approval",
+        ))
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod touch_id_helper_tests {
+    use super::read_touch_id_helper_approval;
+    use std::io::Cursor;
+
+    #[test]
+    fn helper_waits_for_the_parent_approval_byte() {
+        assert!(
+            read_touch_id_helper_approval(&mut Cursor::new([
+                fnox::providers::keychain::TOUCH_ID_HELPER_APPROVAL,
+            ]))
+            .is_ok()
+        );
+        assert!(read_touch_id_helper_approval(&mut Cursor::new([0])).is_err());
+        assert!(read_touch_id_helper_approval(&mut Cursor::new([])).is_err());
+    }
 }
 
 #[tokio::main]

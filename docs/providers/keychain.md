@@ -29,6 +29,33 @@ fnox provider test keychain
 fnox exec -- ./release.sh
 ```
 
+On macOS, enable Touch ID protection for this provider with `touch_id = true`:
+
+```toml
+[providers.keychain]
+type = "keychain"
+service = "fnox"
+touch_id = true
+```
+
+Protected items use a separate `service.touch-id` Keychain service. For each read, Fnox shows the full invoking command, project path, and secret name in its approval window, then asks macOS to verify Touch ID. The same authentication context authorizes the read. Canceling or failing authentication blocks access; there is no password fallback. Touch ID is macOS-only and prompts for every protected read.
+
+Building fnox from source on macOS requires Node.js 22.18.0 or later (Node.js 23 requires 23.6.0 or later) and the macOS 26 SDK (Xcode 26+) to generate and compile the approval UI. Node.js 26 LTS is recommended as the current LTS release, but is not a strict requirement. The CLI and its Touch ID helper must be signed by the same Apple Developer ID team and use the same signing identifier. The helper uses `dev.jdx.fnox` by default; its identifier must also be the CLI's code-signing identifier. For a different explicit App ID, set `FNOX_TOUCH_ID_HELPER_IDENTIFIER` to that identifier when building the CLI and packaging the helper, and pass the same value to `codesign --identifier` when signing the CLI binary.
+
+Apple's Data Protection Keychain requires a code-signing entitlement authorized by a provisioning profile inside an app-like bundle. A bare command-line executable cannot use biometric-protected Keychain items. Install the matching `Fnox.app` helper in `/Applications` or beside the CLI; Fnox runs the protected Keychain operation through that signed app executable. Official releases publish the helper as a separate `fnox-touch-id-<target>.zip` asset when the repository has a valid `FNOX_KEYCHAIN_PROFILE_BASE64` Developer ID provisioning profile configured. Source builds need the same kind of profile and signing identity.
+
+To create a helper for a source build, use Apple's Developer portal to create an explicit App ID and a Developer ID provisioning profile that authorizes its Keychain access group. Then package the compiled executable with that profile and your Developer ID Application identity:
+
+```sh
+.github/scripts/package-touch-id-app.sh \
+  target/release/fnox \
+  /path/to/Fnox.provisionprofile \
+  "Developer ID Application: Your Name (TEAMID)" \
+  target
+```
+
+Move `target/Fnox.app` to `/Applications` or leave it beside the `fnox` CLI. Without the provisioned helper, Touch ID operations fail with an Apple missing-entitlement error.
+
 `fnox set` stores the entry under the secret's name and records that name in `fnox.toml`:
 
 ```toml
@@ -42,16 +69,17 @@ Use `--key-name` to choose a different entry name.
 
 Access belongs to the current OS user and requires an unlocked credential store. macOS may show an access prompt for each keychain item. fnox reads entries one at a time so those prompts never overlap.
 
-The provider needs a desktop session or an unlocked Secret Service, which CI runners and containers usually lack. Prefer [age](/providers/age) or a cloud provider there. You can provision one yourself; fnox's own Linux CI runs `gnome-keyring-daemon --unlock --components=secrets --daemonize`, but that means keeping the unlock password in CI.
+The provider needs a desktop session or an unlocked Secret Service, which CI runners and containers usually lack. Prefer [age](/providers/age) or a cloud provider there. You can provision one yourself; fnox's own Linux CI runs `gnome-keyring-daemon --unlock --components=secrets --daemonize`, but that means keeping the unlock password in CI. For `touch_id = true`, `fnox provider test` creates a temporary protected item, asks you to approve a read in Fnox's approval window, and removes the item after validation. This verifies actual protected Keychain access, not just biometric availability.
 
 ## Configuration
 
-| Field     | Required | Default | Description                                                                                            |
-| --------- | -------- | ------- | ------------------------------------------------------------------------------------------------------ |
-| `service` | Yes      | None    | Service name for every entry; isolates fnox's entries from other applications.                         |
-| `prefix`  | No       | None    | String prepended to each entry name. With `prefix = "myapp/"`, `api-key` is stored as `myapp/api-key`. |
+| Field      | Required | Default | Description                                                                                            |
+| ---------- | -------- | ------- | ------------------------------------------------------------------------------------------------------ |
+| `service`  | Yes      | None    | Service name for every entry; isolates fnox's entries from other applications.                         |
+| `prefix`   | No       | None    | String prepended to each entry name. With `prefix = "myapp/"`, `api-key` is stored as `myapp/api-key`. |
+| `touch_id` | No       | `false` | On macOS, require Touch ID for protected Keychain items.                                               |
 
-Both fields accept `{ secret = "NAME" }`. Every provider also accepts [`auth_command` and `daemon_cache`](/reference/configuration#provider-configuration).
+`service` and `prefix` accept `{ secret = "NAME" }`. Every provider also accepts [`auth_command` and `daemon_cache`](/reference/configuration#provider-configuration).
 
 ## Reference formats
 

@@ -53,5 +53,5 @@ Color edits do not change the captured fingerprint geometry, crawl/retraction pa
 Run the small theme/animation checks with:
 
 ```sh
-node --test test/native/touch-id-preview/*.test.mts
+node --test test/native/touch-id/*.test.mts
 ```
