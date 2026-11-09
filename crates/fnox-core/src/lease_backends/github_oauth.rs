@@ -324,7 +324,7 @@ impl GitHubOauthBackend {
         if self.open_browser {
             let url = device.verification_uri.clone();
             std::mem::drop(tokio::task::spawn_blocking(move || {
-                let _ = open_browser(&url);
+                let _ = crate::browser::open_browser(&url);
             }));
         }
     }
@@ -412,28 +412,4 @@ fn interactive_auth_required() -> FnoxError {
         hint: "Run 'fnox lease create <lease-name>' from an interactive terminal to authorize GitHub, then retry in non-interactive mode".to_string(),
         url: URL.to_string(),
     }
-}
-
-/// Detach the launcher's stdio so a browser cannot write to, or hold open, the
-/// caller's pipes (`fnox env --json` promises a pure stdout).
-fn silence(cmd: &mut std::process::Command) -> &mut std::process::Command {
-    cmd.stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-}
-
-fn open_browser(url: &str) -> std::io::Result<()> {
-    #[cfg(target_os = "macos")]
-    {
-        silence(std::process::Command::new("open").arg(url)).status()?;
-    }
-    #[cfg(target_os = "windows")]
-    {
-        silence(std::process::Command::new("cmd").args(["/C", "start", "", url])).status()?;
-    }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        silence(std::process::Command::new("xdg-open").arg(url)).status()?;
-    }
-    Ok(())
 }

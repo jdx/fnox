@@ -1895,6 +1895,10 @@
           "description": "Description of the secret",
           "type": ["string", "null"]
         },
+        "url": {
+          "description": "Page where a new value for the secret can be created (http or https)",
+          "type": ["string", "null"]
+        },
         "if_missing": {
           "description": "What to do if the secret is missing (error, warn, or ignore)",
           "anyOf": [

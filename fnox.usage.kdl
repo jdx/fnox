@@ -1212,6 +1212,22 @@ See also:
     flag "-d --description" help="Description to record with the secret" {
         arg <DESCRIPTION>
     }
+    flag --url help="Page where a new value can be created (http or https)" {
+        long_help #"""
+Page where a new value can be created (http or https)
+
+Recorded with the secret, shown by `fnox list`, and opened by `--open`.
+"""#
+        arg <URL>
+    }
+    flag --open help="Open the secret's URL in a browser, then prompt for the new value" {
+        long_help #"""
+Open the secret's URL in a browser, then prompt for the new value
+
+Needs an interactive terminal and a `url` on the secret (or `--url`). The URL is always printed, so you can open it yourself over SSH.
+"""#
+        conflicts VALUE --from-file --generate
+    }
     flag "-g --global" help="Write to the global config file (`~/.config/fnox/config.toml`)"
     flag "-k --key-name" help="Name to store the value under at a remote provider (default: KEY)" {
         arg <KEY_NAME>

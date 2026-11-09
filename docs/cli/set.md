@@ -25,6 +25,14 @@ The provider is `--provider`, else the secret's current provider, else `default_
 ## Flags
 
 - **`-d --description <DESCRIPTION>`** — Description to record with the secret
+- **`--url <URL>`** — Page where a new value can be created (http or https)
+
+  Recorded with the secret, shown by `fnox list`, and opened by `--open`.
+
+- **`--open`** — Open the secret's URL in a browser, then prompt for the new value
+
+  Needs an interactive terminal and a `url` on the secret (or `--url`). The URL is always printed, so you can open it yourself over SSH.
+
 - **`-g --global`** — Write to the global config file (`~/.config/fnox/config.toml`)
 - **`-k --key-name <KEY_NAME>`** — Name to store the value under at a remote provider (default: KEY)
 - **`-n --dry-run`** — Show what would be written without storing anything

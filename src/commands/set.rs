@@ -154,6 +154,24 @@ pub struct SetCommand {
     #[usage(short = 'd', long)]
     pub description: Option<String>,
 
+    /// Page where a new value can be created (http or https)
+    ///
+    /// Recorded with the secret, shown by `fnox list`, and opened by `--open`.
+    #[usage(long)]
+    pub url: Option<String>,
+
+    /// Open the secret's URL in a browser, then prompt for the new value
+    ///
+    /// Needs an interactive terminal and a `url` on the secret (or `--url`). The
+    /// URL is always printed, so you can open it yourself over SSH.
+    #[usage(
+        long,
+        conflicts = "value",
+        conflicts = "from_file",
+        conflicts = "generate"
+    )]
+    pub open: bool,
+
     /// Write to the global config file (`~/.config/fnox/config.toml`)
     #[usage(short = 'g', long)]
     pub global: bool,
@@ -243,6 +261,8 @@ impl SetCommand {
             ("--base64-encode", self.base64_encode),
             ("--default", self.default.is_some()),
             ("--if-missing", self.if_missing.is_some()),
+            ("--url", self.url.is_some()),
+            ("--open", self.open),
         ];
         if let Some((flag, _)) = unsupported.iter().find(|(_, set)| *set) {
             return Err(FnoxError::Config(format!(
@@ -325,8 +345,19 @@ impl SetCommand {
         let write_profile_stack = vec![write_profile.clone()];
 
         // Check if we're only setting metadata (no actual secret value)
-        let has_metadata =
-            self.description.is_some() || self.if_missing.is_some() || self.default.is_some();
+        let has_metadata = self.description.is_some()
+            || self.url.is_some()
+            || self.if_missing.is_some()
+            || self.default.is_some();
+        if let Some(url) = &self.url {
+            config::validate_secret_url(url).map_err(FnoxError::Config)?;
+        }
+
+        if self.open && !atty::is(atty::Stream::Stdin) {
+            return Err(FnoxError::Config(
+                "--open needs an interactive terminal to prompt for the new value".into(),
+            ));
+        }
 
         // Get the secret value if provided
         let mut generated: Option<String> = None;
@@ -366,6 +397,9 @@ impl SetCommand {
             None
         } else {
             // Interactive terminal - prompt for value
+            if self.open {
+                self.open_secret_url(&config, &write_profile_stack);
+            }
             let value = demand::Input::new("Enter secret value")
                 .prompt("Secret value: ")
                 .password(true)
@@ -529,6 +563,10 @@ impl SetCommand {
             secret_config.description = Some(desc.clone());
         }
 
+        if let Some(ref url) = self.url {
+            secret_config.url = Some(url.clone());
+        }
+
         if let Some(if_missing) = self.if_missing {
             secret_config.if_missing = Some(if_missing);
         }
@@ -603,6 +641,33 @@ impl SetCommand {
         })
     }
 
+    /// Print the secret's URL and try to open it in the default browser.
+    ///
+    /// Without a URL this only warns, so the value prompt still follows. A
+    /// launcher that fails (no browser over SSH) is not an error either: the
+    /// printed URL is the fallback.
+    fn open_secret_url(&self, config: &Config, write_profile_stack: &[String]) {
+        let url = self.url.clone().or_else(|| {
+            config
+                .get_secret(write_profile_stack, self.key())
+                .ok()
+                .flatten()
+                .and_then(|secret| secret.url.clone())
+        });
+        let Some(url) = url else {
+            eprintln!(
+                "{} {} has no url; add one with --url or `url = \"...\"` in the config",
+                console::style("warning:").yellow().bold(),
+                self.key()
+            );
+            return;
+        };
+        eprintln!("Opening {}", console::style(&url).underlined());
+        if let Err(err) = fnox_core::browser::open_browser(&url) {
+            tracing::debug!("Failed to open browser: {err}");
+        }
+    }
+
     /// Print what `store_at` did, or would do with `--dry-run`
     fn report(&self, stored: &Stored, target_path: &Path) {
         let Stored {
@@ -646,6 +711,9 @@ impl SetCommand {
             }
             if let Some(ref desc) = secret_config.description {
                 println!("  description: {}", console::style(desc).dim());
+            }
+            if let Some(ref url) = secret_config.url {
+                println!("  url: {}", console::style(url).dim());
             }
             if let Some(default) = secret_config
                 .default
