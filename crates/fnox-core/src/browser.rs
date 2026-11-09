@@ -16,7 +16,9 @@ pub fn open_browser(url: &str) -> std::io::Result<()> {
     }
     #[cfg(target_os = "windows")]
     {
-        silence(std::process::Command::new("cmd").args(["/C", "start", "", url])).status()?;
+        // Not `cmd /C start`: cmd would treat `&` in the URL as a command separator
+        silence(std::process::Command::new("rundll32").args(["url.dll,FileProtocolHandler", url]))
+            .status()?;
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {

@@ -392,8 +392,9 @@ impl SetCommand {
             } else {
                 Some(value)
             }
-        } else if has_metadata && self.key_name.is_none() {
-            // Only metadata is being set, no secret value needed
+        } else if has_metadata && !self.open && self.key_name.is_none() {
+            // Only metadata is being set, no secret value needed (`--open` always
+            // asks for a value, even alongside `--url` or `--description`)
             None
         } else {
             // Interactive terminal - prompt for value

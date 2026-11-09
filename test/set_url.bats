@@ -41,3 +41,10 @@ EOF
 
 	assert_fnox_failure set TOKEN value --open
 }
+
+@test "fnox set --open with --url still requires a terminal for the value" {
+	echo "root = true" >"${FNOX_CONFIG_FILE:-fnox.toml}"
+
+	assert_fnox_failure set TOKEN --url "https://example.com/tokens" --open </dev/null
+	assert_output --partial "interactive terminal"
+}

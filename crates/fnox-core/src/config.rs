@@ -2973,12 +2973,16 @@ impl ProfileConfig {
 /// `fnox set --open` hands the string to the system URL opener, so other
 /// schemes (`file:`, custom handlers) are refused.
 pub fn validate_secret_url(url: &str) -> std::result::Result<(), String> {
-    let rest = url
-        .strip_prefix("https://")
-        .or_else(|| url.strip_prefix("http://"))
-        .ok_or_else(|| format!("url must start with http:// or https://, got `{url}`"))?;
-    if rest.is_empty() || rest.starts_with('/') || rest.chars().any(char::is_whitespace) {
-        return Err(format!("url is not a valid http(s) URL: `{url}`"));
+    let invalid = || format!("url is not a valid http(s) URL: `{url}`");
+    if url.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err(invalid());
+    }
+    let parsed = url::Url::parse(url).map_err(|_| invalid())?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err(format!("url must use http or https, got `{url}`"));
+    }
+    if parsed.host_str().is_none_or(str::is_empty) {
+        return Err(invalid());
     }
     Ok(())
 }
@@ -3023,6 +3027,8 @@ mod tests {
     fn secret_url_accepts_http_and_https() {
         assert!(validate_secret_url("https://github.com/settings/tokens").is_ok());
         assert!(validate_secret_url("http://jenkins.local:8080/user/me/security/").is_ok());
+        assert!(validate_secret_url("HTTPS://github.com/settings/tokens").is_ok());
+        assert!(validate_secret_url("https://example.com/new?a=1&b=2").is_ok());
     }
 
     #[test]
@@ -3033,7 +3039,8 @@ mod tests {
             "ftp://example.com",
             "github.com/settings/tokens",
             "https://",
-            "https:///path",
+            "https://?token=new",
+            "https://#frag",
             "https://exa mple.com",
         ] {
             assert!(
