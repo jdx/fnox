@@ -224,16 +224,15 @@ impl ExecCommand {
         let redact_out = redact_on && !std::io::stdout().is_terminal();
         let redact_err = redact_on && !std::io::stderr().is_terminal();
         let redactor = if redact_out || redact_err {
-            // Plaintext defaults are already in the config; redacting them
-            // only corrupts output.
+            // `sensitive = false` keeps plain configuration readable.
             let values: Vec<&String> = plan
                 .set
                 .iter()
                 .chain(plan.files.iter())
-                .filter(|(key, value)| {
-                    !profile_secrets
+                .filter(|(key, _)| {
+                    profile_secrets
                         .get(key.as_str())
-                        .is_some_and(|secret| crate::redact::is_plaintext_default(secret, value))
+                        .is_none_or(|secret| secret.is_sensitive())
                 })
                 .map(|(_, value)| value)
                 .collect();

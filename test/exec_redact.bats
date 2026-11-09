@@ -92,7 +92,21 @@ teardown() {
 	assert_output "200012"
 }
 
-@test "exec --redact leaves plaintext defaults readable" {
+@test "exec --redact redacts a literal default unless sensitive = false" {
+	cat >fnox.toml <<'TOML'
+root = true
+
+[secrets]
+LOCAL_TOKEN = { default = "dev-token-123" }
+LOG_LEVEL = { default = "INFO", sensitive = false }
+SCHEMA = { default = "public", sensitive = false }
+TOML
+	run bash -c "'$FNOX_BIN' exec --redact -- sh -c 'echo \"\$LOG_LEVEL \$SCHEMA publication \$LOCAL_TOKEN\"' | cat"
+	assert_success
+	assert_output "INFO public publication [REDACTED]"
+}
+
+@test "exec --redact leaves a provider value readable with sensitive = false" {
 	cat >fnox.toml <<'TOML'
 root = true
 
@@ -100,25 +114,10 @@ root = true
 type = "plain"
 
 [secrets]
-SECRET = { provider = "plain", value = "s3cr3t-value" }
-LOG_LEVEL = { default = "INFO" }
-SCHEMA = { default = "public" }
-COMBINED = { default = "${SECRET}-suffix" }
+API_ENDPOINT = { provider = "plain", value = "https://api.example.com", sensitive = false }
+API_KEY = { provider = "plain", value = "s3cr3t-value" }
 TOML
-	run bash -c "'$FNOX_BIN' exec --redact -- sh -c 'echo \"\$LOG_LEVEL \$SCHEMA publication \$SECRET \$COMBINED\"' | cat"
+	run bash -c "'$FNOX_BIN' exec --redact -- sh -c 'echo \"\$API_ENDPOINT \$API_KEY\"' | cat"
 	assert_success
-	assert_output "INFO public publication [REDACTED] [REDACTED]"
-}
-
-@test "exec --redact still redacts a plaintext default marked sensitive" {
-	cat >fnox.toml <<'TOML'
-root = true
-
-[secrets]
-LOG_LEVEL = { default = "INFO" }
-LOCAL_TOKEN = { default = "dev-token-123", sensitive = true }
-TOML
-	run bash -c "'$FNOX_BIN' exec --redact -- sh -c 'echo \"\$LOG_LEVEL \$LOCAL_TOKEN\"' | cat"
-	assert_success
-	assert_output "INFO [REDACTED]"
+	assert_output "https://api.example.com [REDACTED]"
 }

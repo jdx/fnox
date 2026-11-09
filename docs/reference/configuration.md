@@ -212,7 +212,7 @@ Secret names are environment variable names: they must match `^[A-Za-z_][A-Za-z0
 | `if_missing`   | `"error"`, `"warn"`, `"ignore"` | inherited          | Missing-secret behavior for this secret.                                                           |
 | `env`          | `true`, `"exec"`, `false`       | top-level `env`    | Where the secret is injected as an environment variable.                                           |
 | `as_file`      | boolean                         | `false`            | Inject the path of a temporary file holding the value.                                             |
-| `sensitive`    | boolean                         | `false`            | Keep redacting a plaintext `default` from output. See [`sensitive`](#sensitive).                   |
+| `sensitive`    | boolean                         | `true`             | Set `false` to leave the value readable in redacted output. See [`sensitive`](#sensitive).         |
 | `json_path`    | string                          | none               | Extract a field from a JSON value, with dot notation for nesting.                                  |
 | `line`         | integer, 1 or more              | none               | Extract one line from a multi-line value.                                                          |
 | `description`  | string                          | none               | Shown by `fnox list`.                                                                              |
@@ -293,15 +293,15 @@ GOOGLE_APPLICATION_CREDENTIALS = { provider = "op", value = "GCP/key file", as_f
 
 ### `sensitive`
 
-Output redaction (`fnox exec --redact`, the MCP `exec` tool and `ci-redact`) skips a secret whose only source is a literal `default`, because that value is already readable in `fnox.toml`. Set `sensitive = true` to redact it anyway:
+Output redaction (`fnox exec --redact`, the MCP `exec` tool and `ci-redact`) hides every secret value by default. Set `sensitive = false` on plain configuration, such as a log level or an endpoint, so its value stays readable instead of corrupting ordinary output:
 
 ```toml
 [secrets]
-LOG_LEVEL = { default = "INFO" }                       # readable in output
-LOCAL_TOKEN = { default = "dev-token-123", sensitive = true } # redacted
+LOG_LEVEL = { default = "INFO", sensitive = false }   # readable in output
+API_KEY = { provider = "kv", value = "api-key" }      # redacted
 ```
 
-Secrets with a provider `value`, and defaults that use `${OTHER}` or `{{ ... }}`, are already redacted, so the flag only changes literal defaults. The usual limits still apply: `fnox exec` filters only output that is not a terminal (piped or redirected), and `fnox exec` and the MCP `exec` tool skip values shorter than 3 bytes after trimming. `ci-redact` has no length limit but cannot mask multi-line values.
+`sensitive = false` applies whatever the value's source, so use it only for values that are not secrets. The usual limits still apply to everything else: `fnox exec` filters only output that is not a terminal (piped or redirected), and `fnox exec` and the MCP `exec` tool skip values shorter than 3 bytes after trimming. `ci-redact` has no length limit but cannot mask multi-line values.
 
 ### `json_path` and `line` {#json-path}
 

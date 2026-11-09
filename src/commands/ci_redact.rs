@@ -89,9 +89,8 @@ impl CiRedactCommand {
             .await
             {
                 Ok(Some(value)) => {
-                    // A plaintext default is already in the config; masking it
-                    // would hide ordinary words in the job log.
-                    if crate::redact::is_plaintext_default(secret_config, &value) {
+                    // `sensitive = false` keeps plain configuration readable in the log.
+                    if !secret_config.is_sensitive() {
                         continue;
                     }
                     // Output CI-specific mask command

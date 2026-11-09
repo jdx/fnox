@@ -349,13 +349,14 @@ pub struct SecretConfig {
     #[serde(default, skip_serializing_if = "is_false")]
     pub as_file: bool,
 
-    /// Keep redacting this secret's value from `fnox exec --redact`, MCP `exec` and
-    /// `ci-redact` output even when it is a plaintext `default`. `fnox exec`
-    /// and MCP `exec` still skip values shorter than 3 bytes after trimming,
-    /// `fnox exec` filters only non-terminal output, and `ci-redact` cannot
-    /// mask multi-line values.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub sensitive: bool,
+    /// Whether `fnox exec --redact`, MCP `exec` and `ci-redact` hide this
+    /// secret's value in output (default: true). Set `false` for plain
+    /// configuration such as a log level, so ordinary words are not replaced
+    /// with `[REDACTED]`. `fnox exec` and MCP `exec` also skip values shorter
+    /// than 3 bytes after trimming, `fnox exec` filters only non-terminal
+    /// output, and `ci-redact` cannot mask multi-line values.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sensitive: Option<bool>,
 
     /// JSON path to extract from the secret value (supports dot notation: "nested.key")
     /// When set, the secret value is parsed as JSON and the specified path is extracted.
@@ -2719,7 +2720,7 @@ impl SecretConfig {
             value: None,
             env: None,
             as_file: false,
-            sensitive: false,
+            sensitive: None,
             json_path: None,
             line: None,
             sync: None,
@@ -2791,8 +2792,8 @@ impl SecretConfig {
         if self.as_file {
             inline.insert("as_file", toml_edit::Value::from(true));
         }
-        if self.sensitive {
-            inline.insert("sensitive", toml_edit::Value::from(true));
+        if let Some(sensitive) = self.sensitive {
+            inline.insert("sensitive", toml_edit::Value::from(sensitive));
         }
         if let Some(ref sync) = self.sync {
             let mut sync_table = toml_edit::InlineTable::new();
@@ -2860,11 +2861,7 @@ impl SecretConfig {
         );
         set_or_remove(table, "env", self.env.map(EnvMode::to_toml_value));
         set_or_remove(table, "as_file", self.as_file.then(|| Value::from(true)));
-        set_or_remove(
-            table,
-            "sensitive",
-            self.sensitive.then(|| Value::from(true)),
-        );
+        set_or_remove(table, "sensitive", self.sensitive.map(Value::from));
         set_or_remove(
             table,
             "sync",
@@ -2908,20 +2905,11 @@ impl SecretConfig {
         self.provider().is_some() || self.value().is_some() || self.default.is_some()
     }
 
-    /// The plaintext `default` when it is this secret's only source.
+    /// Whether output redaction should hide this secret's value.
     ///
-    /// Such a value is already written in the config file, so redacting it
-    /// hides nothing. A secret with a `value` (or synced copy) is excluded
-    /// because a provider answer wins over the default, and so is a default
-    /// that interpolates (`${OTHER}`) or renders a template (`{{ ... }}`)
-    /// because it can embed another secret's value. `sensitive = true` opts a
-    /// plaintext default back into redaction.
-    pub fn literal_default(&self) -> Option<&str> {
-        if self.sensitive || self.value.is_some() || self.sync.is_some() {
-            return None;
-        }
-        let default = self.default.as_deref()?;
-        (!default.contains("${") && !default.contains("{{")).then_some(default)
+    /// True unless the config sets `sensitive = false`.
+    pub fn is_sensitive(&self) -> bool {
+        self.sensitive.unwrap_or(true)
     }
 
     /// Get the provider name, if set.
@@ -4112,24 +4100,29 @@ DEV_INHERITED = { provider = "plain", value = "d" }
     }
 
     #[test]
-    fn test_literal_default_only_for_plaintext_defaults() {
-        let with_default = |default: &str| {
-            let mut secret = SecretConfig::new();
-            secret.default = Some(default.to_string());
-            secret
-        };
-        assert_eq!(with_default("INFO").literal_default(), Some("INFO"));
-        assert_eq!(with_default("${OTHER}-x").literal_default(), None);
-        assert_eq!(with_default("{{ fnox.profile }}").literal_default(), None);
-        assert_eq!(SecretConfig::new().literal_default(), None);
+    fn test_secrets_are_sensitive_unless_marked_false() {
+        let mut secret = SecretConfig::new();
+        assert!(secret.is_sensitive());
+        secret.sensitive = Some(true);
+        assert!(secret.is_sensitive());
+        secret.sensitive = Some(false);
+        assert!(!secret.is_sensitive());
+    }
 
-        let mut sensitive = with_default("INFO");
-        sensitive.sensitive = true;
-        assert_eq!(sensitive.literal_default(), None);
-
-        let mut provider_backed = with_default("fallback");
-        provider_backed.set_value(Some("ref".to_string()));
-        assert_eq!(provider_backed.literal_default(), None);
+    #[test]
+    fn test_sensitive_false_round_trips_through_toml() {
+        let config: Config = toml_edit::de::from_str(
+            "[secrets]\nLOG_LEVEL = { default = \"INFO\", sensitive = false }\nTOKEN = { default = \"x\" }\n",
+        )
+        .unwrap();
+        assert_eq!(config.secrets["LOG_LEVEL"].sensitive, Some(false));
+        assert_eq!(config.secrets["TOKEN"].sensitive, None);
+        assert!(
+            config.secrets["LOG_LEVEL"]
+                .to_inline_table()
+                .to_string()
+                .contains("sensitive = false")
+        );
     }
 
     #[test]
