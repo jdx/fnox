@@ -349,8 +349,10 @@ pub struct SecretConfig {
     #[serde(default, skip_serializing_if = "is_false")]
     pub as_file: bool,
 
-    /// Always redact this secret's value from `fnox exec --redact`, MCP `exec` and
-    /// `ci-redact` output, even when it is a plaintext `default`.
+    /// Keep redacting this secret's value from `fnox exec --redact`, MCP `exec` and
+    /// `ci-redact` output even when it is a plaintext `default`. The usual
+    /// limits still apply: `fnox exec` filters only piped output, and values
+    /// shorter than 3 characters are never redacted.
     #[serde(default, skip_serializing_if = "is_false")]
     pub sensitive: bool,
 

@@ -301,7 +301,7 @@ LOG_LEVEL = { default = "INFO" }                       # readable in output
 LOCAL_TOKEN = { default = "dev-token-123", sensitive = true } # redacted
 ```
 
-Secrets with a provider `value`, and defaults that use `${OTHER}` or `{{ ... }}`, are always redacted, so the flag only changes literal defaults.
+Secrets with a provider `value`, and defaults that use `${OTHER}` or `{{ ... }}`, are already redacted, so the flag only changes literal defaults. `sensitive` follows the same limits as other redaction: `fnox exec` filters only piped output, and values shorter than 3 characters are never redacted.
 
 ### `json_path` and `line` {#json-path}
 
