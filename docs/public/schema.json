@@ -1956,7 +1956,7 @@
           "type": "boolean"
         },
         "sensitive": {
-          "description": "Keep redacting this secret's value from `fnox exec --redact`, MCP `exec` and\n`ci-redact` output even when it is a plaintext `default`. `fnox exec`\nand MCP `exec` still skip values shorter than 3 bytes after trimming,\nand `fnox exec` filters only non-terminal output.",
+          "description": "Keep redacting this secret's value from `fnox exec --redact`, MCP `exec` and\n`ci-redact` output even when it is a plaintext `default`. `fnox exec`\nand MCP `exec` still skip values shorter than 3 bytes after trimming,\n`fnox exec` filters only non-terminal output, and `ci-redact` cannot\nmask multi-line values.",
           "type": "boolean"
         },
         "json_path": {
