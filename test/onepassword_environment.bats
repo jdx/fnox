@@ -15,6 +15,11 @@ echo "$*" >>"$OP_STUB_LOG"
 env_id=""
 if [ "$1 $2 $3" = "environment secret list" ]; then
 	# OP_STUB_LEGACY=1 emulates an old beta that predates `secret list`.
+	# OP_STUB_LEGACY=flag emulates a CLI that knows `secret list` but not `--reveal`.
+	if [ "$OP_STUB_LEGACY" = "flag" ]; then
+		echo '[ERROR] 2026/10/08 00:00:00 unknown flag: --reveal' >&2
+		exit 1
+	fi
 	if [ -n "$OP_STUB_LEGACY" ]; then
 		echo '[ERROR] 2026/10/08 00:00:00 unknown command "secret" for "op environment"' >&2
 		exit 1
@@ -227,6 +232,16 @@ TOML
 
 @test "falls back to op environment read on a CLI without secret list" {
 	export OP_STUB_LEGACY=1
+	run "$FNOX_BIN" get DB_URL
+	assert_success
+	assert_output "postgres://u:p@host/db?sslmode=require"
+
+	run grep -c '^environment read env_abc' "$OP_STUB_LOG"
+	assert_output "1"
+}
+
+@test "falls back to op environment read when secret list rejects a flag" {
+	export OP_STUB_LEGACY=flag
 	run "$FNOX_BIN" get DB_URL
 	assert_success
 	assert_output "postgres://u:p@host/db?sslmode=require"
