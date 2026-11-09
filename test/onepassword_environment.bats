@@ -12,16 +12,36 @@ setup() {
 	cat >"$TEST_TEMP_DIR/bin/op" <<'STUB'
 #!/usr/bin/env bash
 echo "$*" >>"$OP_STUB_LOG"
-if [ "$1 $2" = "environment read" ]; then
-	if [ "$3" = "env_unterminated" ]; then
+env_id=""
+if [ "$1 $2 $3" = "environment secret list" ]; then
+	# OP_STUB_LEGACY=1 emulates an old beta that predates `secret list`.
+	if [ -n "$OP_STUB_LEGACY" ]; then
+		echo '[ERROR] 2026/10/08 00:00:00 unknown command "secret" for "op environment"' >&2
+		exit 1
+	fi
+	if [ "$5 $6" != "--reveal --format=dotenv" ]; then
+		echo "[ERROR] unexpected flags: $*" >&2
+		exit 1
+	fi
+	env_id="$4"
+elif [ "$1 $2" = "environment read" ]; then
+	# Stable CLIs print the `op environment` help and exit 0 for the retired `read`.
+	if [ -z "$OP_STUB_LEGACY" ]; then
+		printf 'Manage Environments\n\nUsage: op environment [command]\n'
+		exit 0
+	fi
+	env_id="$3"
+fi
+if [ -n "$env_id" ]; then
+	if [ "$env_id" = "env_unterminated" ]; then
 		printf 'DB_URL="unterminated\n'
 		exit 0
 	fi
-	if [ "$3" = "env_garbage" ]; then
+	if [ "$env_id" = "env_garbage" ]; then
 		echo '{"variables": []}'
 		exit 0
 	fi
-	if [ "$3" = "env_abc" ]; then
+	if [ "$env_id" = "env_abc" ]; then
 		# A user-set OP_FORMAT would change the real CLI's output; fnox must not pass it on.
 		if [ -n "$OP_FORMAT" ]; then
 			echo '[{"name": "DB_URL"}]'
@@ -91,12 +111,12 @@ teardown() {
 	assert_output $'line1\nline2'
 }
 
-@test "variables of one environment share a single op environment read" {
+@test "variables of one environment share a single op environment secret list" {
 	run "$FNOX_BIN" exec --if-missing ignore -- sh -c 'echo "$DB_URL|$API_KEY"'
 	assert_success
 	assert_output --partial "postgres://u:p@host/db?sslmode=require|quoted value"
 
-	run grep -c '^environment read env_abc' "$OP_STUB_LOG"
+	run grep -c '^environment secret list env_abc' "$OP_STUB_LOG"
 	assert_output "1"
 }
 
@@ -145,7 +165,7 @@ TOML
 	run "$FNOX_BIN" exec --if-missing ignore -- true
 	assert_success
 
-	run grep -c '^environment read env_nope' "$OP_STUB_LOG"
+	run grep -c '^environment secret list env_nope' "$OP_STUB_LOG"
 	assert_output "1"
 }
 
@@ -164,7 +184,7 @@ TOML
 	assert_success
 	assert_output --partial "postgres://u:p@host/db?sslmode=require|quoted value|value-of-db-username|value-of-db-password"
 
-	run grep -c '^environment read env_abc' "$OP_STUB_LOG"
+	run grep -c '^environment secret list env_abc' "$OP_STUB_LOG"
 	assert_output "1"
 	run grep -c '^inject' "$OP_STUB_LOG"
 	assert_output "1"
@@ -203,4 +223,29 @@ TOML
 	run "$FNOX_BIN" get DB_URL
 	assert_failure
 	assert_output --partial "unterminated quote"
+}
+
+@test "falls back to op environment read on a CLI without secret list" {
+	export OP_STUB_LEGACY=1
+	run "$FNOX_BIN" get DB_URL
+	assert_success
+	assert_output "postgres://u:p@host/db?sslmode=require"
+
+	run grep -c '^environment read env_abc' "$OP_STUB_LOG"
+	assert_output "1"
+}
+
+@test "does not fall back to op environment read when secret list fails" {
+	cat >fnox.toml <<'TOML'
+[providers.op]
+type = "1password"
+
+[secrets]
+A = { provider = "op", value = "environment://env_nope/A" }
+TOML
+	run "$FNOX_BIN" get A
+	assert_failure
+
+	run grep -c '^environment read' "$OP_STUB_LOG"
+	assert_output "0"
 }
