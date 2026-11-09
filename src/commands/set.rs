@@ -400,7 +400,7 @@ impl SetCommand {
         } else {
             // Interactive terminal - prompt for value
             if self.open {
-                self.open_secret_url(&config, &write_profile_stack, profile);
+                self.open_secret_url(&config, &write_profile_stack, profile)?;
             }
             let value = demand::Input::new("Enter secret value")
                 .prompt("Secret value: ")
@@ -648,29 +648,38 @@ impl SetCommand {
     /// Without a URL this only warns, so the value prompt still follows. A
     /// launcher that fails (no browser over SSH) is not an error either: the
     /// printed URL is the fallback.
-    fn open_secret_url(&self, config: &Config, write_profile_stack: &[String], profile: &[String]) {
+    fn open_secret_url(
+        &self,
+        config: &Config,
+        write_profile_stack: &[String],
+        profile: &[String],
+    ) -> Result<()> {
         // The secret `set` will write comes first; otherwise the one `fnox list`
-        // shows for the active profiles
-        let lookup = |stack: &[String]| config.get_secret(stack, self.key()).ok().flatten();
-        let url = self.url.clone().or_else(|| {
-            // Pick the secret first, then its url: a write-target secret without
-            // a url must not borrow another profile's
-            lookup(write_profile_stack)
-                .or_else(|| lookup(profile))
-                .and_then(|secret| secret.url.clone())
-        });
+        // shows for the active profiles. Pick the secret first, then its url: a
+        // write-target secret without a url must not borrow another profile's.
+        // Lookup errors (such as a broken profile) surface before any prompt.
+        let url = match &self.url {
+            Some(url) => Some(url.clone()),
+            None => match config.get_secret(write_profile_stack, self.key())? {
+                Some(secret) => secret.url.clone(),
+                None => config
+                    .get_secret(profile, self.key())?
+                    .and_then(|secret| secret.url.clone()),
+            },
+        };
         let Some(url) = url else {
             eprintln!(
                 "{} {} has no url; add one with --url or `url = \"...\"` in the config",
                 console::style("warning:").yellow().bold(),
                 self.key()
             );
-            return;
+            return Ok(());
         };
         eprintln!("Opening {}", console::style(&url).underlined());
         if let Err(err) = fnox_core::browser::open_browser(&url) {
             tracing::debug!("Failed to open browser: {err}");
         }
+        Ok(())
     }
 
     /// Print what `store_at` did, or would do with `--dry-run`
