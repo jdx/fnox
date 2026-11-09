@@ -10,7 +10,7 @@ A standalone developer preview for designing and tweaking the [Fnox Touch ID UI]
 | Recommended          | Node 26.13.0 LTS                        |
 | CI                   | Node 26                                 |
 
-CMake accepts Node.js 22.18.0+ (23.x requires 23.6.0+); Node.js 26 LTS is the recommended current release, not a build requirement. macOS builds target macOS 14+ and require the macOS 26 SDK for `NSGlassEffectView` and CMake 3.25+. Older systems use a standard opaque AppKit view. Reduce Transparency keeps the surface opaque; Reduce Motion limits animation.
+CMake accepts Node.js 22.18.0+ (23.x requires 23.6.0+); Node.js 26 LTS is the recommended current release, not a build requirement. macOS builds target macOS 14+ and require CMake 3.25+. Building with the macOS 26 SDK adds the `NSGlassEffectView` surface; older SDKs and older systems use a standard opaque AppKit view. Reduce Transparency keeps the surface opaque; Reduce Motion limits animation.
 
 Windows and Linux builds use Qt 6 Widgets and SVG. Linux also requires Qt D-Bus. Windows builds require MSVC and the Windows 11 SDK.
 
