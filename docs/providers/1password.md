@@ -124,10 +124,10 @@ DATABASE_URL = { provider = "op", value = "environment://blgexucrwfr2dtsxe2q4uu7
 STRIPE_KEY = { provider = "op", value = "environment://blgexucrwfr2dtsxe2q4uu7dp4/STRIPE_KEY" }
 ```
 
-- fnox runs `op environment read <id>` once per Environment and serves every variable that references it from that read.
+- fnox runs `op environment secret list <id> --reveal --format=dotenv` once per Environment and serves every variable that references it from that read.
 - Environment references ignore `vault` and can sit next to vault item references in the same provider.
 - A variable missing from the Environment is an error, not an empty value.
-- This needs an `op` build that includes `op environment`, currently on the beta channel (2.33.0-beta.02 or later). Authenticate as usual: the desktop app, or a service account that can access the Environment.
+- This needs 1Password CLI 2.42.0 or later. fnox falls back to `op environment read` for the old betas (2.33.0-beta.02 and later) that predate `op environment secret list`. Authenticate as usual: the desktop app, or a service account that can access the Environment.
 
 ## Troubleshooting
 
@@ -154,7 +154,7 @@ fnox provider test op
 
 ### `unknown command` for an `environment://` reference
 
-Your `op` build does not include `op environment`. Install a beta build that does.
+Your `op` build does not include `op environment secret list` or `op environment read`. Update the 1Password CLI to 2.42.0 or later (`op --version` shows the installed version).
 
 ## See also
 

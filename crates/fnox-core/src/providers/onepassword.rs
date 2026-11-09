@@ -107,34 +107,57 @@ impl OnePasswordProvider {
         }
 
         tracing::debug!("Reading 1Password Environment '{}'", id);
-        let output = self
-            .execute_op_command(&["environment", "read", id])
+        // Stable CLIs (2.42.0+) list an Environment's variables with `op environment secret
+        // list`; the old betas (2.33.0-beta.02+) used `op environment read`. Try the stable
+        // command first and fall back only when this CLI doesn't know it, so a real failure
+        // (not signed in, no access) is never retried. The retired `read` prints help and
+        // exits 0 on stable CLIs, which is why it can't be tried first.
+        let output = match self
+            .execute_op_command(&[
+                "environment",
+                "secret",
+                "list",
+                id,
+                "--reveal",
+                "--format=dotenv",
+            ])
             .await
-            .map_err(|e| match e {
-                FnoxError::ProviderCliFailed { details, url, .. }
-                    if details.contains("unknown command") =>
-                {
-                    FnoxError::ProviderCliFailed {
-                        provider: "1Password".to_string(),
-                        details,
-                        hint: "1Password Environments need a 1Password CLI build that includes \
-                               'op environment': 2.33.0-beta.02 or later on the beta channel"
-                            .to_string(),
-                        url,
-                    }
-                }
-                e => e,
-            })?;
+        {
+            Err(FnoxError::ProviderCliFailed { details, .. }) if is_unknown_command(&details) => {
+                tracing::debug!(
+                    "'op environment secret list' is unavailable; trying 'op environment read'"
+                );
+                self.execute_op_command(&["environment", "read", id])
+                    .await
+                    .map_err(|e| match e {
+                        FnoxError::ProviderCliFailed { details, url, .. }
+                            if is_unknown_command(&details) =>
+                        {
+                            FnoxError::ProviderCliFailed {
+                                provider: "1Password".to_string(),
+                                details,
+                                hint: ENVIRONMENT_CLI_HINT.to_string(),
+                                url,
+                            }
+                        }
+                        e => e,
+                    })?
+            }
+            result => result?,
+        };
 
         // Reject output that isn't dotenv before caching it, so a format change surfaces
         // as an error here rather than as "variable not found" for every lookup.
         let vars = parse_dotenv(&output).map_err(|problem| FnoxError::ProviderInvalidResponse {
             provider: "1Password".to_string(),
             details: format!(
-                "Could not parse the output of 'op environment read {}': {}",
+                "Could not parse the output of 'op environment' for '{}': {}",
                 id, problem
             ),
-            hint: "Expected dotenv-style KEY=value lines".to_string(),
+            hint: format!(
+                "Expected dotenv-style KEY=value lines. {}",
+                ENVIRONMENT_CLI_HINT
+            ),
             url: "https://fnox.jdx.dev/providers/1password".to_string(),
         })?;
         let vars = Arc::new(vars);
@@ -404,7 +427,7 @@ impl crate::providers::Provider for OnePasswordProvider {
         &self,
         secrets: &[(String, String)],
     ) -> HashMap<String, Result<String>> {
-        // Environment variables come from one `op environment read` per environment;
+        // Environment variables come from one `op environment secret list` per environment;
         // everything else is resolved together through `op inject`.
         let (env_refs, op_refs): (Vec<_>, Vec<_>) = secrets
             .iter()
@@ -544,7 +567,17 @@ impl OnePasswordProvider {
     }
 }
 
-/// Parse the dotenv-style `KEY=value` lines printed by `op environment read`.
+const ENVIRONMENT_CLI_HINT: &str = "1Password Environments need a 1Password CLI that includes \
+    'op environment secret list' (2.42.0 or later) or, on old betas, 'op environment read' \
+    (2.33.0-beta.02 or later). Check 'op --version'";
+
+/// Whether `op` rejected a command or flag because this CLI build doesn't have it.
+fn is_unknown_command(details: &str) -> bool {
+    details.contains("unknown command") || details.contains("unknown flag")
+}
+
+/// Parse the dotenv-style `KEY=value` lines printed by `op environment secret list --format=dotenv`
+/// (or `op environment read` on old betas).
 ///
 /// Accepts an optional `export ` prefix, blank and `#` comment lines, and single- or
 /// double-quoted values (which may span lines). Unquoted values are taken verbatim.
