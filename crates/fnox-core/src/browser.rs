@@ -34,7 +34,10 @@ fn opener(url: &str) -> std::process::Command {
 /// launcher that stays alive until the browser closes cannot block the caller.
 /// A background thread reaps the child.
 pub fn open_browser(url: &str) -> std::io::Result<()> {
-    let mut child = silence(&mut opener(url)).spawn()?;
+    // Launch the parsed form, which lowercases the scheme: `xdg-open` looks up
+    // its handler by the scheme as written
+    let normalized = url::Url::parse(url).map_or_else(|_| url.to_string(), String::from);
+    let mut child = silence(&mut opener(&normalized)).spawn()?;
     std::thread::spawn(move || {
         let _ = child.wait();
     });
