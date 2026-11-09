@@ -376,6 +376,8 @@ impl EditCommand {
             source: None,
             value: None,
             description: None,
+            url: None,
+            open: false,
             global: false,
             key_name: None,
             dry_run: false,

@@ -3,7 +3,8 @@ use crate::config::Config;
 use crate::error::Result;
 use indexmap::IndexMap;
 use tabled::settings::{
-    Color, Format, Modify, Style, Width,
+    Color, Format, Modify, Remove, Style, Width,
+    location::ByColumnName,
     object::{Columns, Rows},
 };
 use tabled::{Table, Tabled};
@@ -50,6 +51,8 @@ struct SecretRow {
     source_type: String,
     #[tabled(rename = "Provider Key")]
     provider_key: String,
+    #[tabled(rename = "URL")]
+    url: String,
     #[tabled(rename = "Description")]
     description: String,
 }
@@ -64,6 +67,8 @@ struct SecretRowWithSources {
     source_file: String,
     #[tabled(rename = "Provider Key")]
     provider_key: String,
+    #[tabled(rename = "URL")]
+    url: String,
     #[tabled(rename = "Description")]
     description: String,
 }
@@ -76,6 +81,8 @@ struct SecretRowWithValues {
     source_type: String,
     #[tabled(rename = "Provider Key")]
     provider_key: String,
+    #[tabled(rename = "URL")]
+    url: String,
     #[tabled(rename = "Description")]
     description: String,
     #[tabled(rename = "Value")]
@@ -92,6 +99,8 @@ struct SecretRowWithValuesAndSources {
     source_file: String,
     #[tabled(rename = "Provider Key")]
     provider_key: String,
+    #[tabled(rename = "URL")]
+    url: String,
     #[tabled(rename = "Description")]
     description: String,
     #[tabled(rename = "Value")]
@@ -213,11 +222,12 @@ impl ListCommand {
                 key: (*key).clone(),
                 source_type,
                 provider_key: provider_key_str,
+                url: secret_config.url.clone().unwrap_or_default(),
                 description: description_str,
             });
         }
 
-        self.display_table(rows)
+        self.display_table(rows, keys.iter().any(|k| profile_secrets[*k].url.is_some()))
     }
 
     fn display_with_sources(
@@ -246,11 +256,12 @@ impl ListCommand {
                 source_type,
                 source_file,
                 provider_key: provider_key_str,
+                url: secret_config.url.clone().unwrap_or_default(),
                 description: description_str,
             });
         }
 
-        self.display_table(rows)
+        self.display_table(rows, keys.iter().any(|k| profile_secrets[*k].url.is_some()))
     }
 
     fn display_with_values(
@@ -281,12 +292,13 @@ impl ListCommand {
                 key: (*key).clone(),
                 source_type,
                 provider_key: provider_key_str,
+                url: secret_config.url.clone().unwrap_or_default(),
                 description: description_str,
                 value: value_str,
             });
         }
 
-        self.display_table(rows)
+        self.display_table(rows, keys.iter().any(|k| profile_secrets[*k].url.is_some()))
     }
 
     fn display_with_values_and_sources(
@@ -323,17 +335,22 @@ impl ListCommand {
                 source_type,
                 source_file,
                 provider_key: provider_key_str,
+                url: secret_config.url.clone().unwrap_or_default(),
                 description: description_str,
                 value: value_str,
             });
         }
 
-        self.display_table(rows)
+        self.display_table(rows, keys.iter().any(|k| profile_secrets[*k].url.is_some()))
     }
 
-    fn display_table<T: tabled::Tabled>(&self, rows: Vec<T>) -> Result<()> {
+    fn display_table<T: tabled::Tabled>(&self, rows: Vec<T>, has_url: bool) -> Result<()> {
         let mut table = Table::new(rows);
         table.with(Style::empty());
+        if !has_url {
+            // Only show the URL column when some secret records one
+            table.with(Remove::column(ByColumnName::new("URL")));
+        }
 
         // Apply colors only if enabled
         if console::colors_enabled() {

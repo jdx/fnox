@@ -204,21 +204,22 @@ DATABASE_URL = { provider = "op", value = "Database/url", description = "Main da
 
 Secret names are environment variable names: they must match `^[A-Za-z_][A-Za-z0-9_]*$`. Every field is optional; `API_KEY = {}` declares a secret that comes from the environment.
 
-| Field          | Type                            | Default            | Description                                                                      |
-| -------------- | ------------------------------- | ------------------ | -------------------------------------------------------------------------------- |
-| `provider`     | string                          | `default_provider` | Provider that holds or decrypts the value.                                       |
-| `value`        | string                          | none               | Ciphertext for encryption providers, or the item reference for remote providers. |
-| `default`      | string                          | none               | Fallback when the provider returns nothing or fails.                             |
-| `if_missing`   | `"error"`, `"warn"`, `"ignore"` | inherited          | Missing-secret behavior for this secret.                                         |
-| `env`          | `true`, `"exec"`, `false`       | top-level `env`    | Where the secret is injected as an environment variable.                         |
-| `as_file`      | boolean                         | `false`            | Inject the path of a temporary file holding the value.                           |
-| `sensitive`    | boolean                         | `false`            | Keep redacting a plaintext `default` from output. See [`sensitive`](#sensitive). |
-| `json_path`    | string                          | none               | Extract a field from a JSON value, with dot notation for nesting.                |
-| `line`         | integer, 1 or more              | none               | Extract one line from a multi-line value.                                        |
-| `description`  | string                          | none               | Shown by `fnox list`.                                                            |
-| `daemon_cache` | boolean                         | `true`             | Set `false` to resolve this secret directly instead of from the daemon cache.    |
-| `sync`         | table                           | none               | Encrypted cache written by `fnox sync`.                                          |
-| `push`         | array of strings                | none               | [Push targets](#push-targets) that `fnox push` copies the value into.            |
+| Field          | Type                            | Default            | Description                                                                                        |
+| -------------- | ------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------- |
+| `provider`     | string                          | `default_provider` | Provider that holds or decrypts the value.                                                         |
+| `value`        | string                          | none               | Ciphertext for encryption providers, or the item reference for remote providers.                   |
+| `default`      | string                          | none               | Fallback when the provider returns nothing or fails.                                               |
+| `if_missing`   | `"error"`, `"warn"`, `"ignore"` | inherited          | Missing-secret behavior for this secret.                                                           |
+| `env`          | `true`, `"exec"`, `false`       | top-level `env`    | Where the secret is injected as an environment variable.                                           |
+| `as_file`      | boolean                         | `false`            | Inject the path of a temporary file holding the value.                                             |
+| `sensitive`    | boolean                         | `false`            | Keep redacting a plaintext `default` from output. See [`sensitive`](#sensitive).                   |
+| `json_path`    | string                          | none               | Extract a field from a JSON value, with dot notation for nesting.                                  |
+| `line`         | integer, 1 or more              | none               | Extract one line from a multi-line value.                                                          |
+| `description`  | string                          | none               | Shown by `fnox list`.                                                                              |
+| `url`          | string                          | none               | `http(s)` page where a new value is created. Shown by `fnox list`; `fnox set KEY --open` opens it. |
+| `daemon_cache` | boolean                         | `true`             | Set `false` to resolve this secret directly instead of from the daemon cache.                      |
+| `sync`         | table                           | none               | Encrypted cache written by `fnox sync`.                                                            |
+| `push`         | array of strings                | none               | [Push targets](#push-targets) that `fnox push` copies the value into.                              |
 
 ### Resolution order
 
@@ -229,6 +230,23 @@ fnox resolves a secret from the first source that produces a value:
 3. An environment variable with the secret's name.
 
 If none produces a value, [`if_missing`](#if-missing) decides the outcome. `json_path` and `line` apply to whichever value was found.
+
+### `url`
+
+`url` records the page where a new value for the secret is created, such as a personal access token page. It must be an `http://` or `https://` URL.
+
+```toml
+[secrets]
+GITHUB_TOKEN = { provider = "keychain", value = "GITHUB_TOKEN", url = "https://github.com/settings/tokens" }
+```
+
+`fnox list` adds a URL column when any secret has one, and `fnox tui` shows it in the secret details. To rotate the token, run:
+
+```bash
+fnox set GITHUB_TOKEN --open
+```
+
+fnox prints the URL, opens it in your default browser, then prompts for the new value with hidden input. If no browser can be launched (for example over SSH), open the printed URL yourself. `--open` needs an interactive terminal and cannot be combined with `VALUE`, `--from-file`, or `--generate`. Without a `url` on the secret, it prints a warning and goes straight to the prompt. `fnox set KEY --url URL` records the URL without asking for a value.
 
 ### `value`
 
