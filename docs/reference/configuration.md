@@ -301,7 +301,7 @@ LOG_LEVEL = { default = "INFO" }                       # readable in output
 LOCAL_TOKEN = { default = "dev-token-123", sensitive = true } # redacted
 ```
 
-Secrets with a provider `value`, and defaults that use `${OTHER}` or `{{ ... }}`, are already redacted, so the flag only changes literal defaults. `sensitive` follows the same limits as other redaction: `fnox exec` filters only piped output, and values shorter than 3 characters are never redacted.
+Secrets with a provider `value`, and defaults that use `${OTHER}` or `{{ ... }}`, are already redacted, so the flag only changes literal defaults. The usual limits still apply: `fnox exec` filters only output that is not a terminal (piped or redirected), and `fnox exec` and the MCP `exec` tool skip values shorter than 3 bytes after trimming. `ci-redact` has no length limit but cannot mask multi-line values.
 
 ### `json_path` and `line` {#json-path}
 
