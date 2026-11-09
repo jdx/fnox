@@ -16,6 +16,15 @@
 #include <string>
 #include <vector>
 
+// NSGlassEffectView only exists in the macOS 26 SDK. Older SDKs (such as the
+// one on CI runners) cannot compile the glass surface, so the panel keeps its
+// standard opaque content view there.
+#if defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 260000
+#define FNOX_HAS_GLASS_SDK 1
+#else
+#define FNOX_HAS_GLASS_SDK 0
+#endif
+
 extern bool FnoxPreviewAcceptTouchId();
 
 constexpr CGFloat kFingerprintClipBottomInset = 18;
@@ -92,6 +101,7 @@ NSColor* ColorForAppearance(NSColor* color, NSAppearance* appearance) {
 @implementation FnoxApprovalPanel
 @end
 
+#if FNOX_HAS_GLASS_SDK
 API_AVAILABLE(macos(26.0))
 @interface FnoxApprovalGlassView : NSGlassEffectView
 - (void)updateSurface;
@@ -129,6 +139,7 @@ API_AVAILABLE(macos(26.0))
   [self updateSurface];
 }
 @end
+#endif
 
 void DrawFnoxFocusRing(NSView* view) {
   if (view.window == nil || view.window.firstResponder != view ||
@@ -456,6 +467,7 @@ NSView* ApprovalContent(NSPanel* panel) { return ((FnoxApprovalPanel*)panel).app
 void InstallApprovalGlass(FnoxApprovalPanel* panel, CGFloat width, CGFloat height) {
   // Keep the panel's standard content view on systems without NSGlassEffectView.
   panel.approvalContent = panel.contentView;
+#if FNOX_HAS_GLASS_SDK
   if (@available(macOS 26.0, *)) {
     panel.styleMask |= NSWindowStyleMaskFullSizeContentView;
     panel.opaque = NO;
@@ -474,9 +486,14 @@ void InstallApprovalGlass(FnoxApprovalPanel* panel, CGFloat width, CGFloat heigh
     panel.approvalContent = content;
     [glass updateSurface];
   }
+#else
+  (void)width;
+  (void)height;
+#endif
 }
 
 void SetApprovalGlassTransition(NSPanel* panel, BOOL transitioning) {
+#if FNOX_HAS_GLASS_SDK
   if (@available(macOS 26.0, *)) {
     if (![panel.contentView isKindOfClass:[NSGlassEffectView class]]) return;
     const BOOL reduceEffects =
@@ -502,6 +519,10 @@ void SetApprovalGlassTransition(NSPanel* panel, BOOL transitioning) {
       [surface addAnimation:fade forKey:@"approvalGlassFade"];
     }
   }
+#else
+  (void)panel;
+  (void)transitioning;
+#endif
 }
 
 NSPanel* RequestPanel(CGFloat width, CGFloat height, NSString* title) {
