@@ -400,7 +400,7 @@ impl SetCommand {
         } else {
             // Interactive terminal - prompt for value
             if self.open {
-                self.open_secret_url(&config, &write_profile_stack);
+                self.open_secret_url(&config, profile);
             }
             let value = demand::Input::new("Enter secret value")
                 .prompt("Secret value: ")
@@ -648,10 +648,10 @@ impl SetCommand {
     /// Without a URL this only warns, so the value prompt still follows. A
     /// launcher that fails (no browser over SSH) is not an error either: the
     /// printed URL is the fallback.
-    fn open_secret_url(&self, config: &Config, write_profile_stack: &[String]) {
+    fn open_secret_url(&self, config: &Config, profile: &[String]) {
         let url = self.url.clone().or_else(|| {
             config
-                .get_secret(write_profile_stack, self.key())
+                .get_secret(profile, self.key())
                 .ok()
                 .flatten()
                 .and_then(|secret| secret.url.clone())

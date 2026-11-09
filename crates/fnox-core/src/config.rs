@@ -317,7 +317,7 @@ pub struct SecretConfig {
         skip_serializing_if = "Option::is_none",
         deserialize_with = "deserialize_secret_url"
     )]
-    #[schemars(regex(pattern = r"^[hH][tT][tT][pP][sS]?://[^\s/?#]"))]
+    #[schemars(regex(pattern = r"^[hH][tT][tT][pP][sS]?://[^\s/?#]\S*$"))]
     pub url: Option<String>,
 
     /// What to do if the secret is missing (error, warn, or ignore)
