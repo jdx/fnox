@@ -319,9 +319,20 @@ impl FnoxMcpServer {
         // Redact secret values from output to prevent exfiltration via
         // commands like `printenv` or `echo $SECRET`.
         let (stdout, stderr) = if self.mcp_config.redact_output() {
+            // Plaintext defaults are already in the config; redacting them
+            // only corrupts output.
+            let redact_values: Vec<(String, String)> = env_vars
+                .iter()
+                .filter(|(key, value)| {
+                    !profile_secrets
+                        .get(key.as_str())
+                        .is_some_and(|sc| crate::redact::is_plaintext_default(sc, value))
+                })
+                .cloned()
+                .collect();
             (
-                redact_secrets(&stdout_raw, &env_vars)?,
-                redact_secrets(&stderr_raw, &env_vars)?,
+                redact_secrets(&stdout_raw, &redact_values)?,
+                redact_secrets(&stderr_raw, &redact_values)?,
             )
         } else {
             (stdout_raw.to_string(), stderr_raw.to_string())

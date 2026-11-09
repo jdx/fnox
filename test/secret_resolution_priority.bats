@@ -199,9 +199,10 @@ EOF
 	run "$FNOX_BIN" ci-redact
 	assert_success
 
-	# Should mask provider value, not default or env
+	# Should mask provider value, not default or env. A plaintext default is
+	# already in the config, so it is not masked.
 	assert_output --partial "::add-mask::provider-value-to-mask"
-	assert_output --partial "::add-mask::default-value-to-mask"
+	refute_output --partial "::add-mask::default-value-to-mask"
 
 	# Should NOT contain env value
 	refute_output --partial "env-value"

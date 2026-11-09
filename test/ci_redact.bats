@@ -14,10 +14,13 @@ setup() {
 	cat >"$FNOX_CONFIG_FILE" <<EOF
 root = true
 
+[providers.plain]
+type = "plain"
+
 [secrets]
-SECRET_ONE = { default = "secret-value-1" }
-SECRET_TWO = { default = "secret-value-2" }
-PASSWORD = { default = "super-secret-password" }
+SECRET_ONE = { provider = "plain", value = "secret-value-1" }
+SECRET_TWO = { provider = "plain", value = "secret-value-2" }
+PASSWORD = { provider = "plain", value = "super-secret-password" }
 EOF
 }
 
@@ -85,6 +88,9 @@ teardown() {
 	cat >"$FNOX_CONFIG_FILE" <<EOF
 root = true
 
+[providers.plain]
+type = "plain"
+
 [secrets]
 EOF
 
@@ -101,11 +107,14 @@ EOF
 	cat >"$FNOX_CONFIG_FILE" <<EOF
 root = true
 
+[providers.plain]
+type = "plain"
+
 [secrets]
-DEFAULT_SECRET = { default = "default-value" }
+DEFAULT_SECRET = { provider = "plain", value = "default-value" }
 
 [profiles.staging.secrets]
-STAGING_SECRET = { default = "staging-value" }
+STAGING_SECRET = { provider = "plain", value = "staging-value" }
 EOF
 
 	export CI=true
@@ -128,8 +137,11 @@ EOF
 	cat >"$FNOX_CONFIG_FILE" <<EOF
 root = true
 
+[providers.plain]
+type = "plain"
+
 [secrets]
-REQUIRED = { default = "required-value" }
+REQUIRED = { provider = "plain", value = "required-value" }
 OPTIONAL = { if_missing = "ignore" }
 EOF
 
@@ -148,8 +160,11 @@ EOF
 	cat >"$FNOX_CONFIG_FILE" <<EOF
 root = true
 
+[providers.plain]
+type = "plain"
+
 [secrets]
-REQUIRED = { default = "required-value" }
+REQUIRED = { provider = "plain", value = "required-value" }
 OPTIONAL = { if_missing = "warn" }
 EOF
 
@@ -165,6 +180,9 @@ EOF
 @test "ci-redact fails with missing required secrets" {
 	cat >"$FNOX_CONFIG_FILE" <<EOF
 root = true
+
+[providers.plain]
+type = "plain"
 
 [secrets]
 REQUIRED = { if_missing = "error" }
@@ -182,9 +200,12 @@ EOF
 	cat >"$FNOX_CONFIG_FILE" <<EOF
 root = true
 
+[providers.plain]
+type = "plain"
+
 [secrets]
 FROM_ENV = {}
-FROM_DEFAULT = { default = "default-value" }
+FROM_DEFAULT = { provider = "plain", value = "default-value" }
 EOF
 
 	export FROM_ENV="env-value"
@@ -214,11 +235,14 @@ EOF
 	cat >"$FNOX_CONFIG_FILE" <<'EOF'
 root = true
 
+[providers.plain]
+type = "plain"
+
 [secrets]
-MULTILINE_SECRET = { default = """line1
+MULTILINE_SECRET = { provider = "plain", value = """line1
 line2
 line3""" }
-SINGLE_LINE = { default = "single" }
+SINGLE_LINE = { provider = "plain", value = "single" }
 EOF
 
 	export CI=true
@@ -243,13 +267,16 @@ EOF
 	cat >"$FNOX_CONFIG_FILE" <<'EOF'
 root = true
 
+[providers.plain]
+type = "plain"
+
 [secrets]
-GCP_KEY = { default = """{
+GCP_KEY = { provider = "plain", value = """{
   "type": "service_account",
   "project_id": "my-project",
   "private_key": "-----BEGIN PRIVATE KEY-----\nABCD1234\n-----END PRIVATE KEY-----"
 }""" }
-SAFE_SECRET = { default = "safe-value" }
+SAFE_SECRET = { provider = "plain", value = "safe-value" }
 EOF
 
 	export CI=true
@@ -264,4 +291,32 @@ EOF
 
 	# Should still mask single-line secrets
 	assert_output --partial "::add-mask::safe-value"
+}
+
+@test "ci-redact does not mask plaintext defaults" {
+	cat >"$FNOX_CONFIG_FILE" <<'TOML'
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+LOG_LEVEL = { default = "INFO" }
+GREETING = { default = "hello-world" }
+INTERPOLATED = { default = "${GREETING}-suffix" }
+API_KEY = { provider = "plain", value = "real-secret-value" }
+TOML
+
+	export CI=true
+	export GITHUB_ACTIONS=true
+
+	run "$FNOX_BIN" ci-redact
+	assert_success
+	assert_output --partial "::add-mask::real-secret-value"
+	# An interpolated default can embed another secret, so it stays masked.
+	assert_output --partial "::add-mask::hello-world-suffix"
+	refute_output --partial "::add-mask::INFO"
+	# The plain literal default is not masked on its own.
+	mask_count=$(echo "$output" | grep -c "::add-mask::" || true)
+	[ "$mask_count" -eq 2 ]
 }

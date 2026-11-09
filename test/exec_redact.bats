@@ -91,3 +91,21 @@ teardown() {
 	# 200000 x's + newline + "[REDACTED]\n"
 	assert_output "200012"
 }
+
+@test "exec --redact leaves plaintext defaults readable" {
+	cat >fnox.toml <<'TOML'
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+SECRET = { provider = "plain", value = "s3cr3t-value" }
+LOG_LEVEL = { default = "INFO" }
+SCHEMA = { default = "public" }
+COMBINED = { default = "${SECRET}-suffix" }
+TOML
+	run bash -c "'$FNOX_BIN' exec --redact -- sh -c 'echo \"\$LOG_LEVEL \$SCHEMA publication \$SECRET \$COMBINED\"' | cat"
+	assert_success
+	assert_output "INFO public publication [REDACTED] [REDACTED]"
+}

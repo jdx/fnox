@@ -2876,6 +2876,21 @@ impl SecretConfig {
         self.provider().is_some() || self.value().is_some() || self.default.is_some()
     }
 
+    /// The plaintext `default` when it is this secret's only source.
+    ///
+    /// Such a value is already written in the config file, so redacting it
+    /// hides nothing. A secret with a `value` (or synced copy) is excluded
+    /// because a provider answer wins over the default, and so is a default
+    /// that interpolates (`${OTHER}`) or renders a template (`{{ ... }}`)
+    /// because it can embed another secret's value.
+    pub fn literal_default(&self) -> Option<&str> {
+        if self.value.is_some() || self.sync.is_some() {
+            return None;
+        }
+        let default = self.default.as_deref()?;
+        (!default.contains("${") && !default.contains("{{")).then_some(default)
+    }
+
     /// Get the provider name, if set.
     pub fn provider(&self) -> Option<&str> {
         self.provider.as_ref().map(|s| s.value().as_str())
@@ -4004,6 +4019,23 @@ DEV_INHERITED = { provider = "plain", value = "d" }
             Some(Path::new("/tmp/fnox.toml"))
         );
         assert!(raw.source_is_profile);
+    }
+
+    #[test]
+    fn test_literal_default_only_for_plaintext_defaults() {
+        let with_default = |default: &str| {
+            let mut secret = SecretConfig::new();
+            secret.default = Some(default.to_string());
+            secret
+        };
+        assert_eq!(with_default("INFO").literal_default(), Some("INFO"));
+        assert_eq!(with_default("${OTHER}-x").literal_default(), None);
+        assert_eq!(with_default("{{ fnox.profile }}").literal_default(), None);
+        assert_eq!(SecretConfig::new().literal_default(), None);
+
+        let mut provider_backed = with_default("fallback");
+        provider_backed.set_value(Some("ref".to_string()));
+        assert_eq!(provider_backed.literal_default(), None);
     }
 
     #[test]

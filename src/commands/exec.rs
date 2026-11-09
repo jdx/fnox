@@ -224,11 +224,21 @@ impl ExecCommand {
         let redact_out = redact_on && !std::io::stdout().is_terminal();
         let redact_err = redact_on && !std::io::stderr().is_terminal();
         let redactor = if redact_out || redact_err {
-            let values = plan.set.values().chain(plan.files.values());
-            let skipped = plan
+            // Plaintext defaults are already in the config; redacting them
+            // only corrupts output.
+            let values: Vec<&String> = plan
                 .set
-                .values()
-                .chain(plan.files.values())
+                .iter()
+                .chain(plan.files.iter())
+                .filter(|(key, value)| {
+                    !profile_secrets
+                        .get(key.as_str())
+                        .is_some_and(|secret| crate::redact::is_plaintext_default(secret, value))
+                })
+                .map(|(_, value)| value)
+                .collect();
+            let skipped = values
+                .iter()
                 .filter(|v| crate::redact::redactable(v).is_none())
                 .count();
             if skipped > 0 {
@@ -237,7 +247,7 @@ impl ExecCommand {
                     crate::redact::MIN_REDACT_LENGTH
                 );
             }
-            Redactor::new(values.map(String::as_str))
+            Redactor::new(values.into_iter().map(String::as_str))
         } else {
             None
         };

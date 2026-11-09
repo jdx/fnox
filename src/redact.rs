@@ -23,6 +23,16 @@ pub fn redactable(value: &str) -> Option<&str> {
     (v.len() >= MIN_REDACT_LENGTH).then_some(v)
 }
 
+/// Whether `value` is just `secret`'s plaintext `default` from the config.
+///
+/// Such a value is already readable in `fnox.toml`, so redacting it only
+/// corrupts output (`public` becoming `[REDACTED]`). A value that differs from
+/// the default (a lease credential that replaced it, a transformed result)
+/// stays redacted.
+pub fn is_plaintext_default(secret: &crate::config::SecretConfig, value: &str) -> bool {
+    secret.literal_default() == Some(value)
+}
+
 /// A compiled set of secret values.
 pub struct Redactor {
     ac: AhoCorasick,
