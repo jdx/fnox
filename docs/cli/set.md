@@ -52,8 +52,16 @@ The provider is `--provider`, else the secret's current provider, else `default_
   **Choices:** `error`, `warn`, `ignore`
 
 - **`--length <LENGTH>`** — Length in characters of a generated value (default: 32; ignored for uuid; base64 cannot be 1 more than a multiple of 4)
+- **`--open`** — Open the secret's URL in a browser, then prompt for the new value
+
+  Needs an interactive terminal and a `url` on the secret (or `--url`). The URL is printed before the browser opens, so you can open it yourself over SSH. Without a URL, fnox warns and still prompts for the value.
+
 - **`--show`** — Print the generated value after storing it
 - **`--source <SOURCE>`** — With `--file`, keep the stored content in this file, relative to the global config directory, instead of in the config
+- **`--url <URL>`** — Page where a new value can be created (http or https)
+
+  Recorded with the secret, shown by `fnox list`, and opened by `--open`.
+
 - **`-h --help`** — Print help
 
 ## Examples

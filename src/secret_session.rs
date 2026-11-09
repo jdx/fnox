@@ -416,6 +416,8 @@ impl SecretSession {
             key: Some(name.to_string()),
             value: Some(value),
             description: None,
+            url: None,
+            open: false,
             global: false,
             key_name: None,
             dry_run: false,

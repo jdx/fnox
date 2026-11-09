@@ -311,6 +311,15 @@ pub struct SecretConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
+    /// Page where a new value for the secret can be created (http or https)
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_secret_url"
+    )]
+    #[schemars(regex(pattern = r"^[hH][tT][tT][pP][sS]?://[^\s/?#]\S*$"))]
+    pub url: Option<String>,
+
     /// What to do if the secret is missing (error, warn, or ignore)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub if_missing: Option<IfMissing>,
@@ -2694,6 +2703,7 @@ impl SecretConfig {
     pub fn new() -> Self {
         Self {
             description: None,
+            url: None,
             if_missing: None,
             default: None,
             provider: None,
@@ -2750,6 +2760,9 @@ impl SecretConfig {
         }
         if let Some(ref description) = self.description {
             inline.insert("description", toml_edit::Value::from(description.as_str()));
+        }
+        if let Some(ref url) = self.url {
+            inline.insert("url", toml_edit::Value::from(url.as_str()));
         }
         if let Some(ref default) = self.default {
             inline.insert("default", toml_edit::Value::from(default.as_str()));
@@ -2819,6 +2832,7 @@ impl SecretConfig {
             "description",
             self.description.as_deref().map(Value::from),
         );
+        set_or_remove(table, "url", self.url.as_deref().map(Value::from));
         set_or_remove(table, "default", self.default.as_deref().map(Value::from));
         set_or_remove(
             table,
@@ -2955,6 +2969,36 @@ impl ProfileConfig {
     }
 }
 
+/// Check that `url` is an absolute http or https URL.
+///
+/// `fnox set --open` hands the string to the system URL opener, so other
+/// schemes (`file:`, custom handlers) are refused.
+pub fn validate_secret_url(url: &str) -> std::result::Result<(), String> {
+    let invalid = || format!("url is not a valid http(s) URL: `{url}`");
+    if url.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err(invalid());
+    }
+    let parsed = url::Url::parse(url).map_err(|_| invalid())?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err(format!("url must use http or https, got `{url}`"));
+    }
+    if parsed.host_str().is_none_or(str::is_empty) {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+fn deserialize_secret_url<'de, D>(deserializer: D) -> std::result::Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let url = Option::<String>::deserialize(deserializer)?;
+    if let Some(url) = &url {
+        validate_secret_url(url).map_err(serde::de::Error::custom)?;
+    }
+    Ok(url)
+}
+
 fn push_array(targets: &[String]) -> toml_edit::Value {
     toml_edit::Value::Array(targets.iter().map(String::as_str).collect())
 }
@@ -2979,6 +3023,33 @@ fn is_false(value: &bool) -> bool {
 mod tests {
     use super::*;
     use std::path::Path;
+
+    #[test]
+    fn secret_url_accepts_http_and_https() {
+        assert!(validate_secret_url("https://github.com/settings/tokens").is_ok());
+        assert!(validate_secret_url("http://jenkins.local:8080/user/me/security/").is_ok());
+        assert!(validate_secret_url("HTTPS://github.com/settings/tokens").is_ok());
+        assert!(validate_secret_url("https://example.com/new?a=1&b=2").is_ok());
+    }
+
+    #[test]
+    fn secret_url_rejects_other_schemes_and_malformed_urls() {
+        for url in [
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "ftp://example.com",
+            "github.com/settings/tokens",
+            "https://",
+            "https://?token=new",
+            "https://#frag",
+            "https://exa mple.com",
+        ] {
+            assert!(
+                validate_secret_url(url).is_err(),
+                "{url} should be rejected"
+            );
+        }
+    }
 
     #[test]
     fn secret_names_are_portable_environment_identifiers() {

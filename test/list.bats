@@ -466,3 +466,20 @@ EOF
 	assert_output --partial "PROVIDER_SECRET"
 	assert_output --partial "provider-value"
 }
+
+@test "fnox list shows the url column only when a secret has a url" {
+	create_test_config
+	assert_fnox_success list
+	refute_output --partial "URL"
+
+	cat >>"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF
+
+[secrets.GITHUB_TOKEN]
+default = "x"
+url = "https://github.com/settings/tokens"
+EOF
+
+	assert_fnox_success list
+	assert_output --partial "URL"
+	assert_output --partial "https://github.com/settings/tokens"
+}

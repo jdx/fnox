@@ -10,6 +10,7 @@
 
 pub mod audit;
 pub mod auth_prompt;
+pub mod browser;
 pub mod config;
 pub mod config_path;
 pub(crate) mod credential_command;

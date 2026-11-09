@@ -2578,6 +2578,7 @@ dependencies = [
  "tokio",
  "toml_edit",
  "tracing",
+ "url",
  "urlencoding",
  "usage-rs",
  "which",

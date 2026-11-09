@@ -527,6 +527,14 @@ fn render_secret_detail(app: &App, frame: &mut Frame, secret_key: &str) {
             ]));
         }
 
+        // URL
+        if let Some(ref url) = config.url {
+            lines.push(Line::from(vec![
+                Span::styled("URL: ", Style::default().fg(Colors::cyan())),
+                Span::raw(url.as_str()),
+            ]));
+        }
+
         // Default
         if let Some(ref default) = config.default {
             lines.push(Line::from(vec![
