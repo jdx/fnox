@@ -1224,7 +1224,7 @@ Recorded with the secret, shown by `fnox list`, and opened by `--open`.
         long_help #"""
 Open the secret's URL in a browser, then prompt for the new value
 
-Needs an interactive terminal and a `url` on the secret (or `--url`). The URL is always printed, so you can open it yourself over SSH.
+Needs an interactive terminal and a `url` on the secret (or `--url`). The URL is printed before the browser opens, so you can open it yourself over SSH. Without a URL, fnox warns and still prompts for the value.
 """#
         conflicts VALUE --from-file --generate
     }

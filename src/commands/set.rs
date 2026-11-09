@@ -163,7 +163,8 @@ pub struct SetCommand {
     /// Open the secret's URL in a browser, then prompt for the new value
     ///
     /// Needs an interactive terminal and a `url` on the secret (or `--url`). The
-    /// URL is always printed, so you can open it yourself over SSH.
+    /// URL is printed before the browser opens, so you can open it yourself over
+    /// SSH. Without a URL, fnox warns and still prompts for the value.
     #[usage(
         long,
         conflicts = "value",
@@ -353,7 +354,7 @@ impl SetCommand {
             config::validate_secret_url(url).map_err(FnoxError::Config)?;
         }
 
-        if self.open && !atty::is(atty::Stream::Stdin) {
+        if self.open && (!atty::is(atty::Stream::Stdin) || fnox_core::env::is_non_interactive()) {
             return Err(FnoxError::Config(
                 "--open needs an interactive terminal to prompt for the new value".into(),
             ));

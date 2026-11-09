@@ -4270,7 +4270,7 @@
             "name": "open",
             "usage": "--open",
             "help": "Open the secret's URL in a browser, then prompt for the new value",
-            "help_long": "Open the secret's URL in a browser, then prompt for the new value\n\nNeeds an interactive terminal and a `url` on the secret (or `--url`). The URL is always printed, so you can open it yourself over SSH.",
+            "help_long": "Open the secret's URL in a browser, then prompt for the new value\n\nNeeds an interactive terminal and a `url` on the secret (or `--url`). The URL is printed before the browser opens, so you can open it yourself over SSH. Without a URL, fnox warns and still prompts for the value.",
             "help_first_line": "Open the secret's URL in a browser, then prompt for the new value",
             "short": [],
             "long": ["open"],
