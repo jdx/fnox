@@ -651,18 +651,14 @@ impl SetCommand {
     fn open_secret_url(&self, config: &Config, write_profile_stack: &[String], profile: &[String]) {
         // The secret `set` will write comes first; otherwise the one `fnox list`
         // shows for the active profiles
-        let lookup = |stack: &[String]| {
-            config
-                .get_secret(stack, self.key())
-                .ok()
-                .flatten()
+        let lookup = |stack: &[String]| config.get_secret(stack, self.key()).ok().flatten();
+        let url = self.url.clone().or_else(|| {
+            // Pick the secret first, then its url: a write-target secret without
+            // a url must not borrow another profile's
+            lookup(write_profile_stack)
+                .or_else(|| lookup(profile))
                 .and_then(|secret| secret.url.clone())
-        };
-        let url = self
-            .url
-            .clone()
-            .or_else(|| lookup(write_profile_stack))
-            .or_else(|| lookup(profile));
+        });
         let Some(url) = url else {
             eprintln!(
                 "{} {} has no url; add one with --url or `url = \"...\"` in the config",
