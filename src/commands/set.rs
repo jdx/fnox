@@ -400,7 +400,7 @@ impl SetCommand {
         } else {
             // Interactive terminal - prompt for value
             if self.open {
-                self.open_secret_url(&config, profile);
+                self.open_secret_url(&config, &write_profile_stack, profile);
             }
             let value = demand::Input::new("Enter secret value")
                 .prompt("Secret value: ")
@@ -648,14 +648,21 @@ impl SetCommand {
     /// Without a URL this only warns, so the value prompt still follows. A
     /// launcher that fails (no browser over SSH) is not an error either: the
     /// printed URL is the fallback.
-    fn open_secret_url(&self, config: &Config, profile: &[String]) {
-        let url = self.url.clone().or_else(|| {
+    fn open_secret_url(&self, config: &Config, write_profile_stack: &[String], profile: &[String]) {
+        // The secret `set` will write comes first; otherwise the one `fnox list`
+        // shows for the active profiles
+        let lookup = |stack: &[String]| {
             config
-                .get_secret(profile, self.key())
+                .get_secret(stack, self.key())
                 .ok()
                 .flatten()
                 .and_then(|secret| secret.url.clone())
-        });
+        };
+        let url = self
+            .url
+            .clone()
+            .or_else(|| lookup(write_profile_stack))
+            .or_else(|| lookup(profile));
         let Some(url) = url else {
             eprintln!(
                 "{} {} has no url; add one with --url or `url = \"...\"` in the config",
