@@ -154,25 +154,6 @@ pub struct SetCommand {
     #[usage(short = 'd', long)]
     pub description: Option<String>,
 
-    /// Page where a new value can be created (http or https)
-    ///
-    /// Recorded with the secret, shown by `fnox list`, and opened by `--open`.
-    #[usage(long)]
-    pub url: Option<String>,
-
-    /// Open the secret's URL in a browser, then prompt for the new value
-    ///
-    /// Needs an interactive terminal and a `url` on the secret (or `--url`). The
-    /// URL is printed before the browser opens, so you can open it yourself over
-    /// SSH. Without a URL, fnox warns and still prompts for the value.
-    #[usage(
-        long,
-        conflicts = "value",
-        conflicts = "from_file",
-        conflicts = "generate"
-    )]
-    pub open: bool,
-
     /// Write to the global config file (`~/.config/fnox/config.toml`)
     #[usage(short = 'g', long)]
     pub global: bool,
@@ -238,6 +219,19 @@ pub struct SetCommand {
     #[usage(long, requires = "generate")]
     pub length: Option<usize>,
 
+    /// Open the secret's URL in a browser, then prompt for the new value
+    ///
+    /// Needs an interactive terminal and a `url` on the secret (or `--url`). The
+    /// URL is printed before the browser opens, so you can open it yourself over
+    /// SSH. Without a URL, fnox warns and still prompts for the value.
+    #[usage(
+        long,
+        conflicts = "value",
+        conflicts = "from_file",
+        conflicts = "generate"
+    )]
+    pub open: bool,
+
     /// Print the generated value after storing it
     #[usage(long, requires = "generate")]
     pub show: bool,
@@ -246,6 +240,12 @@ pub struct SetCommand {
     /// global config directory, instead of in the config
     #[usage(long, requires = "file")]
     pub source: Option<String>,
+
+    /// Page where a new value can be created (http or https)
+    ///
+    /// Recorded with the secret, shown by `fnox list`, and opened by `--open`.
+    #[usage(long)]
+    pub url: Option<String>,
 }
 
 impl SetCommand {

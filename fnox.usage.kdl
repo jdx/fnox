@@ -1212,22 +1212,6 @@ See also:
     flag "-d --description" help="Description to record with the secret" {
         arg <DESCRIPTION>
     }
-    flag --url help="Page where a new value can be created (http or https)" {
-        long_help #"""
-Page where a new value can be created (http or https)
-
-Recorded with the secret, shown by `fnox list`, and opened by `--open`.
-"""#
-        arg <URL>
-    }
-    flag --open help="Open the secret's URL in a browser, then prompt for the new value" {
-        long_help #"""
-Open the secret's URL in a browser, then prompt for the new value
-
-Needs an interactive terminal and a `url` on the secret (or `--url`). The URL is printed before the browser opens, so you can open it yourself over SSH. Without a URL, fnox warns and still prompts for the value.
-"""#
-        conflicts VALUE --from-file --generate
-    }
     flag "-g --global" help="Write to the global config file (`~/.config/fnox/config.toml`)"
     flag "-k --key-name" help="Name to store the value under at a remote provider (default: KEY)" {
         arg <KEY_NAME>
@@ -1282,9 +1266,25 @@ Uses the OS random number generator. The value is stored through the normal prov
     flag --length help="Length in characters of a generated value (default: 32; ignored for uuid; base64 cannot be 1 more than a multiple of 4)" requires=--generate {
         arg <LENGTH>
     }
+    flag --open help="Open the secret's URL in a browser, then prompt for the new value" {
+        long_help #"""
+Open the secret's URL in a browser, then prompt for the new value
+
+Needs an interactive terminal and a `url` on the secret (or `--url`). The URL is printed before the browser opens, so you can open it yourself over SSH. Without a URL, fnox warns and still prompts for the value.
+"""#
+        conflicts VALUE --from-file --generate
+    }
     flag --show help="Print the generated value after storing it" requires=--generate
     flag --source help="With `--file`, keep the stored content in this file, relative to the global config directory, instead of in the config" requires=--file {
         arg <SOURCE>
+    }
+    flag --url help="Page where a new value can be created (http or https)" {
+        long_help #"""
+Page where a new value can be created (http or https)
+
+Recorded with the secret, shown by `fnox list`, and opened by `--open`.
+"""#
+        arg <URL>
     }
     flag "-h --help" help="Print help" action=help builtin=#true
     arg "[KEY]" help="Secret name, used as the environment variable name"

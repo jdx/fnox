@@ -4249,36 +4249,6 @@
             }
           },
           {
-            "name": "url",
-            "usage": "--url <URL>",
-            "help": "Page where a new value can be created (http or https)",
-            "help_long": "Page where a new value can be created (http or https)\n\nRecorded with the secret, shown by `fnox list`, and opened by `--open`.",
-            "help_first_line": "Page where a new value can be created (http or https)",
-            "short": [],
-            "long": ["url"],
-            "hide": false,
-            "global": false,
-            "arg": {
-              "name": "URL",
-              "usage": "<URL>",
-              "required": true,
-              "double_dash": "Optional",
-              "hide": false
-            }
-          },
-          {
-            "name": "open",
-            "usage": "--open",
-            "help": "Open the secret's URL in a browser, then prompt for the new value",
-            "help_long": "Open the secret's URL in a browser, then prompt for the new value\n\nNeeds an interactive terminal and a `url` on the secret (or `--url`). The URL is printed before the browser opens, so you can open it yourself over SSH. Without a URL, fnox warns and still prompts for the value.",
-            "help_first_line": "Open the secret's URL in a browser, then prompt for the new value",
-            "short": [],
-            "long": ["open"],
-            "hide": false,
-            "global": false,
-            "conflicts": ["VALUE", "--from-file", "--generate"]
-          },
-          {
             "name": "global",
             "usage": "-g --global",
             "help": "Write to the global config file (`~/.config/fnox/config.toml`)",
@@ -4509,6 +4479,18 @@
             "requires": ["--generate"]
           },
           {
+            "name": "open",
+            "usage": "--open",
+            "help": "Open the secret's URL in a browser, then prompt for the new value",
+            "help_long": "Open the secret's URL in a browser, then prompt for the new value\n\nNeeds an interactive terminal and a `url` on the secret (or `--url`). The URL is printed before the browser opens, so you can open it yourself over SSH. Without a URL, fnox warns and still prompts for the value.",
+            "help_first_line": "Open the secret's URL in a browser, then prompt for the new value",
+            "short": [],
+            "long": ["open"],
+            "hide": false,
+            "global": false,
+            "conflicts": ["VALUE", "--from-file", "--generate"]
+          },
+          {
             "name": "show",
             "usage": "--show",
             "help": "Print the generated value after storing it",
@@ -4536,6 +4518,24 @@
               "hide": false
             },
             "requires": ["--file"]
+          },
+          {
+            "name": "url",
+            "usage": "--url <URL>",
+            "help": "Page where a new value can be created (http or https)",
+            "help_long": "Page where a new value can be created (http or https)\n\nRecorded with the secret, shown by `fnox list`, and opened by `--open`.",
+            "help_first_line": "Page where a new value can be created (http or https)",
+            "short": [],
+            "long": ["url"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "URL",
+              "usage": "<URL>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            }
           },
           {
             "name": "help",
