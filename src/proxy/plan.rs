@@ -200,6 +200,7 @@ impl ProxyPlan {
                     .collect(),
                 paths: compile_paths(&rule.paths)?,
                 placeholder,
+                basic: rule.scheme.is_some(),
             });
         }
 
@@ -373,6 +374,12 @@ pub(super) fn validate_rule(rule: &ProxyRule) -> Result<()> {
     {
         return Err(proxy_error(format!(
             "rule for '{}' has an invalid header name",
+            rule.name()
+        )));
+    }
+    if rule.scheme.is_some() && rule.query.is_some() {
+        return Err(proxy_error(format!(
+            "rule for '{}' sets scheme, which only a header rule can use",
             rule.name()
         )));
     }

@@ -93,6 +93,7 @@ pub(super) struct PreparedRule {
     pub(super) methods: HashSet<String>,
     pub(super) paths: Option<GlobSet>,
     pub(super) placeholder: String,
+    pub(super) basic: bool,
 }
 
 impl PreparedRule {
@@ -410,47 +411,58 @@ impl ProxyPolicy {
             )));
         }
 
-        let mut injected = Vec::new();
-        let mut checked = HashSet::new();
-        for rule in &domain_rules {
-            if !checked.insert(rule.placeholder.as_str()) {
-                continue;
-            }
+        let basic_headers: HashSet<&str> = domain_rules
+            .iter()
+            .filter(|rule| rule.basic)
+            .filter_map(|rule| match &rule.target {
+                Target::Header(name) => Some(name.as_str()),
+                Target::Query(_) => None,
+            })
+            .collect();
+        let decoded = decode_basic_headers(headers, &basic_headers);
 
-            let query = QuerySegments::parse(url.query());
-            let Occurrences {
-                in_headers,
-                in_path,
-                total: occurrences,
-            } = Occurrences::count(&rule.placeholder, headers, &path, &query);
-            if occurrences == 0 {
-                continue;
-            }
-            if occurrences > 1 {
-                return Err(proxy_error(format!(
-                    "placeholder for '{}' appeared more than once",
-                    rule.source.name()
-                )));
-            }
+        let result = (|| -> Result<Vec<String>> {
+            let mut injected = Vec::new();
+            let mut checked = HashSet::new();
+            for rule in &domain_rules {
+                if !checked.insert(rule.placeholder.as_str()) {
+                    continue;
+                }
 
-            let outside = || {
-                proxy_error(format!(
-                    "placeholder for '{}' appeared outside its allowed route or target",
-                    rule.source.name()
-                ))
-            };
-            let allows = |target: &dyn Fn(&Target) -> bool| {
-                domain_rules.iter().any(|candidate| {
-                    candidate.placeholder == rule.placeholder
-                        && candidate.route_matches(method, &path)
-                        && target(&candidate.target)
-                })
-            };
+                let query = QuerySegments::parse(url.query());
+                let Occurrences {
+                    in_headers,
+                    in_path,
+                    total: occurrences,
+                } = Occurrences::count(&rule.placeholder, headers, &path, &query);
+                if occurrences == 0 {
+                    continue;
+                }
+                if occurrences > 1 {
+                    return Err(proxy_error(format!(
+                        "placeholder for '{}' appeared more than once",
+                        rule.source.name()
+                    )));
+                }
 
-            // Checked after the placeholder's place, so a misplaced one is
-            // reported as misplaced rather than as a secret to set
-            let value = || {
-                self.values
+                let outside = || {
+                    proxy_error(format!(
+                        "placeholder for '{}' appeared outside its allowed route or target",
+                        rule.source.name()
+                    ))
+                };
+                let allows = |target: &dyn Fn(&Target) -> bool| {
+                    domain_rules.iter().any(|candidate| {
+                        candidate.placeholder == rule.placeholder
+                            && candidate.route_matches(method, &path)
+                            && target(&candidate.target)
+                    })
+                };
+
+                // Checked after the placeholder's place, so a misplaced one is
+                // reported as misplaced rather than as a secret to set
+                let value = || {
+                    self.values
                     .value(&rule.source)
                     .ok_or_else(|| match &rule.source {
                         Source::Secret(secret) => proxy_error(format!(
@@ -458,36 +470,103 @@ impl ProxyPolicy {
                         )),
                         Source::Lease { lease, .. } => self.leases.unavailable(lease),
                     })
-            };
+                };
 
-            if in_path > 0 {
-                return Err(outside());
-            }
-            if in_headers > 0 {
-                let (header_name, header_value) = headers
-                    .iter_mut()
-                    .find(|(_, value)| value.contains(&rule.placeholder))
-                    .expect("placeholder occurrence was counted");
-                if !allows(
-                    &|target| matches!(target, Target::Header(name) if header_name.eq_ignore_ascii_case(name)),
-                ) {
+                if in_path > 0 {
                     return Err(outside());
                 }
-                *header_value = header_value.replacen(&rule.placeholder, &value()?, 1);
-            } else {
-                let name = query
-                    .param_containing(&rule.placeholder)
-                    .ok_or_else(outside)?;
-                if !allows(&|target| matches!(target, Target::Query(allowed) if *allowed == name)) {
-                    return Err(outside());
+                if in_headers > 0 {
+                    let (header_name, header_value) = headers
+                        .iter_mut()
+                        .find(|(_, value)| value.contains(&rule.placeholder))
+                        .expect("placeholder occurrence was counted");
+                    if !allows(
+                        &|target| matches!(target, Target::Header(name) if header_name.eq_ignore_ascii_case(name)),
+                    ) {
+                        return Err(outside());
+                    }
+                    *header_value = header_value.replacen(&rule.placeholder, &value()?, 1);
+                } else {
+                    let name = query
+                        .param_containing(&rule.placeholder)
+                        .ok_or_else(outside)?;
+                    if !allows(
+                        &|target| matches!(target, Target::Query(allowed) if *allowed == name),
+                    ) {
+                        return Err(outside());
+                    }
+                    url.set_query(Some(&query.replaced(&rule.placeholder, &value()?)));
                 }
-                url.set_query(Some(&query.replaced(&rule.placeholder, &value()?)));
+                injected.push(rule.source.label());
             }
-            injected.push(rule.source.label());
+            Ok(injected)
+        })();
+
+        if result.is_ok() {
+            encode_basic_headers(headers, &decoded);
         }
-        Ok(injected)
+        result
     }
 }
+
+const BASIC_PREFIX: &str = "Basic ";
+
+struct DecodedBasic {
+    index: usize,
+    original: String,
+    text: String,
+}
+
+fn decode_basic_headers(
+    headers: &mut [(String, String)],
+    names: &HashSet<&str>,
+) -> Vec<DecodedBasic> {
+    let mut decoded = Vec::new();
+    for (index, (name, value)) in headers.iter_mut().enumerate() {
+        if !names.contains(name.to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let Some(encoded) = value
+            .get(..BASIC_PREFIX.len())
+            .filter(|prefix| prefix.eq_ignore_ascii_case(BASIC_PREFIX))
+            .map(|_| value[BASIC_PREFIX.len()..].trim())
+        else {
+            continue;
+        };
+        let Some(text) = BASIC_ENGINE
+            .decode(encoded)
+            .ok()
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+        else {
+            continue;
+        };
+        let original = std::mem::replace(value, format!("{BASIC_PREFIX}{text}"));
+        decoded.push(DecodedBasic {
+            index,
+            original,
+            text,
+        });
+    }
+    decoded
+}
+
+fn encode_basic_headers(headers: &mut [(String, String)], decoded: &[DecodedBasic]) {
+    for entry in decoded {
+        let value = &mut headers[entry.index].1;
+        let current = &value[BASIC_PREFIX.len()..];
+        *value = if current == entry.text {
+            entry.original.clone()
+        } else {
+            format!("{BASIC_PREFIX}{}", BASIC_ENGINE.encode(current))
+        };
+    }
+}
+
+const BASIC_ENGINE: base64::engine::GeneralPurpose = base64::engine::GeneralPurpose::new(
+    &base64::alphabet::STANDARD,
+    base64::engine::GeneralPurposeConfig::new()
+        .with_decode_padding_mode(base64::engine::DecodePaddingMode::Indifferent),
+);
 
 /// A request's raw query string split on `&`, keeping the original bytes of
 /// every segment so that only the substituted one is re-encoded.

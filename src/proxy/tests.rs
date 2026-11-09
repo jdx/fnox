@@ -19,6 +19,7 @@ fn config() -> ProxyConfig {
             methods: vec!["GET".to_string()],
             paths: vec!["/repos/example/**".to_string()],
             placeholder: Some("ghp_placeholder".to_string()),
+            scheme: None,
         }],
         ..ProxyConfig::default()
     }
@@ -161,6 +162,7 @@ fn redacts_overlapping_values_without_scanning_placeholders() {
         methods: vec![],
         paths: vec![],
         placeholder: Some("short-placeholder".to_string()),
+        scheme: None,
     });
     let values = [
         ("GITHUB_TOKEN".to_string(), "real-token".to_string()),
@@ -208,6 +210,7 @@ fn sibling_rules_allow_any_matching_route() {
         methods: vec!["GET".to_string()],
         paths: vec!["/repos/example/pulls/**".to_string()],
         placeholder: Some("ghp_placeholder".to_string()),
+        scheme: None,
     });
     let plan = ProxyPlan::new(
         &config,
@@ -287,6 +290,7 @@ fn rejects_overlapping_placeholders() {
         methods: vec![],
         paths: vec![],
         placeholder: Some("ghp_placeholder_suffix".to_string()),
+        scheme: None,
     });
     let values = [
         ("GITHUB_TOKEN".to_string(), "real-token".to_string()),
@@ -324,6 +328,7 @@ fn query_rule(domain: &str, query: &str) -> ProxyRule {
         methods: vec![],
         paths: vec![],
         placeholder: Some("key_placeholder".to_string()),
+        scheme: None,
     }
 }
 
@@ -1442,6 +1447,7 @@ fn lease_rule(lease: &str, credential: Option<&str>) -> ProxyRule {
         methods: vec!["POST".to_string()],
         paths: vec!["/api/v4/projects/42/merge_requests/*/notes".to_string()],
         placeholder: Some("forge_placeholder".to_string()),
+        scheme: None,
     }
 }
 
@@ -1779,4 +1785,135 @@ role_arn = "arn:aws:iam::123456789012:role/app"
     secret_credential.lease = None;
     secret_credential.secret = Some("TOKEN".to_string());
     assert!(plan(secret_credential, command).contains("only a lease rule"));
+}
+
+fn basic_rule(domain: &str) -> ProxyRule {
+    ProxyRule {
+        secret: Some("API_KEY".to_string()),
+        lease: None,
+        credential: None,
+        domain: domain.to_string(),
+        env: None,
+        header: Some("authorization".to_string()),
+        query: None,
+        methods: vec![],
+        paths: vec![],
+        placeholder: Some("basic_placeholder".to_string()),
+        scheme: Some(crate::config::ProxyScheme::Basic),
+    }
+}
+
+fn basic_header(credentials: &str) -> (String, String) {
+    use base64::Engine;
+    (
+        "Authorization".to_string(),
+        format!(
+            "Basic {}",
+            base64::engine::general_purpose::STANDARD.encode(credentials)
+        ),
+    )
+}
+
+fn decode_basic(value: &str) -> String {
+    use base64::Engine;
+    let encoded = value.strip_prefix("Basic ").unwrap();
+    String::from_utf8(
+        base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .unwrap(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn basic_scheme_substitutes_inside_encoded_credentials() {
+    let plan = plan_with(vec![basic_rule("github.com")], "real-token").unwrap();
+    let mut headers = vec![basic_header("x-access-token:basic_placeholder")];
+    let (injected, _) = authorize(
+        &plan,
+        "github.com",
+        "GET",
+        "/o/r.git/info/refs",
+        &mut headers,
+    )
+    .unwrap();
+    assert_eq!(injected, ["API_KEY"]);
+    assert_eq!(decode_basic(&headers[0].1), "x-access-token:real-token");
+}
+
+#[test]
+fn basic_scheme_accepts_lowercase_prefix_and_unpadded_input() {
+    let plan = plan_with(vec![basic_rule("github.com")], "real-token").unwrap();
+    let (name, value) = basic_header("u:basic_placeholder");
+    let value = value
+        .replacen("Basic", "basic", 1)
+        .trim_end_matches('=')
+        .to_string();
+    let mut headers = vec![(name, value)];
+    let (injected, _) = authorize(&plan, "github.com", "GET", "/", &mut headers).unwrap();
+    assert_eq!(injected, ["API_KEY"]);
+    assert_eq!(
+        decode_basic(&headers[0].1.replacen("basic", "Basic", 1)),
+        "u:real-token"
+    );
+}
+
+#[test]
+fn basic_scheme_leaves_unrelated_credentials_untouched() {
+    let plan = plan_with(vec![basic_rule("github.com")], "real-token").unwrap();
+    let original = basic_header("user:other-password");
+    let mut headers = vec![original.clone()];
+    let (injected, _) = authorize(&plan, "github.com", "GET", "/", &mut headers).unwrap();
+    assert!(injected.is_empty());
+    assert_eq!(headers[0], original);
+}
+
+#[test]
+fn basic_scheme_ignores_malformed_values() {
+    let plan = plan_with(vec![basic_rule("github.com")], "real-token").unwrap();
+    for value in ["Basic !!!not-base64!!!", "Basic"] {
+        let mut headers = vec![("Authorization".to_string(), value.to_string())];
+        let result = authorize(&plan, "github.com", "GET", "/", &mut headers);
+        assert!(
+            result.is_err() || result.as_ref().unwrap().0.is_empty(),
+            "{value}"
+        );
+        assert_eq!(headers[0].1, value);
+    }
+}
+
+#[test]
+fn basic_scheme_rejects_repeated_placeholder() {
+    let plan = plan_with(vec![basic_rule("github.com")], "real-token").unwrap();
+    let mut headers = vec![basic_header("basic_placeholder:basic_placeholder")];
+    assert!(authorize(&plan, "github.com", "GET", "/", &mut headers).is_err());
+}
+
+#[test]
+fn basic_scheme_only_decodes_the_rule_header() {
+    let plan = plan_with(vec![basic_rule("github.com")], "real-token").unwrap();
+    let other = ("X-Other".to_string(), basic_header("u:basic_placeholder").1);
+    let mut headers = vec![other.clone()];
+    let (injected, _) = authorize(&plan, "github.com", "GET", "/", &mut headers).unwrap();
+    assert!(injected.is_empty());
+    assert_eq!(headers[0], other);
+}
+
+#[test]
+fn plain_rule_does_not_decode_basic_credentials() {
+    let mut rule = basic_rule("github.com");
+    rule.scheme = None;
+    let plan = plan_with(vec![rule], "real-token").unwrap();
+    let original = basic_header("u:basic_placeholder");
+    let mut headers = vec![original.clone()];
+    let (injected, _) = authorize(&plan, "github.com", "GET", "/", &mut headers).unwrap();
+    assert!(injected.is_empty());
+    assert_eq!(headers[0], original);
+}
+
+#[test]
+fn basic_scheme_is_refused_on_a_query_rule() {
+    let mut rule = query_rule("maps.example.com", "key");
+    rule.scheme = Some(crate::config::ProxyScheme::Basic);
+    assert!(plan_with(vec![rule], "real-token").is_err());
 }

@@ -516,6 +516,7 @@ header = "private-token"
 | `rules[].methods`     | array of strings           | every method             | Allowed HTTP methods.                                                                                                                         |
 | `rules[].paths`       | array of globs             | every path               | Allowed URL paths.                                                                                                                            |
 | `rules[].placeholder` | string                     | generated                | Placeholder value given to the command.                                                                                                       |
+| `rules[].scheme` | string | none | Set to `"basic"` to replace the placeholder inside an `Authorization: Basic` value, as git over HTTPS needs. Not allowed with `query`. |
 
 A later config file that sets `[proxy]` replaces the whole table, so it must restate every rule it allows. See [credential proxy](/guide/proxy).
 
