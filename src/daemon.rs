@@ -1686,9 +1686,15 @@ fn provider_daemon_cache_enabled(
         None
     };
 
-    provider_name
+    let source_allows_cache = provider_name
         .and_then(|provider_name| providers.get(provider_name))
-        .is_none_or(|provider| provider.daemon_cache_enabled())
+        .is_none_or(|provider| provider.daemon_cache_enabled());
+    let sync_allows_cache = secret.sync.as_ref().is_none_or(|sync| {
+        providers
+            .get(&sync.provider)
+            .is_none_or(|provider| provider.daemon_cache_enabled())
+    });
+    source_allows_cache && sync_allows_cache
 }
 
 fn cache_key(

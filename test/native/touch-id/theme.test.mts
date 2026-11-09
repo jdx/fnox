@@ -3,20 +3,16 @@ import fs from "node:fs";
 import test from "node:test";
 import {
   contrastRatio,
-  luminance,
-  transformLightColor,
-} from "../../../native/touch-id-preview/color.mts";
-import {
   DARK_THEME,
-  LIGHT_RULES,
-  LIGHT_THEME,
-  themeHeader,
-} from "../../../native/touch-id-preview/theme.mts";
-import {
   fingerprintFrame,
   fingerprintVisitedFrames,
   FINGERPRINT_PALETTES,
-} from "../../../native/touch-id-preview/animation.mts";
+  LIGHT_RULES,
+  LIGHT_THEME,
+  luminance,
+  transformLightColor,
+  touchIdPaths,
+} from "../../paths/touch-id.mts";
 
 test("color math rejects malformed inputs and uses standard luminance endpoints", () => {
   assert.equal(luminance("#000000"), 0);
@@ -70,15 +66,7 @@ test("animation and controls share consistent resting fills", () => {
 });
 
 test("acceptance starts without an overlay and never recolors untouched ridges", () => {
-  const flow = JSON.parse(
-    fs.readFileSync(
-      new URL(
-        "../../../native/touch-id-preview/assets/flow.json",
-        import.meta.url,
-      ),
-      "utf8",
-    ),
-  );
+  const flow = JSON.parse(fs.readFileSync(touchIdPaths.assets.flow, "utf8"));
   const visited = flow.frames.map(fingerprintVisitedFrames);
   for (const palette of Object.values(FINGERPRINT_PALETTES)) {
     const initial = fingerprintFrame(0, flow, visited, palette);

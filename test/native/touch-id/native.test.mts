@@ -2,30 +2,53 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import {
-  fingerprintNativeSamples,
-  parseFingerprintRidges,
-} from "../../../native/touch-id-preview/native.mts";
-import {
   DARK_THEME,
+  fingerprintNativeSamples,
   LIGHT_THEME,
-} from "../../../native/touch-id-preview/theme.mts";
+  parseFingerprintRidges,
+  touchIdPaths,
+} from "../../paths/touch-id.mts";
 
-const svg = fs.readFileSync(
-  new URL(
-    "../../../native/touch-id-preview/assets/geometry.svg",
-    import.meta.url,
-  ),
-  "utf8",
-);
-const flow = JSON.parse(
-  fs.readFileSync(
-    new URL(
-      "../../../native/touch-id-preview/assets/flow.json",
-      import.meta.url,
-    ),
-    "utf8",
-  ),
-);
+const svg = fs.readFileSync(touchIdPaths.assets.geometry, "utf8");
+const approvalPrompt = fs.readFileSync(touchIdPaths.approvalPrompt, "utf8");
+const flow = JSON.parse(fs.readFileSync(touchIdPaths.assets.flow, "utf8"));
+
+test("approval details bound display but copy complete sanitized command and project", () => {
+  assert.match(
+    approvalPrompt,
+    /command = BoundedDisplayValue\(fullCommand, 80\)/,
+  );
+  assert.match(
+    approvalPrompt,
+    /project = BoundedDisplayValue\(fullProject, 80\)/,
+  );
+  assert.match(
+    approvalPrompt,
+    /NSString\* fullCommand = SafeDisplayValue\(command\)/,
+  );
+  assert.match(
+    approvalPrompt,
+    /NSString\* fullProject = SafeDisplayValue\(project\)/,
+  );
+  assert.match(
+    approvalPrompt,
+    /@"Command \(unverified\)",\s*command,\s*fullCommand/,
+  );
+  assert.match(
+    approvalPrompt,
+    /@"Project \(unverified\)",\s*project,\s*fullProject/,
+  );
+  assert.match(approvalPrompt, /NSPasteboardTypeString/);
+  assert.match(approvalPrompt, /@"Command \(unverified\)"/);
+  assert.match(approvalPrompt, /@"Project \(unverified\)"/);
+  assert.match(approvalPrompt, /NSString\* secret = BoundedDisplayValue/);
+  assert.match(approvalPrompt, /Keychain service \(unverified\)/);
+});
+
+test("approval heading does not trust caller-supplied executable identity", () => {
+  assert.match(approvalPrompt, /Unverified command: %@ · Allow access to %@\?/);
+  assert.doesNotMatch(approvalPrompt, /Allow %@ to use %@\?/);
+});
 
 test("parsed geometry retains separate ridges, opposing arcs, and finite coordinates", () => {
   const paths = parseFingerprintRidges(svg);
